@@ -18,30 +18,33 @@ interface JsonError {
   column: number
 }
 
-const validateJson = (s: string): JsonError[] => {
-  if (!s.trim()) return []
+const parseJsonConfig = (s: string): { config: Config | undefined; errors: JsonError[] } => {
+  if (!s.trim()) return { config: undefined, errors: [] }
 
-  // Strip trailing commas to match VS Code behavior (JSONC)
   const normalized = s.replace(/,\s*([\]}])/g, "$1")
 
   try {
-    JSON.parse(normalized)
-    return []
+    return { config: JSON.parse(normalized), errors: [] }
   } catch (e) {
     const err = e as SyntaxError
     const match = err.message.match(/position (\d+)/)
     if (match) {
       const pos = parseInt(match[1], 10)
       const lines = s.slice(0, pos).split("\n")
-      return [{
-        message: err.message,
-        line: lines.length,
-        column: lines[lines.length - 1].length + 1,
-      }]
+      return {
+        config: undefined,
+        errors: [{
+          message: err.message,
+          line: lines.length,
+          column: lines[lines.length - 1].length + 1,
+        }],
+      }
     }
-    return [{ message: err.message, line: 1, column: 1 }]
+    return { config: undefined, errors: [{ message: err.message, line: 1, column: 1 }] }
   }
 }
+
+const validateJson = (s: string): JsonError[] => parseJsonConfig(s).errors
 
 export const SettingsConfig: Component = () => {
   const params = useParams()
@@ -57,11 +60,7 @@ export const SettingsConfig: Component = () => {
   })
 
   const tryParse = (s: string): Config | undefined => {
-    try {
-      return JSON.parse(s)
-    } catch {
-      return undefined
-    }
+    return parseJsonConfig(s).config
   }
 
   const [selectedPath, setSelectedPath] = createSignal<string | null>(null)
@@ -144,14 +143,15 @@ export const SettingsConfig: Component = () => {
       }
       await globalSDK.client.global.config
         .update({ config })
-        .then((result) => {
+        .then(async (result) => {
           globalSync.set("config", result.data!)
           showToast({
             variant: "success",
             title: language.t("common.success"),
-            description: "Global config saved.",
+            description: "Refreshing to apply changes...",
           })
-          setEditorOpen(false)
+          await globalSDK.client.global.dispose()
+          window.location.reload()
         })
         .catch((e) => {
           showToast({
@@ -195,7 +195,8 @@ export const SettingsConfig: Component = () => {
         description: "Refreshing to apply changes...",
       })
       await globalSDK.client.instance.dispose({ directory: worktree })
-      globalSync.child(worktree, { bootstrap: true })
+      await globalSync.child(worktree, { bootstrap: true })
+      window.location.reload()
     }
   }
 
