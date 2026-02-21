@@ -15,11 +15,19 @@ import { Discovery } from "./discovery"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
+  const SCOPE = {
+    SYSTEM: "system",
+    USER: "user",
+    PROJECT: "project",
+  } as const
+  type Scope = (typeof SCOPE)[keyof typeof SCOPE]
   export const Info = z.object({
     name: z.string(),
     description: z.string(),
     location: z.string(),
     content: z.string(),
+    scope: z.enum([SCOPE.SYSTEM, SCOPE.USER, SCOPE.PROJECT]).optional(),
+    duplicate: z.boolean().optional(),
   })
   export type Info = z.infer<typeof Info>
 
@@ -49,9 +57,32 @@ export namespace Skill {
   const OPENCODE_SKILL_GLOB = new Bun.Glob("{skill,skills}/**/SKILL.md")
   const SKILL_GLOB = new Bun.Glob("**/SKILL.md")
 
+  const key = (input: string) => {
+    const value = input.replace(/\\/g, "/")
+    return process.platform === "win32" ? value.toLowerCase() : value
+  }
+
+  const rank = (scope: Scope) => {
+    if (scope === SCOPE.PROJECT) return 3
+    if (scope === SCOPE.USER) return 2
+    return 1
+  }
+
+  const scope = (input: string): Scope => {
+    const value = key(input)
+    const directory = key(Instance.directory)
+    const worktree = key(Instance.worktree)
+    if (value === directory || value.startsWith(directory + "/")) return SCOPE.PROJECT
+    if (value === worktree || value.startsWith(worktree + "/")) return SCOPE.PROJECT
+    if (/(^|\/)\.system(\/|$)/.test(value)) return SCOPE.SYSTEM
+    return SCOPE.USER
+  }
+
   export const state = Instance.state(async () => {
     const skills: Record<string, Info> = {}
+    const list: Info[] = []
     const dirs = new Set<string>()
+    const groups = new Map<string, number[]>()
 
     const addSkill = async (match: string) => {
       const md = await ConfigMarkdown.parse(match).catch((err) => {
@@ -68,22 +99,33 @@ export namespace Skill {
       const parsed = Info.pick({ name: true, description: true }).safeParse(md.data)
       if (!parsed.success) return
 
-      // Warn on duplicate skill names
-      if (skills[parsed.data.name]) {
+      const group = groups.get(parsed.data.name) ?? []
+      const item: Info = {
+        name: parsed.data.name,
+        description: parsed.data.description,
+        location: match,
+        content: md.content,
+        scope: scope(match),
+        duplicate: group.length > 0,
+      }
+
+      if (group.length > 0) {
         log.warn("duplicate skill name", {
           name: parsed.data.name,
           existing: skills[parsed.data.name].location,
           duplicate: match,
         })
+        for (const i of group) {
+          list[i].duplicate = true
+        }
       }
 
       dirs.add(path.dirname(match))
-
-      skills[parsed.data.name] = {
-        name: parsed.data.name,
-        description: parsed.data.description,
-        location: match,
-        content: md.content,
+      list.push(item)
+      groups.set(parsed.data.name, [...group, list.length - 1])
+      const previous = skills[parsed.data.name]
+      if (!previous || rank(item.scope ?? SCOPE.USER) >= rank(previous.scope ?? SCOPE.USER)) {
+        skills[parsed.data.name] = item
       }
     }
 
@@ -170,6 +212,7 @@ export namespace Skill {
 
     return {
       skills,
+      list,
       dirs: Array.from(dirs),
     }
   })
@@ -179,7 +222,7 @@ export namespace Skill {
   }
 
   export async function all() {
-    return state().then((x) => Object.values(x.skills))
+    return state().then((x) => x.list)
   }
 
   export async function dirs() {

@@ -357,11 +357,18 @@ export function Autocomplete(props: {
     const results: AutocompleteOption[] = [...command.slashes()]
 
     for (const serverCommand of sync.data.command) {
-      if (serverCommand.source === "skill") continue
       const label = serverCommand.source === "mcp" ? ":mcp" : ""
+      const meta = serverCommand as typeof serverCommand & {
+        skill_scope?: "system" | "user" | "project"
+        skill_duplicate?: boolean
+      }
+      const description =
+        serverCommand.source !== "skill" || !meta.skill_duplicate || !meta.skill_scope
+          ? serverCommand.description
+          : "(" + meta.skill_scope + ") " + (serverCommand.description ?? "").trim()
       results.push({
         display: "/" + serverCommand.name + label,
-        description: serverCommand.description,
+        description,
         onSelect: () => {
           const newText = "/" + serverCommand.name + " "
           const cursor = props.input().logicalCursor

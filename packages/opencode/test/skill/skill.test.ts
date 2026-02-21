@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test"
 import { Skill } from "../../src/skill"
+import { Command } from "../../src/command"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import path from "path"
@@ -385,4 +386,65 @@ description: A skill in the .opencode/skills directory.
       expect(dirs.length).toBe(4)
     },
   })
+})
+
+
+test("keeps duplicate skills from user and system scopes and exposes both in command list", async () => {
+  await using project = await tmpdir({ git: true })
+  await using home = await tmpdir()
+
+  const systemDir = path.join(home.path, ".claude", "skills", ".system", "skill-creator")
+  const userDir = path.join(home.path, ".claude", "skills", "skill-creator")
+
+  await fs.mkdir(systemDir, { recursive: true })
+  await fs.mkdir(userDir, { recursive: true })
+
+  await Bun.write(
+    path.join(systemDir, "SKILL.md"),
+    `---
+name: skill-creator
+description: system skill creator
+---
+
+# System Skill Creator
+`,
+  )
+
+  await Bun.write(
+    path.join(userDir, "SKILL.md"),
+    `---
+name: skill-creator
+description: user skill creator
+---
+
+# User Skill Creator
+`,
+  )
+
+  const homeValue = process.env.OPENCODE_TEST_HOME
+  process.env.OPENCODE_TEST_HOME = home.path
+
+  try {
+    await Instance.provide({
+      directory: project.path,
+      fn: async () => {
+        const skills = (await Skill.all()).filter((item) => item.name === "skill-creator")
+        expect(skills.length).toBe(2)
+        expect(skills.every((item) => item.duplicate)).toBe(true)
+        expect(skills.find((item) => item.scope === "system")).toBeDefined()
+        expect(skills.find((item) => item.scope === "user")).toBeDefined()
+
+        const active = await Skill.get("skill-creator")
+        expect(active).toBeDefined()
+        expect(active?.scope).toBe("user")
+
+        const commands = (await Command.list()).filter((item) => item.source === "skill" && item.name === "skill-creator")
+        expect(commands.length).toBe(2)
+        expect(commands.find((item) => item.skill_scope === "system")).toBeDefined()
+        expect(commands.find((item) => item.skill_scope === "user")).toBeDefined()
+      },
+    })
+  } finally {
+    process.env.OPENCODE_TEST_HOME = homeValue
+  }
 })

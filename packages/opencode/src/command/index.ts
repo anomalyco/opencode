@@ -28,6 +28,8 @@ export namespace Command {
       agent: z.string().optional(),
       model: z.string().optional(),
       source: z.enum(["command", "mcp", "skill"]).optional(),
+      skill_scope: z.enum(["system", "user", "project"]).optional(),
+      skill_duplicate: z.boolean().optional(),
       // workaround for zod not supporting async functions natively so we use getters
       // https://zod.dev/v4/changelog?id=zfunction
       template: z.promise(z.string()).or(z.string()),
@@ -123,18 +125,38 @@ export namespace Command {
     }
 
     // Add skills as invokable commands
+    const seen: Record<string, number> = {}
+    const rank = (scope?: "system" | "user" | "project") => {
+      if (scope === "project") return 3
+      if (scope === "user") return 2
+      return 1
+    }
     for (const skill of await Skill.all()) {
-      // Skip if a command with this name already exists
-      if (result[skill.name]) continue
-      result[skill.name] = {
+      const next: Info = {
         name: skill.name,
         description: skill.description,
         source: "skill",
+        skill_scope: skill.scope,
+        skill_duplicate: skill.duplicate,
         get template() {
           return skill.content
         },
         hints: [],
       }
+      const existing = result[skill.name]
+      if (existing && existing.source !== "skill") continue
+      if (existing) {
+        const count = (seen[skill.name] ?? 0) + 1
+        seen[skill.name] = count
+        if (rank(next.skill_scope) >= rank(existing.skill_scope)) {
+          result["skill:" + skill.name + ":" + count] = existing
+          result[skill.name] = next
+          continue
+        }
+        result["skill:" + skill.name + ":" + count] = next
+        continue
+      }
+      result[skill.name] = next
     }
 
     return result
