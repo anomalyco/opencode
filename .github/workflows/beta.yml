@@ -1,0 +1,33 @@
+name: beta
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 * * * *"
+
+jobs:
+  sync:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Setup Git Committer
+        id: setup-git-committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+
+      - name: Sync beta branch
+        env:
+          GH_TOKEN: ${{ steps.setup-git-committer.outputs.token }}
+        run: bun script/beta.ts

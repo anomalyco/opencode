@@ -1,0 +1,1890 @@
+---
+title: Sağlayıcılar
+description: opencode'da herhangi bir LLM sağlayıcısını kullanma.
+---
+
+import config from "../../../../config.mjs"
+export const console = config.console
+
+opencode, **75'ten fazla LLM sağlayıcısını** desteklemek için [AI SDK](https://ai-sdk.dev/) ve [Models.dev](https://models.dev) kullanır ve yerel modellerin çalıştırılmasını destekler.
+
+Bir sağlayıcı eklemek için şunları yapmanız gerekir:
+
+1. `/connect` komutunu kullanarak sağlayıcı için API anahtarlarını ekleyin.
+2. Sağlayıcıyı opencode yapılandırmanızda yapılandırın.
+
+---
+
+### Kimlik Bilgileri
+
+Bir sağlayıcının API anahtarlarını `/connect` komutuyla eklediğinizde, bunlar saklanır
+`~/.local/share/opencode/auth.json` içinde.
+
+---
+
+### Yapılandırma
+
+Sağlayıcıları opencode'unuzdaki `provider` bölümü aracılığıyla özelleştirebilirsiniz.
+config.
+
+---
+
+#### Temel URL
+
+`baseURL` seçeneğini ayarlayarak URL tabanını herhangi bir sağlayıcı için özelleştirebilirsiniz. Bu, proxy hizmetlerini veya özel uç noktaları kullanırken kullanışlıdır.
+
+```json title="opencode.json" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "options": {
+        "baseURL": "https://api.anthropic.com/v1"
+      }
+    }
+  }
+}
+```
+
+---
+
+## OpenCode Zen
+
+OpenCode Zen, opencode ekibi tarafından sağlanan modellerin bir listesidir.
+opencode ile iyi çalıştığı test edilip doğrulandı. [Daha fazla bilgi](/docs/zen).
+
+:::tip
+Yeniyseniz OpenCode Zen ile başlamanızı öneririz.
+:::
+
+1. TUI'de `/connect` komutunu çalıştırın, opencode'u seçin ve [opencode.ai/auth](https://opencode.ai/auth)'ye gidin.
+
+   ```txt
+   /connect
+   ```
+
+2. Oturum açın, fatura ayrıntılarınızı ekleyin ve API anahtarınızı kopyalayın.
+
+3. API anahtarınızı yapıştırın.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Önerdiğimiz modellerin listesini görmek için TUI'de `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+opencode'daki diğer sağlayıcılar gibi çalışır ve kullanımı tamamen isteğe bağlıdır.
+
+---
+
+## Dizin
+
+Sağlayıcılardan bazılarına ayrıntılı olarak bakalım. Bir sağlayıcı eklemek istiyorsanız
+liste, bir PR açmaktan çekinmeyin.
+
+:::note
+Burada bir sağlayıcı göremiyor musunuz? Bir PR gönderin.
+:::
+
+---
+
+### 302.AI
+
+1. [302.AI console](https://302.ai/) adresine gidin, bir hesap oluşturun ve bir API anahtarı oluşturun.
+
+2. `/connect` komutunu çalıştırın ve **302.AI**'yi arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. 302.AI API anahtarınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Bir model seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Amazon Bedrock
+
+Amazon Bedrock'u opencode ile kullanmak için:
+
+1. Amazon Bedrock konsolundaki **Model kataloğuna** gidin ve istekte bulunun
+   Dilediğiniz modellere ulaşabilirsiniz.
+
+   :::tip
+   Amazon Bedrock'ta istediğiniz modele erişiminizin olması gerekiyor.
+   :::
+
+2. **Kimlik doğrulamayı yapılandırın**: Aşağıdaki yöntemlerden birini kullanın:
+
+   #### Ortam Değişkenleri (Hızlı Başlangıç)
+
+   opencode'u çalıştırırken bu ortam değişkenlerinden birini ayarlayın:
+
+   ```bash
+   # Option 1: Using AWS access keys
+   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
+
+   # Option 2: Using named AWS profile
+   AWS_PROFILE=my-profile opencode
+
+   # Option 3: Using Bedrock bearer token
+   AWS_BEARER_TOKEN_BEDROCK=XXX opencode
+   ```
+
+   Veya bunları bash profilinize ekleyin:
+
+   ```bash title="~/.bash_profile"
+   export AWS_PROFILE=my-dev-profile
+   export AWS_REGION=us-east-1
+   ```
+
+   #### Yapılandırma Dosyası (Önerilen)
+
+   Projeye özel veya kalıcı yapılandırma için `opencode.json` kullanın:
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "amazon-bedrock": {
+         "options": {
+           "region": "us-east-1",
+           "profile": "my-aws-profile"
+         }
+       }
+     }
+   }
+   ```
+
+   **Mevcut seçenekler:**
+   - `region` - AWS region (e.g., `us-east-1`, `eu-west-1`)
+   - `profile` - `~/.aws/credentials`'den AWS adlı profil
+   - `endpoint` - VPC uç noktaları için özel uç nokta URL (genel `baseURL` seçeneğinin takma adı)
+
+   :::tip
+   Yapılandırma dosyası seçenekleri ortam değişkenlerine göre önceliklidir.
+   :::
+
+#### Gelişmiş: VPC Uç Noktaları
+
+Bedrock için VPC uç noktaları kullanıyorsanız:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      "options": {
+        "region": "us-east-1",
+        "profile": "production",
+        "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
+      }
+    }
+  }
+}
+```
+
+:::note
+`endpoint` seçeneği, AWS'ye özgü terminolojiyi kullanan genel `baseURL` seçeneğinin takma adıdır. Hem `endpoint` hem de `baseURL` belirtilirse, `endpoint` öncelikli olur.
+:::
+
+#### Kimlik Doğrulama Yöntemleri
+
+- **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**: Bir IAM kullanıcısı oluşturun ve AWS Konsolunda erişim anahtarları oluşturun
+- **`AWS_PROFILE`**: `~/.aws/credentials`'den adlandırılmış profilleri kullanın. İlk önce `aws configure --profile my-profile` veya `aws sso login` ile yapılandırın
+- **`AWS_BEARER_TOKEN_BEDROCK`**: Amazon Bedrock konsolundan uzun vadeli API anahtarları oluşturun
+- **`AWS_WEB_IDENTITY_TOKEN_FILE` / `AWS_ROLE_ARN`**: EKS IRSA (IAM Hizmet Hesapları için Roller) veya OIDC federasyonuna sahip diğer Kubernetes ortamları için. Bu ortam değişkenleri, hizmet hesabı ek açıklamaları kullanılırken Kubernetes tarafından otomatik olarak eklenir.
+
+#### Kimlik Doğrulama Önceliği
+
+Amazon Bedrock aşağıdaki kimlik doğrulama önceliğini kullanır:
+
+1. **Taşıyıcı Belirteç** - `AWS_BEARER_TOKEN_BEDROCK` ortam değişkeni veya `/connect` komutundan belirteç
+2. **AWS Credential Chain** - Profil, erişim anahtarları, paylaşılan kimlik bilgileri, IAM rolleri, Web Identity Tokens (EKS IRSA), örnek meta verileri
+
+:::note
+Bir taşıyıcı belirteç ayarlandığında (`/connect` veya `AWS_BEARER_TOKEN_BEDROCK` yoluyla), yapılandırılmış profiller dahil olmak üzere tüm AWS kimlik bilgisi yöntemlerine göre öncelik kazanır.
+:::
+
+3. İstediğiniz modeli seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+:::note
+Özel çıkarım profilleri için anahtardaki modeli ve sağlayıcı adını kullanın ve `id` özelliğini arn olarak ayarlayın. Bu, doğru önbelleğe almayı sağlar:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      // ...
+      "models": {
+        "anthropic-claude-sonnet-4.5": {
+          "id": "arn:aws:bedrock:us-east-1:xxx:application-inference-profile/yyy"
+        }
+      }
+    }
+  }
+}
+```
+
+:::
+
+---
+
+### Anthropic
+
+1. Kaydolduktan sonra `/connect` komutunu çalıştırın ve Anthropic'i seçin.
+
+   ```txt
+   /connect
+   ```
+
+2. Burada **Claude Pro/Max** seçeneğini seçebilirsiniz; tarayıcınız açılacaktır.
+   ve sizden kimlik doğrulamanızı isteyeceğiz.
+
+   ```txt
+   ┌ Select auth method
+   │
+   │ Claude Pro/Max
+   │ Create an API Key
+   │ Manually enter API Key
+   └
+   ```
+
+3. Artık `/models` komutunu kullandığınızda tüm Antropik modeller mevcut olmalıdır.
+
+   ```txt
+   /models
+   ```
+
+:::info
+Claude Pro/Max aboneliğinizi opencode'da kullanmak [Anthropic](https://anthropic.com) tarafından resmi olarak desteklenmemektedir.
+:::
+
+##### API anahtarlarını kullanma
+
+Pro/Max aboneliğiniz yoksa **API Anahtarı Oluştur** seçeneğini de seçebilirsiniz. Ayrıca tarayıcınızı açacak ve Anthropic'te oturum açmanızı isteyecek ve terminalinize yapıştırabileceğiniz bir kod verecektir.
+
+Veya zaten bir API anahtarınız varsa **API Anahtarını Manuel Olarak Girin** seçeneğini seçip terminalinize yapıştırabilirsiniz.
+
+---
+
+### Azure OpenAI
+
+:::note
+"Üzgünüm ama bu isteğe yardımcı olamıyorum" hatalarıyla karşılaşırsanız Azure kaynağınızda içerik filtresini **DefaultV2** yerine **Default** olarak değiştirmeyi deneyin.
+:::
+
+1. [Azure portal](https://portal.azure.com/)'a gidin ve bir **Azure OpenAI** kaynağı oluşturun. İhtiyacınız olacak:
+   - **Kaynak adı**: Bu, API bitiş noktanızın (`https://RESOURCE_NAME.openai.azure.com/`) parçası olur
+   - **API anahtarı**: Kaynağınızdan `KEY 1` veya `KEY 2`
+
+2. [Azure AI Foundry](https://ai.azure.com/)'a gidin ve bir model dağıtın.
+
+   :::note
+   opencode'un düzgün çalışması için dağıtım adının model adıyla eşleşmesi gerekir.
+   :::
+
+3. `/connect` komutunu çalıştırın ve **Azure**'u arayın.
+
+   ```txt
+   /connect
+   ```
+
+4. API anahtarınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+5. Kaynak adınızı ortam değişkeni olarak ayarlayın:
+
+   ```bash
+   AZURE_RESOURCE_NAME=XXX opencode
+   ```
+
+   Veya bash profilinize ekleyin:
+
+   ```bash title="~/.bash_profile"
+   export AZURE_RESOURCE_NAME=XXX
+   ```
+
+6. Dağıtılan modelinizi seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Azure Cognitive Services
+
+1. [Azure portal](https://portal.azure.com/)'a gidin ve bir **Azure OpenAI** kaynağı oluşturun. İhtiyacınız olacak:
+   - **Kaynak adı**: Bu, API bitiş noktanızın (`https://AZURE_COGNITIVE_SERVICES_RESOURCE_NAME.cognitiveservices.azure.com/`) parçası olur
+   - **API anahtarı**: Kaynağınızdan `KEY 1` veya `KEY 2`
+
+2. [Azure AI Foundry](https://ai.azure.com/)'a gidin ve bir model dağıtın.
+
+   :::note
+   opencode'un düzgün çalışması için dağıtım adının model adıyla eşleşmesi gerekir.
+   :::
+
+3. `/connect` komutunu çalıştırın ve **Azure Cognitive Services**'i arayın.
+
+   ```txt
+   /connect
+   ```
+
+4. API anahtarınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+5. Kaynak adınızı ortam değişkeni olarak ayarlayın:
+
+   ```bash
+   AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX opencode
+   ```
+
+   Veya bash profilinize ekleyin:
+
+   ```bash title="~/.bash_profile"
+   export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
+   ```
+
+6. Dağıtılan modelinizi seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Baseten
+
+1. [Baseten](https://app.baseten.co/) adresine gidin, bir hesap oluşturun ve bir API anahtarı oluşturun.
+
+2. `/connect` komutunu çalıştırın ve **Baseten**'i arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. Baseten API anahtarınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Bir model seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Cerebras
+
+1. [Cerebras console](https://inference.cerebras.ai/) adresine gidin, bir hesap oluşturun ve bir API anahtarı oluşturun.
+
+2. `/connect` komutunu çalıştırın ve **Cerebras**'ı arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. Cerebras API anahtarınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. _Qwen 3 Coder 480B_ gibi bir model seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Cloudflare AI Gateway
+
+Cloudflare AI Gateway, OpenAI, Anthropic, Workers AI ve daha fazlasındaki modellere birleşik bir uç nokta aracılığıyla erişmenizi sağlar. [Unified Billing](https://developers.cloudflare.com/ai-gateway/features/unified-billing/) ile her sağlayıcı için ayrı API anahtarlarına ihtiyacınız yoktur.
+
+1. [Cloudflare dashboard](https://dash.cloudflare.com/)'a gidin, **AI** > **AI Ağ Geçidi**'ne gidin ve yeni bir ağ geçidi oluşturun.
+
+2. Hesap Kimliğinizi ve Ağ Geçidi Kimliğinizi ortam değişkenleri olarak ayarlayın.
+
+   ```bash title="~/.bash_profile"
+   export CLOUDFLARE_ACCOUNT_ID=your-32-character-account-id
+   export CLOUDFLARE_GATEWAY_ID=your-gateway-id
+   ```
+
+3. `/connect` komutunu çalıştırın ve **Cloudflare AI Gateway**'i arayın.
+
+   ```txt
+   /connect
+   ```
+
+4. Cloudflare API tokenınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+   Veya bunu bir ortam değişkeni olarak ayarlayın.
+
+   ```bash title="~/.bash_profile"
+   export CLOUDFLARE_API_TOKEN=your-api-token
+   ```
+
+5. Bir model seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+   Opencode yapılandırmanız aracılığıyla da modeller ekleyebilirsiniz.
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "cloudflare-ai-gateway": {
+         "models": {
+           "openai/gpt-4o": {},
+           "anthropic/claude-sonnet-4": {}
+         }
+       }
+     }
+   }
+   ```
+
+---
+
+### Cortecs
+
+1. [Cortecs console](https://cortecs.ai/) adresine gidin, bir hesap oluşturun ve bir API anahtarı oluşturun.
+
+2. `/connect` komutunu çalıştırın ve **Cortecs**'i arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. Cortecs API anahtarınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. _Kimi K2 Instruct_ gibi bir model seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### DeepSeek
+
+1. [DeepSeek console](https://platform.deepseek.com/)'a gidin, bir hesap oluşturun ve **Yeni API anahtarı oluştur**'a tıklayın.
+
+2. `/connect` komutunu çalıştırın ve **DeepSeek**'i arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. DeepSeek API anahtarınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. _DeepSeek Reasoner_ gibi bir DeepSeek modeli seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Deep Infra
+
+1. [Deep Infra dashboard](https://deepinfra.com/dash) adresine gidin, bir hesap oluşturun ve bir API anahtarı oluşturun.
+
+2. `/connect` komutunu çalıştırın ve **Deep Infra**'yı arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. Deep Infra API anahtarınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Bir model seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Firmware
+
+1. [Firmware dashboard](https://app.firmware.ai/signup) adresine gidin, bir hesap oluşturun ve bir API anahtarı oluşturun.
+
+2. `/connect` komutunu çalıştırın ve **Firmware**'i arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. Firmware API anahtarınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Bir model seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Fireworks AI
+
+1. [Fireworks AI console](https://app.fireworks.ai/)'a gidin, bir hesap oluşturun ve **API Anahtarı Oluştur**'a tıklayın.
+
+2. `/connect` komutunu çalıştırın ve **Fireworks AI**'yi arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. Fireworks AI API anahtarınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. _Kimi K2 Instruct_ gibi bir model seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### GitLab Duo
+
+GitLab Duo, GitLab'ın Anthropic proxy'si aracılığıyla yerel araç çağırma yetenekleriyle yapay zeka destekli aracılı sohbet sağlar.
+
+1. `/connect` komutunu çalıştırın ve GitLab'ı seçin.
+
+   ```txt
+   /connect
+   ```
+
+2. Kimlik doğrulama yönteminizi seçin:
+
+   ```txt
+   ┌ Select auth method
+   │
+   │ OAuth (Recommended)
+   │ Personal Access Token
+   └
+   ```
+
+   #### OAuth Kullanımı (Önerilen)
+
+   **OAuth**'u seçtiğinizde tarayıcınız yetkilendirme için açılacaktır.
+
+   #### Kişisel Erişim Simgesini Kullanma
+   1. Go to [GitLab User Settings > Access Tokens](https://gitlab.com/-/user_settings/personal_access_tokens)
+   2. Click **Add new token**
+   3. Name: `OpenCode`, Scopes: `api`
+   4. Belirteci kopyalayın (`glpat-` ile başlar)
+   5. Terminale girin
+
+3. Mevcut modelleri görmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+   Üç Claude tabanlı model mevcuttur:
+   - **duo-chat-haiku-4-5** (Varsayılan) - Hızlı görevler için hızlı yanıtlar
+   - **duo-chat-sonnet-4-5** - Çoğu iş akışı için dengeli performans
+   - **duo-chat-opus-4-5** - Karmaşık analizler için en yeteneklisi
+
+:::note
+İstemiyorsanız 'GITLAB_TOKEN' ortam değişkenini de belirtebilirsiniz.
+to store token in opencode auth storage.
+:::
+
+##### Kendi Kendine Barındırılan GitLab
+
+:::note[uyumluluk notu]
+opencode, oturum başlığını oluşturmak gibi bazı AI görevleri için küçük bir model kullanır.
+Varsayılan olarak Zen tarafından barındırılan gpt-5-nano'yu kullanacak şekilde yapılandırılmıştır. opencode'u kilitlemek için
+yalnızca kendi GitLab tarafından barındırılan örneğinizi kullanmak için aşağıdakileri ekleyin:
+`opencode.json` dosyası. Ayrıca oturum paylaşımını devre dışı bırakmanız da önerilir.
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "small_model": "gitlab/duo-chat-haiku-4-5",
+  "share": "disabled"
+}
+```
+
+:::
+
+Şirket içinde barındırılan GitLab örnekleri için:
+
+```bash
+export GITLAB_INSTANCE_URL=https://gitlab.company.com
+export GITLAB_TOKEN=glpat-...
+```
+
+Örneğiniz özel bir AI Ağ Geçidi çalıştırıyorsa:
+
+```bash
+GITLAB_AI_GATEWAY_URL=https://ai-gateway.company.com
+```
+
+Veya bash profilinize ekleyin:
+
+```bash title="~/.bash_profile"
+export GITLAB_INSTANCE_URL=https://gitlab.company.com
+export GITLAB_AI_GATEWAY_URL=https://ai-gateway.company.com
+export GITLAB_TOKEN=glpat-...
+```
+
+:::note
+GitLab yöneticiniz aşağıdakileri etkinleştirmelidir:
+
+1. Kullanıcı, grup veya örnek için [Duo Agent Platform](https://docs.gitlab.com/user/gitlab_duo/turn_on_off/)
+2. Feature flags (via Rails console):
+   - `agent_platform_claude_code`
+   - `third_party_agents_enabled`
+     :::
+
+##### Kendi Kendine Barındırılan örnekler için OAuth
+
+Oauth'un kendi kendine barındırılan örneğiniz için çalışmasını sağlamak amacıyla
+yeni bir uygulama (Ayarlar → Uygulamalar) ile
+geri arama URL `http://127.0.0.1:8080/callback` ve aşağıdaki kapsamlar:
+
+- api (Sizin adınıza API'a erişin)
+- read_user (Kişisel bilgilerinizi okuyun)
+- read_repository (Depoya salt okunur erişime izin verir)
+
+Then expose application ID as environment variable:
+
+```bash
+export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
+```
+
+Daha fazla belge [opencode-gitlab-auth](https://www.npmjs.com/package/@gitlab/opencode-gitlab-auth) ana sayfasında.
+
+##### Yapılandırma
+
+`opencode.json` üzerinden özelleştirin:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "gitlab": {
+      "options": {
+        "instanceUrl": "https://gitlab.com",
+        "featureFlags": {
+          "duo_agent_platform_agentic_chat": true,
+          "duo_agent_platform": true
+        }
+      }
+    }
+  }
+}
+```
+
+##### GitLab API Araçları (İsteğe bağlı, ancak şiddetle önerilir)
+
+GitLab araçlarına (birleştirme istekleri, sorunlar, işlem hatları, CI/CD vb.) erişmek için:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["@gitlab/opencode-gitlab-plugin"]
+}
+```
+
+Bu eklenti, MR incelemeleri, sorun izleme, işlem hattı izleme ve daha fazlasını içeren kapsamlı GitLab veri havuzu yönetimi yetenekleri sağlar.
+
+---
+
+### GitHub Copilot
+
+GitHub Copilot aboneliğinizi opencode'la kullanmak için:
+
+:::note
+Bazı modelleri kullanmak için [Pro+ aboneliği](https://github.com/features/copilot/plans) gerekebilir.
+
+Bazı modellerin [GitHub Copilot settings](https://docs.github.com/en/copilot/how-tos/use-ai-models/configure-access-to-ai-models#setup-for-individual-use)'da manuel olarak etkinleştirilmesi gerekir.
+:::
+
+1. `/connect` komutunu çalıştırın ve GitHub Copilot'u arayın.
+
+   ```txt
+   /connect
+   ```
+
+2. [github.com/login/device](https://github.com/login/device)'a gidin ve kodu girin.
+
+   ```txt
+   ┌ Login with GitHub Copilot
+   │
+   │ https://github.com/login/device
+   │
+   │ Enter code: 8F43-6FCF
+   │
+   └ Waiting for authorization...
+   ```
+
+3. Şimdi istediğiniz modeli seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Google Vertex AI
+
+Google Vertex AI'yi opencode ile kullanmak için:
+
+1. Google Cloud Console'daki **Model Bahçesi**'ne gidin ve şunları kontrol edin:
+   Bölgenizde mevcut modeller.
+
+   :::note
+   Vertex AI API etkinleştirilmiş bir Google Cloud projenizin olması gerekir.
+   :::
+
+2. Gerekli ortam değişkenlerini ayarlayın:
+   - `GOOGLE_CLOUD_PROJECT`: Google Cloud proje kimliğiniz
+   - `VERTEX_LOCATION` (isteğe bağlı): Vertex AI bölgesi (varsayılanı `global`'dir)
+   - Kimlik Doğrulama (birini seçin):
+     - `GOOGLE_APPLICATION_CREDENTIALS`: Hizmet hesabınızın yolu JSON anahtar dosyası
+     - gcloud kullanarak kimlik doğrulaması yapın CLI: `gcloud auth application-default login`
+
+   Bunları opencode çalıştırılırken ayarlayın.
+
+   ```bash
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
+   ```
+
+   Veya bunları bash profilinize ekleyin.
+
+   ```bash title="~/.bash_profile"
+   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+   export GOOGLE_CLOUD_PROJECT=your-project-id
+   export VERTEX_LOCATION=global
+   ```
+
+:::tip
+`global` bölgesi, hiçbir ekstra maliyet olmaksızın kullanılabilirliği artırır ve hataları azaltır. Veri yerleşimi gereksinimleri için bölgesel uç noktaları (ör. `us-central1`) kullanın. [Daha fazla bilgi](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
+:::
+
+3. İstediğiniz modeli seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Groq
+
+1. [Groq console](https://console.groq.com/)'a gidin, **API Anahtarı Oluştur**'a tıklayın ve anahtarı kopyalayın.
+
+2. `/connect` komutunu çalıştırın ve Groq'u arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. Sağlayıcının API anahtarını girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. İstediğinizi seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Hugging Face
+
+[Hugging Face Inference Providers](https://huggingface.co/docs/inference-providers) 17'den fazla sağlayıcı tarafından desteklenen açık modellere erişim sağlar.
+
+1. Çıkarım Sağlayıcılara çağrı yapma iznine sahip bir belirteç oluşturmak için [Hugging Face settings](https://huggingface.co/settings/tokens/new?ownUserPermissions=inference.serverless.write&tokenType=fineGrained) adresine gidin.
+
+2. `/connect` komutunu çalıştırın ve **Hugging Face**'i arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. Hugging Face tokenınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. _Kimi-K2-Instruct_ veya _GLM-4.6_ gibi bir model seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Helicone
+
+[Helicone](https://helicone.ai), AI uygulamalarınız için günlük kaydı, izleme ve analiz sağlayan bir LLM gözlemlenebilirlik platformudur. Helicone AI Gateway, taleplerinizi modele göre otomatik olarak uygun sağlayıcıya yönlendirir.
+
+1. [Helicone](https://helicone.ai) adresine gidin, bir hesap oluşturun ve kontrol panelinizden bir API anahtarı oluşturun.
+
+2. `/connect` komutunu çalıştırın ve **Helicone**'yu arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. Helicone API anahtarınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Bir model seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+Daha fazla sağlayıcı ve önbelleğe alma ve hız sınırlama gibi gelişmiş özellikler için [Helicone documentation](https://docs.helicone.ai)'yi kontrol edin.
+
+#### İsteğe Bağlı Yapılandırmalar
+
+Helicone'un opencode aracılığıyla otomatik olarak yapılandırılmayan bir özelliği veya modelini görmeniz durumunda bunu her zaman kendiniz yapılandırabilirsiniz.
+
+İşte [Helicone's Model Directory](https://helicone.ai/models), eklemek istediğiniz modellerin kimliklerini almak için buna ihtiyacınız olacak.
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "helicone": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Helicone",
+      "options": {
+        "baseURL": "https://ai-gateway.helicone.ai",
+      },
+      "models": {
+        "gpt-4o": {
+          // Model ID (from Helicone's model directory page)
+          "name": "GPT-4o", // Your own custom name for the model
+        },
+        "claude-sonnet-4-20250514": {
+          "name": "Claude Sonnet 4",
+        },
+      },
+    },
+  },
+}
+```
+
+#### Özel Başlıklar
+
+Helicone, önbelleğe alma, kullanıcı izleme ve oturum yönetimi gibi özellikler için özel başlıkları destekler. `options.headers` kullanarak bunları sağlayıcınızın yapılandırmasına ekleyin:
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "helicone": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Helicone",
+      "options": {
+        "baseURL": "https://ai-gateway.helicone.ai",
+        "headers": {
+          "Helicone-Cache-Enabled": "true",
+          "Helicone-User-Id": "opencode",
+        },
+      },
+    },
+  },
+}
+```
+
+##### Oturum izleme
+
+Helicone'un [Sessions](https://docs.helicone.ai/features/sessions) özelliği, ilgili LLM isteklerini birlikte gruplandırmanıza olanak tanır. Her opencode görüşmesini Helicone'da bir oturum olarak otomatik olarak kaydetmek için [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) eklentisini kullanın.
+
+```bash
+npm install -g opencode-helicone-session
+```
+
+Yapılandırmanıza ekleyin.
+
+```json title="opencode.json"
+{
+  "plugin": ["opencode-helicone-session"]
+}
+```
+
+Eklenti isteklerinize `Helicone-Session-Id` ve `Helicone-Session-Name` başlıklarını enjekte eder. Helicone'un Oturumlar sayfasında her opencode görüşmesinin ayrı bir oturum olarak listelendiğini göreceksiniz.
+
+##### Yaygın Helicone başlıkları
+
+| Başlık                     | Açıklama                                                      |
+| -------------------------- | ------------------------------------------------------------- |
+| `Helicone-Cache-Enabled`   | Enable response caching (`true`/`false`)                      |
+| `Helicone-User-Id`         | Track metrics by user                                         |
+| `Helicone-Property-[Name]` | Add custom properties (e.g., `Helicone-Property-Environment`) |
+| `Helicone-Prompt-Id`       | İstekleri bilgi istemi sürümleriyle ilişkilendirin            |
+
+Mevcut tüm başlıklar için [Helicone Header Directory](https://docs.helicone.ai/helicone-headers/header-directory)'a bakın.
+
+---
+
+### llama.cpp
+
+opencode'u yerel modelleri kullanacak şekilde [llama.cpp's](https://github.com/ggml-org/llama.cpp) llama-server yardımcı programını kullanarak yapılandırabilirsiniz.
+
+```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "llama.cpp": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "llama-server (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:8080/v1"
+      },
+      "models": {
+        "qwen3-coder:a3b": {
+          "name": "Qwen3-Coder: a3b-30b (local)",
+          "limit": {
+            "context": 128000,
+            "output": 65536
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Bu örnekte:
+
+- `llama.cpp` özel sağlayıcı kimliğidir. Bu istediğiniz herhangi bir dize olabilir.
+- `npm` bu sağlayıcı için kullanılacak paketi belirtir. Burada `@ai-sdk/openai-compatible`, herhangi bir OpenAI uyumlu API için kullanılır.
+- `name` sağlayıcının kullanıcı arayüzündeki görünen adıdır.
+- `options.baseURL` yerel sunucunun uç noktasıdır.
+- `models` model kimliklerinin konfigürasyonlarına ait bir haritasıdır. Model adı, model seçim listesinde görüntülenecektir.
+
+---
+
+### IO.NET
+
+IO.NET, çeşitli kullanım durumları için optimize edilmiş 17 model sunar:
+
+1. [IO.NET console](https://ai.io.net/) adresine gidin, bir hesap oluşturun ve bir API anahtarı oluşturun.
+
+2. `/connect` komutunu çalıştırın ve **IO.NET** öğesini arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. IO.NET API anahtarınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Bir model seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### LM Studio
+
+LM Studio aracılığıyla opencode'u yerel modelleri kullanacak şekilde yapılandırabilirsiniz.
+
+```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "lmstudio": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LM Studio (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:1234/v1"
+      },
+      "models": {
+        "google/gemma-3n-e4b": {
+          "name": "Gemma 3n-e4b (local)"
+        }
+      }
+    }
+  }
+}
+```
+
+Bu örnekte:
+
+- `lmstudio` özel sağlayıcı kimliğidir. Bu istediğiniz herhangi bir dize olabilir.
+- `npm` bu sağlayıcı için kullanılacak paketi belirtir. Burada `@ai-sdk/openai-compatible`, herhangi bir OpenAI uyumlu API için kullanılır.
+- `name` sağlayıcının kullanıcı arayüzündeki görünen adıdır.
+- `options.baseURL` yerel sunucunun uç noktasıdır.
+- `models` model kimliklerinin konfigürasyonlarına ait bir haritasıdır. Model adı, model seçim listesinde görüntülenecektir.
+
+---
+
+### Moonshot AI
+
+Moonshot AI'dan Kimi K2'yi kullanmak için:
+
+1. [Moonshot AI console](https://platform.moonshot.ai/console)'a gidin, bir hesap oluşturun ve **API anahtarı oluştur**'a tıklayın.
+
+2. `/connect` komutunu çalıştırın ve **Moonshot AI**'yi arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. Moonshot API anahtarınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. _Kimi K2_ seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### MiniMax
+
+1. [MiniMax API Console](https://platform.minimax.io/login) adresine gidin, bir hesap oluşturun ve bir API anahtarı oluşturun.
+
+2. `/connect` komutunu çalıştırın ve **MiniMax**'ı arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. MiniMax API anahtarınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. _M2.1_ gibi bir model seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Nebius Token Factory
+
+1. [Nebius Token Factory console](https://tokenfactory.nebius.com/)'a gidin, bir hesap oluşturun ve **Anahtar Ekle**'ye tıklayın.
+
+2. `/connect` komutunu çalıştırın ve **Nebius Token Factory**'yi arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. Nebius Token Factory API anahtarınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. _Kimi K2 Instruct_ gibi bir model seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Ollama
+
+Ollama aracılığıyla opencode'u yerel modelleri kullanacak şekilde yapılandırabilirsiniz.
+
+:::tip
+Ollama kendisini opencode için otomatik olarak yapılandırabilir. Ayrıntılar için [Ollama integration docs](https://docs.ollama.com/integrations/opencode)'a bakın.
+:::
+
+```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "ollama": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama (local)",
+      "options": {
+        "baseURL": "http://localhost:11434/v1"
+      },
+      "models": {
+        "llama2": {
+          "name": "Llama 2"
+        }
+      }
+    }
+  }
+}
+```
+
+Bu örnekte:
+
+- `ollama` özel sağlayıcı kimliğidir. Bu istediğiniz herhangi bir dize olabilir.
+- `npm` bu sağlayıcı için kullanılacak paketi belirtir. Burada `@ai-sdk/openai-compatible`, herhangi bir OpenAI uyumlu API için kullanılır.
+- `name` sağlayıcının kullanıcı arayüzündeki görünen adıdır.
+- `options.baseURL` yerel sunucunun uç noktasıdır.
+- `models` model kimliklerinin konfigürasyonlarına ait bir haritasıdır. Model adı, model seçim listesinde görüntülenecektir.
+
+:::tip
+Araç çağrıları çalışmıyorsa Ollama'da `num_ctx` değerini artırmayı deneyin. 16k - 32k civarında başlayın.
+:::
+
+---
+
+### Ollama Cloud
+
+Ollama Cloud'u opencode ile kullanmak için:
+
+1. [https://ollama.com/](https://ollama.com/) adresine gidin ve oturum açın veya bir hesap oluşturun.
+
+2. **Ayarlar** > **Anahtarlar**'a gidin ve yeni bir API anahtarı oluşturmak için **API Anahtarı Ekle**'yi tıklayın.
+
+3. opencode'da kullanmak için API anahtarını kopyalayın.
+
+4. `/connect` komutunu çalıştırın ve **Ollama Cloud**'u arayın.
+
+   ```txt
+   /connect
+   ```
+
+5. Ollama Cloud API anahtarınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+6. **Önemli**: opencode'da bulut modellerini kullanmadan önce model bilgilerini yerel olarak almanız gerekir:
+
+   ```bash
+   ollama pull gpt-oss:20b-cloud
+   ```
+
+7. Ollama Cloud modelinizi seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### OpenAI
+
+[ChatGPT Plus or Pro](https://chatgpt.com/pricing)'a kaydolmanızı öneririz.
+
+1. Kaydolduktan sonra `/connect` komutunu çalıştırın ve OpenAI'yi seçin.
+
+   ```txt
+   /connect
+   ```
+
+2. Burada **ChatGPT Plus/Pro** seçeneğini seçebilirsiniz, tarayıcınız açılacaktır.
+   ve sizden kimlik doğrulamanızı isteyeceğiz.
+
+   ```txt
+   ┌ Select auth method
+   │
+   │ ChatGPT Plus/Pro
+   │ Manually enter API Key
+   └
+   ```
+
+3. Artık `/models` komutunu kullandığınızda tüm OpenAI modelleri mevcut olmalıdır.
+
+   ```txt
+   /models
+   ```
+
+##### API anahtarlarını kullanma
+
+Zaten bir API anahtarınız varsa, **API Anahtarını Manuel Olarak Girin** seçeneğini seçip terminalinize yapıştırabilirsiniz.
+
+---
+
+### OpenCode Zen
+
+OpenCode Zen, opencode ekibinin test edip doğruladığı modellerin bir listesidir. [Daha fazla bilgi](/docs/zen).
+
+1. **<a href={console}>OpenCode Zen</a>**'de oturum açın ve **API Anahtarı Oluştur**'u tıklayın.
+
+2. `/connect` komutunu çalıştırın ve **OpenCode Zen**'i arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. opencode API anahtarınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. _Qwen 3 Coder 480B_ gibi bir model seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### OpenRouter
+
+1. [OpenRouter dashboard](https://openrouter.ai/settings/keys)'a gidin, **API Anahtarı Oluştur**'a tıklayın ve anahtarı kopyalayın.
+
+2. `/connect` komutunu çalıştırın ve OpenRouter'ı arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. Sağlayıcının API anahtarını girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Birçok OpenRouter modeli varsayılan olarak önceden yüklenmiştir; istediğiniz modeli seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+   opencode yapılandırmanız aracılığıyla ek modeller de ekleyebilirsiniz.
+
+   ```json title="opencode.json" {6}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "openrouter": {
+         "models": {
+           "somecoolnewmodel": {}
+         }
+       }
+     }
+   }
+   ```
+
+5. Bunları ayrıca opencode yapılandırmanız aracılığıyla da özelleştirebilirsiniz. Burada bir sağlayıcı belirtmeye ilişkin bir örnek verilmiştir
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "openrouter": {
+         "models": {
+           "moonshotai/kimi-k2": {
+             "options": {
+               "provider": {
+                 "order": ["baseten"],
+                 "allow_fallbacks": false
+               }
+             }
+           }
+         }
+       }
+     }
+   }
+   ```
+
+---
+
+### SAP AI Core
+
+SAP AI Core, birleşik bir platform aracılığıyla OpenAI, Anthropic, Google, Amazon, Meta, Mistral ve AI21'den 40'tan fazla modele erişim sağlar.
+
+1. [SAP BTP Cockpit](https://account.hana.ondemand.com/) sunucunuza gidin, SAP AI Core hizmet örneğinize gidin ve bir hizmet anahtarı oluşturun.
+
+   :::tip
+   Hizmet anahtarı, `clientid`, `clientsecret`, `url` ve `serviceurls.AI_API_URL` içeren bir JSON nesnesidir. AI Core örneğinizi BTP Kokpitinde **Hizmetler** > **Örnekler ve Abonelikler** altında bulabilirsiniz.
+   :::
+
+2. `/connect` komutunu çalıştırın ve **SAP AI Core** arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. Servis anahtarınızı JSON girin.
+
+   ```txt
+   ┌ Service key
+   │
+   │
+   └ enter
+   ```
+
+   Veya `AICORE_SERVICE_KEY` ortam değişkenini ayarlayın:
+
+   ```bash
+   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
+   ```
+
+   Veya bash profilinize ekleyin:
+
+   ```bash title="~/.bash_profile"
+   export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}'
+   ```
+
+4. İsteğe bağlı olarak dağıtım kimliğini ve kaynak grubunu ayarlayın:
+
+   ```bash
+   AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group opencode
+   ```
+
+   :::note
+   Bu ayarlar isteğe bağlıdır ve SAP AI Core kurulumunuza göre yapılandırılmalıdır.
+   :::
+
+5. 40'tan fazla mevcut model arasından seçim yapmak için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### OVHcloud AI Endpoints
+
+1. [OVHcloud panel](https://ovh.com/manager)'a gidin. `Public Cloud` bölümüne gidin, `AI & Machine Learning` > `AI Endpoints` ve `API Keys` sekmesinde **Yeni bir API anahtarı oluştur**'u tıklayın.
+
+2. `/connect` komutunu çalıştırın ve **OVHcloud AI Endpoints**'i arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. OVHcloud AI Uç Noktaları API anahtarınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. _gpt-oss-120b_ gibi bir model seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Scaleway
+
+[Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/)'yi Opencode ile kullanmak için:
+
+1. Yeni bir API anahtarı oluşturmak için [Scaleway Console IAM settings](https://console.scaleway.com/iam/api-keys)'a gidin.
+
+2. `/connect` komutunu çalıştırın ve **Scaleway**'i arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. Scaleway API anahtarınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. _devstral-2-123b-instruct-2512_ veya _gpt-oss-120b_ gibi bir model seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Together AI
+
+1. [Together AI console](https://api.together.ai)'a gidin, bir hesap oluşturun ve **Anahtar Ekle**'ye tıklayın.
+
+2. `/connect` komutunu çalıştırın ve **Together AI**'yi arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. Together AI API anahtarınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. _Kimi K2 Instruct_ gibi bir model seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Venice AI
+
+1. [Venice AI console](https://venice.ai) adresine gidin, bir hesap oluşturun ve bir API anahtarı oluşturun.
+
+2. `/connect` komutunu çalıştırın ve **Venice AI**'yi arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. Venice AI API anahtarınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. _Llama 3.3 70B_ gibi bir model seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Vercel AI Gateway
+
+Vercel AI Gateway, OpenAI, Anthropic, Google, xAI ve daha fazlasındaki modellere birleşik bir uç nokta aracılığıyla erişmenizi sağlar. Modeller herhangi bir fark olmadan liste fiyatıyla sunulmaktadır.
+
+1. [Vercel dashboard](https://vercel.com/)'a gidin, **AI Ağ Geçidi** sekmesine gidin ve yeni bir API anahtarı oluşturmak için **API anahtarlarına** tıklayın.
+
+2. `/connect` komutunu çalıştırın ve **Vercel AI Gateway**'i arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. Vercel AI Gateway API anahtarınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Bir model seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+Modelleri opencode yapılandırmanız aracılığıyla da özelleştirebilirsiniz. Sağlayıcı yönlendirme sırasını belirtmeye ilişkin bir örneği burada bulabilirsiniz.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "vercel": {
+      "models": {
+        "anthropic/claude-sonnet-4": {
+          "options": {
+            "order": ["anthropic", "vertex"]
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Bazı yararlı yönlendirme seçenekleri:
+
+| Seçenek             | Açıklama                                                              |
+| ------------------- | --------------------------------------------------------------------- |
+| `order`             | Denenecek sağlayıcı sırası                                            |
+| `only`              | Belirli sağlayıcılarla sınırla                                        |
+| `zeroDataRetention` | Yalnızca sıfır veri saklama politikasına sahip sağlayıcıları kullanın |
+
+---
+
+### xAI
+
+1. [xAI console](https://console.x.ai/) adresine gidin, bir hesap oluşturun ve bir API anahtarı oluşturun.
+
+2. `/connect` komutunu çalıştırın ve **xAI**'yi arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. xAI API anahtarınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. _Grok Beta_ gibi bir model seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Z.AI
+
+1. [Z.AI API console](https://z.ai/manage-apikey/apikey-list)'a gidin, bir hesap oluşturun ve **Yeni bir API anahtarı oluştur**'a tıklayın.
+
+2. `/connect` komutunu çalıştırın ve **Z.AI**'yi arayın.
+
+   ```txt
+   /connect
+   ```
+
+   **GLM Kodlama Planı**'na aboneyseniz **Z.AI Kodlama Planı**'nı seçin.
+
+3. Z.AI API anahtarınızı girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. _GLM-4.7_ gibi bir model seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### ZenMux
+
+1. [ZenMux dashboard](https://zenmux.ai/settings/keys)'a gidin, **API Anahtarı Oluştur**'a tıklayın ve anahtarı kopyalayın.
+
+2. `/connect` komutunu çalıştırın ve ZenMux'u arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. Sağlayıcının API anahtarını girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Çoğu ZenMux modeli varsayılan olarak önceden yüklenmiştir; istediğinizi seçmek için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+   opencode yapılandırmanız aracılığıyla ek modeller de ekleyebilirsiniz.
+
+   ```json title="opencode.json" {6}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "zenmux": {
+         "models": {
+           "somecoolnewmodel": {}
+         }
+       }
+     }
+   }
+   ```
+
+---
+
+## Özel sağlayıcı
+
+`/connect` komutunda listelenmeyen herhangi bir **OpenAI uyumlu** sağlayıcıyı eklemek için:
+
+:::tip
+OpenAI uyumlu herhangi bir sağlayıcıyı opencode ile kullanabilirsiniz. Çoğu modern yapay zeka sağlayıcısı OpenAI uyumlu API'ler sunar.
+:::
+
+1. `/connect` komutunu çalıştırın ve **Diğer** seçeneğine ilerleyin.
+
+   ```bash
+   $ /connect
+
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ...
+   │  ● Other
+   └
+   ```
+
+2. Sağlayıcı için benzersiz bir kimlik girin.
+
+   ```bash
+   $ /connect
+
+   ┌  Add credential
+   │
+   ◇  Enter provider id
+   │  myprovider
+   └
+   ```
+
+   :::note
+   Unutulmaz bir kimlik seçin, bunu yapılandırma dosyanızda kullanacaksınız.
+   :::
+
+3. Sağlayıcı için API anahtarınızı girin.
+
+   ```bash
+   $ /connect
+
+   ┌  Add credential
+   │
+   ▲  This only stores a credential for myprovider - you will need to configure it in opencode.json, check the docs for examples.
+   │
+   ◇  Enter your API key
+   │  sk-...
+   └
+   ```
+
+4. Proje dizininizde `opencode.json` dosyanızı oluşturun veya güncelleyin:
+
+   ```json title="opencode.json" ""myprovider"" {5-15}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "myprovider": {
+         "npm": "@ai-sdk/openai-compatible",
+         "name": "My AI ProviderDisplay Name",
+         "options": {
+           "baseURL": "https://api.myprovider.com/v1"
+         },
+         "models": {
+           "my-model-name": {
+             "name": "My Model Display Name"
+           }
+         }
+       }
+     }
+   }
+   ```
+
+   Yapılandırma seçenekleri şunlardır:
+   - **npm**: Kullanılacak AI SDK paketi, OpenAI uyumlu sağlayıcılar için `@ai-sdk/openai-compatible`
+   - **name**: UI'daki görünen ad.
+   - **modeller**: Mevcut modeller.
+   - **options.baseURL**: API endpoint URL.
+   - **options.apiKey**: Kimlik doğrulama kullanılmıyorsa isteğe bağlı olarak API anahtarını ayarlayın.
+   - **options.headers**: İsteğe bağlı olarak özel başlıklar ayarlayın.
+
+   Aşağıdaki örnekte gelişmiş seçenekler hakkında daha fazla bilgi bulabilirsiniz.
+
+5. `/models` komutunu çalıştırın; özel sağlayıcınız ve modelleriniz seçim listesinde görünecektir.
+
+---
+
+##### Örnek
+
+Burada `apiKey`, `headers` ve model `limit` seçeneklerini ayarlayan bir örnek verilmiştir.
+
+```json title="opencode.json" {9,11,17-20}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "myprovider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "My AI ProviderDisplay Name",
+      "options": {
+        "baseURL": "https://api.myprovider.com/v1",
+        "apiKey": "{env:ANTHROPIC_API_KEY}",
+        "headers": {
+          "Authorization": "Bearer custom-token"
+        }
+      },
+      "models": {
+        "my-model-name": {
+          "name": "My Model Display Name",
+          "limit": {
+            "context": 200000,
+            "output": 65536
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Yapılandırma ayrıntıları:
+
+- **apiKey**: `env` değişken söz dizimini kullanarak ayarlayın, [daha fazla bilgi](/docs/config#env-vars).
+- **headers**: Her istekle birlikte gönderilen özel başlıklar.
+- **limit.context**: Modelin kabul ettiği maksimum giriş tokenları.
+- **limit.output**: Modelin üretebileceği maksimum token sayısı.
+
+`limit` alanları opencode'un ne kadar bağlamınız kaldığını anlamasını sağlar. Standart sağlayıcılar bunları models.dev'den otomatik olarak alır.
+
+---
+
+## Sorun Giderme
+
+Sağlayıcıyı yapılandırma konusunda sorun yaşıyorsanız aşağıdakileri kontrol edin:
+
+1. **Kimlik doğrulama kurulumunu kontrol edin**: Kimlik bilgilerinin geçerli olup olmadığını görmek için `opencode auth list` komutunu çalıştırın.
+   sağlayıcı için yapılandırmanıza eklenir.
+
+   Bu, kimlik doğrulaması için ortam değişkenlerine güvenen Amazon Bedrock gibi sağlayıcılar için geçerli değildir.
+
+2. Özel sağlayıcılar için opencode yapılandırmasını kontrol edin ve:
+   - `/connect` komutunda kullanılan sağlayıcı kimliğinin, opencode yapılandırmanızdaki kimlikle eşleştiğinden emin olun.
+   - Sağlayıcı için doğru npm paketi kullanılıyor. Örneğin Cerebras için `@ai-sdk/cerebras` kullanın. Diğer tüm OpenAI uyumlu sağlayıcılar için `@ai-sdk/openai-compatible` kullanın.
+   - `options.baseURL` alanında doğru API bitiş noktasının kullanıldığını kontrol edin.
