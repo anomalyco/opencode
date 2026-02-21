@@ -44,6 +44,7 @@ export async function handler(
   input: APIEvent,
   opts: {
     format: ZenData.Format
+    modelList: "lite" | "full"
     parseApiKey: (headers: Headers) => string | undefined
     parseModel: (url: string, body: any) => string
     parseIsStream: (url: string, body: any) => boolean
@@ -77,7 +78,7 @@ export async function handler(
       request: requestId,
       client: ocClient,
     })
-    const zenData = ZenData.list()
+    const zenData = ZenData.list(opts.modelList)
     const modelInfo = validateModel(zenData, model)
     const dataDumper = createDataDumper(sessionId, requestId, projectId)
     const trialLimiter = createTrialLimiter(modelInfo.trial, ip, ocClient)
