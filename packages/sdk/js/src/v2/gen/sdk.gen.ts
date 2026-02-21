@@ -117,6 +117,8 @@ import type {
   SessionInitErrors,
   SessionInitResponses,
   SessionListResponses,
+  SessionMessageCountErrors,
+  SessionMessageCountResponses,
   SessionMessageErrors,
   SessionMessageResponses,
   SessionMessagesErrors,

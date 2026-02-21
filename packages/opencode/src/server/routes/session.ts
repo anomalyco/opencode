@@ -580,6 +580,36 @@ export const SessionRoutes = lazy(() =>
       },
     )
     .get(
+      "/:sessionID/message/count",
+      describeRoute({
+        summary: "Get message count",
+        description: "Get the total number of messages in a session.",
+        operationId: "session.messageCount",
+        responses: {
+          200: {
+            description: "Message count",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ count: z.number() })),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: z.string().meta({ description: "Session ID" }),
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const count = await Session.messageCount({ sessionID })
+        return c.json({ count })
+      },
+    )
+    .get(
       "/:sessionID/message/:messageID",
       describeRoute({
         summary: "Get message",
