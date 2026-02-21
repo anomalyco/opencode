@@ -257,26 +257,11 @@ export function SessionHeader() {
     ] as const
   })
 
-  const checksReady = createMemo(() => {
-    if (platform.platform !== "desktop") return true
-    if (!platform.checkAppExists) return true
-    const list = apps()
-    return list.every((app) => exists[app.id] !== undefined)
-  })
-
   const [prefs, setPrefs] = persisted(Persist.global("open.app"), createStore({ app: "finder" as OpenApp }))
   const [menu, setMenu] = createStore({ open: false })
 
   const canOpen = createMemo(() => platform.platform === "desktop" && !!platform.openPath && server.isLocal())
   const current = createMemo(() => options().find((o) => o.id === prefs.app) ?? options()[0])
-
-  createEffect(() => {
-    if (platform.platform !== "desktop") return
-    if (!checksReady()) return
-    const value = prefs.app
-    if (options().some((o) => o.id === value)) return
-    setPrefs("app", options()[0]?.id ?? "finder")
-  })
 
   const openDir = (app: OpenApp) => {
     const directory = projectDirectory()
@@ -319,9 +304,11 @@ export function SessionHeader() {
       <Show when={centerMount()}>
         {(mount) => (
           <Portal mount={mount()}>
-            <button
+            <Button
               type="button"
-              class="hidden md:flex w-[240px] max-w-full min-w-0 h-[24px] pl-0.5 pr-2 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-panel transition-colors cursor-default hover:bg-surface-raised-base-hover focus-visible:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
+              variant="ghost"
+              size="small"
+              class="hidden md:flex w-[240px] max-w-full min-w-0 pl-0.5 pr-2 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-panel shadow-none cursor-default"
               onClick={() => command.trigger("file.open")}
               aria-label={language.t("session.header.searchFiles")}
             >
@@ -337,7 +324,7 @@ export function SessionHeader() {
                   <Keybind class="shrink-0 !border-0 !bg-transparent !shadow-none px-0">{keybind()}</Keybind>
                 )}
               </Show>
-            </button>
+            </Button>
           </Portal>
         )}
       </Show>
@@ -398,7 +385,7 @@ export function SessionHeader() {
                               <DropdownMenu.Group>
                                 <DropdownMenu.GroupLabel>{language.t("session.header.openIn")}</DropdownMenu.GroupLabel>
                                 <DropdownMenu.RadioGroup
-                                  value={prefs.app}
+                                  value={current().id}
                                   onChange={(value) => {
                                     if (!OPEN_APPS.includes(value as OpenApp)) return
                                     setPrefs("app", value as OpenApp)
@@ -464,8 +451,11 @@ export function SessionHeader() {
                     triggerProps={{
                       variant: "ghost",
                       class:
-                        "rounded-md h-[24px] px-3 border border-border-base bg-surface-panel shadow-none data-[expanded]:bg-surface-raised-base-active",
-                      classList: { "rounded-r-none": share.shareUrl() !== undefined },
+                        "rounded-md h-[24px] px-3 border border-border-weak-base bg-surface-panel shadow-none data-[expanded]:bg-surface-base-active",
+                      classList: {
+                        "rounded-r-none": share.shareUrl() !== undefined,
+                        "border-r-0": share.shareUrl() !== undefined,
+                      },
                       style: { scale: 1 },
                     }}
                     trigger={<span class="text-12-regular">{language.t("session.share.action.share")}</span>}
@@ -537,7 +527,7 @@ export function SessionHeader() {
                       <IconButton
                         icon={share.state.copied ? "check" : "link"}
                         variant="ghost"
-                        class="rounded-l-none h-[24px] border border-border-base bg-surface-panel shadow-none"
+                        class="rounded-l-none h-[24px] border border-border-weak-base bg-surface-panel shadow-none"
                         onClick={() => share.copyLink((error) => showRequestError(language, error))}
                         disabled={share.state.unshare}
                         aria-label={

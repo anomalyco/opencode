@@ -11,7 +11,7 @@ export const dict = {
   "ui.sessionReview.image.loading": "Carregando...",
   "ui.sessionReview.image.placeholder": "Imagem",
   "ui.sessionReview.largeDiff.title": "Diff grande demais para renderizar",
-  "ui.sessionReview.largeDiff.meta": "Limite: {{lines}} linhas / {{limit}}. Atual: {{current}}.",
+  "ui.sessionReview.largeDiff.meta": "Limite: {{limit}} linhas alteradas. Atual: {{current}} linhas alteradas.",
   "ui.sessionReview.largeDiff.renderAnyway": "Renderizar mesmo assim",
 
   "ui.lineComment.label.prefix": "Comentar em ",
@@ -33,7 +33,7 @@ export const dict = {
 
   "ui.sessionTurn.status.delegating": "Delegando trabalho",
   "ui.sessionTurn.status.planning": "Planejando próximos passos",
-  "ui.sessionTurn.status.gatheringContext": "Explorando...",
+  "ui.sessionTurn.status.gatheringContext": "Explorando",
   "ui.sessionTurn.status.gatheredContext": "Explorado",
   "ui.sessionTurn.status.searchingCodebase": "Pesquisando no código",
   "ui.sessionTurn.status.searchingWeb": "Pesquisando na web",

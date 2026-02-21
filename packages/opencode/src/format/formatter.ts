@@ -67,7 +67,10 @@ export const prettier: Info = {
   async enabled() {
     const items = await Filesystem.findUp("package.json", Instance.directory, Instance.worktree)
     for (const item of items) {
-      const json = await Bun.file(item).json()
+      const json = await Filesystem.readJson<{
+        dependencies?: Record<string, string>
+        devDependencies?: Record<string, string>
+      }>(item)
       if (json.dependencies?.prettier) return true
       if (json.devDependencies?.prettier) return true
     }
@@ -86,7 +89,10 @@ export const oxfmt: Info = {
     if (!Flag.OPENCODE_EXPERIMENTAL_OXFMT) return false
     const items = await Filesystem.findUp("package.json", Instance.directory, Instance.worktree)
     for (const item of items) {
-      const json = await Bun.file(item).json()
+      const json = await Filesystem.readJson<{
+        dependencies?: Record<string, string>
+        devDependencies?: Record<string, string>
+      }>(item)
       if (json.dependencies?.oxfmt) return true
       if (json.devDependencies?.oxfmt) return true
     }
@@ -179,7 +185,7 @@ export const ruff: Info = {
       const found = await Filesystem.findUp(config, Instance.directory, Instance.worktree)
       if (found.length > 0) {
         if (config === "pyproject.toml") {
-          const content = await Bun.file(found[0]).text()
+          const content = await Filesystem.readText(found[0])
           if (content.includes("[tool.ruff]")) return true
         } else {
           return true
@@ -190,7 +196,7 @@ export const ruff: Info = {
     for (const dep of deps) {
       const found = await Filesystem.findUp(dep, Instance.directory, Instance.worktree)
       if (found.length > 0) {
-        const content = await Bun.file(found[0]).text()
+        const content = await Filesystem.readText(found[0])
         if (content.includes("ruff")) return true
       }
     }
@@ -348,7 +354,10 @@ export const pint: Info = {
   async enabled() {
     const items = await Filesystem.findUp("composer.json", Instance.directory, Instance.worktree)
     for (const item of items) {
-      const json = await Bun.file(item).json()
+      const json = await Filesystem.readJson<{
+        require?: Record<string, string>
+        "require-dev"?: Record<string, string>
+      }>(item)
       if (json.require?.["laravel/pint"]) return true
       if (json["require-dev"]?.["laravel/pint"]) return true
     }

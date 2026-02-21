@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createOpenReviewFile, focusTerminalById, getTabReorderIndex } from "./helpers"
+import { createOpenReviewFile, createOpenSessionFileTab, focusTerminalById, getTabReorderIndex } from "./helpers"
 
 describe("createOpenReviewFile", () => {
   test("opens and loads selected review file", () => {
@@ -17,6 +17,37 @@ describe("createOpenReviewFile", () => {
     openReviewFile("src/a.ts")
 
     expect(calls).toEqual(["show", "tab:src/a.ts", "open:file://src/a.ts", "load:src/a.ts"])
+  })
+})
+
+describe("createOpenSessionFileTab", () => {
+  test("activates the opened file tab", () => {
+    const calls: string[] = []
+    const openTab = createOpenSessionFileTab({
+      normalizeTab: (value) => {
+        calls.push(`normalize:${value}`)
+        return `file://${value}`
+      },
+      openTab: (tab) => calls.push(`open:${tab}`),
+      pathFromTab: (tab) => {
+        calls.push(`path:${tab}`)
+        return tab.slice("file://".length)
+      },
+      loadFile: (path) => calls.push(`load:${path}`),
+      openReviewPanel: () => calls.push("review"),
+      setActive: (tab) => calls.push(`active:${tab}`),
+    })
+
+    openTab("src/a.ts")
+
+    expect(calls).toEqual([
+      "normalize:src/a.ts",
+      "open:file://src/a.ts",
+      "path:file://src/a.ts",
+      "load:src/a.ts",
+      "review",
+      "active:file://src/a.ts",
+    ])
   })
 })
 
