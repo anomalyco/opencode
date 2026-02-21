@@ -9,6 +9,7 @@ import { fn } from "@/util/fn"
 import { Log } from "@/util/log"
 import { Wildcard } from "@/util/wildcard"
 import os from "os"
+import path from "path"
 import z from "zod"
 
 export namespace PermissionNext {
@@ -135,28 +136,37 @@ export namespace PermissionNext {
     async (input) => {
       const s = await state()
       const { ruleset, ...request } = input
-      for (const pattern of request.patterns ?? []) {
-        const rule = evaluate(request.permission, pattern, ruleset, s.approved)
-        log.info("evaluated", { permission: request.permission, pattern, action: rule })
-        if (rule.action === "deny")
-          throw new DeniedError(ruleset.filter((r) => Wildcard.match(request.permission, r.permission)))
-        if (rule.action === "ask") {
-          const id = input.id ?? Identifier.ascending("permission")
-          return new Promise<void>((resolve, reject) => {
-            const info: Request = {
-              id,
-              ...request,
-            }
-            s.pending[id] = {
-              info,
-              resolve,
-              reject,
-            }
-            Bus.publish(Event.Asked, info)
-          })
+      const patterns = request.patterns ?? []
+      // evaluate each pattern as both relative and absolute, keep the most specific match
+      const results = patterns.flatMap((pattern) => {
+        const candidates = [pattern]
+        if (!path.isAbsolute(pattern)) candidates.push(path.resolve(Instance.worktree, pattern))
+        return candidates.map((p) => {
+          const rule = evaluate(request.permission, p, ruleset, s.approved)
+          log.info("evaluated", { permission: request.permission, pattern: p, action: rule })
+          return rule
+        })
+      })
+
+      const best = results.reduce((a, b) => (b.pattern.length > a.pattern.length ? b : a), results[0])
+      if (!best || best.action === "allow") return
+
+      if (best.action === "deny")
+        throw new DeniedError(ruleset.filter((r) => Wildcard.match(request.permission, r.permission)))
+
+      const id = input.id ?? Identifier.ascending("permission")
+      return new Promise<void>((resolve, reject) => {
+        const info: Request = {
+          id,
+          ...request,
         }
-        if (rule.action === "allow") continue
-      }
+        s.pending[id] = {
+          info,
+          resolve,
+          reject,
+        }
+        Bus.publish(Event.Asked, info)
+      })
     },
   )
 

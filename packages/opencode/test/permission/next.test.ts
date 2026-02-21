@@ -474,6 +474,92 @@ test("ask - resolves immediately when action is allow", async () => {
   })
 })
 
+test("ask - absolute specific allow beats wildcard deny for relative edit path", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const result = await PermissionNext.ask({
+        sessionID: "session_test",
+        permission: "edit",
+        patterns: ["src/foo.ts"],
+        metadata: {},
+        always: [],
+        ruleset: [
+          { permission: "edit", pattern: "*", action: "deny" },
+          { permission: "edit", pattern: `${tmp.path}/src/**`, action: "allow" },
+        ],
+      })
+      expect(result).toBeUndefined()
+    },
+  })
+})
+
+test("ask - absolute specific deny beats wildcard allow for relative edit path", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await expect(
+        PermissionNext.ask({
+          sessionID: "session_test",
+          permission: "edit",
+          patterns: ["src/secret.ts"],
+          metadata: {},
+          always: [],
+          ruleset: [
+            { permission: "edit", pattern: "*", action: "allow" },
+            { permission: "edit", pattern: `${tmp.path}/src/**`, action: "deny" },
+          ],
+        }),
+      ).rejects.toBeInstanceOf(PermissionNext.DeniedError)
+    },
+  })
+})
+
+test("ask - absolute specific allow beats wildcard deny for bash command", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const result = await PermissionNext.ask({
+        sessionID: "session_test",
+        permission: "bash",
+        patterns: ["npm test"],
+        metadata: {},
+        always: [],
+        ruleset: [
+          { permission: "bash", pattern: "*", action: "deny" },
+          { permission: "bash", pattern: "npm *", action: "allow" },
+        ],
+      })
+      expect(result).toBeUndefined()
+    },
+  })
+})
+
+test("ask - specific deny beats wildcard allow for bash command", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await expect(
+        PermissionNext.ask({
+          sessionID: "session_test",
+          permission: "bash",
+          patterns: ["rm -rf /"],
+          metadata: {},
+          always: [],
+          ruleset: [
+            { permission: "bash", pattern: "*", action: "allow" },
+            { permission: "bash", pattern: "rm *", action: "deny" },
+          ],
+        }),
+      ).rejects.toBeInstanceOf(PermissionNext.DeniedError)
+    },
+  })
+})
+
 test("ask - throws RejectedError when action is deny", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
