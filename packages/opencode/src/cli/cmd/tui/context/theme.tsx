@@ -284,7 +284,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     const kv = useKV()
 
     function configMode(): "dark" | "light" | undefined {
-      const override = sync.data.config.theme_mode as "light" | "dark" | "system" | undefined
+      const override = sync.data.config.theme_mode
       if (override === "light" || override === "dark") return override
       return undefined
     }

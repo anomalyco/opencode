@@ -1676,6 +1676,10 @@ export type Config = {
    * Theme name to use for the interface
    */
   theme?: string
+  /**
+   * Override the detected terminal color scheme. Set to 'light' or 'dark' to force a mode, or 'system' to auto-detect from terminal.
+   */
+  theme_mode?: "light" | "dark" | "system"
   keybinds?: KeybindsConfig
   logLevel?: LogLevel
   /**
