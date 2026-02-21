@@ -292,6 +292,10 @@ export const RunCommand = cmd({
         type: "string",
         describe: "model variant (provider-specific reasoning effort, e.g., high, max, minimal)",
       })
+      .option("reasoning-effort", {
+        type: "string",
+        describe: "reasoning effort (alias for --variant)",
+      })
       .option("thinking", {
         type: "boolean",
         describe: "show thinking blocks",
@@ -299,6 +303,13 @@ export const RunCommand = cmd({
       })
   },
   handler: async (args) => {
+    const reasoningEffort = args.reasoningEffort
+    if (args.variant && reasoningEffort && args.variant !== reasoningEffort) {
+      UI.error("Conflicting values: --variant and --reasoning-effort must match")
+      process.exit(1)
+    }
+    const variant = args.variant ?? reasoningEffort
+
     let message = [...args.message, ...(args["--"] || [])]
       .map((arg) => (arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg))
       .join(" ")
@@ -594,7 +605,7 @@ export const RunCommand = cmd({
           model: args.model,
           command: args.command,
           arguments: message,
-          variant: args.variant,
+          variant,
         })
       } else {
         const model = args.model ? Provider.parseModel(args.model) : undefined
@@ -602,7 +613,7 @@ export const RunCommand = cmd({
           sessionID,
           agent,
           model,
-          variant: args.variant,
+          variant,
           parts: [...files, { type: "text", text: message }],
         })
       }
