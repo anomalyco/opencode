@@ -1,3 +1,4 @@
+import type { Config } from "@opencode-ai/sdk/v2/client"
 import { Component, createSignal, Show } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@opencode-ai/ui/toast"
@@ -13,6 +14,14 @@ export const SettingsConfig: Component = () => {
   const globalSync = useGlobalSync()
   const globalSDK = useGlobalSDK()
   const navigate = useNavigate()
+
+  const tryParse = (s: string): Config | undefined => {
+    try {
+      return JSON.parse(s)
+    } catch {
+      return undefined
+    }
+  }
 
   const [selectedPath, setSelectedPath] = createSignal<string | null>(null)
   const [configContent, setConfigContent] = createSignal("")
@@ -31,12 +40,8 @@ export const SettingsConfig: Component = () => {
     if (!platform.readConfigFile) return null
     for (const ext of [".json", ".jsonc"]) {
       const p = `${worktree}/opencode${ext}`
-      try {
-        const content = await platform.readConfigFile(p)
-        return { path: p, content }
-      } catch {
-        continue
-      }
+      const content = await platform.readConfigFile(p).catch(() => null)
+      if (content) return { path: p, content }
     }
     return null
   }
@@ -54,25 +59,22 @@ export const SettingsConfig: Component = () => {
     if (!worktree || platform.platform !== "desktop" || !platform.readConfigFile) return
 
     setLoading(true)
-    try {
-      const found = await findProjectConfig(worktree)
-      if (found) {
-        setConfigContent(found.content)
-        setSelectedPath(found.path)
-      } else {
-        const defaultConfig = `{
+    const found = await findProjectConfig(worktree).catch(() => null)
+    setLoading(false)
+    if (found) {
+      setConfigContent(found.content)
+      setSelectedPath(found.path)
+    } else {
+      const defaultConfig = `{
   "$schema": "https://opencode.ai/config.json",
   "providers": {},
   "agent": {},
   "mode": {}
 }`
-        setConfigContent(defaultConfig)
-        setSelectedPath(projectPath()!)
-      }
-      setEditorOpen(true)
-    } finally {
-      setLoading(false)
+      setConfigContent(defaultConfig)
+      setSelectedPath(projectPath()!)
     }
+    setEditorOpen(true)
   }
 
   const saveConfig = async () => {
@@ -80,66 +82,75 @@ export const SettingsConfig: Component = () => {
     if (!path) return
 
     const isGlobal = path === globalPath()
-
     if (isGlobal) {
-      try {
-        const config = JSON.parse(configContent())
-        const result = await globalSDK.client.global.config.update({ config })
-        globalSync.set("config", result.data!)
-        showToast({
-          variant: "success",
-          title: language.t("common.success"),
-          description: "Global config saved.",
-        })
-        setEditorOpen(false)
-      } catch (e) {
+      const config = tryParse(configContent())
+      if (!config) {
         showToast({
           variant: "error",
           title: language.t("common.error"),
-          description: `Invalid JSON: ${String(e)}`,
+          description: "Invalid JSON",
         })
+        return
       }
-    } else {
-      if (platform.platform !== "desktop" || !platform.writeConfigFile) return
-
-      const worktree = globalSync.data.path.worktree
-      const directory = globalSync.data.path.directory
-      setLoading(true)
-      try {
-        await platform.writeConfigFile(path, configContent())
-        setEditorOpen(false)
-        if (worktree && directory) {
+      await globalSDK.client.global.config
+        .update({ config })
+        .then((result) => {
+          globalSync.set("config", result.data!)
           showToast({
             variant: "success",
             title: language.t("common.success"),
-            description: "Refreshing to apply changes...",
+            description: "Global config saved.",
           })
-          await globalSDK.client.instance.dispose({ directory: worktree })
-          globalSync.child(worktree, { bootstrap: true })
-        }
-      } catch (e) {
-        const errMsg = String(e)
-        if (errMsg.includes("Access is denied")) {
-          showToast({
-            variant: "error",
-            title: language.t("common.error"),
-            description: "Access denied. Check file permissions.",
-          })
-        } else {
+          setEditorOpen(false)
+        })
+        .catch((e) => {
           showToast({
             variant: "error",
             title: language.t("common.error"),
             description: String(e),
           })
-        }
-      } finally {
-        setLoading(false)
+        })
+      return
+    }
+
+    if (platform.platform !== "desktop" || !platform.writeConfigFile) return
+
+    const worktree = globalSync.data.path.worktree
+    const directory = globalSync.data.path.directory
+    setLoading(true)
+    const err = await platform.writeConfigFile(path, configContent()).catch((e) => e)
+    setLoading(false)
+    if (err) {
+      const errMsg = String(err)
+      if (errMsg.includes("Access is denied")) {
+        showToast({
+          variant: "error",
+          title: language.t("common.error"),
+          description: "Access denied. Check file permissions.",
+        })
+        return
       }
+      showToast({
+        variant: "error",
+        title: language.t("common.error"),
+        description: String(err),
+      })
+      return
+    }
+    setEditorOpen(false)
+    if (worktree && directory) {
+      showToast({
+        variant: "success",
+        title: language.t("common.success"),
+        description: "Refreshing to apply changes...",
+      })
+      await globalSDK.client.instance.dispose({ directory: worktree })
+      globalSync.child(worktree, { bootstrap: true })
     }
   }
 
   return (
-    <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
+    <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-100">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 pt-6 pb-8">
           <h2 class="text-16-medium text-text-strong">{language.t("settings.config.title")}</h2>
