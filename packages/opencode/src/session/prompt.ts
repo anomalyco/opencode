@@ -78,12 +78,9 @@ export namespace SessionPrompt {
     },
     async (current) => {
       for (const item of Object.values(current)) {
-        const error = new Error("Instance disposed")
-        const queued = item.callbacks
+        // Avoid unhandled rejections during process/Instance teardown.
+        // Active loops/shells will observe abort and run their own deferred cleanup.
         item.callbacks = []
-        for (const q of queued) {
-          q.reject(error)
-        }
         item.abort.abort()
       }
     },
