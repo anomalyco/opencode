@@ -318,6 +318,9 @@ export namespace ACP {
                       title: part.tool,
                       locations: toLocations(part.tool, part.state.input),
                       rawInput: part.state.input,
+                      ...(part.state.metadata && {
+                        rawOutput: { metadata: part.state.metadata },
+                      }),
                     },
                   })
                   .catch((error) => {
