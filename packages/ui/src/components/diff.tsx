@@ -1,5 +1,5 @@
-import { checksum } from "@opencode-ai/util/encode"
-import { FileDiff, type SelectedLineRange, VirtualizedFileDiff } from "@pierre/diffs"
+import { sampledChecksum } from "@opencode-ai/util/encode"
+import { FileDiff, type FileDiffOptions, type SelectedLineRange, VirtualizedFileDiff } from "@pierre/diffs"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createEffect, createMemo, createSignal, onCleanup, splitProps } from "solid-js"
 import { createDefaultOptions, type DiffProps, styleVariables } from "../pierre"
@@ -78,14 +78,29 @@ export function Diff<T>(props: DiffProps<T>) {
 
   const mobile = createMediaQuery("(max-width: 640px)")
 
-  const options = createMemo(() => {
-    const opts = {
+  const large = createMemo(() => {
+    const before = typeof local.before?.contents === "string" ? local.before.contents : ""
+    const after = typeof local.after?.contents === "string" ? local.after.contents : ""
+    return Math.max(before.length, after.length) > 500_000
+  })
+
+  const largeOptions = {
+    lineDiffType: "none",
+    maxLineDiffLength: 0,
+    tokenizeMaxLineLength: 1,
+  } satisfies Pick<FileDiffOptions<T>, "lineDiffType" | "maxLineDiffLength" | "tokenizeMaxLineLength">
+
+  const options = createMemo<FileDiffOptions<T>>(() => {
+    const base = {
       ...createDefaultOptions(props.diffStyle),
       ...others,
     }
-    if (!mobile()) return opts
+
+    const perf = large() ? { ...base, ...largeOptions } : base
+    if (!mobile()) return perf
+
     return {
-      ...opts,
+      ...perf,
       disableLineNumbers: true,
     }
   })
@@ -528,11 +543,16 @@ export function Diff<T>(props: DiffProps<T>) {
 
   createEffect(() => {
     const opts = options()
-    const workerPool = getWorkerPool(props.diffStyle)
+    const workerPool = large() ? getWorkerPool("unified") : getWorkerPool(props.diffStyle)
     const virtualizer = getVirtualizer()
     const annotations = local.annotations
     const beforeContents = typeof local.before?.contents === "string" ? local.before.contents : ""
     const afterContents = typeof local.after?.contents === "string" ? local.after.contents : ""
+
+    const cacheKey = (contents: string) => {
+      if (!large()) return sampledChecksum(contents, contents.length)
+      return sampledChecksum(contents)
+    }
 
     instance?.cleanUp()
     instance = virtualizer
@@ -545,12 +565,12 @@ export function Diff<T>(props: DiffProps<T>) {
       oldFile: {
         ...local.before,
         contents: beforeContents,
-        cacheKey: checksum(beforeContents),
+        cacheKey: cacheKey(beforeContents),
       },
       newFile: {
         ...local.after,
         contents: afterContents,
-        cacheKey: checksum(afterContents),
+        cacheKey: cacheKey(afterContents),
       },
       lineAnnotations: annotations,
       containerWrapper: container,

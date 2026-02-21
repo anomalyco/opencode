@@ -1,15 +1,15 @@
 ---
-title: 구성
-description: OpenCode JSON 구성을 사용합니다.
+title: Config
+description: Using the OpenCode JSON config.
 ---
 
-JSON 구성 파일을 사용하여 OpenCode를 구성할 수 있습니다.
+JSON config 파일로 OpenCode를 설정할 수 있습니다.
 
 ---
 
 ## 형식
 
-OpenCode는 **JSON** 및 **JSONC** (주석이 있는 JSON) 형식을 지원합니다.
+OpenCode는 **JSON**과 **JSONC**(주석이 포함된 JSON) 형식을 모두 지원합니다.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -25,44 +25,44 @@ OpenCode는 **JSON** 및 **JSONC** (주석이 있는 JSON) 형식을 지원합�
 
 ## 위치
 
-구성을 여러 위치에 배치할 수 있으며, 이들은 서로 다른 우선 순위(precedence)를 가집니다.
+config 파일은 여러 위치에 둘 수 있으며, 각 위치에는 우선순위가 있습니다.
 
 :::note
-구성 파일은 **병합**되며, 대체되지 않습니다.
+config 파일은 **교체되지 않고 병합**됩니다.
 :::
 
-구성 파일은 함께 병합되며 대체되지 않습니다. 다음 구성 위치의 설정이 결합됩니다. 나중의 구성은 충돌하는 키에 대해 이전 구성을 덮어씁니다. 모든 구성의 설정이 보존됩니다.
+config 파일은 서로 대체되는 방식이 아니라 병합됩니다. 아래 config 위치의 설정이 결합되며, 충돌하는 key에 대해서만 나중에 로드된 config가 앞선 값을 override합니다. 충돌하지 않는 설정은 모두 유지됩니다.
 
-예를 들어, 전역 구성이 `theme: "opencode"` 및 `autoupdate: true`를 설정하고 프로젝트 구성이 `model: "anthropic/claude-sonnet-4-5"`를 설정하면 최종 구성에는 세 가지 설정이 모두 포함됩니다.
+예를 들어, 전역 config에 `theme: "opencode"`와 `autoupdate: true`가 있고 프로젝트 config에 `model: "anthropic/claude-sonnet-4-5"`가 있으면 최종 config에는 이 세 설정이 모두 포함됩니다.
 
 ---
 
-### 우선 순위
+### 우선순위
 
-구성 소스는 다음 순서로 로드됩니다 (나중 소스가 이전 소스를 덮어씀):
+config source는 다음 순서로 로드됩니다(나중 source가 앞선 source를 override).
 
-1. **원격 구성** (`.well-known/opencode`에서) - 조직 기본값
-2. **전역 구성** (`~/.config/opencode/opencode.json`) - 사용자 환경설정
-3. **사용자 정의 구성** (`OPENCODE_CONFIG` 환경 변수) - 사용자 정의 재정의
-4. **프로젝트별 구성** (`opencode.json`) - 프로젝트별 설정
-5. **`.opencode` 디렉토리** - 에이전트, 명령, 플러그인
-6. **인라인 구성** (`OPENCODE_CONFIG_CONTENT` 환경 변수) - 런타임 재정의
+1. **Remote config**(`.well-known/opencode`) - 조직 기본값
+2. **Global config**(`~/.config/opencode/opencode.json`) - 사용자 기본 설정
+3. **Custom config**(`OPENCODE_CONFIG` env var) - custom override
+4. **Project config**(프로젝트의 `opencode.json`) - 프로젝트별 설정
+5. **`.opencode` directories** - agents, commands, plugins
+6. **Inline config**(`OPENCODE_CONFIG_CONTENT` env var) - 런타임 override
 
-이것은 프로젝트 구성이 전역 기본값을 덮어쓸 수 있고, 전역 구성이 원격 조직 기본값을 덮어쓸 수 있음을 의미합니다.
+즉, 프로젝트 config는 전역 기본값을 override할 수 있고, 전역 config는 조직의 Remote 기본값을 override할 수 있습니다.
 
 :::note
-`.opencode`와 `~/.config/opencode` 디렉토리는 하위 디렉토리에 대해 **복수형 이름**을 사용합니다: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/`, 그리고 `themes/`. 단수형 이름(예: `agent/`)도 하위 호환성을 위해 지원됩니다.
+`.opencode` 및 `~/.config/opencode` 디렉토리는 하위 디렉토리에 **복수형 이름**을 사용합니다: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/`, `themes/`. 단수형 이름(예: `agent/`)도 하위 호환성을 위해 지원합니다.
 :::
 
 ---
 
-### 원격
+### Remote
 
-조직은 `.well-known/opencode` 엔드포인트를 통해 기본 구성을 제공할 수 있습니다. 이를 지원하는 공급자로 인증할 때 자동으로 가져옵니다.
+조직은 `.well-known/opencode` endpoint로 기본 config를 제공할 수 있습니다. 이를 지원하는 provider로 인증하면 자동으로 가져옵니다.
 
-원격 구성은 기본 레이어로 가장 먼저 로드됩니다. 다른 구성 소스(전역, 프로젝트)는 이러한 기본값을 무시(override)할 수 있습니다.
+Remote config는 가장 먼저 로드되어 기본 레이어 역할을 합니다. 이후의 모든 config source(전역, 프로젝트)는 이 기본값을 override할 수 있습니다.
 
-예를 들어, 조직이 기본적으로 비활성화된 MCP 서버를 제공하는 경우:
+예를 들어, 조직에서 기본 비활성화된 MCP 서버를 제공하는 경우:
 
 ```json title="Remote config from .well-known/opencode"
 {
@@ -76,7 +76,7 @@ OpenCode는 **JSON** 및 **JSONC** (주석이 있는 JSON) 형식을 지원합�
 }
 ```
 
-로컬 설정에서 특정 서버를 활성화할 수 있습니다:
+로컬 config에서 특정 서버를 활성화할 수 있습니다.
 
 ```json title="opencode.json"
 {
@@ -92,65 +92,65 @@ OpenCode는 **JSON** 및 **JSONC** (주석이 있는 JSON) 형식을 지원합�
 
 ---
 
-## 전역
+### Global
 
-`~/.config/opencode/opencode.json`에 전역 OpenCode 구성을 배치합니다. 테마, 공급자, 키바인드와 같은 사용자 전체 기본 설정에 전역 구성을 사용하십시오.
+전역 OpenCode config는 `~/.config/opencode/opencode.json`에 두세요. theme, provider, keybind 같은 사용자 전체 기본 설정은 전역 config로 관리하세요.
 
-전역 구성은 원격 조직 기본값을 덮어씁니다.
+전역 config는 조직의 Remote 기본값을 override합니다.
 
 ---
 
-## 프로젝트별
+### Per project
 
-프로젝트 루트에 `opencode.json`을 추가합니다. 프로젝트 구성은 표준 구성 파일 중 가장 높은 우선순위를 가집니다. 이는 전역 및 원격 구성을 모두 덮어씁니다.
+프로젝트 루트에 `opencode.json`을 추가하세요. 프로젝트 config는 표준 config 파일 중 우선순위가 가장 높아 전역 및 Remote config를 모두 override합니다.
 
 :::tip
-프로젝트의 루트에 특정 설정을 둡니다.
+프로젝트별 config는 프로젝트 루트에 두세요.
 :::
 
-OpenCode가 시작될 때, 현재 디렉토리의 설정 파일이나 가장 가까운 Git 디렉토리를 찾습니다.
+OpenCode 시작 시 현재 디렉토리에서 config 파일을 찾고, 없으면 가장 가까운 Git 디렉토리까지 상위로 탐색합니다.
 
-이것은 Git으로 관리되며 전역 구성과 동일한 스키마를 사용합니다.
+이 파일은 Git에 커밋해도 안전하며 전역 config와 동일한 schema를 사용합니다.
 
 ---
 
-### 사용자 정의 경로
+### Custom path
 
-`OPENCODE_CONFIG` 환경 변수를 사용하여 사용자 정의 구성 파일 경로를 지정합니다.
+`OPENCODE_CONFIG` 환경 변수로 custom config 파일 경로를 지정하세요.
 
 ```bash
 export OPENCODE_CONFIG=/path/to/my/custom-config.json
 opencode run "Hello world"
 ```
 
-사용자 정의 구성은 우선 순위에서 전역 구성과 프로젝트 구성 사이에 로드됩니다.
+Custom config는 우선순위상 전역 config와 프로젝트 config 사이에서 로드됩니다.
 
 ---
 
-## 사용자 정의 디렉토리
+### Custom directory
 
-`OPENCODE_CONFIG_DIR` 환경 변수를 사용하여 사용자 정의 구성 디렉토리를 지정할 수 있습니다. 이 디렉토리는 표준 `.opencode` 디렉토리와 마찬가지로 에이전트, 명령, 모드 및 플러그인을 검색하며 동일한 구조를 따라야 합니다.
+`OPENCODE_CONFIG_DIR` 환경 변수로 custom config 디렉토리를 지정할 수 있습니다. 이 디렉토리는 표준 `.opencode` 디렉토리와 동일하게 agents, commands, modes, plugins를 검색하며, 동일한 구조를 따라야 합니다.
 
 ```bash
 export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
-사용자 정의 디렉토리는 전역 구성 이후 및 `.opencode` 디렉토리 이전에 로드됩니다.
+custom 디렉토리는 전역 config와 `.opencode` 디렉토리 뒤에 로드되므로 해당 설정을 **override할 수 있습니다**.
 
 ---
 
-## 스키마
+## Schema
 
-구성 파일에는 [**`opencode.ai/config.json`**](https://opencode.ai/config.json)에 정의된 스키마가 있습니다.
+config 파일의 schema는 [**`opencode.ai/config.json`**](https://opencode.ai/config.json)에 정의되어 있습니다.
 
-편집기는 스키마에 따라 유효성 검사 및 자동 완성을 제공해야 합니다.
+편집기에서 이 schema를 기반으로 validation과 autocomplete를 사용할 수 있습니다.
 
 ---
 
-#### TUI
+### TUI
 
-`tui` 옵션을 통해 TUI 관련 설정을 구성할 수 있습니다.
+`tui` 옵션으로 TUI 관련 설정을 구성할 수 있습니다.
 
 ```json title="opencode.json"
 {
@@ -165,19 +165,19 @@ opencode run "Hello world"
 }
 ```
 
-유효한 옵션:
+사용 가능한 옵션:
 
 - `scroll_acceleration.enabled` - macOS 스타일 스크롤 가속을 활성화합니다. **`scroll_speed`보다 우선합니다.**
-- `scroll_speed` - 사용자 정의 스크롤 속도 배수 (기본값: `3`, 최소값: `1`). `scroll_acceleration.enabled`가 `true`이면 무시됩니다.
-- `diff_style` - diff 렌더링을 제어합니다. `"auto"`는 터미널 너비에 맞추고, `"stacked"`는 항상 단일 열을 보여줍니다.
+- `scroll_speed` - 사용자 정의 스크롤 속도 배수(기본: `3`, 최소: `1`). `scroll_acceleration.enabled`가 `true`이면 무시됩니다.
+- `diff_style` - diff 렌더링 방식을 제어합니다. `"auto"`는 터미널 너비에 맞춰 조정되고, `"stacked"`는 항상 단일 컬럼으로 표시합니다.
 
-[TUI 사용법에 대해 더 알아보기](/docs/tui).
+[TUI에 대해 더 알아보기](/docs/tui).
 
 ---
 
-## 서버
+### Server
 
-`opencode serve` 및 `opencode web` 명령에 대한 서버 설정을 구성할 수 있습니다.
+`server` 옵션으로 `opencode serve`와 `opencode web` 명령의 server 설정을 구성할 수 있습니다.
 
 ```json title="opencode.json"
 {
@@ -192,21 +192,21 @@ opencode run "Hello world"
 }
 ```
 
-유효한 옵션:
+사용 가능한 옵션:
 
-- `port` - 리스닝 포트.
-- `hostname` - 리스닝 호스트 이름. `mdns`가 활성화되고 hostname이 설정되지 않으면 `0.0.0.0`이 기본값이 됩니다.
-- `mdns` - mDNS 서비스 발견 활성화. 로컬 네트워크의 다른 장치가 OpenCode 서버를 찾을 수 있습니다.
-- `mdnsDomain` - mDNS 서비스를 위한 사용자 정의 도메인 이름. 기본값은 `opencode.local`입니다. 동일한 네트워크에서 여러 인스턴스를 실행할 때 유용합니다.
-- `cors` - 브라우저 기반 클라이언트에서 HTTP 서버를 사용할 때 CORS를 허용할 추가 출처(Origin). 값은 전체 출처(스킴 + 호스트 + 선택적 포트)여야 합니다. 예: `https://app.example.com`.
+- `port` - 수신할 포트입니다.
+- `hostname` - 수신할 호스트명입니다. `mdns`가 활성화되어 있고 hostname이 없으면 기본값은 `0.0.0.0`입니다.
+- `mdns` - mDNS service discovery를 활성화합니다. 네트워크 내 다른 기기에서 OpenCode server를 찾을 수 있습니다.
+- `mdnsDomain` - mDNS service의 custom 도메인 이름입니다. 기본값은 `opencode.local`입니다. 같은 네트워크에서 여러 인스턴스를 실행할 때 유용합니다.
+- `cors` - 브라우저 기반 client에서 HTTP server를 사용할 때 허용할 추가 CORS origin입니다. 값은 전체 origin(scheme + host + optional port) 형식이어야 하며, 예: `https://app.example.com`.
 
-[서버에 대해 더 알아보기](/docs/server).
+[server에 대해 더 알아보기](/docs/server).
 
 ---
 
-## 도구
+### Tools
 
-`tools` 옵션을 통해 LLM이 사용할 수 있는 도구를 구성할 수 있습니다.
+`tools` 옵션으로 LLM이 사용할 수 있는 tool을 관리할 수 있습니다.
 
 ```json title="opencode.json"
 {
@@ -218,13 +218,13 @@ opencode run "Hello world"
 }
 ```
 
-[도구에 대해 더 알아보기](/docs/tools).
+[tool에 대해 더 알아보기](/docs/tools).
 
 ---
 
-## 모델
+### Models
 
-`provider`, `model`, `small_model` 옵션을 통해 OpenCode 구성에서 사용할 공급자와 모델을 구성할 수 있습니다.
+OpenCode config의 `provider`, `model`, `small_model` 옵션으로 사용할 provider와 model을 설정할 수 있습니다.
 
 ```json title="opencode.json"
 {
@@ -235,9 +235,9 @@ opencode run "Hello world"
 }
 ```
 
-`small_model` 옵션은 제목 생성과 같은 가벼운 작업을 위한 별도의 모델을 구성합니다. 기본적으로, OpenCode는 공급자에게서 사용 가능한 더 저렴한 모델이 있다면 그것을 사용하고, 그렇지 않으면 주 모델로 돌아갑니다.
+`small_model`은 제목 생성 같은 경량 작업에 사용할 별도 model을 설정합니다. 기본적으로 OpenCode는 provider에서 더 저렴한 model을 사용할 수 있으면 우선 사용하고, 없으면 메인 model로 fallback합니다.
 
-공급자 옵션은 `timeout`과 `setCacheKey`를 포함할 수 있습니다:
+provider 옵션에는 `timeout`, `setCacheKey`를 포함할 수 있습니다.
 
 ```json title="opencode.json"
 {
@@ -253,20 +253,20 @@ opencode run "Hello world"
 }
 ```
 
-- `timeout` - 요청 타임아웃(밀리초) (기본값: 300000). `false`로 설정하여 비활성화할 수 있습니다.
-- `setCacheKey` - 지정된 공급자에 대해 캐시 키가 항상 설정되도록 강제합니다.
+- `timeout` - 요청 timeout(밀리초, 기본값: 300000). `false`로 비활성화할 수 있습니다.
+- `setCacheKey` - 지정된 provider에 대해 cache key가 항상 설정되도록 보장합니다.
 
-[로컬 모델](/docs/models#local)을 구성할 수도 있습니다. [더 알아보기](/docs/models).
+[local model](/docs/models#local)도 설정할 수 있습니다. [더 알아보기](/docs/models).
 
 ---
 
-### 공급자별 옵션
+#### Provider-Specific Options
 
-일반적인 `timeout` 및 `apiKey` 외에도 일부 공급자는 추가 구성 옵션을 지원합니다.
+일부 provider는 공통 옵션인 `timeout`, `apiKey` 외에 추가 config 옵션을 지원합니다.
 
 ##### Amazon Bedrock
 
-Amazon Bedrock는 AWS 관련 구성을 지원합니다:
+Amazon Bedrock은 AWS 전용 config를 지원합니다.
 
 ```json title="opencode.json"
 {
@@ -283,21 +283,21 @@ Amazon Bedrock는 AWS 관련 구성을 지원합니다:
 }
 ```
 
-- `region` - Bedrock를 위한 AWS 리전 (`AWS_REGION` 환경 변수 또는 `us-east-1`이 기본값)
-- `profile` - `~/.aws/credentials`의 AWS 프로필 이름 (`AWS_PROFILE` 환경 변수가 기본값)
-- `endpoint` - VPC 엔드포인트 등을 위한 사용자 정의 엔드포인트 URL. 이는 AWS 관련 용어를 사용한 일반적인 `baseURL` 옵션의 별칭입니다. 둘 다 지정된 경우 `endpoint`가 우선합니다.
+- `region` - Bedrock용 AWS 리전(`AWS_REGION` env var 또는 기본값 `us-east-1`)
+- `profile` - `~/.aws/credentials`의 AWS named profile(기본값: `AWS_PROFILE` env var)
+- `endpoint` - VPC endpoint용 custom endpoint URL입니다. AWS 용어를 사용한 일반 `baseURL` 옵션의 별칭(alias)입니다. 둘 다 지정하면 `endpoint`가 우선합니다.
 
 :::note
-Bearer 토큰(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로필 기반 인증보다 우선합니다. 자세한 내용은 [인증 우선 순위](/docs/providers#authentication-precedence)를 참조하십시오.
+Bearer token(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 profile 기반 인증보다 우선합니다. 자세한 내용은 [authentication precedence](/docs/providers#authentication-precedence)를 참고하세요.
 :::
 
-[Amazon Bedrock에 대해 더 알아보기](/docs/providers#amazon-bedrock).
+[Amazon Bedrock config 더 알아보기](/docs/providers#amazon-bedrock).
 
 ---
 
-## 테마
+### Themes
 
-`theme` 옵션을 통해 OpenCode 구성에서 사용할 테마를 설정할 수 있습니다.
+`theme` 옵션으로 OpenCode config에서 사용할 theme를 설정할 수 있습니다.
 
 ```json title="opencode.json"
 {
@@ -310,9 +310,9 @@ Bearer 토큰(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로필 기반 
 
 ---
 
-## 에이전트
+### Agents
 
-`agent` 옵션을 통해 특정 작업을 전문으로 하는 에이전트를 구성할 수 있습니다.
+`agent` 옵션으로 특정 작업용 전문 agent를 구성할 수 있습니다.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -332,13 +332,13 @@ Bearer 토큰(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로필 기반 
 }
 ```
 
-`~/.config/opencode/agents/` 또는 `.opencode/agents/`에서 Markdown 파일을 사용하여 에이전트를 정의할 수도 있습니다. [더 알아보기](/docs/agents).
+`~/.config/opencode/agents/` 또는 `.opencode/agents/`의 Markdown 파일로 agent를 정의할 수도 있습니다. [더 알아보기](/docs/agents).
 
 ---
 
-### 기본 에이전트
+### Default agent
 
-`default_agent` 옵션을 사용하여 기본 에이전트를 설정할 수 있습니다. 명시적으로 지정되지 않았을 때 어떤 에이전트가 사용될지 결정합니다.
+`default_agent` 옵션으로 기본 agent를 설정할 수 있습니다. 별도 지정이 없을 때 어떤 agent를 사용할지 결정합니다.
 
 ```json title="opencode.json"
 {
@@ -347,15 +347,15 @@ Bearer 토큰(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로필 기반 
 }
 ```
 
-기본 에이전트는 기본(primary) 에이전트여야 합니다(서브 에이전트 불가). `"build"` 또는 `"plan"`과 같은 내장 에이전트이거나 정의된 [사용자 정의 에이전트](./agents)일 수 있습니다. 지정된 에이전트가 존재하지 않는 경우, OpenCode는 경고와 함께 `"build"`로 돌아갑니다.
+기본 agent는 primary agent여야 합니다(subagent 불가). `"build"`, `"plan"` 같은 내장 agent나 직접 정의한 [custom agent](/docs/agents)를 지정할 수 있습니다. 지정한 agent가 없거나 subagent이면 OpenCode는 경고와 함께 `"build"`로 fallback합니다.
 
-이 설정은 모든 인터페이스에 적용됩니다: TUI, CLI (`opencode run`), 데스크톱 앱 및 GitHub Action.
+이 설정은 TUI, CLI(`opencode run`), 데스크톱 앱, GitHub Action 등 모든 인터페이스에 적용됩니다.
 
 ---
 
-## 공유
+### Sharing
 
-`share` 옵션을 통해 [공유](/docs/share) 기능을 구성할 수 있습니다.
+`share` 옵션으로 [share](/docs/share) 기능을 설정할 수 있습니다.
 
 ```json title="opencode.json"
 {
@@ -364,19 +364,19 @@ Bearer 토큰(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로필 기반 
 }
 ```
 
-값은 다음과 같습니다:
+허용 값:
 
-- `"manual"` - 명령을 통한 수동 공유 허용 (기본값)
-- `"auto"` - 새로운 대화를 자동으로 공유
-- `"disabled"` - 공유 기능 완전히 비활성화
+- `"manual"` - 명령으로 수동 공유 허용(기본값)
+- `"auto"` - 새 대화를 자동 공유
+- `"disabled"` - 공유 기능 완전 비활성화
 
-기본적으로 `/share` 명령을 사용하여 대화를 명시적으로 공유해야 하는 수동 모드로 설정됩니다.
+기본값은 manual 모드이며, `/share` 명령으로 명시적으로 공유해야 합니다.
 
 ---
 
-## 명령
+### Commands
 
-`command` 옵션을 통해 반복 작업을 위한 사용자 정의 명령을 구성할 수 있습니다.
+`command` 옵션으로 반복 작업용 custom command를 구성할 수 있습니다.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -385,8 +385,6 @@ Bearer 토큰(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로필 기반 
     "test": {
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
       "description": "Run tests with coverage",
-      "agent": "build",
-      "model": "anthropic/claude-haiku-4-5",
       "agent": "build",
       "model": "anthropic/claude-haiku-4-5",
     },
@@ -398,13 +396,13 @@ Bearer 토큰(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로필 기반 
 }
 ```
 
-`~/.config/opencode/commands/` 또는 `.opencode/commands/`에서 Markdown 파일을 사용하여 명령을 정의할 수도 있습니다. [더 알아보기](/docs/commands).
+`~/.config/opencode/commands/` 또는 `.opencode/commands/`의 Markdown 파일로 command를 정의할 수도 있습니다. [더 알아보기](/docs/commands).
 
 ---
 
-## 키바인드
+### Keybinds
 
-`keybinds` 옵션을 통해 키바인드를 사용자 정의할 수 있습니다.
+`keybinds` 옵션으로 keybind를 커스터마이즈할 수 있습니다.
 
 ```json title="opencode.json"
 {
@@ -417,9 +415,9 @@ Bearer 토큰(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로필 기반 
 
 ---
 
-## 자동 업데이트
+### Autoupdate
 
-OpenCode는 시작될 때 자동으로 새로운 업데이트를 다운로드합니다. `autoupdate` 옵션으로 이를 비활성화할 수 있습니다.
+OpenCode는 시작 시 새 업데이트를 자동으로 다운로드합니다. `autoupdate` 옵션으로 비활성화할 수 있습니다.
 
 ```json title="opencode.json"
 {
@@ -428,14 +426,14 @@ OpenCode는 시작될 때 자동으로 새로운 업데이트를 다운로드합
 }
 ```
 
-업데이트를 원하지 않지만 새 버전을 알림받고 싶다면 `autoupdate`를 `"notify"`로 설정하십시오.
-Homebrew와 같은 패키지 관리자를 사용하여 설치되지 않은 경우에만 작동합니다.
+업데이트를 자동 적용하지 않고 새 버전 알림만 받고 싶다면 `autoupdate`를 `"notify"`로 설정하세요.
+이 옵션은 Homebrew 같은 패키지 매니저로 설치하지 않은 경우에만 동작합니다.
 
 ---
 
-## 포매터
+### Formatters
 
-`formatter` 옵션을 통해 코드 포매터를 구성할 수 있습니다.
+`formatter` 옵션으로 코드 formatter를 설정할 수 있습니다.
 
 ```json title="opencode.json"
 {
@@ -455,15 +453,15 @@ Homebrew와 같은 패키지 관리자를 사용하여 설치되지 않은 경�
 }
 ```
 
-[포매터에 대해 더 알아보기](/docs/formatters).
+[formatter에 대해 더 알아보기](/docs/formatters).
 
 ---
 
-## 권한
+### Permissions
 
-기본적으로, OpenCode는 **명시적 승인 없이 모든 작업을 허용**합니다. `permission` 옵션을 사용하여 이를 변경할 수 있습니다.
+기본적으로 OpenCode는 **명시적 승인 없이 모든 작업을 허용**합니다. `permission` 옵션으로 이 동작을 바꿀 수 있습니다.
 
-예를 들어, `edit` 및 `bash` 도구가 사용자 승인을 요구하도록 설정하려면:
+예를 들어 `edit`, `bash` tool이 사용자 승인을 요구하게 하려면:
 
 ```json title="opencode.json"
 {
@@ -475,32 +473,34 @@ Homebrew와 같은 패키지 관리자를 사용하여 설치되지 않은 경�
 }
 ```
 
-[권한에 대해 더 알아보기](/docs/permissions).
+[permission에 대해 더 알아보기](/docs/permissions).
 
 ---
 
-### 압축
+### Compaction
 
-`compaction` 옵션을 통해 컨텍스트 압축 동작을 제어할 수 있습니다.
+`compaction` 옵션으로 context compaction 동작을 제어할 수 있습니다.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
     "auto": true,
-    "prune": true
+    "prune": true,
+    "reserved": 10000
   }
 }
 ```
 
-- `auto` - 컨텍스트가 꽉 차면 자동으로 세션을 압축합니다 (기본값: `true`).
-- `prune` - 토큰을 절약하기 위해 오래된 도구 출력을 제거합니다 (기본값: `true`).
+- `auto` - context가 가득 찼을 때 세션을 자동 compact합니다(기본값: `true`).
+- `prune` - token 절약을 위해 오래된 tool 출력을 제거합니다(기본값: `true`).
+- `reserved` - compaction용 token buffer입니다. compaction 중 overflow가 나지 않도록 충분한 window를 남깁니다.
 
 ---
 
-### 파일 감시자
+### Watcher
 
-`watcher` 옵션을 통해 파일 감시자가 무시할 패턴을 설정할 수 있습니다.
+`watcher` 옵션으로 파일 watcher ignore 패턴을 설정할 수 있습니다.
 
 ```json title="opencode.json"
 {
@@ -511,13 +511,13 @@ Homebrew와 같은 패키지 관리자를 사용하여 설치되지 않은 경�
 }
 ```
 
-패턴은 glob 구문을 따릅니다. 잡음이 많은 디렉토리를 제외하는 데 사용하십시오.
+패턴은 glob 문법을 따릅니다. 파일 감시에서 노이즈가 많은 디렉토리를 제외할 때 유용합니다.
 
 ---
 
-### MCP 서버
+### MCP servers
 
-`mcp` 옵션을 통해 사용하려는 MCP 서버를 구성할 수 있습니다.
+`mcp` 옵션으로 사용할 MCP server를 설정할 수 있습니다.
 
 ```json title="opencode.json"
 {
@@ -530,11 +530,11 @@ Homebrew와 같은 패키지 관리자를 사용하여 설치되지 않은 경�
 
 ---
 
-### 플러그인
+### Plugins
 
-[플러그인](/docs/plugins)은 사용자 정의 도구, 훅(hook), 통합으로 OpenCode를 확장합니다.
+[Plugins](/docs/plugins)는 custom tool, hook, integration으로 OpenCode를 확장합니다.
 
-`.opencode/plugins/` 또는 `~/.config/opencode/plugins/`에 플러그인 파일을 배치하십시오. `plugin` 옵션을 통해 npm에서 플러그인을 로드할 수 있습니다.
+plugin 파일은 `.opencode/plugins/` 또는 `~/.config/opencode/plugins/`에 두세요. `plugin` 옵션으로 npm plugin을 로드할 수도 있습니다.
 
 ```json title="opencode.json"
 {
@@ -547,9 +547,9 @@ Homebrew와 같은 패키지 관리자를 사용하여 설치되지 않은 경�
 
 ---
 
-### 지침
+### Instructions
 
-`instructions` 옵션을 통해 모델에 대한 지침(Rules)을 구성할 수 있습니다.
+`instructions` 옵션으로 사용 중인 model에 제공할 지침 파일을 설정할 수 있습니다.
 
 ```json title="opencode.json"
 {
@@ -558,13 +558,13 @@ Homebrew와 같은 패키지 관리자를 사용하여 설치되지 않은 경�
 }
 ```
 
-지침 파일에 대한 경로와 glob 패턴의 배열을 사용합니다. [규칙에 대해 더 알아보기](/docs/rules).
+이 옵션은 지침 파일 경로 및 glob 패턴 배열을 받습니다. [rules에 대해 더 알아보기](/docs/rules).
 
 ---
 
-## 비활성화된 공급자
+### Disabled providers
 
-`disabled_providers` 옵션을 통해 자동으로 로드되는 공급자를 비활성화할 수 있습니다. 자격 증명이 유효하더라도 특정 공급자가 로드되는 것을 방지할 때 유용합니다.
+`disabled_providers` 옵션으로 자동 로드되는 provider를 비활성화할 수 있습니다. credential이 있어도 특정 provider를 로드하지 않게 하고 싶을 때 유용합니다.
 
 ```json title="opencode.json"
 {
@@ -577,17 +577,17 @@ Homebrew와 같은 패키지 관리자를 사용하여 설치되지 않은 경�
 `disabled_providers`는 `enabled_providers`보다 우선합니다.
 :::
 
-`disabled_providers` 옵션은 공급자 ID의 배열을 허용합니다. 공급자가 비활성화되면:
+`disabled_providers`는 provider ID 배열을 받습니다. provider가 비활성화되면:
 
-- 환경 변수가 설정된 경우에도 로드되지 않습니다.
-- API 키가 `/connect` 명령을 통해 구성되는 경우에도 로드되지 않습니다.
-- 공급자의 모델은 모델 선택 목록에 표시되지 않습니다.
+- 환경 변수가 설정되어 있어도 로드되지 않습니다.
+- `/connect` 명령으로 API key를 설정해도 로드되지 않습니다.
+- 해당 provider의 model은 model 선택 목록에 표시되지 않습니다.
 
 ---
 
-### 활성화된 공급자
+### Enabled providers
 
-`enabled_providers` 옵션을 통해 허용할 공급자를 지정할 수 있습니다. 설정하면 지정된 공급자만 활성화되고 다른 모든 공급자는 무시됩니다.
+`enabled_providers` 옵션으로 provider allowlist를 지정할 수 있습니다. 이 값을 설정하면 지정한 provider만 활성화되고 나머지는 무시됩니다.
 
 ```json title="opencode.json"
 {
@@ -596,19 +596,19 @@ Homebrew와 같은 패키지 관리자를 사용하여 설치되지 않은 경�
 }
 ```
 
-OpenCode를 제한하여 특정 공급자만 사용하도록 할 때 유용합니다.
+provider를 하나씩 비활성화하는 대신, OpenCode가 특정 provider만 사용하도록 제한하고 싶을 때 유용합니다.
 
 :::note
 `disabled_providers`는 `enabled_providers`보다 우선합니다.
 :::
 
-공급자가 `enabled_providers`와 `disabled_providers` 둘 다에 나타나면, 하위 호환성을 위해 `disabled_providers`가 우선합니다.
+동일 provider가 `enabled_providers`와 `disabled_providers`에 모두 있으면 하위 호환성을 위해 `disabled_providers`가 우선합니다.
 
 ---
 
-### 실험적 기능
+### Experimental
 
-`experimental` 키는 활발히 개발 중인 옵션을 포함합니다.
+`experimental` key에는 현재 활발히 개발 중인 옵션이 포함됩니다.
 
 ```json title="opencode.json"
 {
@@ -618,20 +618,20 @@ OpenCode를 제한하여 특정 공급자만 사용하도록 할 때 유용합�
 ```
 
 :::caution
-실험적 옵션은 안정적이지 않습니다. 예고 없이 변경되거나 제거될 수 있습니다.
+experimental 옵션은 안정적이지 않습니다. 예고 없이 변경되거나 제거될 수 있습니다.
 :::
 
 ---
 
-## 변수
+## Variables
 
-구성 파일에서 환경 변수를 참조하고 파일 내용에 대한 변수 대체를 사용할 수 있습니다.
+config 파일에서 환경 변수와 파일 내용을 참조할 수 있도록 변수 치환을 사용할 수 있습니다.
 
 ---
 
-##### 환경 변수
+### Env vars
 
-`{env:VARIABLE_NAME}`을 사용하여 환경 변수를 대체합니다.
+`{env:VARIABLE_NAME}` 형식으로 환경 변수를 치환할 수 있습니다.
 
 ```json title="opencode.json"
 {
@@ -648,13 +648,13 @@ OpenCode를 제한하여 특정 공급자만 사용하도록 할 때 유용합�
 }
 ```
 
-환경 변수가 설정되지 않으면 빈 문자열로 대체됩니다.
+환경 변수가 설정되지 않았으면 빈 문자열로 치환됩니다.
 
 ---
 
-## 파일
+### Files
 
-`{file:path/to/file}`를 사용하여 파일의 내용을 대체합니다.
+`{file:path/to/file}` 형식으로 파일 내용을 치환할 수 있습니다.
 
 ```json title="opencode.json"
 {
@@ -670,13 +670,13 @@ OpenCode를 제한하여 특정 공급자만 사용하도록 할 때 유용합�
 }
 ```
 
-파일 경로는:
+파일 경로는 다음을 지원합니다.
 
-- 구성 파일 디렉토리에 상대적이거나
-- `/` 또는 `~`로 시작하는 절대 경로여야 합니다.
+- config 파일 디렉토리 기준 상대 경로
+- `/` 또는 `~`로 시작하는 절대 경로
 
-이것은 다음에 유용합니다:
+이 기능은 다음 상황에 유용합니다.
 
-- API 키와 같은 민감한 데이터를 별도의 파일에 유지할 때.
-- 구성을 어지럽히지 않고 큰 지침 파일을 포함할 때.
-- 여러 구성 파일에서 공통 구성 스니펫을 공유할 때.
+- API key 같은 민감 정보를 별도 파일로 분리
+- 큰 지침 파일을 config를 복잡하게 만들지 않고 포함
+- 여러 config 파일에서 공통 설정 스니펫 재사용

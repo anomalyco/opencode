@@ -44,6 +44,7 @@ export async function handler(
   input: APIEvent,
   opts: {
     format: ZenData.Format
+    modelList: "lite" | "full"
     parseApiKey: (headers: Headers) => string | undefined
     parseModel: (url: string, body: any) => string
     parseIsStream: (url: string, body: any) => boolean
@@ -77,7 +78,7 @@ export async function handler(
       request: requestId,
       client: ocClient,
     })
-    const zenData = ZenData.list()
+    const zenData = ZenData.list(opts.modelList)
     const modelInfo = validateModel(zenData, model)
     const dataDumper = createDataDumper(sessionId, requestId, projectId)
     const trialLimiter = createTrialLimiter(modelInfo.trial, ip, ocClient)
@@ -107,10 +108,14 @@ export async function handler(
       const startTimestamp = Date.now()
       const reqUrl = providerInfo.modifyUrl(providerInfo.api, isStream)
       const reqBody = JSON.stringify(
-        providerInfo.modifyBody({
-          ...createBodyConverter(opts.format, providerInfo.format)(body),
-          model: providerInfo.model,
-        }),
+        providerInfo.modifyBody(
+          {
+            ...createBodyConverter(opts.format, providerInfo.format)(body),
+            model: providerInfo.model,
+            ...(providerInfo.payloadModifier ?? {}),
+          },
+          authInfo?.workspaceID,
+        ),
       )
       logger.debug("REQUEST URL: " + reqUrl)
       logger.debug("REQUEST: " + reqBody.substring(0, 300) + "...")
@@ -274,8 +279,8 @@ export async function handler(
                 part = part.trim()
                 usageParser.parse(part)
 
-                if (providerInfo.bodyModifier) {
-                  for (const [k, v] of Object.entries(providerInfo.bodyModifier)) {
+                if (providerInfo.responseModifier) {
+                  for (const [k, v] of Object.entries(providerInfo.responseModifier)) {
                     part = part.replace(k, v)
                   }
                   c.enqueue(encoder.encode(part + "\n\n"))
@@ -285,7 +290,7 @@ export async function handler(
                 }
               }
 
-              if (!providerInfo.bodyModifier && providerInfo.format === opts.format) {
+              if (!providerInfo.responseModifier && providerInfo.format === opts.format) {
                 c.enqueue(value)
               }
 
