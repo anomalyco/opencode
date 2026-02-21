@@ -214,9 +214,9 @@ new sst.cloudflare.x.SolidStart("Console", {
   },
   transform: {
     server: {
+      placement: { region: "aws:us-east-1" },
       transform: {
         worker: {
-          placement: { mode: "smart" },
           tailConsumers: [{ service: logProcessor.nodes.worker.scriptName }],
         },
       },

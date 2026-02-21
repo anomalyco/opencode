@@ -30,6 +30,7 @@ import {
 
 import { Log } from "../util/log"
 import { pathToFileURL } from "bun"
+import { Filesystem } from "../util/filesystem"
 import { ACPSessionManager } from "./session"
 import type { ACPConfig } from "./types"
 import { Provider } from "../provider/provider"
@@ -228,8 +229,7 @@ export namespace ACP {
                 const metadata = permission.metadata || {}
                 const filepath = typeof metadata["filepath"] === "string" ? metadata["filepath"] : ""
                 const diff = typeof metadata["diff"] === "string" ? metadata["diff"] : ""
-                const file = Bun.file(filepath)
-                const content = (await file.exists()) ? await file.text() : ""
+                const content = (await Filesystem.exists(filepath)) ? await Filesystem.readText(filepath) : ""
                 const newContent = getNewContent(content, diff)
 
                 if (newContent) {

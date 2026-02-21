@@ -9,7 +9,7 @@ import { getDirectory, getFilename } from "@opencode-ai/util/path"
 const MAIN_WORKTREE = "main"
 const CREATE_WORKTREE = "create"
 const ROOT_CLASS =
-  "size-full flex flex-col justify-end items-start gap-4 flex-[1_0_0] self-stretch max-w-200 mx-auto 2xl:max-w-[1000px] px-6 pb-[calc(var(--prompt-height,11.25rem)+64px)]"
+  "size-full flex flex-col justify-end items-start gap-4 flex-[1_0_0] self-stretch max-w-200 mx-auto 2xl:max-w-[1000px] px-6 pb-16"
 
 interface NewSessionViewProps {
   worktree: string
