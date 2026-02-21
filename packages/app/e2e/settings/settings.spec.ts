@@ -9,7 +9,6 @@ import {
   settingsNotificationsPermissionsSelector,
   settingsReleaseNotesSelector,
   settingsSoundsAgentSelector,
-  settingsSoundsAgentEnabledSelector,
   settingsSoundsErrorsSelector,
   settingsSoundsPermissionsSelector,
   settingsThemeSelector,
@@ -336,21 +335,19 @@ test("changing sound agent selection persists in localStorage", async ({ page, g
   expect(stored?.sounds?.agent).not.toBe("staplebops-01")
 })
 
-test("disabling agent sound disables sound selection", async ({ page, gotoSession }) => {
+test("selecting none disables agent sound", async ({ page, gotoSession }) => {
   await gotoSession()
 
   const dialog = await openSettings(page)
   const select = dialog.locator(settingsSoundsAgentSelector)
-  const switchContainer = dialog.locator(settingsSoundsAgentEnabledSelector)
   const trigger = select.locator('[data-slot="select-select-trigger"]')
   await expect(select).toBeVisible()
-  await expect(switchContainer).toBeVisible()
   await expect(trigger).toBeEnabled()
 
-  await switchContainer.locator('[data-slot="switch-control"]').click()
-  await page.waitForTimeout(100)
-
-  await expect(trigger).toBeDisabled()
+  await trigger.click()
+  const items = page.locator('[data-slot="select-select-item"]')
+  await expect(items.first()).toBeVisible()
+  await items.first().click()
 
   const stored = await page.evaluate((key) => {
     const raw = localStorage.getItem(key)
