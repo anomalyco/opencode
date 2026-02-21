@@ -1,10 +1,19 @@
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { JSXElement, ParentProps, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
-import { serverDisplayName } from "@/context/server"
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  type JSXElement,
+  onCleanup,
+  onMount,
+  type ParentProps,
+  Show,
+} from "solid-js"
+import { type ServerConnection, serverDisplayName } from "@/context/server"
 import type { ServerHealth } from "@/utils/server-health"
 
 interface ServerRowProps extends ParentProps {
-  url: string
+  conn: ServerConnection.Any
   status?: ServerHealth
   class?: string
   nameClass?: string
@@ -17,7 +26,7 @@ export function ServerRow(props: ServerRowProps) {
   const [truncated, setTruncated] = createSignal(false)
   let nameRef: HTMLSpanElement | undefined
   let versionRef: HTMLSpanElement | undefined
-  const name = createMemo(() => serverDisplayName(props.url))
+  const name = createMemo(() => serverDisplayName(props.conn))
 
   const check = () => {
     const nameTruncated = nameRef ? nameRef.scrollWidth > nameRef.clientWidth : false
@@ -27,7 +36,7 @@ export function ServerRow(props: ServerRowProps) {
 
   createEffect(() => {
     name()
-    props.url
+    props.conn.http.url
     props.status?.version
     queueMicrotask(check)
   })
