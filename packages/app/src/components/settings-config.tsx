@@ -1,5 +1,6 @@
 import type { Config } from "@opencode-ai/sdk/v2/client"
-import { Component, createSignal, Show } from "solid-js"
+import { Component, createMemo, createSignal, Show } from "solid-js"
+import { useParams } from "@solidjs/router"
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useLanguage } from "@/context/language"
@@ -9,11 +10,17 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { useNavigate } from "@solidjs/router"
 
 export const SettingsConfig: Component = () => {
+  const params = useParams()
   const language = useLanguage()
   const platform = usePlatform()
   const globalSync = useGlobalSync()
   const globalSDK = useGlobalSDK()
   const navigate = useNavigate()
+
+  const currentDir = createMemo(() => {
+    const d = params.dir
+    return d ? atob(d) : ""
+  })
 
   const tryParse = (s: string): Config | undefined => {
     try {
@@ -28,13 +35,13 @@ export const SettingsConfig: Component = () => {
   const [loading, setLoading] = createSignal(false)
   const [editorOpen, setEditorOpen] = createSignal(false)
 
-  const globalPath = () => globalSync.data.path.config
+  const globalPath = createMemo(() => globalSync.data.path.config)
 
-  const projectPath = () => {
-    const worktree = globalSync.data.path.worktree
+  const projectPath = createMemo(() => {
+    const worktree = currentDir()
     if (!worktree) return null
     return `${worktree}/opencode.json`
-  }
+  })
 
   const findProjectConfig = async (worktree: string): Promise<{ path: string; content: string } | null> => {
     if (!platform.readConfigFile) return null
@@ -55,7 +62,7 @@ export const SettingsConfig: Component = () => {
   }
 
   const openProjectEditor = async () => {
-    const worktree = globalSync.data.path.worktree
+    const worktree = currentDir()
     if (!worktree || platform.platform !== "desktop" || !platform.readConfigFile) return
 
     setLoading(true)
@@ -115,8 +122,8 @@ export const SettingsConfig: Component = () => {
 
     if (platform.platform !== "desktop" || !platform.writeConfigFile) return
 
-    const worktree = globalSync.data.path.worktree
-    const directory = globalSync.data.path.directory
+    const worktree = currentDir()
+    const directory = currentDir()
     setLoading(true)
     const err = await platform.writeConfigFile(path, configContent()).catch((e) => e)
     setLoading(false)
