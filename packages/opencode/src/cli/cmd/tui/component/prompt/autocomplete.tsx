@@ -291,7 +291,19 @@ export function Autocomplete(props: {
       return options
     },
     {
-      initialValue: [],
+      display: "/copy",
+      description: "copy session transcript to clipboard",
+      onSelect: () => command.trigger("session.copy"),
+    },
+    {
+      display: "/copy-options",
+      description: "copy session transcript with options",
+      onSelect: () => command.trigger("session.copyWithOptions"),
+    },
+    {
+      display: "/export",
+      description: "export session transcript to file",
+      onSelect: () => command.trigger("session.export"),
     },
   )
 

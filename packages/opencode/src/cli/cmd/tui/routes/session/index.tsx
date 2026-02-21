@@ -820,6 +820,49 @@ export function Session() {
       },
     },
     {
+      title: "Copy session transcript with options",
+      value: "session.copyWithOptions",
+      category: "Session",
+      slash: {
+        name: "copy-options",
+      },
+      onSelect: async (dialog) => {
+        try {
+          const sessionData = session()
+          if (!sessionData) return
+          const sessionMessages = messages()
+
+          const defaultFilename = `session-${sessionData.id.slice(0, 8)}.md`
+
+          const options = await DialogExportOptions.show(
+            dialog,
+            defaultFilename,
+            showThinking(),
+            showDetails(),
+            showAssistantMetadata(),
+            false,
+          )
+
+          if (options === null) return
+
+          const transcript = formatTranscript(
+            sessionData,
+            sessionMessages.map((msg) => ({ info: msg, parts: sync.data.part[msg.id] ?? [] })),
+            {
+              thinking: options.thinking,
+              toolDetails: options.toolDetails,
+              assistantMetadata: options.assistantMetadata,
+            },
+          )
+          await Clipboard.copy(transcript)
+          toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
+        } catch (error) {
+          toast.show({ message: "Failed to copy session transcript", variant: "error" })
+        }
+        dialog.clear()
+      },
+    },
+    {
       title: "Export session transcript",
       value: "session.export",
       keybind: "session_export",
