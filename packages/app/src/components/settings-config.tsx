@@ -74,7 +74,6 @@ export const SettingsConfig: Component = () => {
     } else {
       const defaultConfig = `{
   "$schema": "https://opencode.ai/config.json",
-  "providers": {},
   "agent": {},
   "mode": {}
 }`
