@@ -9,6 +9,7 @@ The global glossary in `translator.md` remains the source of truth for shared do
 - One file per locale
 - Use lowercase locale slugs that match docs locales when possible (for example, `zh-cn.md`, `zh-tw.md`)
 - If only language-level guidance exists, use the language code (for example, `fr.md`)
+- Some repo locale slugs may be aliases/non-BCP47 for consistency (for example, `br` for Brazilian Portuguese / `pt-BR`)
 
 ## What To Put In A Locale File
 
@@ -17,6 +18,7 @@ The global glossary in `translator.md` remains the source of truth for shared do
 - **Preferred Terms**: recurring UI/docs words with preferred translations
 - **Guidance**: tone, style, and consistency notes
 - **Avoid** (optional): common literal translations or wording we should avoid
+- If the repo uses a locale alias slug, document the alias in **Guidance** (for example, prose may mention `pt-BR` while config/examples use `br`)
 
 Prefer guidance that is:
 
@@ -58,3 +60,4 @@ Prefer guidance that is:
 - Mark entries as preferred when they may evolve
 - Keep examples short
 - Add or update the `Sources` section whenever you add a new rule
+- Prefer PR-backed guidance over invented term mappings; start with general guidance if no term-level corrections exist yet

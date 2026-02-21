@@ -29,6 +29,7 @@ When a locale glossary exists, use it to:
 - Apply preferred wording for recurring UI/docs terms in that locale
 - Preserve locale-specific do-not-translate terms and casing decisions
 - Prefer natural phrasing over literal translation when the locale file calls it out
+- If the repo uses a locale alias slug, apply that file too (for example, `pt-BR` maps to `br.md` in this repo)
 
 Locale guidance does not override code/command preservation rules or the global Do-Not-Translate glossary below.
 
