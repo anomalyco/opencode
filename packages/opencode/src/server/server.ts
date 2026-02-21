@@ -10,7 +10,7 @@ import { basicAuth } from "hono/basic-auth"
 import z from "zod"
 import { Provider } from "../provider/provider"
 import { NamedError } from "@opencode-ai/util/error"
-import { LSP } from "../lsp"
+import { LSP, Diagnostic } from "../lsp"
 import { Format } from "../format"
 import { TuiRoutes } from "./routes/tui"
 import { Instance } from "../project/instance"
@@ -459,6 +459,34 @@ export namespace Server {
           }),
           async (c) => {
             return c.json(await LSP.status())
+          },
+        )
+        .get(
+          "/lsp/diagnostics",
+          describeRoute({
+            summary: "Get LSP diagnostics for a file",
+            description: "Get LSP diagnostics (errors, warnings) for a specific file",
+            operationId: "lsp.diagnostics",
+            responses: {
+              200: {
+                description: "Diagnostics for the file",
+                content: {
+                  "application/json": {
+                    schema: resolver(Diagnostic.array()),
+                  },
+                },
+              },
+            },
+          }),
+          validator(
+            "query",
+            z.object({
+              path: z.string(),
+            }),
+          ),
+          async (c) => {
+            const { path } = c.req.valid("query")
+            return c.json(await LSP.fileDiagnostics(path))
           },
         )
         .get(

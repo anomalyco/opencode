@@ -10,6 +10,24 @@ import { Config } from "../config/config"
 import { spawn } from "child_process"
 import { Instance } from "../project/instance"
 import { Flag } from "@/flag/flag"
+import { Filesystem } from "../util/filesystem"
+
+const DiagnosticSchema = z
+  .object({
+    range: z.object({
+      start: z.object({ line: z.number(), character: z.number() }),
+      end: z.object({ line: z.number(), character: z.number() }),
+    }),
+    severity: z.number().optional(),
+    message: z.string(),
+    source: z.string().optional(),
+    code: z.union([z.string(), z.number()]).optional(),
+  })
+  .meta({ ref: "LSPDiagnostic" })
+
+export const Diagnostic = DiagnosticSchema
+export type { LSPClient }
+export type Diagnostic = LSPClient.Diagnostic
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
@@ -297,6 +315,21 @@ export namespace LSP {
         results[path] = arr
       }
     }
+    return results
+  }
+
+  export async function fileDiagnostics(filePath: string): Promise<LSPClient.Diagnostic[]> {
+    const results: LSPClient.Diagnostic[] = []
+    const normalizedPath = Filesystem.normalizePath(filePath)
+
+    const clients = await getClients(normalizedPath)
+    for (const client of clients) {
+      const diagnostics = client.diagnostics.get(normalizedPath)
+      if (diagnostics) {
+        results.push(...diagnostics)
+      }
+    }
+
     return results
   }
 
