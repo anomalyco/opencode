@@ -4,6 +4,7 @@ type Keys = keyof typeof en
 
 export const dict = {
   "ui.sessionReview.title": "Sitzungsänderungen",
+  "ui.sessionReview.title.lastTurn": "Änderungen der letzten Runde",
   "ui.sessionReview.diffStyle.unified": "Vereinheitlicht",
   "ui.sessionReview.diffStyle.split": "Geteilt",
   "ui.sessionReview.expandAll": "Alle erweitern",
@@ -11,6 +12,12 @@ export const dict = {
 
   "ui.sessionReview.change.added": "Hinzugefügt",
   "ui.sessionReview.change.removed": "Entfernt",
+  "ui.sessionReview.change.modified": "Geändert",
+  "ui.sessionReview.image.loading": "Wird geladen...",
+  "ui.sessionReview.image.placeholder": "Bild",
+  "ui.sessionReview.largeDiff.title": "Diff zu groß zum Rendern",
+  "ui.sessionReview.largeDiff.meta": "Limit: {{limit}} geänderte Zeilen. Aktuell: {{current}} geänderte Zeilen.",
+  "ui.sessionReview.largeDiff.renderAnyway": "Trotzdem rendern",
   "ui.lineComment.label.prefix": "Kommentar zu ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Kommentiere ",
@@ -24,10 +31,13 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "erneuter Versuch",
   "ui.sessionTurn.retry.inSeconds": "in {{seconds}}s",
+  "ui.sessionTurn.error.freeUsageExceeded": "Kostenloses Nutzungslimit überschritten",
+  "ui.sessionTurn.error.addCredits": "Guthaben aufladen",
 
   "ui.sessionTurn.status.delegating": "Arbeit delegieren",
   "ui.sessionTurn.status.planning": "Nächste Schritte planen",
-  "ui.sessionTurn.status.gatheringContext": "Kontext sammeln",
+  "ui.sessionTurn.status.gatheringContext": "Erkunden",
+  "ui.sessionTurn.status.gatheredContext": "Erkundet",
   "ui.sessionTurn.status.searchingCodebase": "Codebasis durchsuchen",
   "ui.sessionTurn.status.searchingWeb": "Web durchsuchen",
   "ui.sessionTurn.status.makingEdits": "Änderungen vornehmen",
@@ -76,6 +86,7 @@ export const dict = {
   "ui.common.question.other": "Fragen",
 
   "ui.common.add": "Hinzufügen",
+  "ui.common.back": "Zurück",
   "ui.common.cancel": "Abbrechen",
   "ui.common.confirm": "Bestätigen",
   "ui.common.dismiss": "Verwerfen",
@@ -90,7 +101,10 @@ export const dict = {
   "ui.message.expand": "Nachricht erweitern",
   "ui.message.collapse": "Nachricht reduzieren",
   "ui.message.copy": "Kopieren",
+  "ui.message.copyMessage": "Nachricht kopieren",
+  "ui.message.copyResponse": "Antwort kopieren",
   "ui.message.copied": "Kopiert!",
+  "ui.message.interrupted": "Unterbrochen",
   "ui.message.attachment.alt": "Anhang",
 
   "ui.patch.action.deleted": "Gelöscht",
@@ -101,6 +115,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} beantwortet",
   "ui.question.answer.none": "(keine Antwort)",
   "ui.question.review.notAnswered": "(nicht beantwortet)",
-  "ui.question.multiHint": "(alle zutreffenden auswählen)",
+  "ui.question.multiHint": "Alle zutreffenden auswählen",
+  "ui.question.singleHint": "Eine Antwort auswählen",
   "ui.question.custom.placeholder": "Geben Sie Ihre Antwort ein...",
 } satisfies Partial<Record<Keys, string>>

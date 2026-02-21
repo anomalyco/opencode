@@ -1,18 +1,26 @@
 export const dict = {
   "ui.sessionReview.title": "세션 변경 사항",
+  "ui.sessionReview.title.lastTurn": "마지막 턴 변경 사항",
   "ui.sessionReview.diffStyle.unified": "통합 보기",
   "ui.sessionReview.diffStyle.split": "분할 보기",
   "ui.sessionReview.expandAll": "모두 펼치기",
   "ui.sessionReview.collapseAll": "모두 접기",
-
   "ui.sessionReview.change.added": "추가됨",
   "ui.sessionReview.change.removed": "삭제됨",
+  "ui.sessionReview.change.modified": "수정됨",
+  "ui.sessionReview.image.loading": "로딩 중...",
+  "ui.sessionReview.image.placeholder": "이미지",
+  "ui.sessionReview.largeDiff.title": "차이가 너무 커서 렌더링할 수 없습니다",
+  "ui.sessionReview.largeDiff.meta": "제한: {{limit}} 변경 줄. 현재: {{current}} 변경 줄.",
+  "ui.sessionReview.largeDiff.renderAnyway": "그래도 렌더링",
+
   "ui.lineComment.label.prefix": "",
   "ui.lineComment.label.suffix": "에 댓글 달기",
   "ui.lineComment.editorLabel.prefix": "",
   "ui.lineComment.editorLabel.suffix": "에 댓글 작성 중",
   "ui.lineComment.placeholder": "댓글 추가",
   "ui.lineComment.submit": "댓글",
+
   "ui.sessionTurn.steps.show": "단계 표시",
   "ui.sessionTurn.steps.hide": "단계 숨기기",
   "ui.sessionTurn.summary.response": "응답",
@@ -20,10 +28,13 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "재시도 중",
   "ui.sessionTurn.retry.inSeconds": "{{seconds}}초 후",
+  "ui.sessionTurn.error.freeUsageExceeded": "무료 사용량 초과",
+  "ui.sessionTurn.error.addCredits": "크레딧 추가",
 
   "ui.sessionTurn.status.delegating": "작업 위임 중",
   "ui.sessionTurn.status.planning": "다음 단계 계획 중",
-  "ui.sessionTurn.status.gatheringContext": "컨텍스트 수집 중",
+  "ui.sessionTurn.status.gatheringContext": "탐색 중",
+  "ui.sessionTurn.status.gatheredContext": "탐색됨",
   "ui.sessionTurn.status.searchingCodebase": "코드베이스 검색 중",
   "ui.sessionTurn.status.searchingWeb": "웹 검색 중",
   "ui.sessionTurn.status.makingEdits": "편집 수행 중",
@@ -72,6 +83,7 @@ export const dict = {
   "ui.common.question.other": "질문",
 
   "ui.common.add": "추가",
+  "ui.common.back": "뒤로",
   "ui.common.cancel": "취소",
   "ui.common.confirm": "확인",
   "ui.common.dismiss": "닫기",
@@ -86,7 +98,10 @@ export const dict = {
   "ui.message.expand": "메시지 펼치기",
   "ui.message.collapse": "메시지 접기",
   "ui.message.copy": "복사",
+  "ui.message.copyMessage": "메시지 복사",
+  "ui.message.copyResponse": "응답 복사",
   "ui.message.copied": "복사됨!",
+  "ui.message.interrupted": "중단됨",
   "ui.message.attachment.alt": "첨부 파일",
 
   "ui.patch.action.deleted": "삭제됨",
@@ -97,6 +112,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}}개 답변됨",
   "ui.question.answer.none": "(답변 없음)",
   "ui.question.review.notAnswered": "(답변되지 않음)",
-  "ui.question.multiHint": "(해당하는 항목 모두 선택)",
+  "ui.question.multiHint": "해당하는 항목 모두 선택",
+  "ui.question.singleHint": "하나의 답변을 선택",
   "ui.question.custom.placeholder": "답변 입력...",
 }

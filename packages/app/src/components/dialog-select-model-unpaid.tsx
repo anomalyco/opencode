@@ -6,7 +6,7 @@ import { List, type ListRef } from "@opencode-ai/ui/list"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tag } from "@opencode-ai/ui/tag"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { type Component, onCleanup, onMount, Show } from "solid-js"
+import { type Component, Show } from "solid-js"
 import { useLocal } from "@/context/local"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { DialogConnectProvider } from "./dialog-connect-provider"
@@ -21,24 +21,17 @@ export const DialogSelectModelUnpaid: Component = () => {
   const language = useLanguage()
 
   let listRef: ListRef | undefined
-  const handleKey = (e: KeyboardEvent) => {
+  const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Escape") return
     listRef?.onKeyDown(e)
   }
-
-  onMount(() => {
-    document.addEventListener("keydown", handleKey)
-    onCleanup(() => {
-      document.removeEventListener("keydown", handleKey)
-    })
-  })
 
   return (
     <Dialog
       title={language.t("dialog.model.select.title")}
       class="overflow-y-auto [&_[data-slot=dialog-body]]:overflow-visible [&_[data-slot=dialog-body]]:flex-none"
     >
-      <div class="flex flex-col gap-3 px-2.5">
+      <div class="flex flex-col gap-3 px-2.5" onKeyDown={handleKeyDown}>
         <div class="text-14-medium text-text-base px-2.5">{language.t("dialog.model.unpaid.freeModels.title")}</div>
         <List
           class="[&_[data-slot=list-scroll]]:overflow-visible"

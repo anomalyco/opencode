@@ -1,0 +1,391 @@
+---
+title: SDK
+description: ไคลเอนต์ JS ประเภทที่ปลอดภัยสำหรับเซิร์ฟเวอร์ opencode
+---
+
+import config from "../../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+opencode JS/TS SDK จัดเตรียมไคลเอ็นต์ประเภทที่ปลอดภัยสำหรับการโต้ตอบกับเซิร์ฟเวอร์
+ใช้เพื่อสร้างการบูรณาการและควบคุม opencode โดยทางโปรแกรม
+
+[เรียนรู้เพิ่มเติม](/docs/server) เกี่ยวกับวิธีการทำงานของเซิร์ฟเวอร์ ตัวอย่างเช่น ลองดู [โครงการ](/docs/ecosystem#โครงการ) ที่สร้างโดยชุมชน
+
+---
+
+## ติดตั้ง
+
+ติดตั้ง SDK จาก npm:
+
+```bash
+npm install @opencode-ai/sdk
+```
+
+---
+
+## สร้างไคลเอนต์
+
+สร้างอินสแตนซ์ของ opencode:
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const { client } = await createOpencode()
+```
+
+สิ่งนี้จะเริ่มต้นทั้งเซิร์ฟเวอร์และไคลเอนต์
+
+#### ตัวเลือก
+
+| ตัวเลือก   | Type          | คำอธิบาย                                    | ค่าเริ่มต้น |
+| ---------- | ------------- | ------------------------------------------- | ----------- |
+| `hostname` | `string`      | ชื่อโฮสต์ของเซิร์ฟเวอร์                     | `127.0.0.1` |
+| `port`     | `number`      | พอร์ตเซิร์ฟเวอร์                            | `4096`      |
+| `signal`   | `AbortSignal` | ยกเลิกสัญญาณสำหรับการยกเลิก                 | `undefined` |
+| `timeout`  | `number`      | หมดเวลาเป็น ms สำหรับการเริ่มต้นเซิร์ฟเวอร์ | `5000`      |
+| `config`   | `Config`      | วัตถุการกำหนดค่า                            | `{}`        |
+
+---
+
+## การกำหนดค่า
+
+คุณสามารถส่งผ่านออบเจ็กต์การกำหนดค่าเพื่อปรับแต่งลักษณะการทำงานได้ อินสแตนซ์ยังคงรับ `opencode.json` ของคุณ แต่คุณสามารถแทนที่หรือเพิ่มการกำหนดค่าแบบอินไลน์ได้:
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const opencode = await createOpencode({
+  hostname: "127.0.0.1",
+  port: 4096,
+  config: {
+    model: "anthropic/claude-3-5-sonnet-20241022",
+  },
+})
+
+console.log(`Server running at ${opencode.server.url}`)
+
+opencode.server.close()
+```
+
+## ลูกค้าเท่านั้น
+
+หากคุณมีอินสแตนซ์ opencode ที่ทำงานอยู่แล้ว คุณสามารถสร้างอินสแตนซ์ไคลเอ็นต์เพื่อเชื่อมต่อได้:
+
+```javascript
+import { createOpencodeClient } from "@opencode-ai/sdk"
+
+const client = createOpencodeClient({
+  baseUrl: "http://localhost:4096",
+})
+```
+
+#### ตัวเลือก
+
+| ตัวเลือก        | Type       | คำอธิบาย                                 | ค่าเริ่มต้น             |
+| --------------- | ---------- | ---------------------------------------- | ----------------------- |
+| `baseUrl`       | `string`   | URL ของเซิร์ฟเวอร์                       | `http://localhost:4096` |
+| `fetch`         | `function` | การใช้งานการดึงข้อมูลแบบกำหนดเอง         | `globalThis.fetch`      |
+| `parseAs`       | `string`   | Methodการแยกวิเคราะห์การตอบสนอง          | `auto`                  |
+| `responseStyle` | `string`   | รูปแบบการคืนสินค้า: `data` หรือ `fields` | `fields`                |
+| `throwOnError`  | `boolean`  | โยนข้อผิดพลาดแทนการส่งคืน                | `false`                 |
+
+---
+
+## ประเภท
+
+SDK มีคำจำกัดความ TypeScript สำหรับ API ประเภททั้งหมด นำเข้าโดยตรง:
+
+```typescript
+import type { Session, Message, Part } from "@opencode-ai/sdk"
+```
+
+ทุกประเภทสร้างขึ้นจากข้อกำหนด OpenAPI ของเซิร์ฟเวอร์และมีอยู่ใน <a href={typesUrl}>ไฟล์ประเภท</a>
+
+---
+
+## ข้อผิดพลาด
+
+SDK อาจทำให้เกิดข้อผิดพลาดที่คุณสามารถจับและจัดการได้:
+
+```typescript
+try {
+  await client.session.get({ path: { id: "invalid-id" } })
+} catch (error) {
+  console.error("Failed to get session:", (error as Error).message)
+}
+```
+
+---
+
+## API
+
+SDK เปิดเผย API ของเซิร์ฟเวอร์ทั้งหมดผ่านไคลเอ็นต์ประเภทที่ปลอดภัย
+
+---
+
+### ทั่วโลก
+
+| Method            | คำอธิบาย                             | การตอบสนอง                           |
+| ----------------- | ------------------------------------ | ------------------------------------ |
+| `global.health()` | ตรวจสอบสภาพและเวอร์ชันของเซิร์ฟเวอร์ | `{ healthy: true, version: string }` |
+
+---
+
+#### ตัวอย่าง
+
+```javascript
+const health = await client.global.health()
+console.log(health.data.version)
+```
+
+---
+
+### แอป
+
+| Method         | คำอธิบาย                      | การตอบสนอง                                   |
+| -------------- | ----------------------------- | -------------------------------------------- |
+| `app.log()`    | เขียนรายการบันทึก             | `boolean`                                    |
+| `app.agents()` | รายชื่อตัวแทนที่มีอยู่ทั้งหมด | <a href={typesUrl}><code>ตัวแทน[]</code></a> |
+
+---
+
+#### ตัวอย่าง
+
+```javascript
+// Write a log entry
+await client.app.log({
+  body: {
+    service: "my-app",
+    level: "info",
+    message: "Operation completed",
+  },
+})
+
+// List available agents
+const agents = await client.app.agents()
+```
+
+---
+
+### โครงการ
+
+| Method              | คำอธิบาย                 | การตอบสนอง                                    |
+| ------------------- | ------------------------ | --------------------------------------------- |
+| `project.list()`    | แสดงรายการโครงการทั้งหมด | <a href={typesUrl}><code>Project[]</code></a> |
+| `project.current()` | รับโครงการปัจจุบัน       | <a href={typesUrl}><code>Project</code></a>   |
+
+---
+
+#### ตัวอย่าง
+
+```javascript
+// List all projects
+const projects = await client.project.list()
+
+// Get current project
+const currentProject = await client.project.current()
+```
+
+---
+
+### เส้นทาง
+
+| Method       | คำอธิบาย           | การตอบสนอง                               |
+| ------------ | ------------------ | ---------------------------------------- |
+| `path.get()` | รับเส้นทางปัจจุบัน | <a href={typesUrl}><code>Path</code></a> |
+
+---
+
+#### ตัวอย่าง
+
+```javascript
+// Get current path information
+const pathInfo = await client.path.get()
+```
+
+---
+
+### การกำหนดค่า
+
+| Method               | คำอธิบาย                            | การตอบสนอง                                                                                                |
+| -------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `config.get()`       | รับข้อมูลการกำหนดค่า                | <a href={typesUrl}><code>กำหนดค่า</code></a>                                                              |
+| `config.providers()` | ผู้ให้บริการรายชื่อและโมเดลเริ่มต้น | `{ providers: `<a href={typesUrl}><code>ผู้ให้บริการ[]</code></a>`, default: { [key: string]: string } }` |
+
+---
+
+#### ตัวอย่าง
+
+```javascript
+const config = await client.config.get()
+
+const { providers, default: defaults } = await client.config.providers()
+```
+
+---
+
+### เซสชัน
+
+| Method                                                     | คำอธิบาย                         | หมายเหตุ                                                                                                                                             |
+| ---------------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session.list()`                                           | แสดงรายการเซสชัน                 | ส่งคืน <a href={typesUrl}><code>เซสชัน[]</code></a>                                                                                                  |
+| `session.get({ path })`                                    | รับเซสชัน                        | ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>                                                                                                    |
+| `session.children({ path })`                               | แสดงรายการเซสชันย่อย             | ส่งคืน <a href={typesUrl}><code>เซสชัน[]</code></a>                                                                                                  |
+| `session.create({ body })`                                 | สร้างเซสชัน                      | ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>                                                                                                    |
+| `session.delete({ path })`                                 | ลบเซสชัน                         | ส่งคืน `boolean`                                                                                                                                     |
+| `session.update({ path, body })`                           | อัปเดตคุณสมบัติเซสชัน            | ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>                                                                                                    |
+| `session.init({ path, body })`                             | วิเคราะห์แอปและสร้าง `AGENTS.md` | ส่งคืน `boolean`                                                                                                                                     |
+| `session.abort({ path })`                                  | ยกเลิกเซสชันที่ทำงานอยู่         | ส่งคืน `boolean`                                                                                                                                     |
+| `session.share({ path })`                                  | แบ่งปันเซสชั่น                   | ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>                                                                                                    |
+| `session.unshare({ path })`                                | เลิกแชร์เซสชัน                   | ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>                                                                                                    |
+| `session.summarize({ path, body })`                        | สรุปเซสชัน                       | ส่งคืน `boolean`                                                                                                                                     |
+| `session.messages({ path })`                               | แสดงรายการข้อความในเซสชัน        | ส่งคืน `{ info: `<a href={typesUrl}><code>ข้อความ</code></a>`, parts: `<a href={typesUrl}><code>ส่วน[]</code></a>`}[]`                               |
+| `session.message({ path })`                                | รับรายละเอียดข้อความ             | ส่งคืน `{ info: `<a href={typesUrl}><code>ข้อความ</code></a>`, parts: `<a href={typesUrl}><code>ส่วน[]</code></a>`}`                                 |
+| `session.prompt({ path, body })`                           | ส่งข้อความแจ้ง                   | `body.noReply: true` ส่งคืน UserMessage (บริบทเท่านั้น) ค่าเริ่มต้นส่งคืน <a href={typesUrl}><code>AssistantMessage</code></a> พร้อมการตอบสนองของ AI |
+| `session.command({ path, body })`                          | ส่งคำสั่งไปยังเซสชั่น            | ส่งคืน `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>ส่วน[]</code></a>`}`                        |
+| `session.shell({ path, body })`                            | รันคำสั่ง shell                  | ส่งคืน <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                          |
+| `session.revert({ path, body })`                           | คืนค่าข้อความ                    | ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>                                                                                                    |
+| `session.unrevert({ path })`                               | คืนค่าข้อความที่เปลี่ยนกลับ      | ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>                                                                                                    |
+| `postSessionByIdPermissionsByPermissionId({ path, body })` | ตอบสนองต่อการร้องขอการอนุญาต     | ส่งคืน `boolean`                                                                                                                                     |
+
+---
+
+#### ตัวอย่าง
+
+```javascript
+// Create and manage sessions
+const session = await client.session.create({
+  body: { title: "My session" },
+})
+
+const sessions = await client.session.list()
+
+// Send a prompt message
+const result = await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    model: { providerID: "anthropic", modelID: "claude-3-5-sonnet-20241022" },
+    parts: [{ type: "text", text: "Hello!" }],
+  },
+})
+
+// Inject context without triggering AI response (useful for plugins)
+await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    noReply: true,
+    parts: [{ type: "text", text: "You are a helpful assistant." }],
+  },
+})
+```
+
+---
+
+### ไฟล์
+
+| Method                    | คำอธิบาย                       | การตอบสนอง                                                                                |
+| ------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------- |
+| `find.text({ query })`    | ค้นหาข้อความในไฟล์             | อาร์เรย์ของวัตถุที่ตรงกับ `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
+| `find.files({ query })`   | ค้นหาไฟล์และไดเร็กทอรีตามชื่อ  | `string[]` (paths)                                                                        |
+| `find.symbols({ query })` | ค้นหาสัญลักษณ์พื้นที่ทำงาน     | <a href={typesUrl}><code>Symbol[]</code></a>                                              |
+| `file.read({ query })`    | อ่านไฟล์                       | `{ type: "raw" \| "patch", content: string }`                                             |
+| `file.status({ query? })` | รับสถานะสำหรับไฟล์ที่ถูกติดตาม | <a href={typesUrl}><code>File[]</code></a>                                                |
+
+`find.files` รองรับช่องค้นหาเพิ่มเติมบางช่อง:
+
+- `type`: `"file"` หรือ `"directory"`
+- `directory`: แทนที่รูทโปรเจ็กต์สำหรับการค้นหา
+- `limit`: ผลลัพธ์สูงสุด (1–200)
+
+---
+
+#### ตัวอย่าง
+
+```javascript
+// Search and read files
+const textResults = await client.find.text({
+  query: { pattern: "function.*opencode" },
+})
+
+const files = await client.find.files({
+  query: { query: "*.ts", type: "file" },
+})
+
+const directories = await client.find.files({
+  query: { query: "packages", type: "directory", limit: 20 },
+})
+
+const content = await client.file.read({
+  query: { path: "src/index.ts" },
+})
+```
+
+---
+
+### TUI
+
+| Method                         | คำอธิบาย                       | การตอบสนอง |
+| ------------------------------ | ------------------------------ | ---------- |
+| `tui.appendPrompt({ body })`   | เพิ่มข้อความต่อท้ายข้อความแจ้ง | `boolean`  |
+| `tui.openHelp()`               | เปิดกล่องโต้ตอบความช่วยเหลือ   | `boolean`  |
+| `tui.openSessions()`           | เปิดตัวเลือกเซสชัน             | `boolean`  |
+| `tui.openThemes()`             | เปิดตัวเลือกธีม                | `boolean`  |
+| `tui.openModels()`             | เปิดตัวเลือกรุ่น               | `boolean`  |
+| `tui.submitPrompt()`           | ส่งข้อความแจ้งปัจจุบัน         | `boolean`  |
+| `tui.clearPrompt()`            | ล้างข้อความแจ้ง                | `boolean`  |
+| `tui.executeCommand({ body })` | ดำเนินการคำสั่ง                | `boolean`  |
+| `tui.showToast({ body })`      | แสดงการแจ้งเตือนขนมปังปิ้ง     | `boolean`  |
+
+---
+
+#### ตัวอย่าง
+
+```javascript
+// Control TUI interface
+await client.tui.appendPrompt({
+  body: { text: "Add this to prompt" },
+})
+
+await client.tui.showToast({
+  body: { message: "Task completed", variant: "success" },
+})
+```
+
+---
+
+### การรับรองความถูกต้อง
+
+| Method              | คำอธิบาย                                  | การตอบสนอง |
+| ------------------- | ----------------------------------------- | ---------- |
+| `auth.set({ ... })` | ตั้งค่าข้อมูลประจำตัวการรับรองความถูกต้อง | `boolean`  |
+
+---
+
+#### ตัวอย่าง
+
+```javascript
+await client.auth.set({
+  path: { id: "anthropic" },
+  body: { type: "api", key: "your-api-key" },
+})
+```
+
+---
+
+### กิจกรรม
+
+| Method              | คำอธิบาย                        | การตอบสนอง                      |
+| ------------------- | ------------------------------- | ------------------------------- |
+| `event.subscribe()` | สตรีมเหตุการณ์ที่เซิร์ฟเวอร์ส่ง | สตรีมเหตุการณ์ที่เซิร์ฟเวอร์ส่ง |
+
+---
+
+#### ตัวอย่าง
+
+```javascript
+// Listen to real-time events
+const events = await client.event.subscribe()
+for await (const event of events.stream) {
+  console.log("Event:", event.type, event.properties)
+}
+```

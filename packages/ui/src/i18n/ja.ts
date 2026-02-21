@@ -1,5 +1,6 @@
 export const dict = {
   "ui.sessionReview.title": "セッションの変更",
+  "ui.sessionReview.title.lastTurn": "前回ターンの変更",
   "ui.sessionReview.diffStyle.unified": "Unified",
   "ui.sessionReview.diffStyle.split": "Split",
   "ui.sessionReview.expandAll": "すべて展開",
@@ -7,6 +8,12 @@ export const dict = {
 
   "ui.sessionReview.change.added": "追加",
   "ui.sessionReview.change.removed": "削除",
+  "ui.sessionReview.change.modified": "変更",
+  "ui.sessionReview.image.loading": "読み込み中...",
+  "ui.sessionReview.image.placeholder": "画像",
+  "ui.sessionReview.largeDiff.title": "差分が大きすぎて表示できません",
+  "ui.sessionReview.largeDiff.meta": "上限: {{limit}} 変更行。現在: {{current}} 変更行。",
+  "ui.sessionReview.largeDiff.renderAnyway": "それでも表示する",
   "ui.lineComment.label.prefix": "",
   "ui.lineComment.label.suffix": "へのコメント",
   "ui.lineComment.editorLabel.prefix": "",
@@ -20,10 +27,13 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "再試行中",
   "ui.sessionTurn.retry.inSeconds": "{{seconds}}秒後",
+  "ui.sessionTurn.error.freeUsageExceeded": "無料使用制限に達しました",
+  "ui.sessionTurn.error.addCredits": "クレジットを追加",
 
   "ui.sessionTurn.status.delegating": "作業を委任中",
   "ui.sessionTurn.status.planning": "次のステップを計画中",
-  "ui.sessionTurn.status.gatheringContext": "コンテキストを収集中",
+  "ui.sessionTurn.status.gatheringContext": "探索中",
+  "ui.sessionTurn.status.gatheredContext": "探索済み",
   "ui.sessionTurn.status.searchingCodebase": "コードベースを検索中",
   "ui.sessionTurn.status.searchingWeb": "ウェブを検索中",
   "ui.sessionTurn.status.makingEdits": "編集を実行中",
@@ -72,6 +82,7 @@ export const dict = {
   "ui.common.question.other": "質問",
 
   "ui.common.add": "追加",
+  "ui.common.back": "戻る",
   "ui.common.cancel": "キャンセル",
   "ui.common.confirm": "確認",
   "ui.common.dismiss": "閉じる",
@@ -86,7 +97,10 @@ export const dict = {
   "ui.message.expand": "メッセージを展開",
   "ui.message.collapse": "メッセージを折りたたむ",
   "ui.message.copy": "コピー",
+  "ui.message.copyMessage": "メッセージをコピー",
+  "ui.message.copyResponse": "応答をコピー",
   "ui.message.copied": "コピーしました！",
+  "ui.message.interrupted": "中断",
   "ui.message.attachment.alt": "添付ファイル",
 
   "ui.patch.action.deleted": "削除済み",
@@ -97,6 +111,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}}件回答済み",
   "ui.question.answer.none": "(回答なし)",
   "ui.question.review.notAnswered": "(未回答)",
-  "ui.question.multiHint": "(該当するものをすべて選択)",
+  "ui.question.multiHint": "該当するものをすべて選択",
+  "ui.question.singleHint": "1 つ選択",
   "ui.question.custom.placeholder": "回答を入力...",
 }

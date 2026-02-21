@@ -1,0 +1,156 @@
+---
+title: ACP Desteği
+description: opencode'u ACP uyumlu herhangi bir editörde kullanın.
+---
+
+opencode, [Agent Client Protocol](https://agentclientprotocol.com) veya (ACP) dosyalarını destekleyerek onu doğrudan uyumlu editörlerde ve IDE'lerde kullanmanızı sağlar.
+
+:::tip
+ACP'yi destekleyen editörlerin ve araçların listesi için [ACP progress report](https://zed.dev/blog/acp-progress-report#available-now)'e bakın.
+:::
+
+ACP, kod editörleri ile AI kodlama ajanları arasındaki iletişimi standartlaştıran açık bir protokoldür.
+
+---
+
+## Yapılandırma
+
+opencode'u ACP aracılığıyla kullanmak için düzenleyicinizi `opencode acp` komutunu çalıştıracak şekilde yapılandırın.
+
+Komut, opencode'u, editörünüzle stdio aracılığıyla JSON-RPC üzerinden iletişim kuran ACP uyumlu bir alt süreç olarak başlatır.
+
+Aşağıda ACP'yi destekleyen popüler düzenleyicilere ilişkin örnekler verilmiştir.
+
+---
+
+### Zed
+
+[Zed](https://zed.dev) yapılandırmanıza (`~/.config/zed/settings.json`) ekleyin:
+
+```json title="~/.config/zed/settings.json"
+{
+  "agent_servers": {
+    "OpenCode": {
+      "command": "opencode",
+      "args": ["acp"]
+    }
+  }
+}
+```
+
+Açmak için **Komut Paleti**'ndeki `agent: new thread` eylemini kullanın.
+
+`keymap.json` dosyanızı düzenleyerek de bir klavye kısayolunu bağlayabilirsiniz:
+
+```json title="keymap.json"
+[
+  {
+    "bindings": {
+      "cmd-alt-o": [
+        "agent::NewExternalAgentThread",
+        {
+          "agent": {
+            "custom": {
+              "name": "OpenCode",
+              "command": {
+                "command": "opencode",
+                "args": ["acp"]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+]
+```
+
+---
+
+### JetBrains IDEs
+
+[documentation](https://www.jetbrains.com/help/ai-assistant/acp.html) uyarınca [JetBrains IDE](https://www.jetbrains.com/) acp.json dosyanıza ekleyin:
+
+```json title="acp.json"
+{
+  "agent_servers": {
+    "OpenCode": {
+      "command": "/absolute/path/bin/opencode",
+      "args": ["acp"]
+    }
+  }
+}
+```
+
+Açmak için AI Chat agent seçicisindeki yeni 'OpenCode' ajanını kullanın.
+
+---
+
+### Avante.nvim
+
+[Avante.nvim](https://github.com/yetone/avante.nvim) yapılandırmanıza ekleyin:
+
+```lua
+{
+  acp_providers = {
+    ["opencode"] = {
+      command = "opencode",
+      args = { "acp" }
+    }
+  }
+}
+```
+
+Ortam değişkenlerini iletmeniz gerekiyor:
+
+```lua {6-8}
+{
+  acp_providers = {
+    ["opencode"] = {
+      command = "opencode",
+      args = { "acp" },
+      env = {
+        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+      }
+    }
+  }
+}
+```
+
+---
+
+### CodeCompanion.nvim
+
+opencode'u [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim)'de ACP ajanı olarak kullanmak için Neovim yapılandırmanıza aşağıdakileri ekleyin:
+
+```lua
+require("codecompanion").setup({
+  interactions = {
+    chat = {
+      adapter = {
+        name = "opencode",
+        model = "claude-sonnet-4",
+      },
+    },
+  },
+})
+```
+
+Bu yapılandırma, CodeCompanion'ı opencode'u sohbet için ACP ajanı olarak kullanacak şekilde ayarlar.
+
+Ortam değişkenlerini (`OPENCODE_API_KEY` gibi) iletmeniz gerekiyorsa, tüm ayrıntılar için CodeCompanion.nvim belgelerindeki [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)'ye bakın.
+
+## Destek
+
+opencode, terminalde olduğu gibi ACP aracılığıyla aynı şekilde çalışır. Tüm özellikler desteklenir:
+
+:::note
+`/undo` ve `/redo` gibi bazı yerleşik slash komutları şu anda desteklenmemektedir.
+:::
+
+- Yerleşik araçlar (dosya işlemleri, terminal komutları vb.)
+- Özel araçlar ve slash komutları
+- opencode yapılandırmanızda yapılandırılmış MCP sunucuları
+- `AGENTS.md`'dan projeye özel kurallar
+- Özel biçimlendiriciler ve linter'lar
+- Aracılar ve izin sistemi

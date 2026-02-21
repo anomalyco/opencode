@@ -8,9 +8,6 @@
   border: 0.5px solid var(--border-weak-base);
   background: var(--surface-raised-base);
   color: var(--text-base);
-  transition-property: background-color, border-color, color;
-  transition-duration: var(--transition-duration);
-  transition-timing-function: var(--transition-easing);
 
   &[data-size="normal"] {
     height: 18px;

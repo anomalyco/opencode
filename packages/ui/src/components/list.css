@@ -19,7 +19,7 @@
 [data-component="list"] {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   overflow: hidden;
   padding: 0 12px;
 
@@ -37,9 +37,7 @@
       flex-shrink: 0;
       background-color: transparent;
       opacity: 0.5;
-      transition-property: opacity;
-      transition-duration: var(--transition-duration);
-      transition-timing-function: var(--transition-easing);
+      transition: opacity 0.15s ease;
 
       &:hover:not(:disabled),
       &:focus-visible:not(:disabled),
@@ -90,9 +88,7 @@
       height: 20px;
       background-color: transparent;
       opacity: 0.5;
-      transition-property: opacity;
-      transition-duration: var(--transition-duration);
-      transition-timing-function: var(--transition-easing);
+      transition: opacity 0.15s ease;
 
       &:hover:not(:disabled),
       &:focus-visible:not(:disabled),
@@ -135,6 +131,15 @@
     gap: 12px;
     overflow-y: auto;
     overscroll-behavior: contain;
+    mask: linear-gradient(to bottom, #ffff calc(100% - var(--bottom-fade)), #0000);
+    animation: scroll;
+    animation-timeline: --scroll;
+    scroll-timeline: --scroll y;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    &::-webkit-scrollbar {
+      display: none;
+    }
 
     [data-slot="list-empty-state"] {
       display: flex;
@@ -210,9 +215,7 @@
           background: linear-gradient(to bottom, var(--surface-raised-stronger-non-alpha), transparent);
           pointer-events: none;
           opacity: 0;
-          transition-property: opacity;
-          transition-duration: var(--transition-duration);
-          transition-timing-function: var(--transition-easing);
+          transition: opacity 0.15s ease;
         }
 
         &[data-stuck="true"]::after {
@@ -248,22 +251,17 @@
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
-            aspect-ratio: 1 / 1;
+            aspect-ratio: 1/1;
             [data-component="icon"] {
               color: var(--icon-strong-base);
             }
           }
-
-          [name="check"] {
-            color: var(--icon-strong-base);
-          }
-
           [data-slot="list-item-active-icon"] {
             display: none;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
-            aspect-ratio: 1 / 1;
+            aspect-ratio: 1/1;
             [data-component="icon"] {
               color: var(--icon-strong-base);
             }

@@ -27,6 +27,7 @@ export interface TextFieldProps
   error?: string
   variant?: "normal" | "ghost"
   copyable?: boolean
+  copyKind?: "clipboard" | "link"
   multiline?: boolean
 }
 
@@ -49,9 +50,22 @@ export function TextField(props: TextFieldProps) {
     "error",
     "variant",
     "copyable",
+    "copyKind",
     "multiline",
   ])
   const [copied, setCopied] = createSignal(false)
+
+  const label = () => {
+    if (copied()) return i18n.t("ui.textField.copied")
+    if (local.copyKind === "link") return i18n.t("ui.textField.copyLink")
+    return i18n.t("ui.textField.copyToClipboard")
+  }
+
+  const icon = () => {
+    if (copied()) return "check"
+    if (local.copyKind === "link") return "link"
+    return "copy"
+  }
 
   async function handleCopy() {
     const value = local.value ?? local.defaultValue ?? ""
@@ -92,21 +106,15 @@ export function TextField(props: TextFieldProps) {
           <Kobalte.TextArea {...others} autoResize data-slot="input-input" class={local.class} />
         </Show>
         <Show when={local.copyable}>
-          <Tooltip
-            value={copied() ? i18n.t("ui.textField.copied") : i18n.t("ui.textField.copyLink")}
-            placement="top"
-            gutter={4}
-            forceOpen={copied()}
-            skipDelayDuration={0}
-          >
+          <Tooltip value={label()} placement="top" gutter={4} forceOpen={copied()} skipDelayDuration={0}>
             <IconButton
               type="button"
-              icon={copied() ? "check" : "link"}
+              icon={icon()}
               variant="ghost"
               onClick={handleCopy}
               tabIndex={-1}
               data-slot="input-copy-button"
-              aria-label={copied() ? i18n.t("ui.textField.copied") : i18n.t("ui.textField.copyLink")}
+              aria-label={label()}
             />
           </Tooltip>
         </Show>

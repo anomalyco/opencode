@@ -6,9 +6,7 @@
     content: "";
     position: absolute;
     opacity: 0;
-    transition-property: opacity;
-    transition-duration: var(--transition-duration);
-    transition-timing-function: var(--transition-easing);
+    transition: opacity 0.15s ease-in-out;
   }
 
   &:hover::after,

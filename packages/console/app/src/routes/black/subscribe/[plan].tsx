@@ -14,6 +14,9 @@ import { createList } from "solid-list"
 import { Modal } from "~/component/modal"
 import { BillingTable } from "@opencode-ai/console-core/schema/billing.sql.js"
 import { Billing } from "@opencode-ai/console-core/billing.js"
+import { useI18n } from "~/context/i18n"
+import { useLanguage } from "~/context/language"
+import { formError } from "~/lib/form-error"
 
 const plansMap = Object.fromEntries(plans.map((p) => [p.id, p])) as Record<PlanID, (typeof plans)[number]>
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY!)
@@ -56,8 +59,8 @@ const createSetupIntent = async (input: { plan: string; workspaceID: string }) =
   "use server"
   const { plan, workspaceID } = input
 
-  if (!plan || !["20", "100", "200"].includes(plan)) return { error: "Invalid plan" }
-  if (!workspaceID) return { error: "Workspace ID is required" }
+  if (!plan || !["20", "100", "200"].includes(plan)) return { error: formError.invalidPlan }
+  if (!workspaceID) return { error: formError.workspaceRequired }
 
   return withActor(async () => {
     const session = await useAuthSession()
@@ -75,7 +78,7 @@ const createSetupIntent = async (input: { plan: string; workspaceID: string }) =
         .then((rows) => rows[0]),
     )
     if (customer?.subscriptionID) {
-      return { error: "This workspace already has a subscription" }
+      return { error: formError.alreadySubscribed }
     }
 
     let customerID = customer?.customerID
@@ -142,28 +145,34 @@ interface SuccessData {
 }
 
 function Failure(props: { message: string }) {
+  const i18n = useI18n()
+
   return (
     <div data-slot="failure">
-      <p data-slot="message">Uh oh! {props.message}</p>
+      <p data-slot="message">
+        {i18n.t("black.subscribe.failurePrefix")} {props.message}
+      </p>
     </div>
   )
 }
 
 function Success(props: SuccessData) {
+  const i18n = useI18n()
+
   return (
     <div data-slot="success">
-      <p data-slot="title">You're on the OpenCode Black waitlist</p>
+      <p data-slot="title">{i18n.t("black.subscribe.success.title")}</p>
       <dl data-slot="details">
         <div>
-          <dt>Subscription plan</dt>
-          <dd>OpenCode Black {props.plan}</dd>
+          <dt>{i18n.t("black.subscribe.success.subscriptionPlan")}</dt>
+          <dd>{i18n.t("black.subscribe.success.planName", { plan: props.plan })}</dd>
         </div>
         <div>
-          <dt>Amount</dt>
-          <dd>${props.plan} per month</dd>
+          <dt>{i18n.t("black.subscribe.success.amount")}</dt>
+          <dd>{i18n.t("black.subscribe.success.amountValue", { plan: props.plan })}</dd>
         </div>
         <div>
-          <dt>Payment method</dt>
+          <dt>{i18n.t("black.subscribe.success.paymentMethod")}</dt>
           <dd>
             <Show when={props.paymentMethodLast4} fallback={<span>{props.paymentMethodType}</span>}>
               <span>
@@ -173,16 +182,17 @@ function Success(props: SuccessData) {
           </dd>
         </div>
         <div>
-          <dt>Date joined</dt>
-          <dd>{new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</dd>
+          <dt>{i18n.t("black.subscribe.success.dateJoined")}</dt>
+          <dd>{new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</dd>
         </div>
       </dl>
-      <p data-slot="charge-notice">Your card will be charged when your subscription is activated</p>
+      <p data-slot="charge-notice">{i18n.t("black.subscribe.success.chargeNotice")}</p>
     </div>
   )
 }
 
 function IntentForm(props: { plan: PlanID; workspaceID: string; onSuccess: (data: SuccessData) => void }) {
+  const i18n = useI18n()
   const stripe = useStripe()
   const elements = useElements()
   const [error, setError] = createSignal<string | undefined>(undefined)
@@ -197,7 +207,7 @@ function IntentForm(props: { plan: PlanID; workspaceID: string; onSuccess: (data
 
     const result = await elements()!.submit()
     if (result.error) {
-      setError(result.error.message ?? "An error occurred")
+      setError(result.error.message ?? i18n.t("black.subscribe.error.generic"))
       setLoading(false)
       return
     }
@@ -214,7 +224,7 @@ function IntentForm(props: { plan: PlanID; workspaceID: string; onSuccess: (data
     })
 
     if (confirmError) {
-      setError(confirmError.message ?? "An error occurred")
+      setError(confirmError.message ?? i18n.t("black.subscribe.error.generic"))
       setLoading(false)
       return
     }
@@ -248,15 +258,17 @@ function IntentForm(props: { plan: PlanID; workspaceID: string; onSuccess: (data
         <p data-slot="error">{error()}</p>
       </Show>
       <button type="submit" disabled={loading() || !stripe() || !elements()} data-slot="submit-button">
-        {loading() ? "Processing..." : `Subscribe $${props.plan}`}
+        {loading() ? i18n.t("black.subscribe.processing") : i18n.t("black.subscribe.submit", { plan: props.plan })}
       </button>
-      <p data-slot="charge-notice">You will only be charged when your subscription is activated</p>
+      <p data-slot="charge-notice">{i18n.t("black.subscribe.form.chargeNotice")}</p>
     </form>
   )
 }
 
 export default function BlackSubscribe() {
   const params = useParams()
+  const i18n = useI18n()
+  const language = useLanguage()
   const planData = plansMap[(params.plan as PlanID) ?? "20"] ?? plansMap["20"]
   const plan = planData.id
 
@@ -266,6 +278,16 @@ export default function BlackSubscribe() {
   const [failure, setFailure] = createSignal<string | undefined>(undefined)
   const [clientSecret, setClientSecret] = createSignal<string | undefined>(undefined)
   const [stripe, setStripe] = createSignal<Stripe | undefined>(undefined)
+
+  const formatError = (error: string) => {
+    if (error === formError.invalidPlan) return i18n.t("black.subscribe.error.invalidPlan")
+    if (error === formError.workspaceRequired) return i18n.t("black.subscribe.error.workspaceRequired")
+    if (error === formError.alreadySubscribed) return i18n.t("black.subscribe.error.alreadySubscribed")
+    if (error === "Invalid plan") return i18n.t("black.subscribe.error.invalidPlan")
+    if (error === "Workspace ID is required") return i18n.t("black.subscribe.error.workspaceRequired")
+    if (error === "This workspace already has a subscription") return i18n.t("black.subscribe.error.alreadySubscribed")
+    return error
+  }
 
   // Resolve stripe promise once
   createEffect(() => {
@@ -289,7 +311,7 @@ export default function BlackSubscribe() {
 
     const ws = workspaces()?.find((w) => w.id === id)
     if (ws?.billing?.subscriptionID) {
-      setFailure("This workspace already has a subscription")
+      setFailure(i18n.t("black.subscribe.error.alreadySubscribed"))
       return
     }
     if (ws?.billing?.paymentMethodID) {
@@ -312,7 +334,7 @@ export default function BlackSubscribe() {
 
     const result = await createSetupIntent({ plan, workspaceID: id })
     if (result.error) {
-      setFailure(result.error)
+      setFailure(formatError(result.error))
     } else if ("clientSecret" in result) {
       setClientSecret(result.clientSecret)
     }
@@ -338,7 +360,7 @@ export default function BlackSubscribe() {
 
   return (
     <>
-      <Title>Subscribe to OpenCode Black</Title>
+      <Title>{i18n.t("black.subscribe.title")}</Title>
       <section data-slot="subscribe-form">
         <div data-slot="form-card">
           <Switch>
@@ -347,22 +369,27 @@ export default function BlackSubscribe() {
             <Match when={true}>
               <>
                 <div data-slot="plan-header">
-                  <p data-slot="title">Subscribe to OpenCode Black</p>
+                  <p data-slot="title">{i18n.t("black.subscribe.title")}</p>
                   <p data-slot="price">
-                    <span data-slot="amount">${planData.id}</span> <span data-slot="period">per month</span>
+                    <span data-slot="amount">${planData.id}</span>{" "}
+                    <span data-slot="period">{i18n.t("black.price.perMonth")}</span>
                     <Show when={planData.multiplier}>
-                      <span data-slot="multiplier">{planData.multiplier}</span>
+                      {(multiplier) => <span data-slot="multiplier">{i18n.t(multiplier())}</span>}
                     </Show>
                   </p>
                 </div>
                 <div data-slot="divider" />
-                <p data-slot="section-title">Payment method</p>
+                <p data-slot="section-title">{i18n.t("black.subscribe.paymentMethod")}</p>
 
                 <Show
                   when={clientSecret() && selectedWorkspace() && stripe()}
                   fallback={
                     <div data-slot="loading">
-                      <p>{selectedWorkspace() ? "Loading payment form..." : "Select a workspace to continue"}</p>
+                      <p>
+                        {selectedWorkspace()
+                          ? i18n.t("black.subscribe.loadingPaymentForm")
+                          : i18n.t("black.subscribe.selectWorkspaceToContinue")}
+                      </p>
                     </div>
                   }
                 >
@@ -410,7 +437,7 @@ export default function BlackSubscribe() {
         </div>
 
         {/* Workspace picker modal */}
-        <Modal open={showWorkspacePicker() ?? false} onClose={() => {}} title="Select a workspace for this plan">
+        <Modal open={showWorkspacePicker() ?? false} onClose={() => {}} title={i18n.t("black.workspace.selectPlan")}>
           <div data-slot="workspace-picker">
             <ul
               ref={listRef}
@@ -441,7 +468,8 @@ export default function BlackSubscribe() {
           </div>
         </Modal>
         <p data-slot="fine-print">
-          Prices shown don't include applicable tax · <A href="/legal/terms-of-service">Terms of Service</A>
+          {i18n.t("black.finePrint.beforeTerms")} ·{" "}
+          <A href={language.route("/legal/terms-of-service")}>{i18n.t("black.finePrint.terms")}</A>
         </p>
       </section>
     </>

@@ -5,16 +5,6 @@
   inset: 0;
   z-index: 50;
   background-color: hsl(from var(--background-base) h s l / 0.2);
-
-  animation: overlayHide var(--transition-duration) var(--transition-easing) forwards;
-
-  &[data-expanded] {
-    animation: overlayShow var(--transition-duration) var(--transition-easing) forwards;
-  }
-
-  @starting-style {
-    animation: none;
-  }
 }
 
 [data-component="dialog"] {
@@ -35,6 +25,7 @@
     flex-direction: column;
     align-items: center;
     justify-items: start;
+    overflow: visible;
 
     [data-slot="dialog-content"] {
       display: flex;
@@ -44,7 +35,15 @@
       width: 100%;
       max-height: 100%;
       min-height: 280px;
+      overflow: auto;
       pointer-events: auto;
+
+      /* Hide scrollbar */
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      &::-webkit-scrollbar {
+        display: none;
+      }
 
       /* padding: 8px; */
       /* padding: 8px 8px 0 8px; */
@@ -52,16 +51,6 @@
       background: var(--surface-raised-stronger-non-alpha);
       background-clip: padding-box;
       box-shadow: var(--shadow-lg-border-base);
-
-      animation: contentHide var(--transition-duration) var(--transition-easing) forwards;
-
-      &[data-expanded] {
-        animation: contentShow var(--transition-duration) var(--transition-easing) forwards;
-      }
-
-      @starting-style {
-        animation: none;
-      }
 
       [data-slot="dialog-header"] {
         display: flex;
@@ -173,7 +162,7 @@
 @keyframes contentShow {
   from {
     opacity: 0;
-    transform: translateY(2.5%) scale(0.975);
+    transform: scale(0.98);
   }
   to {
     opacity: 1;
@@ -187,6 +176,6 @@
   }
   to {
     opacity: 0;
-    transform: translateY(-2.5%) scale(0.975);
+    transform: scale(0.98);
   }
 }

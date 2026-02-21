@@ -1,6 +1,6 @@
 import { test, expect } from "../fixtures"
 import { promptSelector } from "../selectors"
-import { sessionIDFromUrl } from "../actions"
+import { sessionIDFromUrl, withSession } from "../actions"
 
 test("can send a prompt and receive a reply", async ({ page, sdk, gotoSession }) => {
   test.setTimeout(120_000)
@@ -44,9 +44,6 @@ test("can send a prompt and receive a reply", async ({ page, sdk, gotoSession })
       )
 
       .toContain(token)
-
-    const reply = page.locator('[data-slot="session-turn-summary-section"]').filter({ hasText: token }).first()
-    await expect(reply).toBeVisible({ timeout: 90_000 })
   } finally {
     page.off("pageerror", onPageError)
     await sdk.session.delete({ sessionID }).catch(() => undefined)
