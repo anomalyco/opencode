@@ -46,6 +46,9 @@ describe("tool.webfetch", () => {
             expect(result.attachments?.[0].type).toBe("file")
             expect(result.attachments?.[0].mime).toBe("image/png")
             expect(result.attachments?.[0].url.startsWith("data:image/png;base64,")).toBe(true)
+            expect(result.attachments?.[0]).not.toHaveProperty("id")
+            expect(result.attachments?.[0]).not.toHaveProperty("sessionID")
+            expect(result.attachments?.[0]).not.toHaveProperty("messageID")
           },
         })
       },

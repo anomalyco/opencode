@@ -2,12 +2,12 @@ use std::time::{Duration, Instant};
 
 use tauri::AppHandle;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
-use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_store::StoreExt;
 use tokio::task::JoinHandle;
 
 use crate::{
     cli,
+    cli::CommandChild,
     constants::{DEFAULT_SERVER_URL_KEY, SETTINGS_STORE, WSL_ENABLED_KEY},
 };
 
@@ -55,18 +55,18 @@ pub async fn set_default_server_url(app: AppHandle, url: Option<String>) -> Resu
 
 #[tauri::command]
 #[specta::specta]
-pub fn get_wsl_config(app: AppHandle) -> Result<WslConfig, String> {
-    let store = app
-        .store(SETTINGS_STORE)
-        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+pub fn get_wsl_config(_app: AppHandle) -> Result<WslConfig, String> {
+    // let store = app
+    //     .store(SETTINGS_STORE)
+    //     .map_err(|e| format!("Failed to open settings store: {}", e))?;
 
-    let enabled = store
-        .get(WSL_ENABLED_KEY)
-        .as_ref()
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+    // let enabled = store
+    //     .get(WSL_ENABLED_KEY)
+    //     .as_ref()
+    //     .and_then(|v| v.as_bool())
+    //     .unwrap_or(false);
 
-    Ok(WslConfig { enabled })
+    Ok(WslConfig { enabled: false })
 }
 
 #[tauri::command]
@@ -150,7 +150,7 @@ pub async fn check_health(url: &str, password: Option<&str>) -> bool {
         return false;
     };
 
-    let mut builder = reqwest::Client::builder().timeout(Duration::from_secs(3));
+    let mut builder = reqwest::Client::builder().timeout(Duration::from_secs(7));
 
     if url_is_localhost(&url) {
         // Some environments set proxy variables (HTTP_PROXY/HTTPS_PROXY/ALL_PROXY) without
@@ -176,6 +176,10 @@ pub async fn check_health(url: &str, password: Option<&str>) -> bool {
         .await
         .map(|r| r.status().is_success())
         .unwrap_or(false)
+}
+
+pub fn is_localhost_url(url: &str) -> bool {
+    reqwest::Url::parse(url).is_ok_and(|u| url_is_localhost(&u))
 }
 
 fn url_is_localhost(url: &reqwest::Url) -> bool {
