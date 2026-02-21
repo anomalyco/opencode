@@ -96,6 +96,7 @@ export interface MessageProps {
   parts: PartType[]
   showAssistantCopyPartID?: string | null
   interrupted?: boolean
+  showReasoningSummaries?: boolean
 }
 
 export interface MessagePartProps {
@@ -264,14 +265,14 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
   return fallback
 }
 
-function renderable(part: PartType) {
+function renderable(part: PartType, showReasoningSummaries = true) {
   if (part.type === "tool") {
     if (HIDDEN_TOOLS.has(part.tool)) return false
     if (part.tool === "question") return part.state.status !== "pending" && part.state.status !== "running"
     return true
   }
   if (part.type === "text") return !!part.text?.trim()
-  if (part.type === "reasoning") return !!part.text?.trim()
+  if (part.type === "reasoning") return showReasoningSummaries && !!part.text?.trim()
   return !!PART_MAPPING[part.type]
 }
 
@@ -280,6 +281,7 @@ export function AssistantParts(props: {
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number
   working?: boolean
+  showReasoningSummaries?: boolean
 }) {
   const data = useData()
   const emptyParts: PartType[] = []
@@ -300,7 +302,7 @@ export function AssistantParts(props: {
 
     const parts = props.messages.flatMap((message) =>
       list(data.store.part?.[message.id], emptyParts)
-        .filter(renderable)
+        .filter((part) => renderable(part, props.showReasoningSummaries ?? true))
         .map((part) => ({ message, part })),
     )
 
@@ -480,6 +482,7 @@ export function Message(props: MessageProps) {
             message={assistantMessage() as AssistantMessage}
             parts={props.parts}
             showAssistantCopyPartID={props.showAssistantCopyPartID}
+            showReasoningSummaries={props.showReasoningSummaries}
           />
         )}
       </Match>
@@ -491,6 +494,7 @@ export function AssistantMessageDisplay(props: {
   message: AssistantMessage
   parts: PartType[]
   showAssistantCopyPartID?: string | null
+  showReasoningSummaries?: boolean
 }) {
   const grouped = createMemo(() => {
     const keys: string[] = []
@@ -519,7 +523,7 @@ export function AssistantMessageDisplay(props: {
     }
 
     parts.forEach((part, index) => {
-      if (!renderable(part)) return
+      if (!renderable(part, props.showReasoningSummaries ?? true)) return
 
       if (isContextGroupTool(part)) {
         if (start < 0) start = index
