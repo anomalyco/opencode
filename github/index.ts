@@ -8,6 +8,7 @@ import type { Context as GitHubContext } from "@actions/github/lib/context"
 import type { IssueCommentEvent, PullRequestReviewCommentEvent } from "@octokit/webhooks-types"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { spawn } from "node:child_process"
+import { sanitizeForGitHubOutput } from "./sanitize"
 
 type GitHubAuthor = {
   login: string
@@ -788,11 +789,12 @@ async function updateComment(body: string) {
   console.log("Updating comment...")
 
   const { repo } = useContext()
+  const safe = sanitizeForGitHubOutput(body)
   return await octoRest.rest.issues.updateComment({
     owner: repo.owner,
     repo: repo.repo,
     comment_id: commentId,
-    body,
+    body: safe,
   })
 }
 
@@ -800,13 +802,14 @@ async function createPR(base: string, branch: string, title: string, body: strin
   console.log("Creating pull request...")
   const { repo } = useContext()
   const truncatedTitle = title.length > 256 ? title.slice(0, 253) + "..." : title
+  const safe = sanitizeForGitHubOutput(body)
   const pr = await octoRest.rest.pulls.create({
     owner: repo.owner,
     repo: repo.repo,
     head: branch,
     base,
     title: truncatedTitle,
-    body,
+    body: safe,
   })
   return pr.data.number
 }
