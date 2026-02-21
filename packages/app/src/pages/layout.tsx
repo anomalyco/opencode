@@ -1953,10 +1953,12 @@ export default function Layout(props: ParentProps) {
       (value) => {
         if (!value.ready) return
         const dir = value.dir
-        const id = value.id
-        if (!dir || !id) return
+        if (!dir) return
         const directory = decode64(dir)
         if (!directory) return
+        notification.project.markViewed(directory)
+        const id = value.id
+        if (!id) return
         setStore("lastSession", directory, id)
         notification.session.markViewed(id)
         const expanded = untrack(() => store.workspaceExpanded[directory])
