@@ -3308,6 +3308,45 @@ export type SessionPromptResponses = {
 
 export type SessionPromptResponse = SessionPromptResponses[keyof SessionPromptResponses]
 
+export type SessionMessageCountData = {
+  body?: never
+  path: {
+    /**
+     * Session ID
+     */
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/message/count"
+}
+
+export type SessionMessageCountErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionMessageCountError = SessionMessageCountErrors[keyof SessionMessageCountErrors]
+
+export type SessionMessageCountResponses = {
+  /**
+   * Message count
+   */
+  200: {
+    count: number
+  }
+}
+
+export type SessionMessageCountResponse = SessionMessageCountResponses[keyof SessionMessageCountResponses]
+
 export type SessionDeleteMessageData = {
   body?: never
   path: {

@@ -10,7 +10,7 @@ import { Flag } from "../flag/flag"
 import { Identifier } from "../id/id"
 import { Installation } from "../installation"
 
-import { Database, NotFoundError, eq, and, or, gte, isNull, desc, like, inArray, lt } from "../storage/db"
+import { Database, NotFoundError, eq, and, or, gte, isNull, desc, like, inArray, lt, sql } from "../storage/db"
 import type { SQL } from "../storage/db"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
@@ -527,6 +527,22 @@ export namespace Session {
       }
       result.reverse()
       return result
+    },
+  )
+
+  export const messageCount = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+    }),
+    async (input) => {
+      const result = Database.use((db) =>
+        db
+          .select({ count: sql<number>`COUNT(*)` })
+          .from(MessageTable)
+          .where(eq(MessageTable.session_id, input.sessionID))
+          .get(),
+      )
+      return result?.count ?? 0
     },
   )
 
