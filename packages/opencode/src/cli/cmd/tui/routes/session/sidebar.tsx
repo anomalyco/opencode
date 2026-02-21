@@ -178,6 +178,9 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 </Show>
                 <text fg={theme.text}>
                   <b>LSP</b>
+                  <Show when={!expanded.lsp}>
+                    <span style={{ fg: theme.textMuted }}> ({sync.data.lsp.length})</span>
+                  </Show>
                 </text>
               </box>
               <Show when={sync.data.lsp.length <= 2 || expanded.lsp}>
@@ -222,6 +225,9 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                   </Show>
                   <text fg={theme.text}>
                     <b>Todo</b>
+                    <Show when={!expanded.todo}>
+                      <span style={{ fg: theme.textMuted }}> ({todo().length})</span>
+                    </Show>
                   </text>
                 </box>
                 <Show when={todo().length <= 2 || expanded.todo}>
@@ -241,6 +247,9 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                   </Show>
                   <text fg={theme.text}>
                     <b>Modified Files</b>
+                    <Show when={!expanded.diff}>
+                      <span style={{ fg: theme.textMuted }}> ({diff().length})</span>
+                    </Show>
                   </text>
                 </box>
                 <Show when={diff().length <= 2 || expanded.diff}>
