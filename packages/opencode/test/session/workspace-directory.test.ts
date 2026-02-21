@@ -3,6 +3,7 @@ import fs from "fs/promises"
 import path from "path"
 import { Session } from "../../src/session"
 import { Instance } from "../../src/project/instance"
+import { NotFoundError } from "../../src/storage/db"
 import { tmpdir } from "../fixture/fixture"
 
 describe("session.addWorkspaceDirectory", () => {
@@ -103,7 +104,7 @@ describe("session.addWorkspaceDirectory", () => {
             sessionID: session.id,
             path: path.join(project.path, "missing-dir"),
           }),
-        ).rejects.toThrow("Directory not found")
+        ).rejects.toBeInstanceOf(NotFoundError)
       },
     })
   })
@@ -125,7 +126,7 @@ describe("session.addWorkspaceDirectory", () => {
             sessionID: session.id,
             path: path.join(project.path, "file.txt"),
           }),
-        ).rejects.toThrow("Path is not a directory")
+        ).rejects.toBeInstanceOf(NotFoundError)
       },
     })
   })

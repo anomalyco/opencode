@@ -458,8 +458,8 @@ export namespace Session {
       const stat = await Bun.file(target)
         .stat()
         .catch(() => undefined)
-      if (!stat) throw new Error(`Directory not found: ${input.path}`)
-      if (!stat.isDirectory()) throw new Error(`Path is not a directory: ${input.path}`)
+      if (!stat) throw new NotFoundError({ message: `Directory not found: ${input.path}` })
+      if (!stat.isDirectory()) throw new NotFoundError({ message: `Path is not a directory: ${input.path}` })
       const directory = await fs.realpath(target)
       const glob = path.join(directory, "*")
 

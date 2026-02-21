@@ -73,4 +73,26 @@ describe("session.workspaceDirectory endpoint", () => {
       },
     })
   })
+
+  test("returns not found for missing directory", async () => {
+    await using project = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: project.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const app = Server.App()
+        const response = await app.request(
+          `/session/${session.id}/workspace/directory?directory=${encodeURIComponent(project.path)}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path: `${project.path}/missing` }),
+          },
+        )
+
+        expect(response.status).toBe(404)
+      },
+    })
+  })
 })
