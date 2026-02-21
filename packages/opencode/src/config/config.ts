@@ -1265,10 +1265,8 @@ export namespace Config {
       const lines = text.split("\n")
 
       for (const match of fileMatches) {
-        const lineIndex = lines.findIndex((line) => line.includes(match))
-        if (lineIndex !== -1 && lines[lineIndex].trim().startsWith("//")) {
-          continue
-        }
+        const lineIndex = lines.findIndex((line) => line.includes(match) && !line.trim().startsWith("//"))
+        if (lineIndex === -1) continue
         let filePath = match.replace(/^\{file:/, "").replace(/\}$/, "")
         if (filePath.startsWith("~/")) {
           filePath = path.join(os.homedir(), filePath.slice(2))
