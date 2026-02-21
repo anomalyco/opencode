@@ -185,6 +185,12 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
       }
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         onKeyDown(e)
+        return
+      }
+      if (e.key === " " && selected) {
+        e.preventDefault()
+        onKeyDown(e)
+        return
       }
     } else {
       onKeyDown(e)
