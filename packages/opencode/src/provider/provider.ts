@@ -1085,6 +1085,29 @@ export namespace Provider {
           opts.signal = combined
         }
 
+        // For anthropic protocol non-Claude models with interleaved reasoning,
+        // convert thinking blocks to reasoning_content on assistant messages
+        if (
+          typeof model.capabilities.interleaved === "object" &&
+          model.capabilities.interleaved.field &&
+          (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/google-vertex/anthropic") &&
+          opts.body &&
+          opts.method === "POST"
+        ) {
+          const body = JSON.parse(opts.body as string)
+          if (Array.isArray(body.messages)) {
+            const field = model.capabilities.interleaved.field
+            for (const msg of body.messages) {
+              if (msg.role !== "assistant" || !Array.isArray(msg.content)) continue
+              const thinking = msg.content.filter((b: any) => b.type === "thinking")
+              const rest = msg.content.filter((b: any) => b.type !== "thinking")
+              msg[field] = thinking.map((b: any) => b.thinking).join("") || ""
+              msg.content = rest
+            }
+            opts.body = JSON.stringify(body)
+          }
+        }
+
         // Strip openai itemId metadata following what codex does
         // Codex uses #[serde(skip_serializing)] on id fields for all item types:
         // Message, Reasoning, FunctionCall, LocalShellCall, CustomToolCall, WebSearchCall

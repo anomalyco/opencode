@@ -135,36 +135,42 @@ export namespace ProviderTransform {
 
     if (typeof model.capabilities.interleaved === "object" && model.capabilities.interleaved.field) {
       const field = model.capabilities.interleaved.field
+      const isAnthropic = model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/google-vertex/anthropic"
       return msgs.map((msg) => {
-        if (msg.role === "assistant" && Array.isArray(msg.content)) {
-          const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
-          const reasoningText = reasoningParts.map((part: any) => part.text).join("")
+        if (msg.role !== "assistant" || !Array.isArray(msg.content)) return msg
 
-          // Filter out reasoning parts from content
-          const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
+        const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
+        const reasoningText = reasoningParts.map((part: any) => part.text).join("")
+        const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
 
-          // Include reasoning_content | reasoning_details directly on the message for all assistant messages
-          if (reasoningText) {
-            return {
-              ...msg,
-              content: filteredContent,
-              providerOptions: {
-                ...msg.providerOptions,
-                openaiCompatible: {
-                  ...(msg.providerOptions as any)?.openaiCompatible,
-                  [field]: reasoningText,
+        // For anthropic protocol non-Claude models, inject a fake signature so the SDK
+        // emits thinking blocks. The fetch wrapper converts them to reasoning_content.
+        if (isAnthropic) {
+          const parts = reasoningText
+            ? [
+                {
+                  type: "reasoning" as const,
+                  text: reasoningText,
+                  providerOptions: { anthropic: { signature: "interleaved-placeholder" } },
                 },
-              },
-            }
-          }
-
-          return {
-            ...msg,
-            content: filteredContent,
-          }
+                ...filteredContent,
+              ]
+            : msg.content
+          return { ...msg, content: parts }
         }
 
-        return msg
+        if (!reasoningText) return { ...msg, content: filteredContent }
+        return {
+          ...msg,
+          content: filteredContent,
+          providerOptions: {
+            ...msg.providerOptions,
+            openaiCompatible: {
+              ...(msg.providerOptions as any)?.openaiCompatible,
+              [field]: reasoningText,
+            },
+          },
+        }
       })
     }
 
