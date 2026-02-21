@@ -36,11 +36,21 @@ export const ModelsCommand = cmd({
       async fn() {
         const providers = await Provider.list()
 
+        function formatCost(cost: { input: number; output: number }) {
+          if (cost.input === 0 && cost.output === 0) return UI.Style.TEXT_DIM + "Free" + UI.Style.TEXT_NORMAL
+          return (
+            UI.Style.TEXT_DIM +
+            `$${cost.input.toFixed(2)} / $${cost.output.toFixed(2)} /1M tokens` +
+            UI.Style.TEXT_NORMAL
+          )
+        }
+
         function printModels(providerID: string, verbose?: boolean) {
           const provider = providers[providerID]
           const sortedModels = Object.entries(provider.models).sort(([a], [b]) => a.localeCompare(b))
           for (const [modelID, model] of sortedModels) {
             process.stdout.write(`${providerID}/${modelID}`)
+            process.stdout.write("  " + formatCost(model.cost))
             process.stdout.write(EOL)
             if (verbose) {
               process.stdout.write(JSON.stringify(model, null, 2))

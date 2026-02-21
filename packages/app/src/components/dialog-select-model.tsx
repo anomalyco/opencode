@@ -18,6 +18,14 @@ import { useLanguage } from "@/context/language"
 const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
 
+function formatCost(cost?: { input: number; output: number }) {
+  if (!cost || (cost.input === 0 && cost.output === 0)) return undefined
+  return {
+    input: `$${cost.input.toFixed(2)}`,
+    output: `$${cost.output.toFixed(2)}`,
+  }
+}
+
 const ModelList: Component<{
   provider?: string
   class?: string
@@ -39,6 +47,14 @@ const ModelList: Component<{
       class={`flex-1 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0 ${props.class ?? ""}`}
       search={{ placeholder: language.t("dialog.model.search.placeholder"), autofocus: true, action: props.action }}
       emptyMessage={language.t("dialog.model.empty")}
+      header={
+        <div class="flex items-center justify-between px-3 py-1 text-11-regular text-text-dimmed">
+          <span>Model</span>
+          <span class="flex items-center text-right tabular-nums">
+            Input / Output /1M tok
+          </span>
+        </div>
+      }
       key={(x) => `${x.provider.id}:${x.id}`}
       items={models}
       current={local.model.current()}
@@ -69,17 +85,35 @@ const ModelList: Component<{
         props.onSelect()
       }}
     >
-      {(i) => (
-        <div class="w-full flex items-center gap-x-2 text-13-regular">
-          <span class="truncate">{i.name}</span>
-          <Show when={isFree(i.provider.id, i.cost)}>
-            <Tag>{language.t("model.tag.free")}</Tag>
-          </Show>
-          <Show when={i.latest}>
-            <Tag>{language.t("model.tag.latest")}</Tag>
-          </Show>
-        </div>
-      )}
+      {(i) => {
+        const price = () => formatCost(i.cost)
+        return (
+          <div class="w-full flex items-center gap-x-2 text-13-regular">
+            <span class="truncate">{i.name}</span>
+            <Show when={i.latest}>
+              <Tag>{language.t("model.tag.latest")}</Tag>
+            </Show>
+            <span class="ml-auto text-11-regular text-text-dimmed shrink-0 tabular-nums whitespace-nowrap flex items-center">
+              <Show
+                when={!isFree(i.provider.id, i.cost) && price()}
+                fallback={
+                  <Show when={isFree(i.provider.id, i.cost)}>
+                    <span class="w-[13ch] text-right">{language.t("model.tag.free")}</span>
+                  </Show>
+                }
+              >
+                {(p) => (
+                  <>
+                    <span class="w-[6ch] text-right">{p().input}</span>
+                    <span class="px-0.5">/</span>
+                    <span class="w-[6ch] text-right">{p().output}</span>
+                  </>
+                )}
+              </Show>
+            </span>
+          </div>
+        )
+      }}
     </List>
   )
 }

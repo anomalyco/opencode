@@ -15,6 +15,11 @@ export function useConnected() {
   )
 }
 
+function formatCost(cost?: { input: number; output: number }) {
+  if (!cost || (cost.input === 0 && cost.output === 0)) return "Free".padStart(15)
+  return `${`$${cost.input.toFixed(2)}`.padStart(6)} / ${`$${cost.output.toFixed(2)}`.padStart(6)}`
+}
+
 export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
   const sync = useSync()
@@ -48,7 +53,7 @@ export function DialogModel(props: { providerID?: string }) {
             description: provider.name,
             category,
             disabled: provider.id === "opencode" && model.id.includes("-nano"),
-            footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+            footer: formatCost(model.cost),
             onSelect: () => {
               dialog.clear()
               local.model.set({ providerID: provider.id, modelID: model.id }, { recent: true })
@@ -86,7 +91,7 @@ export function DialogModel(props: { providerID?: string }) {
               : undefined,
             category: connected() ? provider.name : undefined,
             disabled: provider.id === "opencode" && model.includes("-nano"),
-            footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+            footer: formatCost(info.cost),
             onSelect() {
               dialog.clear()
               local.model.set({ providerID: provider.id, modelID: model }, { recent: true })
@@ -159,6 +164,7 @@ export function DialogModel(props: { providerID?: string }) {
       flat={true}
       skipFilter={true}
       title={title()}
+      columnHeader="Input / Output /1M tok"
       current={local.model.current()}
     />
   )

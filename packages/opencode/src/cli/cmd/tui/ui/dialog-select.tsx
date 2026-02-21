@@ -21,6 +21,7 @@ export interface DialogSelectProps<T> {
   onFilter?: (query: string) => void
   onSelect?: (option: DialogSelectOption<T>) => void
   skipFilter?: boolean
+  columnHeader?: string
   keybind?: {
     keybind?: Keybind.Info
     title: string
@@ -263,6 +264,16 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           />
         </box>
       </box>
+      <Show when={props.columnHeader}>
+        <box paddingLeft={4} paddingRight={4} flexDirection="row" justifyContent="space-between">
+          <text fg={theme.textMuted} attributes={TextAttributes.BOLD}>
+            Model
+          </text>
+          <text fg={theme.textMuted} attributes={TextAttributes.BOLD}>
+            {props.columnHeader}
+          </text>
+        </box>
+      </Show>
       <Show
         when={grouped().length > 0}
         fallback={
@@ -320,9 +331,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                         gap={1}
                       >
                         <Option
-                          title={option.title}
-                          footer={flatten() ? (option.category ?? option.footer) : option.footer}
-                          description={option.description !== category ? option.description : undefined}
+                          title={flatten() && option.category ? `${option.category} / ${option.title}` : option.title}
+                          footer={option.footer}
+                          description={!flatten() && option.description !== category ? option.description : undefined}
                           active={active()}
                           current={current()}
                           gutter={option.gutter}

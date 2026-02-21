@@ -46,6 +46,7 @@ export interface ListProps<T> extends FilteredListProps<T> {
   divider?: boolean
   add?: ListAddProps
   groupHeader?: (group: { category: string; items: T[] }) => JSX.Element
+  header?: JSX.Element
 }
 
 export interface ListRef {
@@ -308,6 +309,9 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
           </div>
           {searchAction()}
         </div>
+      </Show>
+      <Show when={props.header}>
+        <div data-slot="list-column-header">{props.header}</div>
       </Show>
       <div ref={setScrollRef} data-slot="list-scroll">
         <Show
