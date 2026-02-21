@@ -86,11 +86,20 @@ export const SettingsConfig: Component = () => {
     return joinPath(worktree, "opencode.json")
   })
 
+  const safeReadConfigFile = async (path: string): Promise<string | null> => {
+    const content = await platform.readConfigFile?.(path)
+    return content ?? null
+  }
+
+  const safeWriteConfigFile = async (path: string, content: string): Promise<string | null> => {
+    const err = await platform.writeConfigFile?.(path, content)
+    return err ? String(err) : null
+  }
+
   const findProjectConfig = async (worktree: string): Promise<{ path: string; content: string } | null> => {
-    if (!platform.readConfigFile) return null
     for (const ext of [".json", ".jsonc"]) {
       const p = `${worktree}/opencode${ext}`
-      const content = await platform.readConfigFile(p).catch(() => null)
+      const content = await safeReadConfigFile(p)
       if (content) return { path: p, content }
     }
     return null
@@ -109,7 +118,7 @@ export const SettingsConfig: Component = () => {
     if (!worktree || platform.platform !== "desktop" || !platform.readConfigFile) return
 
     setLoading(true)
-    const found = await findProjectConfig(worktree).catch(() => null)
+    const found = await findProjectConfig(worktree)
     setLoading(false)
     if (found) {
       setConfigContent(found.content)
@@ -168,7 +177,7 @@ export const SettingsConfig: Component = () => {
     const worktree = currentDir()
     const directory = currentDir()
     setLoading(true)
-    const err = await platform.writeConfigFile(path, configContent()).catch((e) => e)
+    const err = await safeWriteConfigFile(path, configContent())
     setLoading(false)
     if (err) {
       const errMsg = String(err)
