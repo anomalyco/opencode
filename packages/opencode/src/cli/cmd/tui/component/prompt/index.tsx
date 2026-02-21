@@ -58,6 +58,8 @@ export type PromptRef = {
 const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
 const SHELL_PLACEHOLDERS = ["ls -la", "git status", "pwd"]
 
+let killRing = ""
+
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
   let anchor: BoxRenderable
@@ -833,6 +835,29 @@ export function Prompt(props: PromptProps) {
               keyBindings={textareaKeybindings()}
               onKeyDown={async (e) => {
                 if (props.disabled) {
+                  e.preventDefault()
+                  return
+                }
+                if (keybind.match("input_delete_to_line_end", e)) {
+                  const text = input.plainText
+                  const offset = input.cursorOffset
+                  const nextNewline = text.indexOf("\n", offset)
+                  const endOfLine = nextNewline === -1 ? text.length : nextNewline
+                  const killed = offset === endOfLine && nextNewline !== -1 ? "\n" : text.slice(offset, endOfLine)
+                  if (killed) killRing = killed
+                }
+                if (keybind.match("input_delete_to_line_start", e)) {
+                  const text = input.plainText
+                  const offset = input.cursorOffset
+                  const prevNewline = text.lastIndexOf("\n", offset - 1)
+                  const startOfLine = prevNewline === -1 ? 0 : prevNewline + 1
+                  const killed = text.slice(startOfLine, offset)
+                  if (killed) killRing = killed
+                }
+                if (keybind.match("input_yank", e)) {
+                  if (killRing) {
+                    input.insertText(killRing)
+                  }
                   e.preventDefault()
                   return
                 }

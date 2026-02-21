@@ -9030,6 +9030,11 @@
             "default": "ctrl+u",
             "type": "string"
           },
+          "input_yank": {
+            "description": "Yank killed text in input",
+            "default": "ctrl+y",
+            "type": "string"
+          },
           "input_backspace": {
             "description": "Backspace in input",
             "default": "backspace,shift+backspace",

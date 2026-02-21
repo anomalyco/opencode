@@ -1296,6 +1296,10 @@ export type KeybindsConfig = {
    */
   input_delete_to_line_start?: string
   /**
+   * Yank killed text in input
+   */
+  input_yank?: string
+  /**
    * Backspace in input
    */
   input_backspace?: string
