@@ -74,7 +74,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     })
 
     setNewName("")
-    dialog.close()
+    resolve(`${PROJECTS_DIR}/${value}`)
   }
 
   return (
