@@ -478,6 +478,7 @@ export namespace Config {
     })) {
       plugins.push(pathToFileURL(item).href)
     }
+    plugins.sort()
     return plugins
   }
 
