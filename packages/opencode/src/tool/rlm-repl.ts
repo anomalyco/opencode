@@ -230,7 +230,6 @@ export const RLMReplTool = Tool.define("rlm_repl", async () => {
         setInterval: undefined, // Disabled for safety
         fetch: undefined, // Disabled - use sub_llm for external calls
         require: undefined, // Disabled
-        import: undefined, // Disabled
         eval: undefined, // Disabled
         Function: undefined, // Disabled to prevent sandbox escape
       }
@@ -253,7 +252,11 @@ export const RLMReplTool = Tool.define("rlm_repl", async () => {
         const result = await asyncFn(...sandboxValues)
 
         const output =
-          typeof result === "string" ? result : result === undefined ? "(no return value)" : JSON.stringify(result, null, 2)
+          typeof result === "string"
+            ? result
+            : result === undefined
+              ? "(no return value)"
+              : JSON.stringify(result, null, 2)
 
         log.info("rlm_repl completed", {
           subLLMCalls: subLLMCallCount,
