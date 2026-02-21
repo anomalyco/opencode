@@ -222,30 +222,25 @@ export namespace LiteLLM {
       headers["Authorization"] = `Bearer ${options.apiKey}`
     }
 
-    try {
-      // Try /model/info first for rich metadata, fall back to /models
-      const rich = await fetchModelInfo(base, headers, timeout)
-      if (rich) {
-        log.info("discovered models from LiteLLM /model/info", {
-          count: Object.keys(rich).length,
-          host,
-        })
-        return rich
-      }
-
-      const basic = await fetchModelList(base, headers, timeout)
-      if (Object.keys(basic).length > 0) {
-        log.info("discovered models from /models (fallback)", {
-          count: Object.keys(basic).length,
-          host,
-        })
-        return basic
-      }
-
-      return undefined
-    } catch (e) {
-      log.warn("LiteLLM model discovery error", { error: e, host })
-      return undefined
+    // Try /model/info first for rich metadata, fall back to /models
+    const rich = await fetchModelInfo(base, headers, timeout)
+    if (rich) {
+      log.info("discovered models from LiteLLM /model/info", {
+        count: Object.keys(rich).length,
+        host,
+      })
+      return rich
     }
+
+    const basic = await fetchModelList(base, headers, timeout)
+    if (Object.keys(basic).length > 0) {
+      log.info("discovered models from /models (fallback)", {
+        count: Object.keys(basic).length,
+        host,
+      })
+      return basic
+    }
+
+    return undefined
   }
 }

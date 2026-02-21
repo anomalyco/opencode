@@ -888,15 +888,11 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         return undefined
       })()
 
-      const customHeaders = iife(() => {
-        const raw = Env.get("LITELLM_CUSTOM_HEADERS")
-        if (!raw) return {}
-        try {
-          return JSON.parse(raw) as Record<string, string>
-        } catch {
-          return {}
-        }
-      })
+      const customHeaders = yield* Effect.promise(() =>
+        Promise.resolve(Env.get("LITELLM_CUSTOM_HEADERS"))
+          .then((raw) => (raw ? (JSON.parse(raw) as Record<string, string>) : {}))
+          .catch(() => ({})),
+      )
 
       const timeout = Number(Env.get("LITELLM_TIMEOUT") ?? "5000")
       const discovered = yield* Effect.promise(() =>
