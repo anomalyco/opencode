@@ -78,6 +78,12 @@ export namespace SessionPrompt {
     },
     async (current) => {
       for (const item of Object.values(current)) {
+        const error = new Error("Instance disposed")
+        const queued = item.callbacks
+        item.callbacks = []
+        for (const q of queued) {
+          q.reject(error)
+        }
         item.abort.abort()
       }
     },
@@ -261,6 +267,14 @@ export namespace SessionPrompt {
       SessionStatus.set(sessionID, { type: "idle" })
       return
     }
+
+    const error = new Error("Session cancelled")
+    const queued = match.callbacks
+    match.callbacks = []
+    for (const q of queued) {
+      q.reject(error)
+    }
+
     match.abort.abort()
     delete s[sessionID]
     SessionStatus.set(sessionID, { type: "idle" })
@@ -714,7 +728,9 @@ export namespace SessionPrompt {
     SessionCompaction.prune({ sessionID })
     for await (const item of MessageV2.stream(sessionID)) {
       if (item.info.role === "user") continue
-      const queued = state()[sessionID]?.callbacks ?? []
+      const match = state()[sessionID]
+      const queued = match?.callbacks ?? []
+      if (match) match.callbacks = []
       for (const q of queued) {
         q.resolve(item)
       }
