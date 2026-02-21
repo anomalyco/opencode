@@ -394,7 +394,7 @@ export const dict = {
   "workspace.settings.edit": "Edit",
 
   "workspace.billing.title": "Billing",
-  "workspace.billing.subtitle.beforeLink": "Manage payments methods.",
+  "workspace.billing.subtitle.beforeLink": "Manage payment methods.",
   "workspace.billing.contactUs": "Contact us",
   "workspace.billing.subtitle.afterLink": "if you have any questions.",
   "workspace.billing.currentBalance": "Current Balance",

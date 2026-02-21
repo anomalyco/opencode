@@ -1,0 +1,192 @@
+---
+title: ปุ่มลัด
+description: ปรับแต่งปุ่มลัดของคุณ
+---
+
+OpenCode มีรายการปุ่มลัดที่คุณปรับแต่งได้ผ่านการกำหนดค่า OpenCode
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "keybinds": {
+    "leader": "ctrl+x",
+    "app_exit": "ctrl+c,ctrl+d,<leader>q",
+    "editor_open": "<leader>e",
+    "theme_list": "<leader>t",
+    "sidebar_toggle": "<leader>b",
+    "scrollbar_toggle": "none",
+    "username_toggle": "none",
+    "status_view": "<leader>s",
+    "tool_details": "none",
+    "session_export": "<leader>x",
+    "session_new": "<leader>n",
+    "session_list": "<leader>l",
+    "session_timeline": "<leader>g",
+    "session_fork": "none",
+    "session_rename": "none",
+    "session_share": "none",
+    "session_unshare": "none",
+    "session_interrupt": "escape",
+    "session_compact": "<leader>c",
+    "session_child_cycle": "<leader>right",
+    "session_child_cycle_reverse": "<leader>left",
+    "session_parent": "<leader>up",
+    "messages_page_up": "pageup,ctrl+alt+b",
+    "messages_page_down": "pagedown,ctrl+alt+f",
+    "messages_line_up": "ctrl+alt+y",
+    "messages_line_down": "ctrl+alt+e",
+    "messages_half_page_up": "ctrl+alt+u",
+    "messages_half_page_down": "ctrl+alt+d",
+    "messages_first": "ctrl+g,home",
+    "messages_last": "ctrl+alt+g,end",
+    "messages_next": "none",
+    "messages_previous": "none",
+    "messages_copy": "<leader>y",
+    "messages_undo": "<leader>u",
+    "messages_redo": "<leader>r",
+    "messages_last_user": "none",
+    "messages_toggle_conceal": "<leader>h",
+    "model_list": "<leader>m",
+    "model_cycle_recent": "f2",
+    "model_cycle_recent_reverse": "shift+f2",
+    "model_cycle_favorite": "none",
+    "model_cycle_favorite_reverse": "none",
+    "variant_cycle": "ctrl+t",
+    "command_list": "ctrl+p",
+    "agent_list": "<leader>a",
+    "agent_cycle": "tab",
+    "agent_cycle_reverse": "shift+tab",
+    "input_clear": "ctrl+c",
+    "input_paste": "ctrl+v",
+    "input_submit": "return",
+    "input_newline": "shift+return,ctrl+return,alt+return,ctrl+j",
+    "input_move_left": "left,ctrl+b",
+    "input_move_right": "right,ctrl+f",
+    "input_move_up": "up",
+    "input_move_down": "down",
+    "input_select_left": "shift+left",
+    "input_select_right": "shift+right",
+    "input_select_up": "shift+up",
+    "input_select_down": "shift+down",
+    "input_line_home": "ctrl+a",
+    "input_line_end": "ctrl+e",
+    "input_select_line_home": "ctrl+shift+a",
+    "input_select_line_end": "ctrl+shift+e",
+    "input_visual_line_home": "alt+a",
+    "input_visual_line_end": "alt+e",
+    "input_select_visual_line_home": "alt+shift+a",
+    "input_select_visual_line_end": "alt+shift+e",
+    "input_buffer_home": "home",
+    "input_buffer_end": "end",
+    "input_select_buffer_home": "shift+home",
+    "input_select_buffer_end": "shift+end",
+    "input_delete_line": "ctrl+shift+d",
+    "input_delete_to_line_end": "ctrl+k",
+    "input_delete_to_line_start": "ctrl+u",
+    "input_backspace": "backspace,shift+backspace",
+    "input_delete": "ctrl+d,delete,shift+delete",
+    "input_undo": "ctrl+-,super+z",
+    "input_redo": "ctrl+.,super+shift+z",
+    "input_word_forward": "alt+f,alt+right,ctrl+right",
+    "input_word_backward": "alt+b,alt+left,ctrl+left",
+    "input_select_word_forward": "alt+shift+f,alt+shift+right",
+    "input_select_word_backward": "alt+shift+b,alt+shift+left",
+    "input_delete_word_forward": "alt+d,alt+delete,ctrl+delete",
+    "input_delete_word_backward": "ctrl+w,ctrl+backspace,alt+backspace",
+    "history_previous": "up",
+    "history_next": "down",
+    "terminal_suspend": "ctrl+z",
+    "terminal_title_toggle": "none",
+    "tips_toggle": "<leader>h",
+    "display_thinking": "none"
+  }
+}
+```
+
+---
+
+## ปุ่ม Leader
+
+OpenCode ใช้ปุ่ม `leader` สำหรับการเชื่อมโยงคีย์ส่วนใหญ่ วิธีนี้จะหลีกเลี่ยงความขัดแย้งใน terminal ของคุณ
+
+ตามค่าเริ่มต้น `ctrl+x` จะเป็นปุ่ม leader และการดำเนินการส่วนใหญ่ต้องการให้คุณกดปุ่ม leader ก่อน จากนั้นจึงกดทางลัด ตัวอย่างเช่น หากต้องการเริ่มเซสชันใหม่ คุณต้องกด `ctrl+x` ก่อน จากนั้นจึงกด `n`
+
+คุณไม่จำเป็นต้องใช้ปุ่ม leader สำหรับการผูกคีย์ แต่เราขอแนะนำให้ทำเช่นนั้น
+
+---
+
+## ปิดการใช้งานการผูกปุ่ม
+
+คุณสามารถปิดการใช้งานการผูกปุ่มได้โดยการเพิ่มคีย์ลงในการกำหนดค่าของคุณด้วยค่า "none"
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "keybinds": {
+    "session_compact": "none"
+  }
+}
+```
+
+---
+
+## ทางลัดพร้อมท์เดสก์ท็อป
+
+การป้อนข้อมูลพร้อมท์ของแอป OpenCode บนเดสก์ท็อปรองรับทางลัด Readline/Emacs-style ทั่วไปสำหรับการแก้ไขข้อความ สิ่งเหล่านี้มีอยู่แล้วภายในและปัจจุบันไม่สามารถกำหนดค่าผ่าน `opencode.json` ได้
+
+| ทางลัด   | การกระทำ                                         |
+| -------- | ------------------------------------------------ |
+| `ctrl+a` | ย้ายไปที่จุดเริ่มต้นของบรรทัดปัจจุบัน            |
+| `ctrl+e` | ย้ายไปที่จุดสิ้นสุดของบรรทัดปัจจุบัน             |
+| `ctrl+b` | เลื่อนเคอร์เซอร์กลับไปหนึ่งอักขระ                |
+| `ctrl+f` | เลื่อนเคอร์เซอร์ไปข้างหน้าหนึ่งอักขระ            |
+| `alt+b`  | เลื่อนเคอร์เซอร์กลับไปหนึ่งคำ                    |
+| `alt+f`  | เลื่อนเคอร์เซอร์ไปข้างหน้าหนึ่งคำ                |
+| `ctrl+d` | ลบอักขระใต้เคอร์เซอร์                            |
+| `ctrl+k` | ลบจนจบแถว                                        |
+| `ctrl+u` | ลบจนถึงต้นบรรทัด                                 |
+| `ctrl+w` | ลบคำก่อนหน้า                                     |
+| `alt+d`  | ลบคำถัดไป                                        |
+| `ctrl+t` | ย้ายอักขระ                                       |
+| `ctrl+g` | ยกเลิกป๊อปโอเวอร์ / ยกเลิกการตอบกลับที่ทำงานอยู่ |
+
+---
+
+## Shift+Enter
+
+terminal บางตัวไม่ส่งคีย์ตัวปรับแต่งพร้อม Enter เป็นค่าเริ่มต้น คุณอาจต้องกำหนดค่า terminal ของคุณให้ส่ง `Shift+Enter` เป็นลำดับหลีก
+
+### Windows Terminal
+
+เปิด `settings.json` ของคุณที่:
+
+```
+%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
+```
+
+เพิ่มสิ่งนี้ลงในอาร์เรย์ `actions` ระดับรูท:
+
+```json
+"actions": [
+  {
+    "command": {
+      "action": "sendInput",
+      "input": "\u001b[13;2u"
+    },
+    "id": "User.sendInput.ShiftEnterCustom"
+  }
+]
+```
+
+เพิ่มสิ่งนี้ลงในอาร์เรย์ `keybindings` ระดับรูท:
+
+```json
+"keybindings": [
+  {
+    "keys": "shift+enter",
+    "id": "User.sendInput.ShiftEnterCustom"
+  }
+]
+```
+
+บันทึกไฟล์และรีสตาร์ท Windows Terminal หรือเปิดแท็บใหม่

@@ -6,7 +6,7 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@opencode-ai/ui/toast"
 import { For } from "solid-js"
-import { createStore, produce } from "solid-js/store"
+import { createStore } from "solid-js/store"
 import { Link } from "@/components/link"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
@@ -15,6 +15,147 @@ import { DialogSelectProvider } from "./dialog-select-provider"
 
 const PROVIDER_ID = /^[a-z0-9][a-z0-9-_]*$/
 const OPENAI_COMPATIBLE = "@ai-sdk/openai-compatible"
+
+type Translator = ReturnType<typeof useLanguage>["t"]
+
+type ModelRow = {
+  id: string
+  name: string
+}
+
+type HeaderRow = {
+  key: string
+  value: string
+}
+
+type FormState = {
+  providerID: string
+  name: string
+  baseURL: string
+  apiKey: string
+  models: ModelRow[]
+  headers: HeaderRow[]
+  saving: boolean
+}
+
+type FormErrors = {
+  providerID: string | undefined
+  name: string | undefined
+  baseURL: string | undefined
+  models: Array<{ id?: string; name?: string }>
+  headers: Array<{ key?: string; value?: string }>
+}
+
+type ValidateArgs = {
+  form: FormState
+  t: Translator
+  disabledProviders: string[]
+  existingProviderIDs: Set<string>
+}
+
+function validateCustomProvider(input: ValidateArgs) {
+  const providerID = input.form.providerID.trim()
+  const name = input.form.name.trim()
+  const baseURL = input.form.baseURL.trim()
+  const apiKey = input.form.apiKey.trim()
+
+  const env = apiKey.match(/^\{env:([^}]+)\}$/)?.[1]?.trim()
+  const key = apiKey && !env ? apiKey : undefined
+
+  const idError = !providerID
+    ? input.t("provider.custom.error.providerID.required")
+    : !PROVIDER_ID.test(providerID)
+      ? input.t("provider.custom.error.providerID.format")
+      : undefined
+
+  const nameError = !name ? input.t("provider.custom.error.name.required") : undefined
+  const urlError = !baseURL
+    ? input.t("provider.custom.error.baseURL.required")
+    : !/^https?:\/\//.test(baseURL)
+      ? input.t("provider.custom.error.baseURL.format")
+      : undefined
+
+  const disabled = input.disabledProviders.includes(providerID)
+  const existsError = idError
+    ? undefined
+    : input.existingProviderIDs.has(providerID) && !disabled
+      ? input.t("provider.custom.error.providerID.exists")
+      : undefined
+
+  const seenModels = new Set<string>()
+  const modelErrors = input.form.models.map((m) => {
+    const id = m.id.trim()
+    const modelIdError = !id
+      ? input.t("provider.custom.error.required")
+      : seenModels.has(id)
+        ? input.t("provider.custom.error.duplicate")
+        : (() => {
+            seenModels.add(id)
+            return undefined
+          })()
+    const modelNameError = !m.name.trim() ? input.t("provider.custom.error.required") : undefined
+    return { id: modelIdError, name: modelNameError }
+  })
+  const modelsValid = modelErrors.every((m) => !m.id && !m.name)
+  const models = Object.fromEntries(input.form.models.map((m) => [m.id.trim(), { name: m.name.trim() }]))
+
+  const seenHeaders = new Set<string>()
+  const headerErrors = input.form.headers.map((h) => {
+    const key = h.key.trim()
+    const value = h.value.trim()
+
+    if (!key && !value) return {}
+    const keyError = !key
+      ? input.t("provider.custom.error.required")
+      : seenHeaders.has(key.toLowerCase())
+        ? input.t("provider.custom.error.duplicate")
+        : (() => {
+            seenHeaders.add(key.toLowerCase())
+            return undefined
+          })()
+    const valueError = !value ? input.t("provider.custom.error.required") : undefined
+    return { key: keyError, value: valueError }
+  })
+  const headersValid = headerErrors.every((h) => !h.key && !h.value)
+  const headers = Object.fromEntries(
+    input.form.headers
+      .map((h) => ({ key: h.key.trim(), value: h.value.trim() }))
+      .filter((h) => !!h.key && !!h.value)
+      .map((h) => [h.key, h.value]),
+  )
+
+  const errors: FormErrors = {
+    providerID: idError ?? existsError,
+    name: nameError,
+    baseURL: urlError,
+    models: modelErrors,
+    headers: headerErrors,
+  }
+
+  const ok = !idError && !existsError && !nameError && !urlError && modelsValid && headersValid
+  if (!ok) return { errors }
+
+  const options = {
+    baseURL,
+    ...(Object.keys(headers).length ? { headers } : {}),
+  }
+
+  return {
+    errors,
+    result: {
+      providerID,
+      name,
+      key,
+      config: {
+        npm: OPENAI_COMPATIBLE,
+        name,
+        ...(env ? { env: [env] } : {}),
+        options,
+        models,
+      },
+    },
+  }
+}
 
 type Props = {
   back?: "providers" | "close"
@@ -26,7 +167,7 @@ export function DialogCustomProvider(props: Props) {
   const globalSDK = useGlobalSDK()
   const language = useLanguage()
 
-  const [form, setForm] = createStore({
+  const [form, setForm] = createStore<FormState>({
     providerID: "",
     name: "",
     baseURL: "",
@@ -36,12 +177,12 @@ export function DialogCustomProvider(props: Props) {
     saving: false,
   })
 
-  const [errors, setErrors] = createStore({
-    providerID: undefined as string | undefined,
-    name: undefined as string | undefined,
-    baseURL: undefined as string | undefined,
-    models: [{} as { id?: string; name?: string }],
-    headers: [{} as { key?: string; value?: string }],
+  const [errors, setErrors] = createStore<FormErrors>({
+    providerID: undefined,
+    name: undefined,
+    baseURL: undefined,
+    models: [{}],
+    headers: [{}],
   })
 
   const goBack = () => {
@@ -53,169 +194,36 @@ export function DialogCustomProvider(props: Props) {
   }
 
   const addModel = () => {
-    setForm(
-      "models",
-      produce((draft) => {
-        draft.push({ id: "", name: "" })
-      }),
-    )
-    setErrors(
-      "models",
-      produce((draft) => {
-        draft.push({})
-      }),
-    )
+    setForm("models", (v) => [...v, { id: "", name: "" }])
+    setErrors("models", (v) => [...v, {}])
   }
 
   const removeModel = (index: number) => {
     if (form.models.length <= 1) return
-    setForm(
-      "models",
-      produce((draft) => {
-        draft.splice(index, 1)
-      }),
-    )
-    setErrors(
-      "models",
-      produce((draft) => {
-        draft.splice(index, 1)
-      }),
-    )
+    setForm("models", (v) => v.filter((_, i) => i !== index))
+    setErrors("models", (v) => v.filter((_, i) => i !== index))
   }
 
   const addHeader = () => {
-    setForm(
-      "headers",
-      produce((draft) => {
-        draft.push({ key: "", value: "" })
-      }),
-    )
-    setErrors(
-      "headers",
-      produce((draft) => {
-        draft.push({})
-      }),
-    )
+    setForm("headers", (v) => [...v, { key: "", value: "" }])
+    setErrors("headers", (v) => [...v, {}])
   }
 
   const removeHeader = (index: number) => {
     if (form.headers.length <= 1) return
-    setForm(
-      "headers",
-      produce((draft) => {
-        draft.splice(index, 1)
-      }),
-    )
-    setErrors(
-      "headers",
-      produce((draft) => {
-        draft.splice(index, 1)
-      }),
-    )
+    setForm("headers", (v) => v.filter((_, i) => i !== index))
+    setErrors("headers", (v) => v.filter((_, i) => i !== index))
   }
 
   const validate = () => {
-    const providerID = form.providerID.trim()
-    const name = form.name.trim()
-    const baseURL = form.baseURL.trim()
-    const apiKey = form.apiKey.trim()
-
-    const env = apiKey.match(/^\{env:([^}]+)\}$/)?.[1]?.trim()
-    const key = apiKey && !env ? apiKey : undefined
-
-    const idError = !providerID
-      ? language.t("provider.custom.error.providerID.required")
-      : !PROVIDER_ID.test(providerID)
-        ? language.t("provider.custom.error.providerID.format")
-        : undefined
-
-    const nameError = !name ? language.t("provider.custom.error.name.required") : undefined
-    const urlError = !baseURL
-      ? language.t("provider.custom.error.baseURL.required")
-      : !/^https?:\/\//.test(baseURL)
-        ? language.t("provider.custom.error.baseURL.format")
-        : undefined
-
-    const disabled = (globalSync.data.config.disabled_providers ?? []).includes(providerID)
-    const existingProvider = globalSync.data.provider.all.find((p) => p.id === providerID)
-    const existsError = idError
-      ? undefined
-      : existingProvider && !disabled
-        ? language.t("provider.custom.error.providerID.exists")
-        : undefined
-
-    const seenModels = new Set<string>()
-    const modelErrors = form.models.map((m) => {
-      const id = m.id.trim()
-      const modelIdError = !id
-        ? language.t("provider.custom.error.required")
-        : seenModels.has(id)
-          ? language.t("provider.custom.error.duplicate")
-          : (() => {
-              seenModels.add(id)
-              return undefined
-            })()
-      const modelNameError = !m.name.trim() ? language.t("provider.custom.error.required") : undefined
-      return { id: modelIdError, name: modelNameError }
+    const output = validateCustomProvider({
+      form,
+      t: language.t,
+      disabledProviders: globalSync.data.config.disabled_providers ?? [],
+      existingProviderIDs: new Set(globalSync.data.provider.all.map((p) => p.id)),
     })
-    const modelsValid = modelErrors.every((m) => !m.id && !m.name)
-    const models = Object.fromEntries(form.models.map((m) => [m.id.trim(), { name: m.name.trim() }]))
-
-    const seenHeaders = new Set<string>()
-    const headerErrors = form.headers.map((h) => {
-      const key = h.key.trim()
-      const value = h.value.trim()
-
-      if (!key && !value) return {}
-      const keyError = !key
-        ? language.t("provider.custom.error.required")
-        : seenHeaders.has(key.toLowerCase())
-          ? language.t("provider.custom.error.duplicate")
-          : (() => {
-              seenHeaders.add(key.toLowerCase())
-              return undefined
-            })()
-      const valueError = !value ? language.t("provider.custom.error.required") : undefined
-      return { key: keyError, value: valueError }
-    })
-    const headersValid = headerErrors.every((h) => !h.key && !h.value)
-    const headers = Object.fromEntries(
-      form.headers
-        .map((h) => ({ key: h.key.trim(), value: h.value.trim() }))
-        .filter((h) => !!h.key && !!h.value)
-        .map((h) => [h.key, h.value]),
-    )
-
-    setErrors(
-      produce((draft) => {
-        draft.providerID = idError ?? existsError
-        draft.name = nameError
-        draft.baseURL = urlError
-        draft.models = modelErrors
-        draft.headers = headerErrors
-      }),
-    )
-
-    const ok = !idError && !existsError && !nameError && !urlError && modelsValid && headersValid
-    if (!ok) return
-
-    const options = {
-      baseURL,
-      ...(Object.keys(headers).length ? { headers } : {}),
-    }
-
-    return {
-      providerID,
-      name,
-      key,
-      config: {
-        npm: OPENAI_COMPATIBLE,
-        name,
-        ...(env ? { env: [env] } : {}),
-        options,
-        models,
-      },
-    }
+    setErrors(output.errors)
+    return output.result
   }
 
   const save = async (e: SubmitEvent) => {
@@ -297,7 +305,7 @@ export function DialogCustomProvider(props: Props) {
               placeholder={language.t("provider.custom.field.providerID.placeholder")}
               description={language.t("provider.custom.field.providerID.description")}
               value={form.providerID}
-              onChange={setForm.bind(null, "providerID")}
+              onChange={(v) => setForm("providerID", v)}
               validationState={errors.providerID ? "invalid" : undefined}
               error={errors.providerID}
             />
@@ -305,7 +313,7 @@ export function DialogCustomProvider(props: Props) {
               label={language.t("provider.custom.field.name.label")}
               placeholder={language.t("provider.custom.field.name.placeholder")}
               value={form.name}
-              onChange={setForm.bind(null, "name")}
+              onChange={(v) => setForm("name", v)}
               validationState={errors.name ? "invalid" : undefined}
               error={errors.name}
             />
@@ -313,7 +321,7 @@ export function DialogCustomProvider(props: Props) {
               label={language.t("provider.custom.field.baseURL.label")}
               placeholder={language.t("provider.custom.field.baseURL.placeholder")}
               value={form.baseURL}
-              onChange={setForm.bind(null, "baseURL")}
+              onChange={(v) => setForm("baseURL", v)}
               validationState={errors.baseURL ? "invalid" : undefined}
               error={errors.baseURL}
             />
@@ -322,7 +330,7 @@ export function DialogCustomProvider(props: Props) {
               placeholder={language.t("provider.custom.field.apiKey.placeholder")}
               description={language.t("provider.custom.field.apiKey.description")}
               value={form.apiKey}
-              onChange={setForm.bind(null, "apiKey")}
+              onChange={(v) => setForm("apiKey", v)}
             />
           </div>
 

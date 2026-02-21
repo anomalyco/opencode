@@ -1,0 +1,170 @@
+---
+title: Przedsiębiorstwo
+description: Bezpieczne korzystanie z opencode w Twojej organizacji.
+---
+
+import config from "../../../../config.mjs"
+export const email = `mailto:${config.email}`
+
+opencode Przedsiębiorstwo jest przeznaczone dla organizacji, która ma dostęp do zasobów, że ich kod i dane nigdy nie opuszczą infrastruktury. Może zostać zarejestrowany za pomocą zapachuralizowanej konfiguracji, która integruje się z logowaniem jednokrotnym i uruchomieniem bramą AI.
+
+:::note
+opencode nie przechowuje żadnego kodu ani danych kontekstowych.
+:::
+
+Aby skorzystać z pracy z opencode Przedsiębiorstwo:
+
+1. Przeprowadź próbę wewnętrzną ze swoim systemem.
+2. **<a href={email}>Skontaktuj się z nami</a>**, aby omówić ceny i opcję konfiguracji.
+
+---
+
+## Test
+
+opencode jest oprogramowaniem typu open source i nie przechowuje żadnego kodu ani danych kontekstowych, więc programiści mogą po prostu [zacząć](/docs/) i próbować próbną.
+
+---
+
+### Obsługa danych
+
+**opencode nie dotyczy kodu źródłowego ani danych kontekstowych.** Całe zdarzenie odbywa się lokalnie lub poprzez bezpośrednio wywołane API do twojego dostawcy AI.
+
+to, że korzystasz z usług dostawcy, lub dostawcy zaufania
+Brama AI, możesz bezpłatnie korzystać z opencode.
+
+Zastrzeżeniem jest opcjonalna funkcja `/share`.
+
+---
+
+#### Dzielenie się rozmowami
+
+Jeśli użytkownicy są połączeni z `/share`, połączenie jest połączone z danymi, które zostały przesłane do usług, które są udostępniane przez hosty tych użytkowników w opencode.ai.
+
+Dane są aktualnie dostępne przez sieć brzegową naszego CDN i są buforowane na brzegu w pobliżu Twoich użytkowników.
+
+Zalecamy tę opcję na okres próbny.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled"
+}
+```
+
+[Więcej informacji o udostępnianiu](/docs/share).
+
+---
+
+### Własność kodu
+
+**Jesteś właścicielem całości kodu źródłowego przez opencode.** Nie ma żadnych ograniczeń licencyjnych ani należących do własności.
+
+---
+
+## Wycena
+
+W przypadku opencode Enterprise model per-seat. Jeśli posiadasz własną bramkę LLM, nie pobieramy opłat za korzystanie z tokenów. Aby uzyskać więcej informacji na temat, jeśli jest możliwe, **<a href={email}>skontaktuj się z nami</a>**.
+
+---
+
+## Zastosowanie
+
+Gdy zasięgsz okres próbny i nadzorujesz użytkowanie z opencode na
+swoją organizację, możesz **<a href={email}>skontaktować się z nami</a>**, aby omówić te dźwięki
+opcja cenowa i wdrożeniowa.
+
+---
+
+### Konfiguracja centralna
+
+Możliwości wykorzystania opencode tak, aby skorzystać z jednego zastosowania dla całej organizacji.
+
+Tę zapachową konfigurację można zintegrować z dostawcą SSO i specyfikacje wszyscy użytkownicy mają dostęp wyłącznie do bram wewnętrznych AI.
+
+---
+
+### Integracja SSO
+
+Dzięki zastosowaniu konfiguracji opencode może zostać włączone z dostawcą SSO Twojej organizacji w celu uwierzytelnienia.
+
+Dzięki temu opencode może uzyskać dane uwierzytelniające dla wewnętrznej bramy AI za pośrednictwem transmisji systemu zarządzania tożsamością.
+
+---
+
+### Wewnętrzna bramka AI
+
+Dzięki zastosowaniu konfiguracji opencode można również skorzystać z tego, że można korzystać tylko z wewnętrznych bram AI.
+
+Możesz także dołączyć do wszystkich innych dostawców sztucznej inteligencji, upewniając się, że wszystkie elementy przechodzą przez zatwierdzenie wykorzystania Twojej organizacji.
+
+---
+
+### Hosting własny
+
+Zalecamy, aby można było je udostępnić, aby Twoje dane nigdy nie zostały opuszczone
+Twoja organizacja może być pomocna w utrzymaniu ich w Twojej infrastrukturze.
+
+Jest to obecnie w naszym planie działania. Jeśli jesteś zainteresowany, **<a href={email}>daj nam znać</a>**.
+
+---
+
+## Często zadawane pytania
+
+<details>
+<summary>What is opencode Enterprise?</summary>
+
+opencode Przedsiębiorstwo jest przeznaczone dla organizacji, która ma dostęp do zasobów, że ich kod i dane nigdy nie opuszczą infrastruktury. Może zostać zarejestrowany za pomocą zapachuralizowanej konfiguracji, która integruje się z logowaniem jednokrotnym i uruchomieniem bramą AI.
+
+</details>
+
+<details>
+<summary>How do I get started with opencode Enterprise?</summary>
+
+Po prostu uruchom wersję próbną ze swoim. opencode urządzenia niezabezpieczone kodu ani danych kontekstowych, co ułatwia uruchomienie pracy.
+
+**<a href={email}>skontaktuj się z nami</a>**, aby omówić ceny i wybrać opcję.
+
+</details>
+
+<details>
+<summary>How does enterprise pricing work?</summary>
+
+Oferujemy ceny korporacyjne za jedno stanowisko. Jeśli posiadasz własną bramkę LLM, nie pobieramy opłat za korzystanie z tokenów. Aby uzyskać więcej informacji, **<a href={email}>skontaktuj się z nami</a>**, aby uzyskać wynik określony dla potrzeb Twojej organizacji.
+
+</details>
+
+<details>
+<summary>Is my data secure with opencode Enterprise?</summary>
+
+Tak. opencode nie przechowuje kodu ani danych kontekstowych. Całe zdarzenie odbywa się lokalnie lub poprzez bezpośrednie wywołanie API przez dostawcę AI. Dostęp do konfiguracji i integracji z logowaniem jednokrotnym Twoje dane pozostają bezpieczne w infrastrukturze organizacji.
+
+</details>
+
+<details>
+<summary>Can we use our own private NPM registry?</summary>
+
+opencode obsługuje prywatny rejestry npm poprzez natywną usługę plików `.npmrc` Buna. Jeśli Twoja organizacja korzysta z rejestru prywatnego, takiego jak JFrog Artifactory, Nexus lub wylot, przed uruchomieniem opencode się, że programiści zostali uwierzytelnieni.
+
+Aby zapewnić uwierzytelnianie w rejestrze prywatnym:
+
+```bash
+npm login --registry=https://your-company.jfrog.io/api/npm/npm-virtual/
+```
+
+Spowoduje to do `~/.npmrc` ze szczegółami uwierzytelniania. opencode zrobi to automatycznie
+podniesc do.
+
+:::caution
+Przed uruchomieniem opencode musisz być zalogowany do rejestru prywatnego.
+:::
+
+Alternatywnie możesz skorzystać z pliku `.npmrc`:
+
+```bash title="~/.npmrc"
+registry=https://your-company.jfrog.io/api/npm/npm-virtual/
+//your-company.jfrog.io/api/npm/npm-virtual/:_authToken=${NPM_AUTH_TOKEN}
+```
+
+Programiści muszą się zgłosić do rejestru prywatnego przed uruchomieniem opencode, aby mieć dostęp, że pakiety będą dostępne z rejestru przedsiębiorstwa.
+
+</details>

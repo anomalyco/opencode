@@ -135,6 +135,26 @@ const ZEN_MODELS = [
   new sst.Secret("ZEN_MODELS8"),
   new sst.Secret("ZEN_MODELS9"),
   new sst.Secret("ZEN_MODELS10"),
+  new sst.Secret("ZEN_MODELS11"),
+  new sst.Secret("ZEN_MODELS12"),
+  new sst.Secret("ZEN_MODELS13"),
+  new sst.Secret("ZEN_MODELS14"),
+  new sst.Secret("ZEN_MODELS15"),
+  new sst.Secret("ZEN_MODELS16"),
+  new sst.Secret("ZEN_MODELS17"),
+  new sst.Secret("ZEN_MODELS18"),
+  new sst.Secret("ZEN_MODELS19"),
+  new sst.Secret("ZEN_MODELS20"),
+  new sst.Secret("ZEN_MODELS21"),
+  new sst.Secret("ZEN_MODELS22"),
+  new sst.Secret("ZEN_MODELS23"),
+  new sst.Secret("ZEN_MODELS24"),
+  new sst.Secret("ZEN_MODELS25"),
+  new sst.Secret("ZEN_MODELS26"),
+  new sst.Secret("ZEN_MODELS27"),
+  new sst.Secret("ZEN_MODELS28"),
+  new sst.Secret("ZEN_MODELS29"),
+  new sst.Secret("ZEN_MODELS30"),
 ]
 const STRIPE_SECRET_KEY = new sst.Secret("STRIPE_SECRET_KEY")
 const STRIPE_PUBLISHABLE_KEY = new sst.Secret("STRIPE_PUBLISHABLE_KEY")
@@ -156,14 +176,10 @@ const bucketNew = new sst.cloudflare.Bucket("ZenDataNew")
 const AWS_SES_ACCESS_KEY_ID = new sst.Secret("AWS_SES_ACCESS_KEY_ID")
 const AWS_SES_SECRET_ACCESS_KEY = new sst.Secret("AWS_SES_SECRET_ACCESS_KEY")
 
-let logProcessor
-if ($app.stage === "production" || $app.stage === "frank") {
-  const HONEYCOMB_API_KEY = new sst.Secret("HONEYCOMB_API_KEY")
-  logProcessor = new sst.cloudflare.Worker("LogProcessor", {
-    handler: "packages/console/function/src/log-processor.ts",
-    link: [HONEYCOMB_API_KEY],
-  })
-}
+const logProcessor = new sst.cloudflare.Worker("LogProcessor", {
+  handler: "packages/console/function/src/log-processor.ts",
+  link: [new sst.Secret("HONEYCOMB_API_KEY")],
+})
 
 new sst.cloudflare.x.SolidStart("Console", {
   domain,
@@ -198,10 +214,10 @@ new sst.cloudflare.x.SolidStart("Console", {
   },
   transform: {
     server: {
+      placement: { region: "aws:us-east-1" },
       transform: {
         worker: {
-          placement: { mode: "smart" },
-          tailConsumers: logProcessor ? [{ service: logProcessor.nodes.worker.scriptName }] : [],
+          tailConsumers: [{ service: logProcessor.nodes.worker.scriptName }],
         },
       },
     },

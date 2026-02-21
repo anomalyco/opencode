@@ -1,0 +1,188 @@
+---
+title: LSP 서버
+description: OpenCode는 LSP 서버와 통합되어 작동합니다.
+---
+
+OpenCode는 언어 서버 프로토콜(LSP)과 통합되어 LLM이 코드베이스와 상호 작용할 수 있게 돕습니다. 이를 통해 진단 정보를 사용하여 LLM에 피드백을 제공합니다.
+
+---
+
+## 기본 제공 (Built-in)
+
+OpenCode는 인기 있는 언어들에 대해 여러 내장 LSP 서버를 제공합니다.
+
+| LSP 서버           | 확장자                                                             | 요구사항                                              |
+| ------------------ | ------------------------------------------------------------------ | ----------------------------------------------------- |
+| astro              | .astro                                                             | Astro 프로젝트 자동 설치                              |
+| bash               | .sh, .bash, .zsh, .ksh                                             | bash-language-server 자동 설치                        |
+| clangd             | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++               | C/C++ 프로젝트용 자동 설치                            |
+| csharp             | .cs                                                                | `.NET SDK` 설치                                       |
+| clojure-lsp        | .clj, .cljs, .cljc, .edn                                           | `clojure-lsp` 명령 사용 가능                          |
+| dart               | .dart                                                              | `dart` 명령 사용 가능                                 |
+| deno               | .ts, .tsx, .js, .jsx, .mjs                                         | `deno` 명령 사용 가능(deno.json/deno.jsonc 자동 감지) |
+| elixir-ls          | .ex, .exs                                                          | `elixir` 명령 사용 가능                               |
+| eslint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                 | 프로젝트의 `eslint` 의존성                            |
+| fsharp             | .fs, .fsi, .fsx, .fsscript                                         | `.NET SDK` 설치                                       |
+| gleam              | .gleam                                                             | `gleam` 명령 사용 가능                                |
+| gopls              | .go                                                                | `go` 명령 사용 가능                                   |
+| hls                | .hs, .lhs                                                          | `haskell-language-server-wrapper` 명령 사용 가능      |
+| jdtls              | .java                                                              | `Java SDK (version 21+)` 설치                         |
+| kotlin-ls          | .kt, .kts                                                          | Kotlin 프로젝트용 자동 설치                           |
+| lua-ls             | .lua                                                               | Lua 프로젝트용 자동 설치                              |
+| nixd               | .nix                                                               | `nixd` 명령 사용 가능                                 |
+| ocaml-lsp          | .ml, .mli                                                          | `ocamllsp` 명령 사용 가능                             |
+| oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .ct, .vue, .astro, .svelte | 프로젝트의 `oxlint` 의존성                            |
+| PHP intelephense   | .php                                                               | PHP 프로젝트 자동 설치                                |
+| prisma             | .prisma                                                            | `prisma` 명령 사용 가능                               |
+| pyright            | .py, .pyi                                                          | `pyright` 의존성 설치                                 |
+| ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                          | `ruby` 및 `gem` 명령 사용 가능                        |
+| rust               | .rs                                                                | `rust-analyzer` 명령 사용 가능                        |
+| sourcekit-lsp      | .swift, .objc, .objcpp                                             | `swift` 설치 (macOS의 `xcode`)                        |
+| svelte             | .svelte                                                            | Svelte 프로젝트 자동 설치                             |
+| terraform          | .tf, .tfvars                                                       | GitHub 릴리스에서 자동 설치                           |
+| typst              | .typ, .typc                                                        | GitHub 릴리스에서 자동 설치                           |
+| typescript         | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                       | 프로젝트의 `typescript` 의존성                        |
+| vue                | .vue                                                               | Vue 프로젝트 자동 설치                                |
+| yaml-ls            | .yaml, .yml                                                        | Red Hat yaml-language-server 자동 설치                |
+| zls                | .zig, .zon                                                         | `zig` 명령 사용 가능                                  |
+
+LSP 서버는 위 파일 확장자 중 하나가 감지되고 요구 사항이 충족되면 자동으로 활성화됩니다.
+
+:::note
+`OPENCODE_DISABLE_LSP_DOWNLOAD` 환경 변수를 `true`로 설정하여 자동 LSP 서버 다운로드를 비활성화 할 수 있습니다.
+:::
+
+---
+
+## 작동 방식
+
+OpenCode가 파일을 열 때, 다음과 같이 작동합니다:
+
+1. 활성화된 모든 LSP 서버에 대해 파일 확장자를 확인합니다.
+2. 적절한 LSP 서버가 아직 실행 중이지 않다면 시작합니다.
+
+---
+
+## 구성
+
+OpenCode 설정의 `lsp` 섹션을 통해 LSP 서버를 사용자 정의할 수 있습니다.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {}
+}
+```
+
+각 LSP 서버는 다음을 지원합니다:
+
+| 속성             | 유형     | 설명                                    |
+| ---------------- | -------- | --------------------------------------- |
+| `disabled`       | boolean  | LSP 서버를 비활성화하려면 `true`로 설정 |
+| `command`        | string[] | LSP 서버를 시작하는 명령                |
+| `extensions`     | string[] | 이 LSP 서버의 확장자                    |
+| `env`            | object   | 서버 시작 시 설정할 환경 변수           |
+| `initialization` | object   | LSP 서버에 보내는 초기화 옵션           |
+
+몇 가지 예제를 살펴봅시다.
+
+---
+
+## 환경 변수
+
+`env` 속성을 사용하여 LSP 서버를 시작할 때 환경 변수를 설정합니다.
+
+```json title="opencode.json" {5-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "rust": {
+      "env": {
+        "RUST_LOG": "debug"
+      }
+    }
+  }
+}
+```
+
+---
+
+### 초기화 옵션
+
+`initialization` 속성을 사용하여 초기화 옵션을 LSP 서버에 전달합니다. 이들은 LSP `initialize` 요청에 보내진 서버 별 설정입니다.
+
+```json title="opencode.json" {5-9}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "typescript": {
+      "initialization": {
+        "preferences": {
+          "importModuleSpecifierPreference": "relative"
+        }
+      }
+    }
+  }
+}
+```
+
+:::note
+초기화 옵션은 LSP 서버가 다릅니다. LSP 서버의 사용 가능한 옵션을 확인하세요.
+:::
+
+---
+
+### LSP 서버 비활성화
+
+전역적으로 **모든** LSP 서버를 비활성화하려면 `lsp`를 `false`로 설정하십시오.
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": false
+}
+```
+
+**특정** LSP 서버를 비활성화하려면 `disabled`를 `true`로 설정하십시오.
+
+```json title="opencode.json" {5}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "typescript": {
+      "disabled": true
+    }
+  }
+}
+```
+
+---
+
+## 사용자 정의 LSP 서버
+
+명령어와 파일 확장자를 지정하여 사용자 정의 LSP 서버를 추가할 수 있습니다.
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "custom-lsp": {
+      "command": ["custom-lsp-server", "--stdio"],
+      "extensions": [".custom"]
+    }
+  }
+}
+```
+
+---
+
+## 추가 정보
+
+### PHP Intelephense
+
+PHP Intelephense는 라이선스 키를 통해 프리미엄 기능을 제공합니다. 텍스트 파일에 키(만)를 저장하여 라이선스 키를 제공할 수 있습니다.
+
+- macOS/Linux: `$HOME/intelephense/license.txt`
+- Windows: `%USERPROFILE%/intelephense/license.txt`
+
+파일에는 다른 내용이 없어야 합니다.

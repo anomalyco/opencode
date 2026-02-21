@@ -3,73 +3,79 @@ import { MetaProvider } from "@solidjs/meta"
 import "@opencode-ai/app/index.css"
 import { Font } from "@opencode-ai/ui/font"
 import { Splash } from "@opencode-ai/ui/logo"
+import { Progress } from "@opencode-ai/ui/progress"
 import "./styles.css"
-import { createSignal, Match, onMount } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { commands, events, InitStep } from "./bindings"
 import { Channel } from "@tauri-apps/api/core"
-import { Switch } from "solid-js"
 
 const root = document.getElementById("root")!
+const lines = ["Just a moment...", "Migrating your database", "This may take a couple of minutes"]
+const delays = [3000, 9000]
 
 render(() => {
-  let splash!: SVGSVGElement
-  const [state, setState] = createSignal<InitStep | null>(null)
+  const [step, setStep] = createSignal<InitStep | null>(null)
+  const [line, setLine] = createSignal(0)
+  const [percent, setPercent] = createSignal(0)
+
+  const phase = createMemo(() => step()?.phase)
+
+  const value = createMemo(() => {
+    if (phase() === "done") return 100
+    return Math.max(25, Math.min(100, percent()))
+  })
 
   const channel = new Channel<InitStep>()
-  channel.onmessage = (e) => setState(e)
-  commands.awaitInitialization(channel as any).then(() => {
-    const currentOpacity = getComputedStyle(splash).opacity
+  channel.onmessage = (next) => setStep(next)
+  commands.awaitInitialization(channel as any).catch(() => undefined)
 
-    splash.style.animation = "none"
-    splash.style.animationPlayState = "paused"
-    splash.style.opacity = currentOpacity
+  onMount(() => {
+    setLine(0)
+    setPercent(0)
 
-    requestAnimationFrame(() => {
-      splash.style.transition = "opacity 0.3s ease"
-      requestAnimationFrame(() => {
-        splash.style.opacity = "1"
-      })
+    const timers = delays.map((ms, i) => setTimeout(() => setLine(i + 1), ms))
+
+    const listener = events.sqliteMigrationProgress.listen((e) => {
+      if (e.payload.type === "InProgress") setPercent(Math.max(0, Math.min(100, e.payload.value)))
+      if (e.payload.type === "Done") setPercent(100)
     })
+
+    onCleanup(() => {
+      listener.then((cb) => cb())
+      timers.forEach(clearTimeout)
+    })
+  })
+
+  createEffect(() => {
+    if (phase() !== "done") return
+
+    const timer = setTimeout(() => events.loadingWindowComplete.emit(null), 1000)
+    onCleanup(() => clearTimeout(timer))
+  })
+
+  const status = createMemo(() => {
+    if (phase() === "done") return "All done"
+    if (phase() === "sqlite_waiting") return lines[line()]
+    return "Just a moment..."
   })
 
   return (
     <MetaProvider>
       <div class="w-screen h-screen bg-background-base flex items-center justify-center">
         <Font />
-        <div class="flex flex-col items-center gap-10">
-          <Splash ref={splash} class="h-25 animate-[pulse-splash_2s_ease-in-out_infinite]" />
-          <span class="text-text-base">
-            <Switch fallback="Just a moment...">
-              <Match when={state()?.phase === "done"}>
-                {(_) => {
-                  onMount(() => {
-                    setTimeout(() => events.loadingWindowComplete.emit(null), 1000)
-                  })
-
-                  return "All done"
-                }}
-              </Match>
-              <Match when={state()?.phase === "sqlite_waiting"}>
-                {(_) => {
-                  const textItems = [
-                    "Just a moment...",
-                    "Migrating your database",
-                    "This could take a couple of minutes",
-                  ]
-                  const [textIndex, setTextIndex] = createSignal(0)
-
-                  onMount(async () => {
-                    await new Promise((res) => setTimeout(res, 3000))
-                    setTextIndex(1)
-                    await new Promise((res) => setTimeout(res, 6000))
-                    setTextIndex(2)
-                  })
-
-                  return <>{textItems[textIndex()]}</>
-                }}
-              </Match>
-            </Switch>
-          </span>
+        <div class="flex flex-col items-center gap-11">
+          <Splash class="w-20 h-25 opacity-15" />
+          <div class="w-60 flex flex-col items-center gap-4" aria-live="polite">
+            <span class="w-full overflow-hidden text-center text-ellipsis whitespace-nowrap text-text-strong text-14-normal">
+              {status()}
+            </span>
+            <Progress
+              value={value()}
+              class="w-20 [&_[data-slot='progress-track']]:h-1 [&_[data-slot='progress-track']]:border-0 [&_[data-slot='progress-track']]:rounded-none [&_[data-slot='progress-track']]:bg-surface-weak [&_[data-slot='progress-fill']]:rounded-none [&_[data-slot='progress-fill']]:bg-icon-warning-base"
+              aria-label="Database migration progress"
+              getValueLabel={({ value }) => `${Math.round(value)}%`}
+            />
+          </div>
         </div>
       </div>
     </MetaProvider>

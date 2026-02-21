@@ -1,0 +1,237 @@
+---
+title: Uprawnienia
+description: Kontroluj, które Akcje wymagają zatwierdzenia do uruchomienia.
+---
+
+opencode używa `permission`, aby uniknąć, czy dana akcja została wykonana automatycznie, zachowana monit lub została zablokowana.
+
+Od `v1.1.1` starsza stworzona logiczna `tools` jest przestarzała i została stworzona scalona z `permission`. Stara wersja `tools` jest nadal obsługiwana w celu zapewnienia zgodności wstecznej.
+
+---
+
+## Działania
+
+Każda reguła uprawnień skutkuje jedną z:
+
+- `"allow"` — uruchamiany bez zgody
+- `"ask"` — monit o zatwierdzenie
+- `"deny"` — zablokuj akcję
+
+---
+
+## Konfiguracja
+
+Możesz zainstalować uprawnienia globalnie (za pomocą `*`) i znajdującego się w nim narzędzia.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "*": "ask",
+    "bash": "allow",
+    "edit": "deny"
+  }
+}
+```
+
+Możesz także zainstalować wszystkie uprawnienia na raz:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": "allow"
+}
+```
+
+---
+
+## Szczegółowe reguły (składnia obiektu)
+
+Można skorzystać z różnych działań, które zależą od danych użytkowych.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "git *": "allow",
+      "npm *": "allow",
+      "rm *": "deny",
+      "grep *": "allow"
+    },
+    "edit": {
+      "*": "deny",
+      "packages/web/src/content/docs/*.mdx": "allow"
+    }
+  }
+}
+```
+
+Reguły są zalecane na podstawie odpowiedniego wzorca, przy czym **ostatnia wynikaca reguła wygrywa**. Powszechnym wzorcem jest umieszczenie na pierwszym miejscu odpowiedniego catch-all `"*"`, a po bardziej szczegółowe zasady.
+
+### Symbole wieloznaczne
+
+Wzorce uprawnień z prostych dopasowywania symboli wieloznacznych:
+
+- `*` dopasowuje zero lub więcej dowolnego znaku
+- `?` odpowiada dokładnie jednemu znakowi
+- Wszystkie pozostałe znaki pasują dosłownie
+
+### Rozszerzenie katalogu domowego
+
+Możesz używać `~` lub `$HOME` na początku wzorca, aby zastosować się do swojego katalogu domowego. Jest to szczególnie szczególne w przypadku reguły [`external_directory`](#external-directories).
+
+- `~/projects/*` -> `/Users/username/projects/*`
+- `$HOME/projects/*` -> `/Users/username/projects/*`
+- `~` -> `/Users/username`
+
+### Katalogi zewnętrzne
+
+Użycie `external_directory`, aby zezwolić na wywołanie narzędzia, które obsługuje obsługę poza katalogiem roboczym, z uruchomieniem opencode. Dotyczy każdego narzędzia, które jako dane wejściowe zostało przyjęte (na przykład `read`, `edit`, `list`, `glob`, `grep` i wiele założycieli `bash`).
+
+Rozszerzenie domu (jak `~/...`) wpływa tylko na sposób za zwyczajowy wzorca. Nie powoduje to, że strategie zewnętrzne stają się stosowane przez `external_directory`.
+
+Na przykład umożliwia dostęp do wszystkiego pod `~/projects/personal/`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "~/projects/personal/**": "allow"
+    }
+  }
+}
+```
+
+Każdy dopuszczony tutaj katalog jest dziedziczy tych samych ustawień, co dostęp do obszaru roboczego. Ponieważ [`read` ma wartość domyślną `allow`](#defaults), odczyty są również dostępne dla wpisów poniżej `external_directory`, chyba że zagłębione. Dodaj dodatkowe rozwiązanie, kiedy narzędzie powinno być rozwiązaniem w tych ścieżkach, np. blokowanie edycji przy zachowaniu odczytów:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "~/projects/personal/**": "allow"
+    },
+    "edit": {
+      "~/projects/personal/**": "deny"
+    }
+  }
+}
+```
+
+Skoncentruj listę na zaufanych ścieżkach i dodaj dodatkowe zezwolenie lub odmowę, jeśli jest potrzebne w innych narzędziach (na przykład `bash`).
+
+---
+
+## Dostępne uprawnienia
+
+Uprawnienia opencode są określane na podstawie nazwy narzędzia i kilku zabezpieczeń:
+
+- `read` — odczyt pliku (odpowiada ścieżce pliku)
+- `edit` — wszystkie modyfikacje plików (obejmuje `edit`, `write`, `patch`, `multiedit`)
+- `glob` — maglowanie plików (pasuje do wzorców globowania)
+- `grep` — wyszukiwanie treści (pasuje do wzorca regularnego)
+- `list` — wyświetlanie listy plików w katalogu (pasuje do katalogu)
+- `bash` — uruchamianie poleceń shell (pasuje do poleceń przeanalizowanych, takich jak `git status --porcelain`)
+- `task` — uruchamianie podagentów (odpowiada typowi podagenta)
+- `skill` — ładowanie umiejętności (pasuje do nazwy umiejętności)
+- `lsp` — uruchamianie zapytań LSP (obecnie nieszczegółowych)
+- `todoread`, `todowrite` — czytanie/aktualizacja list rzeczy do wykonania
+- `webfetch` — pobieranie adresu URL (pasuje do adresu URL)
+- `websearch`, `codesearch` — wyszukiwanie sieci/kodu (pasuje do zapytań)
+- `external_directory` — wywoływacz, gdy narzędzie jest dostępne poza katalogiem roboczym projektu
+- `doom_loop` — wyzwalane, gdy samo wywołanie narzędzia zostanie powtórzone 3 razy z tymi samymi danymi podstawowymi
+
+---
+
+## Domyślne
+
+Jeżeli nic nie jest określone, opencode zostanie uruchomione od dopuszczalnych rozwiązań diagnostycznych:
+
+- Dostępne uprawnienia ma wartość domyślną `"allow"`.
+- `doom_loop` i `external_directory` zamek ma wartość `"ask"`.
+- `read` do `"allow"`, ale pliki `.env` są odrzucane:
+
+```json title="opencode.json"
+{
+  "permission": {
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow"
+    }
+  }
+}
+```
+
+---
+
+## Co robi „Zapytaj”.
+
+Gdy opencode poprosi o zatwierdzenie, interfejs użytkownika oferujący trzy wyniki:
+
+- `once` — zatwierdź tylko tę prośbę
+- `always` — zastosowanie, które następuje po zastosowaniu sugerowanych wzorców (przez następczą bieżącą sesję opencode)
+- `reject` — odrzucić
+
+Zestaw wzorców, które `always` zatwierdziłby, jest udostępniony przez narzędzie (na przykładzie zatwierdzenia bash zazwyczaj umieszczają na częstotliwości bezpiecznej prefiksy polecenia, takie jak `git status*`).
+
+---
+
+## Agenci
+
+Można uzyskać dostęp do poszczególnych agentów. Uprawnienia agenta są skalowane z konfiguracją globalną, a następnie agenta ma pierwszeństwo. [Dowiedz się więcej](/docs/agents#permissions) o prawach agenta.
+
+:::note
+Bardziej szczegółowe przykłady dopasowywania wzorców można znaleźć w sekcji [Reguły szczegółowe (składnia obiektu) (#granular-rules-object-syntax) powyżej.
+:::
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "git *": "allow",
+      "git commit *": "deny",
+      "git push *": "deny",
+      "grep *": "allow"
+    }
+  },
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "*": "ask",
+          "git *": "allow",
+          "git commit *": "ask",
+          "git push *": "deny",
+          "grep *": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+Możesz także mieć pozwolenie na agenta w Markdown:
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Code review without edits
+mode: subagent
+permission:
+  edit: deny
+  bash: ask
+  webfetch: deny
+---
+
+Only analyze code and suggest changes.
+```
+
+:::tip
+zastosowanie dopasowywania wzorców dla pierwotnych z argumentami. `"grep *"` pozwala na `grep pattern file.txt`, podczas gdy sam `"grep"` blokuje to. Polecenia takie jak `git status` w przypadku postępowania dyscyplinarnego, ale ostatecznego zastosowania (np. `"git status *"`) podczas stosowania argumentów.
+:::
