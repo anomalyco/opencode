@@ -1,7 +1,7 @@
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { InternalTuiPlugin } from "../../plugin/internal"
-import { createMemo } from "solid-js"
+import { createMemo, Show } from "solid-js"
 
 const id = "internal:sidebar-context"
 
@@ -21,27 +21,54 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       return {
         tokens: 0,
         percent: null,
+        cache: undefined,
       }
     }
 
     const tokens =
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
+    const totalInput = last.tokens.input + last.tokens.cache.read + last.tokens.cache.write
     const model = props.api.state.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
     return {
       tokens,
       percent: model?.limit.context ? Math.round((tokens / model.limit.context) * 100) : null,
+      cache: {
+        input: totalInput,
+        uncached: last.tokens.input,
+        read: last.tokens.cache.read,
+        write: last.tokens.cache.write,
+        hitPercent: totalInput > 0 ? ((last.tokens.cache.read / totalInput) * 100).toFixed(3) : null,
+        output: last.tokens.output,
+      },
     }
   })
 
   return (
-    <box>
-      <text fg={theme().text}>
-        <b>Context</b>
-      </text>
-      <text fg={theme().textMuted}>{state().tokens.toLocaleString()} tokens</text>
-      <text fg={theme().textMuted}>{state().percent ?? 0}% used</text>
-      <text fg={theme().textMuted}>{money.format(cost())} spent</text>
-    </box>
+    <>
+      <box>
+        <text fg={theme().text}>
+          <b>Context</b>
+        </text>
+        <text fg={theme().textMuted}>{state().tokens.toLocaleString()} tokens</text>
+        <text fg={theme().textMuted}>{state().percent ?? 0}% used</text>
+        <text fg={theme().textMuted}>{money.format(cost())} spent</text>
+      </box>
+      <Show when={process.env["OPENCODE_CACHE_AUDIT"] && state().cache?.hitPercent != null ? state().cache : undefined}>
+        {(cache) => (
+          <box>
+            <text fg={theme().text}>
+              <b>Cache Audit</b>
+            </text>
+            <text fg={theme().textMuted}>{cache().input.toLocaleString()} input tokens</text>
+            <text fg={theme().textMuted}>  {cache().uncached.toLocaleString()} new</text>
+            <text fg={theme().textMuted}>  {cache().read.toLocaleString()} cache read</text>
+            <text fg={theme().textMuted}>  {cache().write.toLocaleString()} cache write</text>
+            <text fg={theme().textMuted}>{cache().hitPercent}% hit rate</text>
+            <text fg={theme().textMuted}>{cache().output.toLocaleString()} output tokens</text>
+          </box>
+        )}
+      </Show>
+    </>
   )
 }
 
