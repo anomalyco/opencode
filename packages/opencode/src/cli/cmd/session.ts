@@ -77,6 +77,12 @@ export const SessionListCommand = cmd({
         describe: "limit to N most recent sessions",
         type: "number",
       })
+      .option("global", {
+        alias: "g",
+        describe: "list sessions across all projects",
+        type: "boolean",
+        default: false,
+      })
       .option("format", {
         describe: "output format",
         type: "string",
@@ -86,18 +92,15 @@ export const SessionListCommand = cmd({
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
-      const sessions = [...Session.list({ roots: true, limit: args.maxCount })]
+      const sessions = args.global
+        ? [...Session.listGlobal({ limit: args.maxCount })]
+        : [...Session.list({ roots: true, limit: args.maxCount })]
 
       if (sessions.length === 0) {
         return
       }
 
-      let output: string
-      if (args.format === "json") {
-        output = formatSessionJSON(sessions)
-      } else {
-        output = formatSessionTable(sessions)
-      }
+      const output = args.format === "json" ? formatSessionJSON(sessions) : formatSessionTable(sessions)
 
       const shouldPaginate = process.stdout.isTTY && !args.maxCount && args.format === "table"
 
