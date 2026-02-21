@@ -68,10 +68,15 @@ function fallback(part: ToolPart) {
   const title =
     ("title" in state && state.title ? state.title : undefined) ||
     (input && typeof input === "object" && Object.keys(input).length > 0 ? JSON.stringify(input) : "Unknown")
-  inline({
-    icon: "⚙",
-    title: `${part.tool} ${title}`,
-  })
+  const raw = state.status === "completed" && "output" in state ? state.output : undefined
+  const output = typeof raw === "string" ? raw.trim() : undefined
+  block(
+    {
+      icon: "⚙",
+      title: `${part.tool} ${title}`,
+    },
+    output,
+  )
 }
 
 function glob(info: ToolProps<typeof GlobTool>) {
@@ -582,7 +587,7 @@ export const RunCommand = cmd({
       }
       await share(sdk, sessionID)
 
-      loop().catch((e) => {
+      const loopPromise = loop().catch((e) => {
         console.error(e)
         process.exit(1)
       })
@@ -606,6 +611,8 @@ export const RunCommand = cmd({
           parts: [...files, { type: "text", text: message }],
         })
       }
+
+      await loopPromise
     }
 
     if (args.attach) {
