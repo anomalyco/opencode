@@ -28,9 +28,8 @@ export namespace Flag {
   export declare const OPENCODE_DISABLE_PROJECT_CONFIG: boolean
   export const OPENCODE_FAKE_VCS = process.env["OPENCODE_FAKE_VCS"]
   export declare const OPENCODE_CLIENT: string
-  const password = process.env["OPENCODE_SERVER_PASSWORD"]
+  export const OPENCODE_SERVER_PASSWORD = process.env["OPENCODE_SERVER_PASSWORD"]
   delete process.env["OPENCODE_SERVER_PASSWORD"]
-  export const OPENCODE_SERVER_PASSWORD = password
   export const OPENCODE_SERVER_USERNAME = process.env["OPENCODE_SERVER_USERNAME"]
   export const OPENCODE_ENABLE_QUESTION_TOOL = truthy("OPENCODE_ENABLE_QUESTION_TOOL")
 
