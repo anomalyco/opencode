@@ -62,7 +62,15 @@ const cli = yargs(hideBin(process.argv))
     type: "string",
     choices: ["DEBUG", "INFO", "WARN", "ERROR"],
   })
+  .option("dangerously-skip-permissions", {
+    describe: "skip all permission prompts (allow everything)",
+    type: "boolean",
+    default: false,
+  })
   .middleware(async (opts) => {
+    if (opts.dangerouslySkipPermissions) {
+      process.env.OPENCODE_PERMISSION = JSON.stringify({ "*": "allow" })
+    }
     await Log.init({
       print: process.argv.includes("--print-logs"),
       dev: Installation.isLocal(),
