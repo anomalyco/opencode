@@ -45,6 +45,10 @@ process.on("uncaughtException", (e) => {
   })
 })
 
+for (const sig of ["SIGHUP", "SIGTERM", "SIGPIPE"] as const) {
+  process.on(sig, () => process.exit(1))
+}
+
 const cli = yargs(hideBin(process.argv))
   .parserConfiguration({ "populate--": true })
   .scriptName("opencode")
