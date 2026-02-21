@@ -846,6 +846,15 @@ export namespace Session {
         },
       }
 
+      // OPENCODE_CACHE_AUDIT=1 enables per-call cache token accounting in the log
+      if (process.env["OPENCODE_CACHE_AUDIT"]) {
+        const totalInputTokens = tokens.input + tokens.cache.read + tokens.cache.write
+        const cacheHitPercent = totalInputTokens > 0 ? ((tokens.cache.read / totalInputTokens) * 100).toFixed(1) : "0.0"
+        log.info(
+          `[CACHE] ${input.model.id}  input=${totalInputTokens} (cache_read=${tokens.cache.read} cache_write=${tokens.cache.write} new=${tokens.input})  hit=${cacheHitPercent}%  output=${tokens.output}  total=${tokens.total ?? 0}`,
+        )
+      }
+
       const costInfo =
         input.model.cost?.experimentalOver200K && tokens.input + tokens.cache.read > 200_000
           ? input.model.cost.experimentalOver200K
