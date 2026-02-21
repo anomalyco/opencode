@@ -24,6 +24,12 @@ export const ModelsCommand = cmd({
         describe: "refresh the models cache from models.dev",
         type: "boolean",
       })
+      .option("format", {
+        describe: "output format",
+        type: "string",
+        choices: ["text", "json"] as const,
+        default: "text",
+      })
   },
   handler: async (args) => {
     if (args.refresh) {
@@ -35,6 +41,18 @@ export const ModelsCommand = cmd({
       directory: process.cwd(),
       async fn() {
         const providers = await Provider.list()
+
+        function collectModels(providerID: string) {
+          const provider = providers[providerID]
+          return Object.entries(provider.models)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([modelID, model]) => ({
+              id: `${providerID}/${modelID}`,
+              provider: providerID,
+              model: modelID,
+              ...model,
+            }))
+        }
 
         function printModels(providerID: string, verbose?: boolean) {
           const provider = providers[providerID]
@@ -49,18 +67,7 @@ export const ModelsCommand = cmd({
           }
         }
 
-        if (args.provider) {
-          const provider = providers[args.provider]
-          if (!provider) {
-            UI.error(`Provider not found: ${args.provider}`)
-            return
-          }
-
-          printModels(args.provider, args.verbose)
-          return
-        }
-
-        const providerIDs = Object.keys(providers).sort((a, b) => {
+        const targetProviderIDs = args.provider ? [args.provider] : Object.keys(providers).sort((a, b) => {
           const aIsOpencode = a.startsWith("opencode")
           const bIsOpencode = b.startsWith("opencode")
           if (aIsOpencode && !bIsOpencode) return -1
@@ -68,7 +75,19 @@ export const ModelsCommand = cmd({
           return a.localeCompare(b)
         })
 
-        for (const providerID of providerIDs) {
+        if (args.provider && !providers[args.provider]) {
+          UI.error(`Provider not found: ${args.provider}`)
+          return
+        }
+
+        if (args.format === "json") {
+          const models = targetProviderIDs.flatMap(collectModels)
+          process.stdout.write(JSON.stringify(models, null, 2))
+          process.stdout.write(EOL)
+          return
+        }
+
+        for (const providerID of targetProviderIDs) {
           printModels(providerID, args.verbose)
         }
       },
