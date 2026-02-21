@@ -2124,46 +2124,23 @@ export default function Layout(props: ParentProps) {
 
   createEffect(
     on(
-      () => {
-        return [pageReady(), route().slug, params.id, currentProject()?.worktree, currentDir()] as const
-      },
-      ([ready, slug, id, root, dir]) => {
-        if (!ready || !slug || !dir) {
-          activeRoute.session = ""
-          activeRoute.sessionProject = ""
-          activeRoute.directory = ""
-          return
+      () => ({ ready: pageReady(), dir: params.dir, id: params.id }),
+      (value) => {
+        if (!value.ready) return
+        const dir = value.dir
+        if (!dir) return
+        const directory = decode64(dir)
+        if (!directory) return
+        notification.project.markViewed(directory)
+        const id = value.id
+        if (!id) return
+        setStore("lastSession", directory, id)
+        notification.session.markViewed(id)
+        const expanded = untrack(() => store.workspaceExpanded[directory])
+        if (expanded === false) {
+          setStore("workspaceExpanded", directory, true)
         }
-
-        if (!id) {
-          activeRoute.session = ""
-          activeRoute.sessionProject = ""
-          activeRoute.directory = ""
-          return
-        }
-
-        const session = `${slug}/${id}`
-
-        if (!root) {
-          activeRoute.session = session
-          activeRoute.directory = dir
-          activeRoute.sessionProject = ""
-          return
-        }
-
-        if (server.projects.last() !== root) server.projects.touch(root)
-
-        const changed = session !== activeRoute.session || dir !== activeRoute.directory
-        if (changed) {
-          activeRoute.session = session
-          activeRoute.directory = dir
-          activeRoute.sessionProject = syncSessionRoute(dir, id, root)
-          return
-        }
-
-        if (root === activeRoute.sessionProject) return
-        activeRoute.directory = dir
-        activeRoute.sessionProject = rememberSessionRoute(dir, id, root)
+        requestAnimationFrame(() => scrollToSession(id, `${directory}:${id}`))
       },
     ),
   )
