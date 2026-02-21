@@ -120,6 +120,14 @@ export namespace Filesystem {
   }
 
   export function contains(parent: string, child: string) {
+    // On Windows, path.relative across different drive letters (e.g. D:\project vs C:\evil)
+    // returns the absolute child path instead of a ".." prefixed relative path,
+    // which causes a false positive (the check thinks the child is inside the parent).
+    if (process.platform === "win32") {
+      const parentRoot = parent.slice(0, 3).toUpperCase()
+      const childRoot = child.slice(0, 3).toUpperCase()
+      if (parentRoot !== childRoot) return false
+    }
     return !relative(parent, child).startsWith("..")
   }
 

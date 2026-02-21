@@ -29,6 +29,28 @@ describe("Filesystem.contains", () => {
     expect(Filesystem.contains("/project", "/project-other/file")).toBe(false)
     expect(Filesystem.contains("/project", "/projectfile")).toBe(false)
   })
+
+  if (process.platform === "win32") {
+    test("blocks cross-drive paths on Windows", () => {
+      expect(Filesystem.contains("D:\\project", "C:\\evil\\file.txt")).toBe(false)
+      expect(Filesystem.contains("D:\\project", "C:\\Windows\\System32\\config")).toBe(false)
+      expect(Filesystem.contains("C:\\Users\\user\\project", "D:\\other\\file")).toBe(false)
+    })
+
+    test("allows same-drive paths on Windows", () => {
+      expect(Filesystem.contains("D:\\project", "D:\\project\\src\\file.ts")).toBe(true)
+      expect(Filesystem.contains("C:\\Users\\project", "C:\\Users\\project\\file.ts")).toBe(true)
+    })
+
+    test("handles case-insensitive drive letters on Windows", () => {
+      expect(Filesystem.contains("d:\\project", "D:\\project\\file.ts")).toBe(true)
+      expect(Filesystem.contains("D:\\project", "d:\\project\\file.ts")).toBe(true)
+    })
+
+    test("blocks cross-drive with forward slashes on Windows", () => {
+      expect(Filesystem.contains("D:/project", "C:/evil/file.txt")).toBe(false)
+    })
+  }
 })
 
 /*
