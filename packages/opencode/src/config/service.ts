@@ -38,11 +38,9 @@ function getGlobalConfigPath(): string {
 export const NodeConfigService: ConfigService = {
   async getConfigPaths(cwd?: string): Promise<ConfigPaths> {
     const globalPath = getGlobalConfigPath()
-
-    let projectPath: string | null = null
-    if (cwd) {
-      projectPath = await findConfigFile(cwd, ["opencode.jsonc", "opencode.json"])
-    }
+    const projectPath = cwd 
+      ? await findConfigFile(cwd, ["opencode.jsonc", "opencode.json"])
+      : null
 
     return { global: globalPath, project: projectPath }
   },
