@@ -331,10 +331,18 @@ function createGlobalSync() {
   }
 
   const updateConfig = async (config: Config) => {
-    await globalSDK.client.global.config.update({ config })
-    setGlobalStore("config", config)
+    setGlobalStore("reload", "pending")
+    return globalSDK.client.global.config
+      .update({ config })
+      .then(bootstrap)
+      .then(() => {
+        setGlobalStore("reload", "complete")
+      })
+      .catch((error) => {
+        setGlobalStore("reload", undefined)
+        throw error
+      })
   }
-
   return {
     data: globalStore,
     set: setGlobalStore,

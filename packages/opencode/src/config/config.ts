@@ -133,12 +133,12 @@ export namespace Config {
       // Only scan project .opencode/ directories when project discovery is enabled
       ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
         ? await Array.fromAsync(
-            Filesystem.up({
-              targets: [".opencode"],
-              start: Instance.directory,
-              stop: Instance.worktree,
-            }),
-          )
+          Filesystem.up({
+            targets: [".opencode"],
+            start: Instance.directory,
+            stop: Instance.worktree,
+          }),
+        )
         : []),
       // Always scan ~/.opencode/ (user home directory)
       ...(await Array.fromAsync(
@@ -1234,7 +1234,7 @@ export namespace Config {
           await Filesystem.writeJson(path.join(Global.Path.config, "config.json"), result)
           await fs.unlink(legacy)
         })
-        .catch(() => {})
+        .catch(() => { })
     }
 
     return result
@@ -1324,7 +1324,7 @@ export namespace Config {
       if (!parsed.data.$schema && isFile) {
         parsed.data.$schema = "https://opencode.ai/config.json"
         const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
-        await Bun.write(options.path, updated).catch(() => {})
+        await Bun.write(options.path, updated).catch(() => { })
       }
       const data = parsed.data
       if (data.plugin && isFile) {
@@ -1332,7 +1332,7 @@ export namespace Config {
           const plugin = data.plugin[i]
           try {
             data.plugin[i] = import.meta.resolve!(plugin, options.path)
-          } catch (err) {}
+          } catch (err) { }
         }
       }
       return data
@@ -1458,8 +1458,10 @@ export namespace Config {
 
     const next = await (async () => {
       if (!filepath.endsWith(".jsonc")) {
-        await Filesystem.writeJson(filepath, config)
-        return config
+        const existing = parseConfig(before, filepath)
+        const merged = mergeDeep(existing, config)
+        await Filesystem.writeJson(filepath, merged)
+        return merged
       }
 
       const updated = patchJsonc(before, config)

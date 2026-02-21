@@ -8,6 +8,7 @@ import { usePlatform } from "@/context/platform"
 import { useGlobalSync } from "@/context/global-sync"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useNavigate } from "@solidjs/router"
+import { isDeepEqual } from "remeda"
 
 const joinPath = (...parts: string[]) =>
   parts.map((p) => p.replace(/\\/g, "/")).join("/").replace(/\/+/g, "/")
@@ -65,9 +66,17 @@ export const SettingsConfig: Component = () => {
 
   const [selectedPath, setSelectedPath] = createSignal<string | null>(null)
   const [configContent, setConfigContent] = createSignal("")
+  const [originalContent, setOriginalContent] = createSignal("")
   const [loading, setLoading] = createSignal(false)
   const [editorOpen, setEditorOpen] = createSignal(false)
   const [jsonErrors, setJsonErrors] = createSignal<JsonError[]>([])
+
+  const hasChanges = createMemo(() => {
+    const current = parseJsonConfig(configContent()).config
+    const original = parseJsonConfig(originalContent()).config
+    if (!current || !original) return configContent() !== originalContent()
+    return !isDeepEqual(current, original)
+  })
 
   createEffect(() => {
     const content = configContent()
@@ -109,6 +118,7 @@ export const SettingsConfig: Component = () => {
     const config = globalSync.data.config
     const json = JSON.stringify(config, null, 2)
     setConfigContent(json)
+    setOriginalContent(json)
     setSelectedPath(globalPath())
     setEditorOpen(true)
   }
@@ -122,6 +132,7 @@ export const SettingsConfig: Component = () => {
     setLoading(false)
     if (found) {
       setConfigContent(found.content)
+      setOriginalContent(found.content)
       setSelectedPath(found.path)
       setEditorOpen(true)
       return
@@ -132,6 +143,7 @@ export const SettingsConfig: Component = () => {
   "mode": {}
 }`
     setConfigContent(defaultConfig)
+    setOriginalContent("")
     setSelectedPath(projectPath()!)
     setEditorOpen(true)
   }
@@ -260,7 +272,7 @@ export const SettingsConfig: Component = () => {
               <Button size="small" variant="secondary" onClick={() => setEditorOpen(false)}>
                 {language.t("common.cancel")}
               </Button>
-              <Button size="small" variant="primary" disabled={loading() || jsonErrors().length > 0} onClick={saveConfig}>
+              <Button size="small" variant="primary" disabled={loading() || jsonErrors().length > 0 || !hasChanges()} onClick={saveConfig}>
                 {language.t("common.save")}
               </Button>
             </div>
