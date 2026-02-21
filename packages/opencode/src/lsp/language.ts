@@ -50,7 +50,6 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".kts": "kotlin",
   ".jsx": "javascriptreact",
   ".json": "json",
-  ".jsonc": "json",
   ".tex": "latex",
   ".latex": "latex",
   ".less": "less",

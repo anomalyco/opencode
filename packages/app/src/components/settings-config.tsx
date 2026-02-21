@@ -15,11 +15,14 @@ interface JsonError {
   column: number
 }
 
-const validateJsonLocal = (s: string): JsonError[] => {
+const validateJson = (s: string): JsonError[] => {
   if (!s.trim()) return []
 
+  // Strip trailing commas to match VS Code behavior (JSONC)
+  const normalized = s.replace(/,\s*([\]}])/g, "$1")
+
   try {
-    JSON.parse(s)
+    JSON.parse(normalized)
     return []
   } catch (e) {
     const err = e as SyntaxError
@@ -67,8 +70,7 @@ export const SettingsConfig: Component = () => {
   createEffect(() => {
     const content = configContent()
     if (editorOpen() && content) {
-      const errors = validateJsonLocal(content)
-      setJsonErrors(errors)
+      setJsonErrors(validateJson(content))
     } else {
       setJsonErrors([])
     }
@@ -239,39 +241,22 @@ export const SettingsConfig: Component = () => {
       <Show when={editorOpen()}>
         <div class="flex flex-col gap-4 w-full h-full">
           <div class="flex items-center justify-between">
-            <div class="flex flex-col gap-1">
-              <span class="text-14-medium text-text-strong">{selectedPath()}</span>
-
-            </div>
+            <span class="text-14-medium text-text-strong">{selectedPath()}</span>
             <div class="flex gap-2">
               <Button size="small" variant="secondary" onClick={() => setEditorOpen(false)}>
                 {language.t("common.cancel")}
               </Button>
-              <Button size="small" variant="primary" disabled={loading() || jsonErrors().length > 0} onClick={saveConfig}>
+              <Button size="small" variant="primary" disabled={loading()} onClick={saveConfig}>
                 {language.t("common.save")}
               </Button>
             </div>
           </div>
           <textarea
-            class="flex-1 min-h-[400px] w-full bg-surface-raised-base text-text-strong font-mono text-12-regular p-4 rounded-lg border focus:outline-none focus:border-border-strong-base resize-none"
-            style={{
-              "border-color": jsonErrors().length > 0 ? "var(--border-critical-base)" : undefined,
-            }}
+            class="flex-1 min-h-[400px] w-full bg-surface-raised-base text-text-strong font-mono text-12-regular p-4 rounded-lg border border-border-weak-base focus:outline-none focus:border-border-strong-base resize-none"
             value={configContent()}
             onInput={(e) => setConfigContent(e.currentTarget.value)}
             spellcheck={false}
           />
-          <Show when={jsonErrors().length > 0}>
-            <div class="flex flex-col gap-0.5">
-              <For each={jsonErrors()}>
-                {(error) => (
-                  <span class="text-12-regular" style={{ color: "var(--text-on-critical-base)" }}>
-                    Error at line {error.line}:{error.column} - {error.message}
-                  </span>
-                )}
-              </For>
-            </div>
-          </Show>
         </div>
       </Show>
     </div>
