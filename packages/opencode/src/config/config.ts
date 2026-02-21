@@ -88,20 +88,25 @@ export namespace Config {
       if (value.type === "wellknown") {
         const url = key.replace(/\/+$/, "")
         process.env[value.key] = value.token
-        log.debug("fetching remote config", { url: `${url}/.well-known/opencode` })
-        const response = await fetch(`${url}/.well-known/opencode`)
-        if (!response.ok) {
-          throw new Error(`failed to fetch remote config from ${url}: ${response.status}`)
+        const wellknownUrl = `${url}/.well-known/opencode`
+        const cached = path.join(Global.Path.cache, "wellknown", url.replaceAll(/[^a-zA-Z0-9.-]/g, "_") + ".json")
+        log.debug("fetching remote config", { url: wellknownUrl })
+        const response = await fetch(wellknownUrl, { signal: AbortSignal.timeout(10_000) }).catch(() => undefined)
+        const fetched = response?.ok ? await response.json().catch(() => undefined) : undefined
+        if (fetched) await Filesystem.writeJson(cached, fetched)
+        if (!fetched) log.warn("failed to fetch remote config, trying cache", { url: wellknownUrl })
+        const wellknown = fetched ?? (await Filesystem.readJson(cached).catch(() => undefined))
+        if (!wellknown) {
+          log.warn("no cached remote config available", { url: wellknownUrl })
+          continue
         }
-        const wellknown = (await response.json()) as any
         const remoteConfig = wellknown.config ?? {}
-        // Add $schema to prevent load() from trying to write back to a non-existent file
         if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
         result = mergeConfigConcatArrays(
           result,
           await load(JSON.stringify(remoteConfig), {
-            dir: path.dirname(`${url}/.well-known/opencode`),
-            source: `${url}/.well-known/opencode`,
+            dir: path.dirname(wellknownUrl),
+            source: wellknownUrl,
           }),
         )
         log.debug("loaded remote config from well-known", { url })
