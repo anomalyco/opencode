@@ -1,6 +1,7 @@
 import z from "zod"
 import { Tool } from "./tool"
 import { Question } from "../question"
+import { PermissionNext } from "../permission/next"
 import DESCRIPTION from "./question.txt"
 
 export const QuestionTool = Tool.define("question", {
@@ -9,6 +10,19 @@ export const QuestionTool = Tool.define("question", {
     questions: z.array(Question.Info.omit({ custom: true })).describe("Questions to ask"),
   }),
   async execute(params, ctx) {
+    try {
+      await ctx.ask({ permission: "question", patterns: ["*"], metadata: {}, always: ["*"] })
+    } catch (e) {
+      if (e instanceof PermissionNext.DeniedError || e instanceof PermissionNext.RejectedError) {
+        return {
+          title: "Question denied",
+          output: "Cannot ask questions in this session. Make your best judgment and proceed.",
+          metadata: { answers: [] },
+        }
+      }
+      throw e
+    }
+
     const answers = await Question.ask({
       sessionID: ctx.sessionID,
       questions: params.questions,

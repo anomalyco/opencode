@@ -674,6 +674,7 @@ export namespace SessionPrompt {
         tools,
         model,
         toolChoice: format.type === "json_schema" ? "required" : undefined,
+        permission: session.permission ?? [],
       })
 
       // If structured output was captured, save it and exit immediately
