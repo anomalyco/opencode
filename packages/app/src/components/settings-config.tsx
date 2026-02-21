@@ -73,9 +73,9 @@ export const SettingsConfig: Component = () => {
     const content = configContent()
     if (editorOpen() && content) {
       setJsonErrors(validateJson(content))
-    } else {
-      setJsonErrors([])
+      return
     }
+    setJsonErrors([])
   })
 
   const globalPath = createMemo(() => globalSync.data.path.config.replace(/\\/g, "/"))
@@ -123,15 +123,16 @@ export const SettingsConfig: Component = () => {
     if (found) {
       setConfigContent(found.content)
       setSelectedPath(found.path)
-    } else {
-      const defaultConfig = `{
+      setEditorOpen(true)
+      return
+    }
+    const defaultConfig = `{
   "$schema": "https://opencode.ai/config.json",
   "agent": {},
   "mode": {}
 }`
-      setConfigContent(defaultConfig)
-      setSelectedPath(projectPath()!)
-    }
+    setConfigContent(defaultConfig)
+    setSelectedPath(projectPath()!)
     setEditorOpen(true)
   }
 
