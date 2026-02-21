@@ -63,7 +63,7 @@ type ProviderInfo = {
 }
 
 const list = await client.provider.list()
-const all = (list?.data?.all ?? list?.all ?? []) as ProviderInfo[]
+const all = (list.data?.all ?? []) as ProviderInfo[]
 const azure = all.find((item) => item.id === "azure")
 if (!azure) {
   console.error("Azure provider not found in opencode provider list.")
@@ -85,9 +85,8 @@ if (!variants.includes("xhigh")) {
   process.exit(1)
 }
 
-type IdResult = { data?: { id?: string }; id?: string }
-const created = (await client.session.create({ body: { title: `azure-xhigh-${Date.now()}` } })) as IdResult
-const sessionId = created.data?.id ?? created.id
+const created = await client.session.create({ body: { title: `azure-xhigh-${Date.now()}` } })
+const sessionId = created.data?.id
 if (!sessionId) {
   console.error("Failed to create session.")
   server.close()
