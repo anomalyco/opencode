@@ -1,7 +1,7 @@
 import { Bus } from "../bus"
 import { File } from "../file"
 import { Log } from "../util/log"
-import path from "path"
+
 import z from "zod"
 
 import * as Formatter from "./formatter"
@@ -73,14 +73,14 @@ export namespace Format {
     return status
   }
 
-  async function getFormatter(ext: string) {
+  async function getFormatter(file: string) {
     const formatters = await state().then((x) => x.formatters)
     const result = []
     for (const item of Object.values(formatters)) {
-      log.info("checking", { name: item.name, ext })
-      if (!item.extensions.includes(ext)) continue
+      log.info("checking", { name: item.name, file })
+      if (!item.extensions.some((ext) => file.endsWith(ext))) continue
       if (!(await isEnabled(item))) continue
-      log.info("enabled", { name: item.name, ext })
+      log.info("enabled", { name: item.name, file })
       result.push(item)
     }
     return result
@@ -105,9 +105,8 @@ export namespace Format {
     Bus.subscribe(File.Event.Edited, async (payload) => {
       const file = payload.properties.file
       log.info("formatting", { file })
-      const ext = path.extname(file)
 
-      for (const item of await getFormatter(ext)) {
+      for (const item of await getFormatter(file)) {
         log.info("running", { command: item.command })
         try {
           const proc = Bun.spawn({
