@@ -81,10 +81,9 @@ function fromRule(pattern: string) {
 }
 
 function expand(input: string) {
-  if (input === "~") return process.env.HOME ?? input
-  if (input.startsWith("~/")) {
-    const home = process.env.HOME
-    if (!home) return input
+  const home = process.env.HOME
+  if (input === "~") return home ?? input
+  if (home && (input.startsWith("~/") || input.startsWith("~\\"))) {
     return path.join(home, input.slice(2))
   }
   return input
