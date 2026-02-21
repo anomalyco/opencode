@@ -41,13 +41,38 @@ export namespace Pty {
 
   const token = (ws: Socket) => {
     const data = ws.data
-    if (!data || typeof data !== "object") return
+    if (data === undefined) return
+    if (data === null) return
+    if (typeof data !== "object") return data
 
-    const events = (data as { events?: unknown }).events
-    if (events && typeof events === "object") return events
+    const id = (data as { connId?: unknown }).connId
+    if (typeof id === "number" || typeof id === "string") return id
+
+    const href = (data as { href?: unknown }).href
+    if (typeof href === "string") return href
 
     const url = (data as { url?: unknown }).url
-    if (url && typeof url === "object") return url
+    if (typeof url === "string") return url
+    if (url && typeof url === "object") {
+      const href = (url as { href?: unknown }).href
+      if (typeof href === "string") return href
+      return url
+    }
+
+    const events = (data as { events?: unknown }).events
+    if (typeof events === "number" || typeof events === "string") return events
+    if (events && typeof events === "object") {
+      const id = (events as { connId?: unknown }).connId
+      if (typeof id === "number" || typeof id === "string") return id
+
+      const id2 = (events as { connection?: unknown }).connection
+      if (typeof id2 === "number" || typeof id2 === "string") return id2
+
+      const id3 = (events as { id?: unknown }).id
+      if (typeof id3 === "number" || typeof id3 === "string") return id3
+
+      return events
+    }
 
     return data
   }
@@ -210,7 +235,7 @@ export namespace Pty {
           continue
         }
 
-        if (sub.token !== undefined && token(ws) !== sub.token) {
+        if (token(ws) !== sub.token) {
           session.subscribers.delete(ws)
           continue
         }
