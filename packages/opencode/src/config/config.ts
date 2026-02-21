@@ -1332,7 +1332,9 @@ export namespace Config {
           const plugin = data.plugin[i]
           try {
             data.plugin[i] = import.meta.resolve!(plugin, options.path)
-          } catch (err) {}
+          } catch (err) {
+            log.warn("failed to resolve plugin", { plugin, error: err })
+          }
         }
       }
       return data
