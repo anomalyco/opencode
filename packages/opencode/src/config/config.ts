@@ -989,6 +989,12 @@ export namespace Config {
           baseURL: z.string().optional(),
           enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
           setCacheKey: z.boolean().optional().describe("Enable promptCacheKey for this provider (default false)"),
+          streaming: z
+            .boolean()
+            .optional()
+            .describe(
+              "Enable or disable streaming for this provider. When set to false, uses non-streaming requests and simulates streaming output. Useful for backends that do not support streaming. Default is true.",
+            ),
           timeout: z
             .union([
               z
