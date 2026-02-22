@@ -1,16 +1,13 @@
 import { Hono } from "hono"
 import { DurableObject } from "cloudflare:workers"
-import { randomUUID } from "node:crypto"
-import { jwtVerify, createRemoteJWKSet } from "jose"
-import { createAppAuth } from "@octokit/auth-app"
-import { Octokit } from "@octokit/rest"
-import { Resource } from "sst"
+let randomUUID = crypto.randomUUID
 
-type Env = {
-  SYNC_SERVER: DurableObjectNamespace<SyncServer>
-  Bucket: R2Bucket
-  WEB_DOMAIN: string
-}
+// type Env = {
+//   SYNC_SERVER: DurableObjectNamespace<Env.SyncServer>
+//   Bucket: R2Bucket
+//   WEB_DOMAIN: string
+//   ADMIN_SECRET: string
+// }
 
 async function getFeishuTenantToken(): Promise<string> {
   const response = await fetch("https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal", {
@@ -30,6 +27,7 @@ export class SyncServer extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
   }
+
   async fetch() {
     console.log("SyncServer subscribe")
 
@@ -49,9 +47,9 @@ export class SyncServer extends DurableObject<Env> {
     })
   }
 
-  async webSocketMessage(ws, message) {}
+  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {}
 
-  async webSocketClose(ws, code, reason, wasClean) {
+  async webSocketClose(ws: WebSocket, code: number, reason: string, wasClean: boolean) {
     ws.close(code, "Durable Object is closing WebSocket")
   }
 
@@ -71,11 +69,60 @@ export class SyncServer extends DurableObject<Env> {
       },
     })
     await this.ctx.storage.put(key, content)
+
+    // Update session metadata
+    await this.updateMetadata(key, content)
+
     const clients = this.ctx.getWebSockets()
     console.log("SyncServer publish", key, "to", clients.length, "subscribers")
     for (const client of clients) {
       client.send(JSON.stringify({ key, content }))
     }
+  }
+
+  private async updateMetadata(key: string, content: any) {
+    const sessionID = await this.getSessionID()
+    const shortName = SyncServer.shortName(sessionID!)
+
+    // Get or create metadata
+    let metadata = (await this.ctx.storage.get<any>("metadata")) || {
+      id: shortName,
+      sessionID,
+      messageCount: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+
+    // Update metadata based on content type
+    const [, type] = key.split("/")
+    if (type === "info") {
+      metadata.title = content.title || "Untitled Session"
+      metadata.directory = content.directory || ""
+    } else if (type === "message") {
+      metadata.messageCount++
+      if (content.usage) {
+        metadata.inputTokens += content.usage.inputTokens || 0
+        metadata.outputTokens += content.usage.outputTokens || 0
+      }
+    }
+
+    metadata.updatedAt = new Date().toISOString()
+
+    // Store metadata in durable storage
+    await this.ctx.storage.put("metadata", metadata)
+
+    // Store metadata in R2 for quick listing
+    await this.env.Bucket.put(`share/metadata/${shortName}.json`, JSON.stringify(metadata), {
+      httpMetadata: {
+        contentType: "application/json",
+      },
+    })
+  }
+
+  public async getMetadata() {
+    return this.ctx.storage.get<any>("metadata")
   }
 
   public async share(sessionID: string) {
@@ -89,7 +136,17 @@ export class SyncServer extends DurableObject<Env> {
     return secret
   }
 
-  public async getData() {
+  public async getData(): Promise<
+    Array<{
+      key: string
+      content: {
+        id?: string
+        messageID?: string
+        parts?: any[]
+        [key: string]: any
+      }
+    }>
+  > {
     const data = (await this.ctx.storage.list()) as Map<string, any>
     return Array.from(data.entries())
       .filter(([key, _]) => key.startsWith("session/"))
@@ -110,14 +167,23 @@ export class SyncServer extends DurableObject<Env> {
 
   async clear() {
     const sessionID = await this.getSessionID()
+    const shortName = sessionID ? SyncServer.shortName(sessionID) : null
+
+    // Delete R2 objects
     const list = await this.env.Bucket.list({
-      prefix: `session/message/${sessionID}/`,
+      prefix: `share/session/message/${sessionID}/`,
       limit: 1000,
     })
     for (const item of list.objects) {
       await this.env.Bucket.delete(item.key)
     }
-    await this.env.Bucket.delete(`session/info/${sessionID}`)
+    await this.env.Bucket.delete(`share/session/info/${sessionID}.json`)
+
+    // Delete metadata from R2
+    if (shortName) {
+      await this.env.Bucket.delete(`share/metadata/${shortName}.json`)
+    }
+
     await this.ctx.storage.deleteAll()
   }
 
@@ -135,6 +201,7 @@ export default new Hono<{ Bindings: Env }>()
     const id = c.env.SYNC_SERVER.idFromName(short)
     const stub = c.env.SYNC_SERVER.get(id)
     const secret = await stub.share(sessionID)
+    console.log("WEB_DOMAIN:", c.env.WEB_DOMAIN)
     return c.json({
       secret,
       url: `https://${c.env.WEB_DOMAIN}/s/${short}`,
@@ -154,7 +221,9 @@ export default new Hono<{ Bindings: Env }>()
     const body = await c.req.json<{ sessionShortName: string; adminSecret: string }>()
     const sessionShortName = body.sessionShortName
     const adminSecret = body.adminSecret
-    if (adminSecret !== Resource.ADMIN_SECRET.value) throw new Error("Invalid admin secret")
+    if (adminSecret !== c.env.ADMIN_SECRET) {
+      return c.text("Error: Invalid admin secret", { status: 403 })
+    }
     const id = c.env.SYNC_SERVER.idFromName(sessionShortName)
     const stub = c.env.SYNC_SERVER.get(id)
     await stub.clear()
@@ -195,11 +264,10 @@ export default new Hono<{ Bindings: Env }>()
     let info
     const messages: Record<string, any> = {}
     data.forEach((d) => {
-      const [root, type, ...splits] = d.key.split("/")
+      const [root, type] = d.key.split("/")
       if (root !== "session") return
       if (type === "info") {
         info = d.content
-        return
       }
       if (type === "message") {
         messages[d.content.id] = {
@@ -268,134 +336,102 @@ export default new Hono<{ Bindings: Env }>()
 
     return c.json({ ok: true })
   })
-  /**
-   * Used by the GitHub action to get GitHub installation access token given the OIDC token
-   */
-  .post("/exchange_github_app_token", async (c) => {
-    const EXPECTED_AUDIENCE = "opencode-github-action"
-    const GITHUB_ISSUER = "https://token.actions.githubusercontent.com"
-    const JWKS_URL = `${GITHUB_ISSUER}/.well-known/jwks`
+  .get("/sessions_list", async (c) => {
+    console.log("sessions_list")
+    const list = await c.env.Bucket.list({
+      prefix: "share/metadata/",
+      limit: 1000,
+    })
 
-    // get Authorization header
-    const token = c.req.header("Authorization")?.replace(/^Bearer /, "")
-    if (!token) return c.json({ error: "Authorization header is required" }, { status: 401 })
+    const sessions = await Promise.all(
+      list.objects.map(async (obj) => {
+        const content = await c.env.Bucket.get(obj.key)
+        if (!content) return null
+        const metadata = await content.json()
+        return metadata
+      }),
+    )
 
-    // verify token
-    const JWKS = createRemoteJWKSet(new URL(JWKS_URL))
-    let owner, repo
-    try {
-      const { payload } = await jwtVerify(token, JWKS, {
-        issuer: GITHUB_ISSUER,
-        audience: EXPECTED_AUDIENCE,
-      })
-      const sub = payload.sub // e.g. 'repo:my-org/my-repo:ref:refs/heads/main'
-      const parts = sub.split(":")[1].split("/")
-      owner = parts[0]
-      repo = parts[1]
-    } catch (err) {
-      console.error("Token verification failed:", err)
-      return c.json({ error: "Invalid or expired token" }, { status: 403 })
+    return c.json({
+      sessions: sessions
+        .filter(Boolean)
+        .sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
+    })
+  })
+  .post("/migrate_metadata", async (c) => {
+    const body = await c.req.json<{ adminSecret: string }>()
+    if (body.adminSecret !== c.env.ADMIN_SECRET) {
+      return c.text("Error: Invalid admin secret", { status: 403 })
     }
 
-    // Create app JWT token
-    const auth = createAppAuth({
-      appId: Resource.GITHUB_APP_ID.value,
-      privateKey: Resource.GITHUB_APP_PRIVATE_KEY.value,
-    })
-    const appAuth = await auth({ type: "app" })
-
-    // Lookup installation
-    const octokit = new Octokit({ auth: appAuth.token })
-    const { data: installation } = await octokit.apps.getRepoInstallation({
-      owner,
-      repo,
+    console.log("migrate_metadata: Starting migration")
+    const infoList = await c.env.Bucket.list({
+      prefix: "share/session/info/",
+      limit: 1000,
     })
 
-    // Get installation token
-    const installationAuth = await auth({
-      type: "installation",
-      installationId: installation.id,
-    })
+    const results: { id: string; status: string }[] = []
+    for (const obj of infoList.objects) {
+      const content = await c.env.Bucket.get(obj.key)
+      if (!content) continue
 
-    return c.json({ token: installationAuth.token })
-  })
-  /**
-   * Used by the GitHub action to get GitHub installation access token given user PAT token (used when testing `opencode github run` locally)
-   */
-  .post("/exchange_github_app_token_with_pat", async (c) => {
-    const body = await c.req.json<{ owner: string; repo: string }>()
-    const owner = body.owner
-    const repo = body.repo
+      const info: any = await content.json()
+      const sessionID = obj.key.replace("share/session/info/", "").replace(".json", "")
+      const shortName = SyncServer.shortName(sessionID)
 
-    try {
-      // get Authorization header
-      const authHeader = c.req.header("Authorization")
-      const token = authHeader?.replace(/^Bearer /, "")
-      if (!token) throw new Error("Authorization header is required")
-
-      // Verify permissions
-      const userClient = new Octokit({ auth: token })
-      const { data: repoData } = await userClient.repos.get({ owner, repo })
-      if (!repoData.permissions.admin && !repoData.permissions.push && !repoData.permissions.maintain)
-        throw new Error("User does not have write permissions")
-
-      // Get installation token
-      const auth = createAppAuth({
-        appId: Resource.GITHUB_APP_ID.value,
-        privateKey: Resource.GITHUB_APP_PRIVATE_KEY.value,
-      })
-      const appAuth = await auth({ type: "app" })
-
-      // Lookup installation
-      const appClient = new Octokit({ auth: appAuth.token })
-      const { data: installation } = await appClient.apps.getRepoInstallation({
-        owner,
-        repo,
-      })
-
-      // Get installation token
-      const installationAuth = await auth({
-        type: "installation",
-        installationId: installation.id,
-      })
-
-      return c.json({ token: installationAuth.token })
-    } catch (e: any) {
-      let error = e
-      if (e instanceof Error) {
-        error = e.message
+      // Check if metadata already exists
+      const existingMetadata = await c.env.Bucket.get(`share/metadata/${shortName}.json`)
+      if (existingMetadata) {
+        results.push({ id: shortName, status: "skipped" })
+        continue
       }
 
-      return c.json({ error }, { status: 401 })
-    }
-  })
-  /**
-   * Used by the opencode CLI to check if the GitHub app is installed
-   */
-  .get("/get_github_app_installation", async (c) => {
-    const owner = c.req.query("owner")
-    const repo = c.req.query("repo")
+      // Count messages and tokens
+      const messagesList = await c.env.Bucket.list({
+        prefix: `share/session/message/${sessionID}/`,
+        limit: 1000,
+      })
 
-    const auth = createAppAuth({
-      appId: Resource.GITHUB_APP_ID.value,
-      privateKey: Resource.GITHUB_APP_PRIVATE_KEY.value,
-    })
-    const appAuth = await auth({ type: "app" })
-
-    // Lookup installation
-    const octokit = new Octokit({ auth: appAuth.token })
-    let installation
-    try {
-      const ret = await octokit.apps.getRepoInstallation({ owner, repo })
-      installation = ret.data
-    } catch (err) {
-      if (err instanceof Error && err.message.includes("Not Found")) {
-        // not installed
-      } else {
-        throw err
+      let inputTokens = 0
+      let outputTokens = 0
+      for (const msgObj of messagesList.objects) {
+        const msgContent = await c.env.Bucket.get(msgObj.key)
+        if (msgContent) {
+          const msg: any = await msgContent.json()
+          if (msg.usage) {
+            inputTokens += msg.usage.inputTokens || 0
+            outputTokens += msg.usage.outputTokens || 0
+          }
+        }
       }
+
+      const metadata = {
+        id: shortName,
+        sessionID,
+        title: info.title || "Untitled Session",
+        directory: info.directory || "",
+        messageCount: messagesList.objects.length,
+        inputTokens,
+        outputTokens,
+        createdAt: obj.uploaded?.toISOString() || new Date().toISOString(),
+        updatedAt: obj.uploaded?.toISOString() || new Date().toISOString(),
+      }
+
+      await c.env.Bucket.put(`share/metadata/${shortName}.json`, JSON.stringify(metadata), {
+        httpMetadata: {
+          contentType: "application/json",
+        },
+      })
+
+      results.push({ id: shortName, status: "migrated" })
     }
 
-    return c.json({ installation })
+    return c.json({
+      message: "Migration complete",
+      total: results.length,
+      migrated: results.filter((r) => r.status === "migrated").length,
+      skipped: results.filter((r) => r.status === "skipped").length,
+      results,
+    })
   })
-  .all("*", (c) => c.text("Not Found"))
+  .all("*", (c) => c.text("Not Found", { status: 404 }))

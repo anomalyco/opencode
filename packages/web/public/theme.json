@@ -37,57 +37,159 @@
       "type": "object",
       "description": "Theme color definitions",
       "properties": {
-        "primary": { "$ref": "#/definitions/colorValue" },
-        "secondary": { "$ref": "#/definitions/colorValue" },
-        "accent": { "$ref": "#/definitions/colorValue" },
-        "error": { "$ref": "#/definitions/colorValue" },
-        "warning": { "$ref": "#/definitions/colorValue" },
-        "success": { "$ref": "#/definitions/colorValue" },
-        "info": { "$ref": "#/definitions/colorValue" },
-        "text": { "$ref": "#/definitions/colorValue" },
-        "textMuted": { "$ref": "#/definitions/colorValue" },
-        "selectedListItemText": { "$ref": "#/definitions/colorValue" },
-        "background": { "$ref": "#/definitions/colorValue" },
-        "backgroundPanel": { "$ref": "#/definitions/colorValue" },
-        "backgroundElement": { "$ref": "#/definitions/colorValue" },
-        "border": { "$ref": "#/definitions/colorValue" },
-        "borderActive": { "$ref": "#/definitions/colorValue" },
-        "borderSubtle": { "$ref": "#/definitions/colorValue" },
-        "diffAdded": { "$ref": "#/definitions/colorValue" },
-        "diffRemoved": { "$ref": "#/definitions/colorValue" },
-        "diffContext": { "$ref": "#/definitions/colorValue" },
-        "diffHunkHeader": { "$ref": "#/definitions/colorValue" },
-        "diffHighlightAdded": { "$ref": "#/definitions/colorValue" },
-        "diffHighlightRemoved": { "$ref": "#/definitions/colorValue" },
-        "diffAddedBg": { "$ref": "#/definitions/colorValue" },
-        "diffRemovedBg": { "$ref": "#/definitions/colorValue" },
-        "diffContextBg": { "$ref": "#/definitions/colorValue" },
-        "diffLineNumber": { "$ref": "#/definitions/colorValue" },
-        "diffAddedLineNumberBg": { "$ref": "#/definitions/colorValue" },
-        "diffRemovedLineNumberBg": { "$ref": "#/definitions/colorValue" },
-        "markdownText": { "$ref": "#/definitions/colorValue" },
-        "markdownHeading": { "$ref": "#/definitions/colorValue" },
-        "markdownLink": { "$ref": "#/definitions/colorValue" },
-        "markdownLinkText": { "$ref": "#/definitions/colorValue" },
-        "markdownCode": { "$ref": "#/definitions/colorValue" },
-        "markdownBlockQuote": { "$ref": "#/definitions/colorValue" },
-        "markdownEmph": { "$ref": "#/definitions/colorValue" },
-        "markdownStrong": { "$ref": "#/definitions/colorValue" },
-        "markdownHorizontalRule": { "$ref": "#/definitions/colorValue" },
-        "markdownListItem": { "$ref": "#/definitions/colorValue" },
-        "markdownListEnumeration": { "$ref": "#/definitions/colorValue" },
-        "markdownImage": { "$ref": "#/definitions/colorValue" },
-        "markdownImageText": { "$ref": "#/definitions/colorValue" },
-        "markdownCodeBlock": { "$ref": "#/definitions/colorValue" },
-        "syntaxComment": { "$ref": "#/definitions/colorValue" },
-        "syntaxKeyword": { "$ref": "#/definitions/colorValue" },
-        "syntaxFunction": { "$ref": "#/definitions/colorValue" },
-        "syntaxVariable": { "$ref": "#/definitions/colorValue" },
-        "syntaxString": { "$ref": "#/definitions/colorValue" },
-        "syntaxNumber": { "$ref": "#/definitions/colorValue" },
-        "syntaxType": { "$ref": "#/definitions/colorValue" },
-        "syntaxOperator": { "$ref": "#/definitions/colorValue" },
-        "syntaxPunctuation": { "$ref": "#/definitions/colorValue" }
+        "primary": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "secondary": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "accent": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "error": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "warning": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "success": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "info": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "text": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "textMuted": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "selectedListItemText": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "background": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "backgroundPanel": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "backgroundElement": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "border": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "borderActive": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "borderSubtle": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "diffAdded": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "diffRemoved": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "diffContext": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "diffHunkHeader": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "diffHighlightAdded": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "diffHighlightRemoved": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "diffAddedBg": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "diffRemovedBg": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "diffContextBg": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "diffLineNumber": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "diffAddedLineNumberBg": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "diffRemovedLineNumberBg": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "markdownText": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "markdownHeading": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "markdownLink": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "markdownLinkText": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "markdownCode": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "markdownBlockQuote": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "markdownEmph": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "markdownStrong": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "markdownHorizontalRule": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "markdownListItem": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "markdownListEnumeration": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "markdownImage": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "markdownImageText": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "markdownCodeBlock": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "syntaxComment": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "syntaxKeyword": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "syntaxFunction": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "syntaxVariable": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "syntaxString": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "syntaxNumber": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "syntaxType": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "syntaxOperator": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "syntaxPunctuation": {
+          "$ref": "#/definitions/colorValue"
+        }
       },
       "required": ["primary", "secondary", "accent", "text", "textMuted", "background"],
       "additionalProperties": false

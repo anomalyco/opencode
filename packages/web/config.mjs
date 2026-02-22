@@ -1,12 +1,12 @@
-const stage = process.env.SST_STAGE || "dev"
+const url = process.env.SITE_URL || "https://opencode.j9xym.com"
 
 export default {
-  url: stage === "production" ? "https://opencode.ai" : `https://${stage}.opencode.ai`,
-  console: stage === "production" ? "https://opencode.ai/auth" : `https://${stage}.opencode.ai/auth`,
-  email: "contact@anoma.ly",
-  socialCard: "https://social-cards.sst.dev",
-  github: "https://github.com/anomalyco/opencode",
-  discord: "https://opencode.ai/discord",
+  url,
+  console: `${url}/auth`,
+  email: process.env.SITE_EMAIL || "electrictaoist@gmail.com",
+  socialCard: process.env.SOCIAL_CARD_URL || "https://social-cards.j9xym.com",
+  github: process.env.SITE_GITHUB || "https://github.com/manno23/opencode",
+  // discord: "https://opencode.ai/discord",
   headerLinks: [
     { name: "app.header.home", url: "/" },
     { name: "app.header.docs", url: "/docs/" },

@@ -2,5 +2,5 @@ User-agent: *
 Allow: /
 
 # Disallow shared content pages
-Disallow: /s/
-Disallow: /share/
+# Disallow: /s/
+# Disallow: /share/

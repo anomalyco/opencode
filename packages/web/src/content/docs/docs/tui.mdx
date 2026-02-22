@@ -1,0 +1,390 @@
+---
+title: TUI
+description: Using the OpenCode terminal user interface.
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
+OpenCode provides an interactive terminal interface or TUI for working on your projects with an LLM.
+
+Running OpenCode starts the TUI for the current directory.
+
+```bash
+opencode
+```
+
+Or you can start it for a specific working directory.
+
+```bash
+opencode /path/to/project
+```
+
+Once you're in the TUI, you can prompt it with a message.
+
+```text
+Give me a quick summary of the codebase.
+```
+
+---
+
+## File references
+
+You can reference files in your messages using `@`. This does a fuzzy file search in the current working directory.
+
+:::tip
+You can also use `@` to reference files in your messages.
+:::
+
+```text "@packages/functions/src/api/index.ts"
+How is auth handled in @packages/functions/src/api/index.ts?
+```
+
+The content of the file is added to the conversation automatically.
+
+---
+
+## Bash commands
+
+Start a message with `!` to run a shell command.
+
+```bash frame="none"
+!ls -la
+```
+
+The output of the command is added to the conversation as a tool result.
+
+---
+
+## Commands
+
+When using the OpenCode TUI, you can type `/` followed by a command name to quickly execute actions. For example:
+
+```bash frame="none"
+/help
+```
+
+Most commands also have keybind using `ctrl+x` as the leader key, where `ctrl+x` is the default leader key. [Learn more](/docs/keybinds).
+
+Here are all available slash commands:
+
+---
+
+### connect
+
+Add a provider to OpenCode. Allows you to select from available providers and add their API keys.
+
+```bash frame="none"
+/connect
+```
+
+---
+
+### compact
+
+Compact the current session. _Alias_: `/summarize`
+
+```bash frame="none"
+/compact
+```
+
+**Keybind:** `ctrl+x c`
+
+---
+
+### details
+
+Toggle tool execution details.
+
+```bash frame="none"
+/details
+```
+
+**Keybind:** `ctrl+x d`
+
+---
+
+### editor
+
+Open external editor for composing messages. Uses the editor set in your `EDITOR` environment variable. [Learn more](#editor-setup).
+
+```bash frame="none"
+/editor
+```
+
+**Keybind:** `ctrl+x e`
+
+---
+
+### exit
+
+Exit OpenCode. _Aliases_: `/quit`, `/q`
+
+```bash frame="none"
+/exit
+```
+
+**Keybind:** `ctrl+x q`
+
+---
+
+### export
+
+Export current conversation to Markdown and open in your default editor. Uses the editor set in your `EDITOR` environment variable. [Learn more](#editor-setup).
+
+```bash frame="none"
+/export
+```
+
+**Keybind:** `ctrl+x x`
+
+---
+
+### help
+
+Show the help dialog.
+
+```bash frame="none"
+/help
+```
+
+**Keybind:** `ctrl+x h`
+
+---
+
+### init
+
+Create or update `AGENTS.md` file. [Learn more](/docs/rules).
+
+```bash frame="none"
+/init
+```
+
+**Keybind:** `ctrl+x i`
+
+---
+
+### models
+
+List available models.
+
+```bash frame="none"
+/models
+```
+
+**Keybind:** `ctrl+x m`
+
+---
+
+### new
+
+Start a new session. _Alias_: `/clear`
+
+```bash frame="none"
+/new
+```
+
+**Keybind:** `ctrl+x n`
+
+---
+
+### redo
+
+Redo a previously undone message. Only available after using `/undo`.
+
+:::tip
+Any file changes will also be restored.
+:::
+
+Internally, this uses Git to manage the file changes. So your project **needs to
+be a Git repository**.
+
+```bash frame="none"
+/redo
+```
+
+**Keybind:** `ctrl+x r`
+
+---
+
+### sessions
+
+List and switch between sessions. _Aliases_: `/resume`, `/continue`
+
+```bash frame="none"
+/sessions
+```
+
+**Keybind:** `ctrl+x l`
+
+---
+
+### share
+
+Share current session. [Learn more](/docs/share).
+
+```bash frame="none"
+/share
+```
+
+**Keybind:** `ctrl+x s`
+
+---
+
+### themes
+
+List available themes.
+
+```bash frame="none"
+/theme
+```
+
+**Keybind:** `ctrl+x t`
+
+---
+
+### thinking
+
+Toggle the visibility of thinking/reasoning blocks in the conversation. When enabled, you can see the model's reasoning process for models that support extended thinking.
+
+:::note
+This command only controls whether thinking blocks are **displayed** - it does not enable or disable the model's reasoning capabilities. To toggle actual reasoning capabilities, use `ctrl+t` to cycle through model variants.
+:::
+
+```bash frame="none"
+/thinking
+```
+
+---
+
+### undo
+
+Undo last message in the conversation. Removes the most recent user message, all subsequent responses, and any file changes.
+
+:::tip
+Any file changes made will also be reverted.
+:::
+
+Internally, this uses Git to manage the file changes. So your project **needs to
+be a Git repository**.
+
+```bash frame="none"
+/undo
+```
+
+**Keybind:** `ctrl+x u`
+
+---
+
+### unshare
+
+Unshare current session. [Learn more](/docs/share#un-sharing).
+
+```bash frame="none"
+/unshare
+```
+
+---
+
+## Editor setup
+
+Both the `/editor` and `/export` commands use the editor specified in your `EDITOR` environment variable.
+
+<Tabs>
+  <TabItem label="Linux/macOS">
+    ```bash
+    # Example for nano or vim
+    export EDITOR=nano
+    export EDITOR=vim
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    export EDITOR="code --wait"
+    ```
+
+    To make it permanent, add this to your shell profile;
+    `~/.bashrc`, `~/.zshrc`, etc.
+
+  </TabItem>
+
+  <TabItem label="Windows (CMD)">
+    ```bash
+    set EDITOR=notepad
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    set EDITOR=code --wait
+    ```
+
+    To make it permanent, use **System Properties** > **Environment
+    Variables**.
+
+  </TabItem>
+
+  <TabItem label="Windows (PowerShell)">
+    ```powershell
+    $env:EDITOR = "notepad"
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    $env:EDITOR = "code --wait"
+    ```
+
+    To make it permanent, add this to your PowerShell profile.
+
+  </TabItem>
+</Tabs>
+
+Popular editor options include:
+
+- `code` - Visual Studio Code
+- `cursor` - Cursor
+- `windsurf` - Windsurf
+- `nvim` - Neovim editor
+- `vim` - Vim editor
+- `nano` - Nano editor
+- `notepad` - Windows Notepad
+- `subl` - Sublime Text
+
+:::note
+Some editors like VS Code need to be started with the `--wait` flag.
+:::
+
+Some editors need command-line arguments to run in blocking mode. The `--wait` flag makes the editor process block until closed.
+
+---
+
+## Configure
+
+You can customize TUI behavior through your OpenCode config file.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tui": {
+    "scroll_speed": 3,
+    "scroll_acceleration": {
+      "enabled": true
+    }
+  }
+}
+```
+
+### Options
+
+- `scroll_acceleration` - Enable macOS-style scroll acceleration for smooth, natural scrolling. When enabled, scroll speed increases with rapid scrolling gestures and stays precise for slower movements. **This setting takes precedence over `scroll_speed` and overrides it when enabled.**
+- `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (minimum: `1`). Defaults to `3`. **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**
+
+---
+
+## Customization
+
+You can customize various aspects of the TUI view using the command palette (`ctrl+x h` or `/help`). These settings persist across restarts.
+
+---
+
+#### Username display
+
+Toggle whether your username appears in chat messages. Access this through:
+
+- Command palette: Search for "username" or "hide username"
+- The setting persists automatically and will be remembered across TUI sessions

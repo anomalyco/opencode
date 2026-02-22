@@ -8,6 +8,7 @@ import config from "./config.mjs"
 import { rehypeHeadingIds } from "@astrojs/markdown-remark"
 import rehypeAutolinkHeadings from "rehype-autolink-headings"
 import { spawnSync } from "child_process"
+import fs from "node:fs"
 
 // https://astro.build/config
 export default defineConfig({
@@ -26,7 +27,17 @@ export default defineConfig({
   markdown: {
     rehypePlugins: [rehypeHeadingIds, [rehypeAutolinkHeadings, { behavior: "wrap" }]],
   },
-  build: {},
+  vite: {
+    build: {
+      rollupOptions: {
+        output: {
+          entryFileNames: "js/[name]-[hash].js",
+          chunkFileNames: "js/chunks/[name]-[hash].js",
+          assetFileNames: "static/[name]-[hash][extname]",
+        },
+      },
+    },
+  },
   integrations: [
     configSchema(),
     solidJs(),
@@ -153,15 +164,6 @@ export default defineConfig({
           },
         },
       ],
-      lastUpdated: true,
-      expressiveCode: { themes: ["github-light", "github-dark"] },
-      social: [
-        { icon: "github", label: "GitHub", href: config.github },
-        { icon: "discord", label: "Discord", href: config.discord },
-      ],
-      editLink: {
-        baseUrl: `${config.github}/edit/dev/packages/web/`,
-      },
       markdown: {
         headingLinks: false,
       },
@@ -175,33 +177,9 @@ export default defineConfig({
         "",
         "config",
         "providers",
-        "network",
         "enterprise",
         "troubleshooting",
-        {
-          label: "Windows",
-          translations: {
-            en: "Windows",
-            ar: "Windows",
-            "bs-BA": "Windows",
-            "da-DK": "Windows",
-            "de-DE": "Windows",
-            "es-ES": "Windows",
-            "fr-FR": "Windows",
-            "it-IT": "Windows",
-            "ja-JP": "Windows",
-            "ko-KR": "Windows",
-            "nb-NO": "Windows",
-            "pl-PL": "Windows",
-            "pt-BR": "Windows",
-            "ru-RU": "Windows",
-            "th-TH": "Windows",
-            "tr-TR": "Windows",
-            "zh-CN": "Windows",
-            "zh-TW": "Windows",
-          },
-          link: "windows-wsl",
-        },
+        "windows-wsl",
         {
           label: "Usage",
           translations: {
@@ -250,7 +228,6 @@ export default defineConfig({
             "zh-TW": "設定",
           },
           items: [
-            "tools",
             "rules",
             "agents",
             "models",
@@ -261,8 +238,6 @@ export default defineConfig({
             "permissions",
             "lsp",
             "mcp-servers",
-            "acp",
-            "skills",
             "custom-tools",
           ],
         },
@@ -304,8 +279,12 @@ export default defineConfig({
           headerLinks: config.headerLinks,
         }),
       ],
+      favicon: "/favicon-v3.svg",
     }),
   ],
+  // redirects: {
+  //   "/discord": "https://discord.gg/opencode",
+  // },
 })
 
 function configSchema() {
@@ -315,6 +294,7 @@ function configSchema() {
       "astro:build:done": async () => {
         console.log("generating config schema")
         spawnSync("../opencode/script/schema.ts", ["./dist/config.json"])
+        fs.copyFileSync("./dist/docs/.assetsignore", "./dist/.assetsignore")
       },
     },
   }

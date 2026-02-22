@@ -1,21 +1,40 @@
-# build output
-dist/
-# generated types
-.astro/
-
-# dependencies
+# Dependencies
 node_modules/
+*.pnp
+.pnp.js
+bun.lockb
 
-# logs
+# Vite
+dist/
+build/
+
+# Wrangler
+.wrangler/
+
+.dev.vars
+.dev.vars.*
+worker-configuration.d.ts
+
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
+bun-debug.log
 
-
-# environment variables
-.env
-.env.production
-
-# macOS-specific files
-.DS_Store
+# OS
+Thumbs.db

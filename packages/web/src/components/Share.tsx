@@ -10,15 +10,8 @@ import type { Message } from "opencode/session/message"
 import type { Session } from "opencode/session/index"
 import { Part, ProviderIcon } from "./share/part"
 
-type MessageWithParts = MessageV2.Info & { parts: MessageV2.Part[] }
-
-type Status = "disconnected" | "connecting" | "connected" | "error" | "reconnecting"
-
-function scrollToAnchor(id: string) {
-  const el = document.getElementById(id)
-  if (!el) return
-
-  el.scrollIntoView({ behavior: "smooth" })
+interface ShareProps {
+  id: string
 }
 
 function getStatusText(status: [Status, string?], messages: Record<string, string>): string {
@@ -36,7 +29,6 @@ function getStatusText(status: [Status, string?], messages: Record<string, strin
     default:
       return messages.status_unknown
   }
-}
 
 export default function Share(props: {
   id: string
@@ -50,8 +42,8 @@ export default function Share(props: {
   let scrollSentinel: HTMLElement | undefined
   let scrollObserver: IntersectionObserver | undefined
 
-  const params = new URLSearchParams(window.location.search)
-  const debug = params.get("debug") === "true"
+      console.log(`[Share] Connecting WebSocket to ${url}`)
+      ws = new WebSocket(url)
 
   const [showScrollButton, setShowScrollButton] = createSignal(false)
   const [isButtonHovered, setIsButtonHovered] = createSignal(false)
@@ -118,31 +110,26 @@ export default function Share(props: {
       // Handle incoming messages
       socket.onmessage = (event) => {
         try {
-          const d = JSON.parse(event.data)
-          const [root, type, ...splits] = d.key.split("/")
-          if (root !== "session") return
-          if (type === "info") {
-            setStore("info", reconcile(d.content))
-            return
-          }
-          if (type === "message") {
-            const [, messageID] = splits
-            if ("metadata" in d.content) {
-              d.content = fromV1(d.content)
+          const message = JSON.parse(event.data)
+          console.log(`[Share] WebSocket message:`, message)
+
+          if (message.type === "connected") {
+            console.log(`[Share] Connected to share room`)
+          } else if (message.type === "update") {
+            // Update session/messages with new data
+            if (message.data.session) {
+              setSession(message.data.session)
             }
-            d.content.parts = d.content.parts ?? store.messages[messageID]?.parts ?? []
-            setStore("messages", messageID, reconcile(d.content))
+            if (message.data.messages) {
+              setMessages(message.data.messages)
+            }
+          } else if (message.type === "message") {
+            // Handle new messages
+            const msg = message.data
+            setMessages((prev) => [...prev, msg])
           }
-          if (type === "part") {
-            setStore("messages", d.content.messageID, "parts", (arr) => {
-              const index = arr.findIndex((x) => x.id === d.content.id)
-              if (index === -1) arr.push(d.content)
-              if (index > -1) arr[index] = d.content
-              return [...arr]
-            })
-          }
-        } catch (error) {
-          console.error("Error parsing WebSocket message:", error)
+        } catch (err) {
+          console.error(`[Share] Error processing message:`, err)
         }
       }
 
@@ -206,93 +193,19 @@ export default function Share(props: {
     }
   }
 
-  onMount(() => {
-    lastScrollY = window.scrollY // Initialize scroll position
+  onMount(async () => {
+    // Fetch initial data first
+    setConnectionStatus("connecting")
+    await fetchInitialData()
 
-    // Create sentinel element
-    const sentinel = document.createElement("div")
-    sentinel.style.height = "1px"
-    sentinel.style.position = "absolute"
-    sentinel.style.bottom = "100px"
-    sentinel.style.width = "100%"
-    sentinel.style.pointerEvents = "none"
-    document.body.appendChild(sentinel)
-
-    // Create intersection observer
-    const observer = new IntersectionObserver((entries) => {
-      setIsNearBottom(entries[0].isIntersecting)
-    })
-    observer.observe(sentinel)
-
-    // Store references for cleanup
-    scrollSentinel = sentinel
-    scrollObserver = observer
-
-    checkScrollNeed()
-    window.addEventListener("scroll", checkScrollNeed)
-    window.addEventListener("resize", checkScrollNeed)
+    // Then connect WebSocket for real-time updates
+    connectWebSocket()
   })
 
   onCleanup(() => {
-    window.removeEventListener("scroll", checkScrollNeed)
-    window.removeEventListener("resize", checkScrollNeed)
-
-    // Clean up observer and sentinel
-    if (scrollObserver) {
-      scrollObserver.disconnect()
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.close()
     }
-    if (scrollSentinel) {
-      document.body.removeChild(scrollSentinel)
-    }
-
-    if (scrollTimeout) {
-      clearTimeout(scrollTimeout)
-    }
-  })
-
-  const data = createMemo(() => {
-    const result = {
-      rootDir: undefined as string | undefined,
-      created: undefined as number | undefined,
-      completed: undefined as number | undefined,
-      messages: [] as MessageWithParts[],
-      models: {} as Record<string, string[]>,
-      cost: 0,
-      tokens: {
-        input: 0,
-        output: 0,
-        reasoning: 0,
-      },
-    }
-
-    if (!store.info) return result
-
-    result.created = store.info.time.created
-
-    const msgs = messages()
-    for (let i = 0; i < msgs.length; i++) {
-      const msg = msgs[i]
-
-      result.messages.push(msg)
-
-      if (msg.role === "assistant") {
-        result.cost += msg.cost
-        result.tokens.input += msg.tokens.input
-        result.tokens.output += msg.tokens.output
-        result.tokens.reasoning += msg.tokens.reasoning
-
-        result.models[`${msg.providerID} ${msg.modelID}`] = [msg.providerID, msg.modelID]
-
-        if (msg.path.root) {
-          result.rootDir = msg.path.root
-        }
-
-        if (msg.time.completed) {
-          result.completed = msg.time.completed
-        }
-      }
-    }
-    return result
   })
 
   return (

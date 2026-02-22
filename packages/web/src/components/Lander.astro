@@ -3,14 +3,14 @@ import { Image } from 'astro:assets';
 import { getRelativeLocaleUrl } from 'astro:i18n';
 import config from "virtual:starlight/user-config";
 
-import CopyIcon from "../assets/lander/copy.svg";
-import CheckIcon from "../assets/lander/check.svg";
-import TuiScreenshot from "../assets/lander/screenshot-splash.png";
-import VscodeScreenshot from "../assets/lander/screenshot-vscode.png";
-import GithubScreenshot from "../assets/lander/screenshot-github.png";
+import CopyIcon from "../assets/lander/copy.svg"
+import CheckIcon from "../assets/lander/check.svg"
+import TuiScreenshot from "../assets/lander/screenshot-splash.png"
+import VscodeScreenshot from "../assets/lander/screenshot-vscode.png"
+import GithubScreenshot from "../assets/lander/screenshot-github.png"
 
-const { data } = Astro.locals.starlightRoute.entry;
-const { title = data.title, tagline, image, actions = [] } = data.hero || {};
+const { data } = Astro.locals.starlight.data
+const { image } = data.hero || {}
 
 const imageAttrs = {
     loading: 'eager' as const,
@@ -33,17 +33,24 @@ const protocol = "https://"
 const url = "opencode.ai/install"
 const bash = "| bash"
 
-let darkImage: ImageMetadata | undefined;
-let lightImage: ImageMetadata | undefined;
-let rawHtml: string | undefined;
+let darkImage:
+  | string
+  | ImageMetadata
+  | Promise<{ default: ImageMetadata }>
+  | undefined
+let lightImage:
+  | string
+  | ImageMetadata
+  | Promise<{ default: ImageMetadata }>
+  | undefined
+
 if (image) {
-    if ('file' in image) {
-        darkImage = image.file;
-    } else if ('dark' in image) {
-        darkImage = image.dark;
-        lightImage = image.light;
-    } else {
-        rawHtml = image.html;
+  if ("file" in image) {
+    darkImage = image.file
+  } else if ("dark" in image) {
+    darkImage = image.dark
+    lightImage = image.light
+  } else {
   }
 }
 ---
@@ -69,7 +76,7 @@ if (image) {
       <div class="col2">
       <button class="command" data-command={`${command} ${protocol}${url} ${bash}`}>
           <code>
-            <span>{command}&nbsp;</span><span class="protocol">{protocol}</span><span class="highlight">{url}</span>&nbsp;{bash}
+          <span>{command}</span><span class="protocol">{protocol}</span><span class="highlight">{url}</span>{bash}
           </code>
           <span class="copy">
             <CopyIcon />
@@ -185,10 +192,11 @@ if (image) {
 
     <section class="footer">
       <div class="col1">
-        <a href={github.href} target="_blank" rel="noopener noreferrer">GitHub</a>
+        {github && <a href={github.href} target="_blank" rel="noopener noreferrer">GitHub</a>}
       </div>
       <div class="col2">
-        <a href={discord.href} target="_blank" rel="noopener noreferrer">Discord</a>
+        {/* Discord link disabled - no community server configured */}
+        {discord && <a href={discord.href} target="_blank" rel="noopener noreferrer">Discord</a>}
       </div>
       <div class="col3">
       <span>&copy;2025 <a href="https://anoma.ly" target="_blank" rel="noopener noreferrer">Anomaly Innovations</a></span>

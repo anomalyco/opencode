@@ -1,0 +1,63 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "opencode-web",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-01-14",
+  "observability": {
+    "logs": {
+      "enabled": true,
+    },
+  },
+  "assets": {
+    "directory": "./dist/assets",
+    "html_handling": "none",
+    "not_found_handling": "single-page-application",
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SESSIONS_REF",
+        "class_name": "SessionRef",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_classes": ["SessionRef"],
+    },
+  ],
+  "routes": [
+    {
+      "pattern": "opencode.j9xym.com/*",
+      "zone_name": "j9xym.com"
+    }
+  ],
+  "services": [
+    {
+      "binding": "SESSIONS_API",
+      "service": "opencode-sessions-api",
+    },
+  ],
+  "env": {
+    "production": {
+      "services": [
+        {
+          "binding": "SESSIONS_API",
+          "service": "opencode-sessions-api",
+          "entrypoint": "opencode-sessions-api.production",
+        },
+      ],
+    },
+    "dev": {
+      "vars": {
+        "ENVIRONMENT": "production",
+        "CORS_ORIGINS": "https://opencode.j9xym.com",
+      },
+    },
+  },
+  "vars": {
+    "ENVIRONMENT": "production",
+    "CORS_ORIGINS": "https://opencode.j9xym.com",
+  },
+}

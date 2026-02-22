@@ -1,9 +1,21 @@
 {
-  "extends": "astro/tsconfigs/strict",
-  "include": [".astro/types.d.ts", "**/*"],
-  "exclude": ["dist"],
   "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "node",
     "jsx": "preserve",
-    "jsxImportSource": "solid-js"
-  }
+    "tsx": "preserve",
+    "jsxImportSource": "solid-js",
+    "tsxImportSource": "solid-js",
+    "esModuleInterop": true,
+    "types": ["vite/client", "node"],
+    "baseUrl": ".",
+    "noEmit": true,
+    "isolatedModules": true,
+    "paths": {
+      "@/*": ["./pages/*"],
+      "@@/*": ["./assets/*"]
+    }
+  },
+  "include": ["vite.config.ts"]
 }

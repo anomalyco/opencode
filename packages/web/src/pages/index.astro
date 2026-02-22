@@ -1,0 +1,76 @@
+---
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro"
+import SessionsList from "../components/SessionsList"
+import  Part from "@cloudflare-ai/sdk/v2/types"
+import config from "../../config.mjs"
+
+type Runtime = {
+  env?: {
+    SESSIONS_API?: {
+      fetch: (request: Request) => Promise<Response>
+    }
+  }
+}
+
+type Locals = {
+  runtime?: Runtime
+}
+
+
+const locals = Astro.locals as Locals
+const sessionsApi = locals.runtime?.env?.SESSIONS_API
+
+// let sessions: AgentSession[] = [
+//   // Placeholder session for initial render
+//   // { id: "loading", title: "Loading sessions...", time: { created: Date.now() } }
+// ] 
+//
+if (!sessionsApi) {
+  console.error("SESSIONS_API service binding not configured")
+}
+
+const res = await sessionsApi.fetch(
+  new Request(`${config.url}/api/sessions`, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" }
+  })
+)
+
+const sessions = await (async () => {
+  if (res.ok) {
+      return await res.json() as { sessions: AgentSession[] } || [] 
+    } else {
+      throw new Error(`HTTP ${res.status} ${res.statusText}`)
+    }
+  })
+() .catch((error) => {
+  console.error("Error fetching sessions:", error)
+  return [] as AgentSession[]
+})
+
+---
+<StarlightPage
+  hasSidebar={false}
+  frontmatter={{
+    title: "Shared Sessions",
+    pagefind: false,
+    template: "splash",
+    tableOfContents: false,
+    head: [
+      {
+        tag: "meta",
+        attrs: {
+          name: "description",
+          content: "opencode - View all shared sessions",
+        },
+      },
+    ],
+  }} >
+  <SessionsList sessions={sessions} client:only="solid" />
+</StarlightPage>
+
+<style is:global>
+body > .page > .main-frame .main-pane > main > .content-panel:first-of-type { display: none; }
+body > .page > .main-frame .main-pane > main { padding: 0; }
+body > .page > .main-frame .main-pane > main > .content-panel + .content-panel { border-top: none !important; padding: 0; }
+</style>

@@ -1,0 +1,60 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "opencode-api",
+  "main": "src/api.ts",
+  "compatibility_date": "2024-04-03",
+  "compatibility_flags": ["nodejs_compat"],
+  "dev": {
+    "port": 8787,
+    "ip": "127.0.0.1",
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_classes": ["SyncServer"],
+    },
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SYNC_SERVER",
+        "class_name": "SyncServer",
+      },
+    ],
+  },
+  "r2_buckets": [
+    {
+      "binding": "Bucket",
+      "bucket_name": "opencode-storage",
+    },
+  ],
+  "vars": {
+    "VITE_API_URL": "api.opencode.j9xym.com",
+    "WEB_DOMAIN": "opencode.j9xym.com",
+    "ADMIN_SECRET": "admin-secret",
+  },
+  "observability": {
+    "logs": {
+      "enabled": false,
+    },
+  },
+  "env": {
+    "dev": {
+      "vars": {
+        "VITE_API_URL": "localhost:8787",
+        "WEB_DOMAIN": "localhost:4321",
+      },
+    },
+  },
+  "routes": [
+    {
+      "pattern": "api.opencode.j9xym.com/*",
+      "zone_name": "j9xym.com",
+    },
+    {
+      "pattern": "api.opencode.j9xym.com",
+      "zone_name": "j9xym.com",
+      "custom_domain": true,
+    },
+  ],
+}

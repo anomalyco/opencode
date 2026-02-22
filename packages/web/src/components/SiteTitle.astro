@@ -1,7 +1,8 @@
 ---
-import { logos } from 'virtual:starlight/user-images';
-import config from 'virtual:starlight/user-config';
-const { siteTitle, siteTitleHref } = Astro.locals.starlightRoute;
+// @ts-nocheck
+import { logos } from "virtual:starlight/user-images"
+import config from "virtual:starlight/user-config"
+const { siteTitle, siteTitleHref } = Astro.locals.starlightRoute
 ---
 
 <a href={siteTitleHref} class="site-title sl-flex">
