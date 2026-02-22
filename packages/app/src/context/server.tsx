@@ -24,9 +24,13 @@ export function serverDisplayName(conn?: ServerConnection.Any) {
 function projectsKey(key: ServerConnection.Key) {
   if (!key) return ""
   if (key === "sidecar") return "local"
-  const host = key.replace(/^https?:\/\//, "").split(":")[0]
-  if (host === "localhost" || host === "127.0.0.1") return "local"
+  if (isLocalHost(key)) return "local"
   return key
+}
+
+function isLocalHost(url: string) {
+  const host = url.replace(/^https?:\/\//, "").split(":")[0]
+  if (host === "localhost" || host === "127.0.0.1") return "local"
 }
 
 export namespace ServerConnection {
@@ -102,15 +106,19 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       }),
     )
 
-    const allServers = createMemo(
-      (): Array<ServerConnection.Any> => [
+    const allServers = createMemo((): Array<ServerConnection.Any> => {
+      const servers = [
         ...(props.servers ?? []),
         ...store.list.map((value) => ({
           type: "http" as const,
           http: typeof value === "string" ? { url: value } : value,
         })),
-      ],
-    )
+      ]
+
+      const deduped = new Map(servers.map((conn) => [ServerConnection.key(conn), conn]))
+
+      return [...deduped.values()]
+    })
 
     const [state, setState] = createStore({
       active: props.defaultServer,
@@ -193,7 +201,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     )
     const isLocal = createMemo(() => {
       const c = current()
-      return c?.type === "sidecar" && c.variant === "base"
+      return (c?.type === "sidecar" && c.variant === "base") || (c?.type === "http" && isLocalHost(c.http.url))
     })
 
     return {

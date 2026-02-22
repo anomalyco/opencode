@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import path from "path"
 import { ReadTool } from "../../src/tool/read"
 import { Instance } from "../../src/project/instance"
+import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 import { PermissionNext } from "../../src/permission/next"
 import { Agent } from "../../src/agent/agent"
@@ -199,10 +200,10 @@ describe("tool.read truncation", () => {
   test("truncates large file by bytes and sets truncated metadata", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
-        const base = await Bun.file(path.join(FIXTURES_DIR, "models-api.json")).text()
+        const base = await Filesystem.readText(path.join(FIXTURES_DIR, "models-api.json"))
         const target = 60 * 1024
         const content = base.length >= target ? base : base.repeat(Math.ceil(target / base.length))
-        await Bun.write(path.join(dir, "large.json"), content)
+        await Filesystem.write(path.join(dir, "large.json"), content)
       },
     })
     await Instance.provide({

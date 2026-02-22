@@ -41,6 +41,8 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    width: 100%;
+    min-width: 0;
     color: var(--text-weak);
     font-family: var(--font-family-sans);
     font-size: var(--font-size-base);
@@ -51,6 +53,16 @@
     [data-component="spinner"] {
       width: 16px;
       height: 16px;
+    }
+
+    [data-slot="session-turn-thinking-heading"] {
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--text-weaker);
+      font-weight: var(--font-weight-regular);
     }
   }
 
@@ -79,6 +91,17 @@
   [data-slot="session-turn-diffs"] {
     width: 100%;
     min-width: 0;
+  }
+
+  [data-slot="session-turn-diffs"]
+    > [data-component="collapsible"]
+    > [data-slot="collapsible-trigger"][aria-expanded="true"] {
+    position: sticky;
+    top: var(--sticky-accordion-top, 0px);
+    z-index: 20;
+    height: 40px;
+    padding-bottom: 8px;
+    background-color: var(--background-stronger);
   }
 
   [data-component="session-turn-diffs-trigger"] {
@@ -118,16 +141,20 @@
     gap: 8px;
     flex-shrink: 0;
 
+    [data-slot="collapsible-arrow"] {
+      margin-left: -6px;
+      transform: translateY(2px);
+    }
+
     [data-component="diff-changes"][data-variant="bars"] {
       transform: translateY(1px);
     }
   }
 
   [data-component="session-turn-diffs-content"] {
-    padding-top: 8px;
+    padding-top: 0px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
   }
 
   [data-slot="session-turn-diff-trigger"] {
@@ -140,22 +167,36 @@
   }
 
   [data-slot="session-turn-diff-path"] {
-    display: inline-flex;
+    display: flex;
     min-width: 0;
     align-items: baseline;
     overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
+
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
     line-height: var(--line-height-large);
   }
 
   [data-slot="session-turn-diff-directory"] {
+    flex: 1 1 auto;
     color: var(--text-weak);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    direction: rtl;
+    unicode-bidi: plaintext;
+    text-align: left;
   }
 
   [data-slot="session-turn-diff-filename"] {
+    flex-shrink: 0;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: var(--text-strong);
     font-weight: var(--font-weight-medium);
   }
@@ -182,7 +223,6 @@
     background-color: var(--surface-inset-base);
     width: 100%;
     min-width: 0;
-    max-height: 420px;
     overflow-y: auto;
     overflow-x: hidden;
     scrollbar-width: none;

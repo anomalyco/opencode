@@ -69,8 +69,8 @@ export const dict = {
   "command.agent.cycle.reverse.description": "Skift til forrige agent",
   "command.model.variant.cycle": "Skift tænkeindsats",
   "command.model.variant.cycle.description": "Skift til næste indsatsniveau",
-  "command.prompt.mode.shell": "Skift til shell-tilstand",
-  "command.prompt.mode.normal": "Skift til prompt-tilstand",
+  "command.prompt.mode.shell": "Shell",
+  "command.prompt.mode.normal": "Prompt",
   "command.permissions.autoaccept.enable": "Accepter ændringer automatisk",
   "command.permissions.autoaccept.disable": "Stop automatisk accept af ændringer",
   "command.workspace.toggle": "Skift arbejdsområder",
@@ -594,6 +594,7 @@ export const dict = {
   "settings.general.section.notifications": "Systemmeddelelser",
   "settings.general.section.updates": "Opdateringer",
   "settings.general.section.sounds": "Lydeffekter",
+  "settings.general.section.feed": "Feed",
   "settings.general.section.display": "Skærm",
 
   "settings.general.row.language.title": "Sprog",
@@ -605,6 +606,11 @@ export const dict = {
   "settings.general.row.font.title": "Skrifttype",
   "settings.general.row.font.description": "Tilpas mono-skrifttypen brugt i kodeblokke",
 
+  "settings.general.row.shellToolPartsExpanded.title": "Udvid shell-værktøjsdele",
+  "settings.general.row.shellToolPartsExpanded.description": "Vis shell-værktøjsdele udvidet som standard i tidslinjen",
+  "settings.general.row.editToolPartsExpanded.title": "Udvid edit-værktøjsdele",
+  "settings.general.row.editToolPartsExpanded.description":
+    "Vis edit-, write- og patch-værktøjsdele udvidet som standard i tidslinjen",
   "settings.general.row.wayland.title": "Brug native Wayland",
   "settings.general.row.wayland.description": "Deaktiver X11-fallback på Wayland. Kræver genstart.",
   "settings.general.row.wayland.tooltip":
@@ -635,6 +641,7 @@ export const dict = {
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
   "font.option.geistMono": "Geist Mono",
+  "sound.option.none": "Ingen",
   "sound.option.alert01": "Alarm 01",
   "sound.option.alert02": "Alarm 02",
   "sound.option.alert03": "Alarm 03",

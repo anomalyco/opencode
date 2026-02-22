@@ -2,6 +2,7 @@ import path from "path"
 import os from "os"
 import fs from "fs/promises"
 import z from "zod"
+import { Filesystem } from "../util/filesystem"
 import { Identifier } from "../id/id"
 import { MessageV2 } from "./message-v2"
 import { Log } from "../util/log"
@@ -21,7 +22,6 @@ import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { defer } from "../util/defer"
-import { clone } from "remeda"
 import { ToolRegistry } from "../tool/registry"
 import { MCP } from "../mcp"
 import { LSP } from "../lsp"
@@ -626,11 +626,9 @@ export namespace SessionPrompt {
         })
       }
 
-      const sessionMessages = clone(msgs)
-
       // Ephemerally wrap queued user messages with a reminder to stay on track
       if (step > 1 && lastFinished) {
-        for (const msg of sessionMessages) {
+        for (const msg of msgs) {
           if (msg.info.role !== "user" || msg.info.id <= lastFinished.id) continue
           for (const part of msg.parts) {
             if (part.type !== "text" || part.ignored || part.synthetic) continue
@@ -647,7 +645,7 @@ export namespace SessionPrompt {
         }
       }
 
-      await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
+      await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
       // Build system prompt, adding structured output instruction if needed
       const system = [...(await SystemPrompt.environment(model)), ...(await InstructionPrompt.system())]
@@ -663,7 +661,7 @@ export namespace SessionPrompt {
         sessionID,
         system,
         messages: [
-          ...MessageV2.toModelMessages(sessionMessages, model),
+          ...MessageV2.toModelMessages(msgs, model),
           ...(isLastStep
             ? [
                 {
@@ -908,7 +906,12 @@ export namespace SessionPrompt {
           title: "",
           metadata,
           output: truncated.content,
-          attachments,
+          attachments: attachments.map((attachment) => ({
+            ...attachment,
+            id: Identifier.ascending("part"),
+            sessionID: ctx.sessionID,
+            messageID: input.processor.message.id,
+          })),
           content: result.content, // directly return content to preserve ordering when outputting to model
         }
       }
@@ -1082,11 +1085,9 @@ export namespace SessionPrompt {
               // have to normalize, symbol search returns absolute paths
               // Decode the pathname since URL constructor doesn't automatically decode it
               const filepath = fileURLToPath(part.url)
-              const stat = await Bun.file(filepath)
-                .stat()
-                .catch(() => undefined)
+              const s = Filesystem.stat(filepath)
 
-              if (stat?.isDirectory()) {
+              if (s?.isDirectory()) {
                 part.mime = "application/x-directory"
               }
 
@@ -1233,14 +1234,13 @@ export namespace SessionPrompt {
                 ]
               }
 
-              const file = Bun.file(filepath)
               FileTime.read(input.sessionID, filepath)
               return [
                 {
                   messageID: info.id,
                   sessionID: input.sessionID,
                   type: "text",
-                  text: `Called the Read tool with the following input: {\"filePath\":\"${filepath}\"}`,
+                  text: `Called the Read tool with the following input: {"filePath":"${filepath}"}`,
                   synthetic: true,
                 },
                 {
@@ -1248,7 +1248,7 @@ export namespace SessionPrompt {
                   messageID: info.id,
                   sessionID: input.sessionID,
                   type: "file",
-                  url: `data:${part.mime};base64,` + Buffer.from(await file.bytes()).toString("base64"),
+                  url: `data:${part.mime};base64,` + (await Filesystem.readBytes(filepath)).toString("base64"),
                   mime: part.mime,
                   filename: part.filename!,
                   source: part.source,
@@ -1354,7 +1354,7 @@ export namespace SessionPrompt {
     // Switching from plan mode to build mode
     if (input.agent.name !== "plan" && assistantMessage?.info.agent === "plan") {
       const plan = Session.plan(input.session)
-      const exists = await Bun.file(plan).exists()
+      const exists = await Filesystem.exists(plan)
       if (exists) {
         const part = await Session.updatePart({
           id: Identifier.ascending("part"),
@@ -1373,7 +1373,7 @@ export namespace SessionPrompt {
     // Entering plan mode
     if (input.agent.name === "plan" && assistantMessage?.info.agent !== "plan") {
       const plan = Session.plan(input.session)
-      const exists = await Bun.file(plan).exists()
+      const exists = await Filesystem.exists(plan)
       if (!exists) await fs.mkdir(path.dirname(plan), { recursive: true })
       const part = await Session.updatePart({
         id: Identifier.ascending("part"),
