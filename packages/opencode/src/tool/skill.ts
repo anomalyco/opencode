@@ -115,7 +115,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
         ].join("\n"),
         metadata: {
           name: skill.name,
-          dir: path.normalize(dir),
+          dir,
         },
       }
     },
