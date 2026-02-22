@@ -744,11 +744,7 @@ export namespace SessionPrompt {
     const tools: Record<string, AITool> = {}
 
     // Check if this is an openai-compatible provider (e.g., Ollama)
-    // These providers need special handling for tool schemas and reduced tool sets
     const isOpenAICompatible = input.model.api.npm === "@ai-sdk/openai-compatible"
-
-    // Core tools to keep for openai-compatible providers (local LLMs often struggle with many tools)
-    const CORE_TOOLS = new Set(["bash", "read", "write", "edit", "glob", "grep"])
 
     /**
      * Strip 'description' from required arrays in tool schemas.
@@ -826,14 +822,7 @@ export namespace SessionPrompt {
       { modelID: input.model.api.id, providerID: input.model.providerID },
       input.agent,
     )) {
-      // For openai-compatible providers, filter to core tools only
-      // Local LLMs (Ollama, etc.) often struggle with large tool sets
-      if (isOpenAICompatible && !CORE_TOOLS.has(item.id)) {
-        continue
-      }
-
       let schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
-      // Strip 'description' from required for openai-compatible providers
       schema = stripDescriptionFromRequired(schema)
       tools[item.id] = tool({
         id: item.id as any,
@@ -877,18 +866,15 @@ export namespace SessionPrompt {
       })
     }
 
-    // Skip MCP tools for openai-compatible providers (reduces tool count for local LLMs)
-    if (!isOpenAICompatible) {
-      for (const [key, item] of Object.entries(await MCP.tools())) {
-        const execute = item.execute
-        if (!execute) continue
+    for (const [key, item] of Object.entries(await MCP.tools())) {
+      const execute = item.execute
+      if (!execute) continue
 
-        let transformed = ProviderTransform.schema(input.model, asSchema(item.inputSchema).jsonSchema)
-        // Strip 'description' from required for openai-compatible providers (already skipped above, but keep for consistency)
-        transformed = stripDescriptionFromRequired(transformed)
-        item.inputSchema = jsonSchema(transformed)
-        // Wrap execute to add plugin hooks and format output
-        item.execute = async (args, opts) => {
+      let transformed = ProviderTransform.schema(input.model, asSchema(item.inputSchema).jsonSchema)
+      transformed = stripDescriptionFromRequired(transformed)
+      item.inputSchema = jsonSchema(transformed)
+      // Wrap execute to add plugin hooks and format output
+      item.execute = async (args, opts) => {
           const ctx = context(args, opts)
 
           await Plugin.trigger(
@@ -971,9 +957,8 @@ export namespace SessionPrompt {
             content: result.content, // directly return content to preserve ordering when outputting to model
           }
         }
-        tools[key] = item
-      }
-    } // end if (!isOpenAICompatible)
+      tools[key] = item
+    }
 
     return tools
   }
