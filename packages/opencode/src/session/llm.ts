@@ -4,6 +4,7 @@ import { Log } from "@/util/log"
 import {
   streamText,
   wrapLanguageModel,
+  simulateStreamingMiddleware,
   type ModelMessage,
   type StreamTextResult,
   type Tool,
@@ -243,6 +244,10 @@ export namespace LLM {
               return args.params
             },
           },
+          // When streaming is disabled for the provider, use the AI SDK's
+          // simulateStreamingMiddleware to make non-streaming (generateText)
+          // requests and convert the result into a simulated stream.
+          ...(provider?.options?.streaming === false ? [simulateStreamingMiddleware()] : []),
         ],
       }),
       experimental_telemetry: {
