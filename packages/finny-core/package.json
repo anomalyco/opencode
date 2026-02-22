@@ -1,0 +1,22 @@
+{
+  "name": "@finny-ai/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@finny-ai/integrations": "workspace:*",
+    "@finny-ai/registry": "workspace:*",
+    "@opencode-ai/plugin": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  }
+}
