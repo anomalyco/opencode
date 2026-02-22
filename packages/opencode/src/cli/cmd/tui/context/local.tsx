@@ -13,6 +13,7 @@ import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
 import { Filesystem } from "@/util/filesystem"
+import { useKV } from "./kv"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -20,6 +21,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const sync = useSync()
     const sdk = useSDK()
     const toast = useToast()
+    const kv = useKV()
 
     function isModelValid(model: { providerID: string; modelID: string }) {
       const provider = sync.data.provider.find((x) => x.id === model.providerID)
@@ -320,6 +322,44 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             save()
           })
         },
+        compaction: iife(() => {
+          const key = "compaction_model"
+          const [get] = kv.signal<{ providerID: string; modelID: string } | undefined>(key, undefined)
+          return {
+            current() {
+              return get() as { providerID: string; modelID: string } | undefined
+            },
+            parsed: createMemo(() => {
+              const value = get() as { providerID: string; modelID: string } | undefined
+              if (!value) {
+                return {
+                  provider: undefined,
+                  model: "Using session model",
+                }
+              }
+              const provider = sync.data.provider.find((x) => x.id === value.providerID)
+              const info = provider?.models[value.modelID]
+              return {
+                provider: provider?.name ?? value.providerID,
+                model: info?.name ?? value.modelID,
+              }
+            }),
+            set(model: { providerID: string; modelID: string }) {
+              if (!isModelValid(model)) {
+                toast.show({
+                  message: `Model ${model.providerID}/${model.modelID} is not valid`,
+                  variant: "warning",
+                  duration: 3000,
+                })
+                return
+              }
+              kv.set(key, { ...model })
+            },
+            clear() {
+              kv.set(key, undefined)
+            },
+          }
+        }),
         variant: {
           current() {
             const m = currentModel()

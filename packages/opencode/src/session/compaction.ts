@@ -104,12 +104,15 @@ export namespace SessionCompaction {
     sessionID: string
     abort: AbortSignal
     auto: boolean
+    compactionModel?: { providerID: string; modelID: string }
   }) {
     const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
     const agent = await Agent.get("compaction")
-    const model = agent.model
-      ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
-      : await Provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
+    const model = input.compactionModel
+      ? await Provider.getModel(input.compactionModel.providerID, input.compactionModel.modelID)
+      : agent.model
+        ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
+        : await Provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
     const msg = (await Session.updateMessage({
       id: Identifier.ascending("message"),
       role: "assistant",
@@ -237,6 +240,12 @@ When constructing the summary, try to stick to this template:
         modelID: z.string(),
       }),
       auto: z.boolean(),
+      compactionModel: z
+        .object({
+          providerID: z.string(),
+          modelID: z.string(),
+        })
+        .optional(),
     }),
     async (input) => {
       const msg = await Session.updateMessage({
@@ -255,6 +264,7 @@ When constructing the summary, try to stick to this template:
         sessionID: msg.sessionID,
         type: "compaction",
         auto: input.auto,
+        compactionModel: input.compactionModel,
       })
     },
   )

@@ -505,6 +505,10 @@ export type CompactionPart = {
   messageID: string
   type: "compaction"
   auto: boolean
+  compactionModel?: {
+    providerID: string
+    modelID: string
+  }
 }
 
 export type Part =
@@ -1167,6 +1171,10 @@ export type KeybindsConfig = {
    * Previous favorite model
    */
   model_cycle_favorite_reverse?: string
+  /**
+   * List available compaction models
+   */
+  compaction_model_list?: string
   /**
    * List available commands
    */
@@ -3432,6 +3440,10 @@ export type SessionSummarizeData = {
     providerID: string
     modelID: string
     auto?: boolean
+    compactionModel?: {
+      providerID: string
+      modelID: string
+    }
   }
   path: {
     /**

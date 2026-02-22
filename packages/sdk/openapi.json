@@ -2303,6 +2303,18 @@
                   "auto": {
                     "default": false,
                     "type": "boolean"
+                  },
+                  "compactionModel": {
+                    "type": "object",
+                    "properties": {
+                      "providerID": {
+                        "type": "string"
+                      },
+                      "modelID": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["providerID", "modelID"]
                   }
                 },
                 "required": ["providerID", "modelID"]
@@ -7368,6 +7380,18 @@
           },
           "auto": {
             "type": "boolean"
+          },
+          "compactionModel": {
+            "type": "object",
+            "properties": {
+              "providerID": {
+                "type": "string"
+              },
+              "modelID": {
+                "type": "string"
+              }
+            },
+            "required": ["providerID", "modelID"]
           }
         },
         "required": ["id", "sessionID", "messageID", "type", "auto"]
@@ -8867,6 +8891,11 @@
           },
           "model_cycle_favorite_reverse": {
             "description": "Previous favorite model",
+            "default": "none",
+            "type": "string"
+          },
+          "compaction_model_list": {
+            "description": "List available compaction models",
             "default": "none",
             "type": "string"
           },

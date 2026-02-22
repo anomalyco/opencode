@@ -533,6 +533,7 @@ export namespace SessionPrompt {
           abort,
           sessionID,
           auto: task.auto,
+          compactionModel: task.compactionModel,
         })
         if (result === "stop") break
         continue

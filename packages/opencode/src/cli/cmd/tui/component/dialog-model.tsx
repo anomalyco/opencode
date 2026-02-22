@@ -15,7 +15,7 @@ export function useConnected() {
   )
 }
 
-export function DialogModel(props: { providerID?: string }) {
+export function DialogModel(props: { providerID?: string; target?: "session" | "compaction" }) {
   const local = useLocal()
   const sync = useSync()
   const dialog = useDialog()
@@ -25,13 +25,40 @@ export function DialogModel(props: { providerID?: string }) {
   const connected = useConnected()
   const providers = createDialogProviderOptions()
 
+  const isCompaction = props.target === "compaction"
+
   const showExtra = createMemo(() => connected() && !props.providerID)
+
+  function onModelSelect(model: { providerID: string; modelID: string }) {
+    dialog.clear()
+    if (isCompaction) {
+      local.model.compaction.set(model)
+      return
+    }
+    local.model.set(model, { recent: true })
+  }
 
   const options = createMemo(() => {
     const needle = query().trim()
     const showSections = showExtra() && needle.length === 0
     const favorites = connected() ? local.model.favorite() : []
     const recents = local.model.recent()
+
+    // "Use session model (default)" option only shown in compaction mode
+    const defaultOption = isCompaction
+      ? [
+          {
+            value: { providerID: "", modelID: "" },
+            title: "Use session model (default)",
+            description: "Compaction will use the same model as the session",
+            category: showSections ? "Default" : undefined,
+            onSelect: () => {
+              dialog.clear()
+              local.model.compaction.clear()
+            },
+          },
+        ]
+      : []
 
     function toOptions(items: typeof favorites, category: string) {
       if (!showSections) return []
@@ -49,10 +76,7 @@ export function DialogModel(props: { providerID?: string }) {
             category,
             disabled: provider.id === "opencode" && model.id.includes("-nano"),
             footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
-            onSelect: () => {
-              dialog.clear()
-              local.model.set({ providerID: provider.id, modelID: model.id }, { recent: true })
-            },
+            onSelect: () => onModelSelect({ providerID: provider.id, modelID: model.id }),
           },
         ]
       })
@@ -87,10 +111,7 @@ export function DialogModel(props: { providerID?: string }) {
             category: connected() ? provider.name : undefined,
             disabled: provider.id === "opencode" && model.includes("-nano"),
             footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
-            onSelect() {
-              dialog.clear()
-              local.model.set({ providerID: provider.id, modelID: model }, { recent: true })
-            },
+            onSelect: () => onModelSelect({ providerID: provider.id, modelID: model }),
           })),
           filter((x) => {
             if (!showSections) return true
@@ -121,19 +142,22 @@ export function DialogModel(props: { providerID?: string }) {
 
     if (needle) {
       return [
+        ...defaultOption,
         ...fuzzysort.go(needle, providerOptions, { keys: ["title", "category"] }).map((x) => x.obj),
         ...fuzzysort.go(needle, popularProviders, { keys: ["title"] }).map((x) => x.obj),
       ]
     }
 
-    return [...favoriteOptions, ...recentOptions, ...providerOptions, ...popularProviders]
+    return [...defaultOption, ...favoriteOptions, ...recentOptions, ...providerOptions, ...popularProviders]
   })
 
   const provider = createMemo(() =>
     props.providerID ? sync.data.provider.find((x) => x.id === props.providerID) : null,
   )
 
-  const title = createMemo(() => provider()?.name ?? "Select model")
+  const title = createMemo(() => (isCompaction ? "Select compaction model" : (provider()?.name ?? "Select model")))
+
+  const current = createMemo(() => (isCompaction ? local.model.compaction.current() : local.model.current()))
 
   return (
     <DialogSelect<ReturnType<typeof options>[number]["value"]>
@@ -151,7 +175,10 @@ export function DialogModel(props: { providerID?: string }) {
           title: "Favorite",
           disabled: !connected(),
           onTrigger: (option) => {
-            local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
+            const val = option.value as { providerID: string; modelID: string }
+            if (val.providerID && val.modelID) {
+              local.model.toggleFavorite(val)
+            }
           },
         },
       ]}
@@ -159,7 +186,7 @@ export function DialogModel(props: { providerID?: string }) {
       flat={true}
       skipFilter={true}
       title={title()}
-      current={local.model.current()}
+      current={current()}
     />
   )
 }
