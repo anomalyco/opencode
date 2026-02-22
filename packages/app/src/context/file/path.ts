@@ -113,9 +113,10 @@ export function createPathHelpers(scope: () => string) {
     const windows = /^[A-Za-z]:/.test(root)
     const canonRoot = windows ? root.toLowerCase() : root
     const canonPath = windows ? path.toLowerCase() : path
-    if (canonPath.startsWith(canonRoot) &&
-        (canonRoot.endsWith("/") || canonPath === canonRoot ||
-         canonPath.startsWith(canonRoot + "/"))) {
+    if (
+      canonPath.startsWith(canonRoot) &&
+      (canonRoot.endsWith("/") || canonPath === canonRoot || canonPath.startsWith(canonRoot + "/"))
+    ) {
       // If we match canonRoot + "/", the slash will be removed below.
       path = path.slice(root.length)
     }
