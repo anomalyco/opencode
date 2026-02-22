@@ -2,12 +2,12 @@ use std::time::{Duration, Instant};
 
 use tauri::AppHandle;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
-use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_store::StoreExt;
 use tokio::task::JoinHandle;
 
 use crate::{
     cli,
+    cli::CommandChild,
     constants::{DEFAULT_SERVER_URL_KEY, SETTINGS_STORE, WSL_ENABLED_KEY},
 };
 
@@ -55,18 +55,18 @@ pub async fn set_default_server_url(app: AppHandle, url: Option<String>) -> Resu
 
 #[tauri::command]
 #[specta::specta]
-pub fn get_wsl_config(app: AppHandle) -> Result<WslConfig, String> {
-    let store = app
-        .store(SETTINGS_STORE)
-        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+pub fn get_wsl_config(_app: AppHandle) -> Result<WslConfig, String> {
+    // let store = app
+    //     .store(SETTINGS_STORE)
+    //     .map_err(|e| format!("Failed to open settings store: {}", e))?;
 
-    let enabled = store
-        .get(WSL_ENABLED_KEY)
-        .as_ref()
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+    // let enabled = store
+    //     .get(WSL_ENABLED_KEY)
+    //     .as_ref()
+    //     .and_then(|v| v.as_bool())
+    //     .unwrap_or(false);
 
-    Ok(WslConfig { enabled })
+    Ok(WslConfig { enabled: false })
 }
 
 #[tauri::command]

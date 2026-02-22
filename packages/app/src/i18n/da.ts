@@ -69,6 +69,8 @@ export const dict = {
   "command.agent.cycle.reverse.description": "Skift til forrige agent",
   "command.model.variant.cycle": "Skift tænkeindsats",
   "command.model.variant.cycle.description": "Skift til næste indsatsniveau",
+  "command.prompt.mode.shell": "Skift til shell-tilstand",
+  "command.prompt.mode.normal": "Skift til prompt-tilstand",
   "command.permissions.autoaccept.enable": "Accepter ændringer automatisk",
   "command.permissions.autoaccept.disable": "Stop automatisk accept af ændringer",
   "command.workspace.toggle": "Skift arbejdsområder",
@@ -222,9 +224,11 @@ export const dict = {
 
   "prompt.placeholder.shell": "Indtast shell-kommando...",
   "prompt.placeholder.normal": 'Spørg om hvad som helst... "{{example}}"',
+  "prompt.placeholder.simple": "Spørg om hvad som helst...",
   "prompt.placeholder.summarizeComments": "Opsummér kommentarer…",
   "prompt.placeholder.summarizeComment": "Opsummér kommentar…",
   "prompt.mode.shell": "Shell",
+  "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "esc for at afslutte",
 
   "prompt.example.1": "Ret en TODO i koden",
@@ -500,6 +504,9 @@ export const dict = {
 
   "session.messages.jumpToLatest": "Gå til seneste",
   "session.context.addToContext": "Tilføj {{selection}} til kontekst",
+  "session.todo.title": "Opgaver",
+  "session.todo.collapse": "Skjul",
+  "session.todo.expand": "Udvid",
 
   "session.new.worktree.main": "Hovedgren",
   "session.new.worktree.mainWithBranch": "Hovedgren ({{branch}})",
@@ -572,6 +579,7 @@ export const dict = {
   "sidebar.gettingStarted.line2": "Forbind enhver udbyder for at bruge modeller, inkl. Claude, GPT, Gemini osv.",
   "sidebar.project.recentSessions": "Seneste sessioner",
   "sidebar.project.viewAllSessions": "Vis alle sessioner",
+  "sidebar.project.clearNotifications": "Ryd notifikationer",
 
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "Desktop",
@@ -626,6 +634,7 @@ export const dict = {
   "font.option.robotoMono": "Roboto Mono",
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
+  "font.option.geistMono": "Geist Mono",
   "sound.option.alert01": "Alarm 01",
   "sound.option.alert02": "Alarm 02",
   "sound.option.alert03": "Alarm 03",

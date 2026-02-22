@@ -10,6 +10,7 @@ import { createSortable } from "@thisbeyond/solid-dnd"
 import { type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
+import { useNotification } from "@/context/notification"
 import { ProjectIcon, SessionItem, type SessionItemProps } from "./sidebar-items"
 import { childMapByParent, displayName, sortedRootSessions } from "./helpers"
 import { projectSelected, projectTileActive } from "./sidebar-project-helpers"
@@ -59,6 +60,7 @@ const ProjectTile = (props: {
   selected: Accessor<boolean>
   active: Accessor<boolean>
   overlay: Accessor<boolean>
+  dirs: Accessor<string[]>
   onProjectMouseEnter: (worktree: string, event: MouseEvent) => void
   onProjectMouseLeave: (worktree: string) => void
   onProjectFocus: (worktree: string) => void
@@ -70,73 +72,94 @@ const ProjectTile = (props: {
   setMenu: (value: boolean) => void
   setOpen: (value: boolean) => void
   language: ReturnType<typeof useLanguage>
-}): JSX.Element => (
-  <ContextMenu
-    modal={!props.sidebarHovering()}
-    onOpenChange={(value) => {
-      props.setMenu(value)
-      if (value) props.setOpen(false)
-    }}
-  >
-    <ContextMenu.Trigger
-      as="button"
-      type="button"
-      aria-label={displayName(props.project)}
-      data-action="project-switch"
-      data-project={base64Encode(props.project.worktree)}
-      classList={{
-        "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
-        "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": props.selected(),
-        "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
-          !props.selected() && !props.active(),
-        "bg-surface-base-hover border border-border-weak-base": !props.selected() && props.active(),
+}): JSX.Element => {
+  const notification = useNotification()
+  const unseenCount = createMemo(() =>
+    props.dirs().reduce((total, directory) => total + notification.project.unseenCount(directory), 0),
+  )
+
+  const clear = () =>
+    props
+      .dirs()
+      .filter((directory) => notification.project.unseenCount(directory) > 0)
+      .forEach((directory) => notification.project.markViewed(directory))
+
+  return (
+    <ContextMenu
+      modal={!props.sidebarHovering()}
+      onOpenChange={(value) => {
+        props.setMenu(value)
+        if (value) props.setOpen(false)
       }}
-      onMouseEnter={(event: MouseEvent) => {
-        if (!props.overlay()) return
-        props.onProjectMouseEnter(props.project.worktree, event)
-      }}
-      onMouseLeave={() => {
-        if (!props.overlay()) return
-        props.onProjectMouseLeave(props.project.worktree)
-      }}
-      onFocus={() => {
-        if (!props.overlay()) return
-        props.onProjectFocus(props.project.worktree)
-      }}
-      onClick={() => props.navigateToProject(props.project.worktree)}
-      onBlur={() => props.setOpen(false)}
     >
-      <ProjectIcon project={props.project} notify />
-    </ContextMenu.Trigger>
-    <ContextMenu.Portal mount={!props.mobile ? props.nav() : undefined}>
-      <ContextMenu.Content>
-        <ContextMenu.Item onSelect={() => props.showEditProjectDialog(props.project)}>
-          <ContextMenu.ItemLabel>{props.language.t("common.edit")}</ContextMenu.ItemLabel>
-        </ContextMenu.Item>
-        <ContextMenu.Item
-          data-action="project-workspaces-toggle"
-          data-project={base64Encode(props.project.worktree)}
-          disabled={props.project.vcs !== "git" && !props.workspacesEnabled(props.project)}
-          onSelect={() => props.toggleProjectWorkspaces(props.project)}
-        >
-          <ContextMenu.ItemLabel>
-            {props.workspacesEnabled(props.project)
-              ? props.language.t("sidebar.workspaces.disable")
-              : props.language.t("sidebar.workspaces.enable")}
-          </ContextMenu.ItemLabel>
-        </ContextMenu.Item>
-        <ContextMenu.Separator />
-        <ContextMenu.Item
-          data-action="project-close-menu"
-          data-project={base64Encode(props.project.worktree)}
-          onSelect={() => props.closeProject(props.project.worktree)}
-        >
-          <ContextMenu.ItemLabel>{props.language.t("common.close")}</ContextMenu.ItemLabel>
-        </ContextMenu.Item>
-      </ContextMenu.Content>
-    </ContextMenu.Portal>
-  </ContextMenu>
-)
+      <ContextMenu.Trigger
+        as="button"
+        type="button"
+        aria-label={displayName(props.project)}
+        data-action="project-switch"
+        data-project={base64Encode(props.project.worktree)}
+        classList={{
+          "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
+          "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": props.selected(),
+          "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
+            !props.selected() && !props.active(),
+          "bg-surface-base-hover border border-border-weak-base": !props.selected() && props.active(),
+        }}
+        onMouseEnter={(event: MouseEvent) => {
+          if (!props.overlay()) return
+          props.onProjectMouseEnter(props.project.worktree, event)
+        }}
+        onMouseLeave={() => {
+          if (!props.overlay()) return
+          props.onProjectMouseLeave(props.project.worktree)
+        }}
+        onFocus={() => {
+          if (!props.overlay()) return
+          props.onProjectFocus(props.project.worktree)
+        }}
+        onClick={() => props.navigateToProject(props.project.worktree)}
+        onBlur={() => props.setOpen(false)}
+      >
+        <ProjectIcon project={props.project} notify />
+      </ContextMenu.Trigger>
+      <ContextMenu.Portal mount={!props.mobile ? props.nav() : undefined}>
+        <ContextMenu.Content>
+          <ContextMenu.Item onSelect={() => props.showEditProjectDialog(props.project)}>
+            <ContextMenu.ItemLabel>{props.language.t("common.edit")}</ContextMenu.ItemLabel>
+          </ContextMenu.Item>
+          <ContextMenu.Item
+            data-action="project-workspaces-toggle"
+            data-project={base64Encode(props.project.worktree)}
+            disabled={props.project.vcs !== "git" && !props.workspacesEnabled(props.project)}
+            onSelect={() => props.toggleProjectWorkspaces(props.project)}
+          >
+            <ContextMenu.ItemLabel>
+              {props.workspacesEnabled(props.project)
+                ? props.language.t("sidebar.workspaces.disable")
+                : props.language.t("sidebar.workspaces.enable")}
+            </ContextMenu.ItemLabel>
+          </ContextMenu.Item>
+          <ContextMenu.Item
+            data-action="project-clear-notifications"
+            data-project={base64Encode(props.project.worktree)}
+            disabled={unseenCount() === 0}
+            onSelect={clear}
+          >
+            <ContextMenu.ItemLabel>{props.language.t("sidebar.project.clearNotifications")}</ContextMenu.ItemLabel>
+          </ContextMenu.Item>
+          <ContextMenu.Separator />
+          <ContextMenu.Item
+            data-action="project-close-menu"
+            data-project={base64Encode(props.project.worktree)}
+            onSelect={() => props.closeProject(props.project.worktree)}
+          >
+            <ContextMenu.ItemLabel>{props.language.t("common.close")}</ContextMenu.ItemLabel>
+          </ContextMenu.Item>
+        </ContextMenu.Content>
+      </ContextMenu.Portal>
+    </ContextMenu>
+  )
+}
 
 const ProjectPreviewPanel = (props: {
   project: LocalProject
@@ -254,6 +277,7 @@ export const SortableProject = (props: {
   )
   const workspaces = createMemo(() => props.ctx.workspaceIds(props.project).slice(0, 2))
   const workspaceEnabled = createMemo(() => props.ctx.workspacesEnabled(props.project))
+  const dirs = createMemo(() => props.ctx.workspaceIds(props.project))
   const [open, setOpen] = createSignal(false)
   const [menu, setMenu] = createSignal(false)
 
@@ -304,6 +328,7 @@ export const SortableProject = (props: {
       selected={selected}
       active={active}
       overlay={overlay}
+      dirs={dirs}
       onProjectMouseEnter={props.ctx.onProjectMouseEnter}
       onProjectMouseLeave={props.ctx.onProjectMouseLeave}
       onProjectFocus={props.ctx.onProjectFocus}

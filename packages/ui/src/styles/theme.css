@@ -10,6 +10,7 @@
   --font-size-x-large: 20px;
   --font-weight-regular: 400;
   --font-weight-medium: 500;
+  --line-height-normal: 130%;
   --line-height-large: 150%;
   --line-height-x-large: 180%;
   --line-height-2x-large: 200%;
@@ -252,7 +253,7 @@
   --icon-success-base: var(--apple-light-7);
   --icon-success-hover: var(--apple-light-8);
   --icon-success-active: var(--apple-light-11);
-  --icon-warning-base: var(--amber-light-7);
+  --icon-warning-base: var(--amber-light-9);
   --icon-warning-hover: var(--amber-light-8);
   --icon-warning-active: var(--amber-light-11);
   --icon-critical-base: var(--ember-light-10);
@@ -286,7 +287,7 @@
   --icon-diff-add-active: var(--mint-light-12);
   --icon-diff-delete-base: var(--ember-light-10);
   --icon-diff-delete-hover: var(--ember-light-11);
-  --icon-diff-modified-base: var(--icon-warning-base);
+  --icon-diff-modified-base: #ff8c00;
   --syntax-comment: var(--text-weak);
   --syntax-regexp: var(--text-base);
   --syntax-string: #006656;
@@ -506,7 +507,7 @@
     --icon-strong-disabled: var(--smoke-dark-8);
     --icon-strong-focus: #fdfcfc;
     --icon-brand-base: var(--white);
-    --icon-interactive-base: var(--cobalt-dark-9);
+    --icon-interactive-base: var(--cobalt-dark-11);
     --icon-success-base: var(--apple-dark-7);
     --icon-success-hover: var(--apple-dark-8);
     --icon-success-active: var(--apple-dark-11);
@@ -544,7 +545,7 @@
     --icon-diff-add-active: var(--mint-dark-11);
     --icon-diff-delete-base: var(--ember-dark-9);
     --icon-diff-delete-hover: var(--ember-dark-10);
-    --icon-diff-modified-base: var(--icon-warning-base);
+    --icon-diff-modified-base: #ffba92;
     --syntax-comment: var(--text-weak);
     --syntax-regexp: var(--text-base);
     --syntax-string: #00ceb9;

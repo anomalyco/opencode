@@ -30,6 +30,9 @@ export const projectMenuTriggerSelector = (slug: string) =>
 
 export const projectCloseMenuSelector = (slug: string) => `[data-action="project-close-menu"][data-project="${slug}"]`
 
+export const projectClearNotificationsSelector = (slug: string) =>
+  `[data-action="project-clear-notifications"][data-project="${slug}"]`
+
 export const projectWorkspacesToggleSelector = (slug: string) =>
   `[data-action="project-workspaces-toggle"][data-project="${slug}"]`
 

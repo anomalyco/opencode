@@ -18,18 +18,24 @@ export namespace Pty {
 
   type Socket = {
     readyState: number
+    data: object
     send: (data: string | Uint8Array<ArrayBuffer> | ArrayBuffer) => void
     close: (code?: number, reason?: string) => void
   }
 
-  const sockets = new WeakMap<object, number>()
-  let socketCounter = 0
+  // Bun's ServerWebSocket has a per-connection `.data` object (set during
+  // `server.upgrade`) that changes when the underlying connection is recycled.
+  // We keep a reference to a stable part of it so output can't leak even when
+  // websocket objects are reused.
+  const token = (ws: Socket) => {
+    const data = ws.data
+    const events = (data as { events?: unknown }).events
+    if (events && typeof events === "object") return events
 
-  const tagSocket = (ws: Socket) => {
-    if (!ws || typeof ws !== "object") return
-    const next = (socketCounter = (socketCounter + 1) % Number.MAX_SAFE_INTEGER)
-    sockets.set(ws, next)
-    return next
+    const url = (data as { url?: unknown }).url
+    if (url && typeof url === "object") return url
+
+    return data
   }
 
   // WebSocket control frame: 0x00 + UTF-8 JSON (currently { cursor }).
@@ -96,7 +102,7 @@ export namespace Pty {
     buffer: string
     bufferCursor: number
     cursor: number
-    subscribers: Map<Socket, number>
+    subscribers: Map<Socket, object>
   }
 
   const state = Instance.state(
@@ -176,26 +182,27 @@ export namespace Pty {
       subscribers: new Map(),
     }
     state().set(id, session)
-    ptyProcess.onData((data) => {
-      session.cursor += data.length
+    ptyProcess.onData((chunk) => {
+      session.cursor += chunk.length
 
-      for (const [ws, id] of session.subscribers) {
+      for (const [ws, data] of session.subscribers) {
         if (ws.readyState !== 1) {
           session.subscribers.delete(ws)
           continue
         }
-        if (typeof ws === "object" && sockets.get(ws) !== id) {
+
+        if (token(ws) !== data) {
           session.subscribers.delete(ws)
           continue
         }
         try {
-          ws.send(data)
+          ws.send(chunk)
         } catch {
           session.subscribers.delete(ws)
         }
       }
 
-      session.buffer += data
+      session.buffer += chunk
       if (session.buffer.length <= BUFFER_LIMIT) return
       const excess = session.buffer.length - BUFFER_LIMIT
       session.buffer = session.buffer.slice(excess)
@@ -305,8 +312,12 @@ export namespace Pty {
       return
     }
 
-    const socketId = tagSocket(ws)
-    if (typeof socketId === "number") session.subscribers.set(ws, socketId)
+    if (!ws.data || typeof ws.data !== "object") {
+      ws.close()
+      return
+    }
+
+    session.subscribers.set(ws, token(ws))
     return {
       onMessage: (message: string | ArrayBuffer) => {
         session.process.write(String(message))

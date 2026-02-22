@@ -102,7 +102,17 @@ export namespace ZenData {
         Resource.ZEN_MODELS17.value +
         Resource.ZEN_MODELS18.value +
         Resource.ZEN_MODELS19.value +
-        Resource.ZEN_MODELS20.value,
+        Resource.ZEN_MODELS20.value +
+        Resource.ZEN_MODELS21.value +
+        Resource.ZEN_MODELS22.value +
+        Resource.ZEN_MODELS23.value +
+        Resource.ZEN_MODELS24.value +
+        Resource.ZEN_MODELS25.value +
+        Resource.ZEN_MODELS26.value +
+        Resource.ZEN_MODELS27.value +
+        Resource.ZEN_MODELS28.value +
+        Resource.ZEN_MODELS29.value +
+        Resource.ZEN_MODELS30.value,
     )
     const { models, providers, providerFamilies } = ModelsSchema.parse(json)
     return {

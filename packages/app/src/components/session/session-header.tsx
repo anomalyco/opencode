@@ -257,26 +257,11 @@ export function SessionHeader() {
     ] as const
   })
 
-  const checksReady = createMemo(() => {
-    if (platform.platform !== "desktop") return true
-    if (!platform.checkAppExists) return true
-    const list = apps()
-    return list.every((app) => exists[app.id] !== undefined)
-  })
-
   const [prefs, setPrefs] = persisted(Persist.global("open.app"), createStore({ app: "finder" as OpenApp }))
   const [menu, setMenu] = createStore({ open: false })
 
   const canOpen = createMemo(() => platform.platform === "desktop" && !!platform.openPath && server.isLocal())
   const current = createMemo(() => options().find((o) => o.id === prefs.app) ?? options()[0])
-
-  createEffect(() => {
-    if (platform.platform !== "desktop") return
-    if (!checksReady()) return
-    const value = prefs.app
-    if (options().some((o) => o.id === value)) return
-    setPrefs("app", options()[0]?.id ?? "finder")
-  })
 
   const openDir = (app: OpenApp) => {
     const directory = projectDirectory()
@@ -311,25 +296,25 @@ export function SessionHeader() {
     platform,
   })
 
-  const leftMount = createMemo(
-    () => document.getElementById("opencode-titlebar-left") ?? document.getElementById("opencode-titlebar-center"),
-  )
+  const centerMount = createMemo(() => document.getElementById("opencode-titlebar-center"))
   const rightMount = createMemo(() => document.getElementById("opencode-titlebar-right"))
 
   return (
     <>
-      <Show when={leftMount()}>
+      <Show when={centerMount()}>
         {(mount) => (
           <Portal mount={mount()}>
-            <button
+            <Button
               type="button"
-              class="hidden md:flex w-[320px] max-w-full min-w-0 h-[24px] px-2 pl-1.5 items-center gap-2 justify-between rounded-md border border-border-base bg-surface-panel transition-colors cursor-default hover:bg-surface-raised-base-hover focus-visible:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
+              variant="ghost"
+              size="small"
+              class="hidden md:flex w-[240px] max-w-full min-w-0 pl-0.5 pr-2 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-panel shadow-none cursor-default"
               onClick={() => command.trigger("file.open")}
               aria-label={language.t("session.header.searchFiles")}
             >
-              <div class="flex min-w-0 flex-1 items-center gap-2 overflow-visible">
-                <Icon name="magnifying-glass" size="normal" class="icon-base shrink-0" />
-                <span class="flex-1 min-w-0 text-14-regular text-text-weak truncate h-4.5 flex items-center">
+              <div class="flex min-w-0 flex-1 items-center gap-1.5 overflow-visible">
+                <Icon name="magnifying-glass" size="small" class="icon-base shrink-0 size-4" />
+                <span class="flex-1 min-w-0 text-12-regular text-text-weak truncate text-left">
                   {language.t("session.header.search.placeholder", { project: name() })}
                 </span>
               </div>
@@ -339,24 +324,24 @@ export function SessionHeader() {
                   <Keybind class="shrink-0 !border-0 !bg-transparent !shadow-none px-0">{keybind()}</Keybind>
                 )}
               </Show>
-            </button>
+            </Button>
           </Portal>
         )}
       </Show>
       <Show when={rightMount()}>
         {(mount) => (
           <Portal mount={mount()}>
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2">
               <StatusPopover />
               <Show when={projectDirectory()}>
                 <div class="hidden xl:flex items-center">
                   <Show
                     when={canOpen()}
                     fallback={
-                      <div class="flex h-[24px] box-border items-center rounded-md border border-border-base bg-surface-panel overflow-hidden">
+                      <div class="flex h-[24px] box-border items-center rounded-md border border-border-weak-base bg-surface-panel overflow-hidden">
                         <Button
                           variant="ghost"
-                          class="rounded-none h-full py-0 pr-3 pl-2 gap-2 border-none shadow-none"
+                          class="rounded-none h-full py-0 pr-3 pl-0.5 gap-1.5 border-none shadow-none"
                           onClick={copyPath}
                           aria-label={language.t("session.header.open.copyPath")}
                         >
@@ -369,10 +354,10 @@ export function SessionHeader() {
                     }
                   >
                     <div class="flex items-center">
-                      <div class="flex h-[24px] box-border items-center rounded-md border border-border-base bg-surface-panel overflow-hidden">
+                      <div class="flex h-[24px] box-border items-center rounded-md border border-border-weak-base bg-surface-panel overflow-hidden">
                         <Button
                           variant="ghost"
-                          class="rounded-none h-full py-0 pr-3 pl-2 gap-1.5 border-none shadow-none"
+                          class="rounded-none h-full py-0 pr-3 pl-0.5 gap-1.5 border-none shadow-none"
                           onClick={() => openDir(current().id)}
                           aria-label={language.t("session.header.open.ariaLabel", { app: current().label })}
                         >
@@ -381,9 +366,9 @@ export function SessionHeader() {
                           </div>
                           <span class="text-12-regular text-text-strong">Open</span>
                         </Button>
-                        <div class="self-stretch w-px bg-border-base/70" />
+                        <div class="self-stretch w-px bg-border-weak-base" />
                         <DropdownMenu
-                          gutter={6}
+                          gutter={4}
                           placement="bottom-end"
                           open={menu.open}
                           onOpenChange={(open) => setMenu("open", open)}
@@ -392,7 +377,7 @@ export function SessionHeader() {
                             as={IconButton}
                             icon="chevron-down"
                             variant="ghost"
-                            class="rounded-none h-full w-[24px] p-0 border-none shadow-none data-[expanded]:bg-surface-raised-base-active"
+                            class="rounded-none h-full w-[24px] p-0 border-none shadow-none data-[expanded]:bg-surface-raised-base-hover"
                             aria-label={language.t("session.header.open.menu")}
                           />
                           <DropdownMenu.Portal>
@@ -400,7 +385,7 @@ export function SessionHeader() {
                               <DropdownMenu.Group>
                                 <DropdownMenu.GroupLabel>{language.t("session.header.openIn")}</DropdownMenu.GroupLabel>
                                 <DropdownMenu.RadioGroup
-                                  value={prefs.app}
+                                  value={current().id}
                                   onChange={(value) => {
                                     if (!OPEN_APPS.includes(value as OpenApp)) return
                                     setPrefs("app", value as OpenApp)
@@ -458,7 +443,7 @@ export function SessionHeader() {
                         ? language.t("session.share.popover.description.shared")
                         : language.t("session.share.popover.description.unshared")
                     }
-                    gutter={6}
+                    gutter={4}
                     placement="bottom-end"
                     shift={-64}
                     class="rounded-xl [&_[data-slot=popover-close-button]]:hidden"
@@ -466,11 +451,11 @@ export function SessionHeader() {
                     triggerProps={{
                       variant: "ghost",
                       class:
-                        "rounded-md h-[24px] px-3 border border-border-base bg-surface-panel shadow-none data-[expanded]:bg-surface-raised-base-active",
+                        "rounded-md h-[24px] px-3 border border-border-weak-base bg-surface-panel shadow-none data-[expanded]:bg-surface-base-active",
                       classList: { "rounded-r-none": share.shareUrl() !== undefined },
                       style: { scale: 1 },
                     }}
-                    trigger={language.t("session.share.action.share")}
+                    trigger={<span class="text-12-regular">{language.t("session.share.action.share")}</span>}
                   >
                     <div class="flex flex-col gap-2">
                       <Show
@@ -539,7 +524,7 @@ export function SessionHeader() {
                       <IconButton
                         icon={share.state.copied ? "check" : "link"}
                         variant="ghost"
-                        class="rounded-l-none h-[24px] border border-border-base bg-surface-panel shadow-none"
+                        class="rounded-l-none h-[24px] border border-border-weak-base bg-surface-panel shadow-none"
                         onClick={() => share.copyLink((error) => showRequestError(language, error))}
                         disabled={share.state.unshare}
                         aria-label={
@@ -552,94 +537,97 @@ export function SessionHeader() {
                   </Show>
                 </div>
               </Show>
-              <div class="flex items-center gap-3 ml-2 shrink-0">
-                <TooltipKeybind
-                  title={language.t("command.terminal.toggle")}
-                  keybind={command.keybind("terminal.toggle")}
-                >
-                  <Button
-                    variant="ghost"
-                    class="group/terminal-toggle size-6 p-0"
-                    onClick={() => view().terminal.toggle()}
-                    aria-label={language.t("command.terminal.toggle")}
-                    aria-expanded={view().terminal.opened()}
-                    aria-controls="terminal-panel"
+              <div class="flex items-center gap-1">
+                <div class="hidden md:flex items-center gap-1 shrink-0">
+                  <TooltipKeybind
+                    title={language.t("command.terminal.toggle")}
+                    keybind={command.keybind("terminal.toggle")}
                   >
-                    <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
-                      <Icon
-                        size="small"
-                        name={view().terminal.opened() ? "layout-bottom-full" : "layout-bottom"}
-                        class="group-hover/terminal-toggle:hidden"
-                      />
-                      <Icon
-                        size="small"
-                        name="layout-bottom-partial"
-                        class="hidden group-hover/terminal-toggle:inline-block"
-                      />
-                      <Icon
-                        size="small"
-                        name={view().terminal.opened() ? "layout-bottom" : "layout-bottom-full"}
-                        class="hidden group-active/terminal-toggle:inline-block"
-                      />
-                    </div>
-                  </Button>
-                </TooltipKeybind>
-              </div>
-              <div class="hidden lg:block shrink-0">
-                <TooltipKeybind title={language.t("command.review.toggle")} keybind={command.keybind("review.toggle")}>
-                  <Button
-                    variant="ghost"
-                    class="group/review-toggle size-6 p-0"
-                    onClick={() => view().reviewPanel.toggle()}
-                    aria-label={language.t("command.review.toggle")}
-                    aria-expanded={view().reviewPanel.opened()}
-                    aria-controls="review-panel"
+                    <Button
+                      variant="ghost"
+                      class="group/terminal-toggle titlebar-icon w-8 h-6 p-0 box-border"
+                      onClick={() => view().terminal.toggle()}
+                      aria-label={language.t("command.terminal.toggle")}
+                      aria-expanded={view().terminal.opened()}
+                      aria-controls="terminal-panel"
+                    >
+                      <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
+                        <Icon
+                          size="small"
+                          name={view().terminal.opened() ? "layout-bottom-partial" : "layout-bottom"}
+                          class="group-hover/terminal-toggle:hidden"
+                        />
+                        <Icon
+                          size="small"
+                          name="layout-bottom-partial"
+                          class="hidden group-hover/terminal-toggle:inline-block"
+                        />
+                        <Icon
+                          size="small"
+                          name={view().terminal.opened() ? "layout-bottom" : "layout-bottom-partial"}
+                          class="hidden group-active/terminal-toggle:inline-block"
+                        />
+                      </div>
+                    </Button>
+                  </TooltipKeybind>
+
+                  <TooltipKeybind
+                    title={language.t("command.review.toggle")}
+                    keybind={command.keybind("review.toggle")}
                   >
-                    <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
-                      <Icon
-                        size="small"
-                        name={view().reviewPanel.opened() ? "layout-right-full" : "layout-right"}
-                        class="group-hover/review-toggle:hidden"
-                      />
-                      <Icon
-                        size="small"
-                        name="layout-right-partial"
-                        class="hidden group-hover/review-toggle:inline-block"
-                      />
-                      <Icon
-                        size="small"
-                        name={view().reviewPanel.opened() ? "layout-right" : "layout-right-full"}
-                        class="hidden group-active/review-toggle:inline-block"
-                      />
-                    </div>
-                  </Button>
-                </TooltipKeybind>
-              </div>
-              <div class="hidden lg:block shrink-0">
-                <TooltipKeybind
-                  title={language.t("command.fileTree.toggle")}
-                  keybind={command.keybind("fileTree.toggle")}
-                >
-                  <Button
-                    variant="ghost"
-                    class="group/file-tree-toggle size-6 p-0"
-                    onClick={() => layout.fileTree.toggle()}
-                    aria-label={language.t("command.fileTree.toggle")}
-                    aria-expanded={layout.fileTree.opened()}
-                    aria-controls="file-tree-panel"
+                    <Button
+                      variant="ghost"
+                      class="group/review-toggle titlebar-icon w-8 h-6 p-0 box-border"
+                      onClick={() => view().reviewPanel.toggle()}
+                      aria-label={language.t("command.review.toggle")}
+                      aria-expanded={view().reviewPanel.opened()}
+                      aria-controls="review-panel"
+                    >
+                      <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
+                        <Icon
+                          size="small"
+                          name={view().reviewPanel.opened() ? "layout-right-partial" : "layout-right"}
+                          class="group-hover/review-toggle:hidden"
+                        />
+                        <Icon
+                          size="small"
+                          name="layout-right-partial"
+                          class="hidden group-hover/review-toggle:inline-block"
+                        />
+                        <Icon
+                          size="small"
+                          name={view().reviewPanel.opened() ? "layout-right" : "layout-right-partial"}
+                          class="hidden group-active/review-toggle:inline-block"
+                        />
+                      </div>
+                    </Button>
+                  </TooltipKeybind>
+
+                  <TooltipKeybind
+                    title={language.t("command.fileTree.toggle")}
+                    keybind={command.keybind("fileTree.toggle")}
                   >
-                    <div class="relative flex items-center justify-center size-4">
-                      <Icon
-                        size="small"
-                        name="bullet-list"
-                        classList={{
-                          "text-icon-strong": layout.fileTree.opened(),
-                          "text-icon-weak": !layout.fileTree.opened(),
-                        }}
-                      />
-                    </div>
-                  </Button>
-                </TooltipKeybind>
+                    <Button
+                      variant="ghost"
+                      class="titlebar-icon w-8 h-6 p-0 box-border"
+                      onClick={() => layout.fileTree.toggle()}
+                      aria-label={language.t("command.fileTree.toggle")}
+                      aria-expanded={layout.fileTree.opened()}
+                      aria-controls="file-tree-panel"
+                    >
+                      <div class="relative flex items-center justify-center size-4">
+                        <Icon
+                          size="small"
+                          name={layout.fileTree.opened() ? "file-tree-active" : "file-tree"}
+                          classList={{
+                            "text-icon-strong": layout.fileTree.opened(),
+                            "text-icon-weak": !layout.fileTree.opened(),
+                          }}
+                        />
+                      </div>
+                    </Button>
+                  </TooltipKeybind>
+                </div>
               </div>
             </div>
           </Portal>

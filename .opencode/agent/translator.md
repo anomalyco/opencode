@@ -359,6 +359,7 @@ opencode serve --hostname 0.0.0.0 --port 4096
 opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 opencode session [command]
 opencode session list
+opencode session delete <sessionID>
 opencode stats
 opencode uninstall
 opencode upgrade
@@ -598,6 +599,7 @@ OPENCODE_EXPERIMENTAL_MARKDOWN
 OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX
 OPENCODE_EXPERIMENTAL_OXFMT
 OPENCODE_EXPERIMENTAL_PLAN_MODE
+OPENCODE_ENABLE_QUESTION_TOOL
 OPENCODE_FAKE_VCS
 OPENCODE_GIT_BASH_PATH
 OPENCODE_MODEL

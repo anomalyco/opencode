@@ -1,5 +1,3 @@
-import { Provider } from "@/provider/provider"
-
 import { fn } from "@/util/fn"
 import z from "zod"
 import { Session } from "."
@@ -8,16 +6,10 @@ import { MessageV2 } from "./message-v2"
 import { Identifier } from "@/id/id"
 import { Snapshot } from "@/snapshot"
 
-import { Log } from "@/util/log"
 import { Storage } from "@/storage/storage"
 import { Bus } from "@/bus"
 
-import { LLM } from "./llm"
-import { Agent } from "@/agent/agent"
-
 export namespace SessionSummary {
-  const log = Log.create({ service: "session.summary" })
-
   function unquoteGitPath(input: string) {
     if (!input.startsWith('"')) return input
     if (!input.endsWith('"')) return input
@@ -117,41 +109,6 @@ export namespace SessionSummary {
       diffs,
     }
     await Session.updateMessage(userMsg)
-
-    const textPart = msgWithParts.parts.find((p) => p.type === "text" && !p.synthetic) as MessageV2.TextPart
-    if (textPart && !userMsg.summary?.title) {
-      const agent = await Agent.get("title")
-      if (!agent) return
-      const stream = await LLM.stream({
-        agent,
-        user: userMsg,
-        tools: {},
-        model: agent.model
-          ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
-          : ((await Provider.getSmallModel(userMsg.model.providerID)) ??
-            (await Provider.getModel(userMsg.model.providerID, userMsg.model.modelID))),
-        small: true,
-        messages: [
-          {
-            role: "user" as const,
-            content: `
-              The following is the text to summarize:
-              <text>
-              ${textPart?.text ?? ""}
-              </text>
-            `,
-          },
-        ],
-        abort: new AbortController().signal,
-        sessionID: userMsg.sessionID,
-        system: [],
-        retries: 3,
-      })
-      const result = await stream.text
-      log.info("title", { title: result })
-      userMsg.summary.title = result
-      await Session.updateMessage(userMsg)
-    }
   }
 
   export const diff = fn(

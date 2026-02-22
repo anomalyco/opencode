@@ -1,36 +1,37 @@
 // @refresh reload
-import { webviewZoom } from "./webview-zoom"
-import { render } from "solid-js/web"
+
 import {
   AppBaseProviders,
   AppInterface,
-  PlatformProvider,
-  Platform,
-  useCommand,
   handleNotificationClick,
+  type Platform,
+  PlatformProvider,
+  ServerConnection,
+  useCommand,
 } from "@opencode-ai/app"
-import { open, save } from "@tauri-apps/plugin-dialog"
-import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
-import { openPath as openerOpenPath } from "@tauri-apps/plugin-opener"
-import { open as shellOpen } from "@tauri-apps/plugin-shell"
-import { type as ostype } from "@tauri-apps/plugin-os"
-import { check, Update } from "@tauri-apps/plugin-updater"
-import { getCurrentWindow } from "@tauri-apps/api/window"
-import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification"
-import { relaunch } from "@tauri-apps/plugin-process"
-import { AsyncStorage } from "@solid-primitives/storage"
-import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
-import { Store } from "@tauri-apps/plugin-store"
 import { Splash } from "@opencode-ai/ui/logo"
-import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup } from "solid-js"
+import type { AsyncStorage } from "@solid-primitives/storage"
+import { getCurrentWindow } from "@tauri-apps/api/window"
 import { readImage } from "@tauri-apps/plugin-clipboard-manager"
-
-import { UPDATER_ENABLED } from "./updater"
-import { initI18n, t } from "./i18n"
+import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
+import { open, save } from "@tauri-apps/plugin-dialog"
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
+import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification"
+import { openPath as openerOpenPath } from "@tauri-apps/plugin-opener"
+import { type as ostype } from "@tauri-apps/plugin-os"
+import { relaunch } from "@tauri-apps/plugin-process"
+import { open as shellOpen } from "@tauri-apps/plugin-shell"
+import { Store } from "@tauri-apps/plugin-store"
+import { check, type Update } from "@tauri-apps/plugin-updater"
+import { type Accessor, createResource, type JSX, onCleanup, onMount, Show } from "solid-js"
+import { render } from "solid-js/web"
 import pkg from "../package.json"
+import { initI18n, t } from "./i18n"
+import { UPDATER_ENABLED } from "./updater"
+import { webviewZoom } from "./webview-zoom"
 import "./styles.css"
-import { commands, InitStep } from "./bindings"
 import { Channel } from "@tauri-apps/api/core"
+import { commands, type InitStep } from "./bindings"
 import { createMenu } from "./menu"
 
 const root = document.getElementById("root")
@@ -58,7 +59,7 @@ const listenForDeepLinks = async () => {
   await onOpenUrl((urls) => emitDeepLinks(urls)).catch(() => undefined)
 }
 
-const createPlatform = (password: Accessor<string | null>): Platform => {
+const createPlatform = (): Platform => {
   const os = (() => {
     const type = ostype()
     if (type === "macos" || type === "windows" || type === "linux") return type
@@ -344,22 +345,10 @@ const createPlatform = (password: Accessor<string | null>): Platform => {
     },
 
     fetch: (input, init) => {
-      const pw = password()
-
-      const addHeader = (headers: Headers, password: string) => {
-        headers.append("Authorization", `Basic ${btoa(`opencode:${password}`)}`)
-      }
-
       if (input instanceof Request) {
-        if (pw) addHeader(input.headers, pw)
         return tauriFetch(input)
       } else {
-        const headers = new Headers(init?.headers)
-        if (pw) addHeader(headers, pw)
-        return tauriFetch(input, {
-          ...(init as any),
-          headers: headers,
-        })
+        return tauriFetch(input, init)
       }
     },
 
@@ -417,7 +406,11 @@ const createPlatform = (password: Accessor<string | null>): Platform => {
       return new Promise<File | null>((resolve) => {
         canvas.toBlob((blob) => {
           if (!blob) return resolve(null)
-          resolve(new File([blob], `pasted-image-${Date.now()}.png`, { type: "image/png" }))
+          resolve(
+            new File([blob], `pasted-image-${Date.now()}.png`, {
+              type: "image/png",
+            }),
+          )
         }, "image/png")
       })
     },
@@ -431,9 +424,7 @@ createMenu((id) => {
 void listenForDeepLinks()
 
 render(() => {
-  const [serverPassword, setServerPassword] = createSignal<string | null>(null)
-
-  const platform = createPlatform(() => serverPassword())
+  const platform = createPlatform()
 
   function handleClick(e: MouseEvent) {
     const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
@@ -455,9 +446,16 @@ render(() => {
       <AppBaseProviders>
         <ServerGate>
           {(data) => {
-            setServerPassword(data().password)
-            window.__OPENCODE__ ??= {}
-            window.__OPENCODE__.serverPassword = data().password ?? undefined
+            const server: ServerConnection.Sidecar = {
+              displayName: "Local Server",
+              type: "sidecar",
+              variant: "base",
+              http: {
+                url: data().url,
+                username: "opencode",
+                password: data().password ?? undefined,
+              },
+            }
 
             function Inner() {
               const cmd = useCommand()
@@ -468,7 +466,7 @@ render(() => {
             }
 
             return (
-              <AppInterface defaultUrl={data().url} isSidecar>
+              <AppInterface defaultServer={ServerConnection.key(server)} servers={[server]}>
                 <Inner />
               </AppInterface>
             )

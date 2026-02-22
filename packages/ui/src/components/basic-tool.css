@@ -4,15 +4,44 @@
   display: flex;
   align-items: center;
   align-self: stretch;
-  gap: 20px;
-  justify-content: space-between;
+  gap: 0px;
+  justify-content: flex-start;
 
   [data-slot="basic-tool-tool-trigger-content"] {
-    width: 100%;
+    width: auto;
     display: flex;
     align-items: center;
     align-self: stretch;
-    gap: 20px;
+    gap: 8px;
+  }
+
+  [data-slot="basic-tool-tool-indicator"] {
+    width: 16px;
+    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    [data-component="spinner"] {
+      width: 16px;
+      height: 16px;
+    }
+  }
+
+  [data-slot="basic-tool-tool-spinner"] {
+    width: 16px;
+    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--text-weak);
+
+    [data-component="spinner"] {
+      width: 16px;
+      height: 16px;
+    }
   }
 
   [data-slot="icon-svg"] {
@@ -20,16 +49,17 @@
   }
 
   [data-slot="basic-tool-tool-info"] {
-    flex-grow: 1;
+    flex: 0 1 auto;
     min-width: 0;
+    font-size: 14px;
   }
 
   [data-slot="basic-tool-tool-info-structured"] {
-    width: 100%;
+    width: auto;
     display: flex;
     align-items: center;
     gap: 8px;
-    justify-content: space-between;
+    justify-content: flex-start;
   }
 
   [data-slot="basic-tool-tool-info-main"] {
@@ -43,15 +73,20 @@
   [data-slot="basic-tool-tool-title"] {
     flex-shrink: 0;
     font-family: var(--font-family-sans);
-    font-size: var(--font-size-small);
+    font-size: 14px;
     font-style: normal;
     font-weight: var(--font-weight-medium);
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
-    color: var(--text-base);
+    color: var(--text-strong);
 
     &.capitalize {
       text-transform: capitalize;
+    }
+
+    &.agent-title {
+      color: var(--text-strong);
+      font-weight: var(--font-weight-medium);
     }
   }
 
@@ -62,12 +97,12 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-family: var(--font-family-sans);
-    font-size: var(--font-size-small);
+    font-size: 14px;
     font-style: normal;
-    font-weight: var(--font-weight-medium);
+    font-weight: var(--font-weight-regular);
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
-    color: var(--text-weak);
+    color: var(--text-base);
 
     &.clickable {
       cursor: pointer;
@@ -76,6 +111,26 @@
 
       &:hover {
         color: var(--text-base);
+      }
+    }
+
+    &.subagent-link {
+      color: var(--text-interactive-base);
+      text-decoration: none;
+      text-underline-offset: 2px;
+      font-weight: var(--font-weight-regular);
+
+      &:hover {
+        color: var(--text-interactive-base);
+        text-decoration: underline;
+      }
+
+      &:active {
+        color: var(--text-interactive-base);
+      }
+
+      &:visited {
+        color: var(--text-interactive-base);
       }
     }
   }
@@ -87,11 +142,11 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-family: var(--font-family-sans);
-    font-size: var(--font-size-small);
+    font-size: 14px;
     font-style: normal;
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
-    color: var(--text-weak);
+    color: var(--text-base);
   }
 }

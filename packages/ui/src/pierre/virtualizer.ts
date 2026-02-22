@@ -19,12 +19,35 @@ export const virtualMetrics: Partial<VirtualFileMetrics> = {
   fileGap: 0,
 }
 
+function scrollable(value: string) {
+  return value === "auto" || value === "scroll" || value === "overlay"
+}
+
+function scrollRoot(container: HTMLElement) {
+  let node = container.parentElement
+  while (node) {
+    const style = getComputedStyle(node)
+    if (scrollable(style.overflowY)) return node
+    node = node.parentElement
+  }
+}
+
 function target(container: HTMLElement): Target | undefined {
   if (typeof document === "undefined") return
 
-  const root = container.closest("[data-component='session-review']")
-  if (root instanceof HTMLElement) {
-    const content = root.querySelector("[data-slot='session-review-container']")
+  const review = container.closest("[data-component='session-review']")
+  if (review instanceof HTMLElement) {
+    const content = review.querySelector("[data-slot='session-review-container']")
+    return {
+      key: review,
+      root: review,
+      content: content instanceof HTMLElement ? content : undefined,
+    }
+  }
+
+  const root = scrollRoot(container)
+  if (root) {
+    const content = root.querySelector("[role='log']")
     return {
       key: root,
       root,
