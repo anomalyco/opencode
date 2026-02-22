@@ -1101,7 +1101,7 @@ export namespace Provider {
               if (msg.role !== "assistant" || !Array.isArray(msg.content)) continue
               const thinking = msg.content.filter((b: any) => b.type === "thinking")
               const rest = msg.content.filter((b: any) => b.type !== "thinking")
-              msg[field] = thinking.map((b: any) => b.thinking).join("") || ""
+              msg[field] = thinking.map((b: any) => b.thinking).join("")
               msg.content = rest
             }
             opts.body = JSON.stringify(body)

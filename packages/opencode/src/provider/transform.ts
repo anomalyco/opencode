@@ -139,30 +139,33 @@ export namespace ProviderTransform {
       return msgs.map((msg) => {
         if (msg.role !== "assistant" || !Array.isArray(msg.content)) return msg
 
-        const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
-        const reasoningText = reasoningParts.map((part: any) => part.text).join("")
-        const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
+        const reasoningText = msg.content
+          .filter((part: any) => part.type === "reasoning")
+          .map((part: any) => part.text)
+          .join("")
+        if (!reasoningText) return msg
+
+        const filtered = msg.content.filter((part: any) => part.type !== "reasoning")
 
         // For anthropic protocol non-Claude models, inject a fake signature so the SDK
         // emits thinking blocks. The fetch wrapper converts them to reasoning_content.
         if (isAnthropic) {
-          const parts = reasoningText
-            ? [
-                {
-                  type: "reasoning" as const,
-                  text: reasoningText,
-                  providerOptions: { anthropic: { signature: "interleaved-placeholder" } },
-                },
-                ...filteredContent,
-              ]
-            : msg.content
-          return { ...msg, content: parts }
+          return {
+            ...msg,
+            content: [
+              {
+                type: "reasoning" as const,
+                text: reasoningText,
+                providerOptions: { anthropic: { signature: "interleaved-placeholder" } },
+              },
+              ...filtered,
+            ],
+          }
         }
 
-        if (!reasoningText) return { ...msg, content: filteredContent }
         return {
           ...msg,
-          content: filteredContent,
+          content: filtered,
           providerOptions: {
             ...msg.providerOptions,
             openaiCompatible: {
