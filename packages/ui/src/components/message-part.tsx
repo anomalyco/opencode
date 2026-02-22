@@ -106,6 +106,7 @@ export interface MessagePartProps {
   defaultOpen?: boolean
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number
+  working?: boolean
 }
 
 export type PartComponent = Component<MessagePartProps>
@@ -385,6 +386,7 @@ export function AssistantParts(props: {
                   showAssistantCopyPartID={props.showAssistantCopyPartID}
                   turnDurationMs={props.turnDurationMs}
                   defaultOpen={partDefaultOpen(entry().part, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
+                  working={props.working}
                 />
               )}
             </Show>
@@ -1204,15 +1206,32 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 }
 
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
+  const i18n = useI18n()
   const part = props.part as ReasoningPart
   const text = () => part.text.trim()
   const throttledText = createThrottledValue(text)
+  const [open, setOpen] = createSignal(props.working ?? false)
+
+  // 完成后自动折叠，但用户可以手动点开
+  createEffect(() => {
+    if (!props.working) setOpen(false)
+  })
 
   return (
     <Show when={throttledText()}>
-      <div data-component="reasoning-part">
-        <Markdown text={throttledText()} cacheKey={part.id} />
-      </div>
+      <Collapsible open={open()} onOpenChange={setOpen} variant="ghost">
+        <Collapsible.Trigger>
+          <div data-component="reasoning-trigger">
+            <span>{i18n.t("ui.sessionTurn.status.thinking")}</span>
+            <Collapsible.Arrow />
+          </div>
+        </Collapsible.Trigger>
+        <Collapsible.Content>
+          <div data-component="reasoning-part">
+            <Markdown text={throttledText()} cacheKey={part.id} />
+          </div>
+        </Collapsible.Content>
+      </Collapsible>
     </Show>
   )
 }
