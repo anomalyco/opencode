@@ -242,7 +242,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     // Generate output summary
     const summaryLines = fileChanges.map((change) => {
       if (change.type === "add") {
-        return `A ${path.relative(Instance.worktree, change.filePath)}`
+        return `A ${path.relative(Instance.worktree, change.filePath).replaceAll("\\", "/")}`
       }
       if (change.type === "delete") {
         return `D ${path.relative(Instance.worktree, change.filePath).replaceAll("\\", "/")}`
