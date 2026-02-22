@@ -196,6 +196,7 @@ export namespace MessageV2 {
   export const CompactionPart = PartBase.extend({
     type: z.literal("compaction"),
     auto: z.boolean(),
+    overflow: z.boolean().optional(),
   }).meta({
     ref: "CompactionPart",
   })
@@ -488,7 +489,11 @@ export namespace MessageV2 {
   })
   export type WithParts = z.infer<typeof WithParts>
 
-  export function toModelMessages(input: WithParts[], model: Provider.Model): ModelMessage[] {
+  export function toModelMessages(
+    input: WithParts[],
+    model: Provider.Model,
+    options?: { stripMedia?: boolean },
+  ): ModelMessage[] {
     const result: UIMessage[] = []
     const toolNames = new Set<string>()
     // Track media from tool results that need to be injected as user messages
@@ -562,13 +567,22 @@ export namespace MessageV2 {
               text: part.text,
             })
           // text/plain and directory files are converted into text parts, ignore them
-          if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory")
-            userMessage.parts.push({
-              type: "file",
-              url: part.url,
-              mediaType: part.mime,
-              filename: part.filename,
-            })
+          if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory") {
+            const isMedia = part.mime.startsWith("image/") || part.mime === "application/pdf"
+            if (options?.stripMedia && isMedia) {
+              userMessage.parts.push({
+                type: "text",
+                text: `[Attached ${part.mime}: ${part.filename ?? "file"}]`,
+              })
+            } else {
+              userMessage.parts.push({
+                type: "file",
+                url: part.url,
+                mediaType: part.mime,
+                filename: part.filename,
+              })
+            }
+          }
 
           if (part.type === "compaction") {
             userMessage.parts.push({
@@ -618,7 +632,7 @@ export namespace MessageV2 {
             toolNames.add(part.tool)
             if (part.state.status === "completed") {
               const outputText = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
-              const attachments = part.state.time.compacted ? [] : (part.state.attachments ?? [])
+              const attachments = part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
 
               // For providers that don't support media in tool results, extract media files
               // (images, PDFs) to be sent as a separate user message
