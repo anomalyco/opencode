@@ -86,6 +86,7 @@ const SessionRow = (props: {
   prefetchSession: (session: Session, priority?: "high" | "low") => void
   scheduleHoverPrefetch: () => void
   cancelHoverPrefetch: () => void
+  closeMobileSidebar?: () => void
 }): JSX.Element => (
   <A
     href={`/${props.slug}/session/${props.session.id}`}
@@ -97,6 +98,7 @@ const SessionRow = (props: {
     onFocus={() => props.prefetchSession(props.session, "high")}
     onClick={() => {
       props.setHoverSession(undefined)
+      if (props.mobile) props.closeMobileSidebar?.()
       if (props.sidebarOpened()) return
       props.clearHoverProjectSoon()
     }}
@@ -268,6 +270,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       prefetchSession={props.prefetchSession}
       scheduleHoverPrefetch={scheduleHoverPrefetch}
       cancelHoverPrefetch={cancelHoverPrefetch}
+      closeMobileSidebar={() => layout.mobileSidebar.hide()}
     />
   )
 
@@ -356,6 +359,7 @@ export const NewSessionItem = (props: {
       class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
       onClick={() => {
         props.setHoverSession(undefined)
+        if (props.mobile) layout.mobileSidebar.hide()
         if (layout.sidebar.opened()) return
         props.clearHoverProjectSoon()
       }}
