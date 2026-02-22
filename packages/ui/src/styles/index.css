@@ -23,6 +23,7 @@
 @import "../components/file-icon.css" layer(components);
 @import "../components/hover-card.css" layer(components);
 @import "../components/provider-icon.css" layer(components);
+@import "../components/dock-surface.css" layer(components);
 @import "../components/icon.css" layer(components);
 @import "../components/icon-button.css" layer(components);
 @import "../components/image-preview.css" layer(components);
@@ -43,6 +44,7 @@
 @import "../components/select.css" layer(components);
 @import "../components/spinner.css" layer(components);
 @import "../components/switch.css" layer(components);
+@import "../components/scroll-view.css" layer(components);
 @import "../components/session-review.css" layer(components);
 @import "../components/session-turn.css" layer(components);
 @import "../components/sticky-accordion-header.css" layer(components);

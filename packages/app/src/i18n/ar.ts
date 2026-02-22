@@ -529,6 +529,7 @@ export const dict = {
   "settings.general.section.notifications": "إشعارات النظام",
   "settings.general.section.updates": "التحديثات",
   "settings.general.section.sounds": "المؤثرات الصوتية",
+  "settings.general.section.feed": "الخلاصة",
   "settings.general.section.display": "شاشة العرض",
   "settings.general.row.language.title": "اللغة",
   "settings.general.row.language.description": "تغيير لغة العرض لـ OpenCode",
@@ -538,6 +539,12 @@ export const dict = {
   "settings.general.row.theme.description": "تخصيص سمة OpenCode.",
   "settings.general.row.font.title": "الخط",
   "settings.general.row.font.description": "تخصيص الخط الأحادي المستخدم في كتل التعليمات البرمجية",
+  "settings.general.row.shellToolPartsExpanded.title": "توسيع أجزاء أداة shell",
+  "settings.general.row.shellToolPartsExpanded.description":
+    "إظهار أجزاء أداة shell موسعة بشكل افتراضي في الشريط الزمني",
+  "settings.general.row.editToolPartsExpanded.title": "توسيع أجزاء أداة edit",
+  "settings.general.row.editToolPartsExpanded.description":
+    "إظهار أجزاء أدوات edit و write و patch موسعة بشكل افتراضي في الشريط الزمني",
   "settings.general.row.wayland.title": "استخدام Wayland الأصلي",
   "settings.general.row.wayland.description": "تعطيل التراجع إلى X11 على Wayland. يتطلب إعادة التشغيل.",
   "settings.general.row.wayland.tooltip":
@@ -565,6 +572,7 @@ export const dict = {
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
   "font.option.geistMono": "Geist Mono",
+  "sound.option.none": "بلا",
   "sound.option.alert01": "تنبيه 01",
   "sound.option.alert02": "تنبيه 02",
   "sound.option.alert03": "تنبيه 03",
