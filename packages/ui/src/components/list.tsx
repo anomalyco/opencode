@@ -4,6 +4,7 @@ import { createStore } from "solid-js/store"
 import { useI18n } from "../context/i18n"
 import { Icon, type IconProps } from "./icon"
 import { IconButton } from "./icon-button"
+import { dispatchListKeyEvent } from "./list-keyboard"
 import { TextField } from "./text-field"
 
 function findByKey(container: HTMLElement, key: string) {
@@ -166,14 +167,12 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
 
   const handleKey = (e: KeyboardEvent) => {
     setStore("mouseActive", false)
-    if (e.key === "Escape") return
 
     const all = flat()
-    const selected = all.find((x) => props.key(x) === active())
-    const index = selected ? all.indexOf(selected) : -1
-    props.onKeyEvent?.(e, selected)
+    const { selected, index } = dispatchListKeyEvent(e, all, active(), props.key, props.onKeyEvent)
 
     if (e.defaultPrevented) return
+    if (e.key === "Escape") return
 
     if (e.key === "Enter" && !e.isComposing) {
       e.preventDefault()

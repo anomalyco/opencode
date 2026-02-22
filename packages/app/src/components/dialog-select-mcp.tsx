@@ -1,6 +1,7 @@
 import { Component, createMemo, createSignal, Show } from "solid-js"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Switch } from "@opencode-ai/ui/switch"
@@ -16,6 +17,7 @@ const statusLabels = {
 export const DialogSelectMcp: Component = () => {
   const sync = useSync()
   const sdk = useSDK()
+  const dialog = useDialog()
   const language = useLanguage()
   const [loading, setLoading] = createSignal<string | null>(null)
 
@@ -58,6 +60,12 @@ export const DialogSelectMcp: Component = () => {
         items={items}
         filterKeys={["name", "status"]}
         sortBy={(a, b) => a.name.localeCompare(b.name)}
+        onKeyEvent={(event) => {
+          if (event.key !== "Escape") return
+          event.preventDefault()
+          event.stopPropagation()
+          dialog.close()
+        }}
         onSelect={(x) => {
           if (x) toggle(x.name)
         }}
