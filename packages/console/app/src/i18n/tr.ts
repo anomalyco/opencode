@@ -342,6 +342,7 @@ export const dict = {
   "workspace.usage.table.input": "Giriş",
   "workspace.usage.table.output": "Çıkış",
   "workspace.usage.table.cost": "Maliyet",
+  "workspace.usage.table.session": "Oturum",
   "workspace.usage.breakdown.input": "Giriş",
   "workspace.usage.breakdown.cacheRead": "Önbellek Okuması",
   "workspace.usage.breakdown.cacheWrite": "Önbellek Yazma",

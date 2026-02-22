@@ -327,6 +327,7 @@ export const dict = {
   "workspace.usage.table.input": "輸入",
   "workspace.usage.table.output": "輸出",
   "workspace.usage.table.cost": "成本",
+  "workspace.usage.table.session": "會話",
   "workspace.usage.breakdown.input": "輸入",
   "workspace.usage.breakdown.cacheRead": "快取讀取",
   "workspace.usage.breakdown.cacheWrite": "快取寫入",
