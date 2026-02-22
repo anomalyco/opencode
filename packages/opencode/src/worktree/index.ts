@@ -353,7 +353,28 @@ export namespace Worktree {
     await Project.addSandbox(Instance.project.id, info.directory).catch(() => undefined)
 
     const projectID = Instance.project.id
+    const worktreeCwd = Instance.worktree
     const extra = input?.startCommand?.trim()
+
+    const cleanupFailedWorktree = async () => {
+      log.info("cleaning up failed worktree", { directory: info.directory, branch: info.branch })
+      await fs
+        .rm(info.directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+        .catch((err) => log.error("worktree cleanup: failed to remove directory", { directory: info.directory, error: err }))
+      await $`git worktree remove --force ${info.directory}`
+        .quiet()
+        .nothrow()
+        .cwd(worktreeCwd)
+        .catch(() => undefined)
+      await $`git worktree prune`.quiet().nothrow().cwd(worktreeCwd).catch(() => undefined)
+      await $`git branch -D ${info.branch}`
+        .quiet()
+        .nothrow()
+        .cwd(worktreeCwd)
+        .catch(() => undefined)
+      await Project.removeSandbox(projectID, info.directory).catch(() => undefined)
+    }
+
     setTimeout(() => {
       const start = async () => {
         const populated = await $`git reset --hard`.quiet().nothrow().cwd(info.directory)
@@ -369,6 +390,7 @@ export namespace Worktree {
               },
             },
           })
+          await cleanupFailedWorktree()
           return
         }
 
@@ -392,7 +414,10 @@ export namespace Worktree {
             })
             return false
           })
-        if (!booted) return
+        if (!booted) {
+          await cleanupFailedWorktree()
+          return
+        }
 
         GlobalBus.emit("event", {
           directory: info.directory,
@@ -408,8 +433,9 @@ export namespace Worktree {
         await runStartScripts(info.directory, { projectID, extra })
       }
 
-      void start().catch((error) => {
+      void start().catch(async (error) => {
         log.error("worktree start task failed", { directory: info.directory, error })
+        await cleanupFailedWorktree()
       })
     }, 0)
 
