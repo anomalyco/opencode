@@ -1647,6 +1647,7 @@ function BlockTool(props: {
   onClick?: () => void
   part?: ToolPart
   spinner?: boolean
+  borderColor?: RGBA
 }) {
   const { theme } = useTheme()
   const renderer = useRenderer()
@@ -1662,7 +1663,7 @@ function BlockTool(props: {
       gap={1}
       backgroundColor={hover() ? theme.backgroundMenu : theme.backgroundPanel}
       customBorderChars={SplitBorder.customBorderChars}
-      borderColor={theme.background}
+      borderColor={props.borderColor ?? theme.background}
       onMouseOver={() => props.onClick && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
@@ -1911,6 +1912,12 @@ function Task(props: ToolProps<typeof TaskTool>) {
   const current = createMemo(() => tools().findLast((x) => x.state.status !== "pending"))
 
   const isRunning = createMemo(() => props.part.state.status === "running")
+  const color = createMemo(() => {
+    const name = props.input.subagent_type
+    if (!name) return
+    if (!sync.data.agent.some((x) => x.name === name && !x.hidden)) return
+    return local.agent.color(name)
+  })
 
   return (
     <Switch>
@@ -1924,6 +1931,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
           }
           part={props.part}
           spinner={isRunning()}
+          borderColor={color()}
         >
           <box>
             <text style={{ fg: theme.textMuted }}>
