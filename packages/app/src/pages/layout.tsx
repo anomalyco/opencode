@@ -233,6 +233,13 @@ export default function Layout(props: ParentProps) {
     layout.mobileSidebar.hide()
   }
 
+  const hideMobileSidebarOnLinkTap = (event: MouseEvent) => {
+    const target = event.target
+    if (!(target instanceof Element)) return
+    if (!target.closest("a[href]")) return
+    layout.mobileSidebar.hide()
+  }
+
   function cycleTheme(direction = 1) {
     const ids = availableThemeEntries().map(([id]) => id)
     if (ids.length === 0) return
@@ -2018,7 +2025,10 @@ export default function Layout(props: ParentProps) {
               "translate-x-0": layout.mobileSidebar.opened(),
               "-translate-x-full": !layout.mobileSidebar.opened(),
             }}
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              hideMobileSidebarOnLinkTap(e)
+              e.stopPropagation()
+            }}
           >
             <SidebarContent
               mobile
