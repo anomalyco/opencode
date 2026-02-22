@@ -1864,3 +1864,423 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
     }
   })
 })
+
+// MCP directory loading tests
+
+test("loads MCP configs from .opencode/mcps/ directory", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      const mcpsDir = path.join(opencodeDir, "mcps")
+      await fs.mkdir(mcpsDir, { recursive: true })
+
+      await Filesystem.write(
+        path.join(mcpsDir, "context7.json"),
+        JSON.stringify({
+          type: "remote",
+          url: "https://mcp.context7.com/mcp",
+        }),
+      )
+
+      await Filesystem.write(
+        path.join(mcpsDir, "my-local.json"),
+        JSON.stringify({
+          type: "local",
+          command: ["npx", "my-mcp-server"],
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.mcp?.["context7"]).toEqual({
+        type: "remote",
+        url: "https://mcp.context7.com/mcp",
+      })
+      expect(config.mcp?.["my-local"]).toEqual({
+        type: "local",
+        command: ["npx", "my-mcp-server"],
+      })
+    },
+  })
+})
+
+test("loads MCP configs from .opencode/mcp/ directory (singular)", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      const mcpDir = path.join(opencodeDir, "mcp")
+      await fs.mkdir(mcpDir, { recursive: true })
+
+      await Filesystem.write(
+        path.join(mcpDir, "test-server.json"),
+        JSON.stringify({
+          type: "remote",
+          url: "https://test.example.com/mcp",
+          enabled: false,
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.mcp?.["test-server"]).toEqual({
+        type: "remote",
+        url: "https://test.example.com/mcp",
+        enabled: false,
+      })
+    },
+  })
+})
+
+test("MCP directory files support {env:VAR} substitution", async () => {
+  const originalEnv = process.env["TEST_MCP_API_KEY"]
+  process.env["TEST_MCP_API_KEY"] = "secret-key-123"
+
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const mcpsDir = path.join(dir, ".opencode", "mcps")
+        await fs.mkdir(mcpsDir, { recursive: true })
+
+        await Filesystem.write(
+          path.join(mcpsDir, "n8n.json"),
+          JSON.stringify({
+            type: "local",
+            command: ["npx", "n8n-mcp"],
+            environment: {
+              N8N_API_KEY: "{env:TEST_MCP_API_KEY}",
+            },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.mcp?.["n8n"]).toEqual(
+          expect.objectContaining({
+            type: "local",
+            environment: {
+              N8N_API_KEY: "secret-key-123",
+            },
+          }),
+        )
+      },
+    })
+  } finally {
+    if (originalEnv !== undefined) {
+      process.env["TEST_MCP_API_KEY"] = originalEnv
+    } else {
+      delete process.env["TEST_MCP_API_KEY"]
+    }
+  }
+})
+
+test("MCP directory files support JSONC format", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const mcpsDir = path.join(dir, ".opencode", "mcps")
+      await fs.mkdir(mcpsDir, { recursive: true })
+
+      await Filesystem.write(
+        path.join(mcpsDir, "commented.jsonc"),
+        `{
+          // This is my MCP server
+          "type": "remote",
+          "url": "https://example.com/mcp",
+          "enabled": true
+        }`,
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.mcp?.["commented"]).toEqual({
+        type: "remote",
+        url: "https://example.com/mcp",
+        enabled: true,
+      })
+    },
+  })
+})
+
+test("MCP directory configs merge with opencode.json MCP configs", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      // MCP defined in opencode.json
+      await Filesystem.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            existing: {
+              type: "remote",
+              url: "https://existing.example.com/mcp",
+            },
+          },
+        }),
+      )
+
+      // MCP defined in directory
+      const mcpsDir = path.join(dir, ".opencode", "mcps")
+      await fs.mkdir(mcpsDir, { recursive: true })
+      await Filesystem.write(
+        path.join(mcpsDir, "from-dir.json"),
+        JSON.stringify({
+          type: "remote",
+          url: "https://from-dir.example.com/mcp",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      // Both should be present
+      expect(config.mcp?.["existing"]).toEqual({
+        type: "remote",
+        url: "https://existing.example.com/mcp",
+      })
+      expect(config.mcp?.["from-dir"]).toEqual({
+        type: "remote",
+        url: "https://from-dir.example.com/mcp",
+      })
+    },
+  })
+})
+
+test("MCP directory config overrides same-name MCP from opencode.json", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      // MCP defined in opencode.json with enabled: false
+      await Filesystem.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            myserver: {
+              type: "remote",
+              url: "https://myserver.example.com/mcp",
+              enabled: false,
+            },
+          },
+        }),
+      )
+
+      // Directory config enables it (higher precedence)
+      const mcpsDir = path.join(dir, ".opencode", "mcps")
+      await fs.mkdir(mcpsDir, { recursive: true })
+      await Filesystem.write(
+        path.join(mcpsDir, "myserver.json"),
+        JSON.stringify({
+          type: "remote",
+          url: "https://myserver.example.com/mcp",
+          enabled: true,
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      // Directory config should override (deep merge, enabled: true wins)
+      expect(config.mcp?.["myserver"]?.enabled).toBe(true)
+    },
+  })
+})
+
+test("MCP directory config supports enabled-only toggle files", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      // Full MCP definition in opencode.json
+      await Filesystem.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            heavy: {
+              type: "local",
+              command: ["npx", "heavy-mcp"],
+              enabled: false,
+            },
+          },
+        }),
+      )
+
+      // Directory file just toggles enabled
+      const mcpsDir = path.join(dir, ".opencode", "mcps")
+      await fs.mkdir(mcpsDir, { recursive: true })
+      await Filesystem.write(
+        path.join(mcpsDir, "heavy.json"),
+        JSON.stringify({ enabled: true }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      // Should deep merge: keep command from opencode.json, override enabled from directory
+      expect(config.mcp?.["heavy"]).toEqual(
+        expect.objectContaining({
+          type: "local",
+          command: ["npx", "heavy-mcp"],
+          enabled: true,
+        }),
+      )
+    },
+  })
+})
+
+// .mcp.json file loading tests (Claude Code compatible format)
+
+test("loads MCP servers from .mcp.json at project root", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Filesystem.write(
+        path.join(dir, ".mcp.json"),
+        JSON.stringify({
+          "context7": {
+            type: "remote",
+            url: "https://mcp.context7.com/mcp",
+          },
+          "my-db": {
+            type: "local",
+            command: ["npx", "db-mcp-server"],
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.mcp?.["context7"]).toEqual({
+        type: "remote",
+        url: "https://mcp.context7.com/mcp",
+      })
+      expect(config.mcp?.["my-db"]).toEqual({
+        type: "local",
+        command: ["npx", "db-mcp-server"],
+      })
+    },
+  })
+})
+
+test(".mcp.json supports {env:VAR} substitution", async () => {
+  const originalEnv = process.env["TEST_MCP_URL"]
+  process.env["TEST_MCP_URL"] = "https://secret.example.com/mcp"
+
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Filesystem.write(
+          path.join(dir, ".mcp.json"),
+          JSON.stringify({
+            "my-server": {
+              type: "remote",
+              url: "{env:TEST_MCP_URL}",
+            },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.mcp?.["my-server"]).toEqual({
+          type: "remote",
+          url: "https://secret.example.com/mcp",
+        })
+      },
+    })
+  } finally {
+    if (originalEnv !== undefined) {
+      process.env["TEST_MCP_URL"] = originalEnv
+    } else {
+      delete process.env["TEST_MCP_URL"]
+    }
+  }
+})
+
+test(".mcp.json merges with opencode.json MCP configs", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Filesystem.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            "from-config": {
+              type: "remote",
+              url: "https://config.example.com/mcp",
+            },
+          },
+        }),
+      )
+      await Filesystem.write(
+        path.join(dir, ".mcp.json"),
+        JSON.stringify({
+          "from-dotfile": {
+            type: "remote",
+            url: "https://dotfile.example.com/mcp",
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.mcp?.["from-config"]).toBeDefined()
+      expect(config.mcp?.["from-dotfile"]).toBeDefined()
+    },
+  })
+})
+
+test(".mcp.json is not loaded when OPENCODE_DISABLE_PROJECT_CONFIG is set", async () => {
+  const originalEnv = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+  process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
+
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Filesystem.write(
+          path.join(dir, ".mcp.json"),
+          JSON.stringify({
+            "should-not-load": {
+              type: "remote",
+              url: "https://example.com/mcp",
+            },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.mcp?.["should-not-load"]).toBeUndefined()
+      },
+    })
+  } finally {
+    if (originalEnv !== undefined) {
+      process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = originalEnv
+    } else {
+      delete process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+    }
+  }
+})

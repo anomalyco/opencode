@@ -124,6 +124,15 @@ export namespace Config {
       }
     }
 
+    // Load .mcp.json files (Claude Code compatible format)
+    if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+      const found = await Filesystem.findUp(".mcp.json", Instance.directory, Instance.worktree)
+      for (const resolved of found.toReversed()) {
+        const mcpFromFile = await loadMcpFile(resolved)
+        result.mcp = mergeDeep(result.mcp ?? {}, mcpFromFile)
+      }
+    }
+
     result.agent = result.agent || {}
     result.mode = result.mode || {}
     result.plugin = result.plugin || []
@@ -181,6 +190,7 @@ export namespace Config {
       result.agent = mergeDeep(result.agent, await loadAgent(dir))
       result.agent = mergeDeep(result.agent, await loadMode(dir))
       result.plugin.push(...(await loadPlugin(dir)))
+      result.mcp = mergeDeep(result.mcp ?? {}, await loadMcp(dir))
     }
 
     // Inline config content overrides all non-managed config sources.
@@ -479,6 +489,156 @@ export namespace Config {
       plugins.push(pathToFileURL(item).href)
     }
     return plugins
+  }
+
+  async function loadMcpFile(filepath: string): Promise<NonNullable<Info["mcp"]>> {
+    const McpFileSchema = z.record(
+      z.string(),
+      z.union([
+        McpLocal,
+        McpRemote,
+        z
+          .object({
+            enabled: z.boolean(),
+          })
+          .strict(),
+      ]),
+    )
+    let text = await Filesystem.readText(filepath).catch((err: any) => {
+      if (err.code === "ENOENT") return
+      throw new JsonError({ path: filepath }, { cause: err })
+    })
+    if (!text) return {}
+
+    const configDir = path.dirname(filepath)
+
+    // Apply {env:VAR} substitution
+    text = text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
+      return process.env[varName] || ""
+    })
+
+    // Apply {file:path} substitution
+    const fileMatches = text.match(/\{file:[^}]+\}/g)
+    if (fileMatches) {
+      const lines = text.split("\n")
+      for (const match of fileMatches) {
+        const lineIndex = lines.findIndex((line) => line.includes(match))
+        if (lineIndex !== -1 && lines[lineIndex].trim().startsWith("//")) continue
+        let filePath = match.replace(/^\{file:/, "").replace(/\}$/, "")
+        if (filePath.startsWith("~/")) filePath = path.join(os.homedir(), filePath.slice(2))
+        const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath)
+        const fileContent = (
+          await Bun.file(resolvedPath)
+            .text()
+            .catch((error) => {
+              const errMsg = `bad file reference: "${match}"`
+              if (error.code === "ENOENT") {
+                throw new InvalidError(
+                  { path: filepath, message: errMsg + ` ${resolvedPath} does not exist` },
+                  { cause: error },
+                )
+              }
+              throw new InvalidError({ path: filepath, message: errMsg }, { cause: error })
+            })
+        ).trim()
+        text = text.replace(match, () => JSON.stringify(fileContent).slice(1, -1))
+      }
+    }
+
+    const errors: JsoncParseError[] = []
+    const data = parseJsonc(text, errors, { allowTrailingComma: true })
+    if (errors.length) {
+      log.error("failed to parse .mcp.json", { path: filepath, errors })
+      return {}
+    }
+
+    const parsed = McpFileSchema.safeParse(data)
+    if (parsed.success) {
+      log.info("loaded MCP servers from file", { path: filepath, count: Object.keys(parsed.data).length })
+      return parsed.data
+    }
+
+    log.error("invalid .mcp.json format", { path: filepath, issues: parsed.error.issues })
+    return {}
+  }
+
+  async function loadMcp(dir: string) {
+    const McpEntry = z.union([
+      McpLocal,
+      McpRemote,
+      z
+        .object({
+          enabled: z.boolean(),
+        })
+        .strict(),
+    ])
+    const result: Record<string, z.infer<typeof McpEntry>> = {}
+    for (const item of await Glob.scan("{mcp,mcps}/*.{json,jsonc}", {
+      cwd: dir,
+      absolute: true,
+      dot: true,
+      symlink: true,
+    })) {
+      let text = await Filesystem.readText(item).catch((err: any) => {
+        if (err.code === "ENOENT") return
+        throw new JsonError({ path: item }, { cause: err })
+      })
+      if (!text) continue
+
+      const configDir = path.dirname(item)
+
+      // Apply {env:VAR} substitution
+      text = text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
+        return process.env[varName] || ""
+      })
+
+      // Apply {file:path} substitution
+      const fileMatches = text.match(/\{file:[^}]+\}/g)
+      if (fileMatches) {
+        const lines = text.split("\n")
+        for (const match of fileMatches) {
+          const lineIndex = lines.findIndex((line) => line.includes(match))
+          if (lineIndex !== -1 && lines[lineIndex].trim().startsWith("//")) continue
+          let filePath = match.replace(/^\{file:/, "").replace(/\}$/, "")
+          if (filePath.startsWith("~/")) filePath = path.join(os.homedir(), filePath.slice(2))
+          const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath)
+          const fileContent = (
+            await Bun.file(resolvedPath)
+              .text()
+              .catch((error) => {
+                const errMsg = `bad file reference: "${match}"`
+                if (error.code === "ENOENT") {
+                  throw new InvalidError(
+                    { path: item, message: errMsg + ` ${resolvedPath} does not exist` },
+                    { cause: error },
+                  )
+                }
+                throw new InvalidError({ path: item, message: errMsg }, { cause: error })
+              })
+          ).trim()
+          text = text.replace(match, () => JSON.stringify(fileContent).slice(1, -1))
+        }
+      }
+
+      const errors: JsoncParseError[] = []
+      const data = parseJsonc(text, errors, { allowTrailingComma: true })
+      if (errors.length) {
+        log.error("failed to parse MCP config", { path: item, errors })
+        continue
+      }
+
+      const name = trim(path.basename(item))
+      const parsed = McpEntry.safeParse(data)
+      if (parsed.success) {
+        result[name] = parsed.data
+        continue
+      }
+      log.error("invalid MCP config", {
+        path: item,
+        issues: parsed.error.issues,
+      })
+    }
+    return result
   }
 
   /**
