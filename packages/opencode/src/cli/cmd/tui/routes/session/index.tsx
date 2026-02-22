@@ -7,6 +7,7 @@ import {
   For,
   Match,
   on,
+  onCleanup,
   Show,
   Switch,
   useContext,
@@ -204,7 +205,7 @@ export function Session() {
   })
 
   let lastSwitch: string | undefined = undefined
-  sdk.event.on("message.part.updated", (evt) => {
+  const unsubMessagePartUpdated = sdk.event.on("message.part.updated", (evt) => {
     const part = evt.properties.part
     if (part.type !== "tool") return
     if (part.sessionID !== route.sessionID) return
@@ -218,6 +219,10 @@ export function Session() {
       local.agent.set("plan")
       lastSwitch = part.id
     }
+  })
+
+  onCleanup(() => {
+    unsubMessagePartUpdated()
   })
 
   let scroll: ScrollBoxRenderable
