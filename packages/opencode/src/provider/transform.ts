@@ -135,36 +135,30 @@ export namespace ProviderTransform {
 
     if (typeof model.capabilities.interleaved === "object" && model.capabilities.interleaved.field) {
       const field = model.capabilities.interleaved.field
+      const key =
+        model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/google-vertex/anthropic"
+          ? "anthropic"
+          : "openaiCompatible"
       return msgs.map((msg) => {
-        if (msg.role === "assistant" && Array.isArray(msg.content)) {
-          const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
-          const reasoningText = reasoningParts.map((part: any) => part.text).join("")
+        if (msg.role !== "assistant" || !Array.isArray(msg.content)) return msg
 
-          // Filter out reasoning parts from content
-          const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
+        const reasoningText = msg.content
+          .filter((part: any) => part.type === "reasoning")
+          .map((part: any) => part.text)
+          .join("")
+        if (!reasoningText) return msg
 
-          // Include reasoning_content | reasoning_details directly on the message for all assistant messages
-          if (reasoningText) {
-            return {
-              ...msg,
-              content: filteredContent,
-              providerOptions: {
-                ...msg.providerOptions,
-                openaiCompatible: {
-                  ...(msg.providerOptions as any)?.openaiCompatible,
-                  [field]: reasoningText,
-                },
-              },
-            }
-          }
-
-          return {
-            ...msg,
-            content: filteredContent,
-          }
+        return {
+          ...msg,
+          content: msg.content.filter((part: any) => part.type !== "reasoning"),
+          providerOptions: {
+            ...msg.providerOptions,
+            [key]: {
+              ...(msg.providerOptions as any)?.[key],
+              [field]: reasoningText,
+            },
+          },
         }
-
-        return msg
       })
     }
 
