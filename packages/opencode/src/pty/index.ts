@@ -39,8 +39,9 @@ export namespace Pty {
     return next
   }
 
-  const token = (ws: Socket) => {
-    const data = ws.data
+  const token = (ws: unknown) => {
+    if (!ws || typeof ws !== "object") return ws
+    const data = (ws as { data?: unknown }).data
     if (data === undefined) return
     if (data === null) return
     if (typeof data !== "object") return data
@@ -317,7 +318,7 @@ export namespace Pty {
     }
   }
 
-  export function connect(id: string, ws: Socket, cursor?: number) {
+  export function connect(id: string, ws: Socket, cursor?: number, identity?: unknown) {
     const session = state().get(id)
     if (!session) {
       ws.close()
@@ -337,7 +338,7 @@ export namespace Pty {
     }
 
     owners.set(ws, id)
-    session.subscribers.set(ws, { id: socketId, token: token(ws) })
+    session.subscribers.set(ws, { id: socketId, token: token(identity ?? ws) })
 
     const cleanup = () => {
       session.subscribers.delete(ws)
