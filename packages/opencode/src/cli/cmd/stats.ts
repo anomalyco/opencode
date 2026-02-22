@@ -46,6 +46,21 @@ interface SessionStats {
   medianTokensPerSession: number
 }
 
+type DisplayedModels = [string, SessionStats['modelUsage'][string]][];
+type DisplayedTools = [string, SessionStats['toolUsage'][string]][];
+
+enum StatsOutputFormat {
+  ASCII = "ascii",
+  JSON = "json",
+}
+
+interface DisplayStatsOptions {
+  format: StatsOutputFormat
+  prettyPrintJson?: boolean
+  toolLimit?: number
+  modelLimit?: number
+}
+
 export const StatsCommand = cmd({
   command: "stats",
   describe: "show token usage and cost statistics",
@@ -66,6 +81,15 @@ export const StatsCommand = cmd({
         describe: "filter by project (default: all projects, empty string: current project)",
         type: "string",
       })
+      .option("format", {
+        describe: "output format",
+        default: StatsOutputFormat.ASCII,
+        choices: Object.values(StatsOutputFormat),
+      })
+      .option("pretty", {
+        describe: "pretty-print JSON output (must also use --format json)",
+        type: "boolean",
+      })
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
@@ -78,7 +102,12 @@ export const StatsCommand = cmd({
         modelLimit = args.models
       }
 
-      displayStats(stats, args.tools, modelLimit)
+      displayStats(stats, {
+        format: args.format,
+        prettyPrintJson: args.pretty,
+        toolLimit: args.tools,
+        modelLimit: modelLimit,
+      })
     })
   },
 })
@@ -306,7 +335,46 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
   return stats
 }
 
-export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit?: number) {
+export function displayStats(stats: SessionStats, opts: DisplayStatsOptions) {
+  let modelsToDisplay: DisplayedModels | undefined;
+  if (opts.modelLimit !== undefined && Object.keys(stats.modelUsage).length > 0) {
+    const sortedModels = Object.entries(stats.modelUsage).sort(([, a], [, b]) => b.messages - a.messages)
+    modelsToDisplay = opts.modelLimit === Infinity ? sortedModels : sortedModels.slice(0, opts.modelLimit)
+  }
+
+  let toolsToDisplay: DisplayedTools | undefined;
+  if (Object.keys(stats.toolUsage).length > 0) {
+    const sortedTools = Object.entries(stats.toolUsage).sort(([, a], [, b]) => b - a)
+    toolsToDisplay = opts.toolLimit ? sortedTools.slice(0, opts.toolLimit) : sortedTools
+  }
+
+  if (opts.format === "json") {
+    displayAsJson(stats, opts.prettyPrintJson, modelsToDisplay, toolsToDisplay)
+    return
+  }
+
+  // Default to ASCII output
+  displayAsAscii(stats, modelsToDisplay, toolsToDisplay)
+}
+
+function displayAsJson(stats: SessionStats, prettyPrintJson?: boolean, modelsToDisplay?: DisplayedModels, toolsToDisplay?: DisplayedTools) {
+  // Apply only the displayed models to the stats object
+  stats.modelUsage = modelsToDisplay ? modelsToDisplay.reduce((acc, [model, usage]) => {
+    acc[model] = usage
+    return acc
+  }, {} as SessionStats['modelUsage']) : {}
+
+
+  // Apply only the displayed tools to the stats object
+  stats.toolUsage = toolsToDisplay ? toolsToDisplay.reduce((acc, [tool, count]) => {
+    acc[tool] = count
+    return acc
+  }, {} as SessionStats['toolUsage']) : {}
+
+  console.log(JSON.stringify(stats, null, prettyPrintJson ? 2 : 0))
+}
+
+function displayAsAscii(stats: SessionStats, modelsToDisplay?: DisplayedModels, toolsToDisplay?: DisplayedTools) {
   const width = 56
 
   function renderRow(label: string, value: string): string {
@@ -346,10 +414,7 @@ export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit
   console.log()
 
   // Model Usage section
-  if (modelLimit !== undefined && Object.keys(stats.modelUsage).length > 0) {
-    const sortedModels = Object.entries(stats.modelUsage).sort(([, a], [, b]) => b.messages - a.messages)
-    const modelsToDisplay = modelLimit === Infinity ? sortedModels : sortedModels.slice(0, modelLimit)
-
+  if (modelsToDisplay) {
     console.log("┌────────────────────────────────────────────────────────┐")
     console.log("│                      MODEL USAGE                       │")
     console.log("├────────────────────────────────────────────────────────┤")
@@ -371,10 +436,7 @@ export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit
   console.log()
 
   // Tool Usage section
-  if (Object.keys(stats.toolUsage).length > 0) {
-    const sortedTools = Object.entries(stats.toolUsage).sort(([, a], [, b]) => b - a)
-    const toolsToDisplay = toolLimit ? sortedTools.slice(0, toolLimit) : sortedTools
-
+  if (toolsToDisplay) {
     console.log("┌────────────────────────────────────────────────────────┐")
     console.log("│                      TOOL USAGE                        │")
     console.log("├────────────────────────────────────────────────────────┤")
