@@ -4,7 +4,6 @@ import { RadioGroup } from "./radio-group"
 import { DiffChanges } from "./diff-changes"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
-import { LineComment, LineCommentEditor } from "./line-comment"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { Tooltip } from "./tooltip"
 import { ScrollView } from "./scroll-view"
@@ -12,12 +11,14 @@ import { useDiffComponent } from "../context/diff"
 import { useI18n } from "../context/i18n"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
-import { createEffect, createMemo, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { type FileContent, type FileDiff } from "@opencode-ai/sdk/v2"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
-import { type SelectedLineRange } from "@pierre/diffs"
+import { type DiffLineAnnotation, type SelectedLineRange } from "@pierre/diffs"
 import { Dynamic } from "solid-js/web"
+import { createHoverCommentUtility } from "../pierre/comment-hover"
+import { createLineCommentAnnotationRenderer, type LineCommentAnnotationMeta } from "./line-comment-annotations"
 
 const MAX_DIFF_CHANGED_LINES = 500
 
@@ -137,42 +138,7 @@ type SessionReviewSelection = {
   range: SelectedLineRange
 }
 
-function findSide(element: HTMLElement): "additions" | "deletions" | undefined {
-  const typed = element.closest("[data-line-type]")
-  if (typed instanceof HTMLElement) {
-    const type = typed.dataset.lineType
-    if (type === "change-deletion") return "deletions"
-    if (type === "change-addition" || type === "change-additions") return "additions"
-  }
-
-  const code = element.closest("[data-code]")
-  if (!(code instanceof HTMLElement)) return
-  return code.hasAttribute("data-deletions") ? "deletions" : "additions"
-}
-
-function findMarker(root: ShadowRoot, range: SelectedLineRange) {
-  const marker = (line: number, side?: "additions" | "deletions") => {
-    const nodes = Array.from(root.querySelectorAll(`[data-line="${line}"], [data-alt-line="${line}"]`)).filter(
-      (node): node is HTMLElement => node instanceof HTMLElement,
-    )
-    if (nodes.length === 0) return
-    if (!side) return nodes[0]
-    const match = nodes.find((node) => findSide(node) === side)
-    return match ?? nodes[0]
-  }
-
-  const a = marker(range.start, range.side)
-  const b = marker(range.end, range.endSide ?? range.side)
-  if (!a) return b
-  if (!b) return a
-  return a.getBoundingClientRect().top > b.getBoundingClientRect().top ? a : b
-}
-
-function markerTop(wrapper: HTMLElement, marker: HTMLElement) {
-  const wrapperRect = wrapper.getBoundingClientRect()
-  const rect = marker.getBoundingClientRect()
-  return rect.top - wrapperRect.top + Math.max(0, (rect.height - 20) / 2)
-}
+type SessionReviewAnnotation = LineCommentAnnotationMeta<SessionReviewComment>
 
 export const SessionReview = (props: SessionReviewProps) => {
   let scroll: HTMLDivElement | undefined
@@ -249,11 +215,11 @@ export const SessionReview = (props: SessionReviewProps) => {
       const root = scroll
       if (!root) return
 
-      const anchor = root.querySelector(`[data-comment-id="${focus.id}"]`)
-      const ready =
-        anchor instanceof HTMLElement && anchor.style.pointerEvents !== "none" && anchor.style.opacity !== "0"
+      const wrapper = anchors.get(focus.file)
+      const anchor = wrapper?.querySelector(`[data-comment-id="${focus.id}"]`)
+      const ready = anchor instanceof HTMLElement
 
-      const target = ready ? anchor : anchors.get(focus.file)
+      const target = ready ? anchor : wrapper
       if (!target) {
         if (attempt >= 120) return
         requestAnimationFrame(() => scrollTo(attempt + 1))
@@ -376,51 +342,109 @@ export const SessionReview = (props: SessionReviewProps) => {
                 })
 
                 const [draft, setDraft] = createSignal("")
-                const [positions, setPositions] = createSignal<Record<string, number>>({})
-                const [draftTop, setDraftTop] = createSignal<number | undefined>(undefined)
 
-                const getRoot = () => {
-                  const el = wrapper
-                  if (!el) return
+                const annotationLine = (range: SelectedLineRange) => Math.max(range.start, range.end)
+                const annotationSide = (range: SelectedLineRange) => range.endSide ?? range.side ?? "additions"
+                const selected = () => selectedLines()
 
-                  const host = el.querySelector("diffs-container")
-                  if (!(host instanceof HTMLElement)) return
-                  return host.shadowRoot ?? undefined
-                }
-
-                const updateAnchors = () => {
-                  const el = wrapper
-                  if (!el) return
-
-                  const root = getRoot()
-                  if (!root) return
-
-                  const next: Record<string, number> = {}
-                  for (const item of comments()) {
-                    const marker = findMarker(root, item.selection)
-                    if (!marker) continue
-                    next[item.id] = markerTop(el, marker)
-                  }
-                  setPositions(next)
+                const annotations = createMemo<DiffLineAnnotation<SessionReviewAnnotation>[]>(() => {
+                  const list = comments().map((comment) => ({
+                    side: annotationSide(comment.selection),
+                    lineNumber: annotationLine(comment.selection),
+                    metadata: {
+                      kind: "comment",
+                      key: `comment:${comment.id}`,
+                      comment,
+                    } satisfies SessionReviewAnnotation,
+                  }))
 
                   const range = draftRange()
-                  if (!range) {
-                    setDraftTop(undefined)
-                    return
+                  if (range) {
+                    return [
+                      ...list,
+                      {
+                        side: annotationSide(range),
+                        lineNumber: annotationLine(range),
+                        metadata: {
+                          kind: "draft",
+                          key: `draft:${file}`,
+                          range,
+                        } satisfies SessionReviewAnnotation,
+                      },
+                    ]
                   }
 
-                  const marker = findMarker(root, range)
-                  if (!marker) {
-                    setDraftTop(undefined)
-                    return
-                  }
+                  return list
+                })
 
-                  setDraftTop(markerTop(el, marker))
-                }
+                const annotationRenderer = createLineCommentAnnotationRenderer<SessionReviewComment>({
+                  renderComment: (comment) => ({
+                    id: comment.id,
+                    open: isCommentOpen(comment),
+                    comment: comment.comment,
+                    selection: selectionLabel(comment.selection),
+                    onMouseEnter: () => setSelection({ file: comment.file, range: comment.selection }),
+                    onClick: () => {
+                      if (isCommentOpen(comment)) {
+                        setOpened(null)
+                        return
+                      }
 
-                const scheduleAnchors = () => {
-                  requestAnimationFrame(updateAnchors)
-                }
+                      openComment(comment)
+                    },
+                  }),
+                  renderDraft: (range) => ({
+                    value: draft(),
+                    selection: selectionLabel(range),
+                    onInput: setDraft,
+                    onCancel: () => setCommenting(null),
+                    onSubmit: (comment) => {
+                      props.onLineComment?.({
+                        file,
+                        selection: range,
+                        comment,
+                        preview: selectionPreview(item(), range),
+                      })
+                      setCommenting(null)
+                    },
+                  }),
+                })
+
+                const renderAnnotation = (annotation: DiffLineAnnotation<SessionReviewAnnotation>) =>
+                  annotationRenderer.render(annotation)
+
+                const renderHoverUtility = (
+                  getHoveredLine: () => { lineNumber: number; side?: "additions" | "deletions" },
+                ) =>
+                  createHoverCommentUtility({
+                    label: i18n.t("ui.lineComment.submit"),
+                    getHoveredLine,
+                    onSelect: (hovered) => {
+                      const current = opened()?.file === file ? null : selected()
+                      const range = (() => {
+                        if (current) return current
+                        const next: SelectedLineRange = {
+                          start: hovered.lineNumber,
+                          end: hovered.lineNumber,
+                        }
+                        if (hovered.side) next.side = hovered.side
+                        return next
+                      })()
+
+                      setOpened(null)
+                      setSelection({ file, range })
+                      setCommenting({ file, range })
+                    },
+                  })
+
+                createEffect(() => {
+                  annotationRenderer.reconcile(annotations())
+                })
+
+                onCleanup(() => {
+                  anchors.delete(file)
+                  annotationRenderer.cleanup()
+                })
 
                 createEffect(() => {
                   if (!isImage()) return
@@ -438,15 +462,9 @@ export const SessionReview = (props: SessionReviewProps) => {
                 })
 
                 createEffect(() => {
-                  comments()
-                  scheduleAnchors()
-                })
-
-                createEffect(() => {
                   const range = draftRange()
                   if (!range) return
                   setDraft("")
-                  scheduleAnchors()
                 })
 
                 createEffect(() => {
@@ -506,6 +524,7 @@ export const SessionReview = (props: SessionReviewProps) => {
 
                   if (!range) {
                     setSelection(null)
+                    setCommenting(null)
                     return
                   }
 
@@ -520,8 +539,9 @@ export const SessionReview = (props: SessionReviewProps) => {
                     return
                   }
 
+                  setOpened(null)
                   setSelection({ file, range })
-                  setCommenting({ file, range })
+                  setCommenting(null)
                 }
 
                 const openComment = (comment: SessionReviewComment) => {
@@ -607,7 +627,6 @@ export const SessionReview = (props: SessionReviewProps) => {
                         ref={(el) => {
                           wrapper = el
                           anchors.set(file, el)
-                          scheduleAnchors()
                         }}
                       >
                         <Show when={expanded()}>
@@ -658,11 +677,14 @@ export const SessionReview = (props: SessionReviewProps) => {
                                 diffStyle={diffStyle()}
                                 onRendered={() => {
                                   props.onDiffRendered?.()
-                                  scheduleAnchors()
                                 }}
                                 enableLineSelection={props.onLineComment != null}
+                                enableHoverUtility={props.onLineComment != null}
                                 onLineSelected={handleLineSelected}
                                 onLineSelectionEnd={handleLineSelectionEnd}
+                                annotations={annotations()}
+                                renderAnnotation={renderAnnotation}
+                                renderHoverUtility={props.onLineComment ? renderHoverUtility : undefined}
                                 selectedLines={selectedLines()}
                                 commentedLines={commentedLines()}
                                 before={{
@@ -676,50 +698,6 @@ export const SessionReview = (props: SessionReviewProps) => {
                               />
                             </Match>
                           </Switch>
-
-                          <For each={comments()}>
-                            {(comment) => (
-                              <LineComment
-                                id={comment.id}
-                                top={positions()[comment.id]}
-                                onMouseEnter={() => setSelection({ file: comment.file, range: comment.selection })}
-                                onClick={() => {
-                                  if (isCommentOpen(comment)) {
-                                    setOpened(null)
-                                    return
-                                  }
-
-                                  openComment(comment)
-                                }}
-                                open={isCommentOpen(comment)}
-                                comment={comment.comment}
-                                selection={selectionLabel(comment.selection)}
-                              />
-                            )}
-                          </For>
-
-                          <Show when={draftRange()}>
-                            {(range) => (
-                              <Show when={draftTop() !== undefined}>
-                                <LineCommentEditor
-                                  top={draftTop()}
-                                  value={draft()}
-                                  selection={selectionLabel(range())}
-                                  onInput={setDraft}
-                                  onCancel={() => setCommenting(null)}
-                                  onSubmit={(comment) => {
-                                    props.onLineComment?.({
-                                      file,
-                                      selection: range(),
-                                      comment,
-                                      preview: selectionPreview(item(), range()),
-                                    })
-                                    setCommenting(null)
-                                  }}
-                                />
-                              </Show>
-                            )}
-                          </Show>
                         </Show>
                       </div>
                     </Accordion.Content>

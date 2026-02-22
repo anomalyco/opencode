@@ -4,6 +4,13 @@
   z-index: var(--line-comment-z, 30);
 }
 
+[data-component="line-comment"][data-inline] {
+  position: relative;
+  right: auto;
+  display: inline-flex;
+  align-items: flex-start;
+}
+
 [data-component="line-comment"][data-open] {
   z-index: var(--line-comment-open-z, 100);
 }
@@ -21,7 +28,17 @@
   border: none;
 }
 
+[data-component="line-comment"][data-variant="add"] [data-slot="line-comment-button"] {
+  background: var(--syntax-diff-add);
+}
+
 [data-component="line-comment"] [data-component="icon"] {
+  color: var(--white);
+}
+
+[data-component="line-comment"] [data-slot="line-comment-icon"] {
+  width: 12px;
+  height: 12px;
   color: var(--white);
 }
 
@@ -44,6 +61,22 @@
   background: var(--surface-raised-stronger-non-alpha);
   box-shadow: var(--shadow-lg-border-base);
   padding: 12px;
+}
+
+[data-component="line-comment"][data-inline] [data-slot="line-comment-popover"] {
+  position: relative;
+  top: auto;
+  right: auto;
+  margin-left: 8px;
+}
+
+[data-component="line-comment"][data-inline] [data-slot="line-comment-popover"][data-inline-body] {
+  margin-left: 0;
+}
+
+[data-component="line-comment"][data-inline][data-variant="default"]
+  [data-slot="line-comment-popover"][data-inline-body] {
+  cursor: pointer;
 }
 
 [data-component="line-comment"][data-variant="editor"] [data-slot="line-comment-popover"] {
@@ -112,4 +145,31 @@
 
 [data-component="line-comment"] [data-slot="line-comment-editor-label"] {
   margin-right: auto;
+}
+
+[data-component="line-comment"] [data-slot="line-comment-action"] {
+  border: 1px solid var(--border-base);
+  background: var(--surface-base);
+  color: var(--text-strong);
+  border-radius: var(--radius-md);
+  height: 28px;
+  padding: 0 10px;
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+}
+
+[data-component="line-comment"] [data-slot="line-comment-action"][data-variant="ghost"] {
+  background: transparent;
+}
+
+[data-component="line-comment"] [data-slot="line-comment-action"][data-variant="primary"] {
+  background: var(--text-strong);
+  border-color: var(--text-strong);
+  color: var(--background-base);
+}
+
+[data-component="line-comment"] [data-slot="line-comment-action"]:disabled {
+  opacity: 0.5;
+  pointer-events: none;
 }

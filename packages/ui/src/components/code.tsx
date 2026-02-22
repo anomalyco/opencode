@@ -12,6 +12,7 @@ import {
 import { ComponentProps, createEffect, createMemo, createSignal, onCleanup, onMount, Show, splitProps } from "solid-js"
 import { Portal } from "solid-js/web"
 import { createDefaultOptions, styleVariables } from "../pierre"
+import { markCommentedFileLines } from "../pierre/commented-lines"
 import { getWorkerPool } from "../pierre/worker"
 import { Icon } from "./icon"
 
@@ -556,41 +557,6 @@ export function Code<T>(props: CodeProps<T>) {
     })
   })
 
-  const applyCommentedLines = (ranges: SelectedLineRange[]) => {
-    const root = getRoot()
-    if (!root) return
-
-    const existing = Array.from(root.querySelectorAll("[data-comment-selected]"))
-    for (const node of existing) {
-      if (!(node instanceof HTMLElement)) continue
-      node.removeAttribute("data-comment-selected")
-    }
-
-    const annotations = Array.from(root.querySelectorAll("[data-line-annotation]")).filter(
-      (node): node is HTMLElement => node instanceof HTMLElement,
-    )
-
-    for (const range of ranges) {
-      const start = Math.max(1, Math.min(range.start, range.end))
-      const end = Math.max(range.start, range.end)
-
-      for (let line = start; line <= end; line++) {
-        const nodes = Array.from(root.querySelectorAll(`[data-line="${line}"], [data-column-number="${line}"]`))
-        for (const node of nodes) {
-          if (!(node instanceof HTMLElement)) continue
-          node.setAttribute("data-comment-selected", "")
-        }
-      }
-
-      for (const annotation of annotations) {
-        const line = parseInt(annotation.dataset.lineAnnotation?.split(",")[1] ?? "", 10)
-        if (Number.isNaN(line)) continue
-        if (line < start || line > end) continue
-        annotation.setAttribute("data-comment-selected", "")
-      }
-    }
-  }
-
   const text = () => {
     const value = local.file.contents as unknown
     if (typeof value === "string") return value
@@ -920,7 +886,7 @@ export function Code<T>(props: CodeProps<T>) {
     const value = text()
     instance.render({
       file: typeof local.file.contents === "string" ? local.file : { ...local.file, contents: value },
-      lineAnnotations: local.annotations,
+      lineAnnotations: [],
       containerWrapper: container,
     })
 
@@ -944,8 +910,20 @@ export function Code<T>(props: CodeProps<T>) {
 
   createEffect(() => {
     rendered()
+    const active = instance
+    if (!active) return
+    active.setLineAnnotations(local.annotations ?? [])
+    active.rerender()
+  })
+
+  createEffect(() => {
+    rendered()
     const ranges = local.commentedLines ?? []
-    requestAnimationFrame(() => applyCommentedLines(ranges))
+    requestAnimationFrame(() => {
+      const root = getRoot()
+      if (!root) return
+      markCommentedFileLines(root, ranges)
+    })
   })
 
   createEffect(() => {

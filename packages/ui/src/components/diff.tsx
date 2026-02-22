@@ -3,6 +3,7 @@ import { FileDiff, type FileDiffOptions, type SelectedLineRange, VirtualizedFile
 import { createMediaQuery } from "@solid-primitives/media"
 import { createEffect, createMemo, createSignal, onCleanup, splitProps } from "solid-js"
 import { createDefaultOptions, type DiffProps, styleVariables } from "../pierre"
+import { findDiffSide, markCommentedDiffLines } from "../pierre/commented-lines"
 import { acquireVirtualizer, virtualMetrics } from "../pierre/virtualizer"
 import { getWorkerPool } from "../pierre/worker"
 
@@ -35,19 +36,7 @@ function findLineNumber(node: Node | null): number | undefined {
 function findSide(node: Node | null): SelectionSide | undefined {
   const element = findElement(node)
   if (!element) return
-
-  const line = element.closest("[data-line], [data-alt-line]")
-  if (line instanceof HTMLElement) {
-    const type = line.dataset.lineType
-    if (type === "change-deletion") return "deletions"
-    if (type === "change-addition" || type === "change-additions") return "additions"
-  }
-
-  const code = element.closest("[data-code]")
-  if (!(code instanceof HTMLElement)) return
-
-  if (code.hasAttribute("data-deletions")) return "deletions"
-  return "additions"
+  return findDiffSide(element)
 }
 
 export function Diff<T>(props: DiffProps<T>) {
@@ -278,60 +267,6 @@ export function Diff<T>(props: DiffProps<T>) {
     observer.observe(container, { childList: true, subtree: true })
   }
 
-  const applyCommentedLines = (ranges: SelectedLineRange[]) => {
-    const root = getRoot()
-    if (!root) return
-
-    const existing = Array.from(root.querySelectorAll("[data-comment-selected]"))
-    for (const node of existing) {
-      if (!(node instanceof HTMLElement)) continue
-      node.removeAttribute("data-comment-selected")
-    }
-
-    const diffs = root.querySelector("[data-diff]")
-    if (!(diffs instanceof HTMLElement)) return
-
-    const split = diffs.dataset.diffType === "split"
-
-    const rows = Array.from(diffs.querySelectorAll("[data-line-index]")).filter(
-      (node): node is HTMLElement => node instanceof HTMLElement,
-    )
-    if (rows.length === 0) return
-
-    const annotations = Array.from(diffs.querySelectorAll("[data-line-annotation]")).filter(
-      (node): node is HTMLElement => node instanceof HTMLElement,
-    )
-
-    for (const range of ranges) {
-      const start = rowIndex(root, split, range.start, range.side)
-      if (start === undefined) continue
-
-      const end = (() => {
-        const same = range.end === range.start && (range.endSide == null || range.endSide === range.side)
-        if (same) return start
-        return rowIndex(root, split, range.end, range.endSide ?? range.side)
-      })()
-      if (end === undefined) continue
-
-      const first = Math.min(start, end)
-      const last = Math.max(start, end)
-
-      for (const row of rows) {
-        const idx = lineIndex(split, row)
-        if (idx === undefined) continue
-        if (idx < first || idx > last) continue
-        row.setAttribute("data-comment-selected", "")
-      }
-
-      for (const annotation of annotations) {
-        const idx = parseInt(annotation.dataset.lineAnnotation?.split(",")[1] ?? "", 10)
-        if (Number.isNaN(idx)) continue
-        if (idx < first || idx > last) continue
-        annotation.setAttribute("data-comment-selected", "")
-      }
-    }
-  }
-
   const setSelectedLines = (range: SelectedLineRange | null) => {
     const active = current()
     if (!active) return
@@ -545,7 +480,6 @@ export function Diff<T>(props: DiffProps<T>) {
     const opts = options()
     const workerPool = large() ? getWorkerPool("unified") : getWorkerPool(props.diffStyle)
     const virtualizer = getVirtualizer()
-    const annotations = local.annotations
     const beforeContents = typeof local.before?.contents === "string" ? local.before.contents : ""
     const afterContents = typeof local.after?.contents === "string" ? local.after.contents : ""
 
@@ -572,7 +506,7 @@ export function Diff<T>(props: DiffProps<T>) {
         contents: afterContents,
         cacheKey: cacheKey(afterContents),
       },
-      lineAnnotations: annotations,
+      lineAnnotations: [],
       containerWrapper: container,
     })
 
@@ -596,8 +530,20 @@ export function Diff<T>(props: DiffProps<T>) {
 
   createEffect(() => {
     rendered()
+    const active = current()
+    if (!active) return
+    active.setLineAnnotations(local.annotations ?? [])
+    active.rerender()
+  })
+
+  createEffect(() => {
+    rendered()
     const ranges = local.commentedLines ?? []
-    requestAnimationFrame(() => applyCommentedLines(ranges))
+    requestAnimationFrame(() => {
+      const root = getRoot()
+      if (!root) return
+      markCommentedDiffLines(root, ranges)
+    })
   })
 
   createEffect(() => {
