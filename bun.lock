@@ -1,5 +1,6 @@
 {
   "lockfileVersion": 1,
+  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "opencode",
@@ -240,6 +241,38 @@
         "tailwindcss": "catalog:",
         "typescript": "catalog:",
         "vite": "catalog:",
+      },
+    },
+    "packages/finny-core": {
+      "name": "@finny-ai/core",
+      "version": "0.1.0",
+      "dependencies": {
+        "@finny-ai/integrations": "workspace:*",
+        "@finny-ai/registry": "workspace:*",
+        "@opencode-ai/plugin": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/finny-integrations": {
+      "name": "@finny-ai/integrations",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/finny-registry": {
+      "name": "@finny-ai/registry",
+      "version": "0.1.0",
+      "dependencies": {
+        "@opencode-ai/plugin": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
       },
     },
     "packages/function": {
@@ -988,6 +1021,12 @@
     "@fastify/proxy-addr": ["@fastify/proxy-addr@5.1.0", "", { "dependencies": { "@fastify/forwarded": "^3.0.0", "ipaddr.js": "^2.1.0" } }, "sha512-INS+6gh91cLUjB+PVHfu1UqcB76Sqtpyp7bnL+FYojhjygvOPA9ctiD/JDKsyD9Xgu4hUhCSJBPig/w7duNajw=="],
 
     "@fastify/rate-limit": ["@fastify/rate-limit@10.3.0", "", { "dependencies": { "@lukeed/ms": "^2.0.2", "fastify-plugin": "^5.0.0", "toad-cache": "^3.7.0" } }, "sha512-eIGkG9XKQs0nyynatApA3EVrojHOuq4l6fhB4eeCk4PIOeadvOJz9/4w3vGI44Go17uaXOWEcPkaD8kuKm7g6Q=="],
+
+    "@finny-ai/core": ["@finny-ai/core@workspace:packages/finny-core"],
+
+    "@finny-ai/integrations": ["@finny-ai/integrations@workspace:packages/finny-integrations"],
+
+    "@finny-ai/registry": ["@finny-ai/registry@workspace:packages/finny-registry"],
 
     "@floating-ui/core": ["@floating-ui/core@1.7.4", "", { "dependencies": { "@floating-ui/utils": "^0.2.10" } }, "sha512-C3HlIdsBxszvm5McXlB8PeOEWfBhcGBTZGkGlWc2U0KFY5IwG5OQEuQ8rq52DZmcHDlPLd+YFBK+cZcytwIFWg=="],
 
