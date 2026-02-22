@@ -66,7 +66,7 @@ export namespace Snapshot {
       await $`git --git-dir ${git} config core.autocrlf false`.quiet().nothrow()
       log.info("initialized")
     }
-    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
+    await add(git)
     const hash = await $`git --git-dir ${git} --work-tree ${Instance.worktree} write-tree`
       .quiet()
       .cwd(Instance.directory)
@@ -84,7 +84,7 @@ export namespace Snapshot {
 
   export async function patch(hash: string): Promise<Patch> {
     const git = gitdir()
-    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
+    await add(git)
     const result =
       await $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --name-only ${hash} -- .`
         .quiet()
@@ -162,7 +162,7 @@ export namespace Snapshot {
 
   export async function diff(hash: string) {
     const git = gitdir()
-    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
+    await add(git)
     const result =
       await $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff ${hash} -- .`
         .quiet()
@@ -252,5 +252,39 @@ export namespace Snapshot {
   function gitdir() {
     const project = Instance.project
     return path.join(Global.Path.data, "snapshot", project.id)
+  }
+
+  async function add(git: string) {
+    await syncExclude(git)
+    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
+  }
+
+  async function syncExclude(git: string) {
+    const file = await excludes()
+    const target = path.join(git, "info", "exclude")
+    await fs.mkdir(path.join(git, "info"), { recursive: true })
+    if (!file) {
+      await Bun.write(target, "")
+      return
+    }
+    const text = await Bun.file(file)
+      .text()
+      .catch(() => "")
+    await Bun.write(target, text)
+  }
+
+  async function excludes() {
+    const file = await $`git rev-parse --path-format=absolute --git-path info/exclude`
+      .quiet()
+      .cwd(Instance.worktree)
+      .nothrow()
+      .text()
+    if (!file.trim()) return
+    const exists = await fs
+      .stat(file.trim())
+      .then(() => true)
+      .catch(() => false)
+    if (!exists) return
+    return file.trim()
   }
 }

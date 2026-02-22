@@ -1,5 +1,5 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { batch, createEffect, createMemo, onCleanup } from "solid-js"
+import { type Accessor, batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
 import { Persist, persisted } from "@/utils/persist"
@@ -15,92 +15,126 @@ export function normalizeServerUrl(input: string) {
   return withProtocol.replace(/\/+$/, "")
 }
 
-export function serverDisplayName(url: string) {
-  if (!url) return ""
-  return url.replace(/^https?:\/\//, "").replace(/\/+$/, "")
+export function serverDisplayName(conn?: ServerConnection.Any) {
+  if (!conn) return ""
+  if (conn.displayName) return conn.displayName
+  return conn.http.url.replace(/^https?:\/\//, "").replace(/\/+$/, "")
 }
 
-function projectsKey(url: string) {
-  if (!url) return ""
+function projectsKey(key: ServerConnection.Key) {
+  if (!key) return ""
+  if (key === "sidecar") return "local"
+  if (isLocalHost(key)) return "local"
+  return key
+}
+
+function isLocalHost(url: string) {
   const host = url.replace(/^https?:\/\//, "").split(":")[0]
   if (host === "localhost" || host === "127.0.0.1") return "local"
-  return url
+}
+
+export namespace ServerConnection {
+  type Base = { displayName?: string }
+
+  export type HttpBase = {
+    url: string
+    username?: string
+    password?: string
+  }
+
+  // Regular web connections
+  export type Http = {
+    type: "http"
+    http: HttpBase
+  } & Base
+
+  export type Sidecar = {
+    type: "sidecar"
+    http: HttpBase
+  } & (
+    | // Regular desktop server
+    { variant: "base" }
+    // WSL server (windows only)
+    | {
+        variant: "wsl"
+        distro: string
+      }
+  ) &
+    Base
+
+  // Remote server desktop can SSH into
+  export type Ssh = {
+    type: "ssh"
+    host: string
+    // SSH client exposes an HTTP server for the app to use as a proxy
+    http: HttpBase
+  } & Base
+
+  export type Any =
+    | Http
+    // All these are desktop-only
+    | (Sidecar | Ssh)
+
+  export const key = (conn: Any): Key => {
+    switch (conn.type) {
+      case "http":
+        return Key.make(conn.http.url)
+      case "sidecar": {
+        if (conn.variant === "wsl") return Key.make(`wsl:${conn.distro}`)
+        return Key.make("sidecar")
+      }
+      case "ssh":
+        return Key.make(`ssh:${conn.host}`)
+    }
+  }
+
+  export type Key = string & { _brand: "Key" }
+  export const Key = { make: (v: string) => v as Key }
 }
 
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
-  init: (props: { defaultUrl: string; isSidecar?: boolean }) => {
+  init: (props: { defaultServer: ServerConnection.Key; servers?: Array<ServerConnection.Any> }) => {
     const platform = usePlatform()
 
     const [store, setStore, _, ready] = persisted(
       Persist.global("server", ["server.v3"]),
       createStore({
         list: [] as string[],
-        currentSidecarUrl: "",
         projects: {} as Record<string, StoredProject[]>,
         lastProject: {} as Record<string, string>,
       }),
     )
 
+    const allServers = createMemo((): Array<ServerConnection.Any> => {
+      const servers = [
+        ...(props.servers ?? []),
+        ...store.list.map((value) => ({
+          type: "http" as const,
+          http: typeof value === "string" ? { url: value } : value,
+        })),
+      ]
+
+      const deduped = new Map(servers.map((conn) => [ServerConnection.key(conn), conn]))
+
+      return [...deduped.values()]
+    })
+
     const [state, setState] = createStore({
-      active: "",
+      active: props.defaultServer,
       healthy: undefined as boolean | undefined,
     })
 
     const healthy = () => state.healthy
 
-    const defaultUrl = () => normalizeServerUrl(props.defaultUrl)
-
-    function reconcileStartup() {
-      const fallback = defaultUrl()
-      if (!fallback) return
-
-      const previousSidecarUrl = normalizeServerUrl(store.currentSidecarUrl)
-      const list = previousSidecarUrl ? store.list.filter((url) => url !== previousSidecarUrl) : store.list
-      if (!props.isSidecar) {
-        batch(() => {
-          setStore("list", list)
-          if (store.currentSidecarUrl) setStore("currentSidecarUrl", "")
-          setState("active", fallback)
-        })
-        return
-      }
-
-      const nextList = list.includes(fallback) ? list : [...list, fallback]
-      batch(() => {
-        setStore("list", nextList)
-        setStore("currentSidecarUrl", fallback)
-        setState("active", fallback)
-      })
-    }
-
-    function updateServerList(url: string, remove = false) {
-      if (remove) {
-        const list = store.list.filter((x) => x !== url)
-        const next = state.active === url ? (list[0] ?? defaultUrl() ?? "") : state.active
-        batch(() => {
-          setStore("list", list)
-          setState("active", next)
-        })
-        return
-      }
-
-      batch(() => {
-        if (!store.list.includes(url)) {
-          setStore("list", store.list.length, url)
-        }
-        setState("active", url)
-      })
-    }
-
-    function startHealthPolling(url: string) {
+    function startHealthPolling(conn: ServerConnection.Any) {
       let alive = true
       let busy = false
 
       const run = () => {
         if (busy) return
         busy = true
-        void check(url)
+        void check(conn)
           .then((next) => {
             if (!alive) return
             setState("healthy", next)
@@ -118,59 +152,73 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       }
     }
 
-    function setActive(input: string) {
-      const url = normalizeServerUrl(input)
-      if (!url) return
-      setState("active", url)
+    function setActive(input: ServerConnection.Key) {
+      if (state.active !== input) setState("active", input)
     }
 
     function add(input: string) {
       const url = normalizeServerUrl(input)
       if (!url) return
-      updateServerList(url)
+      return batch(() => {
+        const http: ServerConnection.HttpBase = { url }
+        if (!store.list.includes(url)) {
+          setStore("list", store.list.length, url)
+        }
+        const conn: ServerConnection.Http = { type: "http", http }
+        setState("active", ServerConnection.key(conn))
+        return conn
+      })
     }
 
-    function remove(input: string) {
-      const url = normalizeServerUrl(input)
-      if (!url) return
-      updateServerList(url, true)
+    function remove(key: ServerConnection.Key) {
+      const list = store.list.filter((x) => x !== key)
+      batch(() => {
+        setStore("list", list)
+        if (state.active === key) {
+          const next = list[0]
+          setState("active", next ? ServerConnection.key({ type: "http", http: { url: next } }) : props.defaultServer)
+        }
+      })
     }
-
-    createEffect(() => {
-      if (!ready()) return
-      if (state.active) return
-      reconcileStartup()
-    })
 
     const isReady = createMemo(() => ready() && !!state.active)
 
     const fetcher = platform.fetch ?? globalThis.fetch
-    const check = (url: string) => checkServerHealth(url, fetcher).then((x) => x.healthy)
+    const check = (conn: ServerConnection.Any) => checkServerHealth(conn.http, fetcher).then((x) => x.healthy)
 
     createEffect(() => {
-      const url = state.active
-      if (!url) return
+      const current_ = current()
+      if (!current_) return
 
       setState("healthy", undefined)
-      onCleanup(startHealthPolling(url))
+      onCleanup(startHealthPolling(current_))
     })
 
     const origin = createMemo(() => projectsKey(state.active))
     const projectsList = createMemo(() => store.projects[origin()] ?? [])
-    const isLocal = createMemo(() => origin() === "local")
+    const current: Accessor<ServerConnection.Any | undefined> = createMemo(
+      () => allServers().find((s) => ServerConnection.key(s) === state.active) ?? allServers()[0],
+    )
+    const isLocal = createMemo(() => {
+      const c = current()
+      return (c?.type === "sidecar" && c.variant === "base") || (c?.type === "http" && isLocalHost(c.http.url))
+    })
 
     return {
       ready: isReady,
       healthy,
       isLocal,
-      get url() {
+      get key() {
         return state.active
       },
       get name() {
-        return serverDisplayName(state.active)
+        return serverDisplayName(current())
       },
       get list() {
-        return store.list
+        return allServers()
+      },
+      get current() {
+        return current()
       },
       setActive,
       add,

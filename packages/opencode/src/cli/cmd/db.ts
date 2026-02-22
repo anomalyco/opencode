@@ -4,6 +4,8 @@ import { Database } from "../../storage/db"
 import { Database as BunDatabase } from "bun:sqlite"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
+import { JsonMigration } from "../../storage/json-migration"
+import { EOL } from "os"
 
 const QueryCommand = cmd({
   command: "$0 [query]",
@@ -58,11 +60,59 @@ const PathCommand = cmd({
   },
 })
 
+const MigrateCommand = cmd({
+  command: "migrate",
+  describe: "migrate JSON data to SQLite (merges with existing data)",
+  handler: async () => {
+    const sqlite = new BunDatabase(Database.Path)
+    const tty = process.stderr.isTTY
+    const width = 36
+    const orange = "\x1b[38;5;214m"
+    const muted = "\x1b[0;2m"
+    const reset = "\x1b[0m"
+    let last = -1
+    if (tty) process.stderr.write("\x1b[?25l")
+    try {
+      const stats = await JsonMigration.run(sqlite, {
+        progress: (event) => {
+          const percent = Math.floor((event.current / event.total) * 100)
+          if (percent === last) return
+          last = percent
+          if (tty) {
+            const fill = Math.round((percent / 100) * width)
+            const bar = `${"■".repeat(fill)}${"･".repeat(width - fill)}`
+            process.stderr.write(
+              `\r${orange}${bar} ${percent.toString().padStart(3)}%${reset} ${muted}${event.current}/${event.total}${reset} `,
+            )
+          } else {
+            process.stderr.write(`sqlite-migration:${percent}${EOL}`)
+          }
+        },
+      })
+      if (tty) process.stderr.write("\n")
+      if (tty) process.stderr.write("\x1b[?25h")
+      else process.stderr.write(`sqlite-migration:done${EOL}`)
+      UI.println(
+        `Migration complete: ${stats.projects} projects, ${stats.sessions} sessions, ${stats.messages} messages`,
+      )
+      if (stats.errors.length > 0) {
+        UI.println(`${stats.errors.length} errors occurred during migration`)
+      }
+    } catch (err) {
+      if (tty) process.stderr.write("\x1b[?25h")
+      UI.error(`Migration failed: ${err instanceof Error ? err.message : String(err)}`)
+      process.exit(1)
+    } finally {
+      sqlite.close()
+    }
+  },
+})
+
 export const DbCommand = cmd({
   command: "db",
   describe: "database tools",
   builder: (yargs: Argv) => {
-    return yargs.command(QueryCommand).command(PathCommand).demandCommand()
+    return yargs.command(QueryCommand).command(PathCommand).command(MigrateCommand).demandCommand()
   },
   handler: () => {},
 })
