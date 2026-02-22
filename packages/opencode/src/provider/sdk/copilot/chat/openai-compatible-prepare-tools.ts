@@ -50,7 +50,7 @@ export function prepareTools({
         type: "function",
         function: {
           name: tool.name,
-          description: tool.description,
+          description: tool.description?.trim() ? tool.description : undefined,
           parameters: tool.inputSchema,
         },
       })

@@ -1,6 +1,6 @@
 import { OpenAICompatibleChatLanguageModel } from "@/provider/sdk/copilot/chat/openai-compatible-chat-language-model"
 import { describe, test, expect, mock } from "bun:test"
-import type { LanguageModelV2Prompt } from "@ai-sdk/provider"
+import type { JSONSchema7, LanguageModelV2Prompt } from "@ai-sdk/provider"
 
 async function convertReadableStreamToArray<T>(stream: ReadableStream<T>): Promise<T[]> {
   const reader = stream.getReader()
@@ -536,10 +536,18 @@ describe("doStream", () => {
 })
 
 describe("request body", () => {
-  test("should send tools in OpenAI format", async () => {
-    let capturedBody: unknown
+  const inputSchema: JSONSchema7 = {
+    type: "object",
+    properties: {
+      location: { type: "string" },
+    },
+    required: ["location"],
+  }
+
+  async function tools(description: string) {
+    let body: { tools: unknown[] } | undefined
     const mockFetch = mock(async (_url: string, init?: RequestInit) => {
-      capturedBody = JSON.parse(init?.body as string)
+      body = JSON.parse(init?.body as string)
       return new Response(
         new ReadableStream({
           start(controller) {
@@ -552,41 +560,41 @@ describe("request body", () => {
     })
 
     const model = createModel(mockFetch)
-
     await model.doStream({
       prompt: TEST_PROMPT,
       tools: [
         {
           type: "function",
           name: "get_weather",
-          description: "Get the weather for a location",
-          inputSchema: {
-            type: "object",
-            properties: {
-              location: { type: "string" },
-            },
-            required: ["location"],
-          },
+          description,
+          inputSchema,
         },
       ],
       includeRawChunks: false,
     })
+    return body?.tools ?? []
+  }
 
-    expect((capturedBody as { tools: unknown[] }).tools).toEqual([
+  test("should send tools in OpenAI format", async () => {
+    expect(await tools("Get the weather for a location")).toEqual([
       {
         type: "function",
         function: {
           name: "get_weather",
           description: "Get the weather for a location",
-          parameters: {
-            type: "object",
-            properties: {
-              location: { type: "string" },
-            },
-            required: ["location"],
-          },
+          parameters: inputSchema,
         },
       },
     ])
+  })
+
+  test("should omit function description when it is empty", async () => {
+    const body = await tools("")
+    expect((body[0] as { function: { description?: string } })?.function).not.toHaveProperty("description")
+  })
+
+  test("should omit function description when it is whitespace only", async () => {
+    const body = await tools("   ")
+    expect((body[0] as { function: { description?: string } })?.function).not.toHaveProperty("description")
   })
 })
