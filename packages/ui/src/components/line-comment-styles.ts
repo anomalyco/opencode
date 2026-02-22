@@ -1,3 +1,4 @@
+export const lineCommentStyles = `
 [data-component="line-comment"] {
   position: absolute;
   right: 24px;
@@ -74,8 +75,7 @@
   margin-left: 0;
 }
 
-[data-component="line-comment"][data-inline][data-variant="default"]
-  [data-slot="line-comment-popover"][data-inline-body] {
+[data-component="line-comment"][data-inline][data-variant="default"] [data-slot="line-comment-popover"][data-inline-body] {
   cursor: pointer;
 }
 
@@ -172,4 +172,24 @@
 [data-component="line-comment"] [data-slot="line-comment-action"]:disabled {
   opacity: 0.5;
   pointer-events: none;
+}
+`
+
+let installed = false
+
+export function installLineCommentStyles() {
+  if (installed) return
+  if (typeof document === "undefined") return
+
+  const id = "opencode-line-comment-styles"
+  if (document.getElementById(id)) {
+    installed = true
+    return
+  }
+
+  const style = document.createElement("style")
+  style.id = id
+  style.textContent = lineCommentStyles
+  document.head.appendChild(style)
+  installed = true
 }

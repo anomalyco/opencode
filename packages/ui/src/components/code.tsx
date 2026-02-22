@@ -13,6 +13,7 @@ import { ComponentProps, createEffect, createMemo, createSignal, onCleanup, onMo
 import { Portal } from "solid-js/web"
 import { createDefaultOptions, styleVariables } from "../pierre"
 import { markCommentedFileLines } from "../pierre/commented-lines"
+import { createLineNumberSelectionBridge, restoreShadowTextSelection } from "../pierre/selection-bridge"
 import { getWorkerPool } from "../pierre/worker"
 import { Icon } from "./icon"
 
@@ -30,6 +31,7 @@ export type CodeProps<T = {}> = FileOptions<T> & {
   annotations?: LineAnnotation<T>[]
   selectedLines?: SelectedLineRange | null
   commentedLines?: SelectedLineRange[]
+  onLineNumberSelectionEnd?: (selection: SelectedLineRange | null) => void
   onRendered?: () => void
   onLineSelectionEnd?: (selection: SelectedLineRange | null) => void
   class?: string
@@ -156,6 +158,7 @@ export function Code<T>(props: CodeProps<T>) {
   let dragMoved = false
   let lastSelection: SelectedLineRange | null = null
   let pendingSelectionEnd = false
+  const bridge = createLineNumberSelectionBridge()
 
   const [local, others] = splitProps(props, [
     "file",
@@ -164,6 +167,9 @@ export function Code<T>(props: CodeProps<T>) {
     "annotations",
     "selectedLines",
     "commentedLines",
+    "onLineSelected",
+    "onLineSelectionEnd",
+    "onLineNumberSelectionEnd",
     "onRendered",
   ])
 
@@ -199,6 +205,16 @@ export function Code<T>(props: CodeProps<T>) {
   const options = createMemo(() => ({
     ...createDefaultOptions<T>("unified"),
     ...others,
+    onLineSelected: (range: SelectedLineRange | null) => {
+      lastSelection = range
+      local.onLineSelected?.(range)
+    },
+    onLineSelectionEnd: (range: SelectedLineRange | null) => {
+      lastSelection = range
+      local.onLineSelectionEnd?.(range)
+      if (!bridge.consume(range)) return
+      requestAnimationFrame(() => local.onLineNumberSelectionEnd?.(range))
+    },
   }))
 
   const getRoot = () => {
@@ -684,7 +700,7 @@ export function Code<T>(props: CodeProps<T>) {
     observer.observe(container, { childList: true, subtree: true })
   }
 
-  const updateSelection = () => {
+  const updateSelection = (preserveTextSelection = false) => {
     const root = getRoot()
     if (!root) return
 
@@ -723,6 +739,9 @@ export function Code<T>(props: CodeProps<T>) {
     if (endSide && side && endSide !== side) selected.endSide = endSide
 
     setSelectedLines(selected)
+
+    if (!preserveTextSelection || !domRange) return
+    restoreShadowTextSelection(root, domRange.cloneRange())
   }
 
   const setSelectedLines = (range: SelectedLineRange | null) => {
@@ -735,11 +754,12 @@ export function Code<T>(props: CodeProps<T>) {
 
     selectionFrame = requestAnimationFrame(() => {
       selectionFrame = undefined
-      updateSelection()
+      const finishing = pendingSelectionEnd
+      updateSelection(finishing)
 
       if (!pendingSelectionEnd) return
       pendingSelectionEnd = false
-      props.onLineSelectionEnd?.(lastSelection)
+      local.onLineSelectionEnd?.(lastSelection)
     })
   }
 
@@ -788,9 +808,13 @@ export function Code<T>(props: CodeProps<T>) {
     if (event.button !== 0) return
 
     const { line, numberColumn } = lineFromMouseEvent(event)
-    if (numberColumn) return
+    if (numberColumn) {
+      bridge.begin(true, line)
+      return
+    }
     if (line === undefined) return
 
+    bridge.begin(false, line)
     dragStart = line
     dragEnd = line
     dragMoved = false
@@ -798,16 +822,21 @@ export function Code<T>(props: CodeProps<T>) {
 
   const handleMouseMove = (event: MouseEvent) => {
     if (props.enableLineSelection !== true) return
+
+    const next = lineFromMouseEvent(event)
+    if (bridge.track(event.buttons, next.line)) return
+
     if (dragStart === undefined) return
 
     if ((event.buttons & 1) === 0) {
       dragStart = undefined
       dragEnd = undefined
       dragMoved = false
+      bridge.finish()
       return
     }
 
-    const { line } = lineFromMouseEvent(event)
+    const { line } = next
     if (line === undefined) return
 
     dragEnd = line
@@ -817,13 +846,18 @@ export function Code<T>(props: CodeProps<T>) {
 
   const handleMouseUp = () => {
     if (props.enableLineSelection !== true) return
+
+    if (bridge.finish() === "numbers") {
+      return
+    }
+
     if (dragStart === undefined) return
 
     if (!dragMoved) {
       pendingSelectionEnd = false
       const line = dragStart
       setSelectedLines({ start: line, end: line })
-      props.onLineSelectionEnd?.(lastSelection)
+      local.onLineSelectionEnd?.(lastSelection)
       dragStart = undefined
       dragEnd = undefined
       dragMoved = false
@@ -976,6 +1010,7 @@ export function Code<T>(props: CodeProps<T>) {
     dragStart = undefined
     dragEnd = undefined
     dragMoved = false
+    bridge.reset()
     lastSelection = null
     pendingSelectionEnd = false
   })

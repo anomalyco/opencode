@@ -4,6 +4,7 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { createEffect, createMemo, createSignal, onCleanup, splitProps } from "solid-js"
 import { createDefaultOptions, type DiffProps, styleVariables } from "../pierre"
 import { findDiffSide, markCommentedDiffLines } from "../pierre/commented-lines"
+import { createLineNumberSelectionBridge, restoreShadowTextSelection } from "../pierre/selection-bridge"
 import { acquireVirtualizer, virtualMetrics } from "../pierre/virtualizer"
 import { getWorkerPool } from "../pierre/worker"
 
@@ -53,6 +54,7 @@ export function Diff<T>(props: DiffProps<T>) {
   let dragMoved = false
   let lastSelection: SelectedLineRange | null = null
   let pendingSelectionEnd = false
+  const bridge = createLineNumberSelectionBridge()
 
   const [local, others] = splitProps(props, [
     "before",
@@ -62,6 +64,9 @@ export function Diff<T>(props: DiffProps<T>) {
     "annotations",
     "selectedLines",
     "commentedLines",
+    "onLineSelected",
+    "onLineSelectionEnd",
+    "onLineNumberSelectionEnd",
     "onRendered",
   ])
 
@@ -83,6 +88,20 @@ export function Diff<T>(props: DiffProps<T>) {
     const base = {
       ...createDefaultOptions(props.diffStyle),
       ...others,
+      onLineSelected: (range: SelectedLineRange | null) => {
+        const fixed = fixSelection(range)
+        const next = fixed === undefined ? range : fixed
+        lastSelection = next
+        local.onLineSelected?.(next)
+      },
+      onLineSelectionEnd: (range: SelectedLineRange | null) => {
+        const fixed = fixSelection(range)
+        const next = fixed === undefined ? range : fixed
+        lastSelection = next
+        local.onLineSelectionEnd?.(next)
+        if (!bridge.consume(next)) return
+        requestAnimationFrame(() => local.onLineNumberSelectionEnd?.(next))
+      },
     }
 
     const perf = large() ? { ...base, ...largeOptions } : base
@@ -267,7 +286,7 @@ export function Diff<T>(props: DiffProps<T>) {
     observer.observe(container, { childList: true, subtree: true })
   }
 
-  const setSelectedLines = (range: SelectedLineRange | null) => {
+  const setSelectedLines = (range: SelectedLineRange | null, preserve?: { root: ShadowRoot; text: Range }) => {
     const active = current()
     if (!active) return
 
@@ -279,9 +298,10 @@ export function Diff<T>(props: DiffProps<T>) {
 
     lastSelection = fixed
     active.setSelectedLines(fixed)
+    restoreShadowTextSelection(preserve?.root, preserve?.text)
   }
 
-  const updateSelection = () => {
+  const updateSelection = (preserveTextSelection = false) => {
     const root = getRoot()
     if (!root) return
 
@@ -319,6 +339,12 @@ export function Diff<T>(props: DiffProps<T>) {
     if (side) selected.side = side
     if (endSide && side && endSide !== side) selected.endSide = endSide
 
+    const text = preserveTextSelection && domRange ? domRange.cloneRange() : undefined
+    if (text) {
+      setSelectedLines(selected, { root, text })
+      return
+    }
+
     setSelectedLines(selected)
   }
 
@@ -327,11 +353,12 @@ export function Diff<T>(props: DiffProps<T>) {
 
     selectionFrame = requestAnimationFrame(() => {
       selectionFrame = undefined
-      updateSelection()
+      const finishing = pendingSelectionEnd
+      updateSelection(finishing)
 
       if (!pendingSelectionEnd) return
       pendingSelectionEnd = false
-      props.onLineSelectionEnd?.(lastSelection)
+      local.onLineSelectionEnd?.(lastSelection)
     })
   }
 
@@ -401,9 +428,13 @@ export function Diff<T>(props: DiffProps<T>) {
     if (event.button !== 0) return
 
     const { line, numberColumn, side } = lineFromMouseEvent(event)
-    if (numberColumn) return
+    if (numberColumn) {
+      bridge.begin(true, line)
+      return
+    }
     if (line === undefined) return
 
+    bridge.begin(false, line)
     dragStart = line
     dragEnd = line
     dragSide = side
@@ -413,6 +444,10 @@ export function Diff<T>(props: DiffProps<T>) {
 
   const handleMouseMove = (event: MouseEvent) => {
     if (props.enableLineSelection !== true) return
+
+    const next = lineFromMouseEvent(event)
+    if (bridge.track(event.buttons, next.line)) return
+
     if (dragStart === undefined) return
 
     if ((event.buttons & 1) === 0) {
@@ -421,10 +456,11 @@ export function Diff<T>(props: DiffProps<T>) {
       dragSide = undefined
       dragEndSide = undefined
       dragMoved = false
+      bridge.finish()
       return
     }
 
-    const { line, side } = lineFromMouseEvent(event)
+    const { line, side } = next
     if (line === undefined) return
 
     dragEnd = line
@@ -435,6 +471,11 @@ export function Diff<T>(props: DiffProps<T>) {
 
   const handleMouseUp = () => {
     if (props.enableLineSelection !== true) return
+
+    if (bridge.finish() === "numbers") {
+      return
+    }
+
     if (dragStart === undefined) return
 
     if (!dragMoved) {
@@ -446,7 +487,7 @@ export function Diff<T>(props: DiffProps<T>) {
       }
       if (dragSide) selected.side = dragSide
       setSelectedLines(selected)
-      props.onLineSelectionEnd?.(lastSelection)
+      local.onLineSelectionEnd?.(lastSelection)
       dragStart = undefined
       dragEnd = undefined
       dragSide = undefined
@@ -585,6 +626,7 @@ export function Diff<T>(props: DiffProps<T>) {
     dragSide = undefined
     dragEndSide = undefined
     dragMoved = false
+    bridge.reset()
     lastSelection = null
     pendingSelectionEnd = false
 

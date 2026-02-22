@@ -1,7 +1,10 @@
-import { onMount, Show, splitProps, type JSX } from "solid-js"
+import { createEffect, createSignal, onMount, Show, splitProps, type JSX } from "solid-js"
 import { Button } from "./button"
 import { Icon } from "./icon"
+import { installLineCommentStyles } from "./line-comment-styles"
 import { useI18n } from "../context/i18n"
+
+installLineCommentStyles()
 
 export type LineCommentVariant = "default" | "editor" | "add"
 
@@ -193,11 +196,16 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
   const refs = {
     textarea: undefined as HTMLTextAreaElement | undefined,
   }
+  const [text, setText] = createSignal(split.value)
 
   const focus = () => refs.textarea?.focus()
 
+  createEffect(() => {
+    setText(split.value)
+  })
+
   const submit = () => {
-    const value = split.value.trim()
+    const value = text().trim()
     if (!value) return
     split.onSubmit(value)
   }
@@ -217,8 +225,12 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
           data-slot="line-comment-textarea"
           rows={split.rows ?? 3}
           placeholder={split.placeholder ?? i18n.t("ui.lineComment.placeholder")}
-          value={split.value}
-          on:input={(e) => split.onInput((e.currentTarget as HTMLTextAreaElement).value)}
+          value={text()}
+          on:input={(e) => {
+            const value = (e.currentTarget as HTMLTextAreaElement).value
+            setText(value)
+            split.onInput(value)
+          }}
           on:keydown={(e) => {
             const event = e as KeyboardEvent
             if (e.key === "Escape") {
@@ -256,7 +268,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
                   type="button"
                   data-slot="line-comment-action"
                   data-variant="primary"
-                  disabled={split.value.trim().length === 0}
+                  disabled={text().trim().length === 0}
                   on:click={submit as any}
                 >
                   {split.submitLabel ?? i18n.t("ui.lineComment.submit")}
@@ -267,7 +279,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
             <Button size="small" variant="ghost" onClick={split.onCancel}>
               {split.cancelLabel ?? i18n.t("ui.common.cancel")}
             </Button>
-            <Button size="small" variant="primary" disabled={split.value.trim().length === 0} onClick={submit}>
+            <Button size="small" variant="primary" disabled={text().trim().length === 0} onClick={submit}>
               {split.submitLabel ?? i18n.t("ui.lineComment.submit")}
             </Button>
           </Show>

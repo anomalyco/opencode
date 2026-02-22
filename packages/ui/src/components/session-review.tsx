@@ -18,6 +18,7 @@ import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { type DiffLineAnnotation, type SelectedLineRange } from "@pierre/diffs"
 import { Dynamic } from "solid-js/web"
 import { createHoverCommentUtility } from "../pierre/comment-hover"
+import { cloneSelectedLineRange, lineInSelectedRange } from "../pierre/selection-bridge"
 import { createLineCommentAnnotationRenderer, type LineCommentAnnotationMeta } from "./line-comment-annotations"
 
 const MAX_DIFF_CHANGED_LINES = 500
@@ -202,7 +203,7 @@ export const SessionReview = (props: SessionReviewProps) => {
     setOpened(focus)
 
     const comment = (props.comments ?? []).find((c) => c.file === focus.file && c.id === focus.id)
-    if (comment) setSelection({ file: comment.file, range: comment.selection })
+    if (comment) setSelection({ file: comment.file, range: cloneSelectedLineRange(comment.selection) })
 
     const current = open()
     if (!current.includes(focus.file)) {
@@ -383,7 +384,8 @@ export const SessionReview = (props: SessionReviewProps) => {
                     open: isCommentOpen(comment),
                     comment: comment.comment,
                     selection: selectionLabel(comment.selection),
-                    onMouseEnter: () => setSelection({ file: comment.file, range: comment.selection }),
+                    onMouseEnter: () =>
+                      setSelection({ file: comment.file, range: cloneSelectedLineRange(comment.selection) }),
                     onClick: () => {
                       if (isCommentOpen(comment)) {
                         setOpened(null)
@@ -397,14 +399,18 @@ export const SessionReview = (props: SessionReviewProps) => {
                     value: draft(),
                     selection: selectionLabel(range),
                     onInput: setDraft,
-                    onCancel: () => setCommenting(null),
+                    onCancel: () => {
+                      setDraft("")
+                      setCommenting(null)
+                    },
                     onSubmit: (comment) => {
                       props.onLineComment?.({
                         file,
-                        selection: range,
+                        selection: cloneSelectedLineRange(range),
                         comment,
                         preview: selectionPreview(item(), range),
                       })
+                      setDraft("")
                       setCommenting(null)
                     },
                   }),
@@ -422,7 +428,9 @@ export const SessionReview = (props: SessionReviewProps) => {
                     onSelect: (hovered) => {
                       const current = opened()?.file === file ? null : selected()
                       const range = (() => {
-                        if (current) return current
+                        if (current && lineInSelectedRange(current, hovered.lineNumber, hovered.side)) {
+                          return cloneSelectedLineRange(current)
+                        }
                         const next: SelectedLineRange = {
                           start: hovered.lineNumber,
                           end: hovered.lineNumber,
@@ -431,9 +439,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                         return next
                       })()
 
-                      setOpened(null)
-                      setSelection({ file, range })
-                      setCommenting({ file, range })
+                      openDraft(range)
                     },
                   })
 
@@ -462,8 +468,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                 })
 
                 createEffect(() => {
-                  const range = draftRange()
-                  if (!range) return
+                  draftRange()
                   setDraft("")
                 })
 
@@ -524,29 +529,39 @@ export const SessionReview = (props: SessionReviewProps) => {
 
                   if (!range) {
                     setSelection(null)
+                    setDraft("")
                     setCommenting(null)
                     return
                   }
 
-                  setSelection({ file, range })
+                  setSelection({ file, range: cloneSelectedLineRange(range) })
+                }
+
+                const openDraft = (range: SelectedLineRange) => {
+                  const next = cloneSelectedLineRange(range)
+                  setOpened(null)
+                  setSelection({ file, range: cloneSelectedLineRange(next) })
+                  setCommenting({ file, range: next })
                 }
 
                 const handleLineSelectionEnd = (range: SelectedLineRange | null) => {
                   if (!props.onLineComment) return
 
                   if (!range) {
+                    setDraft("")
                     setCommenting(null)
                     return
                   }
 
+                  const next = cloneSelectedLineRange(range)
                   setOpened(null)
-                  setSelection({ file, range })
+                  setSelection({ file, range: next })
                   setCommenting(null)
                 }
 
                 const openComment = (comment: SessionReviewComment) => {
                   setOpened({ file: comment.file, id: comment.id })
-                  setSelection({ file: comment.file, range: comment.selection })
+                  setSelection({ file: comment.file, range: cloneSelectedLineRange(comment.selection) })
                 }
 
                 const isCommentOpen = (comment: SessionReviewComment) => {
@@ -682,6 +697,10 @@ export const SessionReview = (props: SessionReviewProps) => {
                                 enableHoverUtility={props.onLineComment != null}
                                 onLineSelected={handleLineSelected}
                                 onLineSelectionEnd={handleLineSelectionEnd}
+                                onLineNumberSelectionEnd={(range: SelectedLineRange | null) => {
+                                  if (!range) return
+                                  openDraft(range)
+                                }}
                                 annotations={annotations()}
                                 renderAnnotation={renderAnnotation}
                                 renderHoverUtility={props.onLineComment ? renderHoverUtility : undefined}

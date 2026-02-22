@@ -22,6 +22,7 @@ export function Diff<T>(props: SSRDiffProps<T>) {
     "annotations",
     "selectedLines",
     "commentedLines",
+    "onLineNumberSelectionEnd",
   ])
   const workerPool = useWorkerPool(props.diffStyle)
 

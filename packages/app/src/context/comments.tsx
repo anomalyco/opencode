@@ -44,6 +44,17 @@ function aggregate(comments: Record<string, LineComment[]>) {
     .sort((a, b) => a.time - b.time)
 }
 
+function cloneSelection(selection: SelectedLineRange): SelectedLineRange {
+  const next: SelectedLineRange = {
+    start: selection.start,
+    end: selection.end,
+  }
+
+  if (selection.side) next.side = selection.side
+  if (selection.endSide) next.endSide = selection.endSide
+  return next
+}
+
 function createCommentSessionState(store: Store<CommentStore>, setStore: SetStoreFunction<CommentStore>) {
   const [state, setState] = createStore({
     focus: null as CommentFocus | null,
@@ -70,6 +81,7 @@ function createCommentSessionState(store: Store<CommentStore>, setStore: SetStor
       id: uuid(),
       time: Date.now(),
       ...input,
+      selection: cloneSelection(input.selection),
     }
 
     batch(() => {

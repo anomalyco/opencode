@@ -1,5 +1,5 @@
 import { type SelectedLineRange } from "@pierre/diffs"
-import { type JSX } from "solid-js"
+import { createMemo, createSignal, type JSX } from "solid-js"
 import { render as renderSolid } from "solid-js/web"
 import { LineComment, LineCommentEditor } from "./line-comment"
 
@@ -29,63 +29,77 @@ export function createLineCommentAnnotationRenderer<T>(props: {
   renderComment: (comment: T) => CommentProps
   renderDraft: (range: SelectedLineRange) => DraftProps
 }) {
-  const nodes = new Map<string, VoidFunction>()
+  const nodes = new Map<
+    string,
+    {
+      host: HTMLDivElement
+      dispose: VoidFunction
+      setMeta: (meta: LineCommentAnnotationMeta<T>) => void
+    }
+  >()
 
-  const mount = (meta: LineCommentAnnotationMeta<T>, view: JSX.Element) => {
+  const mount = (meta: LineCommentAnnotationMeta<T>) => {
     if (typeof document === "undefined") return
 
-    nodes.get(meta.key)?.()
     const host = document.createElement("div")
-    const dispose = renderSolid(() => view, host)
-    nodes.set(meta.key, dispose)
-    return host
+    const [current, setCurrent] = createSignal(meta)
+    const view = createMemo<JSX.Element>(() => {
+      const next = current()
+
+      if (next.kind === "comment") {
+        const view = props.renderComment(next.comment)
+        return (
+          <LineComment
+            inline
+            id={view.id}
+            open={view.open}
+            comment={view.comment}
+            selection={view.selection}
+            onClick={view.onClick}
+            onMouseEnter={view.onMouseEnter}
+          />
+        )
+      }
+
+      const view = props.renderDraft(next.range)
+      return (
+        <LineCommentEditor
+          inline
+          value={view.value}
+          selection={view.selection}
+          onInput={view.onInput}
+          onCancel={view.onCancel}
+          onSubmit={view.onSubmit}
+          onPopoverFocusOut={view.onPopoverFocusOut}
+        />
+      )
+    })
+    const dispose = renderSolid(() => <>{view()}</>, host)
+
+    const node = { host, dispose, setMeta: setCurrent }
+    nodes.set(meta.key, node)
+    return node
   }
 
   const render = <A extends { metadata: LineCommentAnnotationMeta<T> }>(annotation: A) => {
     const meta = annotation.metadata
-
-    if (meta.kind === "comment") {
-      const view = props.renderComment(meta.comment)
-      return mount(
-        meta,
-        <LineComment
-          inline
-          id={view.id}
-          open={view.open}
-          comment={view.comment}
-          selection={view.selection}
-          onClick={view.onClick}
-          onMouseEnter={view.onMouseEnter}
-        />,
-      )
-    }
-
-    const view = props.renderDraft(meta.range)
-    return mount(
-      meta,
-      <LineCommentEditor
-        inline
-        value={view.value}
-        selection={view.selection}
-        onInput={view.onInput}
-        onCancel={view.onCancel}
-        onSubmit={view.onSubmit}
-        onPopoverFocusOut={view.onPopoverFocusOut}
-      />,
-    )
+    const node = nodes.get(meta.key) ?? mount(meta)
+    if (!node) return
+    node.setMeta(meta)
+    return node.host
   }
 
   const reconcile = <A extends { metadata: LineCommentAnnotationMeta<T> }>(annotations: A[]) => {
     const next = new Set(annotations.map((annotation) => annotation.metadata.key))
-    for (const [key, dispose] of nodes) {
+    for (const [key, node] of nodes) {
       if (next.has(key)) continue
-      dispose()
+      node.dispose()
       nodes.delete(key)
     }
   }
 
   const cleanup = () => {
-    for (const [, dispose] of nodes) dispose()
+    for (const [, node] of nodes) node.dispose()
     nodes.clear()
   }
 

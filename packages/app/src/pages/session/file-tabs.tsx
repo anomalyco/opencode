@@ -4,6 +4,7 @@ import { Dynamic } from "solid-js/web"
 import { useParams } from "@solidjs/router"
 import { useCodeComponent } from "@opencode-ai/ui/context/code"
 import { createHoverCommentUtility } from "@opencode-ai/ui/pierre/comment-hover"
+import { cloneSelectedLineRange, lineInSelectedRange } from "@opencode-ai/ui/pierre/selection-bridge"
 import {
   createLineCommentAnnotationRenderer,
   type LineCommentAnnotationMeta,
@@ -162,14 +163,28 @@ export function FileTabContent(props: { tab: string }) {
   const [note, setNote] = createStore({
     openedComment: null as string | null,
     commenting: null as SelectedLineRange | null,
+    selected: null as SelectedLineRange | null,
     draft: "",
   })
 
+  const activeSelection = () => note.selected ?? selectedLines()
+
   const setCommenting = (range: SelectedLineRange | null) => {
-    setNote("commenting", range)
-    if (!range) return
     setNote("draft", "")
+    setNote("commenting", range ? cloneSelectedLineRange(range) : null)
   }
+
+  createEffect(
+    on(
+      path,
+      () => {
+        setNote("selected", null)
+        setNote("openedComment", null)
+        setNote("commenting", null)
+      },
+      { defer: true },
+    ),
+  )
 
   const annotationLine = (range: SelectedLineRange) => Math.max(range.start, range.end)
   const annotations = createMemo(() => {
@@ -196,7 +211,7 @@ export function FileTabContent(props: { tab: string }) {
       ]
     }
 
-    const range = selectedLines()
+    const range = activeSelection()
     if (!range || note.openedComment) return list
     return list
   })
@@ -210,14 +225,14 @@ export function FileTabContent(props: { tab: string }) {
       onMouseEnter: () => {
         const p = path()
         if (!p) return
-        file.setSelectedLines(p, comment.selection)
+        file.setSelectedLines(p, cloneSelectedLineRange(comment.selection))
       },
       onClick: () => {
         const p = path()
         if (!p) return
         setCommenting(null)
         setNote("openedComment", (current) => (current === comment.id ? null : comment.id))
-        file.setSelectedLines(p, comment.selection)
+        file.setSelectedLines(p, cloneSelectedLineRange(comment.selection))
       },
     }),
     renderDraft: (range) => ({
@@ -247,21 +262,27 @@ export function FileTabContent(props: { tab: string }) {
 
   const renderAnnotation = annotationRenderer.render
 
+  const openDraft = (range: SelectedLineRange) => {
+    const p = path()
+    if (!p) return
+    const next = cloneSelectedLineRange(range)
+    setNote("openedComment", null)
+    setNote("selected", next)
+    file.setSelectedLines(p, cloneSelectedLineRange(next))
+    setCommenting(next)
+  }
+
   const renderHoverUtility = (getHoveredLine: () => { lineNumber: number; side?: "additions" | "deletions" }) =>
     createHoverCommentUtility({
       label: language.t("ui.lineComment.submit"),
       getHoveredLine,
       onSelect: (hovered) => {
-        const p = path()
-        if (!p) return
-
-        const range = note.openedComment
-          ? { start: hovered.lineNumber, end: hovered.lineNumber }
-          : (selectedLines() ?? { start: hovered.lineNumber, end: hovered.lineNumber })
-
-        setNote("openedComment", null)
-        file.setSelectedLines(p, range)
-        setCommenting(range)
+        const selected = note.openedComment ? null : activeSelection()
+        const range =
+          selected && lineInSelectedRange(selected, hovered.lineNumber, hovered.side)
+            ? cloneSelectedLineRange(selected)
+            : { start: hovered.lineNumber, end: hovered.lineNumber }
+        openDraft(range)
       },
     })
 
@@ -284,8 +305,9 @@ export function FileTabContent(props: { tab: string }) {
     if (!target) return
 
     setNote("openedComment", target.id)
+    setNote("selected", cloneSelectedLineRange(target.selection))
     setCommenting(null)
-    file.setSelectedLines(p, target.selection)
+    file.setSelectedLines(p, cloneSelectedLineRange(target.selection))
     requestAnimationFrame(() => comments.clearFocus())
   })
 
@@ -435,7 +457,7 @@ export function FileTabContent(props: { tab: string }) {
         }}
         enableLineSelection
         enableHoverUtility
-        selectedLines={selectedLines()}
+        selectedLines={activeSelection()}
         commentedLines={commentedLines()}
         onRendered={() => {
           requestAnimationFrame(restoreScroll)
@@ -443,11 +465,20 @@ export function FileTabContent(props: { tab: string }) {
         annotations={annotations()}
         renderAnnotation={renderAnnotation}
         renderHoverUtility={renderHoverUtility}
+        onLineSelected={(range: SelectedLineRange | null) => {
+          setNote("selected", range ? cloneSelectedLineRange(range) : null)
+        }}
+        onLineNumberSelectionEnd={(range: SelectedLineRange | null) => {
+          if (!range) return
+          openDraft(range)
+        }}
         onLineSelectionEnd={(range: SelectedLineRange | null) => {
+          const next = range ? cloneSelectedLineRange(range) : null
+          setNote("selected", next)
           const p = path()
-          if (p) file.setSelectedLines(p, range)
+          if (p) file.setSelectedLines(p, next ? cloneSelectedLineRange(next) : null)
 
-          if (!range) {
+          if (!next) {
             setCommenting(null)
             return
           }

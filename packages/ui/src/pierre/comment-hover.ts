@@ -27,6 +27,8 @@ export function createHoverCommentUtility(props: {
   button.style.fontSize = "14px"
   button.style.lineHeight = "1"
   button.style.cursor = "pointer"
+  button.style.position = "relative"
+  button.style.left = "22px"
 
   let line: HoverCommentLine | undefined
 
@@ -51,6 +53,11 @@ export function createHoverCommentUtility(props: {
   requestAnimationFrame(loop)
   button.addEventListener("mouseenter", sync)
   button.addEventListener("mousemove", sync)
+  button.addEventListener("pointerdown", (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    sync()
+  })
   button.addEventListener("mousedown", (event) => {
     event.preventDefault()
     event.stopPropagation()
