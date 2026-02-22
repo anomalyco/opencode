@@ -79,22 +79,34 @@ impl CommandChild {
 }
 
 pub async fn get_config(app: &AppHandle) -> Option<Config> {
-    let (events, _) = spawn_command(app, "debug config", &[]).ok()?;
+    let (events, child) = spawn_command(app, "debug config", &[]).ok()?;
 
-    events
-        .fold(String::new(), async |mut config_str, event| {
-            if let CommandEvent::Stdout(s) = &event {
-                config_str += s.as_str()
-            }
-            if let CommandEvent::Stderr(s) = &event {
-                config_str += s.as_str()
-            }
+    let result = tokio::time::timeout(Duration::from_secs(15), async {
+        events
+            .fold(String::new(), async |mut config_str, event| {
+                if let CommandEvent::Stdout(s) = &event {
+                    config_str += s.as_str()
+                }
+                if let CommandEvent::Stderr(s) = &event {
+                    config_str += s.as_str()
+                }
 
-            config_str
-        })
-        .map(|v| serde_json::from_str::<Config>(&v))
-        .await
-        .ok()
+                config_str
+            })
+            .map(|v| serde_json::from_str::<Config>(&v))
+            .await
+            .ok()
+    })
+    .await;
+
+    match result {
+        Ok(config) => config,
+        Err(_) => {
+            tracing::warn!("get_config timed out after 15s");
+            let _ = child.kill();
+            None
+        }
+    }
 }
 
 fn get_cli_install_path() -> Option<std::path::PathBuf> {
@@ -339,7 +351,7 @@ pub fn spawn_command(
         };
 
         let mut cmd = Command::new(shell);
-        cmd.args(["-il", "-c", &line]);
+        cmd.args(["-l", "-c", &line]);
 
         for (key, value) in envs {
             cmd.env(key, value);
@@ -562,11 +574,10 @@ async fn read_line<F: Fn(String) -> CommandEvent + Send + Copy + 'static>(
         let line = lines.next_line().await;
 
         match line {
-            Ok(s) => {
-                if let Some(s) = s {
-                    let _ = tx.clone().send(wrapper(s)).await;
-                }
+            Ok(Some(s)) => {
+                let _ = tx.clone().send(wrapper(s)).await;
             }
+            Ok(None) => break,
             Err(e) => {
                 let tx_ = tx.clone();
                 let _ = tx_.send(CommandEvent::Error(e.to_string())).await;
