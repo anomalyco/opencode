@@ -19,6 +19,7 @@ import { dict as no } from "@/i18n/no"
 import { dict as br } from "@/i18n/br"
 import { dict as th } from "@/i18n/th"
 import { dict as bs } from "@/i18n/bs"
+import { dict as ca } from "@/i18n/ca"
 import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
 import { dict as uiZh } from "@opencode-ai/ui/i18n/zh"
 import { dict as uiZht } from "@opencode-ai/ui/i18n/zht"
@@ -35,6 +36,7 @@ import { dict as uiNo } from "@opencode-ai/ui/i18n/no"
 import { dict as uiBr } from "@opencode-ai/ui/i18n/br"
 import { dict as uiTh } from "@opencode-ai/ui/i18n/th"
 import { dict as uiBs } from "@opencode-ai/ui/i18n/bs"
+import { dict as uiCa } from "@opencode-ai/ui/i18n/ca"
 
 export type Locale =
   | "en"
@@ -53,6 +55,7 @@ export type Locale =
   | "br"
   | "th"
   | "bs"
+  | "ca"
 
 type RawDictionary = typeof en & typeof uiEn
 type Dictionary = i18n.Flatten<RawDictionary>
@@ -74,6 +77,7 @@ const LOCALES: readonly Locale[] = [
   "pl",
   "ru",
   "bs",
+  "ca",
   "ar",
   "no",
   "br",
@@ -97,6 +101,7 @@ const LABEL_KEY: Record<Locale, keyof Dictionary> = {
   br: "language.br",
   th: "language.th",
   bs: "language.bs",
+  ca: "language.ca",
 }
 
 const base = i18n.flatten({ ...en, ...uiEn })
@@ -117,6 +122,7 @@ const DICT: Record<Locale, Dictionary> = {
   br: { ...base, ...i18n.flatten({ ...br, ...uiBr }) },
   th: { ...base, ...i18n.flatten({ ...th, ...uiTh }) },
   bs: { ...base, ...i18n.flatten({ ...bs, ...uiBs }) },
+  ca: { ...base, ...i18n.flatten({ ...ca, ...uiCa }) },
 }
 
 const localeMatchers: Array<{ locale: Locale; match: (language: string) => boolean }> = [
@@ -138,6 +144,7 @@ const localeMatchers: Array<{ locale: Locale; match: (language: string) => boole
   { locale: "br", match: (language) => language.startsWith("pt") },
   { locale: "th", match: (language) => language.startsWith("th") },
   { locale: "bs", match: (language) => language.startsWith("bs") },
+  { locale: "ca", match: (language) => language.startsWith("ca") },
 ]
 
 type ParityKey = "command.session.previous.unseen" | "command.session.next.unseen"
@@ -157,6 +164,7 @@ const PARITY_CHECK: Record<Exclude<Locale, "en">, Record<ParityKey, string>> = {
   br,
   th,
   bs,
+  ca,
 }
 void PARITY_CHECK
 
