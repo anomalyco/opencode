@@ -26,7 +26,7 @@ export const isRootVisibleSession = (session: Session, directory: string) =>
   workspaceKey(session.directory) === workspaceKey(directory) && !session.parentID && !session.time?.archived
 
 export const sortedRootSessions = (store: { session: Session[]; path: { directory: string } }, now: number) =>
-  store.session.filter((session) => isRootVisibleSession(session, store.path.directory)).toSorted(sortSessions(now))
+  store.session.filter((session) => isRootVisibleSession(session, store.path.directory)).sort(sortSessions(now))
 
 export const childMapByParent = (sessions: Session[]) => {
   const map = new Map<string, string[]>()

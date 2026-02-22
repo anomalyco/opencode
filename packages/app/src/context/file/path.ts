@@ -90,9 +90,14 @@ export function encodeFilePath(filepath: string): string {
   }
 
   // Encode each path segment (preserving forward slashes as path separators)
+  // Keep the colon in Windows drive letters (`/C:/...`) so downstream file URL parsers
+  // can reliably detect drives.
   return normalized
     .split("/")
-    .map((segment) => encodeURIComponent(segment))
+    .map((segment, index) => {
+      if (index === 1 && /^[A-Za-z]:$/.test(segment)) return segment
+      return encodeURIComponent(segment)
+    })
     .join("/")
 }
 

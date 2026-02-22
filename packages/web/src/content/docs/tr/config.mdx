@@ -1,0 +1,685 @@
+---
+title: Yapılandırma
+description: opencode JSON yapılandırması kullanır.
+---
+
+opencode'u JSON yapılandırma dosyası kullanarak yapılandırabilirsiniz.
+
+---
+
+## Format
+
+opencode hem **JSON** hem de **JSONC** (JSON Yorumlarla birlikte) formatlarını destekler.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Theme configuration
+  "theme": "opencode",
+  "model": "anthropic/claude-sonnet-4-5",
+  "autoupdate": true,
+}
+```
+
+---
+
+## Konumlar
+
+Yapılandırmanızı birkaç farklı konuma yerleştirebilirsiniz ve bunların
+farklı öncelik sırası vardır.
+
+:::note
+Yapılandırma dosyaları **birleştirilir**, değiştirilmez.
+:::
+
+Yapılandırma dosyaları değiştirilmez, birleştirilir. Aşağıdaki yapılandırma konumlarındaki ayarlar birleştirilir. Daha sonraki yapılandırmalar, yalnızca çakışan anahtarlar için önceki yapılandırmaları geçersiz kılar. Tüm yapılandırmalardaki çakışmayan ayarlar korunur.
+
+Örneğin, genel ayarınız `theme: "opencode"` ve `autoupdate: true`'yi ayarlıyorsa ve proje ayarlarınız `model: "anthropic/claude-sonnet-4-5"`'yi ayarlıyorsa, nihai yapılandırma üç ayarı da içerecektir.
+
+---
+
+### Öncelik sırası
+
+Yapılandırma kaynakları bu sırayla yüklenir (sonraki kaynaklar öncekileri geçersiz kılar):
+
+1. **Uzak yapılandırma** (`.well-known/opencode`'dan) - kurumsal varsayılanlar
+2. **Genel yapılandırma** (`~/.config/opencode/opencode.json`) - kullanıcı tercihleri
+3. **Özel yapılandırma** (`OPENCODE_CONFIG` env var) - özel geçersiz kılmalar
+4. **Proje yapılandırması** (projedeki `opencode.json`) - projeye özgü ayarlar
+5. **`.opencode` dizinleri** - agent'lar, komutlar, eklentiler
+6. **Satır içi yapılandırma** (`OPENCODE_CONFIG_CONTENT` env var) - çalışma zamanı geçersiz kılmaları
+
+Bu, proje yapılandırmalarının genel varsayılanları geçersiz kılabileceği ve genel yapılandırmaların uzak organizasyonel varsayılanları geçersiz kılabileceği anlamına gelir.
+
+:::note
+`.opencode` ve `~/.config/opencode` dizinleri alt dizinler için **çoğul adlar** kullanır: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` ve `themes/`. Tekil adlar (örneğin, `agent/`) da geriye dönük uyumluluk açısından desteklenir.
+:::
+
+---
+
+### Uzak
+
+Kuruluşlar, `.well-known/opencode` uç noktası aracılığıyla varsayılan yapılandırmayı sağlayabilir. Bu, onu destekleyen bir sağlayıcıyla kimlik doğrulaması yaptığınızda otomatik olarak alınır.
+
+Uzak yapılandırma ilk olarak yüklenir ve temel katman görevi görür. Diğer tüm yapılandırma kaynakları (genel, proje) bu varsayılanları geçersiz kılabilir.
+
+Örneğin, kuruluşunuz varsayılan olarak devre dışı bırakılan MCP sunucuları sağlıyorsa:
+
+```json title="Remote config from .well-known/opencode"
+{
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": false
+    }
+  }
+}
+```
+
+Yerel yapılandırmanızda belirli sunucuları etkinleştirebilirsiniz:
+
+```json title="opencode.json"
+{
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+---
+
+### Global
+
+Global opencode yapılandırmanızı `~/.config/opencode/opencode.json` içine yerleştirin. Temalar, sağlayıcılar veya tuş atamaları gibi kullanıcı çapındaki tercihler için genel yapılandırmayı kullanın.
+
+Genel yapılandırma, uzak kurumsal varsayılanları geçersiz kılar.
+
+---
+
+### Proje başına
+
+Proje kökünüze `opencode.json` ekleyin. Proje yapılandırması, standart yapılandırma dosyaları arasında en yüksek önceliğe sahiptir; hem genel hem de uzak yapılandırmaları geçersiz kılar.
+
+:::tip
+Projeye özel yapılandırmayı projenizin köküne yerleştirin.
+:::
+
+opencode başlatıldığında geçerli dizinde bir yapılandırma dosyası arar veya en yakın Git dizinine gider.
+
+Bunun Git'te kontrol edilmesi de güvenlidir ve global olanla aynı şemayı kullanır.
+
+---
+
+### Özel yol
+
+`OPENCODE_CONFIG` ortam değişkenini kullanarak özel bir yapılandırma dosyası yolu belirtin.
+
+```bash
+export OPENCODE_CONFIG=/path/to/my/custom-config.json
+opencode run "Hello world"
+```
+
+Özel yapılandırma genel ve proje yapılandırmaları arasında öncelik sırasına göre yüklenir.
+
+---
+
+### Özel dizin
+
+`OPENCODE_CONFIG_DIR` kullanarak özel bir yapılandırma dizini belirtin
+ortam değişkeni. Bu dizin agent'lar, komutlar için aranacaktır.
+modlar ve eklentiler tıpkı standart `.opencode` dizini gibi olmalıdır ve
+aynı yapıyı takip edin.
+
+```bash
+export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+opencode run "Hello world"
+```
+
+Özel dizin, genel yapılandırma ve `.opencode` dizinlerinden sonra yüklenir, böylece bunların ayarlarını **geçersiz kılabilir**.
+
+---
+
+## Şema
+
+Yapılandırma dosyası [**`opencode.ai/config.json`**](https://opencode.ai/config.json)'da tanımlanan bir şemaya sahiptir.
+
+Editörünüz şemaya göre doğrulama ve otomatik tamamlama yapabilmelidir.
+
+---
+
+### TUI
+
+TUI'ye özgü ayarları `tui` seçeneği aracılığıyla yapılandırabilirsiniz.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tui": {
+    "scroll_speed": 3,
+    "scroll_acceleration": {
+      "enabled": true
+    },
+    "diff_style": "auto"
+  }
+}
+```
+
+Mevcut seçenekler:
+
+- `scroll_acceleration.enabled` - MacOS tarzı kaydırma hızlandırmayı etkinleştirin. **`scroll_speed`'ye göre önceliklidir.**
+- `scroll_speed` - Özel kaydırma hızı çarpanı (varsayılan: `3`, minimum: `1`). `scroll_acceleration.enabled` `true` ise dikkate alınmaz.
+- `diff_style` - Fark oluşturmayı kontrol edin. `"auto"` terminal genişliğine uyum sağlar, `"stacked"` her zaman tek sütunu gösterir.
+
+[TUI kullanımı hakkında daha fazla bilgi](/docs/tui).
+
+---
+
+### Sunucu
+
+`opencode serve` ve `opencode web` komutları için sunucu ayarlarını `server` seçeneği aracılığıyla yapılandırabilirsiniz.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "server": {
+    "port": 4096,
+    "hostname": "0.0.0.0",
+    "mdns": true,
+    "mdnsDomain": "myproject.local",
+    "cors": ["http://localhost:5173"]
+  }
+}
+```
+
+Mevcut seçenekler:
+
+- `port` - Dinlenecek port.
+- `hostname` - Dinlenecek ana bilgisayar adı. `mdns` etkinleştirildiğinde ve hiçbir ana bilgisayar adı ayarlanmadığında, varsayılan değer `0.0.0.0` olur.
+- `mdns` - mDNS hizmet bulmayı etkinleştirin. Bu, ağdaki diğer cihazların opencode sunucunuzu keşfetmesine olanak tanır.
+- `mdnsDomain` - mDNS hizmeti için özel alan adı. Varsayılan olarak `opencode.local` şeklindedir. Aynı ağda birden fazla örneği çalıştırmak için kullanışlıdır.
+- `cors` - Tarayıcı tabanlı bir istemciden HTTP sunucusunu kullanırken CORS'ye izin verecek ek kaynaklar. Değerler tam kaynaklar olmalıdır (şema + ana bilgisayar + isteğe bağlı bağlantı noktası), örneğin `https://app.example.com`.
+
+[Sunucu hakkında daha fazla bilgi](/docs/server).
+
+---
+
+### Araçlar
+
+Bir LLM'nin kullanabileceği araçları `tools` seçeneği aracılığıyla yönetebilirsiniz.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "write": false,
+    "bash": false
+  }
+}
+```
+
+[Araçlar hakkında daha fazla bilgi](/docs/tools).
+
+---
+
+### Modeller
+
+opencode yapılandırmanızda kullanmak istediğiniz sağlayıcıları ve modelleri `provider`, `model` ve `small_model` seçenekleri aracılığıyla yapılandırabilirsiniz.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {},
+  "model": "anthropic/claude-sonnet-4-5",
+  "small_model": "anthropic/claude-haiku-4-5"
+}
+```
+
+`small_model` seçeneği, başlık oluşturma gibi hafif görevler için ayrı bir model yapılandırır. Varsayılan olarak opencode, sağlayıcınızda mevcutsa daha ucuz bir model kullanmaya çalışır, aksi takdirde ana modelinize geri döner.
+
+Sağlayıcı seçenekleri `timeout` ve `setCacheKey` içerebilir:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "options": {
+        "timeout": 600000,
+        "setCacheKey": true
+      }
+    }
+  }
+}
+```
+
+- `timeout` - Milisaniye cinsinden istek zaman aşımı (varsayılan: 300000). Devre dışı bırakmak için `false` olarak ayarlayın.
+- `setCacheKey` - Belirlenen sağlayıcı için her zaman bir önbellek anahtarının ayarlandığından emin olun.
+
+Ayrıca [local models](/docs/models#local) ayarlayabilirsiniz. [Daha fazla bilgi](/docs/models).
+
+---
+
+#### Sağlayıcıya Özel Seçenekler
+
+Bazı sağlayıcılar genel `timeout` ve `apiKey` ayarlarının ötesinde ek yapılandırma seçeneklerini destekler.
+
+##### Amazon Bedrock
+
+Amazon Bedrock, AWS'a özgü yapılandırmayı destekler:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      "options": {
+        "region": "us-east-1",
+        "profile": "my-aws-profile",
+        "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
+      }
+    }
+  }
+}
+```
+
+- `region` - Bedrock için AWS bölgesi (varsayılanı `AWS_REGION` env var veya `us-east-1`'dir)
+- `profile` - `~/.aws/credentials`'den AWS adlı profil (varsayılanı `AWS_PROFILE` env var'dır)
+- `endpoint` - VPC uç noktaları için özel uç nokta URL. Bu, AWS'e özgü terminolojiyi kullanan genel `baseURL` seçeneğinin takma adıdır. Her ikisi de belirtilirse `endpoint` öncelikli olur.
+
+:::note
+Taşıyıcı belirteçleri (`AWS_BEARER_TOKEN_BEDROCK` veya `/connect`) profil tabanlı kimlik doğrulamaya göre önceliklidir. Ayrıntılar için [authentication precedence](/docs/providers#authentication-precedence)'ye bakın.
+:::
+
+[Amazon Bedrock yapılandırması hakkında daha fazla bilgi](/docs/providers#amazon-bedrock).
+
+---
+
+### Temalar
+
+opencode yapılandırmanızda kullanmak istediğiniz temayı `theme` seçeneği aracılığıyla yapılandırabilirsiniz.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "theme": ""
+}
+```
+
+[Daha fazla bilgi](/docs/themes).
+
+---
+
+### Agent'lar
+
+`agent` seçeneği aracılığıyla özel görevlere yönelik özel agent'ları yapılandırabilirsiniz.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "code-reviewer": {
+      "description": "Reviews code for best practices and potential issues",
+      "model": "anthropic/claude-sonnet-4-5",
+      "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
+      "tools": {
+        // Disable file modification tools for review-only agent
+        "write": false,
+        "edit": false,
+        "bash": true,
+      },
+    },
+  },
+}
+```
+
+Agent'ları `~/.config/opencode/agents/` veya `.opencode/agents/` içindeki Markdown dosyalarıyla da tanımlayabilirsiniz. [Daha fazla bilgi](/docs/agents).
+
+---
+
+### Varsayılan agent
+
+`default_agent` seçeneğini kullanarak varsayılan agent'ı ayarlayabilirsiniz. Bu, hiçbiri açıkça belirtilmediğinde hangi agent'ın kullanılacağını belirler.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "plan"
+}
+```
+
+Varsayılan agent, birincil agent olmalıdır (alt agent değil). Bu, `"build"` veya `"plan"` gibi yerleşik bir agent ya da tanımladığınız bir [özel agent](/docs/agents) olabilir. Belirtilen agent mevcut değilse veya bir alt agent ise, opencode bir uyarıyla birlikte `"build"`'ye geri döner.
+
+Bu ayar tüm arayüzler için geçerlidir: TUI, CLI (`opencode run`), masaüstü uygulaması ve GitHub Action.
+
+---
+
+### Paylaşma
+
+[share](/docs/share) özelliğini `share` seçeneği aracılığıyla yapılandırabilirsiniz.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "manual"
+}
+```
+
+Bu şunları gerektirir:
+
+- `"manual"` - Komutlar aracılığıyla manuel paylaşıma izin ver (varsayılan)
+- `"auto"` - Yeni konuşmaları otomatik olarak paylaş
+- `"disabled"` - Paylaşımı tamamen devre dışı bırak
+
+Varsayılan olarak paylaşım, `/share` komutunu kullanarak konuşmaları açıkça paylaşmanız gereken manuel moda ayarlanmıştır.
+
+---
+
+### Komutlar
+
+`command` seçeneği aracılığıyla tekrarlanan görevler için özel komutlar yapılandırabilirsiniz.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-haiku-4-5",
+    },
+    "component": {
+      "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",
+      "description": "Create a new component",
+    },
+  },
+}
+```
+
+Komutları `~/.config/opencode/commands/` veya `.opencode/commands/` içindeki Markdown dosyalarıyla da tanımlayabilirsiniz. [Daha fazla bilgi](/docs/commands).
+
+---
+
+### Tuş atamaları
+
+Tuş atamalarınızı `keybinds` seçeneği aracılığıyla özelleştirebilirsiniz.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "keybinds": {}
+}
+```
+
+[Daha fazla bilgi](/docs/keybinds).
+
+---
+
+### Otomatik Güncelleme
+
+opencode başlatıldığında yeni güncellemeleri otomatik olarak indirecektir. Bunu `autoupdate` seçeneğiyle devre dışı bırakabilirsiniz.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": false
+}
+```
+
+Güncelleme istemiyor ancak yeni bir sürüm mevcut olduğunda bilgilendirilmek istiyorsanız `autoupdate` öğesini `"notify"` olarak ayarlayın.
+Bunun yalnızca Homebrew gibi bir paket yöneticisi kullanılarak yüklenmemişse işe yaradığına dikkat edin.
+
+---
+
+### Biçimlendiriciler
+
+Kod formatlayıcılarını `formatter` seçeneği aracılığıyla yapılandırabilirsiniz.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "disabled": true
+    },
+    "custom-prettier": {
+      "command": ["npx", "prettier", "--write", "$FILE"],
+      "environment": {
+        "NODE_ENV": "development"
+      },
+      "extensions": [".js", ".ts", ".jsx", ".tsx"]
+    }
+  }
+}
+```
+
+[Formatter'lar hakkında daha fazla bilgi](/docs/formatters).
+
+---
+
+### İzinler
+
+Varsayılan olarak, opencode açık bir onay gerektirmeden **tüm işlemlere izin verir**. `permission` seçeneğini kullanarak bunu değiştirebilirsiniz.
+
+Örneğin, `edit` ve `bash` araçlarının kullanıcı onayı gerektirdiğinden emin olmak için:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "ask",
+    "bash": "ask"
+  }
+}
+```
+
+[İzinler hakkında daha fazla bilgi](/docs/permissions).
+
+---
+
+### Sıkıştırma
+
+Bağlam sıkıştırma davranışını `compaction` seçeneği aracılığıyla kontrol edebilirsiniz.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": true,
+    "prune": true
+  }
+}
+```
+
+- `auto` - Bağlam dolduğunda oturumu otomatik olarak sıkıştırır (varsayılan: `true`).
+- `prune` - Belirteçleri kaydetmek için eski araç çıktılarını kaldırın (varsayılan: `true`).
+
+---
+
+### İzleyici
+
+Dosya izleyicinin yok sayma kalıplarını `watcher` seçeneği aracılığıyla yapılandırabilirsiniz.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "watcher": {
+    "ignore": ["node_modules/**", "dist/**", ".git/**"]
+  }
+}
+```
+
+Desenler glob sözdizimini takip eder. Gürültülü dizinleri dosya izlemenin dışında bırakmak için bunu kullanın.
+
+---
+
+### MCP sunucuları
+
+Kullanmak istediğiniz MCP sunucularını `mcp` seçeneği aracılığıyla yapılandırabilirsiniz.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {}
+}
+```
+
+[Daha fazla bilgi](/docs/mcp-servers).
+
+---
+
+### Eklentiler
+
+[Eklentiler](/docs/plugins) opencode'u özel araçlar, kancalar ve entegrasyonlarla genişletin.
+
+Eklenti dosyalarını `.opencode/plugins/` veya `~/.config/opencode/plugins/` içine yerleştirin. Ayrıca eklentileri `plugin` seçeneği aracılığıyla npm'den de yükleyebilirsiniz.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
+}
+```
+
+[Daha fazla bilgi](/docs/plugins).
+
+---
+
+### Talimatlar
+
+Kullandığınız modele ilişkin talimatları `instructions` seçeneği aracılığıyla yapılandırabilirsiniz.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
+}
+```
+
+Bu, talimat dosyalarına giden bir dizi yolu ve glob desenini alır. [Kurallar hakkında daha fazla bilgiyi buradan edinin](/docs/rules).
+
+---
+
+### Devre dışı bırakılan sağlayıcılar
+
+`disabled_providers` seçeneği aracılığıyla otomatik olarak yüklenen sağlayıcıları devre dışı bırakabilirsiniz. Bu, belirli sağlayıcıların kimlik bilgileri mevcut olsa bile yüklenmesini engellemek istediğinizde kullanışlıdır.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "disabled_providers": ["openai", "gemini"]
+}
+```
+
+:::note
+`disabled_providers`, `enabled_providers`'ye göre önceliklidir.
+:::
+
+`disabled_providers` seçeneği bir dizi sağlayıcı kimliğini kabul eder. Bir sağlayıcı devre dışı bırakıldığında:
+
+- Ortam değişkenleri ayarlanmış olsa bile yüklenmez.
+- API anahtarları `/connect` komutu aracılığıyla yapılandırılsa bile yüklenmeyecektir.
+- Sağlayıcının modelleri, model seçim listesinde görünmez.
+
+---
+
+### Etkin sağlayıcılar
+
+`enabled_providers` seçeneğini kullanarak sağlayıcıların izin verilenler listesini belirtebilirsiniz. Ayarlandığında yalnızca belirtilen sağlayıcılar etkinleştirilecek ve diğerleri göz ardı edilecektir.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "enabled_providers": ["anthropic", "openai"]
+}
+```
+
+Bu, opencode'u tek tek devre dışı bırakmak yerine yalnızca belirli sağlayıcıları kullanacak şekilde kısıtlamak istediğinizde kullanışlıdır.
+
+:::note
+`disabled_providers`, `enabled_providers`'ye göre önceliklidir.
+:::
+
+Bir sağlayıcı hem `enabled_providers` hem de `disabled_providers`'de görünüyorsa, geriye dönük uyumluluk için `disabled_providers` önceliğe sahiptir.
+
+---
+
+### Deneysel
+
+`experimental` anahtarı aktif olarak geliştirilmekte olan seçenekleri içerir.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {}
+}
+```
+
+:::caution
+Deneysel seçenekler kararlı değildir. Bildirim yapılmaksızın değişebilir veya kaldırılabilirler.
+:::
+
+---
+
+## Değişkenler
+
+Ortam değişkenlerine ve dosya içeriklerine referans vermek için yapılandırma dosyalarınızda değişken değiştirmeyi kullanabilirsiniz.
+
+---
+
+### Ortam değişkenleri
+
+Ortam değişkenlerini değiştirmek için `{env:VARIABLE_NAME}` kullanın:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "{env:OPENCODE_MODEL}",
+  "provider": {
+    "anthropic": {
+      "models": {},
+      "options": {
+        "apiKey": "{env:ANTHROPIC_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+Ortam değişkeni ayarlanmamışsa boş bir dizeyle değiştirilecektir.
+
+---
+
+### Dosyalar
+
+Bir dosyanın biçimini değiştirmek için `{file:path/to/file}` kullanın:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["./custom-instructions.md"],
+  "provider": {
+    "openai": {
+      "options": {
+        "apiKey": "{file:~/.secrets/openai-key}"
+      }
+    }
+  }
+}
+```
+
+Dosya yolları şunlar olabilir:
+
+- Yapılandırma dosyası dizinine göre
+- Veya `/` veya `~` ile başlayan mutlak yollar
+
+Bunlar aşağıdakiler için faydalıdır:
+
+- API anahtarları gibi hassas verileri ayrı dosyalarda tutmak.
+- Yapılandırmanızı karmaşıklaştırmadan büyük talimat dosyaları içerir.
+- Birden fazla yapılandırma dosyasında ortak yapılandırma parçacıklarının paylaşılması.

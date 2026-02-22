@@ -1,0 +1,170 @@
+---
+title: Egendefinerte verktøy
+description: Lag verktøy som LLM kan kalle inn OpenCode.
+---
+
+Egendefinerte verktøy er funksjoner du oppretter som LLM kan kalle under samtaler. De fungerer sammen med OpenCode sine [innebygde verktøy](/docs/tools) som `read`, `write` og `bash`.
+
+---
+
+## Opprette et verktøy
+
+Verktøy er definert som **TypeScript**- eller **JavaScript**-filer. Verktøydefinisjonen kan imidlertid påkalle skript skrevet på **alle språk** - TypeScript eller JavaScript brukes bare for selve verktøydefinisjonen.
+
+---
+
+### Plassering
+
+De kan defineres:
+
+- Lokalt ved å plassere dem i `.opencode/tools/`-katalogen til prosjektet ditt.
+- Eller globalt, ved å plassere dem i `~/.config/opencode/tools/`.
+
+---
+
+### Struktur
+
+Den enkleste måten å lage verktøy på er å bruke `tool()`-hjelperen som gir typesikkerhet og validering.
+
+```ts title=".opencode/tools/database.ts" {1}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Query the project database",
+  args: {
+    query: tool.schema.string().describe("SQL query to execute"),
+  },
+  async execute(args) {
+    // Your database logic here
+    return `Executed query: ${args.query}`
+  },
+})
+```
+
+**filnavnet** blir **verktøynavnet**. Ovennevnte oppretter et `database`-verktøy.
+
+---
+
+#### Flere verktøy per fil
+
+Du kan også eksportere flere verktøy fra en enkelt fil. Hver eksport blir **et separat verktøy** med navnet **`<filename>_<exportname>`**:
+
+```ts title=".opencode/tools/math.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export const add = tool({
+  description: "Add two numbers",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args) {
+    return args.a + args.b
+  },
+})
+
+export const multiply = tool({
+  description: "Multiply two numbers",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args) {
+    return args.a * args.b
+  },
+})
+```
+
+Dette lager to verktøy: `math_add` og `math_multiply`.
+
+---
+
+### Argumenter
+
+Du kan bruke `tool.schema`, som bare er [Zod](https://zod.dev), for å definere argumenttyper.
+
+```ts "tool.schema"
+args: {
+  query: tool.schema.string().describe("SQL query to execute")
+}
+```
+
+Du kan også importere [Zod](https://zod.dev) direkte og returnere et vanlig objekt:
+
+```ts {6}
+import { z } from "zod"
+
+export default {
+  description: "Tool description",
+  args: {
+    param: z.string().describe("Parameter description"),
+  },
+  async execute(args, context) {
+    // Tool implementation
+    return "result"
+  },
+}
+```
+
+---
+
+### Kontekst
+
+Verktøy mottar kontekst om gjeldende økt:
+
+```ts title=".opencode/tools/project.ts" {8}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Get project information",
+  args: {},
+  async execute(args, context) {
+    // Access context information
+    const { agent, sessionID, messageID, directory, worktree } = context
+    return `Agent: ${agent}, Session: ${sessionID}, Message: ${messageID}, Directory: ${directory}, Worktree: ${worktree}`
+  },
+})
+```
+
+Bruk `context.directory` for øktens arbeidskatalog.
+Bruk `context.worktree` for git-arbeidstreet.
+
+---
+
+## Eksempler
+
+### Skrive et verktøy i Python
+
+Du kan skrive verktøyene dine på hvilket som helst språk du vil. Her er et eksempel som legger til to tall ved hjelp av Python.
+
+Først lager du verktøyet som et Python-skript:
+
+```python title=".opencode/tools/add.py"
+import sys
+
+a = int(sys.argv[1])
+b = int(sys.argv[2])
+print(a + b)
+```
+
+Lag deretter verktøydefinisjonen som påkaller den:
+
+```ts title=".opencode/tools/python-add.ts" {10}
+import { tool } from "@opencode-ai/plugin"
+import path from "path"
+
+export default tool({
+  description: "Add two numbers using Python",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args, context) {
+    const script = path.join(context.worktree, ".opencode/tools/add.py")
+    const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
+    return result.trim()
+  },
+})
+```
+
+Her bruker vi [`Bun.$`](https://bun.com/docs/runtime/shell)-verktøyet for å kjøre Python-skriptet.

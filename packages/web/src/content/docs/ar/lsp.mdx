@@ -1,0 +1,188 @@
+---
+title: خوادم LSP
+description: يتكامل OpenCode مع خوادم LSP لديك.
+---
+
+يتكامل OpenCode مع بروتوكول خادم اللغة (LSP) لمساعدة LLM على التفاعل مع قاعدة الشيفرة لديك. ويستخدم التشخيصات لتزويد LLM بتغذية راجعة.
+
+---
+
+## المدمجة
+
+يأتي OpenCode مع عدة خوادم LSP مدمجة للغات الشائعة:
+
+| خادم LSP           | الامتدادات                                                          | المتطلبات                                            |
+| ------------------ | ------------------------------------------------------------------- | ---------------------------------------------------- |
+| astro              | .astro                                                              | يثبت تلقائيا لمشاريع Astro                           |
+| bash               | .sh, .bash, .zsh, .ksh                                              | يثبت `bash-language-server` تلقائيا                  |
+| clangd             | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++                | يثبت تلقائيا لمشاريع C/C++                           |
+| csharp             | .cs                                                                 | تثبيت `.NET SDK`                                     |
+| clojure-lsp        | .clj, .cljs, .cljc, .edn                                            | توفر أمر `clojure-lsp`                               |
+| dart               | .dart                                                               | توفر أمر `dart`                                      |
+| deno               | .ts, .tsx, .js, .jsx, .mjs                                          | توفر أمر `deno` (يكتشف تلقائيا deno.json/deno.jsonc) |
+| elixir-ls          | .ex, .exs                                                           | توفر أمر `elixir`                                    |
+| eslint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                  | وجود تبعية `eslint` في المشروع                       |
+| fsharp             | .fs, .fsi, .fsx, .fsscript                                          | تثبيت `.NET SDK`                                     |
+| gleam              | .gleam                                                              | توفر أمر `gleam`                                     |
+| gopls              | .go                                                                 | توفر أمر `go`                                        |
+| hls                | .hs, .lhs                                                           | توفر أمر `haskell-language-server-wrapper`           |
+| jdtls              | .java                                                               | تثبيت `Java SDK (version 21+)`                       |
+| kotlin-ls          | .kt, .kts                                                           | يثبت تلقائيا لمشاريع Kotlin                          |
+| lua-ls             | .lua                                                                | يثبت تلقائيا لمشاريع Lua                             |
+| nixd               | .nix                                                                | توفر أمر `nixd`                                      |
+| ocaml-lsp          | .ml, .mli                                                           | توفر أمر `ocamllsp`                                  |
+| oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | وجود تبعية `oxlint` في المشروع                       |
+| php intelephense   | .php                                                                | يثبت تلقائيا لمشاريع PHP                             |
+| prisma             | .prisma                                                             | توفر أمر `prisma`                                    |
+| pyright            | .py, .pyi                                                           | تثبيت تبعية `pyright`                                |
+| ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | توفر أمري `ruby` و `gem`                             |
+| rust               | .rs                                                                 | توفر أمر `rust-analyzer`                             |
+| sourcekit-lsp      | .swift, .objc, .objcpp                                              | تثبيت `swift` (على macOS عبر `xcode`)                |
+| svelte             | .svelte                                                             | يثبت تلقائيا لمشاريع Svelte                          |
+| terraform          | .tf, .tfvars                                                        | يثبت تلقائيا من إصدارات GitHub                       |
+| tinymist           | .typ, .typc                                                         | يثبت تلقائيا من إصدارات GitHub                       |
+| typescript         | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | وجود تبعية `typescript` في المشروع                   |
+| vue                | .vue                                                                | يثبت تلقائيا لمشاريع Vue                             |
+| yaml-ls            | .yaml, .yml                                                         | يثبت `yaml-language-server` من Red Hat تلقائيا       |
+| zls                | .zig, .zon                                                          | توفر أمر `zig`                                       |
+
+تُفعَّل خوادم LSP تلقائيا عند اكتشاف أحد امتدادات الملفات المذكورة أعلاه واستيفاء المتطلبات.
+
+:::note
+يمكنك تعطيل تنزيلات خوادم LSP التلقائية عبر ضبط متغير البيئة `OPENCODE_DISABLE_LSP_DOWNLOAD` على `true`.
+:::
+
+---
+
+## كيف يعمل
+
+عندما يفتح opencode ملفا، فإنه:
+
+1. يفحص امتداد الملف مقابل جميع خوادم LSP المفعّلة.
+2. يشغّل خادم LSP المناسب إذا لم يكن قيد التشغيل بالفعل.
+
+---
+
+## الإعداد
+
+يمكنك تخصيص خوادم LSP عبر قسم `lsp` في إعدادات opencode.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {}
+}
+```
+
+يدعم كل خادم LSP ما يلي:
+
+| الخاصية          | النوع    | الوصف                                             |
+| ---------------- | -------- | ------------------------------------------------- |
+| `disabled`       | boolean  | اضبطها على `true` لتعطيل خادم LSP                 |
+| `command`        | string[] | الأمر المستخدم لتشغيل خادم LSP                    |
+| `extensions`     | string[] | امتدادات الملفات التي يجب أن يعالجها خادم LSP هذا |
+| `env`            | object   | متغيرات البيئة التي تُضبط عند تشغيل الخادم        |
+| `initialization` | object   | خيارات التهيئة التي تُرسل إلى خادم LSP            |
+
+لنلق نظرة على بعض الأمثلة.
+
+---
+
+### متغيرات البيئة
+
+استخدم الخاصية `env` لضبط متغيرات البيئة عند تشغيل خادم LSP:
+
+```json title="opencode.json" {5-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "rust": {
+      "env": {
+        "RUST_LOG": "debug"
+      }
+    }
+  }
+}
+```
+
+---
+
+### خيارات التهيئة
+
+استخدم الخاصية `initialization` لتمرير خيارات التهيئة إلى خادم LSP. هذه إعدادات خاصة بالخادم تُرسل أثناء طلب LSP `initialize`:
+
+```json title="opencode.json" {5-9}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "typescript": {
+      "initialization": {
+        "preferences": {
+          "importModuleSpecifierPreference": "relative"
+        }
+      }
+    }
+  }
+}
+```
+
+:::note
+تختلف خيارات التهيئة بحسب خادم LSP. راجع توثيق خادم LSP لديك لمعرفة الخيارات المتاحة.
+:::
+
+---
+
+### تعطيل خوادم LSP
+
+لتعطيل **جميع** خوادم LSP على مستوى التطبيق، اضبط `lsp` على `false`:
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": false
+}
+```
+
+لتعطيل خادم LSP **بعينه**، اضبط `disabled` على `true`:
+
+```json title="opencode.json" {5}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "typescript": {
+      "disabled": true
+    }
+  }
+}
+```
+
+---
+
+### خوادم LSP مخصصة
+
+يمكنك إضافة خوادم LSP مخصصة عبر تحديد الأمر وامتدادات الملفات:
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "custom-lsp": {
+      "command": ["custom-lsp-server", "--stdio"],
+      "extensions": [".custom"]
+    }
+  }
+}
+```
+
+---
+
+## معلومات إضافية
+
+### PHP Intelephense
+
+يوفر PHP Intelephense ميزات مدفوعة عبر مفتاح ترخيص. يمكنك تزويده بمفتاح الترخيص عبر وضع (فقط) المفتاح داخل ملف نصي في:
+
+- على macOS/Linux: `$HOME/intelephense/licence.txt`
+- على Windows: `%USERPROFILE%/intelephense/licence.txt`
+
+يجب أن يحتوي الملف على مفتاح الترخيص فقط دون أي محتوى إضافي.

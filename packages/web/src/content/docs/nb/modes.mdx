@@ -1,0 +1,74 @@
+---
+title: Moduser
+description: Ulike moduser for forskjellige brukstilfeller.
+---
+
+:::caution
+Moduser er nå konfigurert gjennom alternativet `agent` i OpenCode-konfigurasjonen. De
+Alternativet `mode` er nå utdatert. [Finn ut mer](/docs/agents).
+:::
+
+Moduser i OpenCode lar deg tilpasse oppførselen, verktøyene og prompter for ulike brukstilfeller.
+
+Den kommer med to innebygde moduser: **bygg** og **plan**. Du kan tilpasse
+disse eller konfigurer din egen gjennom OpenCode-konfigurasjonen.
+
+---
+
+### Bygg
+
+Bygg er **standard**-modusen med alle verktøy aktivert. Dette er standardmodusen for utviklingsarbeid der du trenger full tilgang til filoperasjoner og systemkommandoer.
+
+---
+
+### Plan
+
+En begrenset modus designet for planlegging og analyse. I planmodus er følgende verktøy deaktivert som standard:
+
+- `write` - Kan ikke opprette nye filer
+- `edit` - Kan ikke endre eksisterende filer, bortsett fra filer som ligger på `.opencode/plans/*.md` for å detaljere selve planen
+- `patch` - Kan ikke bruke patcher
+- `bash` - Kan ikke utføre shell-kommandoer
+
+Denne modusen er nyttig når du vil at AI skal analysere kode, foreslå endringer eller lage planer uten å gjøre noen faktiske endringer i kodebasen.
+
+---
+
+### Temperatur
+
+Kontroller tilfeldigheten og kreativiteten til AI-ens svar med `temperature`-konfigurasjonen. Lavere verdier gjør svarene mer fokuserte og deterministiske, mens høyere verdier øker kreativiteten og variasjonen.
+
+```json title="opencode.json"
+{
+  "mode": {
+    "plan": {
+      "temperature": 0.1
+    },
+    "creative": {
+      "temperature": 0.8
+    }
+  }
+}
+```
+
+Temperaturverdier varierer vanligvis fra 0,0 til 1,0:
+
+- **0.0-0.2**: Veldig fokuserte og deterministiske svar, ideelt for kodeanalyse og planlegging
+- **0,3-0,5**: Balanserte svar med litt kreativitet, bra for generelle utviklingsoppgaver
+- **0.6-1.0**: Mer kreative og varierte svar, nyttig for idédugnad og utforskning
+
+Hvis ingen temperatur er spesifisert, bruker OpenCode modellspesifikke standardinnstillinger (vanligvis 0 for de fleste modeller, 0,55 for Qwen-modeller).
+
+---
+
+### Bruksområder
+
+Her er noen vanlige bruksområder for forskjellige moduser.
+
+- **Bygg-modus**: Fullt utviklingsarbeid med alle verktøy aktivert
+- **Plan-modus**: Analyse og planlegging uten å gjøre endringer
+- **Review-modus**: Kodegjennomgang med skrivebeskyttet tilgang pluss dokumentasjonsverktøy
+- **Debug-modus**: Fokusert på etterforskning med bash- og leseverktøy aktivert
+- **Docs-modus**: Dokumentasjonsskriving med filoperasjoner, men ingen systemkommandoer
+
+Du kan også finne at forskjellige modeller er gode for forskjellige bruksområder.

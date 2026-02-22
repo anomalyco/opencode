@@ -1,0 +1,682 @@
+---
+title: 設定
+description: 使用 OpenCode JSON 設定。
+---
+
+您可以使用 JSON 設定檔來設定 OpenCode。
+
+---
+
+## 格式
+
+OpenCode 支援 **JSON** 和 **JSONC**（帶註解的 JSON）格式。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Theme configuration
+  "theme": "opencode",
+  "model": "anthropic/claude-sonnet-4-5",
+  "autoupdate": true,
+}
+```
+
+---
+
+## 位置
+
+您可以將設定放置在不同的位置，它們具有不同的優先順序。
+
+:::note
+設定檔是**合併在一起**的，而不是替換。
+:::
+
+設定檔是合併在一起的，而不是被替換。來自以下設定位置的設定會被合併。後面的設定僅在鍵衝突時覆寫前面的設定。所有設定中的非衝突設定都會被保留。
+
+例如，如果您的全域設定設定了 `theme: "opencode"` 和 `autoupdate: true`，而您的專案設定設定了 `model: "anthropic/claude-sonnet-4-5"`，則最終設定將包含所有三個設定。
+
+---
+
+### 優先順序
+
+設定來源按以下順序載入（後面的來源覆寫前面的來源）：
+
+1. **遠端設定**（來自 `.well-known/opencode`）- 組織預設值
+2. **全域設定**（`~/.config/opencode/opencode.json`）- 使用者偏好
+3. **自訂設定**（`OPENCODE_CONFIG` 環境變數）- 自訂覆寫
+4. **專案設定**（專案中的 `opencode.json`）- 專案特定設定
+5. **`.opencode` 目錄** - 代理、指令、外掛程式
+6. **內嵌設定**（`OPENCODE_CONFIG_CONTENT` 環境變數）- 執行時覆寫
+
+這意味著專案設定可以覆寫全域預設值，全域設定可以覆寫遠端組織預設值。
+
+:::note
+`.opencode` 和 `~/.config/opencode` 目錄的子目錄使用**複數名稱**：`agents/`、`commands/`、`modes/`、`plugins/`、`skills/`、`tools/` 和 `themes/`。為了向後相容，也支援單數名稱（例如 `agent/`）。
+:::
+
+---
+
+### 遠端
+
+組織可以透過 `.well-known/opencode` 端點提供預設設定。當您使用支援該功能的供應商進行身分驗證時，會自動擷取此設定。
+
+遠端設定最先載入，作為基礎層。所有其他設定來源（全域、專案）都可以覆寫這些預設值。
+
+例如，如果您的組織提供了預設停用的 MCP 伺服器：
+
+```json title="Remote config from .well-known/opencode"
+{
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": false
+    }
+  }
+}
+```
+
+您可以在本地設定中啟用特定伺服器：
+
+```json title="opencode.json"
+{
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+---
+
+### 全域
+
+將全域 OpenCode 設定放在 `~/.config/opencode/opencode.json` 中。使用全域設定來設定使用者層級的偏好，例如主題、供應商或快捷鍵。
+
+全域設定覆寫遠端組織預設值。
+
+---
+
+### 專案層級
+
+在專案根目錄中新增 `opencode.json`。專案設定在標準設定檔中具有最高優先級——它會覆寫全域設定和遠端設定。
+
+:::tip
+將專案特定設定放在專案的根目錄中。
+:::
+
+當 OpenCode 啟動時，它會在當前目錄中尋找設定檔，或向上遍歷到最近的 Git 目錄。
+
+該設定檔也可以安全地提交到 Git 中，並使用與全域設定相同的 Schema。
+
+---
+
+### 自訂路徑
+
+使用 `OPENCODE_CONFIG` 環境變數指定自訂設定檔路徑。
+
+```bash
+export OPENCODE_CONFIG=/path/to/my/custom-config.json
+opencode run "Hello world"
+```
+
+自訂設定在優先順序中位於全域設定和專案設定之間載入。
+
+---
+
+### 自訂目錄
+
+使用 `OPENCODE_CONFIG_DIR` 環境變數指定自訂設定目錄。該目錄會像標準 `.opencode` 目錄一樣被搜尋代理、指令、模式和外掛程式，並且應遵循相同的結構。
+
+```bash
+export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+opencode run "Hello world"
+```
+
+自訂目錄在全域設定和 `.opencode` 目錄之後載入，因此**可以覆寫**它們的設定。
+
+---
+
+## Schema
+
+設定檔具有在 [**`opencode.ai/config.json`**](https://opencode.ai/config.json) 中定義的 Schema。
+
+您的編輯器應該能夠基於該 Schema 進行驗證和自動補全。
+
+---
+
+### TUI
+
+您可以透過 `tui` 選項設定 TUI 相關設定。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tui": {
+    "scroll_speed": 3,
+    "scroll_acceleration": {
+      "enabled": true
+    },
+    "diff_style": "auto"
+  }
+}
+```
+
+可用選項：
+
+- `scroll_acceleration.enabled` - 啟用 macOS 風格的捲動加速。**優先於 `scroll_speed`。**
+- `scroll_speed` - 自訂捲動速度倍率（預設值：`3`，最小值：`1`）。如果 `scroll_acceleration.enabled` 為 `true`，則忽略此選項。
+- `diff_style` - 控制差異呈現方式。`"auto"` 根據終端機寬度自適應，`"stacked"` 始終顯示單列。
+
+[在此了解更多關於 TUI 的資訊](/docs/tui)。
+
+---
+
+### 伺服器
+
+您可以透過 `server` 選項為 `opencode serve` 和 `opencode web` 指令設定伺服器設定。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "server": {
+    "port": 4096,
+    "hostname": "0.0.0.0",
+    "mdns": true,
+    "mdnsDomain": "myproject.local",
+    "cors": ["http://localhost:5173"]
+  }
+}
+```
+
+可用選項：
+
+- `port` - 監聽連接埠。
+- `hostname` - 監聽主機名稱。當 `mdns` 啟用且未設定主機名稱時，預設為 `0.0.0.0`。
+- `mdns` - 啟用 mDNS 服務探索。這允許網路上的其他裝置發現您的 OpenCode 伺服器。
+- `mdnsDomain` - mDNS 服務的自訂網域名稱。預設為 `opencode.local`。適用於在同一網路上執行多個實例的情境。
+- `cors` - 從基於瀏覽器的用戶端使用 HTTP 伺服器時允許 CORS 的額外來源。值必須是完整的來源（通訊協定 + 主機 + 可選連接埠），例如 `https://app.example.com`。
+
+[在此了解更多關於伺服器的資訊](/docs/server)。
+
+---
+
+### 工具
+
+您可以透過 `tools` 選項管理 LLM 可以使用的工具。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "write": false,
+    "bash": false
+  }
+}
+```
+
+[在此了解更多關於工具的資訊](/docs/tools)。
+
+---
+
+### 模型
+
+您可以透過 `provider`、`model` 和 `small_model` 選項在 OpenCode 設定中設定要使用的供應商和模型。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {},
+  "model": "anthropic/claude-sonnet-4-5",
+  "small_model": "anthropic/claude-haiku-4-5"
+}
+```
+
+`small_model` 選項為標題生成等輕量級任務設定單獨的模型。預設情況下，如果您的供應商有更便宜的模型可用，OpenCode 會嘗試使用該模型，否則會回退到您的主模型。
+
+供應商選項可以包括 `timeout` 和 `setCacheKey`：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "options": {
+        "timeout": 600000,
+        "setCacheKey": true
+      }
+    }
+  }
+}
+```
+
+- `timeout` - 請求逾時時間，單位為毫秒（預設值：300000）。設定為 `false` 可停用逾時。
+- `setCacheKey` - 確保始終為指定供應商設定快取金鑰。
+
+您還可以設定[本地模型](/docs/models#local)。[了解更多](/docs/models)。
+
+---
+
+#### 供應商特定選項
+
+一些供應商支援除通用 `timeout` 和 `apiKey` 設定之外的額外設定選項。
+
+##### Amazon Bedrock
+
+Amazon Bedrock 支援 AWS 特定設定：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      "options": {
+        "region": "us-east-1",
+        "profile": "my-aws-profile",
+        "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
+      }
+    }
+  }
+}
+```
+
+- `region` - Bedrock 的 AWS 區域（預設為 `AWS_REGION` 環境變數或 `us-east-1`）
+- `profile` - 來自 `~/.aws/credentials` 的 AWS 命名設定檔（預設為 `AWS_PROFILE` 環境變數）
+- `endpoint` - VPC 端點的自訂端點 URL。這是通用 `baseURL` 選項使用 AWS 特定術語的別名。如果兩者都指定，`endpoint` 優先。
+
+:::note
+Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）優先於基於設定檔的身分驗證。詳情請參見[認證優先級](/docs/providers#authentication-precedence)。
+:::
+
+[了解更多關於 Amazon Bedrock 設定的資訊](/docs/providers#amazon-bedrock)。
+
+---
+
+### 主題
+
+您可以透過 OpenCode 設定中的 `theme` 選項設定要使用的主題。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "theme": ""
+}
+```
+
+[在此了解更多](/docs/themes)。
+
+---
+
+### 代理
+
+您可以透過 `agent` 選項為特定任務設定專用代理。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "code-reviewer": {
+      "description": "Reviews code for best practices and potential issues",
+      "model": "anthropic/claude-sonnet-4-5",
+      "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
+      "tools": {
+        // Disable file modification tools for review-only agent
+        "write": false,
+        "edit": false,
+      },
+    },
+  },
+}
+```
+
+您還可以使用 `~/.config/opencode/agents/` 或 `.opencode/agents/` 中的 Markdown 檔案定義代理。[在此了解更多](/docs/agents)。
+
+---
+
+### 預設代理
+
+您可以使用 `default_agent` 選項設定預設代理。當未明確指定代理時，將使用該預設代理。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "plan"
+}
+```
+
+預設代理必須是主代理（不能是子代理）。可以是內建代理（如 `"build"` 或 `"plan"`），也可以是您定義的[自訂代理](/docs/agents)。如果指定的代理不存在或是子代理，OpenCode 將回退到 `"build"` 並發出警告。
+
+此設定適用於所有介面：TUI、CLI（`opencode run`）、桌面應用程式和 GitHub Action。
+
+---
+
+### 分享
+
+您可以透過 `share` 選項設定[分享](/docs/share)功能。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "manual"
+}
+```
+
+該選項接受：
+
+- `"manual"` - 允許透過指令手動分享（預設）
+- `"auto"` - 自動分享新工作階段
+- `"disabled"` - 完全停用分享
+
+預設情況下，分享設定為手動模式，您需要使用 `/share` 指令明確分享工作階段。
+
+---
+
+### 指令
+
+您可以透過 `command` 選項為重複任務設定自訂指令。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-haiku-4-5",
+    },
+    "component": {
+      "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",
+      "description": "Create a new component",
+    },
+  },
+}
+```
+
+您還可以使用 `~/.config/opencode/commands/` 或 `.opencode/commands/` 中的 Markdown 檔案定義指令。[在此了解更多](/docs/commands)。
+
+---
+
+### 快捷鍵
+
+您可以透過 `keybinds` 選項自訂快捷鍵。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "keybinds": {}
+}
+```
+
+[在此了解更多](/docs/keybinds)。
+
+---
+
+### 自動更新
+
+OpenCode 啟動時會自動下載新版本。您可以使用 `autoupdate` 選項停用此功能。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": false
+}
+```
+
+如果您不想自動更新但希望在新版本可用時收到通知，可將 `autoupdate` 設定為 `"notify"`。
+請注意，此功能僅在未透過 Homebrew 等套件管理器安裝時有效。
+
+---
+
+### 格式化器
+
+您可以透過 `formatter` 選項設定程式碼格式化器。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "disabled": true
+    },
+    "custom-prettier": {
+      "command": ["npx", "prettier", "--write", "$FILE"],
+      "environment": {
+        "NODE_ENV": "development"
+      },
+      "extensions": [".js", ".ts", ".jsx", ".tsx"]
+    }
+  }
+}
+```
+
+[在此了解更多關於格式化器的資訊](/docs/formatters)。
+
+---
+
+### 權限
+
+預設情況下，OpenCode **允許所有操作**，無需明確批准。您可以使用 `permission` 選項變更此行為。
+
+例如，要讓 `edit` 和 `bash` 工具需要使用者確認：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "ask",
+    "bash": "ask"
+  }
+}
+```
+
+[在此了解更多關於權限的資訊](/docs/permissions)。
+
+---
+
+### 壓縮
+
+您可以透過 `compaction` 選項控制上下文壓縮行為。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": true,
+    "prune": true,
+    "reserved": 10000
+  }
+}
+```
+
+- `auto` - 當上下文已滿時自動壓縮工作階段（預設值：`true`）。
+- `prune` - 刪除舊的工具輸出以節省 Token（預設值：`true`）。
+- `reserved` - 壓縮時的 Token 緩衝區。保留足夠的窗口以避免壓縮過程中溢出。
+
+---
+
+### 檔案監看器
+
+您可以透過 `watcher` 選項設定檔案監看器的忽略模式。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "watcher": {
+    "ignore": ["node_modules/**", "dist/**", ".git/**"]
+  }
+}
+```
+
+模式遵循 glob 語法。使用此選項可以從檔案監看中排除頻繁變動的目錄。
+
+---
+
+### MCP 伺服器
+
+您可以透過 `mcp` 選項設定要使用的 MCP 伺服器。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {}
+}
+```
+
+[在此了解更多](/docs/mcp-servers)。
+
+---
+
+### 外掛程式
+
+[外掛程式](/docs/plugins)透過自訂工具、掛鉤和整合來擴展 OpenCode。
+
+將外掛程式檔案放置在 `.opencode/plugins/` 或 `~/.config/opencode/plugins/` 中。您還可以透過 `plugin` 選項從 npm 載入外掛程式。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
+}
+```
+
+[在此了解更多](/docs/plugins)。
+
+---
+
+### 指示
+
+您可以透過 `instructions` 選項為所使用的模型設定指示。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
+}
+```
+
+該選項接受指示檔案路徑和 glob 模式的陣列。[在此了解更多關於規則的資訊](/docs/rules)。
+
+---
+
+### 停用供應商
+
+您可以透過 `disabled_providers` 選項停用自動載入的供應商。當您希望阻止某些供應商被載入（即使其憑證可用）時，此選項非常有用。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "disabled_providers": ["openai", "gemini"]
+}
+```
+
+:::note
+`disabled_providers` 優先於 `enabled_providers`。
+:::
+
+`disabled_providers` 選項接受供應商 ID 的陣列。當某個供應商被停用時：
+
+- 即使設定了環境變數，也不會被載入。
+- 即使透過 `/connect` 指令設定了 API 金鑰，也不會被載入。
+- 該供應商的模型不會出現在模型選擇列表中。
+
+---
+
+### 啟用供應商
+
+您可以透過 `enabled_providers` 選項指定允許使用的供應商白名單。設定後，僅啟用指定的供應商，所有其他供應商將被忽略。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "enabled_providers": ["anthropic", "openai"]
+}
+```
+
+當您希望限制 OpenCode 僅使用特定供應商，而不是逐一停用其他供應商時，此選項非常有用。
+
+:::note
+`disabled_providers` 優先於 `enabled_providers`。
+:::
+
+如果某個供應商同時出現在 `enabled_providers` 和 `disabled_providers` 中，為了向後相容，`disabled_providers` 優先。
+
+---
+
+### 實驗性功能
+
+`experimental` 鍵包含正在積極開發中的選項。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {}
+}
+```
+
+:::caution
+實驗性選項不穩定。它們可能會在不另行通知的情況下被變更或移除。
+:::
+
+---
+
+## 變數
+
+您可以在設定檔中使用變數替換來參照環境變數和檔案內容。
+
+---
+
+### 環境變數
+
+使用 `{env:VARIABLE_NAME}` 來替換環境變數：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "{env:OPENCODE_MODEL}",
+  "provider": {
+    "anthropic": {
+      "models": {},
+      "options": {
+        "apiKey": "{env:ANTHROPIC_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+如果環境變數未設定，它將被替換為空字串。
+
+---
+
+### 檔案
+
+使用 `{file:path/to/file}` 來替換檔案內容：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["./custom-instructions.md"],
+  "provider": {
+    "openai": {
+      "options": {
+        "apiKey": "{file:~/.secrets/openai-key}"
+      }
+    }
+  }
+}
+```
+
+檔案路徑可以是：
+
+- 相對於設定檔所在目錄的路徑
+- 以 `/` 或 `~` 開頭的絕對路徑
+
+這些功能適用於：
+
+- 將 API 金鑰等敏感資料保存在單獨的檔案中。
+- 引入大型指示檔案而不會使設定變得雜亂。
+- 在多個設定檔之間共享通用設定片段。

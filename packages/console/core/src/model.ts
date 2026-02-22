@@ -53,8 +53,6 @@ export namespace ZenData {
         weight: z.number().optional(),
         disabled: z.boolean().optional(),
         storeModel: z.string().optional(),
-        headers: z.record(z.string(), z.string()).optional(),
-        bodyModifier: z.record(z.string(), z.string()).optional(),
       }),
     ),
   })
@@ -62,20 +60,29 @@ export namespace ZenData {
   const ProviderSchema = z.object({
     api: z.string(),
     apiKey: z.string(),
-    format: FormatSchema,
+    format: FormatSchema.optional(),
     headerMappings: z.record(z.string(), z.string()).optional(),
+    payloadModifier: z.record(z.string(), z.any()).optional(),
+    family: z.string().optional(),
+  })
+
+  const ProviderFamilySchema = z.object({
+    headers: z.record(z.string(), z.string()).optional(),
+    responseModifier: z.record(z.string(), z.string()).optional(),
   })
 
   const ModelsSchema = z.object({
     models: z.record(z.string(), z.union([ModelSchema, z.array(ModelSchema.extend({ formatFilter: FormatSchema }))])),
+    liteModels: z.record(z.string(), ModelSchema),
     providers: z.record(z.string(), ProviderSchema),
+    providerFamilies: z.record(z.string(), ProviderFamilySchema),
   })
 
   export const validate = fn(ModelsSchema, (input) => {
     return input
   })
 
-  export const list = fn(z.void(), () => {
+  export const list = fn(z.enum(["lite", "full"]), (modelList) => {
     const json = JSON.parse(
       Resource.ZEN_MODELS1.value +
         Resource.ZEN_MODELS2.value +
@@ -96,9 +103,28 @@ export namespace ZenData {
         Resource.ZEN_MODELS17.value +
         Resource.ZEN_MODELS18.value +
         Resource.ZEN_MODELS19.value +
-        Resource.ZEN_MODELS20.value,
+        Resource.ZEN_MODELS20.value +
+        Resource.ZEN_MODELS21.value +
+        Resource.ZEN_MODELS22.value +
+        Resource.ZEN_MODELS23.value +
+        Resource.ZEN_MODELS24.value +
+        Resource.ZEN_MODELS25.value +
+        Resource.ZEN_MODELS26.value +
+        Resource.ZEN_MODELS27.value +
+        Resource.ZEN_MODELS28.value +
+        Resource.ZEN_MODELS29.value +
+        Resource.ZEN_MODELS30.value,
     )
-    return ModelsSchema.parse(json)
+    const { models, liteModels, providers, providerFamilies } = ModelsSchema.parse(json)
+    return {
+      models: modelList === "lite" ? liteModels : models,
+      providers: Object.fromEntries(
+        Object.entries(providers).map(([id, provider]) => [
+          id,
+          { ...provider, ...(provider.family ? providerFamilies[provider.family] : {}) },
+        ]),
+      ),
+    }
   })
 }
 

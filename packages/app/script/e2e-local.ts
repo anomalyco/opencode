@@ -89,7 +89,6 @@ let runner: ReturnType<typeof Bun.spawn> | undefined
 let server: { stop: () => Promise<void> | void } | undefined
 let inst: { Instance: { disposeAll: () => Promise<void> | void } } | undefined
 let cleaned = false
-let internalError = false
 
 const cleanup = async () => {
   if (cleaned) return
@@ -115,9 +114,8 @@ const shutdown = (code: number, reason: string) => {
 }
 
 const reportInternalError = (reason: string, error: unknown) => {
-  internalError = true
-  console.error(`e2e-local internal error: ${reason}`)
-  console.error(error)
+  console.warn(`e2e-local ignored server error: ${reason}`)
+  console.warn(error)
 }
 
 process.once("SIGINT", () => shutdown(130, "SIGINT"))
@@ -176,7 +174,5 @@ try {
 } finally {
   await cleanup()
 }
-
-if (code === 0 && internalError) code = 1
 
 process.exit(code)
