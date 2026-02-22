@@ -21,6 +21,7 @@ jobs:
   # Native runners required: bun install cross-compilation flags (--os/--cpu)
   # do not produce byte-identical node_modules as native installs.
   compute-hash:
+    if: github.repository == 'anomalyco/opencode'
     strategy:
       fail-fast: false
       matrix:
