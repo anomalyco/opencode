@@ -38,9 +38,9 @@
   }
 
   [data-slot="radio-group-indicator"] {
-    background: var(--surface-raised-stronger-non-alpha);
+    background: var(--button-secondary-base);
     border-radius: var(--radius-sm);
-    box-shadow: var(--shadow-xs-border);
+    box-shadow: var(--shadow-xs-border-base);
     content: "";
     opacity: var(--indicator-opacity, 1);
     pointer-events: none;
@@ -80,7 +80,7 @@
 
   [data-slot="radio-group-item-label"] {
     color: var(--text-weak);
-    cursor: pointer;
+    cursor: default;
     display: flex;
     align-items: center;
     justify-content: center;

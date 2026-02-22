@@ -1,19 +1,18 @@
-import { createResource, createEffect, createMemo, onCleanup, Show } from "solid-js"
-import { createStore, reconcile } from "solid-js/store"
+import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
-import { List } from "@opencode-ai/ui/list"
-import { Button } from "@opencode-ai/ui/button"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { TextField } from "@opencode-ai/ui/text-field"
-import { normalizeServerUrl, useServer } from "@/context/server"
-import { usePlatform } from "@/context/platform"
-import { useNavigate } from "@solidjs/router"
-import { useLanguage } from "@/context/language"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { useGlobalSDK } from "@/context/global-sdk"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { List } from "@opencode-ai/ui/list"
+import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@opencode-ai/ui/toast"
+import { useNavigate } from "@solidjs/router"
+import { createEffect, createMemo, createResource, onCleanup, Show } from "solid-js"
+import { createStore, reconcile } from "solid-js/store"
 import { ServerRow } from "@/components/server/server-row"
+import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
+import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
 import { checkServerHealth, type ServerHealth } from "@/utils/server-health"
 
 interface AddRowProps {
@@ -89,7 +88,7 @@ function useServerPreview(fetcher: typeof fetch) {
     if (!looksComplete(value)) return
     const normalized = normalizeServerUrl(value)
     if (!normalized) return
-    const result = await checkServerHealth(normalized, fetcher)
+    const result = await checkServerHealth({ url: normalized }, fetcher)
     setStatus(result.healthy)
   }
 
@@ -171,14 +170,13 @@ export function DialogSelectServer() {
   const dialog = useDialog()
   const server = useServer()
   const platform = usePlatform()
-  const globalSDK = useGlobalSDK()
   const language = useLanguage()
   const fetcher = platform.fetch ?? globalThis.fetch
   const { defaultUrl, canDefault, setDefault } = useDefaultServer(platform, language)
   const { previewStatus } = useServerPreview(fetcher)
   let listRoot: HTMLDivElement | undefined
   const [store, setStore] = createStore({
-    status: {} as Record<string, ServerHealth | undefined>,
+    status: {} as Record<ServerConnection.Key, ServerHealth | undefined>,
     addServer: {
       url: "",
       adding: false,
@@ -214,24 +212,25 @@ export function DialogSelectServer() {
     })
   }
 
-  const replaceServer = (original: string, next: string) => {
-    const active = server.url
-    const nextActive = active === original ? next : active
+  const replaceServer = (original: ServerConnection.Http, next: string) => {
+    const active = server.key
+    const newConn = server.add(next)
+    if (!newConn) return
 
-    server.add(next)
+    const nextActive = active === ServerConnection.key(original) ? ServerConnection.key(newConn) : active
     if (nextActive) server.setActive(nextActive)
-    server.remove(original)
+    server.remove(ServerConnection.key(original))
   }
 
   const items = createMemo(() => {
-    const current = server.url
+    const current = server.current
     const list = server.list
     if (!current) return list
     if (!list.includes(current)) return [current, ...list]
     return [current, ...list.filter((x) => x !== current)]
   })
 
-  const current = createMemo(() => items().find((x) => x === server.url) ?? items()[0])
+  const current = createMemo(() => items().find((x) => ServerConnection.key(x) === server.key) ?? items()[0])
 
   const sortedItems = createMemo(() => {
     const list = items()
@@ -246,17 +245,17 @@ export function DialogSelectServer() {
     return list.slice().sort((a, b) => {
       if (a === active) return -1
       if (b === active) return 1
-      const diff = rank(store.status[a]) - rank(store.status[b])
+      const diff = rank(store.status[ServerConnection.key(a)]) - rank(store.status[ServerConnection.key(b)])
       if (diff !== 0) return diff
       return (order.get(a) ?? 0) - (order.get(b) ?? 0)
     })
   })
 
   async function refreshHealth() {
-    const results: Record<string, ServerHealth> = {}
+    const results: Record<ServerConnection.Key, ServerHealth> = {}
     await Promise.all(
-      items().map(async (url) => {
-        results[url] = await checkServerHealth(url, fetcher)
+      items().map(async (conn) => {
+        results[ServerConnection.key(conn)] = await checkServerHealth(conn.http, fetcher)
       }),
     )
     setStore("status", reconcile(results))
@@ -269,15 +268,15 @@ export function DialogSelectServer() {
     onCleanup(() => clearInterval(interval))
   })
 
-  async function select(value: string, persist?: boolean) {
-    if (!persist && store.status[value]?.healthy === false) return
+  async function select(conn: ServerConnection.Any, persist?: boolean) {
+    if (!persist && store.status[ServerConnection.key(conn)]?.healthy === false) return
     dialog.close()
     if (persist) {
-      server.add(value)
+      server.add(conn.http.url)
       navigate("/")
       return
     }
-    server.setActive(value)
+    server.setActive(ServerConnection.key(conn))
     navigate("/")
   }
 
@@ -311,7 +310,7 @@ export function DialogSelectServer() {
 
     setStore("addServer", { adding: true, error: "" })
 
-    const result = await checkServerHealth(normalized, fetcher)
+    const result = await checkServerHealth({ url: normalized }, fetcher)
     setStore("addServer", { adding: false })
 
     if (!result.healthy) {
@@ -320,25 +319,25 @@ export function DialogSelectServer() {
     }
 
     resetAdd()
-    await select(normalized, true)
+    await select({ type: "http", http: { url: normalized } }, true)
   }
 
-  async function handleEdit(original: string, value: string) {
-    if (store.editServer.busy) return
+  async function handleEdit(original: ServerConnection.Any, value: string) {
+    if (store.editServer.busy || original.type !== "http") return
     const normalized = normalizeServerUrl(value)
     if (!normalized) {
       resetEdit()
       return
     }
 
-    if (normalized === original) {
+    if (normalized === original.http.url) {
       resetEdit()
       return
     }
 
     setStore("editServer", { busy: true, error: "" })
 
-    const result = await checkServerHealth(normalized, fetcher)
+    const result = await checkServerHealth({ url: normalized }, fetcher)
     setStore("editServer", { busy: false })
 
     if (!result.healthy) {
@@ -366,7 +365,7 @@ export function DialogSelectServer() {
     handleAdd(store.addServer.url)
   }
 
-  const handleEditKey = (event: KeyboardEvent, original: string) => {
+  const handleEditKey = (event: KeyboardEvent, original: ServerConnection.Any) => {
     event.stopPropagation()
     if (event.key === "Escape") {
       event.preventDefault()
@@ -378,7 +377,7 @@ export function DialogSelectServer() {
     handleEdit(original, store.editServer.value)
   }
 
-  async function handleRemove(url: string) {
+  async function handleRemove(url: ServerConnection.Key) {
     server.remove(url)
     if ((await platform.getDefaultServerUrl?.()) === url) {
       platform.setDefaultServerUrl?.(null)
@@ -390,11 +389,14 @@ export function DialogSelectServer() {
       <div class="flex flex-col gap-2">
         <div ref={(el) => (listRoot = el)}>
           <List
-            search={{ placeholder: language.t("dialog.server.search.placeholder"), autofocus: false }}
+            search={{
+              placeholder: language.t("dialog.server.search.placeholder"),
+              autofocus: false,
+            }}
             noInitialSelection
             emptyMessage={language.t("dialog.server.empty")}
             items={sortedItems}
-            key={(x) => x}
+            key={(x) => x.http.url}
             onSelect={(x) => {
               if (x) select(x)
             }}
@@ -425,10 +427,11 @@ export function DialogSelectServer() {
             }
           >
             {(i) => {
+              const key = ServerConnection.key(i)
               return (
                 <div class="flex items-center gap-3 min-w-0 flex-1 group/item">
                   <Show
-                    when={store.editServer.id !== i}
+                    when={store.editServer.id !== i.http.url}
                     fallback={
                       <EditRow
                         value={store.editServer.value}
@@ -443,12 +446,12 @@ export function DialogSelectServer() {
                     }
                   >
                     <ServerRow
-                      url={i}
-                      status={store.status[i]}
-                      dimmed={store.status[i]?.healthy === false}
+                      conn={i}
+                      status={store.status[key]}
+                      dimmed={store.status[key]?.healthy === false}
                       class="flex items-center gap-3 px-4 min-w-0 flex-1"
                       badge={
-                        <Show when={defaultUrl() === i}>
+                        <Show when={defaultUrl() === i.http.url}>
                           <span class="text-text-weak bg-surface-base text-14-regular px-1.5 rounded-xs">
                             {language.t("dialog.server.status.default")}
                           </span>
@@ -456,59 +459,63 @@ export function DialogSelectServer() {
                       }
                     />
                   </Show>
-                  <Show when={store.editServer.id !== i}>
+                  <Show when={store.editServer.id !== i.http.url}>
                     <div class="flex items-center justify-center gap-5 pl-4">
-                      <Show when={current() === i}>
+                      <Show when={ServerConnection.key(current()) === key}>
                         <p class="text-text-weak text-12-regular">{language.t("dialog.server.current")}</p>
                       </Show>
 
-                      <DropdownMenu>
-                        <DropdownMenu.Trigger
-                          as={IconButton}
-                          icon="dot-grid"
-                          variant="ghost"
-                          class="shrink-0 size-8 hover:bg-surface-base-hover data-[expanded]:bg-surface-base-active"
-                          onClick={(e: MouseEvent) => e.stopPropagation()}
-                          onPointerDown={(e: PointerEvent) => e.stopPropagation()}
-                        />
-                        <DropdownMenu.Portal>
-                          <DropdownMenu.Content class="mt-1">
-                            <DropdownMenu.Item
-                              onSelect={() => {
-                                setStore("editServer", {
-                                  id: i,
-                                  value: i,
-                                  error: "",
-                                  status: store.status[i]?.healthy,
-                                })
-                              }}
-                            >
-                              <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.edit")}</DropdownMenu.ItemLabel>
-                            </DropdownMenu.Item>
-                            <Show when={canDefault() && defaultUrl() !== i}>
-                              <DropdownMenu.Item onSelect={() => setDefault(i)}>
+                      <Show when={i.type === "http"}>
+                        <DropdownMenu>
+                          <DropdownMenu.Trigger
+                            as={IconButton}
+                            icon="dot-grid"
+                            variant="ghost"
+                            class="shrink-0 size-8 hover:bg-surface-base-hover data-[expanded]:bg-surface-base-active"
+                            onClick={(e: MouseEvent) => e.stopPropagation()}
+                            onPointerDown={(e: PointerEvent) => e.stopPropagation()}
+                          />
+                          <DropdownMenu.Portal>
+                            <DropdownMenu.Content class="mt-1">
+                              <DropdownMenu.Item
+                                onSelect={() => {
+                                  setStore("editServer", {
+                                    id: i.http.url,
+                                    value: i.http.url,
+                                    error: "",
+                                    status: store.status[ServerConnection.key(i)]?.healthy,
+                                  })
+                                }}
+                              >
+                                <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.edit")}</DropdownMenu.ItemLabel>
+                              </DropdownMenu.Item>
+                              <Show when={canDefault() && defaultUrl() !== i.http.url}>
+                                <DropdownMenu.Item onSelect={() => setDefault(i.http.url)}>
+                                  <DropdownMenu.ItemLabel>
+                                    {language.t("dialog.server.menu.default")}
+                                  </DropdownMenu.ItemLabel>
+                                </DropdownMenu.Item>
+                              </Show>
+                              <Show when={canDefault() && defaultUrl() === i.http.url}>
+                                <DropdownMenu.Item onSelect={() => setDefault(null)}>
+                                  <DropdownMenu.ItemLabel>
+                                    {language.t("dialog.server.menu.defaultRemove")}
+                                  </DropdownMenu.ItemLabel>
+                                </DropdownMenu.Item>
+                              </Show>
+                              <DropdownMenu.Separator />
+                              <DropdownMenu.Item
+                                onSelect={() => handleRemove(ServerConnection.key(i))}
+                                class="text-text-on-critical-base hover:bg-surface-critical-weak"
+                              >
                                 <DropdownMenu.ItemLabel>
-                                  {language.t("dialog.server.menu.default")}
+                                  {language.t("dialog.server.menu.delete")}
                                 </DropdownMenu.ItemLabel>
                               </DropdownMenu.Item>
-                            </Show>
-                            <Show when={canDefault() && defaultUrl() === i}>
-                              <DropdownMenu.Item onSelect={() => setDefault(null)}>
-                                <DropdownMenu.ItemLabel>
-                                  {language.t("dialog.server.menu.defaultRemove")}
-                                </DropdownMenu.ItemLabel>
-                              </DropdownMenu.Item>
-                            </Show>
-                            <DropdownMenu.Separator />
-                            <DropdownMenu.Item
-                              onSelect={() => handleRemove(i)}
-                              class="text-text-on-critical-base hover:bg-surface-critical-weak"
-                            >
-                              <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.delete")}</DropdownMenu.ItemLabel>
-                            </DropdownMenu.Item>
-                          </DropdownMenu.Content>
-                        </DropdownMenu.Portal>
-                      </DropdownMenu>
+                            </DropdownMenu.Content>
+                          </DropdownMenu.Portal>
+                        </DropdownMenu>
+                      </Show>
                     </div>
                   </Show>
                 </div>

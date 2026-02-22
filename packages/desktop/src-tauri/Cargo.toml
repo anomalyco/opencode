@@ -54,6 +54,9 @@ chrono = "0.4"
 tokio-stream = { version = "0.1.18", features = ["sync"] }
 process-wrap = { version = "9.0.3", features = ["tokio1"] }
 
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = ["Win32_System_Threading"] }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18.2"
 webkit2gtk = "=2.0.2"

@@ -15,7 +15,7 @@ export const dict = {
   "ui.sessionReview.image.loading": "載入中...",
   "ui.sessionReview.image.placeholder": "圖片",
   "ui.sessionReview.largeDiff.title": "差異過大，無法渲染",
-  "ui.sessionReview.largeDiff.meta": "限制：{{lines}} 行 / {{limit}}。目前：{{current}}。",
+  "ui.sessionReview.largeDiff.meta": "限制：{{limit}} 行變更。目前：{{current}} 行變更。",
   "ui.sessionReview.largeDiff.renderAnyway": "仍然渲染",
 
   "ui.lineComment.label.prefix": "評論 ",
@@ -37,7 +37,7 @@ export const dict = {
 
   "ui.sessionTurn.status.delegating": "正在委派工作",
   "ui.sessionTurn.status.planning": "正在規劃下一步",
-  "ui.sessionTurn.status.gatheringContext": "正在探索...",
+  "ui.sessionTurn.status.gatheringContext": "正在探索",
   "ui.sessionTurn.status.gatheredContext": "已探索",
   "ui.sessionTurn.status.searchingCodebase": "正在搜尋程式碼庫",
   "ui.sessionTurn.status.searchingWeb": "正在搜尋網頁",

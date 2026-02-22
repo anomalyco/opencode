@@ -93,8 +93,8 @@ export const dict = {
   "command.model.variant.cycle": "切换思考强度",
   "command.model.variant.cycle.description": "切换到下一个强度等级",
 
-  "command.prompt.mode.shell": "切换到 Shell 模式",
-  "command.prompt.mode.normal": "切换到 Prompt 模式",
+  "command.prompt.mode.shell": "Shell",
+  "command.prompt.mode.normal": "Prompt",
 
   "command.permissions.autoaccept.enable": "自动接受编辑",
   "command.permissions.autoaccept.disable": "停止自动接受编辑",
@@ -633,6 +633,7 @@ export const dict = {
   "font.option.ubuntuMono": "Ubuntu Mono",
   "font.option.geistMono": "Geist Mono",
 
+  "sound.option.none": "无",
   "sound.option.alert01": "警报 01",
   "sound.option.alert02": "警报 02",
   "sound.option.alert03": "警报 03",

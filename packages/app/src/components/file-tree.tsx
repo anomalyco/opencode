@@ -550,8 +550,15 @@ export default function FileTree(props: {
                       </Match>
                       <Match when={!node.ignored}>
                         <span class="filetree-iconpair size-4">
-                          <FileIcon node={node} class="size-4 filetree-icon filetree-icon--color" />
-                          <FileIcon node={node} class="size-4 filetree-icon filetree-icon--mono" mono />
+                          <FileIcon
+                            node={node}
+                            class="size-4 filetree-icon filetree-icon--color opacity-0 group-hover/filetree:opacity-100"
+                          />
+                          <FileIcon
+                            node={node}
+                            class="size-4 filetree-icon filetree-icon--mono group-hover/filetree:opacity-0"
+                            mono
+                          />
                         </span>
                       </Match>
                     </Switch>

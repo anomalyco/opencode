@@ -11,7 +11,7 @@ export const dict = {
   "ui.sessionReview.image.loading": "جار التحميل...",
   "ui.sessionReview.image.placeholder": "صورة",
   "ui.sessionReview.largeDiff.title": "Diff كبير جدا لعرضه",
-  "ui.sessionReview.largeDiff.meta": "الحد: {{lines}} سطر / {{limit}}. الحالي: {{current}}.",
+  "ui.sessionReview.largeDiff.meta": "الحد: {{limit}} سطرًا متغيرًا. الحالي: {{current}} سطرًا متغيرًا.",
   "ui.sessionReview.largeDiff.renderAnyway": "اعرض على أي حال",
 
   "ui.lineComment.label.prefix": "تعليق على ",
@@ -33,7 +33,7 @@ export const dict = {
 
   "ui.sessionTurn.status.delegating": "تفويض العمل",
   "ui.sessionTurn.status.planning": "تخطيط الخطوات التالية",
-  "ui.sessionTurn.status.gatheringContext": "استكشاف...",
+  "ui.sessionTurn.status.gatheringContext": "استكشاف",
   "ui.sessionTurn.status.gatheredContext": "تم الاستكشاف",
   "ui.sessionTurn.status.searchingCodebase": "البحث في قاعدة التعليمات البرمجية",
   "ui.sessionTurn.status.searchingWeb": "البحث في الويب",

@@ -23,15 +23,3 @@
   position: absolute;
   inset: 0;
 }
-
-[data-component="filetree"] .filetree-iconpair .filetree-icon--color {
-  opacity: 0;
-}
-
-[data-component="filetree"]:hover .filetree-iconpair .filetree-icon--color {
-  opacity: 1;
-}
-
-[data-component="filetree"]:hover .filetree-iconpair .filetree-icon--mono {
-  opacity: 0;
-}

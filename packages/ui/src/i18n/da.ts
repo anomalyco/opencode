@@ -12,7 +12,7 @@ export const dict = {
   "ui.sessionReview.image.loading": "Indlæser...",
   "ui.sessionReview.image.placeholder": "Billede",
   "ui.sessionReview.largeDiff.title": "Diff er for stor til at blive vist",
-  "ui.sessionReview.largeDiff.meta": "Grænse: {{lines}} linjer / {{limit}}. Nuværende: {{current}}.",
+  "ui.sessionReview.largeDiff.meta": "Grænse: {{limit}} ændrede linjer. Nuværende: {{current}} ændrede linjer.",
   "ui.sessionReview.largeDiff.renderAnyway": "Vis alligevel",
   "ui.lineComment.label.prefix": "Kommenter på ",
   "ui.lineComment.label.suffix": "",
@@ -32,7 +32,7 @@ export const dict = {
 
   "ui.sessionTurn.status.delegating": "Delegerer arbejde",
   "ui.sessionTurn.status.planning": "Planlægger næste trin",
-  "ui.sessionTurn.status.gatheringContext": "Udforsker...",
+  "ui.sessionTurn.status.gatheringContext": "Udforsker",
   "ui.sessionTurn.status.gatheredContext": "Udforsket",
   "ui.sessionTurn.status.searchingCodebase": "Søger i koden",
   "ui.sessionTurn.status.searchingWeb": "Søger på nettet",
