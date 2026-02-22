@@ -146,10 +146,16 @@ export const createSseClient = <TData = unknown>({
 
         signal.addEventListener("abort", abortHandler)
 
+        const MAX_BUFFER_SIZE = 10_485_760 // 10 MB
         try {
           while (true) {
             const { done, value } = await reader.read()
             if (done) break
+            if (buffer.length + value.length > MAX_BUFFER_SIZE) {
+              throw new Error(
+                `SSE buffer overflow: accumulated ${buffer.length + value.length} bytes (limit ${MAX_BUFFER_SIZE})`,
+              )
+            }
             buffer += value
             // Normalize line endings: CRLF -> LF, then CR -> LF
             buffer = buffer.replace(/\r\n/g, "\n").replace(/\r/g, "\n")

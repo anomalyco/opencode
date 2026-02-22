@@ -150,6 +150,27 @@ export namespace MCP {
   // Store transports for OAuth servers to allow finishing auth
   type TransportWithAuth = StreamableHTTPClientTransport | SSEClientTransport
   const pendingOAuthTransports = new Map<string, TransportWithAuth>()
+  const pendingOAuthTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  const OAUTH_TRANSPORT_TTL_MS = 5 * 60 * 1_000 // 5 minutes
+
+  function setPendingOAuthTransport(key: string, transport: TransportWithAuth) {
+    const existing = pendingOAuthTimers.get(key)
+    if (existing) clearTimeout(existing)
+    pendingOAuthTransports.set(key, transport)
+    const timer = setTimeout(() => {
+      pendingOAuthTransports.delete(key)
+      pendingOAuthTimers.delete(key)
+      log.info("evicted stale pending OAuth transport", { key })
+    }, OAUTH_TRANSPORT_TTL_MS)
+    pendingOAuthTimers.set(key, timer)
+  }
+
+  function deletePendingOAuthTransport(key: string) {
+    const timer = pendingOAuthTimers.get(key)
+    if (timer) clearTimeout(timer)
+    pendingOAuthTimers.delete(key)
+    pendingOAuthTransports.delete(key)
+  }
 
   // Prompt cache types
   type PromptInfo = Awaited<ReturnType<MCPClient["listPrompts"]>>["prompts"][number]
@@ -205,6 +226,8 @@ export namespace MCP {
           }),
         ),
       )
+      for (const timer of pendingOAuthTimers.values()) clearTimeout(timer)
+      pendingOAuthTimers.clear()
       pendingOAuthTransports.clear()
     },
   )
@@ -378,7 +401,7 @@ export namespace MCP {
               }).catch((e) => log.debug("failed to show toast", { error: e }))
             } else {
               // Store transport for later finishAuth call
-              pendingOAuthTransports.set(key, transport)
+              setPendingOAuthTransport(key, transport)
               status = { status: "needs_auth" as const }
               // Show toast for needs_auth
               Bus.publish(TuiEvent.ToastShow, {
@@ -772,7 +795,7 @@ export namespace MCP {
     } catch (error) {
       if (error instanceof UnauthorizedError && capturedUrl) {
         // Store transport for finishAuth
-        pendingOAuthTransports.set(mcpName, transport)
+        setPendingOAuthTransport(mcpName, transport)
         return { authorizationUrl: capturedUrl.toString() }
       }
       throw error
@@ -879,7 +902,7 @@ export namespace MCP {
       }
 
       // Re-add the MCP server to establish connection
-      pendingOAuthTransports.delete(mcpName)
+      deletePendingOAuthTransport(mcpName)
       const result = await add(mcpName, mcpConfig)
 
       const statusRecord = result.status as Record<string, Status>
@@ -899,7 +922,7 @@ export namespace MCP {
   export async function removeAuth(mcpName: string): Promise<void> {
     await McpAuth.remove(mcpName)
     McpOAuthCallback.cancelPending(mcpName)
-    pendingOAuthTransports.delete(mcpName)
+    deletePendingOAuthTransport(mcpName)
     await McpAuth.clearOAuthState(mcpName)
     log.info("removed oauth credentials", { mcpName })
   }

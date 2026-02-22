@@ -75,10 +75,14 @@ export async function createOpencodeServer(options?: ServerOptions) {
       reject(error)
     })
     if (options.signal) {
-      options.signal.addEventListener("abort", () => {
-        clearTimeout(id)
-        reject(new Error("Aborted"))
-      })
+      options.signal.addEventListener(
+        "abort",
+        () => {
+          clearTimeout(id)
+          reject(new Error("Aborted"))
+        },
+        { once: true },
+      )
     }
   })
 

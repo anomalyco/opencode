@@ -48,6 +48,7 @@ export namespace LSPClient {
       new StreamMessageWriter(input.server.process.stdin as any),
     )
 
+    const MAX_DIAGNOSTICS_FILES = 2_000
     const diagnostics = new Map<string, Diagnostic[]>()
     connection.onNotification("textDocument/publishDiagnostics", (params) => {
       const filePath = Filesystem.normalizePath(fileURLToPath(params.uri))
@@ -56,6 +57,11 @@ export namespace LSPClient {
         count: params.diagnostics.length,
       })
       const exists = diagnostics.has(filePath)
+      if (!exists && diagnostics.size >= MAX_DIAGNOSTICS_FILES) {
+        // Evict the oldest entry to stay within the size limit
+        const oldest = diagnostics.keys().next().value
+        if (oldest !== undefined) diagnostics.delete(oldest)
+      }
       diagnostics.set(filePath, params.diagnostics)
       if (!exists && input.serverID === "typescript") return
       Bus.publish(Event.Diagnostics, { path: filePath, serverID: input.serverID })
@@ -132,6 +138,7 @@ export namespace LSPClient {
       })
     }
 
+    const MAX_OPEN_FILES = 1_000
     const files: {
       [path: string]: number
     } = {}
@@ -191,6 +198,11 @@ export namespace LSPClient {
 
           log.info("textDocument/didOpen", input)
           diagnostics.delete(input.path)
+          // Evict oldest tracked file if we're at the limit
+          if (Object.keys(files).length >= MAX_OPEN_FILES) {
+            const oldest = Object.keys(files)[0]
+            if (oldest) delete files[oldest]
+          }
           await connection.sendNotification("textDocument/didOpen", {
             textDocument: {
               uri: pathToFileURL(input.path).href,
