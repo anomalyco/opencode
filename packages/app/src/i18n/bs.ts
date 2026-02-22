@@ -91,7 +91,10 @@ export const dict = {
   "palette.search.placeholder": "Pretraži datoteke, komande i sesije",
   "palette.empty": "Nema rezultata",
   "palette.group.commands": "Komande",
-  "palette.group.files": "Datoteke",
+  "palette.group.files": "Podudaranja naziva datoteka",
+  "palette.group.content": "Podudaranja sadržaja lokalnih datoteka",
+  "palette.group.chat": "Podudaranja sadržaja chata",
+  "palette.group.sessions": "Podudaranja naziva sesija",
 
   "dialog.provider.search.placeholder": "Pretraži provajdere",
   "dialog.provider.empty": "Nema pronađenih provajdera",

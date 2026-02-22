@@ -3043,6 +3043,46 @@ export type SessionCreateResponses = {
 
 export type SessionCreateResponse = SessionCreateResponses[keyof SessionCreateResponses]
 
+export type SessionSearchData = {
+  body?: never
+  path?: never
+  query: {
+    /**
+     * Filter by project directory
+     */
+    directory?: string
+    /**
+     * Text to search for in message content
+     */
+    query: string
+    /**
+     * Maximum results
+     */
+    limit?: number
+    /**
+     * Treat query as regular expression
+     */
+    regex?: string
+  }
+  url: "/session/search"
+}
+
+export type SessionSearchResponses = {
+  /**
+   * Matching sessions with snippets
+   */
+  200: Array<{
+    sessionID: string
+    title: string
+    directory: string
+    partID: string
+    messageID: string
+    snippet: string
+  }>
+}
+
+export type SessionSearchResponse = SessionSearchResponses[keyof SessionSearchResponses]
+
 export type SessionStatusData = {
   body?: never
   path?: never
@@ -4283,6 +4323,12 @@ export type FindTextData = {
   query: {
     directory?: string
     pattern: string
+    case_sensitive?: "true" | "false"
+    whole_word?: "true" | "false"
+    regex?: "true" | "false"
+    include?: string | Array<string>
+    exclude?: string | Array<string>
+    limit?: number
   }
   url: "/find"
 }

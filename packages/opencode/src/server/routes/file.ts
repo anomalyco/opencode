@@ -7,6 +7,17 @@ import { LSP } from "../../lsp"
 import { Instance } from "../../project/instance"
 import { lazy } from "../../util/lazy"
 
+function boolOpt(v: string | undefined): boolean | undefined {
+  if (v === "true") return true
+  if (v === "false") return false
+  return undefined
+}
+
+function listOpt(v: string | string[] | undefined): string[] | undefined {
+  if (v == null) return undefined
+  return Array.isArray(v) ? v : [v]
+}
+
 export const FileRoutes = lazy(() =>
   new Hono()
     .get(
@@ -30,14 +41,25 @@ export const FileRoutes = lazy(() =>
         "query",
         z.object({
           pattern: z.string(),
+          case_sensitive: z.enum(["true", "false"]).optional(),
+          whole_word: z.enum(["true", "false"]).optional(),
+          regex: z.enum(["true", "false"]).optional(),
+          include: z.union([z.string(), z.array(z.string())]).optional(),
+          exclude: z.union([z.string(), z.array(z.string())]).optional(),
+          limit: z.coerce.number().int().min(1).max(200).optional(),
         }),
       ),
       async (c) => {
-        const pattern = c.req.valid("query").pattern
+        const query = c.req.valid("query")
         const result = await Ripgrep.search({
           cwd: Instance.directory,
-          pattern,
-          limit: 10,
+          pattern: query.pattern,
+          limit: query.limit ?? 50,
+          caseSensitive: boolOpt(query.case_sensitive),
+          wholeWord: boolOpt(query.whole_word),
+          regex: boolOpt(query.regex),
+          include: listOpt(query.include),
+          exclude: listOpt(query.exclude),
         })
         return c.json(result)
       },

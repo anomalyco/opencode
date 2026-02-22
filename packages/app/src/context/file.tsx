@@ -200,6 +200,38 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         () => [],
       )
 
+    const searchContent = (
+      pattern: string,
+      options?: {
+        caseSensitive?: boolean
+        wholeWord?: boolean
+        regex?: boolean
+        include?: string[]
+        exclude?: string[]
+        limit?: number
+      },
+    ) =>
+      sdk.client.find
+        .text({
+          pattern,
+          case_sensitive: options?.caseSensitive ? "true" : "false",
+          whole_word: options?.wholeWord ? "true" : "false",
+          regex: options?.regex ? "true" : "false",
+          include: options?.include?.filter(Boolean),
+          exclude: options?.exclude?.filter(Boolean),
+          limit: options?.limit ?? 50,
+        })
+        .then(
+          (x) =>
+            (x.data ?? []).map((match) => ({
+              path: path.normalize(match.path.text),
+              line: match.lines.text,
+              lineNumber: match.line_number,
+              submatches: match.submatches,
+            })),
+          () => [],
+        )
+
     const stop = sdk.event.listen((e) => {
       invalidateFromWatcher(e.details, {
         normalize: path.normalize,
@@ -275,6 +307,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       setSelectedLines,
       searchFiles: (query: string) => search(query, "false"),
       searchFilesAndDirectories: (query: string) => search(query, "true"),
+      searchContent,
     }
   },
 })

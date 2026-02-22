@@ -91,7 +91,10 @@ export const dict = {
   "palette.search.placeholder": "Search files, commands, and sessions",
   "palette.empty": "No results found",
   "palette.group.commands": "Commands",
-  "palette.group.files": "Files",
+  "palette.group.files": "File Name Matches",
+  "palette.group.content": "Local File Content Matches",
+  "palette.group.chat": "Chat Content Matches",
+  "palette.group.sessions": "Session Name Matches",
 
   "dialog.provider.search.placeholder": "Search providers",
   "dialog.provider.empty": "No providers found",

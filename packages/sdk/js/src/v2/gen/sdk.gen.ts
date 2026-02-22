@@ -125,6 +125,7 @@ import type {
   SessionPromptResponses,
   SessionRevertErrors,
   SessionRevertResponses,
+  SessionSearchResponses,
   SessionShareErrors,
   SessionShareResponses,
   SessionShellErrors,
@@ -1047,6 +1048,40 @@ export class Session2 extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Search session content
+   *
+   * Search for text within message parts (chat content) across all sessions. Searches the JSON data column of parts using SQL LIKE.
+   */
+  public search<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      query: string
+      limit?: number
+      regex?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "query" },
+            { in: "query", key: "limit" },
+            { in: "query", key: "regex" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionSearchResponses, unknown, ThrowOnError>({
+      url: "/session/search",
+      ...options,
+      ...params,
     })
   }
 
@@ -2224,6 +2259,12 @@ export class Find extends HeyApiClient {
     parameters: {
       directory?: string
       pattern: string
+      case_sensitive?: "true" | "false"
+      whole_word?: "true" | "false"
+      regex?: "true" | "false"
+      include?: string | Array<string>
+      exclude?: string | Array<string>
+      limit?: number
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2234,6 +2275,12 @@ export class Find extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "pattern" },
+            { in: "query", key: "case_sensitive" },
+            { in: "query", key: "whole_word" },
+            { in: "query", key: "regex" },
+            { in: "query", key: "include" },
+            { in: "query", key: "exclude" },
+            { in: "query", key: "limit" },
           ],
         },
       ],

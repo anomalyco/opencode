@@ -16,8 +16,25 @@ import { Log } from "../../util/log"
 import { PermissionNext } from "@/permission/next"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { Database, like, and, eq, desc } from "../../storage/db"
+import { PartTable, SessionTable } from "../../session/session.sql"
 
 const log = Log.create({ service: "server" })
+
+function textFromPartData(data: Record<string, unknown>): string {
+  if (typeof data.text === "string") return data.text
+  if (typeof data.prompt === "string") return data.prompt
+  if (typeof data.description === "string") return data.description
+  return JSON.stringify(data).slice(0, 200)
+}
+
+function snippetAround(text: string, idx: number, len: number, context: number): string {
+  const start = Math.max(0, idx - context)
+  const end = Math.min(text.length, idx + len + context)
+  const prefix = start > 0 ? "..." : ""
+  const suffix = end < text.length ? "..." : ""
+  return (prefix + text.slice(start, end) + suffix).trim()
+}
 
 export const SessionRoutes = lazy(() =>
   new Hono()
@@ -48,7 +65,7 @@ export const SessionRoutes = lazy(() =>
             .optional()
             .meta({ description: "Filter sessions updated on or after this timestamp (milliseconds since epoch)" }),
           search: z.string().optional().meta({ description: "Filter sessions by title (case-insensitive)" }),
-          limit: z.coerce.number().optional().meta({ description: "Maximum number of sessions to return" }),
+           limit: z.coerce.number().optional().meta({ description: "Maximum number of sessions to return" }),
         }),
       ),
       async (c) => {
@@ -64,6 +81,120 @@ export const SessionRoutes = lazy(() =>
           sessions.push(session)
         }
         return c.json(sessions)
+      },
+    )
+    .get(
+      "/search",
+      describeRoute({
+        summary: "Search session content",
+        description:
+          "Search for text within message parts (chat content) across all sessions. Searches the JSON data column of parts using SQL LIKE.",
+        operationId: "session.search",
+        responses: {
+          200: {
+            description: "Matching sessions with snippets",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z
+                    .object({
+                      sessionID: z.string(),
+                      title: z.string(),
+                      directory: z.string(),
+                      partID: z.string(),
+                      messageID: z.string(),
+                      snippet: z.string(),
+                    })
+                    .array(),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "query",
+        z.object({
+          query: z.string().meta({ description: "Text to search for in message content" }),
+          directory: z.string().optional().meta({ description: "Filter by project directory" }),
+          limit: z.coerce.number().int().min(1).max(100).optional().meta({ description: "Maximum results" }),
+          regex: z.string().optional().transform((v) => v === "true").meta({ description: "Treat query as regular expression" }),
+        }),
+      ),
+      async (c) => {
+        const input = c.req.valid("query")
+        const query = input.query.trim()
+        if (!query) return c.json([])
+
+        const useRegex = !!input.regex
+        const limit = input.limit
+        let re: RegExp | undefined
+        if (useRegex) {
+          const maxLen = 200
+          let pattern = query
+          if (query.length > maxLen) {
+            // Cap pattern length to mitigate ReDoS (catastrophic backtracking from malicious regex)
+            log.warn("session search regex truncated", { len: query.length, max: maxLen })
+            pattern = query.slice(0, maxLen)
+          }
+          try { re = new RegExp(pattern, "i") } catch { return c.json([]) }
+        }
+
+        const conditions: Parameters<typeof and>[0][] = []
+        if (!useRegex) {
+          // Escape LIKE meta-characters to prevent LIKE injection
+          const escaped = query.replace(/[%_\\]/g, (c) => "\\" + c)
+          conditions.push(like(PartTable.data, `%${escaped}%`))
+        }
+        if (input.directory) conditions.push(eq(SessionTable.directory, input.directory))
+
+        const rows = Database.use((db) =>
+          db
+            .select({
+              sessionID: PartTable.session_id,
+              partID: PartTable.id,
+              messageID: PartTable.message_id,
+              data: PartTable.data,
+              title: SessionTable.title,
+              directory: SessionTable.directory,
+            })
+            .from(PartTable)
+            .innerJoin(SessionTable, eq(PartTable.session_id, SessionTable.id))
+            .where(conditions.length ? and(...conditions) : undefined)
+            .orderBy(desc(SessionTable.time_updated))
+            .all(),
+        )
+
+        type ResultRow = (typeof rows)[number] & { snippet: string }
+        const results: ResultRow[] = []
+        const context = 40
+
+        for (const row of rows) {
+          const text = textFromPartData(row.data as Record<string, unknown>)
+          let idx: number
+          let matchLen: number
+          if (re) {
+            const m = re.exec(text)
+            if (!m) continue
+            idx = m.index
+            matchLen = m[0].length
+          } else {
+            idx = text.toLowerCase().indexOf(query.toLowerCase())
+            matchLen = query.length
+          }
+          const snippet = snippetAround(text, idx, matchLen, context)
+          results.push({ ...row, snippet })
+          if (limit != null && results.length >= limit) break
+        }
+
+        return c.json(results.map((row) => ({
+          sessionID: row.sessionID,
+          title: row.title,
+          directory: row.directory,
+          partID: row.partID,
+          messageID: row.messageID,
+          snippet: row.snippet,
+        })))
       },
     )
     .get(

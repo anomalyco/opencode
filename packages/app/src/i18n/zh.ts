@@ -118,7 +118,10 @@ export const dict = {
   "palette.search.placeholder": "搜索文件、命令和会话",
   "palette.empty": "未找到结果",
   "palette.group.commands": "命令",
-  "palette.group.files": "文件",
+  "palette.group.files": "文件名匹配",
+  "palette.group.content": "本地文件内容匹配",
+  "palette.group.chat": "聊天内容匹配",
+  "palette.group.sessions": "会话名匹配",
 
   "dialog.provider.search.placeholder": "搜索提供商",
   "dialog.provider.empty": "未找到提供商",

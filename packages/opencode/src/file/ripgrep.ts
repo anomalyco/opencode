@@ -5,7 +5,7 @@ import fs from "fs/promises"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
 import { lazy } from "../util/lazy"
-import { $ } from "bun"
+
 import { Filesystem } from "../util/filesystem"
 
 import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"
@@ -333,21 +333,54 @@ export namespace Ripgrep {
     return lines.join("\n")
   }
 
+  /** Normalize a path or glob for ripgrep --glob (relative to cwd). */
+  function toGlob(raw: string, cwd: string): string {
+    if (/[*?\[\]]/.test(raw)) return raw
+    let value = raw
+    if (path.isAbsolute(raw)) {
+      const rel = path.relative(cwd, raw)
+      if (rel.startsWith("..")) return ""
+      value = rel || "."
+    }
+    if (value === ".") return "**"
+    return value.endsWith("/") ? `${value}**` : `${value}/**`
+  }
+
+  function pushGlobArgs(args: string[], cwd: string, patterns: string[] | undefined, negate: boolean): void {
+    if (!patterns) return
+    for (const g of patterns) {
+      const glob = toGlob(g, cwd)
+      if (glob) args.push(negate ? `--glob=!${glob}` : `--glob=${glob}`)
+    }
+  }
+
   export async function search(input: {
     cwd: string
     pattern: string
     glob?: string[]
     limit?: number
     follow?: boolean
+    caseSensitive?: boolean
+    wholeWord?: boolean
+    regex?: boolean
+    include?: string[]
+    exclude?: string[]
   }) {
-    const args = [`${await filepath()}`, "--json", "--hidden", "--glob='!.git/*'"]
+    const args = [`${await filepath()}`, "--json", "--hidden", "--glob=!.git/*"]
     if (input.follow) args.push("--follow")
+    if (input.caseSensitive) args.push("--case-sensitive")
+    if (!input.caseSensitive) args.push("--ignore-case")
+    if (input.wholeWord) args.push("--word-regexp")
+    if (input.regex !== true) args.push("--fixed-strings")
 
     if (input.glob) {
       for (const g of input.glob) {
         args.push(`--glob=${g}`)
       }
     }
+
+    pushGlobArgs(args, input.cwd, input.include, false)
+    pushGlobArgs(args, input.cwd, input.exclude, true)
 
     if (input.limit) {
       args.push(`--max-count=${input.limit}`)
@@ -356,15 +389,18 @@ export namespace Ripgrep {
     args.push("--")
     args.push(input.pattern)
 
-    const command = args.join(" ")
-    const result = await $`${{ raw: command }}`.cwd(input.cwd).quiet().nothrow()
-    if (result.exitCode !== 0) {
+    const proc = Bun.spawn(args, {
+      cwd: input.cwd,
+      stdout: "pipe",
+      stderr: "ignore",
+    })
+    const text = await new Response(proc.stdout).text()
+    await proc.exited
+    if (proc.exitCode !== 0) {
       return []
     }
 
-    // Handle both Unix (\n) and Windows (\r\n) line endings
-    const lines = result.text().trim().split(/\r?\n/).filter(Boolean)
-    // Parse JSON lines from ripgrep output
+    const lines = text.trim().split(/\r?\n/).filter(Boolean)
 
     return lines
       .map((line) => JSON.parse(line))

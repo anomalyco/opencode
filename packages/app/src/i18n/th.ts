@@ -91,7 +91,10 @@ export const dict = {
   "palette.search.placeholder": "ค้นหาไฟล์ คำสั่ง และเซสชัน",
   "palette.empty": "ไม่พบผลลัพธ์",
   "palette.group.commands": "คำสั่ง",
-  "palette.group.files": "ไฟล์",
+  "palette.group.files": "ผลการจับคู่ชื่อไฟล์",
+  "palette.group.content": "ผลการจับคู่เนื้อหาไฟล์ในเครื่อง",
+  "palette.group.chat": "ผลการจับคู่เนื้อหาแชท",
+  "palette.group.sessions": "ผลการจับคู่ชื่อเซสชัน",
 
   "dialog.provider.search.placeholder": "ค้นหาผู้ให้บริการ",
   "dialog.provider.empty": "ไม่พบผู้ให้บริการ",

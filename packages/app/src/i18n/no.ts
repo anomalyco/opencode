@@ -94,7 +94,10 @@ export const dict = {
   "palette.search.placeholder": "Søk i filer, kommandoer og sesjoner",
   "palette.empty": "Ingen resultater funnet",
   "palette.group.commands": "Kommandoer",
-  "palette.group.files": "Filer",
+  "palette.group.files": "Filnavnstreff",
+  "palette.group.content": "Lokalt filinnholdstreff",
+  "palette.group.chat": "Chatinnholdstreff",
+  "palette.group.sessions": "Sesjonsnavnstreff",
 
   "dialog.provider.search.placeholder": "Søk etter leverandører",
   "dialog.provider.empty": "Ingen leverandører funnet",

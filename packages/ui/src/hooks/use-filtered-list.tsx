@@ -8,6 +8,7 @@ export interface FilteredListProps<T> {
   items: T[] | ((filter: string) => T[] | Promise<T[]>)
   key: (item: T) => string
   filterKeys?: string[]
+  disableFuzzy?: boolean
   current?: T
   groupBy?: (x: T) => string
   sortBy?: (a: T, b: T) => number
@@ -34,7 +35,7 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
       const result = pipe(
         all,
         (x) => {
-          if (!needle) return x
+          if (!needle || props.disableFuzzy) return x
           if (!props.filterKeys && Array.isArray(x) && x.every((e) => typeof e === "string")) {
             return fuzzysort.go(needle, x).map((x) => x.target) as T[]
           }

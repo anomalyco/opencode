@@ -25,6 +25,7 @@
 
   [data-slot="list-search-wrapper"] {
     display: flex;
+    flex-wrap: wrap;
     flex-shrink: 0;
     align-items: center;
     gap: 8px;

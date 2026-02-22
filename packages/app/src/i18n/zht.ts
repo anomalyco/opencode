@@ -95,7 +95,10 @@ export const dict = {
   "palette.search.placeholder": "搜尋檔案、命令和工作階段",
   "palette.empty": "找不到結果",
   "palette.group.commands": "命令",
-  "palette.group.files": "檔案",
+  "palette.group.files": "檔案名稱匹配",
+  "palette.group.content": "本機檔案內容匹配",
+  "palette.group.chat": "聊天內容匹配",
+  "palette.group.sessions": "工作階段名稱匹配",
 
   "dialog.provider.search.placeholder": "搜尋提供者",
   "dialog.provider.empty": "找不到提供者",

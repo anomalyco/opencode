@@ -91,7 +91,10 @@ export const dict = {
   "palette.search.placeholder": "Поиск файлов, команд и сессий",
   "palette.empty": "Ничего не найдено",
   "palette.group.commands": "Команды",
-  "palette.group.files": "Файлы",
+  "palette.group.files": "Совпадения имён файлов",
+  "palette.group.content": "Совпадения содержимого локальных файлов",
+  "palette.group.chat": "Совпадения содержимого чата",
+  "palette.group.sessions": "Совпадения имён сессий",
 
   "dialog.provider.search.placeholder": "Поиск провайдеров",
   "dialog.provider.empty": "Провайдеры не найдены",
