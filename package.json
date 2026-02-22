@@ -78,6 +78,7 @@
     "turbo": "2.5.6"
   },
   "dependencies": {
+    "@ast-grep/napi": "0.40.5",
     "@aws-sdk/client-s3": "3.933.0",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",

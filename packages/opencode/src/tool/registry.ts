@@ -1,3 +1,4 @@
+import { AstGrepTool } from "./astgrep"
 import { QuestionTool } from "./question"
 import { BashTool } from "./bash"
 import { EditTool } from "./edit"
@@ -101,6 +102,7 @@ export namespace ToolRegistry {
     return [
       InvalidTool,
       ...(question ? [QuestionTool] : []),
+      AstGrepTool,
       BashTool,
       ReadTool,
       GlobTool,
