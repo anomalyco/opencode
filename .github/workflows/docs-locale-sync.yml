@@ -12,13 +12,14 @@ jobs:
     if: github.actor != 'opencode-agent[bot]'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
-      id-token: write
       contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          persist-credentials: false
           fetch-depth: 0
+          ref: ${{ github.ref_name }}
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
@@ -51,9 +52,54 @@ jobs:
         uses: sst/opencode/github@latest
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
+          OPENCODE_CONFIG_CONTENT: |
+            {
+              "permission": {
+                "*": "deny",
+                "read": {
+                  "*": "deny",
+                  "packages/web/src/content/docs": "allow",
+                  "packages/web/src/content/docs/*": "allow",
+                  "packages/web/src/content/docs/*.mdx": "allow",
+                  "packages/web/src/content/docs/*/*.mdx": "allow",
+                  ".opencode": "allow",
+                  ".opencode/agent": "allow",
+                  ".opencode/agent/glossary": "allow",
+                  ".opencode/agent/translator.md": "allow",
+                  ".opencode/agent/glossary/*.md": "allow"
+                },
+                "edit": {
+                  "*": "deny",
+                  "packages/web/src/content/docs/*/*.mdx": "allow"
+                },
+                "glob": {
+                  "*": "deny",
+                  "packages/web/src/content/docs*": "allow",
+                  ".opencode/agent/glossary*": "allow"
+                },
+                "task": {
+                  "*": "deny",
+                  "translator": "allow"
+                }
+              },
+              "agent": {
+                "translator": {
+                  "permission": {
+                    "*": "deny",
+                    "read": {
+                      "*": "deny",
+                      ".opencode/agent/translator.md": "allow",
+                      ".opencode/agent/glossary/*.md": "allow"
+                    }
+                  }
+                }
+              }
+            }
         with:
-          model: opencode/gpt-5.2
+          model: opencode/gpt-5.3-codex
           agent: docs
+          use_github_token: true
           prompt: |
             Update localized docs to match the latest English docs changes.
 
@@ -67,10 +113,11 @@ jobs:
             2. You MUST use the Task tool for translation work and launch subagents with subagent_type `translator` (defined in .opencode/agent/translator.md).
             3. Do not translate directly in the primary agent. Use translator subagent output as the source for locale text updates.
             4. Run translator subagent Task calls in parallel whenever file/locale translation work is independent.
-            5. Preserve frontmatter keys, internal links, code blocks, and existing locale-specific metadata unless the English change requires an update.
-            6. Keep locale docs structure aligned with their corresponding English pages.
-            7. Do not modify English source docs in packages/web/src/content/docs/*.mdx.
-            8. If no locale updates are needed, make no changes.
+            5. Use only the minimum tools needed for this task (read/glob, file edits, and translator Task). Do not use shell, web, search, or GitHub tools for translation work.
+            6. Preserve frontmatter keys, internal links, code blocks, and existing locale-specific metadata unless the English change requires an update.
+            7. Keep locale docs structure aligned with their corresponding English pages.
+            8. Do not modify English source docs in packages/web/src/content/docs/*.mdx.
+            9. If no locale updates are needed, make no changes.
 
       - name: Commit and push locale docs updates
         if: steps.changes.outputs.has_changes == 'true'
