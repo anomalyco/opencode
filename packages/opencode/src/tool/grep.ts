@@ -10,6 +10,19 @@ import { assertExternalDirectory } from "./external-directory"
 
 const MAX_LINE_LENGTH = 2000
 
+function normalizeInclude(include?: string) {
+  if (!include) return undefined
+  const v = include.trim()
+  if (!v) return undefined
+
+  // Treat “match everything” globs as redundant. Passing them via --glob can
+  // act as an override/whitelist and may cause ignored paths to be searched.
+  const redundant = new Set(["*", "*.*", "**", "**/*", "./**", "./**/*"])
+  if (redundant.has(v)) return undefined
+
+  return v
+}
+
 export const GrepTool = Tool.define("grep", {
   description: DESCRIPTION,
   parameters: z.object({
@@ -22,6 +35,8 @@ export const GrepTool = Tool.define("grep", {
       throw new Error("pattern is required")
     }
 
+    const include = normalizeInclude(params.include)
+
     await ctx.ask({
       permission: "grep",
       patterns: [params.pattern],
@@ -29,7 +44,7 @@ export const GrepTool = Tool.define("grep", {
       metadata: {
         pattern: params.pattern,
         path: params.path,
-        include: params.include,
+        include: include,
       },
     })
 
@@ -39,8 +54,8 @@ export const GrepTool = Tool.define("grep", {
 
     const rgPath = await Ripgrep.filepath()
     const args = ["-nH", "--hidden", "--no-messages", "--field-match-separator=|", "--regexp", params.pattern]
-    if (params.include) {
-      args.push("--glob", params.include)
+    if (include) {
+      args.push("--glob", include)
     }
     args.push(searchPath)
 
