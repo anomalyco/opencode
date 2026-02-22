@@ -744,6 +744,122 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
   })
 })
 
+describe("ProviderTransform.message - kimi-k2.5 anthropic interleaved reasoning", () => {
+  const kimiModel = {
+    id: "anthropic/kimi-k2.5",
+    providerID: "anthropic",
+    api: {
+      id: "kimi-k2.5",
+      url: "https://api.anthropic.com",
+      npm: "@ai-sdk/anthropic",
+    },
+    name: "Kimi K2.5",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: { field: "reasoning_content" },
+    },
+    cost: { input: 0.001, output: 0.002, cache: { read: 0.0001, write: 0.0002 } },
+    limit: { context: 128000, output: 8192 },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "2025-01-01",
+  } as any
+
+  test("injects reasoning_content into providerOptions.anthropic", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Let me think..." },
+          { type: "text", text: "The answer is 42" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, kimiModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].providerOptions?.anthropic?.reasoning_content).toBe("Let me think...")
+    expect(result[0].content).toEqual([{ type: "text", text: "The answer is 42" }])
+  })
+
+  test("does not inject when no reasoning parts exist", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "No reasoning here" }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, kimiModel, {})
+
+    expect(result[0].providerOptions?.anthropic?.reasoning_content).toBeUndefined()
+    expect(result[0].content).toEqual([{ type: "text", text: "No reasoning here" }])
+  })
+
+  test("concatenates multiple reasoning parts", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "First thought. " },
+          { type: "reasoning", text: "Second thought." },
+          { type: "text", text: "Result" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, kimiModel, {})
+
+    expect(result[0].providerOptions?.anthropic?.reasoning_content).toBe("First thought. Second thought.")
+    expect(result[0].content).toEqual([{ type: "text", text: "Result" }])
+  })
+
+  test("works with google-vertex/anthropic SDK", () => {
+    const vertexModel = {
+      ...kimiModel,
+      api: { ...kimiModel.api, npm: "@ai-sdk/google-vertex/anthropic" },
+    }
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Thinking via vertex..." },
+          { type: "text", text: "Done" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, vertexModel, {})
+
+    expect(result[0].providerOptions?.anthropic?.reasoning_content).toBe("Thinking via vertex...")
+  })
+
+  test("leaves non-assistant messages unchanged", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Thinking..." },
+          { type: "text", text: "Hi" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, kimiModel, {})
+
+    expect(result[0].content).toBe("Hello")
+    expect(result[1].providerOptions?.anthropic?.reasoning_content).toBe("Thinking...")
+  })
+})
+
 describe("ProviderTransform.message - empty image handling", () => {
   const mockModel = {
     id: "anthropic/claude-3-5-sonnet",
