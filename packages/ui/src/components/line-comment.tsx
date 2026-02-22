@@ -53,6 +53,7 @@ export const LineCommentAnchor = (props: LineCommentAnchorProps) => {
   return (
     <div
       data-component="line-comment"
+      data-prevent-autofocus=""
       data-variant={variant()}
       data-comment-id={props.id}
       data-open={props.open ? "" : undefined}
@@ -233,16 +234,15 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
           }}
           on:keydown={(e) => {
             const event = e as KeyboardEvent
+            event.stopPropagation()
             if (e.key === "Escape") {
               event.preventDefault()
-              event.stopPropagation()
               split.onCancel()
               return
             }
             if (e.key !== "Enter") return
             if (e.shiftKey) return
             event.preventDefault()
-            event.stopPropagation()
             submit()
           }}
         />

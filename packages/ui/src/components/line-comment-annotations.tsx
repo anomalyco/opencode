@@ -42,39 +42,53 @@ export function createLineCommentAnnotationRenderer<T>(props: {
     if (typeof document === "undefined") return
 
     const host = document.createElement("div")
+    host.setAttribute("data-prevent-autofocus", "")
     const [current, setCurrent] = createSignal(meta)
-    const view = createMemo<JSX.Element>(() => {
-      const next = current()
-
-      if (next.kind === "comment") {
-        const view = props.renderComment(next.comment)
-        return (
+    if (meta.kind === "comment") {
+      const view = createMemo(() => {
+        const next = current()
+        if (next.kind !== "comment") return props.renderComment(meta.comment)
+        return props.renderComment(next.comment)
+      })
+      const dispose = renderSolid(
+        () => (
           <LineComment
             inline
-            id={view.id}
-            open={view.open}
-            comment={view.comment}
-            selection={view.selection}
-            onClick={view.onClick}
-            onMouseEnter={view.onMouseEnter}
+            id={view().id}
+            open={view().open}
+            comment={view().comment}
+            selection={view().selection}
+            onClick={view().onClick}
+            onMouseEnter={view().onMouseEnter}
           />
-        )
-      }
+        ),
+        host,
+      )
 
-      const view = props.renderDraft(next.range)
-      return (
+      const node = { host, dispose, setMeta: setCurrent }
+      nodes.set(meta.key, node)
+      return node
+    }
+
+    const view = createMemo(() => {
+      const next = current()
+      if (next.kind !== "draft") return props.renderDraft(meta.range)
+      return props.renderDraft(next.range)
+    })
+    const dispose = renderSolid(
+      () => (
         <LineCommentEditor
           inline
-          value={view.value}
-          selection={view.selection}
-          onInput={view.onInput}
-          onCancel={view.onCancel}
-          onSubmit={view.onSubmit}
-          onPopoverFocusOut={view.onPopoverFocusOut}
+          value={view().value}
+          selection={view().selection}
+          onInput={view().onInput}
+          onCancel={view().onCancel}
+          onSubmit={view().onSubmit}
+          onPopoverFocusOut={view().onPopoverFocusOut}
         />
-      )
-    })
-    const dispose = renderSolid(() => <>{view()}</>, host)
+      ),
+      host,
+    )
 
     const node = { host, dispose, setMeta: setCurrent }
     nodes.set(meta.key, node)
