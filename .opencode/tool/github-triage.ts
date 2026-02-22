@@ -5,8 +5,16 @@ import DESCRIPTION from "./github-triage.txt"
 const TEAM = {
   desktop: ["adamdotdevin", "iamdavidhill", "Brendonovich", "nexxeln"],
   zen: ["fwang", "MrMushrooooom"],
-  tui: ["thdxr", "kommander", "rekram1-node"],
-  core: ["thdxr", "rekram1-node", "jlongster"],
+  tui: [
+    "thdxr",
+    "kommander",
+    // "rekram1-node" (on vacation)
+  ],
+  core: [
+    "thdxr",
+    // "rekram1-node", (on vacation)
+    "jlongster",
+  ],
   docs: ["R44VC0RP"],
   windows: ["Hona"],
 } as const
@@ -42,10 +50,7 @@ async function githubFetch(endpoint: string, options: RequestInit = {}) {
 export default tool({
   description: DESCRIPTION,
   args: {
-    assignee: tool.schema
-      .enum(ASSIGNEES as [string, ...string[]])
-      .describe("The username of the assignee")
-      .default("rekram1-node"),
+    assignee: tool.schema.enum(ASSIGNEES as [string, ...string[]]).describe("The username of the assignee"),
     labels: tool.schema
       .array(tool.schema.enum(["nix", "opentui", "perf", "web", "desktop", "zen", "docs", "windows", "core"]))
       .describe("The labels(s) to add to the issue")
@@ -68,7 +73,8 @@ export default tool({
       results.push("Dropped label: nix (issue does not mention nix)")
     }
 
-    const assignee = nix ? "rekram1-node" : web ? pick(TEAM.desktop) : args.assignee
+    // const assignee = nix ? "rekram1-node" : web ? pick(TEAM.desktop) : args.assignee
+    const assignee = web ? pick(TEAM.desktop) : args.assignee
 
     if (labels.includes("zen") && !zen) {
       throw new Error("Only add the zen label when issue title/body contains 'zen'")

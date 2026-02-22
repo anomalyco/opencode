@@ -67,11 +67,11 @@ export function TerminalPanel() {
     on(
       () => terminal.active(),
       (activeId) => {
-        if (!activeId || !opened()) return
+        if (!activeId || !open()) return
         if (document.activeElement instanceof HTMLElement) {
           document.activeElement.blur()
         }
-        focusTerminalById(activeId)
+        setTimeout(() => focusTerminalById(activeId), 0)
       },
     ),
   )
@@ -209,21 +209,17 @@ export function TerminalPanel() {
                 </Tabs.List>
               </Tabs>
               <div class="flex-1 min-h-0 relative">
-                <For each={all()}>
-                  {(pty) => (
-                    <div
-                      id={`terminal-wrapper-${pty.id}`}
-                      class="absolute inset-0"
-                      style={{
-                        display: terminal.active() === pty.id ? "block" : "none",
-                      }}
-                    >
-                      <Show when={pty.id} keyed>
-                        <Terminal pty={pty} onCleanup={terminal.update} onConnectError={() => terminal.clone(pty.id)} />
-                      </Show>
-                    </div>
+                <Show when={terminal.active()} keyed>
+                  {(id) => (
+                    <Show when={byId().get(id)}>
+                      {(pty) => (
+                        <div id={`terminal-wrapper-${id}`} class="absolute inset-0">
+                          <Terminal pty={pty()} onCleanup={terminal.update} onConnectError={() => terminal.clone(id)} />
+                        </div>
+                      )}
+                    </Show>
                   )}
-                </For>
+                </Show>
               </div>
             </div>
             <DragOverlay>
