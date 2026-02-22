@@ -620,6 +620,174 @@ describe("ProviderTransform.schema - gemini non-object properties removal", () =
   })
 })
 
+describe("ProviderTransform.schema - gemini anyOf/oneOf sibling fields stripping", () => {
+  const geminiModel = {
+    providerID: "google",
+    api: {
+      id: "gemini-3-pro",
+    },
+  } as any
+
+  test("strips sibling fields when anyOf is present", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        edits: {
+          type: "array",
+          anyOf: [{ type: "string" }, { type: "number" }],
+          description: "This should be stripped",
+          items: { type: "string" },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    // anyOf must be the ONLY field
+    expect(result.properties.edits).toEqual({
+      anyOf: [{ type: "string" }, { type: "number" }],
+    })
+    expect(result.properties.edits.type).toBeUndefined()
+    expect(result.properties.edits.description).toBeUndefined()
+    expect(result.properties.edits.items).toBeUndefined()
+  })
+
+  test("strips sibling fields when oneOf is present", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        value: {
+          type: "string",
+          oneOf: [{ type: "string" }, { type: "null" }],
+          description: "This should be stripped",
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.value).toEqual({
+      oneOf: [{ type: "string" }, { type: "null" }],
+    })
+  })
+
+  test("recursively sanitizes nested anyOf", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        nested: {
+          anyOf: [
+            {
+              type: "object",
+              properties: {
+                inner: {
+                  anyOf: [{ type: "string" }, { type: "number" }],
+                  description: "Should be stripped",
+                },
+              },
+            },
+          ],
+          description: "Should be stripped",
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    // Outer anyOf should have siblings stripped
+    expect(result.properties.nested).toEqual({
+      anyOf: [
+        {
+          type: "object",
+          properties: {
+            inner: {
+              anyOf: [{ type: "string" }, { type: "number" }],
+            },
+          },
+        },
+      ],
+    })
+  })
+
+  test("does not affect schemas without anyOf/oneOf", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "A name",
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.name.type).toBe("string")
+    expect(result.properties.name.description).toBe("A name")
+  })
+
+  test("does not affect non-gemini providers", () => {
+    const openaiModel = {
+      providerID: "openai",
+      api: {
+        id: "gpt-4",
+      },
+    } as any
+
+    const schema = {
+      type: "object",
+      properties: {
+        edits: {
+          type: "array",
+          anyOf: [{ type: "string" }, { type: "number" }],
+          description: "This should remain",
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(openaiModel, schema) as any
+
+    // OpenAI should NOT strip sibling fields
+    expect(result.properties.edits.type).toBe("array")
+    expect(result.properties.edits.anyOf).toBeDefined()
+    expect(result.properties.edits.description).toBe("This should remain")
+  })
+
+  test("strips sibling fields when anyOf is inside array items", () => {
+    // This is the exact case the oh-my-opencode plugin creates
+    const schema = {
+      type: "object",
+      properties: {
+        edits: {
+          type: "array",
+          items: {
+            anyOf: [
+              { type: "object", properties: { field1: { type: "string" } } },
+              { type: "object", properties: { field2: { type: "number" } } },
+            ],
+            type: "object", // This sibling should be stripped
+            properties: { foo: { type: "string" } }, // This sibling should be stripped
+            required: ["foo"], // This sibling should be stripped
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    // The items should only have anyOf, with all siblings stripped
+    expect(result.properties.edits.items).toEqual({
+      anyOf: [
+        { type: "object", properties: { field1: { type: "string" } } },
+        { type: "object", properties: { field2: { type: "number" } } },
+      ],
+    })
+    expect(result.properties.edits.items.type).toBeUndefined()
+    expect(result.properties.edits.items.properties).toBeUndefined()
+    expect(result.properties.edits.items.required).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.message - DeepSeek reasoning content", () => {
   test("DeepSeek with tool calls includes reasoning_content in providerOptions", () => {
     const msgs = [

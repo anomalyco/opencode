@@ -906,6 +906,17 @@ export namespace ProviderTransform {
           return obj.map(sanitizeGemini)
         }
 
+        // Gemini requires anyOf/oneOf to be the ONLY field in a schema object.
+        // When present, strip all sibling fields.
+        // See: https://github.com/anomalyco/opencode/issues/14509
+        if (obj.anyOf !== undefined) {
+          return { anyOf: obj.anyOf.map(sanitizeGemini) }
+        }
+        if (obj.oneOf !== undefined) {
+          return { oneOf: obj.oneOf.map(sanitizeGemini) }
+        }
+
+        // Recursively sanitize all object values (including items)
         const result: any = {}
         for (const [key, value] of Object.entries(obj)) {
           if (key === "enum" && Array.isArray(value)) {
@@ -933,7 +944,14 @@ export namespace ProviderTransform {
           }
           // Ensure items has at least a type if it's an empty object
           // This handles nested arrays like { type: "array", items: { type: "array", items: {} } }
-          if (typeof result.items === "object" && !Array.isArray(result.items) && !result.items.type) {
+          // But don't add default type if items already has anyOf/oneOf (Gemini requires these alone)
+          if (
+            typeof result.items === "object" &&
+            !Array.isArray(result.items) &&
+            !result.items.type &&
+            result.items.anyOf === undefined &&
+            result.items.oneOf === undefined
+          ) {
             result.items.type = "string"
           }
         }
