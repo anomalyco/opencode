@@ -18,12 +18,14 @@ export namespace Pty {
 
   type Socket = {
     readyState: number
+    data?: unknown
     send: (data: string | Uint8Array | ArrayBuffer) => void
     close: (code?: number, reason?: string) => void
   }
 
   type Subscriber = {
     id: number
+    token: unknown
   }
 
   const sockets = new WeakMap<object, number>()
@@ -35,6 +37,44 @@ export namespace Pty {
     const next = (socketCounter = (socketCounter + 1) % Number.MAX_SAFE_INTEGER)
     sockets.set(ws, next)
     return next
+  }
+
+  const token = (ws: Socket) => {
+    const data = ws.data
+    if (data === undefined) return
+    if (data === null) return
+    if (typeof data !== "object") return data
+
+    const id = (data as { connId?: unknown }).connId
+    if (typeof id === "number" || typeof id === "string") return id
+
+    const href = (data as { href?: unknown }).href
+    if (typeof href === "string") return href
+
+    const url = (data as { url?: unknown }).url
+    if (typeof url === "string") return url
+    if (url && typeof url === "object") {
+      const href = (url as { href?: unknown }).href
+      if (typeof href === "string") return href
+      return url
+    }
+
+    const events = (data as { events?: unknown }).events
+    if (typeof events === "number" || typeof events === "string") return events
+    if (events && typeof events === "object") {
+      const id = (events as { connId?: unknown }).connId
+      if (typeof id === "number" || typeof id === "string") return id
+
+      const id2 = (events as { connection?: unknown }).connection
+      if (typeof id2 === "number" || typeof id2 === "string") return id2
+
+      const id3 = (events as { id?: unknown }).id
+      if (typeof id3 === "number" || typeof id3 === "string") return id3
+
+      return events
+    }
+
+    return data
   }
 
   // WebSocket control frame: 0x00 + UTF-8 JSON.
@@ -194,6 +234,12 @@ export namespace Pty {
           session.subscribers.delete(ws)
           continue
         }
+
+        if (token(ws) !== sub.token) {
+          session.subscribers.delete(ws)
+          continue
+        }
+
         try {
           ws.send(chunk)
         } catch {
@@ -291,7 +337,7 @@ export namespace Pty {
     }
 
     owners.set(ws, id)
-    session.subscribers.set(ws, { id: socketId })
+    session.subscribers.set(ws, { id: socketId, token: token(ws) })
 
     const cleanup = () => {
       session.subscribers.delete(ws)

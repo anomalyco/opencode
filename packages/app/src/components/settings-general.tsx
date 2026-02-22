@@ -20,12 +20,17 @@ let demoSoundState = {
 
 // To prevent audio from overlapping/playing very quickly when navigating the settings menus,
 // delay the playback by 100ms during quick selection changes and pause existing sounds.
-const playDemoSound = (src: string) => {
+const stopDemoSound = () => {
   if (demoSoundState.cleanup) {
     demoSoundState.cleanup()
   }
-
   clearTimeout(demoSoundState.timeout)
+  demoSoundState.cleanup = undefined
+}
+
+const playDemoSound = (src: string | undefined) => {
+  stopDemoSound()
+  if (!src) return
 
   demoSoundState.timeout = setTimeout(() => {
     demoSoundState.cleanup = playSound(src)
@@ -132,11 +137,17 @@ export const SettingsGeneral: Component = () => {
   ] as const
   const fontOptionsList = [...fontOptions]
 
-  const soundOptions = [...SOUND_OPTIONS]
+  const noneSound = { id: "none", label: "sound.option.none", src: undefined } as const
+  const soundOptions = [noneSound, ...SOUND_OPTIONS]
 
-  const soundSelectProps = (current: () => string, set: (id: string) => void) => ({
+  const soundSelectProps = (
+    enabled: () => boolean,
+    current: () => string,
+    setEnabled: (value: boolean) => void,
+    set: (id: string) => void,
+  ) => ({
     options: soundOptions,
-    current: soundOptions.find((o) => o.id === current()),
+    current: enabled() ? (soundOptions.find((o) => o.id === current()) ?? noneSound) : noneSound,
     value: (o: (typeof soundOptions)[number]) => o.id,
     label: (o: (typeof soundOptions)[number]) => language.t(o.label),
     onHighlight: (option: (typeof soundOptions)[number] | undefined) => {
@@ -145,6 +156,12 @@ export const SettingsGeneral: Component = () => {
     },
     onSelect: (option: (typeof soundOptions)[number] | undefined) => {
       if (!option) return
+      if (option.id === "none") {
+        setEnabled(false)
+        stopDemoSound()
+        return
+      }
+      setEnabled(true)
       set(option.id)
       playDemoSound(option.src)
     },
@@ -250,6 +267,18 @@ export const SettingsGeneral: Component = () => {
             )}
           </Select>
         </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.reasoningSummaries.title")}
+          description={language.t("settings.general.row.reasoningSummaries.description")}
+        >
+          <div data-action="settings-reasoning-summaries">
+            <Switch
+              checked={settings.general.showReasoningSummaries()}
+              onChange={(checked) => settings.general.setShowReasoningSummaries(checked)}
+            />
+          </div>
+        </SettingsRow>
       </div>
     </div>
   )
@@ -307,66 +336,45 @@ export const SettingsGeneral: Component = () => {
           title={language.t("settings.general.sounds.agent.title")}
           description={language.t("settings.general.sounds.agent.description")}
         >
-          <div class="flex items-center gap-2">
-            <div data-action="settings-sounds-agent-enabled">
-              <Switch
-                checked={settings.sounds.agentEnabled()}
-                onChange={(checked) => settings.sounds.setAgentEnabled(checked)}
-              />
-            </div>
-            <Select
-              disabled={!settings.sounds.agentEnabled()}
-              data-action="settings-sounds-agent"
-              {...soundSelectProps(
-                () => settings.sounds.agent(),
-                (id) => settings.sounds.setAgent(id),
-              )}
-            />
-          </div>
+          <Select
+            data-action="settings-sounds-agent"
+            {...soundSelectProps(
+              () => settings.sounds.agentEnabled(),
+              () => settings.sounds.agent(),
+              (value) => settings.sounds.setAgentEnabled(value),
+              (id) => settings.sounds.setAgent(id),
+            )}
+          />
         </SettingsRow>
 
         <SettingsRow
           title={language.t("settings.general.sounds.permissions.title")}
           description={language.t("settings.general.sounds.permissions.description")}
         >
-          <div class="flex items-center gap-2">
-            <div data-action="settings-sounds-permissions-enabled">
-              <Switch
-                checked={settings.sounds.permissionsEnabled()}
-                onChange={(checked) => settings.sounds.setPermissionsEnabled(checked)}
-              />
-            </div>
-            <Select
-              disabled={!settings.sounds.permissionsEnabled()}
-              data-action="settings-sounds-permissions"
-              {...soundSelectProps(
-                () => settings.sounds.permissions(),
-                (id) => settings.sounds.setPermissions(id),
-              )}
-            />
-          </div>
+          <Select
+            data-action="settings-sounds-permissions"
+            {...soundSelectProps(
+              () => settings.sounds.permissionsEnabled(),
+              () => settings.sounds.permissions(),
+              (value) => settings.sounds.setPermissionsEnabled(value),
+              (id) => settings.sounds.setPermissions(id),
+            )}
+          />
         </SettingsRow>
 
         <SettingsRow
           title={language.t("settings.general.sounds.errors.title")}
           description={language.t("settings.general.sounds.errors.description")}
         >
-          <div class="flex items-center gap-2">
-            <div data-action="settings-sounds-errors-enabled">
-              <Switch
-                checked={settings.sounds.errorsEnabled()}
-                onChange={(checked) => settings.sounds.setErrorsEnabled(checked)}
-              />
-            </div>
-            <Select
-              disabled={!settings.sounds.errorsEnabled()}
-              data-action="settings-sounds-errors"
-              {...soundSelectProps(
-                () => settings.sounds.errors(),
-                (id) => settings.sounds.setErrors(id),
-              )}
-            />
-          </div>
+          <Select
+            data-action="settings-sounds-errors"
+            {...soundSelectProps(
+              () => settings.sounds.errorsEnabled(),
+              () => settings.sounds.errors(),
+              (value) => settings.sounds.setErrorsEnabled(value),
+              (id) => settings.sounds.setErrors(id),
+            )}
+          />
         </SettingsRow>
       </div>
     </div>
@@ -418,7 +426,7 @@ export const SettingsGeneral: Component = () => {
 
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
-      <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
+      <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 pt-6 pb-8">
           <h2 class="text-16-medium text-text-strong">{language.t("settings.tab.general")}</h2>
         </div>

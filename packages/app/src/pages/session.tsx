@@ -27,7 +27,7 @@ import { SessionReviewTab, type DiffStyle, type SessionReviewTabProps } from "@/
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { MessageTimeline } from "@/pages/session/message-timeline"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
-import { SessionPromptDock } from "@/pages/session/session-prompt-dock"
+import { SessionComposerRegion, createSessionComposerState } from "@/pages/session/composer"
 import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
@@ -54,11 +54,7 @@ export default function Page() {
     },
   })
 
-  const blocked = createMemo(() => {
-    const sessionID = params.id
-    if (!sessionID) return false
-    return !!sync.data.permission[sessionID]?.[0] || !!sync.data.question[sessionID]?.[0]
-  })
+  const composer = createSessionComposerState()
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const workspaceKey = createMemo(() => params.dir ?? "")
@@ -401,7 +397,7 @@ export default function Page() {
     }
 
     if (event.key.length === 1 && event.key !== "Unidentified" && !(event.ctrlKey || event.metaKey)) {
-      if (blocked()) return
+      if (composer.blocked()) return
       inputRef?.focus()
     }
   }
@@ -947,15 +943,12 @@ export default function Page() {
       if (next === dockHeight) return
 
       const el = scroller
-      const stick = el ? el.scrollHeight - el.clientHeight - el.scrollTop < 10 : false
+      const delta = next - dockHeight
+      const stick = el ? el.scrollHeight - el.clientHeight - el.scrollTop < 10 + Math.max(0, delta) : false
 
       dockHeight = next
 
-      if (stick && el) {
-        requestAnimationFrame(() => {
-          el.scrollTo({ top: el.scrollHeight, behavior: "auto" })
-        })
-      }
+      if (stick) autoScroll.forceScrollToBottom()
 
       if (el) scheduleScrollState(el)
       scrollSpy.markDirty()
@@ -1090,7 +1083,8 @@ export default function Page() {
             </Switch>
           </div>
 
-          <SessionPromptDock
+          <SessionComposerRegion
+            state={composer}
             centered={centered()}
             inputRef={(el) => {
               inputRef = el
@@ -1101,6 +1095,7 @@ export default function Page() {
               comments.clear()
               resumeScroll()
             }}
+            onResponseSubmit={resumeScroll}
             setPromptDockRef={(el) => {
               promptDock = el
             }}

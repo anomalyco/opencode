@@ -482,10 +482,13 @@ export namespace File {
       }
     }
 
-    return changedFiles.map((x) => ({
-      ...x,
-      path: path.relative(Instance.directory, x.path),
-    }))
+    return changedFiles.map((x) => {
+      const full = path.isAbsolute(x.path) ? x.path : path.join(Instance.directory, x.path)
+      return {
+        ...x,
+        path: path.relative(Instance.directory, full),
+      }
+    })
   }
 
   export async function read(file: string): Promise<Content> {
