@@ -1,5 +1,5 @@
 import { createStore } from "solid-js/store"
-import { batch, createEffect, createMemo } from "solid-js"
+import { batch, createEffect, createMemo, on } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
 import { uniqueBy } from "remeda"
@@ -13,6 +13,7 @@ import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
 import { Filesystem } from "@/util/filesystem"
+import { useRoute } from "@tui/context/route"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -20,6 +21,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const sync = useSync()
     const sdk = useSDK()
     const toast = useToast()
+    const route = useRoute()
 
     function isModelValid(model: { providerID: string; modelID: string }) {
       const provider = sync.data.provider.find((x) => x.id === model.providerID)
@@ -90,6 +92,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
           return colors()[index % colors().length]
         },
+        // internal setter used for session restore without validation toast
+        _set(name: string) {
+          setAgentStore("current", name)
+        },
       }
     })
 
@@ -112,12 +118,20 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           modelID: string
         }[]
         variant: Record<string, string | undefined>
+        session: Record<
+          string,
+          {
+            model?: { providerID: string; modelID: string }
+            agent?: string
+          }
+        >
       }>({
         ready: false,
         model: {},
         recent: [],
         favorite: [],
         variant: {},
+        session: {},
       })
 
       const filePath = path.join(Global.Path.state, "model.json")
@@ -135,6 +149,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           recent: modelStore.recent,
           favorite: modelStore.favorite,
           variant: modelStore.variant,
+          session: modelStore.session,
         })
       }
 
@@ -143,6 +158,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (Array.isArray(x.recent)) setModelStore("recent", x.recent)
           if (Array.isArray(x.favorite)) setModelStore("favorite", x.favorite)
           if (typeof x.variant === "object" && x.variant !== null) setModelStore("variant", x.variant)
+          if (typeof x.session === "object" && x.session !== null) setModelStore("session", x.session)
         })
         .catch(() => {})
         .finally(() => {
@@ -358,6 +374,28 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             this.set(variants[index + 1])
           },
         },
+        saveForSession(sessionID: string) {
+          const currentModelVal = currentModel()
+          const currentAgentName = agent.current()?.name
+          setModelStore("session", sessionID, {
+            model: currentModelVal,
+            agent: currentAgentName,
+          })
+          save()
+        },
+        restoreForSession(sessionID: string) {
+          const saved = modelStore.session[sessionID]
+          if (!saved) return
+          if (saved.agent) {
+            const agents = sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden)
+            if (agents.some((x) => x.name === saved.agent)) {
+              agent._set(saved.agent)
+            }
+          }
+          if (saved.model && isModelValid(saved.model)) {
+            setModelStore("model", agent.current().name, saved.model)
+          }
+        },
       }
     })
 
@@ -395,6 +433,22 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           })
       }
     })
+
+    // Save model/agent when leaving a session, restore when entering one
+    createEffect(
+      on(
+        () => route.data,
+        (current, previous) => {
+          if (previous?.type === "session") {
+            model.saveForSession(previous.sessionID)
+          }
+          if (current.type === "session") {
+            model.restoreForSession(current.sessionID)
+          }
+        },
+        { defer: true },
+      ),
+    )
 
     const result = {
       model,
