@@ -3,6 +3,7 @@ import path from "path"
 import fs from "fs/promises"
 import { FileTime } from "../../src/file/time"
 import { Instance } from "../../src/project/instance"
+import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 
 describe("file/time", () => {
@@ -312,8 +313,8 @@ describe("file/time", () => {
     })
   })
 
-  describe("stat() Bun.file pattern", () => {
-    test("reads file modification time via Bun.file().stat()", async () => {
+  describe("stat() Filesystem.stat pattern", () => {
+    test("reads file modification time via Filesystem.stat()", async () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "file.txt")
       await fs.writeFile(filepath, "content", "utf-8")
@@ -323,9 +324,9 @@ describe("file/time", () => {
         fn: async () => {
           FileTime.read(sessionID, filepath)
 
-          const stats = await Bun.file(filepath).stat()
-          expect(stats.mtime).toBeInstanceOf(Date)
-          expect(stats.mtime.getTime()).toBeGreaterThan(0)
+          const stats = Filesystem.stat(filepath)
+          expect(stats?.mtime).toBeInstanceOf(Date)
+          expect(stats!.mtime.getTime()).toBeGreaterThan(0)
 
           // FileTime.assert uses this stat internally
           await FileTime.assert(sessionID, filepath)
@@ -343,14 +344,14 @@ describe("file/time", () => {
         fn: async () => {
           FileTime.read(sessionID, filepath)
 
-          const originalStat = await Bun.file(filepath).stat()
+          const originalStat = Filesystem.stat(filepath)
 
           // Wait and modify
           await new Promise((resolve) => setTimeout(resolve, 100))
           await fs.writeFile(filepath, "modified", "utf-8")
 
-          const newStat = await Bun.file(filepath).stat()
-          expect(newStat.mtime.getTime()).toBeGreaterThan(originalStat.mtime.getTime())
+          const newStat = Filesystem.stat(filepath)
+          expect(newStat!.mtime.getTime()).toBeGreaterThan(originalStat!.mtime.getTime())
 
           await expect(FileTime.assert(sessionID, filepath)).rejects.toThrow()
         },

@@ -65,6 +65,7 @@ packages/desktop/app-icon-*.svg
 opencode-dev
 logs/
 *.bun-build
+tsconfig.tsbuildinfo
 
 # Trellis workflow (developer-specific)
 .trellis/workspace/

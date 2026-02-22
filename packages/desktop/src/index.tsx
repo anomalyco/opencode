@@ -34,7 +34,7 @@ import { UPDATER_ENABLED } from "./updater"
 import { webviewZoom } from "./webview-zoom"
 import "./styles.css"
 import { Channel, invoke } from "@tauri-apps/api/core"
-import { commands, type InitStep } from "./bindings"
+import { commands, ServerReadyData, type InitStep } from "./bindings"
 import { createMenu } from "./menu"
 
 const root = document.getElementById("root")
@@ -515,6 +515,12 @@ void listenForDragDrop()
 render(() => {
   const platform = createPlatform()
 
+  const [defaultServer] = createResource(() =>
+    platform.getDefaultServerUrl?.().then((url) => {
+      if (url) return ServerConnection.key({ type: "http", http: { url } })
+    }),
+  )
+
   function handleClick(e: MouseEvent) {
     const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
     if (link?.href) {
@@ -535,16 +541,19 @@ render(() => {
       <AppBaseProviders>
         <ServerGate>
           {(data) => {
-            const server: ServerConnection.Sidecar = {
-              displayName: "Local Server",
-              type: "sidecar",
-              variant: "base",
-              http: {
-                url: data().url,
-                username: "opencode",
-                password: data().password ?? undefined,
-              },
+            const http = {
+              url: data.url,
+              username: data.username ?? undefined,
+              password: data.password ?? undefined,
             }
+            const server: ServerConnection.Any = data.is_sidecar
+              ? {
+                  displayName: "Local Server",
+                  type: "sidecar",
+                  variant: "base",
+                  http,
+                }
+              : { type: "http", http }
 
             function Inner() {
               const cmd = useCommand()
@@ -555,9 +564,11 @@ render(() => {
             }
 
             return (
-              <AppInterface defaultServer={ServerConnection.key(server)} servers={[server]}>
-                <Inner />
-              </AppInterface>
+              <Show when={!defaultServer.loading}>
+                <AppInterface defaultServer={defaultServer.latest ?? ServerConnection.key(server)} servers={[server]}>
+                  <Inner />
+                </AppInterface>
+              </Show>
             )
           }}
         </ServerGate>
@@ -566,10 +577,8 @@ render(() => {
   )
 }, root!)
 
-type ServerReadyData = { url: string; password: string | null }
-
 // Gate component that waits for the server to be ready
-function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.Element }) {
+function ServerGate(props: { children: (data: ServerReadyData) => JSX.Element }) {
   const [serverData] = createResource(() => commands.awaitInitialization(new Channel<InitStep>() as any))
   if (serverData.state === "errored") throw serverData.error
 
@@ -583,7 +592,7 @@ function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.
         </div>
       }
     >
-      {(data) => props.children(data)}
+      {(data) => props.children(data())}
     </Show>
   )
 }

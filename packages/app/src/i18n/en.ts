@@ -638,6 +638,8 @@ export const dict = {
   "settings.general.row.theme.description": "Customise how OpenCode is themed.",
   "settings.general.row.font.title": "Font",
   "settings.general.row.font.description": "Customise the mono font used in code blocks",
+  "settings.general.row.reasoningSummaries.title": "Show reasoning summaries",
+  "settings.general.row.reasoningSummaries.description": "Display model reasoning summaries in the timeline",
 
   "settings.general.row.fontSize.title": "Message Font Size",
   "settings.general.row.fontSize.description": "Adjust the font size for user and assistant messages",
@@ -683,6 +685,7 @@ export const dict = {
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
   "font.option.geistMono": "Geist Mono",
+  "sound.option.none": "None",
   "sound.option.alert01": "Alert 01",
   "sound.option.alert02": "Alert 02",
   "sound.option.alert03": "Alert 03",

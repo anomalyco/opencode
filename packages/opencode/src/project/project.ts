@@ -13,6 +13,7 @@ import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
 import { existsSync } from "fs"
 import { git } from "../util/git"
+import { Glob } from "../util/glob"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
@@ -86,8 +87,7 @@ export namespace Project {
         const gitBinary = Bun.which("git")
 
         // cached id calculation
-        let id = await Bun.file(path.join(dotgit, "opencode"))
-          .text()
+        let id = await Filesystem.readText(path.join(dotgit, "opencode"))
           .then((x) => x.trim())
           .catch(() => undefined)
 
@@ -125,9 +125,7 @@ export namespace Project {
 
           id = roots[0]
           if (id) {
-            void Bun.file(path.join(dotgit, "opencode"))
-              .write(id)
-              .catch(() => undefined)
+            void Filesystem.write(path.join(dotgit, "opencode"), id).catch(() => undefined)
           }
         }
 
@@ -265,22 +263,16 @@ export namespace Project {
     if (input.vcs !== "git") return
     if (input.icon?.override) return
     if (input.icon?.url) return
-    const glob = new Bun.Glob("**/{favicon}.{ico,png,svg,jpg,jpeg,webp}")
-    const matches = await Array.fromAsync(
-      glob.scan({
-        cwd: input.worktree,
-        absolute: true,
-        onlyFiles: true,
-        followSymlinks: false,
-        dot: false,
-      }),
-    )
+    const matches = await Glob.scan("**/favicon.{ico,png,svg,jpg,jpeg,webp}", {
+      cwd: input.worktree,
+      absolute: true,
+      include: "file",
+    })
     const shortest = matches.sort((a, b) => a.length - b.length)[0]
     if (!shortest) return
-    const file = Bun.file(shortest)
-    const buffer = await file.arrayBuffer()
-    const base64 = Buffer.from(buffer).toString("base64")
-    const mime = file.type || "image/png"
+    const buffer = await Filesystem.readBytes(shortest)
+    const base64 = buffer.toString("base64")
+    const mime = Filesystem.mimeType(shortest) || "image/png"
     const url = `data:${mime};base64,${base64}`
     await update({
       projectID: input.id,
@@ -381,10 +373,8 @@ export namespace Project {
     const data = fromRow(row)
     const valid: string[] = []
     for (const dir of data.sandboxes) {
-      const stat = await Bun.file(dir)
-        .stat()
-        .catch(() => undefined)
-      if (stat?.isDirectory()) valid.push(dir)
+      const s = Filesystem.stat(dir)
+      if (s?.isDirectory()) valid.push(dir)
     }
     return valid
   }

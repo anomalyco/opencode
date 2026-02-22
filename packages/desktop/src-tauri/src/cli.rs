@@ -339,7 +339,7 @@ pub fn spawn_command(
         };
 
         let mut cmd = Command::new(shell);
-        cmd.args(["-l", "-c", &line]);
+        cmd.args(["-il", "-c", &line]);
 
         for (key, value) in envs {
             cmd.env(key, value);
