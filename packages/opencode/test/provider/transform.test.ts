@@ -1527,6 +1527,34 @@ describe("ProviderTransform.message - cache control on gateway", () => {
       },
     })
   })
+
+  test("non-claude model via @ai-sdk/anthropic uses message-level cache control", () => {
+    const model = createModel({
+      id: "kimi/kimi-k2.5",
+      providerID: "kimi",
+      api: {
+        id: "kimi-k2.5",
+        url: "https://api.anthropic.com",
+        npm: "@ai-sdk/anthropic",
+      },
+    })
+    const msgs = [
+      {
+        role: "system",
+        content: "You are a helpful assistant",
+      },
+      {
+        role: "user",
+        content: "Hello",
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+    expect(result[0].providerOptions?.anthropic?.cacheControl).toEqual({
+      type: "ephemeral",
+    })
+  })
 })
 
 describe("ProviderTransform.variants", () => {
