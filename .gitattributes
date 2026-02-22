@@ -1,0 +1,34 @@
+# Fork merge drivers
+# Files marked merge=ours always keep the fork's version during upstream merges.
+# Requires: git config merge.ours.driver true
+
+# Fork-owned session management (not in upstream)
+packages/cloudsession/** merge=ours
+
+# Fork environment config
+packages/opencode/.env.example merge=ours
+
+# Fork web infrastructure (SolidJS+Hono rewrite, not upstream Astro)
+packages/web/wrangler.jsonc merge=ours
+packages/web/vite.config.ts merge=ours
+packages/web/src/worker.ts merge=ours
+packages/web/README.md merge=ours
+
+# Fork function worker config
+packages/function/wrangler.jsonc merge=ours
+packages/function/docs/** merge=ours
+
+# Fork worker-test package (not in upstream)
+packages/worker-test/** merge=ours
+
+# Fork gitignore has extra entries for cloudflare/fork files
+.gitignore merge=ours
+
+# Fork divergence documentation
+FORK_CHANGES.md merge=ours
+
+# Fork network filter (blocks upstream domains, allows fork domains)
+packages/opencode/src/util/network.ts merge=ours
+
+# Fork share implementation
+packages/opencode/src/share/** merge=ours

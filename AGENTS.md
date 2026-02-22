@@ -1,4 +1,35 @@
+## Build/Test/Lint
+
+- `bun dev` - run dev server (packages/web or packages/opencode)
+- `bun build` - build for Cloudflare Pages (web)
 - To regenerate the JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
+- No test framework - use manual testing in dev mode
+
+## Tech Stack
+
+- Astro 5 + Solid.js for reactive UI components (web package)
+- TypeScript strict mode enabled
+- Cloudflare Pages adapter for deployment
+- Starlight for docs, MDX for content
+- Wrangler for local testing
+
+## Code Style
+
+- Use Solid.js reactive primitives: `createSignal`, `createMemo`, `createEffect`, `onMount`, `onCleanup`
+- Control flow: `For`, `Show`, `Switch`/`Match` (no `else` statements)
+- CSS Modules: `*.module.css` for component styles
+- Solid components: `*.tsx` with JSX, Astro components: `*.astro`
+- Avoid `any`, `let`, unnecessary destructuring, `try/catch` when possible
+- Prefer single word variable names, keep logic in one function
+
+## Context
+
+- Forked from upstream opencode/web - tracking changes with GitHub actions
+- SST/github integrations intentionally removed per TODO.md
+- Uses shared session types from opencode/session packages
+
+## Tool Calling
+
 - ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
 - The default branch in this repo is `dev`.
 - Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.

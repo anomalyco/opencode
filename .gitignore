@@ -27,4 +27,48 @@ target
 opencode-dev
 logs/
 *.bun-build
-tsconfig.tsbuildinfo
+
+# SST generated files (tracked ones in console/* stay tracked)
+sst-env.d.ts
+packages/*/sst-env.d.ts
+
+# Wrangler generated types
+worker-configuration.d.ts
+
+# Astro build output
+packages/web/.astro/
+
+# OpenProse runtime state
+.prose/
+
+# AST experiment artifacts
+.ast/
+
+# OpenCode personal config (skills, themes, agent artifacts)
+.opencode/skill/
+.opencode/themes/
+.opencode/context/project/
+.opencode/project/
+.opencode/agent/researcher.md
+
+# Fork-specific web docs (AI-generated dev notes)
+packages/web/docs/
+
+# Backup files
+*.backup
+
+# Private keys
+private.key
+*.pem
+
+# AST-grep config (references deleted .ast/ dir)
+sgconfig.yml
+
+# Fork experiment files in packages/opencode
+packages/opencode/Dockerfile.minimal
+packages/opencode/env.d.ts
+packages/opencode/vite.config.minimal.ts
+packages/opencode/wrangler.jsonc
+
+.branchlet.json
+packages/web/src/content/i18n/*.json
