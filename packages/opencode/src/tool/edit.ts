@@ -236,6 +236,10 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
     searchLines.pop()
   }
 
+  if (searchLines.length < 3) {
+    return
+  }
+
   const firstLineSearch = searchLines[0].trim()
   const lastLineSearch = searchLines[searchLines.length - 1].trim()
   const searchBlockSize = searchLines.length
