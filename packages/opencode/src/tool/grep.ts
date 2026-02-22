@@ -138,7 +138,7 @@ export const GrepTool = Tool.define("grep", {
     if (truncated) {
       outputLines.push("")
       outputLines.push(
-        `(Results truncated: showing ${limit} of ${Locale.pluralize(totalMatches, "{} match", "{} matches")} (${totalMatches - limit}). Consider using a more specific path or pattern.)`,
+        `(Results truncated: showing ${limit} of ${totalMatches} matches (${totalMatches - limit} hidden). Consider using a more specific path or pattern.)`,
       )
     }
 
