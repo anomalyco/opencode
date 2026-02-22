@@ -743,6 +743,50 @@ export namespace SessionPrompt {
     using _ = log.time("resolveTools")
     const tools: Record<string, AITool> = {}
 
+    // Check if this is an openai-compatible provider (e.g., Ollama)
+    // These providers need special handling for tool schemas and reduced tool sets
+    const isOpenAICompatible = input.model.api.npm === "@ai-sdk/openai-compatible"
+
+    // Core tools to keep for openai-compatible providers (local LLMs often struggle with many tools)
+    const CORE_TOOLS = new Set(["bash", "read", "write", "edit", "glob", "grep"])
+
+    /**
+     * Strip 'description' from required arrays in tool schemas.
+     * Ollama and other local LLMs often omit the description field when calling tools,
+     * but the AI SDK validates that all required fields are present, which causes
+     * repairToolCall to fire and rename the tool to 'invalid'.
+     */
+    function stripDescriptionFromRequired(schema: Record<string, any>): Record<string, any> {
+      if (!isOpenAICompatible) return schema
+
+      const result = { ...schema }
+      if (Array.isArray(result.required) && result.required.includes("description")) {
+        result.required = result.required.filter((r) => r !== "description")
+        // If required is now empty, remove it entirely
+        if (result.required.length === 0) {
+          delete result.required
+        }
+      }
+      // Recursively process nested schemas (properties, items, etc.)
+      if (result.properties && typeof result.properties === "object") {
+        result.properties = Object.fromEntries(
+          Object.entries(result.properties).map(([key, value]) => [
+            key,
+            stripDescriptionFromRequired(value as Record<string, any>),
+          ]),
+        )
+      }
+      if (result.items) {
+        result.items = stripDescriptionFromRequired(result.items as Record<string, any>)
+      }
+      if (result.additionalProperties && typeof result.additionalProperties === "object") {
+        result.additionalProperties = stripDescriptionFromRequired(
+          result.additionalProperties as Record<string, any>,
+        )
+      }
+      return result
+    }
+
     const context = (args: any, options: ToolCallOptions): Tool.Context => ({
       sessionID: input.session.id,
       abort: options.abortSignal!,
@@ -782,7 +826,15 @@ export namespace SessionPrompt {
       { modelID: input.model.api.id, providerID: input.model.providerID },
       input.agent,
     )) {
-      const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
+      // For openai-compatible providers, filter to core tools only
+      // Local LLMs (Ollama, etc.) often struggle with large tool sets
+      if (isOpenAICompatible && !CORE_TOOLS.has(item.id)) {
+        continue
+      }
+
+      let schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
+      // Strip 'description' from required for openai-compatible providers
+      schema = stripDescriptionFromRequired(schema)
       tools[item.id] = tool({
         id: item.id as any,
         description: item.description,
@@ -825,98 +877,103 @@ export namespace SessionPrompt {
       })
     }
 
-    for (const [key, item] of Object.entries(await MCP.tools())) {
-      const execute = item.execute
-      if (!execute) continue
+    // Skip MCP tools for openai-compatible providers (reduces tool count for local LLMs)
+    if (!isOpenAICompatible) {
+      for (const [key, item] of Object.entries(await MCP.tools())) {
+        const execute = item.execute
+        if (!execute) continue
 
-      const transformed = ProviderTransform.schema(input.model, asSchema(item.inputSchema).jsonSchema)
-      item.inputSchema = jsonSchema(transformed)
-      // Wrap execute to add plugin hooks and format output
-      item.execute = async (args, opts) => {
-        const ctx = context(args, opts)
+        let transformed = ProviderTransform.schema(input.model, asSchema(item.inputSchema).jsonSchema)
+        // Strip 'description' from required for openai-compatible providers (already skipped above, but keep for consistency)
+        transformed = stripDescriptionFromRequired(transformed)
+        item.inputSchema = jsonSchema(transformed)
+        // Wrap execute to add plugin hooks and format output
+        item.execute = async (args, opts) => {
+          const ctx = context(args, opts)
 
-        await Plugin.trigger(
-          "tool.execute.before",
-          {
-            tool: key,
-            sessionID: ctx.sessionID,
-            callID: opts.toolCallId,
-          },
-          {
-            args,
-          },
-        )
+          await Plugin.trigger(
+            "tool.execute.before",
+            {
+              tool: key,
+              sessionID: ctx.sessionID,
+              callID: opts.toolCallId,
+            },
+            {
+              args,
+            },
+          )
 
-        await ctx.ask({
-          permission: key,
-          metadata: {},
-          patterns: ["*"],
-          always: ["*"],
-        })
+          await ctx.ask({
+            permission: key,
+            metadata: {},
+            patterns: ["*"],
+            always: ["*"],
+          })
 
-        const result = await execute(args, opts)
+          const result = await execute(args, opts)
 
-        await Plugin.trigger(
-          "tool.execute.after",
-          {
-            tool: key,
-            sessionID: ctx.sessionID,
-            callID: opts.toolCallId,
-            args,
-          },
-          result,
-        )
+          await Plugin.trigger(
+            "tool.execute.after",
+            {
+              tool: key,
+              sessionID: ctx.sessionID,
+              callID: opts.toolCallId,
+              args,
+            },
+            result,
+          )
 
-        const textParts: string[] = []
-        const attachments: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[] = []
+          const textParts: string[] = []
+          const attachments: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[] = []
 
-        for (const contentItem of result.content) {
-          if (contentItem.type === "text") {
-            textParts.push(contentItem.text)
-          } else if (contentItem.type === "image") {
-            attachments.push({
-              type: "file",
-              mime: contentItem.mimeType,
-              url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
-            })
-          } else if (contentItem.type === "resource") {
-            const { resource } = contentItem
-            if (resource.text) {
-              textParts.push(resource.text)
-            }
-            if (resource.blob) {
+          for (const contentItem of result.content) {
+            if (contentItem.type === "text") {
+              textParts.push(contentItem.text)
+            } else if (contentItem.type === "image") {
               attachments.push({
                 type: "file",
-                mime: resource.mimeType ?? "application/octet-stream",
-                url: `data:${resource.mimeType ?? "application/octet-stream"};base64,${resource.blob}`,
-                filename: resource.uri,
+                mime: contentItem.mimeType,
+                url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
               })
+            } else if (contentItem.type === "resource") {
+              const { resource } = contentItem
+              if (resource.text) {
+                textParts.push(resource.text)
+              }
+              if (resource.blob) {
+                attachments.push({
+                  type: "file",
+                  mime: resource.mimeType ?? "application/octet-stream",
+                  url: `data:${resource.mimeType ?? "application/octet-stream"};base64,${resource.blob}`,
+                  filename: resource.uri,
+                })
+              }
             }
           }
-        }
 
-        const truncated = await Truncate.output(textParts.join("\n\n"), {}, input.agent)
-        const metadata = {
-          ...(result.metadata ?? {}),
-          truncated: truncated.truncated,
-          ...(truncated.truncated && { outputPath: truncated.outputPath }),
-        }
+          const truncated = await Truncate.output(textParts.join("\n\n"), {}, input.agent)
+          const metadata = {
+            ...(result.metadata ?? {}),
+            truncated: truncated.truncated,
+            ...(truncated.truncated && { outputPath: truncated.outputPath }),
+          }
 
-        return {
-          title: "",
-          metadata,
-          output: truncated.content,
-          attachments: attachments.map((attachment) => ({
-            ...attachment,
-            id: Identifier.ascending("part"),
-            sessionID: ctx.sessionID,
-            messageID: input.processor.message.id,
-          })),
-          content: result.content, // directly return content to preserve ordering when outputting to model
+          return {
+            title: "",
+            metadata,
+            output: truncated.content,
+            attachments: attachments.map((attachment) => ({
+              ...attachment,
+              id: Identifier.ascending("part"),
+              sessionID: ctx.sessionID,
+              messageID: input.processor.message.id,
+            })),
+            content: result.content, // directly return content to preserve ordering when outputting to model
+          }
         }
+        tools[key] = item
       }
-      tools[key] = item
-    }
+    } // end if (!isOpenAICompatible)
 
     return tools
   }

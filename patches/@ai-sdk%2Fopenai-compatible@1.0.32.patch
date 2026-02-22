@@ -1,5 +1,3 @@
-diff --git a/dist/index.js b/dist/index.js
-index 210819172d611c64900564de97c1f23c5f5c132f..e8ea9508ba7aa21bc3c10bab4b4b9ae2d9295ae5 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -243,12 +243,14 @@ function prepareTools({
@@ -13,15 +11,13 @@ index 210819172d611c64900564de97c1f23c5f5c132f..e8ea9508ba7aa21bc3c10bab4b4b9ae2
 -          name: tool.name,
 -          description: tool.description,
 -          parameters: tool.inputSchema
-+          name: t.name,
++          name: t.name ?? t.id,
 +          description: t.description,
 +          parameters: t.parameters ?? t.inputSchema,
 +          strict: t.strict,
          }
        });
      }
-diff --git a/dist/index.mjs b/dist/index.mjs
-index e6f9923d1d91f832d8a15d126b900a7f5303d767..0c4fa435598166d34666b370e1a99037f6541766 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
 @@ -227,12 +227,14 @@ function prepareTools({
@@ -35,7 +31,7 @@ index e6f9923d1d91f832d8a15d126b900a7f5303d767..0c4fa435598166d34666b370e1a99037
 -          name: tool.name,
 -          description: tool.description,
 -          parameters: tool.inputSchema
-+          name: t.name,
++          name: t.name ?? t.id,
 +          description: t.description,
 +          parameters: t.parameters ?? t.inputSchema,
 +          strict: t.strict,
