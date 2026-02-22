@@ -1,5 +1,6 @@
 import { Auth } from "../../auth"
 import { cmd } from "./cmd"
+import { Locale } from "../../util/locale"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { ModelsDev } from "../../provider/models"
@@ -219,7 +220,7 @@ export const ProvidersListCommand = cmd({
       prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
     }
 
-    prompts.outro(`${results.length} credentials`)
+    prompts.outro(Locale.pluralize(results.length, '{} credential', '{} credentials'))
 
     const activeEnvVars: Array<{ provider: string; envVar: string }> = []
 
@@ -242,7 +243,7 @@ export const ProvidersListCommand = cmd({
         prompts.log.info(`${provider} ${UI.Style.TEXT_DIM}${envVar}`)
       }
 
-      prompts.outro(`${activeEnvVars.length} environment variable` + (activeEnvVars.length === 1 ? "" : "s"))
+      prompts.outro(Locale.pluralize(activeEnvVars.length, "{} environment variable", "{} environment variables"))
     }
   },
 })

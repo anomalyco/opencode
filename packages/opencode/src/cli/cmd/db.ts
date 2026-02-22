@@ -1,5 +1,6 @@
 import type { Argv } from "yargs"
 import { spawn } from "child_process"
+import { Locale } from "../../util/locale"
 import { Database } from "../../storage/db"
 import { Database as BunDatabase } from "bun:sqlite"
 import { UI } from "../ui"
@@ -93,10 +94,10 @@ const MigrateCommand = cmd({
       if (tty) process.stderr.write("\x1b[?25h")
       else process.stderr.write(`sqlite-migration:done${EOL}`)
       UI.println(
-        `Migration complete: ${stats.projects} projects, ${stats.sessions} sessions, ${stats.messages} messages`,
+        `Migration complete: ${Locale.pluralize(stats.projects, "{} project", "{} projects")}, ${Locale.pluralize(stats.sessions, "{} session", "{} sessions")}, ${Locale.pluralize(stats.messages, "{} message", "{} messages")}`,
       )
       if (stats.errors.length > 0) {
-        UI.println(`${stats.errors.length} errors occurred during migration`)
+        UI.println(`${Locale.pluralize(stats.errors.length, "{} error", "{} errors")} occurred during migration`)
       }
     } catch (err) {
       if (tty) process.stderr.write("\x1b[?25h")

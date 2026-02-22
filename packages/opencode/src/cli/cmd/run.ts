@@ -80,7 +80,7 @@ function glob(info: ToolProps<typeof GlobTool>) {
   const suffix = root ? `in ${normalizePath(root)}` : ""
   const num = info.metadata.count
   const description =
-    num === undefined ? suffix : `${suffix}${suffix ? " · " : ""}${num} ${num === 1 ? "match" : "matches"}`
+    num === undefined ? suffix : `${suffix}${suffix ? " · " : ""}${Locale.pluralize(num, "{} match", "{} matches")}`
   inline({
     icon: "✱",
     title,
@@ -94,7 +94,7 @@ function grep(info: ToolProps<typeof GrepTool>) {
   const suffix = root ? `in ${normalizePath(root)}` : ""
   const num = info.metadata.matches
   const description =
-    num === undefined ? suffix : `${suffix}${suffix ? " · " : ""}${num} ${num === 1 ? "match" : "matches"}`
+    num === undefined ? suffix : `${suffix}${suffix ? " · " : ""}${Locale.pluralize(num, "{} match", "{} matches")}`
   inline({
     icon: "✱",
     title,

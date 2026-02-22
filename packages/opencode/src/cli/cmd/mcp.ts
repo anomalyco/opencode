@@ -1,4 +1,5 @@
 import { cmd } from "./cmd"
+import { Locale } from "../../util/locale"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
@@ -129,7 +130,7 @@ export const McpListCommand = cmd({
           )
         }
 
-        prompts.outro(`${servers.length} server(s)`)
+        prompts.outro(Locale.pluralize(servers.length, "{} server", "{} servers"))
       },
     })
   },
@@ -312,7 +313,7 @@ export const McpAuthListCommand = cmd({
           prompts.log.info(`${icon} ${name} ${UI.Style.TEXT_DIM}${statusText}\n    ${UI.Style.TEXT_DIM}${url}`)
         }
 
-        prompts.outro(`${oauthServers.length} OAuth-capable server(s)`)
+        prompts.outro(Locale.pluralize(oauthServers.length, "{} OAuth-capable server", "{} OAuth-capable servers"))
       },
     })
   },

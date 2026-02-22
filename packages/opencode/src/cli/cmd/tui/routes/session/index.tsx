@@ -1106,7 +1106,7 @@ export function Session() {
                               paddingLeft={2}
                               backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
                             >
-                              <text fg={theme.textMuted}>{revert()!.reverted.length} message reverted</text>
+                              <text fg={theme.textMuted}>{Locale.pluralize(revert()!.reverted.length, '{} message', '{} messages')} reverted</text>
                               <text fg={theme.textMuted}>
                                 <span style={{ fg: theme.text }}>{keybind.print("messages_redo")}</span> or /redo to
                                 restore
@@ -2008,11 +2008,11 @@ function Task(props: ToolProps<typeof TaskTool>) {
     if (isRunning() && tools().length > 0) {
       // content[0] += ` · ${tools().length} toolcalls`
       if (current()) content.push(`↳ ${Locale.titlecase(current()!.tool)} ${(current()!.state as any).title}`)
-      else content.push(`↳ ${tools().length} toolcalls`)
+      else content.push(`↳ ${Locale.pluralize(tools().length, '{} toolcall', '{} toolcalls')}`)
     }
 
     if (props.part.state.status === "completed") {
-      content.push(`└ ${tools().length} toolcalls · ${Locale.duration(duration())}`)
+      content.push(`└ ${Locale.pluralize(tools().length, '{} toolcall', '{} toolcalls')} · ${Locale.duration(duration())}`)
     }
 
     return content.join("\n")

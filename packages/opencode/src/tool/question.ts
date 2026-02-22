@@ -1,6 +1,7 @@
 import z from "zod"
 import { Tool } from "./tool"
 import { Question } from "../question"
+import { Locale } from "../util/locale"
 import DESCRIPTION from "./question.txt"
 
 export const QuestionTool = Tool.define("question", {
@@ -23,7 +24,7 @@ export const QuestionTool = Tool.define("question", {
     const formatted = params.questions.map((q, i) => `"${q.question}"="${format(answers[i])}"`).join(", ")
 
     return {
-      title: `Asked ${params.questions.length} question${params.questions.length > 1 ? "s" : ""}`,
+      title: `Asked ${Locale.pluralize(params.questions.length, "{} question", "{} questions")}`,
       output: `User has answered your questions: ${formatted}. You can now continue with the user's answers in mind.`,
       metadata: {
         answers,

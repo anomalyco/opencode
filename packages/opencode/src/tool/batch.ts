@@ -1,6 +1,7 @@
 import z from "zod"
 import { Tool } from "./tool"
 import { ProviderID, ModelID } from "../provider/schema"
+import { Locale } from "../util/locale"
 import DESCRIPTION from "./batch.txt"
 
 const DISALLOWED = new Set(["batch"])
@@ -162,7 +163,7 @@ export const BatchTool = Tool.define("batch", async () => {
 
       const outputMessage =
         failedCalls > 0
-          ? `Executed ${successfulCalls}/${results.length} tools successfully. ${failedCalls} failed.`
+          ? `Executed ${successfulCalls}/${Locale.pluralize(results.length, "{} tool", "{} tools")} successfully. ${failedCalls} failed.`
           : `All ${successfulCalls} tools executed successfully.\n\nKeep using the batch tool for optimal performance in your next response!`
 
       return {

@@ -1,6 +1,7 @@
 import path from "path"
 import { exec } from "child_process"
 import { Filesystem } from "../../util/filesystem"
+import { Locale } from "../../util/locale"
 import * as prompts from "@clack/prompts"
 import { map, pipe, sortBy, values } from "remeda"
 import { Octokit } from "@octokit/rest"
@@ -1622,7 +1623,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
           `Additions: ${pr.additions}`,
           `Deletions: ${pr.deletions}`,
           `Total Commits: ${pr.commits.totalCount}`,
-          `Changed Files: ${pr.files.nodes.length} files`,
+          `Changed Files: ${Locale.pluralize(pr.files.nodes.length, "{} file", "{} files")}`,
           ...(comments.length > 0 ? ["<pull_request_comments>", ...comments, "</pull_request_comments>"] : []),
           ...(files.length > 0 ? ["<pull_request_changed_files>", ...files, "</pull_request_changed_files>"] : []),
           ...(reviewData.length > 0 ? ["<pull_request_reviews>", ...reviewData, "</pull_request_reviews>"] : []),

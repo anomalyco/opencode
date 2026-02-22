@@ -2,6 +2,7 @@ import z from "zod"
 import { text } from "node:stream/consumers"
 import { Tool } from "./tool"
 import { Filesystem } from "../util/filesystem"
+import { Locale } from "../util/locale"
 import { Ripgrep } from "../file/ripgrep"
 import { Process } from "../util/process"
 
@@ -116,7 +117,9 @@ export const GrepTool = Tool.define("grep", {
     }
 
     const totalMatches = matches.length
-    const outputLines = [`Found ${totalMatches} matches${truncated ? ` (showing first ${limit})` : ""}`]
+    const outputLines = [
+      `Found ${Locale.pluralize(totalMatches, "{} match", "{} matches")}${truncated ? ` (showing first ${limit})` : ""}`,
+    ]
 
     let currentFile = ""
     for (const match of finalMatches) {
@@ -135,7 +138,7 @@ export const GrepTool = Tool.define("grep", {
     if (truncated) {
       outputLines.push("")
       outputLines.push(
-        `(Results truncated: showing ${limit} of ${totalMatches} matches (${totalMatches - limit} hidden). Consider using a more specific path or pattern.)`,
+        `(Results truncated: showing ${limit} of ${Locale.pluralize(totalMatches, "{} match", "{} matches")} (${totalMatches - limit}). Consider using a more specific path or pattern.)`,
       )
     }
 

@@ -1,4 +1,5 @@
 import z from "zod"
+import { Locale } from "../util/locale"
 import { createReadStream } from "fs"
 import * as fs from "fs/promises"
 import * as path from "path"
@@ -99,8 +100,8 @@ export const ReadTool = Tool.define("read", {
         `<entries>`,
         sliced.join("\n"),
         truncated
-          ? `\n(Showing ${sliced.length} of ${entries.length} entries. Use 'offset' parameter to read beyond entry ${offset + sliced.length})`
-          : `\n(${entries.length} entries)`,
+          ? `\n(Showing ${sliced.length} of ${Locale.pluralize(entries.length, "{} entry", "{} entries")}. Use 'offset' parameter to read beyond entry ${offset + sliced.length})`
+          : `\n(${Locale.pluralize(entries.length, "{} entry", "{} entries")})`,
         `</entries>`,
       ].join("\n")
 
@@ -187,7 +188,9 @@ export const ReadTool = Tool.define("read", {
     }
 
     if (lines < offset && !(lines === 0 && offset === 1)) {
-      throw new Error(`Offset ${offset} is out of range for this file (${lines} lines)`)
+      throw new Error(
+        `Offset ${offset} is out of range for this file (${Locale.pluralize(lines, "{} line", "{} lines")})`,
+      )
     }
 
     const content = raw.map((line, index) => {
@@ -208,7 +211,7 @@ export const ReadTool = Tool.define("read", {
     } else if (hasMoreLines) {
       output += `\n\n(Showing lines ${offset}-${lastReadLine} of ${totalLines}. Use offset=${nextOffset} to continue.)`
     } else {
-      output += `\n\n(End of file - total ${totalLines} lines)`
+      output += `\n\n(End of file - total ${Locale.pluralize(totalLines, "{} line", "{} lines")})`
     }
     output += "\n</content>"
 

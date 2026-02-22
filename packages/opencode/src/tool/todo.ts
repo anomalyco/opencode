@@ -1,5 +1,6 @@
 import z from "zod"
 import { Tool } from "./tool"
+import { Locale } from "../util/locale"
 import DESCRIPTION_WRITE from "./todowrite.txt"
 import { Todo } from "../session/todo"
 
@@ -21,7 +22,7 @@ export const TodoWriteTool = Tool.define("todowrite", {
       todos: params.todos,
     })
     return {
-      title: `${params.todos.filter((x) => x.status !== "completed").length} todos`,
+      title: Locale.pluralize(params.todos.filter((x) => x.status !== "completed").length, "{} todo", "{} todos"),
       output: JSON.stringify(params.todos, null, 2),
       metadata: {
         todos: params.todos,
@@ -43,7 +44,7 @@ export const TodoReadTool = Tool.define("todoread", {
 
     const todos = await Todo.get(ctx.sessionID)
     return {
-      title: `${todos.filter((x) => x.status !== "completed").length} todos`,
+      title: Locale.pluralize(todos.filter((x) => x.status !== "completed").length, "{} todo", "{} todos"),
       metadata: {
         todos,
       },

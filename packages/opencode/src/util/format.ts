@@ -1,3 +1,5 @@
+import { Locale } from "./locale"
+
 export function formatDuration(secs: number) {
   if (secs <= 0) return ""
   if (secs < 60) return `${secs}s`
@@ -13,8 +15,8 @@ export function formatDuration(secs: number) {
   }
   if (secs < 604800) {
     const days = Math.floor(secs / 86400)
-    return days === 1 ? "~1 day" : `~${days} days`
+    return `~${Locale.pluralize(days, "{} day", "{} days")}`
   }
   const weeks = Math.floor(secs / 604800)
-  return weeks === 1 ? "~1 week" : `~${weeks} weeks`
+  return `~${Locale.pluralize(weeks, "{} week", "{} weeks")}`
 }

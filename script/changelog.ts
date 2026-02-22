@@ -255,7 +255,8 @@ export async function buildNotes(from: string, to: string) {
 
   if (contributors.size > 0) {
     notes.push("")
-    notes.push(`**Thank you to ${contributors.size} community contributor${contributors.size > 1 ? "s" : ""}:**`)
+    const count = contributors.size
+    notes.push(`**Thank you to ${count === 1 ? "1 community contributor" : `${count} community contributors`}:**`)
     for (const [username, userCommits] of contributors) {
       notes.push(`- @${username}:`)
       for (const c of userCommits) {
