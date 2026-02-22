@@ -140,16 +140,24 @@ git config rerere.autoupdate true
 # Register ours merge driver (keeps fork version for marked files)
 git config merge.ours.driver true
 
-# Standard merge from upstream
-git fetch upstream
-git merge upstream/dev
+# --- Upstream sync: merge release tags ---
+git fetch upstream --tags
+git checkout dev && git merge --ff-only upstream/dev   # keep dev as clean mirror
+git checkout main && git merge v1.2.XX -m "upstream: sync to v1.2.XX"
 
-# For "deleted by us" conflicts (SST files, disabled workflows):
+# --- For "deleted by us" conflicts (SST files, disabled workflows):
 git rm <file>
 
-# After merge, always regenerate lockfile:
+# --- After merge, always regenerate lockfile:
 bun install
 
-# Typecheck (excludes console/enterprise packages):
+# --- Feature branches: merge with --no-ff ---
+git checkout main
+git merge --no-ff feat/my-feature -m "feat: description"
+
+# --- Urgent upstream fix between releases:
+git cherry-pick <upstream-commit-hash>
+
+# --- Typecheck (excludes console/enterprise packages):
 bun run typecheck
 ```

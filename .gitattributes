@@ -1,34 +1,45 @@
-# Fork merge drivers
+# Fork merge drivers — used with `git merge <upstream-tag>` strategy
 # Files marked merge=ours always keep the fork's version during upstream merges.
 # Requires: git config merge.ours.driver true
+#
+# Strategy: we merge upstream release tags onto main. These rules prevent
+# conflicts on fork-owned files. Files that don't exist upstream are listed
+# for documentation purposes (they won't conflict but are clearly fork-only).
 
-# Fork-owned session management (not in upstream)
+# --- Fork-only packages (no upstream equivalent) ---
 packages/cloudsession/** merge=ours
+packages/worker-test/** merge=ours
 
-# Fork environment config
-packages/opencode/.env.example merge=ours
+# --- Fork infrastructure overlaying upstream packages ---
 
-# Fork web infrastructure (SolidJS+Hono rewrite, not upstream Astro)
+# Web: SolidJS+Hono rewrite (upstream uses Astro SSR)
 packages/web/wrangler.jsonc merge=ours
 packages/web/vite.config.ts merge=ours
 packages/web/src/worker.ts merge=ours
 packages/web/README.md merge=ours
 
-# Fork function worker config
+# Function: Cloudflare Workers deployment
 packages/function/wrangler.jsonc merge=ours
 packages/function/docs/** merge=ours
 
-# Fork worker-test package (not in upstream)
-packages/worker-test/** merge=ours
+# --- Fork-modified opencode core files ---
 
-# Fork gitignore has extra entries for cloudflare/fork files
-.gitignore merge=ours
-
-# Fork divergence documentation
-FORK_CHANGES.md merge=ours
-
-# Fork network filter (blocks upstream domains, allows fork domains)
+# Network filter (blocks upstream domains, allows fork domains)
 packages/opencode/src/util/network.ts merge=ours
 
-# Fork share implementation
+# Share implementation (capnweb RPC rewrite)
 packages/opencode/src/share/** merge=ours
+
+# Fork environment config
+packages/opencode/.env.example merge=ours
+
+# Domain overrides in these files (opencode.ai -> j9xym.com)
+packages/opencode/src/installation/index.ts merge=ours
+packages/opencode/src/server/server.ts merge=ours
+packages/opencode/src/mcp/oauth-provider.ts merge=ours
+
+# --- Root config files ---
+.gitignore merge=ours
+.gitattributes merge=ours
+AGENTS.md merge=ours
+FORK_CHANGES.md merge=ours
