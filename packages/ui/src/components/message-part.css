@@ -490,8 +490,10 @@
 }
 
 [data-component="edit-content"] {
+  border-radius: inherit;
   border-top: 1px solid var(--border-weaker-base);
   max-height: 420px;
+  overflow-x: hidden;
   overflow-y: auto;
 
   scrollbar-width: none;
@@ -500,15 +502,24 @@
   &::-webkit-scrollbar {
     display: none;
   }
+
+  [data-component="diff"] {
+    border-radius: inherit;
+    overflow: hidden;
+  }
 }
 
 [data-component="write-content"] {
+  border-radius: inherit;
   border-top: 1px solid var(--border-weaker-base);
   max-height: 240px;
+  overflow-x: hidden;
   overflow-y: auto;
 
   [data-component="code"] {
-    padding-bottom: 0px !important;
+    padding-bottom: 0 !important;
+    border-radius: inherit;
+    overflow: hidden;
   }
 
   /* Hide scrollbar */
@@ -1285,12 +1296,19 @@
 }
 
 [data-component="apply-patch-file-diff"] {
+  border-radius: inherit;
+  overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
 
   &::-webkit-scrollbar {
     display: none;
+  }
+
+  [data-component="diff"] {
+    border-radius: inherit;
+    overflow: hidden;
   }
 }
 
