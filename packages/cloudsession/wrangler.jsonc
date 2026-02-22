@@ -1,0 +1,40 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "opencode-sessions-api",
+  "main": "src/index.tsx",
+  "compatibility_date": "2026-02-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true,
+    },
+  },
+  "r2_buckets": [
+    {
+      "binding": "SESSIONS_STORE",
+      "bucket_name": "opencode-sessions",
+    },
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SESSIONS_BROADCAST",
+        "class_name": "SessionBroadcast",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["SessionBroadcast"],
+    },
+  ],
+  "dev": {
+    "ip": "localhost",
+    "port": 8787,
+    "local_protocol": "http",
+  },
+  "workers_dev": false,
+  "preview_urls": false,
+}

@@ -1,0 +1,5 @@
+[test]
+preload = ["./src/preload.ts"]
+
+[install]
+# Make cloudflare:workers resolve to our mock
