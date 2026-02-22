@@ -1,9 +1,9 @@
 ---
 title: 키바인드
-description: 키바인드를 사용자 지정하세요.
+description: 키바인드를 커스터마이즈하세요.
 ---
 
-opencode는 opencode config를 통해 사용자 정의 할 수있는 keybinds 목록을 가지고 있습니다.
+OpenCode에는 OpenCode config를 통해 커스터마이즈할 수 있는 keybinds 목록이 있습니다.
 
 ```json title="opencode.json"
 {
@@ -107,17 +107,17 @@ opencode는 opencode config를 통해 사용자 정의 할 수있는 keybinds �
 
 ## 리더 키
 
-opencode는 대부분의 keybinds에 대한 `leader` 키를 사용합니다. 이것은 당신의 terminal에 있는 충돌을 피합니다.
+OpenCode는 대부분의 keybinds에 `leader` 키를 사용합니다. 이렇게 하면 terminal에서 충돌을 피할 수 있습니다.
 
-기본적으로 `ctrl+x`는 리더 키이며 대부분의 작업은 리더 키를 먼저 누르고 단축키를 누릅니다. 예를 들어, 새 세션을 시작하려면 먼저 `ctrl+x`를 누르고 `n`를 누릅니다.
+기본값으로 `ctrl+x`가 리더 키이며, 대부분의 작업은 먼저 리더 키를 누른 뒤 단축키를 누릅니다. 예를 들어 새 세션을 시작하려면 먼저 `ctrl+x`를 누르고 `n`을 누릅니다.
 
-키바인드에 리더 키를 사용할 필요는 없지만, 사용하는 것을 권장합니다.
+keybinds에 리더 키를 꼭 사용할 필요는 없지만, 사용하는 것을 권장합니다.
 
 ---
 
 ## 키바인드 비활성화
 
-"none"의 값으로 구성에 키를 추가하여 keybind를 비활성화 할 수 있습니다.
+config에 해당 키를 값 `"none"`으로 추가하면 keybind를 비활성화할 수 있습니다.
 
 ```json title="opencode.json"
 {
@@ -132,39 +132,39 @@ opencode는 대부분의 keybinds에 대한 `leader` 키를 사용합니다. 이
 
 ## 데스크탑 프롬프트 단축키
 
-opencode 데스크톱 앱 프롬프트 입력은 텍스트 편집을 위한 일반적인 Readline/Emacs-style 단축키를 지원합니다. 이들은 내장되어 있으며 현재 `opencode.json`를 통해 구성할 수 없습니다.
+OpenCode 데스크톱 앱의 프롬프트 입력은 텍스트 편집을 위한 일반적인 Readline/Emacs-style 단축키를 지원합니다. 이 단축키는 내장되어 있으며 현재 `opencode.json`으로는 설정할 수 없습니다.
 
-| 단축키   | 동작                       |
-| -------- | -------------------------- |
-| `ctrl+a` | 현재 행 시작으로 이동      |
-| `ctrl+e` | 현재선 끝으로 이동         |
-| `ctrl+b` | 커서를 다시 한 문자로 이동 |
-| `ctrl+f` | 한자 앞의 커서             |
-| `alt+b`  | 한 단어로 커서 이동        |
-| `alt+f`  | 한 단어를 넘겨 주세요      |
-| `ctrl+d` | 커서의 캐릭터 삭제         |
-| `ctrl+k` | 노선의 종료                |
-| `ctrl+u` | 노선 시작                  |
-| `ctrl+w` | 이전 단어                  |
-| `alt+d`  | 다음 단어를 죽이기         |
-| `ctrl+t` | 자가용 캐릭터              |
-| `ctrl+g` | 팝오버를 취소 / 응답 취소  |
+| 단축키   | 동작                              |
+| -------- | --------------------------------- |
+| `ctrl+a` | 현재 줄 시작으로 이동             |
+| `ctrl+e` | 현재 줄 끝으로 이동               |
+| `ctrl+b` | 커서를 문자 하나 뒤로 이동        |
+| `ctrl+f` | 커서를 문자 하나 앞으로 이동      |
+| `alt+b`  | 커서를 단어 하나 뒤로 이동        |
+| `alt+f`  | 커서를 단어 하나 앞으로 이동      |
+| `ctrl+d` | 커서 아래 문자 삭제               |
+| `ctrl+k` | 줄 끝까지 삭제                    |
+| `ctrl+u` | 줄 시작까지 삭제                  |
+| `ctrl+w` | 이전 단어 삭제                    |
+| `alt+d`  | 다음 단어 삭제                    |
+| `ctrl+t` | 문자 순서 바꾸기                  |
+| `ctrl+g` | 팝오버 취소 / 실행 중인 응답 중단 |
 
 ---
 
 ## Shift+Enter
 
-몇몇 terminal은 기본적으로 입력한 보조 키를 보내지 않습니다. `Shift+Enter`를 이스케이프 시퀀스로 보낼 terminal을 구성해야 할 수 있습니다.
+일부 terminal은 기본적으로 Enter와 modifier 키 조합을 전송하지 않습니다. `Shift+Enter`를 이스케이프 시퀀스로 전송하도록 terminal을 설정해야 할 수도 있습니다.
 
 ### Windows Terminal
 
-`settings.json`를 엽니다:
+다음 경로의 `settings.json`을 여세요:
 
 ```
 %LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
 ```
 
-루트 레벨 `actions` 배열에 이것을 추가하십시오:
+루트 레벨 `actions` 배열에 다음을 추가하세요:
 
 ```json
 "actions": [
@@ -178,7 +178,7 @@ opencode 데스크톱 앱 프롬프트 입력은 텍스트 편집을 위한 일�
 ]
 ```
 
-루트 레벨 `keybindings` 배열에 이것을 추가하십시오:
+루트 레벨 `keybindings` 배열에 다음을 추가하세요:
 
 ```json
 "keybindings": [
@@ -189,4 +189,4 @@ opencode 데스크톱 앱 프롬프트 입력은 텍스트 편집을 위한 일�
 ]
 ```
 
-파일을 저장하고 Windows Terminal을 다시 시작하거나 새 탭을 엽니 다.
+파일을 저장한 뒤 Windows Terminal을 다시 시작하거나 새 탭을 여세요.
