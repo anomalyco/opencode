@@ -179,6 +179,7 @@
 
 [data-component="text-part"] {
   width: 100%;
+  margin-top: 24px;
 
   [data-slot="text-part-body"] {
     margin-top: 0;
@@ -227,13 +228,18 @@
 [data-component="reasoning-part"] {
   width: 100%;
   color: var(--text-base);
-  font-size: var(--font-size-small);
-  line-height: var(--line-height-large);
+  line-height: var(--line-height-normal);
 
   [data-component="markdown"] {
     margin-top: 24px;
     font-style: normal;
     font-size: inherit;
+    color: var(--text-weak);
+
+    strong,
+    b {
+      color: var(--text-weak);
+    }
 
     p:has(strong) {
       margin-top: 24px;
@@ -484,8 +490,10 @@
 }
 
 [data-component="edit-content"] {
+  border-radius: inherit;
   border-top: 1px solid var(--border-weaker-base);
   max-height: 420px;
+  overflow-x: hidden;
   overflow-y: auto;
 
   scrollbar-width: none;
@@ -494,15 +502,24 @@
   &::-webkit-scrollbar {
     display: none;
   }
+
+  [data-component="diff"] {
+    border-radius: inherit;
+    overflow: hidden;
+  }
 }
 
 [data-component="write-content"] {
+  border-radius: inherit;
   border-top: 1px solid var(--border-weaker-base);
   max-height: 240px;
+  overflow-x: hidden;
   overflow-y: auto;
 
   [data-component="code"] {
-    padding-bottom: 0px !important;
+    padding-bottom: 0 !important;
+    border-radius: inherit;
+    overflow: hidden;
   }
 
   /* Hide scrollbar */
@@ -1279,12 +1296,19 @@
 }
 
 [data-component="apply-patch-file-diff"] {
+  border-radius: inherit;
+  overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
 
   &::-webkit-scrollbar {
     display: none;
+  }
+
+  [data-component="diff"] {
+    border-radius: inherit;
+    overflow: hidden;
   }
 }
 
