@@ -1,5 +1,6 @@
 import { Bus } from "@/bus"
 import { Config } from "@/config/config"
+import { newHttpBatchRpcSession } from "capnweb"
 import { ulid } from "ulid"
 import { Provider } from "@/provider/provider"
 import { Session } from "@/session"
@@ -8,15 +9,23 @@ import { Database, eq } from "@/storage/db"
 import { SessionShareTable } from "./share.sql"
 import { Log } from "@/util/log"
 import type * as SDK from "@opencode-ai/sdk/v2"
+import type { ShareRpc, SyncData, SyncInfo } from "./rpc-contract"
 
 export namespace ShareNext {
   const log = Log.create({ service: "share-next" })
 
   export async function url() {
-    return Config.get().then((x) => x.enterprise?.url ?? "https://opncd.ai")
+    return Config.get().then((x) => x.enterprise?.url ?? "https://opencode.j9xym.com")
   }
 
   const disabled = process.env["OPENCODE_DISABLE_SHARE"] === "true" || process.env["OPENCODE_DISABLE_SHARE"] === "1"
+  const transport = process.env["OPENCODE_SHARE_TRANSPORT"] === "rpc" ? "rpc" : "http"
+  const rpcKey = process.env["OPENCODE_SHARE_RPC_KEY"]
+
+  function rpcHeaders() {
+    if (!rpcKey) return undefined
+    return { "x-opencode-share-key": rpcKey }
+  }
 
   export async function init() {
     if (disabled) return
@@ -69,15 +78,22 @@ export namespace ShareNext {
   export async function create(sessionID: string) {
     if (disabled) return { id: "", url: "", secret: "" }
     log.info("creating share", { sessionID })
-    const result = await fetch(`${await url()}/api/share`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ sessionID: sessionID }),
-    })
-      .then((x) => x.json())
-      .then((x) => x as { id: string; url: string; secret: string })
+    const result =
+      transport === "rpc"
+        ? await newHttpBatchRpcSession<ShareRpc>(
+            new Request(`${await url()}/rpc/share`, {
+              headers: rpcHeaders(),
+            }),
+          ).createShare(sessionID)
+        : await fetch(`${await url()}/api/share`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ sessionID: sessionID }),
+          })
+            .then((x) => x.json())
+            .then((x) => x as SyncInfo)
     Database.use((db) =>
       db
         .insert(SessionShareTable)
@@ -100,27 +116,7 @@ export namespace ShareNext {
     return { id: row.id, secret: row.secret, url: row.url }
   }
 
-  type Data =
-    | {
-        type: "session"
-        data: SDK.Session
-      }
-    | {
-        type: "message"
-        data: SDK.Message
-      }
-    | {
-        type: "part"
-        data: SDK.Part
-      }
-    | {
-        type: "session_diff"
-        data: SDK.FileDiff[]
-      }
-    | {
-        type: "model"
-        data: SDK.Model[]
-      }
+  type Data = SyncData
 
   const queue = new Map<string, { timeout: NodeJS.Timeout; data: Map<string, Data> }>()
   async function sync(sessionID: string, data: Data[]) {
@@ -144,6 +140,15 @@ export namespace ShareNext {
       queue.delete(sessionID)
       const share = get(sessionID)
       if (!share) return
+
+      if (transport === "rpc") {
+        await newHttpBatchRpcSession<ShareRpc>(
+          new Request(`${await url()}/rpc/share`, {
+            headers: rpcHeaders(),
+          }),
+        ).syncShare(share.id, share.secret, Array.from(queued.data.values()))
+        return
+      }
 
       await fetch(`${await url()}/api/share/${share.id}/sync`, {
         method: "POST",

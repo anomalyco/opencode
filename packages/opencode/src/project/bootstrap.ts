@@ -9,12 +9,14 @@ import { Command } from "../command"
 import { Instance } from "./instance"
 import { Vcs } from "./vcs"
 import { Log } from "@/util/log"
+import { Network } from "@/util/network"
 import { ShareNext } from "@/share/share-next"
 import { Snapshot } from "../snapshot"
 import { Truncate } from "../tool/truncation"
 
 export async function InstanceBootstrap() {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
+  Network.init() // Initialize network filter to block upstream domains
   await Plugin.init()
   ShareNext.init()
   Format.init()
