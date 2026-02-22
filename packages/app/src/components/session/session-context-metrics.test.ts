@@ -91,11 +91,4 @@ describe("getSessionContextMetrics", () => {
     expect(two.context?.message.id).toBe("a2")
     expect(two.totalCost).toBe(1)
   })
-
-  test("returns empty metrics when inputs are undefined", () => {
-    const metrics = getSessionContextMetrics(undefined, undefined)
-
-    expect(metrics.totalCost).toBe(0)
-    expect(metrics.context).toBeUndefined()
-  })
 })

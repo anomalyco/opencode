@@ -2,19 +2,14 @@ use std::time::{Duration, Instant};
 
 use tauri::AppHandle;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
+use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_store::StoreExt;
 use tokio::task::JoinHandle;
 
 use crate::{
     cli,
-    cli::CommandChild,
-    constants::{DEFAULT_SERVER_URL_KEY, SETTINGS_STORE, WSL_ENABLED_KEY},
+    constants::{DEFAULT_SERVER_URL_KEY, SETTINGS_STORE},
 };
-
-#[derive(Clone, serde::Serialize, serde::Deserialize, specta::Type, Debug, Default)]
-pub struct WslConfig {
-    pub enabled: bool,
-}
 
 #[tauri::command]
 #[specta::specta]
@@ -53,48 +48,16 @@ pub async fn set_default_server_url(app: AppHandle, url: Option<String>) -> Resu
     Ok(())
 }
 
-#[tauri::command]
-#[specta::specta]
-pub fn get_wsl_config(_app: AppHandle) -> Result<WslConfig, String> {
-    // let store = app
-    //     .store(SETTINGS_STORE)
-    //     .map_err(|e| format!("Failed to open settings store: {}", e))?;
-
-    // let enabled = store
-    //     .get(WSL_ENABLED_KEY)
-    //     .as_ref()
-    //     .and_then(|v| v.as_bool())
-    //     .unwrap_or(false);
-
-    Ok(WslConfig { enabled: false })
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn set_wsl_config(app: AppHandle, config: WslConfig) -> Result<(), String> {
-    let store = app
-        .store(SETTINGS_STORE)
-        .map_err(|e| format!("Failed to open settings store: {}", e))?;
-
-    store.set(WSL_ENABLED_KEY, serde_json::Value::Bool(config.enabled));
-
-    store
-        .save()
-        .map_err(|e| format!("Failed to save settings: {}", e))?;
-
-    Ok(())
-}
-
 pub async fn get_saved_server_url(app: &tauri::AppHandle) -> Option<String> {
     if let Some(url) = get_default_server_url(app.clone()).ok().flatten() {
-        tracing::info!(%url, "Using desktop-specific custom URL");
+        println!("Using desktop-specific custom URL: {url}");
         return Some(url);
     }
 
     if let Some(cli_config) = cli::get_config(app).await
         && let Some(url) = get_server_url_from_config(&cli_config)
     {
-        tracing::info!(%url, "Using custom server URL from config");
+        println!("Using custom server URL from config: {url}");
         return Some(url);
     }
 
@@ -107,50 +70,33 @@ pub fn spawn_local_server(
     port: u32,
     password: String,
 ) -> (CommandChild, HealthCheck) {
-    let (child, exit) = cli::serve(&app, &hostname, port, &password);
+    let child = cli::serve(&app, &hostname, port, &password);
 
     let health_check = HealthCheck(tokio::spawn(async move {
         let url = format!("http://{hostname}:{port}");
+
         let timestamp = Instant::now();
+        loop {
+            tokio::time::sleep(Duration::from_millis(100)).await;
 
-        let ready = async {
-            loop {
-                tokio::time::sleep(Duration::from_millis(100)).await;
-
-                if check_health(&url, Some(&password)).await {
-                    tracing::info!(elapsed = ?timestamp.elapsed(), "Server ready");
-                    return Ok(());
-                }
+            if check_health(&url, Some(&password)).await {
+                println!("Server ready after {:?}", timestamp.elapsed());
+                break;
             }
-        };
-
-        let terminated = async {
-            match exit.await {
-                Ok(payload) => Err(format!(
-                    "Sidecar terminated before becoming healthy (code={:?} signal={:?})",
-                    payload.code, payload.signal
-                )),
-                Err(_) => Err("Sidecar terminated before becoming healthy".to_string()),
-            }
-        };
-
-        tokio::select! {
-            res = ready => res,
-            res = terminated => res,
         }
     }));
 
     (child, health_check)
 }
 
-pub struct HealthCheck(pub JoinHandle<Result<(), String>>);
+pub struct HealthCheck(pub JoinHandle<()>);
 
 pub async fn check_health(url: &str, password: Option<&str>) -> bool {
     let Ok(url) = reqwest::Url::parse(url) else {
         return false;
     };
 
-    let mut builder = reqwest::Client::builder().timeout(Duration::from_secs(7));
+    let mut builder = reqwest::Client::builder().timeout(Duration::from_secs(3));
 
     if url_is_localhost(&url) {
         // Some environments set proxy variables (HTTP_PROXY/HTTPS_PROXY/ALL_PROXY) without
@@ -176,10 +122,6 @@ pub async fn check_health(url: &str, password: Option<&str>) -> bool {
         .await
         .map(|r| r.status().is_success())
         .unwrap_or(false)
-}
-
-pub fn is_localhost_url(url: &str) -> bool {
-    reqwest::Url::parse(url).is_ok_and(|u| url_is_localhost(&u))
 }
 
 fn url_is_localhost(url: &reqwest::Url) -> bool {
@@ -214,7 +156,7 @@ fn normalize_hostname_for_url(hostname: &str) -> String {
 fn get_server_url_from_config(config: &cli::Config) -> Option<String> {
     let server = config.server.as_ref()?;
     let port = server.port?;
-    tracing::debug!(port, "server.port found in OC config");
+    println!("server.port found in OC config: {port}");
     let hostname = server
         .hostname
         .as_ref()
@@ -225,7 +167,7 @@ fn get_server_url_from_config(config: &cli::Config) -> Option<String> {
 }
 
 pub async fn check_health_or_ask_retry(app: &AppHandle, url: &str) -> bool {
-    tracing::debug!(%url, "Checking health");
+    println!("Checking health for {url}");
     loop {
         if check_health(url, None).await {
             return true;

@@ -224,6 +224,7 @@ export default function () {
                       {iife(() => {
                         const [store, setStore] = createStore({
                           messageId: undefined as string | undefined,
+                          expandedSteps: {} as Record<string, boolean>,
                         })
                         const messages = createMemo(() =>
                           data().sessionID
@@ -295,7 +296,10 @@ export default function () {
                                 {(message) => (
                                   <SessionTurn
                                     sessionID={data().sessionID}
+                                    sessionTitle={info().title}
                                     messageID={message.id}
+                                    stepsExpanded={store.expandedSteps[message.id] ?? false}
+                                    onStepsExpandedToggle={() => setStore("expandedSteps", message.id, (v) => !v)}
                                     classes={{
                                       root: "min-w-0 w-full relative",
                                       content: "flex flex-col justify-between !overflow-visible",
@@ -371,6 +375,13 @@ export default function () {
                                     <SessionTurn
                                       sessionID={data().sessionID}
                                       messageID={store.messageId ?? firstUserMessage()!.id!}
+                                      stepsExpanded={
+                                        store.expandedSteps[store.messageId ?? firstUserMessage()!.id!] ?? false
+                                      }
+                                      onStepsExpandedToggle={() => {
+                                        const id = store.messageId ?? firstUserMessage()!.id!
+                                        setStore("expandedSteps", id, (v) => !v)
+                                      }}
                                       classes={{
                                         root: "grow",
                                         content: "flex flex-col justify-between",

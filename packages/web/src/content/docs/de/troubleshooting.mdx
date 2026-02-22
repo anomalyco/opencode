@@ -1,5 +1,5 @@
 ---
-title: Fehlerbehebung
+title: Troubleshooting
 description: Haeufige Probleme und schnelle Loesungen.
 ---
 
@@ -20,7 +20,7 @@ Mit `--log-level` bekommst du detailliertere Diagnoseinfos, z. B. `opencode --lo
 
 ---
 
-## Speicher
+## Storage
 
 opencode speichert Sitzungs- und App-Daten auf der Festplatte unter:
 
@@ -37,12 +37,12 @@ Dieses Verzeichnis enthaelt:
 
 ---
 
-## Desktop-App
+## Desktop app
 
 OpenCode Desktop startet im Hintergrund einen lokalen OpenCode-Server (`opencode-cli`-Sidecar).
 Viele Probleme kommen von fehlerhaften Plugins, kaputtem Cache oder falschen Server-Einstellungen.
 
-### Schnellchecks
+### Quick checks
 
 - App komplett beenden und neu starten
 - Bei Fehlerbildschirm **Restart** klicken und Details kopieren
@@ -50,11 +50,11 @@ Viele Probleme kommen von fehlerhaften Plugins, kaputtem Cache oder falschen Ser
 
 ---
 
-### Plugins deaktivieren
+### Disable plugins
 
 If the desktop app is crashing on launch, hanging, or behaving strangely, start by disabling plugins.
 
-#### Globale Konfiguration prüfen
+#### Check the global config
 
 Open your global config file and look for a `plugin` key.
 
@@ -71,7 +71,7 @@ If you have plugins configured, temporarily disable them by removing the key or 
 }
 ```
 
-#### Plugin-Verzeichnisse prüfen
+#### Check plugin directories
 
 OpenCode can also load local plugins from disk. Temporarily move these out of the way (or rename the folder) and restart the desktop app:
 
@@ -85,7 +85,7 @@ If the app starts working again, re-enable plugins one at a time to find which o
 
 ---
 
-### Cache leeren
+### Clear the cache
 
 If disabling plugins doesn't help (or a plugin install is stuck), clear the cache so OpenCode can rebuild it.
 
@@ -100,21 +100,21 @@ If disabling plugins doesn't help (or a plugin install is stuck), clear the cach
 
 ---
 
-### Server-Verbindungsprobleme beheben
+### Fix server connection issues
 
 OpenCode Desktop can either start its own local server (default) or connect to a server URL you configured.
 
 If you see a **"Connection Failed"** dialog (or the app never gets past the splash screen), check for a custom server URL.
 
-#### Desktop-Standard-Server-URL löschen
+#### Clear the desktop default server URL
 
 From the Home screen, click the server name (with the status dot) to open the Server picker. In the **Default server** section, click **Clear**.
 
-#### `server.port` / `server.hostname` aus Konfiguration entfernen
+#### Remove `server.port` / `server.hostname` from your config
 
 If your `opencode.json(c)` contains a `server` section, temporarily remove it and restart the desktop app.
 
-#### Umgebungsvariablen prüfen
+#### Check environment variables
 
 If you have `OPENCODE_PORT` set in your environment, the desktop app will try to use that port for the local server.
 
@@ -122,7 +122,7 @@ If you have `OPENCODE_PORT` set in your environment, the desktop app will try to
 
 ---
 
-### Linux: Wayland / X11-Probleme
+### Linux: Wayland / X11 issues
 
 On Linux, some Wayland setups can cause blank windows or compositor errors.
 
@@ -131,19 +131,19 @@ On Linux, some Wayland setups can cause blank windows or compositor errors.
 
 ---
 
-### Windows: WebView2-Laufzeit
+### Windows: WebView2 runtime
 
 On Windows, OpenCode Desktop requires the Microsoft Edge **WebView2 Runtime**. If the app opens to a blank window or won't start, install/update WebView2 and try again.
 
 ---
 
-### Windows: Allgemeine Performance-Probleme
+### Windows: General performance issues
 
 If you're experiencing slow performance, file access issues, or terminal problems on Windows, try using [WSL (Windows Subsystem for Linux)](/docs/windows-wsl). WSL provides a Linux environment that works more seamlessly with OpenCode's features.
 
 ---
 
-### Benachrichtigungen werden nicht angezeigt
+### Notifications not showing
 
 OpenCode Desktop only shows system notifications when:
 
@@ -152,7 +152,7 @@ OpenCode Desktop only shows system notifications when:
 
 ---
 
-### Desktop-App-Speicher zurücksetzen (letzter Ausweg)
+### Reset desktop app storage (last resort)
 
 If the app won't start and you can't clear settings from inside the UI, reset the desktop app's saved state.
 
@@ -196,7 +196,7 @@ Hier sind typische Fehlerbilder und wie du sie loest.
 
 ---
 
-### OpenCode startet nicht
+### OpenCode won't start
 
 1. Check the logs for error messages
 2. Try running with `--print-logs` to see output in the terminal
@@ -204,7 +204,7 @@ Hier sind typische Fehlerbilder und wie du sie loest.
 
 ---
 
-### Authentifizierungsprobleme
+### Authentication issues
 
 1. Try re-authenticating with the `/connect` command in the TUI
 2. Check that your API keys are valid
@@ -212,7 +212,7 @@ Hier sind typische Fehlerbilder und wie du sie loest.
 
 ---
 
-### Modell nicht verfügbar
+### Model not available
 
 1. Check that you've authenticated with the provider
 2. Verify the model name in your config is correct
@@ -251,7 +251,7 @@ To resolve this:
 
 ---
 
-### AI_APICallError und Provider-Paket-Probleme
+### AI_APICallError and provider package issues
 
 If you encounter API call errors, this may be due to outdated provider packages. opencode dynamically installs provider packages (OpenAI, Anthropic, Google, etc.) as needed and caches them locally.
 
@@ -271,7 +271,7 @@ This will force opencode to download the most recent versions of provider packag
 
 ---
 
-### Copy/Paste funktioniert nicht unter Linux
+### Copy/paste not working on Linux
 
 Linux users need to have one of the following clipboard utilities installed for copy/paste functionality to work:
 

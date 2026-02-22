@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js"
+import { createSignal, createEffect, onMount, onCleanup } from "solid-js"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -40,6 +40,8 @@ export function DialogReleaseNotes(props: { highlights: Highlight[] }) {
     handleClose()
   }
 
+  let focusTrap: HTMLDivElement | undefined
+
   function handleKeyDown(e: KeyboardEvent) {
     if (e.key === "Escape") {
       e.preventDefault()
@@ -58,13 +60,27 @@ export function DialogReleaseNotes(props: { highlights: Highlight[] }) {
     }
   }
 
+  onMount(() => {
+    focusTrap?.focus()
+    document.addEventListener("keydown", handleKeyDown)
+    onCleanup(() => document.removeEventListener("keydown", handleKeyDown))
+  })
+
+  // Refocus the trap when index changes to ensure escape always works
+  createEffect(() => {
+    index() // track index
+    focusTrap?.focus()
+  })
+
   return (
     <Dialog
       size="large"
       fit
       class="w-[min(calc(100vw-40px),720px)] h-[min(calc(100vh-40px),400px)] -mt-20 min-h-0 overflow-hidden"
     >
-      <div class="flex flex-1 min-w-0 min-h-0" tabIndex={0} autofocus onKeyDown={handleKeyDown}>
+      {/* Hidden element to capture initial focus and handle escape */}
+      <div ref={focusTrap} tabindex="0" class="absolute opacity-0 pointer-events-none" />
+      <div class="flex flex-1 min-w-0 min-h-0">
         {/* Left side - Text content */}
         <div class="flex flex-col flex-1 min-w-0 p-8">
           {/* Top section - feature content (fixed position from top) */}

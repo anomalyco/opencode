@@ -1,8 +1,6 @@
 import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg, RGBA } from "@opentui/core"
-import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
+import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
-import path from "path"
-import { Filesystem } from "@/util/filesystem"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
 import { EmptyBorder } from "@tui/component/border"
@@ -15,6 +13,7 @@ import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
+import { DialogExecutionMode } from "../dialog-execution-mode"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
 import { useRenderer } from "@opentui/solid"
@@ -43,7 +42,6 @@ import {
   type CompletionCycleState,
 } from "@tui-integration"
 import { ExecutionMode } from "@shell-mode"
-import { DialogExecutionMode } from "../dialog-execution-mode"
 import { DialogSkill } from "../dialog-skill"
 
 export type PromptProps = {
@@ -68,7 +66,6 @@ export type PromptRef = {
 }
 
 const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
-const SHELL_PLACEHOLDERS = ["ls -la", "git status", "pwd"]
 
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
@@ -152,16 +149,6 @@ export function Prompt(props: PromptProps) {
     completionCycle: null,
   })
 
-  createEffect(
-    on(
-      () => props.sessionID,
-      () => {
-        setStore("placeholder", Math.floor(Math.random() * PLACEHOLDERS.length))
-      },
-      { defer: true },
-    ),
-  )
-
   // Initialize agent/model/variant from last user message when session changes
   let syncedSessionID: string | undefined
   createEffect(() => {
@@ -236,10 +223,7 @@ export function Prompt(props: PromptProps) {
           if (autocomplete.visible) return
           if (!input.focused) return
           // TODO: this should be its own command
-          if (store.mode === "shell") {
-            setStore("mode", "normal")
-            return
-          }
+
           if (!props.sessionID) return
 
           setStore("interrupt", store.interrupt + 1)
@@ -722,7 +706,7 @@ export function Prompt(props: PromptProps) {
   async function pasteImage(file: { filename?: string; content: string; mime: string }) {
     const currentOffset = input.visualCursor.offset
     const extmarkStart = currentOffset
-    const count = store.prompt.parts.filter((x) => x.type === "file" && x.mime.startsWith("image/")).length
+    const count = store.prompt.parts.filter((x) => x.type === "file").length
     const virtualText = `[Image ${count + 1}]`
     const extmarkEnd = extmarkStart + virtualText.length
     const textToInsert = virtualText + " "
@@ -764,7 +748,6 @@ export function Prompt(props: PromptProps) {
 
   const highlight = createMemo(() => {
     if (keybind.leader) return theme.border
-    if (store.mode === "shell") return theme.primary
     return local.agent.color(local.agent.current().name)
   })
 
@@ -779,15 +762,6 @@ export function Prompt(props: PromptProps) {
   const modePrefixColor = createMemo(() => {
     const modeDisplay = executionMode.getModeDisplay()
     return theme[modeDisplay.color as keyof typeof theme] as RGBA
-  })
-
-  const placeholderText = createMemo(() => {
-    if (props.sessionID) return undefined
-    if (store.mode === "shell") {
-      const example = SHELL_PLACEHOLDERS[store.placeholder % SHELL_PLACEHOLDERS.length]
-      return `Run a command... "${example}"`
-    }
-    return `Ask anything... "${PLACEHOLDERS[store.placeholder % PLACEHOLDERS.length]}"`
   })
 
   const spinnerDef = createMemo(() => {
@@ -874,7 +848,7 @@ export function Prompt(props: PromptProps) {
                 <text fg={modePrefixColor()}>{executionMode.getModeDisplay().icon} </text>
                 <box flexGrow={1}>
                   <textarea
-                    placeholder={placeholderText()}
+                    placeholder={props.sessionID ? undefined : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
                     textColor={keybind.leader ? theme.textMuted : theme.text}
                     focusedTextColor={keybind.leader ? theme.textMuted : theme.text}
                     minHeight={1}
@@ -1052,26 +1026,26 @@ export function Prompt(props: PromptProps) {
                       const isUrl = /^(https?):\/\//.test(filepath)
                       if (!isUrl) {
                         try {
-                          const mime = Filesystem.mimeType(filepath)
-                          const filename = path.basename(filepath)
+                          const file = Bun.file(filepath)
                           // Handle SVG as raw text content, not as base64 image
-                          if (mime === "image/svg+xml") {
+                          if (file.type === "image/svg+xml") {
                             event.preventDefault()
-                            const content = await Filesystem.readText(filepath).catch(() => {})
+                            const content = await file.text().catch(() => {})
                             if (content) {
-                              pasteText(content, `[SVG: ${filename ?? "image"}]`)
+                              pasteText(content, `[SVG: ${file.name ?? "image"}]`)
                               return
                             }
                           }
-                          if (mime.startsWith("image/")) {
+                          if (file.type.startsWith("image/")) {
                             event.preventDefault()
-                            const content = await Filesystem.readArrayBuffer(filepath)
+                            const content = await file
+                              .arrayBuffer()
                               .then((buffer) => Buffer.from(buffer).toString("base64"))
                               .catch(() => {})
                             if (content) {
                               await pasteImage({
-                                filename,
-                                mime,
+                                filename: file.name,
+                                mime: file.type,
                                 content,
                               })
                               return

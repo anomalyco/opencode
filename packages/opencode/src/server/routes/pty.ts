@@ -3,7 +3,7 @@ import { describeRoute, validator, resolver } from "hono-openapi"
 import { upgradeWebSocket } from "hono/bun"
 import z from "zod"
 import { Pty } from "@/pty"
-import { NotFoundError } from "../../storage/db"
+import { Storage } from "../../storage/storage"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 
@@ -76,7 +76,7 @@ export const PtyRoutes = lazy(() =>
       async (c) => {
         const info = Pty.get(c.req.valid("param").ptyID)
         if (!info) {
-          throw new NotFoundError({ message: "Session not found" })
+          throw new Storage.NotFoundError({ message: "Session not found" })
         }
         return c.json(info)
       },
@@ -160,38 +160,14 @@ export const PtyRoutes = lazy(() =>
         })()
         let handler: ReturnType<typeof Pty.connect>
         if (!Pty.get(id)) throw new Error("Session not found")
-
-        type Socket = {
-          readyState: number
-          send: (data: string | Uint8Array | ArrayBuffer) => void
-          close: (code?: number, reason?: string) => void
-        }
-
-        const isSocket = (value: unknown): value is Socket => {
-          if (!value || typeof value !== "object") return false
-          if (!("readyState" in value)) return false
-          if (!("send" in value) || typeof (value as { send?: unknown }).send !== "function") return false
-          if (!("close" in value) || typeof (value as { close?: unknown }).close !== "function") return false
-          return typeof (value as { readyState?: unknown }).readyState === "number"
-        }
-
         return {
           onOpen(_event, ws) {
-            const socket = ws.raw
-            if (!isSocket(socket)) {
-              ws.close()
-              return
-            }
-            handler = Pty.connect(id, socket, cursor)
+            handler = Pty.connect(id, ws, cursor)
           },
           onMessage(event) {
-            if (typeof event.data !== "string") return
-            handler?.onMessage(event.data)
+            handler?.onMessage(String(event.data))
           },
           onClose() {
-            handler?.onClose()
-          },
-          onError() {
             handler?.onClose()
           },
         }

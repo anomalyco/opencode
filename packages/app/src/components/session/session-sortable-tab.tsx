@@ -31,12 +31,8 @@ export function SortableTab(props: { tab: string; onTabClose: (tab: string) => v
   const command = useCommand()
   const sortable = createSortable(props.tab)
   const path = createMemo(() => file.pathFromTab(props.tab))
-  const content = createMemo(() => {
-    const value = path()
-    if (!value) return
-    return <FileVisual path={value} />
-  })
   return (
+    // @ts-ignore
     <div use:sortable classList={{ "h-full": true, "opacity-0": sortable.isActiveDraggable }}>
       <div class="relative h-full">
         <Tabs.Trigger
@@ -59,7 +55,7 @@ export function SortableTab(props: { tab: string; onTabClose: (tab: string) => v
           hideCloseButton
           onMiddleClick={() => props.onTabClose(props.tab)}
         >
-          <Show when={content()}>{(value) => value()}</Show>
+          <Show when={path()}>{(p) => <FileVisual path={p()} />}</Show>
         </Tabs.Trigger>
       </div>
     </div>

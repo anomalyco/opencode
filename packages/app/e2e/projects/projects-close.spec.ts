@@ -1,6 +1,6 @@
 import { test, expect } from "../fixtures"
-import { createTestProject, cleanupTestProject, openSidebar, clickMenuItem, openProjectMenu } from "../actions"
-import { projectCloseHoverSelector, projectSwitchSelector } from "../selectors"
+import { createTestProject, cleanupTestProject, openSidebar, clickMenuItem } from "../actions"
+import { projectCloseHoverSelector, projectCloseMenuSelector, projectSwitchSelector } from "../selectors"
 import { dirSlug } from "../utils"
 
 test("can close a project via hover card close button", async ({ page, withProject }) => {
@@ -31,15 +31,16 @@ test("can close a project via hover card close button", async ({ page, withProje
   }
 })
 
-test("closing active project navigates to another open project", async ({ page, withProject }) => {
+test("can close a project via project header more options menu", async ({ page, withProject }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
   const other = await createTestProject()
+  const otherName = other.split("/").pop() ?? other
   const otherSlug = dirSlug(other)
 
   try {
     await withProject(
-      async ({ slug }) => {
+      async () => {
         await openSidebar(page)
 
         const otherButton = page.locator(projectSwitchSelector(otherSlug)).first()
@@ -48,20 +49,21 @@ test("closing active project navigates to another open project", async ({ page, 
 
         await expect(page).toHaveURL(new RegExp(`/${otherSlug}/session`))
 
-        const menu = await openProjectMenu(page, otherSlug)
+        const header = page
+          .locator(".group\\/project")
+          .filter({ has: page.locator(`[data-action="project-menu"][data-project="${otherSlug}"]`) })
+          .first()
+        await expect(header).toContainText(otherName)
+
+        const trigger = header.locator(`[data-action="project-menu"][data-project="${otherSlug}"]`).first()
+        await expect(trigger).toHaveCount(1)
+        await trigger.focus()
+        await page.keyboard.press("Enter")
+
+        const menu = page.locator('[data-component="dropdown-menu-content"]').first()
+        await expect(menu).toBeVisible({ timeout: 10_000 })
 
         await clickMenuItem(menu, /^Close$/i, { force: true })
-
-        await expect
-          .poll(() => {
-            const pathname = new URL(page.url()).pathname
-            if (new RegExp(`^/${slug}/session(?:/[^/]+)?/?$`).test(pathname)) return "project"
-            if (pathname === "/") return "home"
-            return ""
-          })
-          .toMatch(/^(project|home)$/)
-
-        await expect(page).not.toHaveURL(new RegExp(`/${otherSlug}/session(?:[/?#]|$)`))
         await expect(otherButton).toHaveCount(0)
       },
       { extra: [other] },

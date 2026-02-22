@@ -2,7 +2,6 @@ import path from "path"
 import os from "os"
 import fs from "fs/promises"
 import z from "zod"
-import { Filesystem } from "../util/filesystem"
 import { Identifier } from "../id/id"
 import { MessageV2 } from "./message-v2"
 import { Log } from "../util/log"
@@ -22,10 +21,12 @@ import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { defer } from "../util/defer"
+import { clone } from "remeda"
 import { ToolRegistry } from "../tool/registry"
 import { MCP } from "../mcp"
 import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
+import { ListTool } from "../tool/ls"
 import { FileTime } from "../file/time"
 import { Flag } from "../flag/flag"
 import { ulid } from "ulid"
@@ -49,16 +50,6 @@ import { Truncate } from "@/tool/truncation"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
-
-const STRUCTURED_OUTPUT_DESCRIPTION = `Use this tool to return your final response in the requested structured format.
-
-IMPORTANT:
-- You MUST call this tool exactly once at the end of your response
-- The input must be valid JSON matching the required schema
-- Complete all necessary research and tool calls BEFORE calling this tool
-- This tool provides your final answer - no further actions are taken after calling it`
-
-const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
@@ -106,7 +97,6 @@ export namespace SessionPrompt {
       .describe(
         "@deprecated tools and permissions have been merged, you can set permissions on the session itself now",
       ),
-    format: MessageV2.Format.optional(),
     system: z.string().optional(),
     variant: z.string().optional(),
     parts: z.array(
@@ -175,7 +165,9 @@ export namespace SessionPrompt {
     }
     if (permissions.length > 0) {
       session.permission = permissions
-      await Session.setPermission({ sessionID: session.id, permission: permissions })
+      await Session.update(session.id, (draft) => {
+        draft.permission = permissions
+      })
     }
 
     if (input.noReply === true) {
@@ -284,11 +276,6 @@ export namespace SessionPrompt {
     }
 
     using _ = defer(() => cancel(sessionID))
-
-    // Structured output state
-    // Note: On session resumption, state is reset but outputFormat is preserved
-    // on the user message and will be retrieved from lastUser below
-    let structuredOutput: unknown | undefined
 
     let step = 0
     const session = await Session.get(sessionID)
@@ -447,19 +434,12 @@ export namespace SessionPrompt {
           log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
           return undefined
         })
-        const attachments = result?.attachments?.map((attachment) => ({
-          ...attachment,
-          id: Identifier.ascending("part"),
-          sessionID,
-          messageID: assistantMessage.id,
-        }))
         await Plugin.trigger(
           "tool.execute.after",
           {
             tool: "task",
             sessionID,
             callID: part.id,
-            args: taskArgs,
           },
           result,
         )
@@ -475,7 +455,7 @@ export namespace SessionPrompt {
               title: result.title,
               metadata: result.metadata,
               output: result.output,
-              attachments,
+              attachments: result.attachments,
               time: {
                 ...part.state.time,
                 end: Date.now(),
@@ -611,16 +591,6 @@ export namespace SessionPrompt {
         messages: msgs,
       })
 
-      // Inject StructuredOutput tool if JSON schema mode enabled
-      if (lastUser.format?.type === "json_schema") {
-        tools["StructuredOutput"] = createStructuredOutputTool({
-          schema: lastUser.format.schema,
-          onSuccess(output) {
-            structuredOutput = output
-          },
-        })
-      }
-
       if (step === 1) {
         SessionSummary.summarize({
           sessionID: sessionID,
@@ -628,9 +598,11 @@ export namespace SessionPrompt {
         })
       }
 
+      const sessionMessages = clone(msgs)
+
       // Ephemerally wrap queued user messages with a reminder to stay on track
       if (step > 1 && lastFinished) {
-        for (const msg of msgs) {
+        for (const msg of sessionMessages) {
           if (msg.info.role !== "user" || msg.info.id <= lastFinished.id) continue
           for (const part of msg.parts) {
             if (part.type !== "text" || part.ignored || part.synthetic) continue
@@ -647,23 +619,16 @@ export namespace SessionPrompt {
         }
       }
 
-      await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
-
-      // Build system prompt, adding structured output instruction if needed
-      const system = [...(await SystemPrompt.environment(model)), ...(await InstructionPrompt.system())]
-      const format = lastUser.format ?? { type: "text" }
-      if (format.type === "json_schema") {
-        system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
-      }
+      await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
       const result = await processor.process({
         user: lastUser,
         agent,
         abort,
         sessionID,
-        system,
+        system: [...(await SystemPrompt.environment(model)), ...(await InstructionPrompt.system())],
         messages: [
-          ...MessageV2.toModelMessages(msgs, model),
+          ...MessageV2.toModelMessages(sessionMessages, model),
           ...(isLastStep
             ? [
                 {
@@ -675,33 +640,7 @@ export namespace SessionPrompt {
         ],
         tools,
         model,
-        toolChoice: format.type === "json_schema" ? "required" : undefined,
       })
-
-      // If structured output was captured, save it and exit immediately
-      // This takes priority because the StructuredOutput tool was called successfully
-      if (structuredOutput !== undefined) {
-        processor.message.structured = structuredOutput
-        processor.message.finish = processor.message.finish ?? "stop"
-        await Session.updateMessage(processor.message)
-        break
-      }
-
-      // Check if model finished (finish reason is not "tool-calls" or "unknown")
-      const modelFinished = processor.message.finish && !["tool-calls", "unknown"].includes(processor.message.finish)
-
-      if (modelFinished && !processor.message.error) {
-        if (format.type === "json_schema") {
-          // Model stopped without calling StructuredOutput tool
-          processor.message.error = new MessageV2.StructuredOutputError({
-            message: "Model did not produce structured output",
-            retries: 0,
-          }).toObject()
-          await Session.updateMessage(processor.message)
-          break
-        }
-      }
-
       if (result === "stop") break
       if (result === "compact") {
         await SessionCompaction.create({
@@ -732,8 +671,7 @@ export namespace SessionPrompt {
     return Provider.defaultModel()
   }
 
-  /** @internal Exported for testing */
-  export async function resolveTools(input: {
+  async function resolveTools(input: {
     agent: Agent.Info
     model: Provider.Model
     session: Session.Info
@@ -804,26 +742,16 @@ export namespace SessionPrompt {
             },
           )
           const result = await item.execute(args, ctx)
-          const output = {
-            ...result,
-            attachments: result.attachments?.map((attachment) => ({
-              ...attachment,
-              id: Identifier.ascending("part"),
-              sessionID: ctx.sessionID,
-              messageID: input.processor.message.id,
-            })),
-          }
           await Plugin.trigger(
             "tool.execute.after",
             {
               tool: item.id,
               sessionID: ctx.sessionID,
               callID: ctx.callID,
-              args,
             },
-            output,
+            result,
           )
-          return output
+          return result
         },
       })
     }
@@ -865,19 +793,21 @@ export namespace SessionPrompt {
             tool: key,
             sessionID: ctx.sessionID,
             callID: opts.toolCallId,
-            args,
           },
           result,
         )
 
         const textParts: string[] = []
-        const attachments: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[] = []
+        const attachments: MessageV2.FilePart[] = []
 
         for (const contentItem of result.content) {
           if (contentItem.type === "text") {
             textParts.push(contentItem.text)
           } else if (contentItem.type === "image") {
             attachments.push({
+              id: Identifier.ascending("part"),
+              sessionID: input.session.id,
+              messageID: input.processor.message.id,
               type: "file",
               mime: contentItem.mimeType,
               url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
@@ -889,6 +819,9 @@ export namespace SessionPrompt {
             }
             if (resource.blob) {
               attachments.push({
+                id: Identifier.ascending("part"),
+                sessionID: input.session.id,
+                messageID: input.processor.message.id,
                 type: "file",
                 mime: resource.mimeType ?? "application/octet-stream",
                 url: `data:${resource.mimeType ?? "application/octet-stream"};base64,${resource.blob}`,
@@ -909,12 +842,7 @@ export namespace SessionPrompt {
           title: "",
           metadata,
           output: truncated.content,
-          attachments: attachments.map((attachment) => ({
-            ...attachment,
-            id: Identifier.ascending("part"),
-            sessionID: ctx.sessionID,
-            messageID: input.processor.message.id,
-          })),
+          attachments,
           content: result.content, // directly return content to preserve ordering when outputting to model
         }
       }
@@ -922,36 +850,6 @@ export namespace SessionPrompt {
     }
 
     return tools
-  }
-
-  /** @internal Exported for testing */
-  export function createStructuredOutputTool(input: {
-    schema: Record<string, any>
-    onSuccess: (output: unknown) => void
-  }): AITool {
-    // Remove $schema property if present (not needed for tool input)
-    const { $schema, ...toolSchema } = input.schema
-
-    return tool({
-      id: "StructuredOutput" as any,
-      description: STRUCTURED_OUTPUT_DESCRIPTION,
-      inputSchema: jsonSchema(toolSchema as any),
-      async execute(args) {
-        // AI SDK validates args against inputSchema before calling execute()
-        input.onSuccess(args)
-        return {
-          output: "Structured output captured successfully.",
-          title: "Structured Output",
-          metadata: { valid: true },
-        }
-      },
-      toModelOutput(result) {
-        return {
-          type: "text",
-          value: result.output,
-        }
-      },
-    })
   }
 
   async function createUserMessage(input: PromptInput) {
@@ -975,27 +873,21 @@ export namespace SessionPrompt {
       agent: agent.name,
       model,
       system: input.system,
-      format: input.format,
       variant,
     }
     using _ = defer(() => InstructionPrompt.clear(info.id))
 
-    type Draft<T> = T extends MessageV2.Part ? Omit<T, "id"> & { id?: string } : never
-    const assign = (part: Draft<MessageV2.Part>): MessageV2.Part => ({
-      ...part,
-      id: part.id ?? Identifier.ascending("part"),
-    })
-
     const parts = await Promise.all(
-      input.parts.map(async (part): Promise<Draft<MessageV2.Part>[]> => {
+      input.parts.map(async (part): Promise<MessageV2.Part[]> => {
         if (part.type === "file") {
           // before checking the protocol we check if this is an mcp resource because it needs special handling
           if (part.source?.type === "resource") {
             const { clientName, uri } = part.source
             log.info("mcp resource", { clientName, uri, mime: part.mime })
 
-            const pieces: Draft<MessageV2.Part>[] = [
+            const pieces: MessageV2.Part[] = [
               {
+                id: Identifier.ascending("part"),
                 messageID: info.id,
                 sessionID: input.sessionID,
                 type: "text",
@@ -1018,6 +910,7 @@ export namespace SessionPrompt {
               for (const content of contents) {
                 if ("text" in content && content.text) {
                   pieces.push({
+                    id: Identifier.ascending("part"),
                     messageID: info.id,
                     sessionID: input.sessionID,
                     type: "text",
@@ -1028,6 +921,7 @@ export namespace SessionPrompt {
                   // Handle binary content if needed
                   const mimeType = "mimeType" in content ? content.mimeType : part.mime
                   pieces.push({
+                    id: Identifier.ascending("part"),
                     messageID: info.id,
                     sessionID: input.sessionID,
                     type: "text",
@@ -1039,6 +933,7 @@ export namespace SessionPrompt {
 
               pieces.push({
                 ...part,
+                id: part.id ?? Identifier.ascending("part"),
                 messageID: info.id,
                 sessionID: input.sessionID,
               })
@@ -1046,6 +941,7 @@ export namespace SessionPrompt {
               log.error("failed to read MCP resource", { error, clientName, uri })
               const message = error instanceof Error ? error.message : String(error)
               pieces.push({
+                id: Identifier.ascending("part"),
                 messageID: info.id,
                 sessionID: input.sessionID,
                 type: "text",
@@ -1062,6 +958,7 @@ export namespace SessionPrompt {
               if (part.mime === "text/plain") {
                 return [
                   {
+                    id: Identifier.ascending("part"),
                     messageID: info.id,
                     sessionID: input.sessionID,
                     type: "text",
@@ -1069,6 +966,7 @@ export namespace SessionPrompt {
                     text: `Called the Read tool with the following input: ${JSON.stringify({ filePath: part.filename })}`,
                   },
                   {
+                    id: Identifier.ascending("part"),
                     messageID: info.id,
                     sessionID: input.sessionID,
                     type: "text",
@@ -1077,6 +975,7 @@ export namespace SessionPrompt {
                   },
                   {
                     ...part,
+                    id: part.id ?? Identifier.ascending("part"),
                     messageID: info.id,
                     sessionID: input.sessionID,
                   },
@@ -1088,9 +987,11 @@ export namespace SessionPrompt {
               // have to normalize, symbol search returns absolute paths
               // Decode the pathname since URL constructor doesn't automatically decode it
               const filepath = fileURLToPath(part.url)
-              const s = Filesystem.stat(filepath)
+              const stat = await Bun.file(filepath)
+                .stat()
+                .catch(() => undefined)
 
-              if (s?.isDirectory()) {
+              if (stat?.isDirectory()) {
                 part.mime = "application/x-directory"
               }
 
@@ -1124,15 +1025,16 @@ export namespace SessionPrompt {
                       }
                     }
                   }
-                  offset = Math.max(start, 1)
+                  offset = Math.max(start - 1, 0)
                   if (end) {
-                    limit = end - (offset - 1)
+                    limit = end - offset
                   }
                 }
                 const args = { filePath: filepath, offset, limit }
 
-                const pieces: Draft<MessageV2.Part>[] = [
+                const pieces: MessageV2.Part[] = [
                   {
+                    id: Identifier.ascending("part"),
                     messageID: info.id,
                     sessionID: input.sessionID,
                     type: "text",
@@ -1156,6 +1058,7 @@ export namespace SessionPrompt {
                     }
                     const result = await t.execute(args, readCtx)
                     pieces.push({
+                      id: Identifier.ascending("part"),
                       messageID: info.id,
                       sessionID: input.sessionID,
                       type: "text",
@@ -1175,6 +1078,7 @@ export namespace SessionPrompt {
                     } else {
                       pieces.push({
                         ...part,
+                        id: part.id ?? Identifier.ascending("part"),
                         messageID: info.id,
                         sessionID: input.sessionID,
                       })
@@ -1190,6 +1094,7 @@ export namespace SessionPrompt {
                       }).toObject(),
                     })
                     pieces.push({
+                      id: Identifier.ascending("part"),
                       messageID: info.id,
                       sessionID: input.sessionID,
                       type: "text",
@@ -1202,7 +1107,7 @@ export namespace SessionPrompt {
               }
 
               if (part.mime === "application/x-directory") {
-                const args = { filePath: filepath }
+                const args = { path: filepath }
                 const listCtx: Tool.Context = {
                   sessionID: input.sessionID,
                   abort: new AbortController().signal,
@@ -1213,16 +1118,18 @@ export namespace SessionPrompt {
                   metadata: async () => {},
                   ask: async () => {},
                 }
-                const result = await ReadTool.init().then((t) => t.execute(args, listCtx))
+                const result = await ListTool.init().then((t) => t.execute(args, listCtx))
                 return [
                   {
+                    id: Identifier.ascending("part"),
                     messageID: info.id,
                     sessionID: input.sessionID,
                     type: "text",
                     synthetic: true,
-                    text: `Called the Read tool with the following input: ${JSON.stringify(args)}`,
+                    text: `Called the list tool with the following input: ${JSON.stringify(args)}`,
                   },
                   {
+                    id: Identifier.ascending("part"),
                     messageID: info.id,
                     sessionID: input.sessionID,
                     type: "text",
@@ -1231,27 +1138,30 @@ export namespace SessionPrompt {
                   },
                   {
                     ...part,
+                    id: part.id ?? Identifier.ascending("part"),
                     messageID: info.id,
                     sessionID: input.sessionID,
                   },
                 ]
               }
 
+              const file = Bun.file(filepath)
               FileTime.read(input.sessionID, filepath)
               return [
                 {
+                  id: Identifier.ascending("part"),
                   messageID: info.id,
                   sessionID: input.sessionID,
                   type: "text",
-                  text: `Called the Read tool with the following input: {"filePath":"${filepath}"}`,
+                  text: `Called the Read tool with the following input: {\"filePath\":\"${filepath}\"}`,
                   synthetic: true,
                 },
                 {
-                  id: part.id,
+                  id: part.id ?? Identifier.ascending("part"),
                   messageID: info.id,
                   sessionID: input.sessionID,
                   type: "file",
-                  url: `data:${part.mime};base64,` + (await Filesystem.readBytes(filepath)).toString("base64"),
+                  url: `data:${part.mime};base64,` + Buffer.from(await file.bytes()).toString("base64"),
                   mime: part.mime,
                   filename: part.filename!,
                   source: part.source,
@@ -1266,11 +1176,13 @@ export namespace SessionPrompt {
           const hint = perm.action === "deny" ? " . Invoked by user; guaranteed to exist." : ""
           return [
             {
+              id: Identifier.ascending("part"),
               ...part,
               messageID: info.id,
               sessionID: input.sessionID,
             },
             {
+              id: Identifier.ascending("part"),
               messageID: info.id,
               sessionID: input.sessionID,
               type: "text",
@@ -1287,13 +1199,14 @@ export namespace SessionPrompt {
 
         return [
           {
+            id: Identifier.ascending("part"),
             ...part,
             messageID: info.id,
             sessionID: input.sessionID,
           },
         ]
       }),
-    ).then((x) => x.flat().map(assign))
+    ).then((x) => x.flat())
 
     await Plugin.trigger(
       "chat.message",
@@ -1357,7 +1270,7 @@ export namespace SessionPrompt {
     // Switching from plan mode to build mode
     if (input.agent.name !== "plan" && assistantMessage?.info.agent === "plan") {
       const plan = Session.plan(input.session)
-      const exists = await Filesystem.exists(plan)
+      const exists = await Bun.file(plan).exists()
       if (exists) {
         const part = await Session.updatePart({
           id: Identifier.ascending("part"),
@@ -1376,7 +1289,7 @@ export namespace SessionPrompt {
     // Entering plan mode
     if (input.agent.name === "plan" && assistantMessage?.info.agent !== "plan") {
       const plan = Session.plan(input.session)
-      const exists = await Filesystem.exists(plan)
+      const exists = await Bun.file(plan).exists()
       if (!exists) await fs.mkdir(path.dirname(plan), { recursive: true })
       const part = await Session.updatePart({
         id: Identifier.ascending("part"),
@@ -1634,11 +1547,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const args = [...matchingInvocation.args, wrappedCommand]
 
     const cwd = Instance.directory
-    const shellEnv = await Plugin.trigger(
-      "shell.env",
-      { cwd, sessionID: input.sessionID, callID: part.callID },
-      { env: {} },
-    )
+    const shellEnv = await Plugin.trigger("shell.env", { cwd }, { env: {} })
     const proc = spawn(shell, args, {
       cwd: getCwd(),
       detached: process.platform !== "win32",
@@ -2042,16 +1951,21 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       ],
     })
     const text = await result.text.catch((err) => log.error("failed to generate title", { error: err }))
-    if (text) {
-      const cleaned = text
-        .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
-        .split("\n")
-        .map((line) => line.trim())
-        .find((line) => line.length > 0)
-      if (!cleaned) return
+    if (text)
+      return Session.update(
+        input.session.id,
+        (draft) => {
+          const cleaned = text
+            .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+            .split("\n")
+            .map((line) => line.trim())
+            .find((line) => line.length > 0)
+          if (!cleaned) return
 
-      const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
-      return Session.setTitle({ sessionID: input.session.id, title })
-    }
+          const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
+          draft.title = title
+        },
+        { touch: false },
+      )
   }
 }

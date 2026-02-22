@@ -18,7 +18,7 @@ export const ExportCommand = cmd({
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
       let sessionID = args.sessionID
-      process.stderr.write(`Exporting session: ${sessionID ?? "latest"}\n`)
+      process.stderr.write(`Exporting session: ${sessionID ?? "latest"}`)
 
       if (!sessionID) {
         UI.empty()

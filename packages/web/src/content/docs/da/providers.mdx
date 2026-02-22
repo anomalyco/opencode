@@ -1,35 +1,37 @@
 ---
-title: Udbydere
-description: Brug en hvilken som helst LLM-udbyder i OpenCode.
+title: Leverandører
+description: Bruge en hvilken som helst LLM-leverandør i OpenCode.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 
-OpenCode bruger [AI SDK](https://ai-sdk.dev/) og [Models.dev](https://models.dev) til at understøtte **75+ LLM-udbydere** og understøtter kørsel af lokale modeller.
+OpenCode bruger [AI SDK](https://ai-sdk.dev/) og [Models.dev](https://models.dev) for at støtte **75+ LLM leverandører** og den støtter kjøring av lokale modeller.
 
-For at tilføje en udbyder skal du:
+For at tilføje til en leverandør må du:
 
-1. Tilføje API-nøglerne for udbyderen ved at bruge kommandoen `/connect`.
-2. Konfigurere udbyderen i OpenCode-konfigurationen.
-
----
-
-### Legitimationsoplysninger
-
-Når du tilføjer en udbyders API-nøgler med `/connect`-kommandoen, gemmes de i `~/.local/share/opencode/auth.json`.
+1. Legg til API-nøklene for leverandøren ved at bruge kommandoen `/connect`.
+2. Konfigurer leverandøren i OpenCode-konfigurasjonen.
 
 ---
 
-### Konfiguration
+### Legitimasjon
 
-Du kan tilpasse udbyderne gennem `provider`-delen i OpenCode-konfigurationen.
+Når du tilføjer til en leverandørs API-nøkler med `/connect`-kommandoen, lagres de
+i `~/.local/share/opencode/auth.json`.
+
+---
+
+### Konfig
+
+Du kan tilpasse leverandørene gjennom `provider`-delen i OpenCode
+konfig.
 
 ---
 
 #### Base URL
 
-Du kan tilpasse base URL for enhver udbyder ved at angive muligheden `baseURL`. Dette er nyttigt, når du bruger proxy-tjenester eller tilpassede endpoints.
+Du kan tilpasse basen URL for enhver leverandør ved at angi alternativet `baseURL`. Dette er nyttig når du bruger proxy-tjenester eller tilpassede endepunkter.
 
 ```json title="opencode.json" {6}
 {
@@ -48,21 +50,22 @@ Du kan tilpasse base URL for enhver udbyder ved at angive muligheden `baseURL`. 
 
 ## OpenCode Zen
 
-OpenCode Zen er en liste over modeller leveret af OpenCode-teamet, som er blevet testet og verificeret til at fungere godt med OpenCode. [Læs mere](/docs/zen).
+OpenCode Zen er en liste over modeller levert av OpenCode-teamet som har vært
+testet og verifisert for at fungere godt med OpenCode. [Finn ut mer](/docs/zen).
 
 :::tip
 Hvis du er ny, anbefaler vi at starte med OpenCode Zen.
 :::
 
-1. Kør kommandoen `/connect` i TUI, vælg opencode og gå til [opencode.ai/auth](https://opencode.ai/auth).
+1. Kjør kommandoen `/connect` i TUI, velg opencode og gå til [opencode.ai/auth](https://opencode.ai/auth).
 
    ```txt
    /connect
    ```
 
-2. Log ind, tilføj dine faktureringsoplysninger og kopier API-nøglen.
+2. Logg på, tilføj til faktureringsdetaljene dine og kopier API-nøgleen.
 
-3. Indsæt API-nøglen.
+3. Lim inn API-nøgleen.
 
    ```txt
    ┌ API key
@@ -71,37 +74,38 @@ Hvis du er ny, anbefaler vi at starte med OpenCode Zen.
    └ enter
    ```
 
-4. Kør `/models` i TUI for at se listen over modeller, vi anbefaler.
+4. Kjør `/models` i TUI for at se listen over modeller vi anbefaler.
 
    ```txt
    /models
    ```
 
-Det fungerer som alle andre udbydere i OpenCode og er helt valgfrit at bruge.
+Det fungerer som alle andre leverandører i OpenCode og er helt valgfritt at bruge.
 
 ---
 
 ## Katalog
 
-Lad os se på nogle af udbyderne i detaljer. Hvis du vil tilføje en udbyder til listen, er du velkommen til at åbne en PR.
+La oss se på nogle av leverandørene i detalj. Hvis du vil tilføje til en leverandør til
+liste, åpne gjerne en PR.
 
 :::note
-Ser du ikke en udbyder her? Indsend en PR.
+Ser du ikke en leverandør her? Send inn en PR.
 :::
 
 ---
 
 ### 302.AI
 
-1. Gå til [302.AI-konsollen](https://302.ai/), opret en konto og generer en API-nøgle.
+1. Gå over til [302.AI-konsollen](https://302.ai/), opret en konto og generer en API-nøgle.
 
-2. Kør kommandoen `/connect` og søg efter **302.AI**.
+2. Kjør kommandoen `/connect` og søk etter **302.AI**.
 
    ```txt
    /connect
    ```
 
-3. Indtast 302.AI API-nøglen.
+3. Skriv inn 302.AI API-nøgleen.
 
    ```txt
    ┌ API key
@@ -110,7 +114,7 @@ Ser du ikke en udbyder her? Indsend en PR.
    └ enter
    ```
 
-4. Kør kommandoen `/models` for at vælge en model.
+4. Kjør kommandoen `/models` for at velge en modell.
 
    ```txt
    /models
@@ -118,21 +122,22 @@ Ser du ikke en udbyder her? Indsend en PR.
 
 ---
 
-### Amazon Bedrock
+### Amazonas grunnfjell
 
-Sådan bruger du Amazon Bedrock med OpenCode:
+Slik bruger du Amazon Bedrock med OpenCode:
 
-1. Gå til **modelkataloget** i Amazon Bedrock-konsollen og anmod om adgang til de modeller, du ønsker.
+1. Gå over til **modellkatalogen** i Amazon Bedrock-konsollen og be om
+   tilgang til modellene du ønsker.
 
    :::tip
-   Du skal have adgang til modellen du ønsker i Amazon Bedrock.
+   Du må ha tilgang til modellen du ønsker i Amazon Bedrock.
    :::
 
-2. **Konfigurer godkendelse** ved at bruge en af følgende metoder:
+2. **Konfigurer autentisering** ved at bruge en av følgende metoder:
 
    #### Miljøvariabler (hurtigstart)
 
-   Angiv en af disse miljøvariabler, mens du kører opencode:
+   Angi en av disse miljøvariablene mens du kjører opencode:
 
    ```bash
    # Option 1: Using AWS access keys
@@ -145,16 +150,16 @@ Sådan bruger du Amazon Bedrock med OpenCode:
    AWS_BEARER_TOKEN_BEDROCK=XXX opencode
    ```
 
-   Eller tilføj dem til din bash-profil:
+   Eller tilføj dem til bash-profilen din:
 
    ```bash title="~/.bash_profile"
    export AWS_PROFILE=my-dev-profile
    export AWS_REGION=us-east-1
    ```
 
-   #### Konfigurationsfil (anbefalet)
+   #### Konfigurasjonsfil (anbefalt)
 
-   For projektspecifik eller vedvarende konfiguration, brug `opencode.json`:
+   For prosjektspesifikk eller vedvarende konfigurasjon, brug `opencode.json`:
 
    ```json title="opencode.json"
    {
@@ -170,18 +175,18 @@ Sådan bruger du Amazon Bedrock med OpenCode:
    }
    ```
 
-   **Tilgængelige muligheder:**
+   **Tilgjengelige alternativer:**
    - `region` - AWS region (f.eks. `us-east-1`, `eu-west-1`)
-   - `profile` - AWS navngivet profil fra `~/.aws/credentials`
-   - `endpoint` - Brugerdefineret endpoint URL for VPC endpoints (alias for generisk `baseURL`-mulighed)
+   - `profile` - AWS navngitt profil fra `~/.aws/credentials`
+   - `endpoint` - Egendefinert endepunkt URL for VPC endepunkter (alias for generisk `baseURL`-alternativ)
 
    :::tip
-   Konfigurationsfil-muligheder har forrang over miljøvariabler.
+   Alternativer for konfigurasjonsfil har forrang over miljøvariabler.
    :::
 
-   #### Avanceret: VPC Endpoints
+   #### Avansert: VPC Sluttpunkter
 
-   Hvis du bruger VPC endpoints for Bedrock:
+   Hvis du bruger VPC endepunkter for Berggrunn:
 
    ```json title="opencode.json"
    {
@@ -199,33 +204,33 @@ Sådan bruger du Amazon Bedrock med OpenCode:
    ```
 
    :::note
-   Muligheden `endpoint` er et alias for den generiske mulighed `baseURL`, der bruger AWS-specifik terminologi. Hvis både `endpoint` og `baseURL` er specificeret, har `endpoint` forrang.
+   Alternativet `endpoint` er et alias for det generiske alternativet `baseURL`, ved at bruge AWS-spesifikk terminologi. Hvis både `endpoint` og `baseURL` er spesifisert, har `endpoint` forrang.
    :::
 
-   #### Godkendelsesmetoder
-   - **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**: Opret en IAM-bruger og generer adgangsnøgler i AWS-konsollen
-   - **`AWS_PROFILE`**: Brug navngivne profiler fra `~/.aws/credentials`. Konfigurer først med `aws configure --profile my-profile` eller `aws sso login`
-   - **`AWS_BEARER_TOKEN_BEDROCK`**: Generer langsigtede API-nøgler fra Amazon Bedrock-konsollen
-   - **`AWS_WEB_IDENTITY_TOKEN_FILE` / `AWS_ROLE_ARN`**: For EKS IRSA (IAM roller for tjenestekonti) eller andre Kubernetes-miljøer med OIDC føderation. Disse miljøvariabler injiceres automatisk af Kubernetes, når du bruger tjenestekontokommentarer.
+   #### Autentiseringsmetoder
+   - **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**: Opret en IAM-bruger og generer tilgangsnøkler i AWS-konsollen
+   - **`AWS_PROFILE`**: Brug navngitte profiler fra `~/.aws/credentials`. Konfigurer først med `aws configure --profile my-profile` eller `aws sso login`
+   - **`AWS_BEARER_TOKEN_BEDROCK`**: Generer langsiktige API-nøkler fra Amazon Bedrock-konsollen
+   - **`AWS_WEB_IDENTITY_TOKEN_FILE` / `AWS_ROLE_ARN`**: For EKS IRSA (IAM roller for tjenestekontoer) eller andre Kubernetes-miljøer med OIDC føderasjon. Disse miljøvariablene injiseres automatisk av Kubernetes når du bruger tjenestekontokommentarer.
 
-   #### Godkendelsesprioritet
+   #### Autentiseringsprioritet
 
-   Amazon Bedrock bruger følgende godkendelsesprioritet:
+   Amazon Bedrock bruger følgende autentiseringsprioritet:
    1. **Bearer Token** - `AWS_BEARER_TOKEN_BEDROCK` miljøvariabel eller token fra kommandoen `/connect`
-   2. **AWS legitimationskæde** - profil, adgangsnøgler, delte legitimationsoplysninger, IAM roller, webidentitetstokens (EKS IRSA), instansmetadata
+   2. **AWS legitimasjonskjede** - profil, tilgangsnøkler, delt legitimasjon, IAM roller, nettidentitetstokener (EKS IRSA), forekomstmetadata
 
    :::note
-   Når et bearer token er angivet (via `/connect` eller `AWS_BEARER_TOKEN_BEDROCK`), har det forrang over alle AWS godkendelsesmetoder inklusiv konfigurerede profiler.
+   Når et bærertoken er angitt (via `/connect` eller `AWS_BEARER_TOKEN_BEDROCK`), har det forrang over alle AWS legitimasjonsmetoder inkludert konfigurerte profiler.
    :::
 
-3. Kør kommandoen `/models` for at vælge den model, du ønsker.
+3. Kjør kommandoen `/models` for at velge modellen du ønsker.
 
    ```txt
    /models
    ```
 
 :::note
-For brugerdefinerede inferensprofiler, brug modellen og udbydernavnet i nøglen og sæt egenskaben `id` til arn. Dette sikrer korrekt caching:
+For egendefinerte slutningsprofiler, brug modellen og leverandørnavnet i nøkkelen og sett egenskapen `id` til arn. Dette sikrer korrekt caching:
 
 ```json title="opencode.json"
 {
@@ -247,15 +252,16 @@ For brugerdefinerede inferensprofiler, brug modellen og udbydernavnet i nøglen 
 
 ---
 
-### Anthropic
+### Antropisk
 
-1. Når du har registreret dig, kør kommandoen `/connect` og vælg Anthropic.
+1. Når du har registrert deg, kjør kommandoen `/connect` og velg Antropisk.
 
    ```txt
    /connect
    ```
 
-2. Her kan du vælge muligheden **Claude Pro/Max**, og det vil åbne din browser og bede dig om at godkende.
+2. Her kan du velge alternativet **Claude Pro/Max** og det vil åpne nettleseren din
+   og ber deg om at autentisere.
 
    ```txt
    ┌ Select auth method
@@ -266,47 +272,47 @@ For brugerdefinerede inferensprofiler, brug modellen og udbydernavnet i nøglen 
    └
    ```
 
-3. Nu skal alle de Anthropiske modeller være tilgængelige, når du bruger kommandoen `/models`.
+3. Nå skal alle de antropiske modellene være tilgængelige når du bruger kommandoen `/models`.
 
    ```txt
    /models
    ```
 
 :::info
-At bruge dit Claude Pro/Max-abonnement i OpenCode understøttes ikke officielt af [Anthropic](https://anthropic.com).
+Å bruge Claude Pro/Max-abonnementet ditt i OpenCode støttes ikke offisielt av [Anthropic](https://anthropic.com).
 :::
 
-##### Brug API-nøgler
+##### Bruge API-tastene
 
-Du kan også vælge **Create an API Key**, hvis du ikke har et Pro/Max-abonnement. Det åbner også din browser og beder dig logge på Anthropic og giver dig en kode, du kan indsætte i din terminal.
+Du kan også velge **Opret en API-nøgle** hvis du ikke har et Pro/Max-abonnement. Den åpner også nettleseren din og ber deg logge på Anthropic og gi deg en kode du kan lime inn i terminalen din.
 
-Eller hvis du allerede har en API-nøgle, kan du vælge **Manually enter API Key** og indsætte den i terminalen.
+Eller hvis du allerede har en API-nøgle, kan du velge **Angi API-nøgle manuelt** og lime den inn i terminalen.
 
 ---
 
 ### Azure OpenAI
 
 :::note
-Hvis du støder på "Beklager, men jeg kan ikke hjælpe med den anmodning"-fejl, kan du prøve at ændre indholdsfilteret fra **DefaultV2** til **Default** i Azure-ressourcen.
+Hvis du støter på «Beklager, men jeg kan ikke hjelpe med den forespørselen»-feil, kan du prøve at endre innholdsfilteret fra **DefaultV2** til **Default** i Azure-ressursen.
 :::
 
-1. Gå til [Azure-portalen](https://portal.azure.com/) og opret en **Azure OpenAI**-ressource. Du skal bruge:
-   - **Ressourcenavn**: Dette bliver en del af API-endpointet (`https://RESOURCE_NAME.openai.azure.com/`)
-   - **API-nøgle**: Enten `KEY 1` eller `KEY 2` fra din ressource
+1. Gå over til [Azure-portalen](https://portal.azure.com/) og lag en **Azure OpenAI**-ressurs. Du trenger:
+   - **Ressursnavn**: Dette blir en del av API-endepunktet (`https://RESOURCE_NAME.openai.azure.com/`)
+   - **API-nøgle**: Enten `KEY 1` eller `KEY 2` fra ressursen din
 
-2. Gå til [Azure AI Foundry](https://ai.azure.com/) og distribuer en model.
+2. Gå til [Azure AI Foundry](https://ai.azure.com/) og distribuer en modell.
 
    :::note
-   Distributionsnavnet skal matche modelnavnet for at opencode skal fungere korrekt.
+   Distribusjonsnavnet må samsvare med modellnavnet for at opencode skal fungere skikkelig.
    :::
 
-3. Kør kommandoen `/connect` og søg efter **Azure**.
+3. Kjør kommandoen `/connect` og søk etter **Azure**.
 
    ```txt
    /connect
    ```
 
-4. Indtast API-nøglen.
+4. Skriv inn API-nøgleen.
 
    ```txt
    ┌ API key
@@ -315,19 +321,19 @@ Hvis du støder på "Beklager, men jeg kan ikke hjælpe med den anmodning"-fejl,
    └ enter
    ```
 
-5. Angiv dit ressourcenavn som en miljøvariabel:
+5. Angi ressursnavnet ditt som en miljøvariabel:
 
    ```bash
    AZURE_RESOURCE_NAME=XXX opencode
    ```
 
-   Eller tilføj den til din bash-profil:
+   Eller tilføj den til bash-profilen din:
 
    ```bash title="~/.bash_profile"
    export AZURE_RESOURCE_NAME=XXX
    ```
 
-6. Kør kommandoen `/models` for at vælge den distribuerede model.
+6. Kjør kommandoen `/models` for at velge den distribuerte modellen.
 
    ```txt
    /models
@@ -337,23 +343,23 @@ Hvis du støder på "Beklager, men jeg kan ikke hjælpe med den anmodning"-fejl,
 
 ### Azure Cognitive Services
 
-1. Gå til [Azure-portalen](https://portal.azure.com/) og opret en **Azure OpenAI**-ressource. Du skal bruge:
-   - **Ressourcenavn**: Dette bliver en del af API-endpointet (`https://AZURE_COGNITIVE_SERVICES_RESOURCE_NAME.cognitiveservices.azure.com/`)
-   - **API-nøgle**: Enten `KEY 1` eller `KEY 2` fra din ressource
+1. Gå over til [Azure-portalen](https://portal.azure.com/) og lag en **Azure OpenAI**-ressurs. Du trenger:
+   - **Ressursnavn**: Dette blir en del av API-endepunktet (`https://AZURE_COGNITIVE_SERVICES_RESOURCE_NAME.cognitiveservices.azure.com/`)
+   - **API-nøgle**: Enten `KEY 1` eller `KEY 2` fra ressursen din
 
-2. Gå til [Azure AI Foundry](https://ai.azure.com/) og distribuer en model.
+2. Gå til [Azure AI Foundry](https://ai.azure.com/) og distribuer en modell.
 
    :::note
-   Distributionsnavnet skal matche modelnavnet for at opencode skal fungere korrekt.
+   Distribusjonsnavnet må samsvare med modellnavnet for at opencode skal fungere skikkelig.
    :::
 
-3. Kør kommandoen `/connect` og søg efter **Azure Cognitive Services**.
+3. Kjør kommandoen `/connect` og søk etter **Azure Cognitive Services**.
 
    ```txt
    /connect
    ```
 
-4. Indtast API-nøglen.
+4. Skriv inn API-nøgleen.
 
    ```txt
    ┌ API key
@@ -362,19 +368,19 @@ Hvis du støder på "Beklager, men jeg kan ikke hjælpe med den anmodning"-fejl,
    └ enter
    ```
 
-5. Angiv dit ressourcenavn som en miljøvariabel:
+5. Angi ressursnavnet ditt som en miljøvariabel:
 
    ```bash
    AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX opencode
    ```
 
-   Eller tilføj den til din bash-profil:
+   Eller tilføj den til bash-profilen din:
 
    ```bash title="~/.bash_profile"
    export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
    ```
 
-6. Kør kommandoen `/models` for at vælge den distribuerede model.
+6. Kjør kommandoen `/models` for at velge den distribuerte modellen.
 
    ```txt
    /models
@@ -384,15 +390,15 @@ Hvis du støder på "Beklager, men jeg kan ikke hjælpe med den anmodning"-fejl,
 
 ### Baseten
 
-1. Gå til [Baseten](https://app.baseten.co/), opret en konto og generer en API-nøgle.
+1. Gå over til [Baseten](https://app.baseten.co/), opret en konto og generer en API-nøgle.
 
-2. Kør kommandoen `/connect` og søg efter **Baseten**.
+2. Kjør kommandoen `/connect` og søk etter **Baseten**.
 
    ```txt
    /connect
    ```
 
-3. Indtast din Baseten API-nøgle.
+3. Skriv inn din Baseten API-nøgle.
 
    ```txt
    ┌ API key
@@ -401,7 +407,7 @@ Hvis du støder på "Beklager, men jeg kan ikke hjælpe med den anmodning"-fejl,
    └ enter
    ```
 
-4. Kør kommandoen `/models` for at vælge en model.
+4. Kjør kommandoen `/models` for at velge en modell.
 
    ```txt
    /models
@@ -411,15 +417,15 @@ Hvis du støder på "Beklager, men jeg kan ikke hjælpe med den anmodning"-fejl,
 
 ### Cerebras
 
-1. Gå til [Cerebras-konsollen](https://inference.cerebras.ai/), opret en konto og generer en API-nøgle.
+1. Gå over til [Cerebras-konsollen](https://inference.cerebras.ai/), opret en konto og generer en API-nøgle.
 
-2. Kør kommandoen `/connect` og søg efter **Cerebras**.
+2. Kjør kommandoen `/connect` og søk etter **Cerebras**.
 
    ```txt
    /connect
    ```
 
-3. Indtast Cerebras API-nøglen.
+3. Skriv inn Cerebras API-nøgleen.
 
    ```txt
    ┌ API key
@@ -428,7 +434,7 @@ Hvis du støder på "Beklager, men jeg kan ikke hjælpe med den anmodning"-fejl,
    └ enter
    ```
 
-4. Kør kommandoen `/models` for at vælge en model som _Qwen 3 Coder 480B_.
+4. Kjør kommandoen `/models` for at velge en modell som _Qwen 3 Coder 480B_.
 
    ```txt
    /models
@@ -438,24 +444,24 @@ Hvis du støder på "Beklager, men jeg kan ikke hjælpe med den anmodning"-fejl,
 
 ### Cloudflare AI Gateway
 
-Cloudflare AI Gateway lader dig få adgang til modeller fra OpenAI, Anthropic, Workers AI og flere gennem et samlet endpoint. Med [Unified Billing](https://developers.cloudflare.com/ai-gateway/features/unified-billing/) behøver du ikke separate API-nøgler for hver udbyder.
+Cloudflare AI Gateway lar deg få tilgang til modeller fra OpenAI, Anthropic, Workers AI og mer gjennom et enhetlig endepunkt. Med [Unified Billing](https://developers.cloudflare.com/ai-gateway/features/unified-billing/) trenger du ikke separate API-nøkler for hver leverandør.
 
-1. Gå til [Cloudflare-dashboardet](https://dash.cloudflare.com/), naviger til **AI** > **AI Gateway**, og opret en ny gateway.
+1. Gå over til [Cloudflare-dashbordet](https://dash.cloudflare.com/), naviger til **AI** > **AI Gateway**, og lag en ny gateway.
 
-2. Angiv konto-ID og gateway-ID som miljøvariabler.
+2. Angi konto ID og gateway ID som miljøvariabler.
 
    ```bash title="~/.bash_profile"
    export CLOUDFLARE_ACCOUNT_ID=your-32-character-account-id
    export CLOUDFLARE_GATEWAY_ID=your-gateway-id
    ```
 
-3. Kør kommandoen `/connect` og søg efter **Cloudflare AI Gateway**.
+3. Kjør kommandoen `/connect` og søk etter **Cloudflare AI Gateway**.
 
    ```txt
    /connect
    ```
 
-4. Indtast din Cloudflare API-token.
+4. Skriv inn Cloudflare API-tokenet ditt.
 
    ```txt
    ┌ API key
@@ -464,19 +470,19 @@ Cloudflare AI Gateway lader dig få adgang til modeller fra OpenAI, Anthropic, W
    └ enter
    ```
 
-   Eller angiv den som en miljøvariabel.
+   Eller angi den som en miljøvariabel.
 
    ```bash title="~/.bash_profile"
    export CLOUDFLARE_API_TOKEN=your-api-token
    ```
 
-5. Kør kommandoen `/models` for at vælge en model.
+5. Kjør kommandoen `/models` for at velge en modell.
 
    ```txt
    /models
    ```
 
-   Du kan også tilføje modeller gennem opencode-konfigurationen.
+   Du kan også tilføje til modeller gjennom opencode-konfigurasjonen.
 
    ```json title="opencode.json"
    {
@@ -496,15 +502,15 @@ Cloudflare AI Gateway lader dig få adgang til modeller fra OpenAI, Anthropic, W
 
 ### Cortecs
 
-1. Gå til [Cortecs-konsollen](https://cortecs.ai/), opret en konto og generer en API-nøgle.
+1. Gå over til [Cortecs-konsollen](https://cortecs.ai/), opret en konto og generer en API-nøgle.
 
-2. Kør kommandoen `/connect` og søg efter **Cortecs**.
+2. Kjør kommandoen `/connect` og søk etter **Cortecs**.
 
    ```txt
    /connect
    ```
 
-3. Indtast Cortecs API-nøglen.
+3. Skriv inn Cortecs API-nøgleen.
 
    ```txt
    ┌ API key
@@ -513,7 +519,7 @@ Cloudflare AI Gateway lader dig få adgang til modeller fra OpenAI, Anthropic, W
    └ enter
    ```
 
-4. Kør kommandoen `/models` for at vælge en model som _Kimi K2 Instruct_.
+4. Kjør kommandoen `/models` for at velge en modell som _Kimi K2 Instruct_.
 
    ```txt
    /models
@@ -523,15 +529,15 @@ Cloudflare AI Gateway lader dig få adgang til modeller fra OpenAI, Anthropic, W
 
 ### DeepSeek
 
-1. Gå til [DeepSeek-konsollen](https://platform.deepseek.com/), opret en konto og klik på **Create API Key**.
+1. Gå over til [DeepSeek-konsollen](https://platform.deepseek.com/), opret en konto og klikk på **Opret ny API-nøgle**.
 
-2. Kør kommandoen `/connect` og søg efter **DeepSeek**.
+2. Kjør kommandoen `/connect` og søk etter **DeepSeek**.
 
    ```txt
    /connect
    ```
 
-3. Indtast DeepSeek API-nøglen.
+3. Skriv inn DeepSeek API-nøgleen.
 
    ```txt
    ┌ API key
@@ -540,7 +546,7 @@ Cloudflare AI Gateway lader dig få adgang til modeller fra OpenAI, Anthropic, W
    └ enter
    ```
 
-4. Kør kommandoen `/models` for at vælge en DeepSeek-model som _DeepSeek Reasoner_.
+4. Kjør kommandoen `/models` for at velge en DeepSeek-modell som _DeepSeek Reasoner_.
 
    ```txt
    /models
@@ -550,15 +556,15 @@ Cloudflare AI Gateway lader dig få adgang til modeller fra OpenAI, Anthropic, W
 
 ### Deep Infra
 
-1. Gå til [Deep Infra-dashboardet](https://deepinfra.com/dash), opret en konto og generer en API-nøgle.
+1. Gå over til [Deep Infra-dashbordet](https://deepinfra.com/dash), opret en konto og generer en API-nøgle.
 
-2. Kør kommandoen `/connect` og søg efter **Deep Infra**.
+2. Kjør kommandoen `/connect` og søk etter **Deep Infra**.
 
    ```txt
    /connect
    ```
 
-3. Indtast Deep Infra API-nøglen.
+3. Skriv inn Deep Infra API-nøgleen.
 
    ```txt
    ┌ API key
@@ -567,7 +573,7 @@ Cloudflare AI Gateway lader dig få adgang til modeller fra OpenAI, Anthropic, W
    └ enter
    ```
 
-4. Kør kommandoen `/models` for at vælge en model.
+4. Kjør kommandoen `/models` for at velge en modell.
 
    ```txt
    /models
@@ -575,17 +581,17 @@ Cloudflare AI Gateway lader dig få adgang til modeller fra OpenAI, Anthropic, W
 
 ---
 
-### Firmware
+### Fastvare
 
-1. Gå til [Firmware dashboard](https://app.firmware.ai/signup), opret en konto og generer en API-nøgle.
+1. Gå over til [Firmware dashboard](https://app.firmware.ai/signup), opret en konto og generer en API-nøgle.
 
-2. Kør kommandoen `/connect` og søg efter **Firmware**.
+2. Kjør kommandoen `/connect` og søk etter **Firmware**.
 
    ```txt
    /connect
    ```
 
-3. Indtast firmware API-nøglen.
+3. Skriv inn firmware API-nøgleen.
 
    ```txt
    ┌ API key
@@ -594,7 +600,7 @@ Cloudflare AI Gateway lader dig få adgang til modeller fra OpenAI, Anthropic, W
    └ enter
    ```
 
-4. Kør kommandoen `/models` for at vælge en model.
+4. Kjør kommandoen `/models` for at velge en modell.
 
    ```txt
    /models
@@ -602,17 +608,17 @@ Cloudflare AI Gateway lader dig få adgang til modeller fra OpenAI, Anthropic, W
 
 ---
 
-### Fireworks AI
+### Fyrverkeri AI
 
-1. Gå til [Fireworks AI-konsollen](https://app.fireworks.ai/), opret en konto og klik på **Create API Key**.
+1. Gå over til [Fireworks AI-konsollen](https://app.fireworks.ai/), opret en konto og klikk på **Create API Key**.
 
-2. Kør kommandoen `/connect` og søg efter **Fireworks AI**.
+2. Kjør kommandoen `/connect` og søk etter **Fireworks AI**.
 
    ```txt
    /connect
    ```
 
-3. Indtast Fireworks AI API-nøglen.
+3. Skriv inn Fireworks AI API-nøgleen.
 
    ```txt
    ┌ API key
@@ -621,7 +627,7 @@ Cloudflare AI Gateway lader dig få adgang til modeller fra OpenAI, Anthropic, W
    └ enter
    ```
 
-4. Kør kommandoen `/models` for at vælge en model som _Kimi K2 Instruct_.
+4. Kjør kommandoen `/models` for at velge en modell som _Kimi K2 Instruct_.
 
    ```txt
    /models
@@ -631,15 +637,15 @@ Cloudflare AI Gateway lader dig få adgang til modeller fra OpenAI, Anthropic, W
 
 ### GitLab Duo
 
-GitLab Duo giver AI-drevet agentchat med native værktøjskaldsfunktioner gennem GitLabs anthropiske proxy.
+GitLab Duo gir AI-drevet agentchat med native verktøyoppringingsfunksjoner gjennom GitLabs antropiske proxy.
 
-1. Kør kommandoen `/connect` og vælg GitLab.
+1. Kjør kommandoen `/connect` og velg GitLab.
 
    ```txt
    /connect
    ```
 
-2. Vælg din godkendelsesmetode:
+2. Velg autentiseringsmetoden din:
 
    ```txt
    ┌ Select auth method
@@ -649,40 +655,40 @@ GitLab Duo giver AI-drevet agentchat med native værktøjskaldsfunktioner gennem
    └
    ```
 
-   #### Brug OAuth (anbefalet)
+   #### Bruge OAuth (anbefalt)
 
-   Vælg **OAuth** og din browser åbner for autorisation.
+   Velg **OAuth** og nettleseren din åpnes for autorisasjon.
 
-   #### Brug personlig adgangstoken
+   #### Bruger personlig tilgangstoken
    1. Gå til [GitLab User Settings > Access Tokens](https://gitlab.com/-/user_settings/personal_access_tokens)
-   2. Klik på **Add new token**
+   2. Klikk på **Legg til nytt token**
    3. Navn: `OpenCode`, omfang: `api`
    4. Kopier tokenet (starter med `glpat-`)
-   5. Indtast den i terminalen
+   5. Skriv den inn i terminalen
 
-3. Kør kommandoen `/models` for at se tilgængelige modeller.
+3. Kjør kommandoen `/models` for at se tilgængelige modeller.
 
    ```txt
    /models
    ```
 
-   Tre Claude-baserede modeller er tilgængelige:
-   - **duo-chat-haiku-4-5** (standard) - Hurtige svar til hurtige opgaver
-   - **duo-chat-sonnet-4-5** - Balanceret ydeevne til de fleste arbejdsgange
-   - **duo-chat-opus-4-5** - Mest egnet til kompleks analyse
+   Tre Claude-baserte modeller er tilgængelige:
+   - **duo-chat-haiku-4-5** (standard) - Raske svar for raske oppgaver
+   - **duo-chat-sonnet-4-5** - Balansert ytelse for de fleste arbeidsflyter
+   - **duo-chat-opus-4-5** - Mest egnet for kompleks analyse
 
 :::note
-Du kan også specificere 'GITLAB_TOKEN' miljøvariabel, hvis du ikke vil
-gemme tokenet i opencode auth-lagring.
+Du kan også spesifisere 'GITLAB_TOKEN' miljøvariabel hvis du ikke vil
+for at lagre token i opencode auth-lagring.
 :::
 
 ##### Selvhostet GitLab
 
-:::note[overholdelsesbemærkning]
-OpenCode bruger en lille model til nogle AI-opgaver som at generere sessionstitlen.
-Den er konfigureret til at bruge gpt-5-nano som standard, hostet af Zen. For at låse OpenCode
-til kun at bruge din egen GitLab-hostede instans, tilføj følgende i din
-`opencode.json` fil. Det anbefales også at deaktivere sessionsdeling.
+:::note[compliance note]
+OpenCode bruger en liten modell for nogle AI oppgaver som at generere sessiontittelen.
+Den er konfigurert til at bruge gpt-5-nano som standard, hostet av Zen. For at låse OpenCode
+for kun at bruge din egen GitLab-hostede forekomst, tilføj til følgende i din
+`opencode.json` fil. Det anbefales også at deaktivere sessiondeling.
 
 ```json
 {
@@ -694,20 +700,20 @@ til kun at bruge din egen GitLab-hostede instans, tilføj følgende i din
 
 :::
 
-For selvhostede GitLab-instanser:
+For selvhostede GitLab-forekomster:
 
 ```bash
 export GITLAB_INSTANCE_URL=https://gitlab.company.com
 export GITLAB_TOKEN=glpat-...
 ```
 
-Hvis din instans kører en brugerdefineret AI-gateway:
+Hvis forekomsten din kjører en brugerdefineret AI-gateway:
 
 ```bash
 GITLAB_AI_GATEWAY_URL=https://ai-gateway.company.com
 ```
 
-Eller tilføj til din bash-profil:
+Eller tilføj til bash-profilen din:
 
 ```bash title="~/.bash_profile"
 export GITLAB_INSTANCE_URL=https://gitlab.company.com
@@ -716,35 +722,35 @@ export GITLAB_TOKEN=glpat-...
 ```
 
 :::note
-Din GitLab-administrator skal aktivere følgende:
+GitLab-administratoren din må aktivere følgende:
 
-1. [Duo Agent Platform](https://docs.gitlab.com/user/gitlab_duo/turn_on_off/) for brugeren, gruppen eller instansen
-2. Funktionsflag (via Rails-konsollen):
+1. [Duo Agent Platform](https://docs.gitlab.com/user/gitlab_duo/turn_on_off/) for brugeren, gruppen eller forekomsten
+2. Funksjonsflagg (via Rails-konsollen):
    - `agent_platform_claude_code`
    - `third_party_agents_enabled`
      :::
 
-##### OAuth for selvhostede instanser
+##### OAuth for selvvertsbaserte forekomster
 
-For at få Oauth til at fungere for din selvhostede instans, skal du oprette
-en ny applikation (Indstillinger → Applikationer) med
+For at få Oauth til at fungere for din selvhostede forekomst, må du oprete
+en ny applikasjon (Innstillinger → Programmer) med
 callback URL `http://127.0.0.1:8080/callback` og følgende omfang:
 
-- api (Få adgang til API på dine vegne)
-- read_user (Læs din personlige information)
-- read_repository (tillader skrivebeskyttet adgang til depotet)
+- api (Få tilgang til API på dine vegne)
+- read_user (Les din personlige informasjon)
+- read_repository (tillater skrivebeskyttet tilgang til depotet)
 
-Udsæt derefter applikations-ID som miljøvariabel:
+Utsett deretter applikasjonen ID som miljøvariabel:
 
 ```bash
 export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 ```
 
-Mere dokumentation på [opencode-gitlab-auth](https://www.npmjs.com/package/@gitlab/opencode-gitlab-auth) hjemmesiden.
+Mer dokumentasjon på [opencode-gitlab-auth](https://www.npmjs.com/package/@gitlab/opencode-gitlab-auth) hjemmeside.
 
-##### Konfiguration
+##### Konfigurasjon
 
-Tilpas gennem `opencode.json`:
+Tilpass gjennom `opencode.json`:
 
 ```json title="opencode.json"
 {
@@ -763,9 +769,9 @@ Tilpas gennem `opencode.json`:
 }
 ```
 
-##### GitLab API-værktøjer (valgfrit, men stærkt anbefalet)
+##### GitLab API Verktøy (valgfritt, men sterkt anbefalt)
 
-For at få adgang til GitLab-værktøjer (merge requests, problemer, pipelines, CI/CD, etc.):
+For at få tilgang til GitLab-verktøy (sammenslåingsforespørsler, problemer, pipelines, CI/CD, etc.):
 
 ```json title="opencode.json"
 {
@@ -774,28 +780,28 @@ For at få adgang til GitLab-værktøjer (merge requests, problemer, pipelines, 
 }
 ```
 
-Denne plugin giver omfattende GitLab-repository-administrationsfunktioner, inklusiv MR-anmeldelser, problemsporing, pipeline-overvågning og mere.
+Denne plugin-en gir omfattende GitLab-repository-administrasjonsfunksjoner, inkludert MR-anmeldelser, problemsporing, pipeline-overvåking og mer.
 
 ---
 
 ### GitHub Copilot
 
-Sådan bruger du GitHub Copilot-abonnementet med OpenCode:
+Slik bruger du GitHub Copilot-abonnementet med OpenCode:
 
 :::note
-Nogle modeller kan kræve et [Pro+
+Nogle modeller kan trenge en [Pro+
 abonnement](https://github.com/features/copilot/plans) at bruge.
 
-Nogle modeller skal aktiveres manuelt i [GitHub Copilot-indstillingerne](https://docs.github.com/en/copilot/how-tos/use-ai-models/configure-access-to-ai-models#setup-for-individual-use).
+Nogle modeller må aktiveres manuelt i [GitHub Copilot-innstillingene](https://docs.github.com/en/copilot/how-tos/use-ai-models/configure-access-to-ai-models#setup-for-individual-use).
 :::
 
-1. Kør kommandoen `/connect` og søg efter GitHub Copilot.
+1. Kjør kommandoen `/connect` og søk etter GitHub Copilot.
 
    ```txt
    /connect
    ```
 
-2. Naviger til [github.com/login/device](https://github.com/login/device) og indtast koden.
+2. Naviger til [github.com/login/device](https://github.com/login/device) og skriv inn koden.
 
    ```txt
    ┌ Login with GitHub Copilot
@@ -804,10 +810,10 @@ Nogle modeller skal aktiveres manuelt i [GitHub Copilot-indstillingerne](https:/
    │
    │ Enter code: 8F43-6FCF
    │
-   │ Waiting for authorization...
+   └ Waiting for authorization...
    ```
 
-3. Kør nu kommandoen `/models` for at vælge modellen du ønsker.
+3. Kjør nå kommandoen `/models` for at velge modellen du ønsker.
 
    ```txt
    /models
@@ -817,29 +823,29 @@ Nogle modeller skal aktiveres manuelt i [GitHub Copilot-indstillingerne](https:/
 
 ### Google Vertex AI
 
-Sådan bruger du Google Vertex AI med OpenCode:
+Slik bruger du Google Vertex AI med OpenCode:
 
-1. Gå til **Model Garden** i Google Cloud Console og tjek
+1. Gå over til **Model Garden** i Google Cloud Console og tjek
    modeller tilgængelig i din region.
 
    :::note
-   Du skal have et Google Cloud-projekt med Vertex AI API aktiveret.
+   Du må ha et Google Cloud-prosjekt med Vertex AI API aktivert.
    :::
 
-2. Angiv de nødvendige miljøvariabler:
-   - `GOOGLE_CLOUD_PROJECT`: Dit Google Cloud-projekt ID
-   - `VERTEX_LOCATION` (valgfrit): Regionen for Vertex AI (standard til `global`)
-   - Godkendelse (vælg en):
-     - `GOOGLE_APPLICATION_CREDENTIALS`: Sti til tjenestekontoens JSON-nøglefil
-     - Godkend med gcloud CLI: `gcloud auth application-default login`
+2. Angi de nødvendige miljøvariablene:
+   - `GOOGLE_CLOUD_PROJECT`: Google Cloud-prosjektet ditt ID
+   - `VERTEX_LOCATION` (valgfritt): Regionen for verteks AI (standard til `global`)
+   - Autentisering (velg en):
+     - `GOOGLE_APPLICATION_CREDENTIALS`: Bane til tjenestekontoen JSON nøkkelfil
+     - Autentiser med gcloud CLI: `gcloud auth application-default login`
 
-   Sæt dem mens du kører opencode.
+   Sett dem mens du kjører opencode.
 
    ```bash
    GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
    ```
 
-   Eller tilføj dem til din bash-profil.
+   Eller tilføj dem til på bash-profilen din.
 
    ```bash title="~/.bash_profile"
    export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
@@ -848,10 +854,10 @@ Sådan bruger du Google Vertex AI med OpenCode:
    ```
 
 :::tip
-`global`-regionen forbedrer tilgængeligheden og reducerer fejl uden ekstra omkostninger. Brug regionale endpoints (f.eks. `us-central1`) for krav til dataophold. [Læs mere](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
+`global`-regionen forbedrer tilgængeligheten og reduserer feil uten ekstra kostnad. Brug regionale endepunkter (f.eks. `us-central1`) for krav til dataopphold. [Finn ut mer](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
 :::
 
-3. Kør kommandoen `/models` for at vælge modellen du ønsker.
+3. Kjør kommandoen `/models` for at velge modellen du ønsker.
 
    ```txt
    /models
@@ -861,15 +867,15 @@ Sådan bruger du Google Vertex AI med OpenCode:
 
 ### Groq
 
-1. Gå til [Groq-konsollen](https://console.groq.com/), klik på **Create API Key**, og kopier nøglen.
+1. Gå over til [Groq-konsollen](https://console.groq.com/), klikk på **Create API Key**, og kopier nøkkelen.
 
-2. Kør kommandoen `/connect` og søg efter Groq.
+2. Kjør kommandoen `/connect` og søk etter Groq.
 
    ```txt
    /connect
    ```
 
-3. Indtast API-nøglen for udbyderen.
+3. Skriv inn API-nøgleen for leverandøren.
 
    ```txt
    ┌ API key
@@ -878,7 +884,7 @@ Sådan bruger du Google Vertex AI med OpenCode:
    └ enter
    ```
 
-4. Kør kommandoen `/models` for at vælge den du ønsker.
+4. Kjør kommandoen `/models` for at velge den du ønsker.
 
    ```txt
    /models
@@ -886,19 +892,19 @@ Sådan bruger du Google Vertex AI med OpenCode:
 
 ---
 
-### Hugging Face
+### Klemmer ansikt
 
-[Hugging Face Inference Providers](https://huggingface.co/docs/inference-providers) giver adgang til åbne modeller som støttes af 17+ udbydere.
+[Hugging Face Inference Providers](https://huggingface.co/docs/inference-providers) gir tilgang til åpne modeller som støttes av 17+ leverandører.
 
-1. Gå til [Hugging Face-indstillinger](https://huggingface.co/settings/tokens/new?ownUserPermissions=inference.serverless.write&tokenType=fineGrained) for at oprette et token med tilladelse til at kalde inferensudbydere.
+1. Gå over til [Hugging Face-innstillinger](https://huggingface.co/settings/tokens/new?ownUserPermissions=inference.serverless.write&tokenType=fineGrained) for at oprete et token med tillatelse til at ringe til inferensleverandører.
 
-2. Kør kommandoen `/connect` og søg efter **Hugging Face**.
+2. Kjør kommandoen `/connect` og søk etter **Hugging Face**.
 
    ```txt
    /connect
    ```
 
-3. Indtast dit Hugging Face-token.
+3. Skriv inn ditt Hugging Face-token.
 
    ```txt
    ┌ API key
@@ -907,7 +913,7 @@ Sådan bruger du Google Vertex AI med OpenCode:
    └ enter
    ```
 
-4. Kør kommandoen `/models` for at vælge en model som _Kimi-K2-Instruct_ eller _GLM-4.6_.
+4. Kjør kommandoen `/models` for at velge en modell som _Kimi-K2-Instruct_ eller _GLM-4.6_.
 
    ```txt
    /models
@@ -915,19 +921,19 @@ Sådan bruger du Google Vertex AI med OpenCode:
 
 ---
 
-### Helicone
+### Helikon
 
-[Helicone](https://helicone.ai) er en LLM observerbarhedsplatform som giver logning, overvågning og analyser for dine AI-applikationer. Helicone AI Gateway ruter dine anmodninger til den rigtige udbyder automatisk baseret på modellen.
+[Helicone](https://helicone.ai) er en LLM observerbarhetsplattform som gir logging, overvåking og analyser for AI-applikasjonene dine. Helicone AI Gateway ruter forespørslene dine til riktig leverandør automatisk basert på modellen.
 
-1. Gå til [Helicone](https://helicone.ai), opret en konto og generer en API-nøgle fra dashboardet.
+1. Gå over til [Helicone](https://helicone.ai), opret en konto og generer en API-nøgle fra dashbordet.
 
-2. Kør kommandoen `/connect` og søg efter **Helicone**.
+2. Kjør kommandoen `/connect` og søk etter **Helicone**.
 
    ```txt
    /connect
    ```
 
-3. Indtast Helicone API-nøglen.
+3. Skriv inn Helicone API-nøgleen.
 
    ```txt
    ┌ API key
@@ -936,19 +942,19 @@ Sådan bruger du Google Vertex AI med OpenCode:
    └ enter
    ```
 
-4. Kør kommandoen `/models` for at vælge en model.
+4. Kjør kommandoen `/models` for at velge en modell.
 
    ```txt
    /models
    ```
 
-For flere udbydere og avancerede funktioner som caching og hastighedsbegrænsning, tjek [Helicone-dokumentationen](https://docs.helicone.ai).
+For flere leverandører og avanserte funksjoner som bufring og hastighetsbegrensning, tjek [Helicone-dokumentasjonen](https://docs.helicone.ai).
 
-#### Valgfrie konfigurationer
+#### Valgfrie konfigurasjoner
 
-I tilfælde af at du ser en funktion eller model fra Helicone som ikke konfigureres automatisk gennem opencode, kan du altid konfigurere den selv.
+I tilfelle du ser en funksjon eller modell fra Helicone som ikke konfigureres automatisk gjennom opencode, kan du alltid konfigurere den selv.
 
-Her er [Helicone's Model Directory](https://helicone.ai/models), du skal bruge denne for at hente ID'erne til de modeller du vil tilføje.
+Her er [Helicone's Model Directory](https://helicone.ai/models), du trenger denne for at hente ID-ene til modellene du vil tilføje til.
 
 ```jsonc title="~/.config/opencode/opencode.jsonc"
 {
@@ -974,9 +980,9 @@ Her er [Helicone's Model Directory](https://helicone.ai/models), du skal bruge d
 }
 ```
 
-#### Brugerdefinerede headers
+#### Egendefinerte topptekster
 
-Helicone understøtter tilpassede headers for funktioner som caching, brugersporing og sessionsadministration. Læg dem til din udbyderkonfiguration ved at bruge `options.headers`:
+Helicone støtter tilpassede overskrifter for funksjoner som bufring, brugersporing og sessionadministrasjon. Legg dem til leverandørkonfigurasjonen din ved at bruge `options.headers`:
 
 ```jsonc title="~/.config/opencode/opencode.jsonc"
 {
@@ -997,15 +1003,15 @@ Helicone understøtter tilpassede headers for funktioner som caching, brugerspor
 }
 ```
 
-##### Sessionssporing
+##### Sesjonssporing
 
-Helicones [Sessions](https://docs.helicone.ai/features/sessions) funktion lader dig gruppe relaterede LLM anmodninger sammen. Brug [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) plugin for automatisk at logge hver OpenCode-samtale som en session i Helicone.
+Helicones [Sessions](https://docs.helicone.ai/features/sessions) funksjon lar deg gruppere relaterte LLM forespørsler sammen. Brug [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) plugin for automatisk at logge hver OpenCode-samtale som en session i Helicone.
 
 ```bash
 npm install -g opencode-helicone-session
 ```
 
-Tilføj den til din konfiguration.
+Legg den til i konfigurasjonen din.
 
 ```json title="opencode.json"
 {
@@ -1013,24 +1019,24 @@ Tilføj den til din konfiguration.
 }
 ```
 
-Programmatisk injicerer `Helicone-Session-Id` og `Helicone-Session-Name` headers i dine anmodninger. På Helicones Sessions-side vil du se hver OpenCode-samtale opført som en separat session.
+Programtiltilføjet injiserer `Helicone-Session-Id` og `Helicone-Session-Name` overskrifter i forespørslene dine. På Helicones Sessions-side vil du se hver OpenCode-samtale oppført som en separat session.
 
-##### Almindelige Helicone-headers
+##### Vanlige helikonhoder
 
-| Header                     | Beskrivelse                                                               |
-| -------------------------- | ------------------------------------------------------------------------- |
-| `Helicone-Cache-Enabled`   | Aktiver respons-caching (`true`/`false`)                                  |
-| `Helicone-User-Id`         | Spor beregninger efter bruger                                             |
-| `Helicone-Property-[Name]` | Tilføj egendefinerede egenskaber (f.eks. `Helicone-Property-Environment`) |
-| `Helicone-Prompt-Id`       | Knyt anmodninger til prompt-versioner                                     |
+| Overskrift                 | Beskrivelse                                                                |
+| -------------------------- | -------------------------------------------------------------------------- |
+| `Helicone-Cache-Enabled`   | Aktiver responsbufring (`true`/`false`)                                    |
+| `Helicone-User-Id`         | Spor beregninger etter bruger                                              |
+| `Helicone-Property-[Name]` | Legg til egendefinerte egenskaper (f.eks. `Helicone-Property-Environment`) |
+| `Helicone-Prompt-Id`       | Knytt forespørsler til spørsmålsversioner                                  |
 
-Se [Helicone Header Directory](https://docs.helicone.ai/helicone-headers/header-directory) for alle tilgængelige headers.
+Se [Helicone Header Directory](https://docs.helicone.ai/helicone-headers/header-directory) for alle tilgængelige overskrifter.
 
 ---
 
-### llama.cpp
+### lama.cpp
 
-Du kan konfigurere opencode til at bruge lokale modeller gennem [llama.cpps](https://github.com/ggml-org/llama.cpp) llama-server-værktøj
+Du kan konfigurere opencode for at bruge lokale modeller gjennom [llama.cpps](https://github.com/ggml-org/llama.cpp) lama-server-verktøy
 
 ```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
 {
@@ -1056,29 +1062,29 @@ Du kan konfigurere opencode til at bruge lokale modeller gennem [llama.cpps](htt
 }
 ```
 
-I dette eksempel:
+I dette eksemplet:
 
-- `llama.cpp` er den tilpassede udbyder ID. Dette kan være hvilken som helst streng du vil.
-- `npm` specificerer pakken som skal bruges for denne udbyder. Her bruges `@ai-sdk/openai-compatible` for enhver OpenAI-kompatibel API.
-- `name` er visningsnavnet for udbyderen i UI.
-- `options.baseURL` er endpointet for den lokale server.
-- `models` er et kort over model-ID'er til deres konfigurationer. Modelnavnet vil vises i modelvalglisten.
+- `llama.cpp` er den tilpassede leverandøren ID. Dette kan være hvilken som helst streng du vil.
+- `npm` spesifiserer pakken som skal bruges for denne leverandøren. Her bruges `@ai-sdk/openai-compatible` for enhver OpenAI-kompatibel API.
+- `name` er visningsnavnet for leverandøren i UI.
+- `options.baseURL` er endepunktet for den lokale serveren.
+- `models` er et kart over modell-ID-er til deres konfigurasjoner. Modellnavnet vil vises i modellvalglisten.
 
 ---
 
 ### IO.NET
 
-IO.NET tilbyder 17 modeller optimeret for forskellige brugstilfælde:
+IO.NET tilbyr 17 modeller optimert for ulike brugstilfeller:
 
-1. Gå til [IO.NET-konsollen](https://ai.io.net/), opret en konto og generer en API-nøgle.
+1. Gå over til [IO.NET-konsollen](https://ai.io.net/), opret en konto og generer en API-nøgle.
 
-2. Kør kommandoen `/connect` og søg efter **IO.NET**.
+2. Kjør kommandoen `/connect` og søk etter **IO.NET**.
 
    ```txt
    /connect
    ```
 
-3. Indtast nøglen IO.NET API.
+3. Skriv inn nøkkelen IO.NET API.
 
    ```txt
    ┌ API key
@@ -1087,7 +1093,7 @@ IO.NET tilbyder 17 modeller optimeret for forskellige brugstilfælde:
    └ enter
    ```
 
-4. Kør kommandoen `/models` for at vælge en model.
+4. Kjør kommandoen `/models` for at velge en modell.
 
    ```txt
    /models
@@ -1097,7 +1103,7 @@ IO.NET tilbyder 17 modeller optimeret for forskellige brugstilfælde:
 
 ### LM Studio
 
-Du kan konfigurere opencode til at bruge lokale modeller gennem LM Studio.
+Du kan konfigurere opencode for at bruge lokale modeller gjennom LM Studio.
 
 ```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
 {
@@ -1119,29 +1125,29 @@ Du kan konfigurere opencode til at bruge lokale modeller gennem LM Studio.
 }
 ```
 
-I dette eksempel:
+I dette eksemplet:
 
-- `lmstudio` er den tilpassede udbyder ID. Dette kan være hvilken som helst streng du vil.
-- `npm` specificerer pakken som skal bruges for denne udbyder. Her bruges `@ai-sdk/openai-compatible` for enhver OpenAI-kompatibel API.
-- `name` er visningsnavnet for udbyderen i UI.
-- `options.baseURL` er endpointet for den lokale server.
-- `models` er et kort over model-ID'er til deres konfigurationer. Modelnavnet vil vises i modelvalglisten.
+- `lmstudio` er den tilpassede leverandøren ID. Dette kan være hvilken som helst streng du vil.
+- `npm` spesifiserer pakken som skal bruges for denne leverandøren. Her bruges `@ai-sdk/openai-compatible` for enhver OpenAI-kompatibel API.
+- `name` er visningsnavnet for leverandøren i UI.
+- `options.baseURL` er endepunktet for den lokale serveren.
+- `models` er et kart over modell-ID-er til deres konfigurasjoner. Modellnavnet vil vises i modellvalglisten.
 
 ---
 
-### Moonshot AI
+### Måneskudd AI
 
-Sådan bruger du Kimi K2 fra Moonshot AI:
+Slik bruger du Kimi K2 fra Moonshot AI:
 
-1. Gå til [Moonshot AI-konsollen](https://platform.moonshot.ai/console), opret en konto og klik på **Create API Key**.
+1. Gå over til [Moonshot AI-konsollen](https://platform.moonshot.ai/console), opret en konto og klikk på **Opret API-nøgle**.
 
-2. Kør kommandoen `/connect` og søg efter **Moonshot AI**.
+2. Kjør kommandoen `/connect` og søk etter **Moonshot AI**.
 
    ```txt
    /connect
    ```
 
-3. Indtast Moonshot API-nøglen.
+3. Skriv inn Moonshot API-nøgleen.
 
    ```txt
    ┌ API key
@@ -1150,7 +1156,7 @@ Sådan bruger du Kimi K2 fra Moonshot AI:
    └ enter
    ```
 
-4. Kør kommandoen `/models` for at vælge _Kimi K2_.
+4. Kjør kommandoen `/models` for at velge _Kimi K2_.
 
    ```txt
    /models
@@ -1160,15 +1166,15 @@ Sådan bruger du Kimi K2 fra Moonshot AI:
 
 ### MiniMax
 
-1. Gå til [MiniMax API-konsollen](https://platform.minimax.io/login), opret en konto og generer en API-nøgle.
+1. Gå over til [MiniMax API-konsollen](https://platform.minimax.io/login), opret en konto og generer en API-nøgle.
 
-2. Kør kommandoen `/connect` og søg efter **MiniMax**.
+2. Kjør kommandoen `/connect` og søk etter **MiniMax**.
 
    ```txt
    /connect
    ```
 
-3. Indtast MiniMax API-nøglen.
+3. Skriv inn MiniMax API-nøgleen.
 
    ```txt
    ┌ API key
@@ -1177,7 +1183,7 @@ Sådan bruger du Kimi K2 fra Moonshot AI:
    └ enter
    ```
 
-4. Kør kommandoen `/models` for at vælge en model som _M2.1_.
+4. Kjør kommandoen `/models` for at velge en modell som _M2.1_.
 
    ```txt
    /models
@@ -1187,15 +1193,15 @@ Sådan bruger du Kimi K2 fra Moonshot AI:
 
 ### Nebius Token Factory
 
-1. Gå til [Nebius Token Factory-konsollen](https://tokenfactory.nebius.com/), opret en konto og klik på **Add Key**.
+1. Gå over til [Nebius Token Factory-konsollen](https://tokenfactory.nebius.com/), opret en konto og klikk på **Legg til nøkkel**.
 
-2. Kør kommandoen `/connect` og søg efter **Nebius Token Factory**.
+2. Kjør kommandoen `/connect` og søk etter **Nebius Token Factory**.
 
    ```txt
    /connect
    ```
 
-3. Indtast Nebius Token Factory API-nøglen.
+3. Skriv inn Nebius Token Factory API-nøgleen.
 
    ```txt
    ┌ API key
@@ -1204,7 +1210,7 @@ Sådan bruger du Kimi K2 fra Moonshot AI:
    └ enter
    ```
 
-4. Kør kommandoen `/models` for at vælge en model som _Kimi K2 Instruct_.
+4. Kjør kommandoen `/models` for at velge en modell som _Kimi K2 Instruct_.
 
    ```txt
    /models
@@ -1214,10 +1220,10 @@ Sådan bruger du Kimi K2 fra Moonshot AI:
 
 ### Ollama
 
-Du kan konfigurere opencode til at bruge lokale modeller gennem Ollama.
+Du kan konfigurere opencode for at bruge lokale modeller gjennom Ollama.
 
 :::tip
-Ollama kan automatisk konfigurere sig selv for OpenCode. Se [Ollama-integrationsdokumenterne](https://docs.ollama.com/integrations/opencode) for detaljer.
+Ollama kan automatisk konfigurere seg selv for OpenCode. Se [Ollama-integrasjonsdokumentene](https://docs.ollama.com/integrations/opencode) for detaljer.
 :::
 
 ```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
@@ -1240,37 +1246,37 @@ Ollama kan automatisk konfigurere sig selv for OpenCode. Se [Ollama-integrations
 }
 ```
 
-I dette eksempel:
+I dette eksemplet:
 
-- `ollama` er den tilpassede udbyder ID. Dette kan være hvilken som helst streng du vil.
-- `npm` specificerer pakken som skal bruges for denne udbyder. Her bruges `@ai-sdk/openai-compatible` for enhver OpenAI-kompatibel API.
-- `name` er visningsnavnet for udbyderen i UI.
-- `options.baseURL` er endpointet for den lokale server.
-- `models` er et kort over model-ID'er til deres konfigurationer. Modelnavnet vil vises i modelvalglisten.
+- `ollama` er den tilpassede leverandøren ID. Dette kan være hvilken som helst streng du vil.
+- `npm` spesifiserer pakken som skal bruges for denne leverandøren. Her bruges `@ai-sdk/openai-compatible` for enhver OpenAI-kompatibel API.
+- `name` er visningsnavnet for leverandøren i UI.
+- `options.baseURL` er endepunktet for den lokale serveren.
+- `models` er et kart over modell-ID-er til deres konfigurasjoner. Modellnavnet vil vises i modellvalglisten.
 
 :::tip
-Hvis værktøjskald ikke fungerer, prøv at øge `num_ctx` i Ollama. Start omkring 16k - 32k.
+Hvis verktøykall ikke fungerer, prøv at øke `num_ctx` i Ollama. Start rundt 16k - 32k.
 :::
 
 ---
 
 ### Ollama Cloud
 
-Sådan bruger du Ollama Cloud med OpenCode:
+Slik bruger du Ollama Cloud med OpenCode:
 
-1. Gå til [https://ollama.com/](https://ollama.com/) og log på eller opret en konto.
+1. Gå over til [https://ollama.com/](https://ollama.com/) og logg på eller opret en konto.
 
-2. Naviger til **Settings** > **Keys** og klik på **Add API Key** for at generere en ny API-nøgle.
+2. Naviger til **Innstillinger** > **Nøkler** og klikk på **Legg til API-nøgle** for at generere en ny API-nøgle.
 
-3. Kopier API-nøglen til brug i OpenCode.
+3. Kopier API-nøgleen for brug i OpenCode.
 
-4. Kør kommandoen `/connect` og søg efter **Ollama Cloud**.
+4. Kjør kommandoen `/connect` og søk etter **Ollama Cloud**.
 
    ```txt
    /connect
    ```
 
-5. Indtast din Ollama Cloud API-nøgle.
+5. Skriv inn din Ollama Cloud API-nøgle.
 
    ```txt
    ┌ API key
@@ -1279,13 +1285,13 @@ Sådan bruger du Ollama Cloud med OpenCode:
    └ enter
    ```
 
-6. **Vigtigt**: Før du bruger skymodeller i OpenCode, skal du hente modelinformationen lokalt:
+6. **Viktig**: Før du bruger skymodeller i OpenCode, må du hente modellinformasjonen lokalt:
 
    ```bash
    ollama pull gpt-oss:20b-cloud
    ```
 
-7. Kør kommandoen `/models` for at vælge din Ollama Cloud-model.
+7. Kjør kommandoen `/models` for at velge din Ollama Cloud-modell.
 
    ```txt
    /models
@@ -1295,16 +1301,16 @@ Sådan bruger du Ollama Cloud med OpenCode:
 
 ### OpenAI
 
-Vi anbefaler at du registrerer dig for [ChatGPT Plus eller Pro](https://chatgpt.com/pricing).
+Vi anbefaler at du registrerer deg for [ChatGPT Plus eller Pro](https://chatgpt.com/pricing).
 
-1. Når du har registreret dig, kør kommandoen `/connect` og vælg OpenAI.
+1. Når du har registrert deg, kjør kommandoen `/connect` og velg OpenAI.
 
    ```txt
    /connect
    ```
 
-2. Her kan du vælge muligheden **ChatGPT Plus/Pro** og det åbner din browser
-   og beder dig om at godkende.
+2. Her kan du velge alternativet **ChatGPT Plus/Pro** og det åpner nettleseren din
+   og ber deg om at autentisere.
 
    ```txt
    ┌ Select auth method
@@ -1314,31 +1320,31 @@ Vi anbefaler at du registrerer dig for [ChatGPT Plus eller Pro](https://chatgpt.
    └
    ```
 
-3. Nu skal alle OpenAI-modellerne være tilgængelige, når du bruger kommandoen `/models`.
+3. Nå skal alle OpenAI-modellene være tilgængelige når du bruger kommandoen `/models`.
 
    ```txt
    /models
    ```
 
-##### Brug API-nøgler
+##### Bruge API-tastene
 
-Hvis du allerede har en API-nøgle, kan du vælge **Manually enter API Key** og indsætte den i terminalen.
+Hvis du allerede har en API-nøgle, kan du velge **Angi API-nøgle manuelt** og lime den inn i terminalen.
 
 ---
 
 ### OpenCode Zen
 
-OpenCode Zen er en liste over testede og verificerede modeller leveret af OpenCode-teamet. [Læs mere](/docs/zen).
+OpenCode Zen er en liste over testede og verifiserte modeller levert av OpenCode-teamet. [Finn ut mer](/docs/zen).
 
-1. Log på **<a href={console}>OpenCode Zen</a>** og klik på **Create API Key**.
+1. Logg på **<a href={console}>OpenCode Zen</a>** og klikk på **Create API Key**.
 
-2. Kør kommandoen `/connect` og søg efter **OpenCode Zen**.
+2. Kjør kommandoen `/connect` og søk etter **OpenCode Zen**.
 
    ```txt
    /connect
    ```
 
-3. Indtast OpenCode API-nøglen.
+3. Skriv inn OpenCode API-nøgleen.
 
    ```txt
    ┌ API key
@@ -1347,7 +1353,7 @@ OpenCode Zen er en liste over testede og verificerede modeller leveret af OpenCo
    └ enter
    ```
 
-4. Kør kommandoen `/models` for at vælge en model som _Qwen 3 Coder 480B_.
+4. Kjør kommandoen `/models` for at velge en modell som _Qwen 3 Coder 480B_.
 
    ```txt
    /models
@@ -1357,15 +1363,15 @@ OpenCode Zen er en liste over testede og verificerede modeller leveret af OpenCo
 
 ### OpenRouter
 
-1. Gå til [OpenRouter-dashboardet](https://openrouter.ai/settings/keys), klik på **Create API Key**, og kopier nøglen.
+1. Gå over til [OpenRouter-dashbordet](https://openrouter.ai/settings/keys), klikk på **Create API Key**, og kopier nøkkelen.
 
-2. Kør kommandoen `/connect` og søg efter OpenRouter.
+2. Kjør kommandoen `/connect` og søk etter OpenRouter.
 
    ```txt
    /connect
    ```
 
-3. Indtast API-nøglen for udbyderen.
+3. Skriv inn API-nøgleen for leverandøren.
 
    ```txt
    ┌ API key
@@ -1374,13 +1380,13 @@ OpenCode Zen er en liste over testede og verificerede modeller leveret af OpenCo
    └ enter
    ```
 
-4. Mange OpenRouter-modeller er forudindlæst som standard, kør kommandoen `/models` for at vælge den du ønsker.
+4. Mange OpenRouter-modeller er forhåndslastet som standard, kjør kommandoen `/models` for at velge den du ønsker.
 
    ```txt
    /models
    ```
 
-   Du kan også tilføje flere modeller gennem opencode-konfigurationen.
+   Du kan også tilføje til flere modeller gjennom opencode-konfigurasjonen.
 
    ```json title="opencode.json" {6}
    {
@@ -1395,7 +1401,7 @@ OpenCode Zen er en liste over testede og verificerede modeller leveret af OpenCo
    }
    ```
 
-5. Du kan også tilpasse dem gennem opencode-konfigurationen. Her er et eksempel på at specificere en udbyder
+5. Du kan også tilpasse dem gjennom opencode-konfigurasjonen. Her er et eksempel på at spesifisere en leverandør
 
    ```json title="opencode.json"
    {
@@ -1419,23 +1425,23 @@ OpenCode Zen er en liste over testede og verificerede modeller leveret af OpenCo
 
 ---
 
-### SAP AI Core
+### SAP AI Kjerne
 
-SAP AI Core giver adgang til 40+ modeller fra OpenAI, Anthropic, Google, Amazon, Meta, Mistral og AI21 gennem en samlet platform.
+SAP AI Core gir tilgang til 40+ modeller fra OpenAI, Anthropic, Google, Amazon, Meta, Mistral og AI21 gjennom en enhetlig plattform.
 
-1. Gå til din [SAP BTP Cockpit](https://account.hana.ondemand.com/), naviger til din SAP AI kerne-tjenesteinstans, og opret en tjenestenøgle.
+1. Gå til din [SAP BTP Cockpit](https://account.hana.ondemand.com/), naviger til din SAP AI kjernetjenesteforekomst, og lag en tjenestenøkkel.
 
    :::tip
-   Tjenestenøglen er et JSON-objekt som indeholder `clientid`, `clientsecret`, `url` og `serviceurls.AI_API_URL`. Du finder din AI-kerneinstans under **Services** > **Instances and Subscriptions** i BTP cockpittet.
+   Tjenestenøkkelen er et JSON-objekt som inneholder `clientid`, `clientsecret`, `url` og `serviceurls.AI_API_URL`. Du finner AI kjerneforekomsten din under **Tjenester** > **Forekomster og abonnementer** i BTP cockpiten.
    :::
 
-2. Kør kommandoen `/connect` og søg efter **SAP AI Core**.
+2. Kjør kommandoen `/connect` og søk etter **SAP AI Core**.
 
    ```txt
    /connect
    ```
 
-3. Indtast tjenestenøglen JSON.
+3. Skriv inn tjenestenøkkelen JSON.
 
    ```txt
    ┌ Service key
@@ -1444,29 +1450,29 @@ SAP AI Core giver adgang til 40+ modeller fra OpenAI, Anthropic, Google, Amazon,
    └ enter
    ```
 
-   Eller angiv miljøvariablen `AICORE_SERVICE_KEY`:
+   Eller angi miljøvariabelen `AICORE_SERVICE_KEY`:
 
    ```bash
    AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
    ```
 
-   Eller tilføj den til din bash-profil:
+   Eller tilføj den til bash-profilen din:
 
    ```bash title="~/.bash_profile"
    export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}'
    ```
 
-4. Angiv eventuelt deployment-ID og ressourcegruppe:
+4. Angi eventuelt distribusjon ID og ressursgruppe:
 
    ```bash
    AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group opencode
    ```
 
    :::note
-   Disse indstillinger er valgfrie og bør konfigureres i henhold til SAP AI kerne-opsætningen.
+   Disse innstillingene er valgfrie og bør konfigureres i henhold til SAP AI kjerneoppsettet.
    :::
 
-5. Kør kommandoen `/models` for at vælge fra 40+ tilgængelige modeller.
+5. Kjør kommandoen `/models` for at velge fra 40+ tilgængelige modeller.
 
    ```txt
    /models
@@ -1474,17 +1480,17 @@ SAP AI Core giver adgang til 40+ modeller fra OpenAI, Anthropic, Google, Amazon,
 
 ---
 
-### OVHcloud AI Endpoints
+### OVHcloud AI endepunkter
 
-1. Gå til [OVHcloud-panelet](https://ovh.com/manager). Naviger til `Public Cloud`-delen, `AI & Machine Learning` > `AI Endpoints` og i `API Keys`-fanen klikker du på **Opret en ny API-nøgle**.
+1. Gå over til [OVHcloud-panelet](https://ovh.com/manager). Naviger til `Public Cloud`-delen, `AI & Machine Learning` > `AI Endpoints` og i `API Keys`-fanen klikker du på **Opret en ny API-nøgle**.
 
-2. Kør kommandoen `/connect` og søg efter **OVHcloud AI Endpoints**.
+2. Kjør kommandoen `/connect` og søk etter **OVHcloud AI endepunkter**.
 
    ```txt
    /connect
    ```
 
-3. Indtast OVHcloud AI Endpoints API-nøgle.
+3. Skriv inn OVHcloud AI Endpoints API-nøgle.
 
    ```txt
    ┌ API key
@@ -1493,7 +1499,7 @@ SAP AI Core giver adgang til 40+ modeller fra OpenAI, Anthropic, Google, Amazon,
    └ enter
    ```
 
-4. Kør kommandoen `/models` for at vælge en model som _gpt-oss-120b_.
+4. Kjør kommandoen `/models` for at velge en modell som _gpt-oss-120b_.
 
    ```txt
    /models
@@ -1503,17 +1509,17 @@ SAP AI Core giver adgang til 40+ modeller fra OpenAI, Anthropic, Google, Amazon,
 
 ### Scaleway
 
-Sådan bruger du [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) med OpenCode:
+Slik bruger du [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) med OpenCode:
 
-1. Gå til [Scaleway Console IAM indstillinger](https://console.scaleway.com/iam/api-keys) for at generere en ny API-nøgle.
+1. Gå over til [Scaleway Console IAM innstillinger](https://console.scaleway.com/iam/api-keys) for at generere en ny API-nøgle.
 
-2. Kør kommandoen `/connect` og søg efter **Scaleway**.
+2. Kjør kommandoen `/connect` og søk etter **Scaleway**.
 
    ```txt
    /connect
    ```
 
-3. Indtast Scaleway API-nøglen.
+3. Skriv inn Scaleway API-nøgleen.
 
    ```txt
    ┌ API key
@@ -1522,7 +1528,7 @@ Sådan bruger du [Scaleway Generative APIs](https://www.scaleway.com/en/docs/gen
    └ enter
    ```
 
-4. Kør kommandoen `/models` for at vælge en model som _devstral-2-123b-instruct-2512_ eller _gpt-oss-120b_.
+4. Kjør kommandoen `/models` for at velge en modell som _devstral-2-123b-instruct-2512_ eller _gpt-oss-120b_.
 
    ```txt
    /models
@@ -1530,17 +1536,17 @@ Sådan bruger du [Scaleway Generative APIs](https://www.scaleway.com/en/docs/gen
 
 ---
 
-### Together AI
+### Sammen AI
 
-1. Gå til [Together AI-konsollen](https://api.together.ai), opret en konto og klik på **Add Key**.
+1. Gå over til [Together AI-konsollen](https://api.together.ai), opret en konto og klikk på **Legg til nøkkel**.
 
-2. Kør kommandoen `/connect` og søg efter **Together AI**.
+2. Kjør kommandoen `/connect` og søk etter **Together AI**.
 
    ```txt
    /connect
    ```
 
-3. Indtast Together AI API-nøglen.
+3. Skriv inn Together AI API-nøgleen.
 
    ```txt
    ┌ API key
@@ -1549,7 +1555,7 @@ Sådan bruger du [Scaleway Generative APIs](https://www.scaleway.com/en/docs/gen
    └ enter
    ```
 
-4. Kør kommandoen `/models` for at vælge en model som _Kimi K2 Instruct_.
+4. Kjør kommandoen `/models` for at velge en modell som _Kimi K2 Instruct_.
 
    ```txt
    /models
@@ -1557,17 +1563,17 @@ Sådan bruger du [Scaleway Generative APIs](https://www.scaleway.com/en/docs/gen
 
 ---
 
-### Venice AI
+### Venezia AI
 
-1. Gå til [Venice AI-konsollen](https://venice.ai), opret en konto og generer en API-nøgle.
+1. Gå over til [Venezia AI-konsollen](https://venice.ai), opret en konto og generer en API-nøgle.
 
-2. Kør kommandoen `/connect` og søg efter **Venice AI**.
+2. Kjør kommandoen `/connect` og søk etter **Venezia AI**.
 
    ```txt
    /connect
    ```
 
-3. Indtast Venice AI API-nøglen.
+3. Skriv inn Venezia AI API-nøgleen.
 
    ```txt
    ┌ API key
@@ -1576,7 +1582,7 @@ Sådan bruger du [Scaleway Generative APIs](https://www.scaleway.com/en/docs/gen
    └ enter
    ```
 
-4. Kør kommandoen `/models` for at vælge en model som _Llama 3.3 70B_.
+4. Kjør kommandoen `/models` for at velge en modell som _Llama 3.3 70B_.
 
    ```txt
    /models
@@ -1586,17 +1592,17 @@ Sådan bruger du [Scaleway Generative APIs](https://www.scaleway.com/en/docs/gen
 
 ### Vercel AI Gateway
 
-Vercel AI Gateway lader dig få adgang til modeller fra OpenAI, Anthropic, Google, xAI og mere gennem et samlet endpoint. Modeller tilbydes til listepris uden påslag.
+Vercel AI Gateway lar deg få tilgang til modeller fra OpenAI, Anthropic, Google, xAI og mer gjennom et enhetlig endepunkt. Modeller tilbys til listepris uten påslag.
 
-1. Gå til [Vercel dashboard](https://vercel.com/), naviger til fanen **AI Gateway**, og klik på **API Keys** for at oprette en ny API-nøgle.
+1. Gå over til [Vercel dashboard](https://vercel.com/), naviger til fanen **AI Gateway**, og klikk på **API nøkler** for at oprete en ny API-nøgle.
 
-2. Kør kommandoen `/connect` og søg efter **Vercel AI Gateway**.
+2. Kjør kommandoen `/connect` og søk etter **Vercel AI Gateway**.
 
    ```txt
    /connect
    ```
 
-3. Indtast Vercel AI Gateway API-nøgle.
+3. Skriv inn Vercel AI Gateway API-nøgle.
 
    ```txt
    ┌ API key
@@ -1605,13 +1611,13 @@ Vercel AI Gateway lader dig få adgang til modeller fra OpenAI, Anthropic, Googl
    └ enter
    ```
 
-4. Kør kommandoen `/models` for at vælge en model.
+4. Kjør kommandoen `/models` for at velge en modell.
 
    ```txt
    /models
    ```
 
-Du kan også tilpasse modeller gennem opencode-konfigurationen. Her er et eksempel på specificering af udbyder-rutingsrækkefølge.
+Du kan også tilpasse modeller gjennom opencode-konfigurasjonen. Her er et eksempel på spesifisering av leverandørrutingsrekkefølge.
 
 ```json title="opencode.json"
 {
@@ -1632,25 +1638,25 @@ Du kan også tilpasse modeller gennem opencode-konfigurationen. Her er et eksemp
 
 Nogle nyttige rutealternativer:
 
-| Alternativ          | Beskrivelse                                              |
-| ------------------- | -------------------------------------------------------- |
-| `order`             | Providersekvens for at prøve                             |
-| `only`              | Begræns til specifikke udbydere                          |
-| `zeroDataRetention` | Brug kun udbydere med nul retningslinjer for datalagring |
+| Alternativ          | Beskrivelse                                                   |
+| ------------------- | ------------------------------------------------------------- |
+| `order`             | Providersekvens for at prøve                                  |
+| `only`              | Begrens til spesifikke leverandører                           |
+| `zeroDataRetention` | Brug kun leverandører med null retningslinjer for datalagring |
 
 ---
 
 ### xAI
 
-1. Gå til [xAI-konsollen](https://console.x.ai/), opret en konto og generer en API-nøgle.
+1. Gå over til [xAI-konsollen](https://console.x.ai/), opret en konto og generer en API-nøgle.
 
-2. Kør kommandoen `/connect` og søg efter **xAI**.
+2. Kjør kommandoen `/connect` og søk etter **xAI**.
 
    ```txt
    /connect
    ```
 
-3. Indtast xAI API-nøglen.
+3. Skriv inn xAI API-nøgleen.
 
    ```txt
    ┌ API key
@@ -1659,7 +1665,7 @@ Nogle nyttige rutealternativer:
    └ enter
    ```
 
-4. Kør kommandoen `/models` for at vælge en model som _Grok Beta_.
+4. Kjør kommandoen `/models` for at velge en modell som _Grok Beta_.
 
    ```txt
    /models
@@ -1669,17 +1675,17 @@ Nogle nyttige rutealternativer:
 
 ### Z.AI
 
-1. Gå til [Z.AI API-konsollen](https://z.ai/manage-apikey/apikey-list), opret en konto og klik på **Create new API Key**.
+1. Gå over til [Z.AI API-konsollen](https://z.ai/manage-apikey/apikey-list), opret en konto og klikk på **Opret en ny API-nøgle**.
 
-2. Kør kommandoen `/connect` og søg efter **Z.AI**.
+2. Kjør kommandoen `/connect` og søk etter **Z.AI**.
 
    ```txt
    /connect
    ```
 
-   Hvis du abonnerer på **GLM Coding Plan**, vælg **Z.AI Coding Plan**.
+   Hvis du abonnerer på **GLM Coding Plan**, velg **Z.AI Coding Plan**.
 
-3. Indtast Z.AI API-nøglen.
+3. Skriv inn Z.AI API-nøgleen.
 
    ```txt
    ┌ API key
@@ -1688,7 +1694,7 @@ Nogle nyttige rutealternativer:
    └ enter
    ```
 
-4. Kør kommandoen `/models` for at vælge en model som _GLM-4.7_.
+4. Kjør kommandoen `/models` for at velge en modell som _GLM-4.7_.
 
    ```txt
    /models
@@ -1698,15 +1704,15 @@ Nogle nyttige rutealternativer:
 
 ### ZenMux
 
-1. Gå til [ZenMux-dashboardet](https://zenmux.ai/settings/keys), klik på **Create API Key**, og kopier nøglen.
+1. Gå over til [ZenMux-dashbordet](https://zenmux.ai/settings/keys), klikk på **Create API Key**, og kopier nøkkelen.
 
-2. Kør kommandoen `/connect` og søg efter ZenMux.
+2. Kjør kommandoen `/connect` og søk etter ZenMux.
 
    ```txt
    /connect
    ```
 
-3. Indtast API-nøglen for udbyderen.
+3. Skriv inn API-nøgleen for leverandøren.
 
    ```txt
    ┌ API key
@@ -1715,13 +1721,13 @@ Nogle nyttige rutealternativer:
    └ enter
    ```
 
-4. Mange ZenMux-modeller er forudindlæst som standard, kør kommandoen `/models` for at vælge den du ønsker.
+4. Mange ZenMux-modeller er forhåndslastet som standard, kjør kommandoen `/models` for at velge den du ønsker.
 
    ```txt
    /models
    ```
 
-   Du kan også tilføje flere modeller gennem opencode-konfigurationen.
+   Du kan også tilføje til flere modeller gjennom opencode-konfigurasjonen.
 
    ```json title="opencode.json" {6}
    {
@@ -1738,15 +1744,15 @@ Nogle nyttige rutealternativer:
 
 ---
 
-## Brugerdefineret udbyder
+## Egendefinert leverandør
 
-Sådan tilføjer du en **OpenAI-kompatibel** udbyder som ikke er opført i `/connect`-kommandoen:
+Slik tilføjer du til en **OpenAI-kompatibel**-leverandør som ikke er oppført i `/connect`-kommandoen:
 
 :::tip
-Du kan bruge hvilken som helst OpenAI-kompatibel udbyder med opencode. De fleste moderne AI-udbydere tilbyder OpenAI-kompatible API'er.
+Du kan bruge hvilken som helst OpenAI-kompatibel leverandør med opencode. De fleste moderne AI-leverandører tilbyr OpenAI-kompatible APIer.
 :::
 
-1. Kør kommandoen `/connect` og rul ned til **Other**.
+1. Kjør kommandoen `/connect` og rull ned til **Annet**.
 
    ```bash
    $ /connect
@@ -1759,7 +1765,7 @@ Du kan bruge hvilken som helst OpenAI-kompatibel udbyder med opencode. De fleste
    └
    ```
 
-2. Indtast et unikt ID for udbyderen.
+2. Skriv inn en unik ID for leverandøren.
 
    ```bash
    $ /connect
@@ -1772,10 +1778,10 @@ Du kan bruge hvilken som helst OpenAI-kompatibel udbyder med opencode. De fleste
    ```
 
    :::note
-   Vælg et mindeværdigt ID, du vil bruge dette i din konfigurationsfil.
+   Velg en minneverdig ID, du vil bruge denne i konfigurasjonsfilen din.
    :::
 
-3. Indtast API-nøglen for udbyderen.
+3. Skriv inn API-nøgleen for leverandøren.
 
    ```bash
    $ /connect
@@ -1789,7 +1795,7 @@ Du kan bruge hvilken som helst OpenAI-kompatibel udbyder med opencode. De fleste
    └
    ```
 
-4. Opret eller opdater `opencode.json`-filen i projektkataloget:
+4. Opret eller opdater `opencode.json`-filen i prosjektkatalogen:
 
    ```json title="opencode.json" ""myprovider"" {5-15}
    {
@@ -1811,23 +1817,23 @@ Du kan bruge hvilken som helst OpenAI-kompatibel udbyder med opencode. De fleste
    }
    ```
 
-   Her er konfigurationsmulighederne:
-   - **npm**: AI SDK pakke at bruge, `@ai-sdk/openai-compatible` for OpenAI-kompatible udbydere
-   - **name**: Visningsnavn i UI.
-   - **models**: Tilgængelige modeller.
-   - **options.baseURL**: API endpoint URL.
-   - **options.apiKey**: Angiv API-nøglen hvis du ikke bruger auth.
-   - **options.headers**: Angiv egendefinerede headers.
+   Her er konfigurasjonsalternativene:
+   - **npm**: AI SDK pakke at bruge, `@ai-sdk/openai-compatible` for OpenAI-kompatible leverandører
+   - **navn**: Visningsnavn i UI.
+   - **modeller**: Tilgjengelige modeller.
+   - **options.baseURL**: API endepunkt URL.
+   - **options.apiKey**: Angi API-nøgleen hvis du ikke bruger auth.
+   - **options.headers**: Angi egendefinerte overskrifter.
 
-   Mere om de avancerede muligheder i eksemplet nedenfor.
+   Mer om de avanserte alternativene i eksemplet nedenfor.
 
-5. Kør kommandoen `/models` og din egendefinerede udbyder og modeller vil vises i udvalgslisten.
+5. Kjør kommandoen `/models` og din egendefinerte leverandør og modeller vil vises i utvalgslisten.
 
 ---
 
 ##### Eksempel
 
-Her er et eksempel på indstilling af mulighederne `apiKey`, `headers` og model `limit`.
+Her er et eksempel på innstilling av alternativene `apiKey`, `headers` og modell `limit`.
 
 ```json title="opencode.json" {9,11,17-20}
 {
@@ -1857,27 +1863,27 @@ Her er et eksempel på indstilling af mulighederne `apiKey`, `headers` og model 
 }
 ```
 
-Konfigurationsdetaljer:
+Konfigurasjonsdetaljer:
 
-- **apiKey**: Angiv med `env` variabel syntaks, [læs mere](/docs/config#env-vars).
-- **headers**: Egendefinerede headers sendt med hver anmodning.
-- **limit.context**: Maksimalt input-tokens som modellen accepterer.
-- **limit.output**: Maksimalt antal tokens modellen kan generere.
+- **apiKey**: Angi med `env` variabel syntaks, [finn ut mer](/docs/config#env-vars).
+- **overskrifter**: Egendefinerte overskrifter sendt med hver forespørsel.
+- **limit.context**: Maksimalt inndatatoken som modellen godtar.
+- **limit.output**: Maksimalt antall tokens modellen kan generere.
 
-`limit`-felterne lader OpenCode forstå hvor meget kontekst du har tilbage. Standardudbydere henter disse automatisk fra models.dev.
+`limit`-feltene lar OpenCode forstå hvor mye kontekst du har igjen. Standardleverandører henter disse automatisk fra models.dev.
 
 ---
 
-## Fejlfinding
+## Feilsøking
 
-Hvis du har problemer med at konfigurere en udbyder, tjek følgende:
+Hvis du har problemer med at konfigurere en leverandør, tjek følgende:
 
-1. **Tjek godkendelsesopsætningen**: Kør `opencode auth list` for at se om legitimationsoplysningerne
-   for udbyderen er tilføjet til din konfiguration.
+1. **Tjek autentiseringsoppsettet**: Kjør `opencode auth list` for at se om legitimasjonen
+   for leverandøren tilføjes til konfigurasjonen din.
 
-   Dette gælder ikke udbydere som Amazon Bedrock, som er afhængige af miljøvariabler for godkendelse.
+   Dette gjelder ikke leverandører som Amazon Bedrock, som er avhengige av miljøvariabler for godkjenning.
 
-2. For tilpassede udbydere, tjek opencode-konfigurationen og:
-   - Sørg for at udbyderens ID som bruges i `/connect`-kommandoen matcher ID i opencode-konfigurationen.
-   - Den rigtige npm-pakke bruges for udbyderen. Brug for eksempel `@ai-sdk/cerebras` for Cerebras. Og for alle andre OpenAI-kompatible udbydere, brug `@ai-sdk/openai-compatible`.
-   - Kontroller at korrekt API-endpoint er brugt i `options.baseURL`-feltet.
+2. For tilpassede leverandører, tjek opencode-konfigurasjonen og:
+   - Sørg for at leverandøren ID som bruges i `/connect`-kommandoen samsvarer med ID i opencode-konfigurasjonen.
+     – Den riktige npm-pakken bruges for leverandøren. Brug for eksempel `@ai-sdk/cerebras` for Cerebras. Og for alle andre OpenAI-kompatible leverandører, brug `@ai-sdk/openai-compatible`.
+   - Kontroller at riktig API-endepunkt er brugt i `options.baseURL`-feltet.

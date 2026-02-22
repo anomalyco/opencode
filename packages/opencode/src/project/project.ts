@@ -1,19 +1,18 @@
 import z from "zod"
+import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
 import path from "path"
-import { Database, eq } from "../storage/db"
-import { ProjectTable } from "./project.sql"
-import { SessionTable } from "../session/session.sql"
+import { $ } from "bun"
+import { Storage } from "../storage/storage"
 import { Log } from "../util/log"
 import { Flag } from "@/flag/flag"
+import { Session } from "../session"
 import { work } from "../util/queue"
 import { fn } from "@opencode-ai/util/fn"
 import { BusEvent } from "@/bus/bus-event"
 import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
 import { existsSync } from "fs"
-import { git } from "../util/git"
-import { Glob } from "../util/glob"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
@@ -51,43 +50,21 @@ export namespace Project {
     Updated: BusEvent.define("project.updated", Info),
   }
 
-  type Row = typeof ProjectTable.$inferSelect
-
-  export function fromRow(row: Row): Info {
-    const icon =
-      row.icon_url || row.icon_color
-        ? { url: row.icon_url ?? undefined, color: row.icon_color ?? undefined }
-        : undefined
-    return {
-      id: row.id,
-      worktree: row.worktree,
-      vcs: row.vcs ? Info.shape.vcs.parse(row.vcs) : undefined,
-      name: row.name ?? undefined,
-      icon,
-      time: {
-        created: row.time_created,
-        updated: row.time_updated,
-        initialized: row.time_initialized ?? undefined,
-      },
-      sandboxes: row.sandboxes,
-      commands: row.commands ?? undefined,
-    }
-  }
-
   export async function fromDirectory(directory: string) {
     log.info("fromDirectory", { directory })
 
-    const data = await iife(async () => {
+    const { id, sandbox, worktree, vcs } = await iife(async () => {
       const matches = Filesystem.up({ targets: [".git"], start: directory })
-      const dotgit = await matches.next().then((x) => x.value)
+      const git = await matches.next().then((x) => x.value)
       await matches.return()
-      if (dotgit) {
-        let sandbox = path.dirname(dotgit)
+      if (git) {
+        let sandbox = path.dirname(git)
 
         const gitBinary = Bun.which("git")
 
         // cached id calculation
-        let id = await Filesystem.readText(path.join(dotgit, "opencode"))
+        let id = await Bun.file(path.join(git, "opencode"))
+          .text()
           .then((x) => x.trim())
           .catch(() => undefined)
 
@@ -102,11 +79,13 @@ export namespace Project {
 
         // generate id from root commit
         if (!id) {
-          const roots = await git(["rev-list", "--max-parents=0", "--all"], {
-            cwd: sandbox,
-          })
-            .then(async (result) =>
-              (await result.text())
+          const roots = await $`git rev-list --max-parents=0 --all`
+            .quiet()
+            .nothrow()
+            .cwd(sandbox)
+            .text()
+            .then((x) =>
+              x
                 .split("\n")
                 .filter(Boolean)
                 .map((x) => x.trim())
@@ -125,7 +104,9 @@ export namespace Project {
 
           id = roots[0]
           if (id) {
-            void Filesystem.write(path.join(dotgit, "opencode"), id).catch(() => undefined)
+            void Bun.file(path.join(git, "opencode"))
+              .write(id)
+              .catch(() => undefined)
           }
         }
 
@@ -138,10 +119,12 @@ export namespace Project {
           }
         }
 
-        const top = await git(["rev-parse", "--show-toplevel"], {
-          cwd: sandbox,
-        })
-          .then(async (result) => path.resolve(sandbox, (await result.text()).trim()))
+        const top = await $`git rev-parse --show-toplevel`
+          .quiet()
+          .nothrow()
+          .cwd(sandbox)
+          .text()
+          .then((x) => path.resolve(sandbox, x.trim()))
           .catch(() => undefined)
 
         if (!top) {
@@ -155,11 +138,13 @@ export namespace Project {
 
         sandbox = top
 
-        const worktree = await git(["rev-parse", "--git-common-dir"], {
-          cwd: sandbox,
-        })
-          .then(async (result) => {
-            const dirname = path.dirname((await result.text()).trim())
+        const worktree = await $`git rev-parse --git-common-dir`
+          .quiet()
+          .nothrow()
+          .cwd(sandbox)
+          .text()
+          .then((x) => {
+            const dirname = path.dirname(x.trim())
             if (dirname === ".") return sandbox
             return dirname
           })
@@ -190,89 +175,69 @@ export namespace Project {
       }
     })
 
-    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, data.id)).get())
-    const existing = await iife(async () => {
-      if (row) return fromRow(row)
-      const fresh: Info = {
-        id: data.id,
-        worktree: data.worktree,
-        vcs: data.vcs as Info["vcs"],
+    let existing = await Storage.read<Info>(["project", id]).catch(() => undefined)
+    if (!existing) {
+      existing = {
+        id,
+        worktree,
+        vcs: vcs as Info["vcs"],
         sandboxes: [],
         time: {
           created: Date.now(),
           updated: Date.now(),
         },
       }
-      if (data.id !== "global") {
-        await migrateFromGlobal(data.id, data.worktree)
+      if (id !== "global") {
+        await migrateFromGlobal(id, worktree)
       }
-      return fresh
-    })
+    }
+
+    // migrate old projects before sandboxes
+    if (!existing.sandboxes) existing.sandboxes = []
 
     if (Flag.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY) discover(existing)
 
     const result: Info = {
       ...existing,
-      worktree: data.worktree,
-      vcs: data.vcs as Info["vcs"],
+      worktree,
+      vcs: vcs as Info["vcs"],
       time: {
         ...existing.time,
         updated: Date.now(),
       },
     }
-    if (data.sandbox !== result.worktree && !result.sandboxes.includes(data.sandbox))
-      result.sandboxes.push(data.sandbox)
+    if (sandbox !== result.worktree && !result.sandboxes.includes(sandbox)) result.sandboxes.push(sandbox)
     result.sandboxes = result.sandboxes.filter((x) => existsSync(x))
-    const insert = {
-      id: result.id,
-      worktree: result.worktree,
-      vcs: result.vcs ?? null,
-      name: result.name,
-      icon_url: result.icon?.url,
-      icon_color: result.icon?.color,
-      time_created: result.time.created,
-      time_updated: result.time.updated,
-      time_initialized: result.time.initialized,
-      sandboxes: result.sandboxes,
-      commands: result.commands,
-    }
-    const updateSet = {
-      worktree: result.worktree,
-      vcs: result.vcs ?? null,
-      name: result.name,
-      icon_url: result.icon?.url,
-      icon_color: result.icon?.color,
-      time_updated: result.time.updated,
-      time_initialized: result.time.initialized,
-      sandboxes: result.sandboxes,
-      commands: result.commands,
-    }
-    Database.use((db) =>
-      db.insert(ProjectTable).values(insert).onConflictDoUpdate({ target: ProjectTable.id, set: updateSet }).run(),
-    )
+    await Storage.write<Info>(["project", id], result)
     GlobalBus.emit("event", {
       payload: {
         type: Event.Updated.type,
         properties: result,
       },
     })
-    return { project: result, sandbox: data.sandbox }
+    return { project: result, sandbox }
   }
 
   export async function discover(input: Info) {
     if (input.vcs !== "git") return
     if (input.icon?.override) return
     if (input.icon?.url) return
-    const matches = await Glob.scan("**/favicon.{ico,png,svg,jpg,jpeg,webp}", {
-      cwd: input.worktree,
-      absolute: true,
-      include: "file",
-    })
+    const glob = new Bun.Glob("**/{favicon}.{ico,png,svg,jpg,jpeg,webp}")
+    const matches = await Array.fromAsync(
+      glob.scan({
+        cwd: input.worktree,
+        absolute: true,
+        onlyFiles: true,
+        followSymlinks: false,
+        dot: false,
+      }),
+    )
     const shortest = matches.sort((a, b) => a.length - b.length)[0]
     if (!shortest) return
-    const buffer = await Filesystem.readBytes(shortest)
-    const base64 = buffer.toString("base64")
-    const mime = Filesystem.mimeType(shortest) || "image/png"
+    const file = Bun.file(shortest)
+    const buffer = await file.arrayBuffer()
+    const base64 = Buffer.from(buffer).toString("base64")
+    const mime = file.type || "image/png"
     const url = `data:${mime};base64,${base64}`
     await update({
       projectID: input.id,
@@ -283,54 +248,43 @@ export namespace Project {
     return
   }
 
-  async function migrateFromGlobal(id: string, worktree: string) {
-    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, "global")).get())
-    if (!row) return
+  async function migrateFromGlobal(newProjectID: string, worktree: string) {
+    const globalProject = await Storage.read<Info>(["project", "global"]).catch(() => undefined)
+    if (!globalProject) return
 
-    const sessions = Database.use((db) =>
-      db.select().from(SessionTable).where(eq(SessionTable.project_id, "global")).all(),
-    )
-    if (sessions.length === 0) return
+    const globalSessions = await Storage.list(["session", "global"]).catch(() => [])
+    if (globalSessions.length === 0) return
 
-    log.info("migrating sessions from global", { newProjectID: id, worktree, count: sessions.length })
+    log.info("migrating sessions from global", { newProjectID, worktree, count: globalSessions.length })
 
-    await work(10, sessions, async (row) => {
-      // Skip sessions that belong to a different directory
-      if (row.directory && row.directory !== worktree) return
+    await work(10, globalSessions, async (key) => {
+      const sessionID = key[key.length - 1]
+      const session = await Storage.read<Session.Info>(key).catch(() => undefined)
+      if (!session) return
+      if (session.directory && session.directory !== worktree) return
 
-      log.info("migrating session", { sessionID: row.id, from: "global", to: id })
-      Database.use((db) => db.update(SessionTable).set({ project_id: id }).where(eq(SessionTable.id, row.id)).run())
+      session.projectID = newProjectID
+      log.info("migrating session", { sessionID, from: "global", to: newProjectID })
+      await Storage.write(["session", newProjectID, sessionID], session)
+      await Storage.remove(key)
     }).catch((error) => {
-      log.error("failed to migrate sessions from global to project", { error, projectId: id })
+      log.error("failed to migrate sessions from global to project", { error, projectId: newProjectID })
     })
   }
 
-  export function setInitialized(id: string) {
-    Database.use((db) =>
-      db
-        .update(ProjectTable)
-        .set({
-          time_initialized: Date.now(),
-        })
-        .where(eq(ProjectTable.id, id))
-        .run(),
-    )
+  export async function setInitialized(projectID: string) {
+    await Storage.update<Info>(["project", projectID], (draft) => {
+      draft.time.initialized = Date.now()
+    })
   }
 
-  export function list() {
-    return Database.use((db) =>
-      db
-        .select()
-        .from(ProjectTable)
-        .all()
-        .map((row) => fromRow(row)),
-    )
-  }
-
-  export function get(id: string): Info | undefined {
-    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
-    if (!row) return undefined
-    return fromRow(row)
+  export async function list() {
+    const keys = await Storage.list(["project"])
+    const projects = await Promise.all(keys.map((x) => Storage.read<Info>(x)))
+    return projects.map((project) => ({
+      ...project,
+      sandboxes: project.sandboxes?.filter((x) => existsSync(x)),
+    }))
   }
 
   export const update = fn(
@@ -341,88 +295,77 @@ export namespace Project {
       commands: Info.shape.commands.optional(),
     }),
     async (input) => {
-      const result = Database.use((db) =>
-        db
-          .update(ProjectTable)
-          .set({
-            name: input.name,
-            icon_url: input.icon?.url,
-            icon_color: input.icon?.color,
-            commands: input.commands,
-            time_updated: Date.now(),
-          })
-          .where(eq(ProjectTable.id, input.projectID))
-          .returning()
-          .get(),
-      )
-      if (!result) throw new Error(`Project not found: ${input.projectID}`)
-      const data = fromRow(result)
+      const result = await Storage.update<Info>(["project", input.projectID], (draft) => {
+        if (input.name !== undefined) draft.name = input.name
+        if (input.icon !== undefined) {
+          draft.icon = {
+            ...draft.icon,
+          }
+          if (input.icon.url !== undefined) draft.icon.url = input.icon.url
+          if (input.icon.override !== undefined) draft.icon.override = input.icon.override || undefined
+          if (input.icon.color !== undefined) draft.icon.color = input.icon.color
+        }
+
+        if (input.commands?.start !== undefined) {
+          const start = input.commands.start || undefined
+          draft.commands = {
+            ...(draft.commands ?? {}),
+          }
+          draft.commands.start = start
+          if (!draft.commands.start) draft.commands = undefined
+        }
+
+        draft.time.updated = Date.now()
+      })
       GlobalBus.emit("event", {
         payload: {
           type: Event.Updated.type,
-          properties: data,
+          properties: result,
         },
       })
-      return data
+      return result
     },
   )
 
-  export async function sandboxes(id: string) {
-    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
-    if (!row) return []
-    const data = fromRow(row)
+  export async function sandboxes(projectID: string) {
+    const project = await Storage.read<Info>(["project", projectID]).catch(() => undefined)
+    if (!project?.sandboxes) return []
     const valid: string[] = []
-    for (const dir of data.sandboxes) {
-      const s = Filesystem.stat(dir)
-      if (s?.isDirectory()) valid.push(dir)
+    for (const dir of project.sandboxes) {
+      const stat = await fs.stat(dir).catch(() => undefined)
+      if (stat?.isDirectory()) valid.push(dir)
     }
     return valid
   }
 
-  export async function addSandbox(id: string, directory: string) {
-    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
-    if (!row) throw new Error(`Project not found: ${id}`)
-    const sandboxes = [...row.sandboxes]
-    if (!sandboxes.includes(directory)) sandboxes.push(directory)
-    const result = Database.use((db) =>
-      db
-        .update(ProjectTable)
-        .set({ sandboxes, time_updated: Date.now() })
-        .where(eq(ProjectTable.id, id))
-        .returning()
-        .get(),
-    )
-    if (!result) throw new Error(`Project not found: ${id}`)
-    const data = fromRow(result)
+  export async function addSandbox(projectID: string, directory: string) {
+    const result = await Storage.update<Info>(["project", projectID], (draft) => {
+      const sandboxes = draft.sandboxes ?? []
+      if (!sandboxes.includes(directory)) sandboxes.push(directory)
+      draft.sandboxes = sandboxes
+      draft.time.updated = Date.now()
+    })
     GlobalBus.emit("event", {
       payload: {
         type: Event.Updated.type,
-        properties: data,
+        properties: result,
       },
     })
-    return data
+    return result
   }
 
-  export async function removeSandbox(id: string, directory: string) {
-    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
-    if (!row) throw new Error(`Project not found: ${id}`)
-    const sandboxes = row.sandboxes.filter((s) => s !== directory)
-    const result = Database.use((db) =>
-      db
-        .update(ProjectTable)
-        .set({ sandboxes, time_updated: Date.now() })
-        .where(eq(ProjectTable.id, id))
-        .returning()
-        .get(),
-    )
-    if (!result) throw new Error(`Project not found: ${id}`)
-    const data = fromRow(result)
+  export async function removeSandbox(projectID: string, directory: string) {
+    const result = await Storage.update<Info>(["project", projectID], (draft) => {
+      const sandboxes = draft.sandboxes ?? []
+      draft.sandboxes = sandboxes.filter((sandbox) => sandbox !== directory)
+      draft.time.updated = Date.now()
+    })
     GlobalBus.emit("event", {
       payload: {
         type: Event.Updated.type,
-        properties: data,
+        properties: result,
       },
     })
-    return data
+    return result
   }
 }

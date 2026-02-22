@@ -7,12 +7,11 @@ import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
 import { Env } from "../../src/env"
 import { Global } from "../../src/global"
-import { Filesystem } from "../../src/util/filesystem"
 
 test("Bedrock: config region takes precedence over AWS_REGION env var", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Filesystem.write(
+      await Bun.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -44,7 +43,7 @@ test("Bedrock: config region takes precedence over AWS_REGION env var", async ()
 test("Bedrock: falls back to AWS_REGION env var when no config region", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Filesystem.write(
+      await Bun.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -69,7 +68,7 @@ test("Bedrock: falls back to AWS_REGION env var when no config region", async ()
 test("Bedrock: loads when bearer token from auth.json is present", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Filesystem.write(
+      await Bun.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -90,14 +89,14 @@ test("Bedrock: loads when bearer token from auth.json is present", async () => {
   // Save original auth.json if it exists
   let originalAuth: string | undefined
   try {
-    originalAuth = await Filesystem.readText(authPath)
+    originalAuth = await Bun.file(authPath).text()
   } catch {
     // File doesn't exist, that's fine
   }
 
   try {
     // Write test auth.json
-    await Filesystem.write(
+    await Bun.write(
       authPath,
       JSON.stringify({
         "amazon-bedrock": {
@@ -123,7 +122,7 @@ test("Bedrock: loads when bearer token from auth.json is present", async () => {
   } finally {
     // Restore original or delete
     if (originalAuth !== undefined) {
-      await Filesystem.write(authPath, originalAuth)
+      await Bun.write(authPath, originalAuth)
     } else {
       try {
         await unlink(authPath)
@@ -137,7 +136,7 @@ test("Bedrock: loads when bearer token from auth.json is present", async () => {
 test("Bedrock: config profile takes precedence over AWS_PROFILE env var", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Filesystem.write(
+      await Bun.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -170,7 +169,7 @@ test("Bedrock: config profile takes precedence over AWS_PROFILE env var", async 
 test("Bedrock: includes custom endpoint in options when specified", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Filesystem.write(
+      await Bun.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -203,7 +202,7 @@ test("Bedrock: includes custom endpoint in options when specified", async () => 
 test("Bedrock: autoloads when AWS_WEB_IDENTITY_TOKEN_FILE is present", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Filesystem.write(
+      await Bun.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -241,7 +240,7 @@ test("Bedrock: autoloads when AWS_WEB_IDENTITY_TOKEN_FILE is present", async () 
 test("Bedrock: model with us. prefix should not be double-prefixed", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Filesystem.write(
+      await Bun.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -278,7 +277,7 @@ test("Bedrock: model with us. prefix should not be double-prefixed", async () =>
 test("Bedrock: model with global. prefix should not be prefixed", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Filesystem.write(
+      await Bun.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -314,7 +313,7 @@ test("Bedrock: model with global. prefix should not be prefixed", async () => {
 test("Bedrock: model with eu. prefix should not be double-prefixed", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Filesystem.write(
+      await Bun.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -350,7 +349,7 @@ test("Bedrock: model with eu. prefix should not be double-prefixed", async () =>
 test("Bedrock: model without prefix in US region should get us. prefix added", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Filesystem.write(
+      await Bun.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",

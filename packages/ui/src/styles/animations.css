@@ -1,6 +1,5 @@
 :root {
   --animate-pulse: pulse-opacity 2s ease-in-out infinite;
-  --animate-pulse-scale: pulse-scale 1.2s ease-in-out infinite;
 }
 
 @keyframes pulse-opacity {
@@ -10,16 +9,6 @@
   }
   50% {
     opacity: 1;
-  }
-}
-
-@keyframes pulse-scale {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(0.6666667);
   }
 }
 

@@ -29,7 +29,7 @@ OpenCode ใช้ [AI SDK](https://ai-sdk.dev/) และ [Models.dev](https://
 
 ---
 
-#### Base URL (URL พื้นฐาน)
+#### Base URL
 
 คุณสามารถปรับแต่งฐาน URL สำหรับผู้ให้บริการรายใดก็ได้โดยตั้งค่าตัวเลือก `baseURL` สิ่งนี้มีประโยชน์เมื่อใช้บริการพร็อกซีหรือจุดสิ้นสุดแบบกำหนดเอง
 
@@ -282,7 +282,7 @@ OpenCode Zen คือรายชื่อโมเดลที่จัดท�
 การใช้การสมัครสมาชิก Claude Pro/Max ใน OpenCode ไม่ได้รับการสนับสนุนอย่างเป็นทางการจาก [Anthropic](https://anthropic.com)
 :::
 
-##### การใช้ API Key
+##### ใช้API Key
 
 คุณยังสามารถเลือก **สร้าง API คีย์** หากคุณไม่มีการสมัครสมาชิก Pro/Max นอกจากนี้ยังจะเปิดเบราว์เซอร์ของคุณและขอให้คุณเข้าสู่ระบบ Anthropic และให้รหัสที่คุณสามารถวางใน terminal ของคุณ
 
@@ -341,7 +341,7 @@ OpenCode Zen คือรายชื่อโมเดลที่จัดท�
 
 ---
 
-### Azure Cognitive Services
+### บริการความรู้ความเข้าใจ Azure
 
 1. ไปที่ [พอร์ทัล Azure](https://portal.azure.com/) และสร้างทรัพยากร **Azure OpenAI** คุณจะต้องการ:
    - **ชื่อทรัพยากร**: นี่จะกลายเป็นส่วนหนึ่งของจุดสิ้นสุด API ของคุณ (`https://AZURE_COGNITIVE_SERVICES_RESOURCE_NAME.cognitiveservices.azure.com/`)
@@ -388,7 +388,7 @@ OpenCode Zen คือรายชื่อโมเดลที่จัดท�
 
 ---
 
-### Baseten
+### บาสเตน
 
 1. ไปที่ [Baseten](https://app.baseten.co/) สร้างบัญชี และสร้างคีย์ API
 
@@ -442,11 +442,11 @@ OpenCode Zen คือรายชื่อโมเดลที่จัดท�
 
 ---
 
-### Cloudflare AI Gateway
+### เกตเวย์ AI ของ Cloudflare
 
 Cloudflare AI Gateway ช่วยให้คุณเข้าถึงโมเดลจาก OpenAI, Anthropic, Workers AI และอื่นๆ อีกมากมายผ่านตำแหน่งข้อมูลแบบรวม ด้วย [การเรียกเก็บเงินแบบรวม](https://developers.cloudflare.com/ai-gateway/features/unified-billing/) คุณไม่จำเป็นต้องใช้คีย์ API แยกต่างหากสำหรับผู้ให้บริการแต่ละราย
 
-1. ไปที่ [แดชบอร์ด Cloudflare](https://dash.cloudflare.com/) ไปที่ **AI** > **AI Gateway** และสร้างเกตเวย์ใหม่
+1. ไปที่ [แดชบอร์ด Cloudflare](https://dash.cloudflare.com/) ไปที่ **AI** > **เกตเวย์ AI** และสร้างเกตเวย์ใหม่
 
 2. ตั้งค่ารหัสบัญชีและรหัสเกตเวย์ของคุณเป็นตัวแปรสภาพแวดล้อม
 
@@ -500,7 +500,7 @@ Cloudflare AI Gateway ช่วยให้คุณเข้าถึงโม�
 
 ---
 
-### Cortecs
+### คอร์เทคส์
 
 1. ไปที่ [คอนโซล Cortecs](https://cortecs.ai/) สร้างบัญชี และสร้างคีย์ API
 
@@ -527,7 +527,7 @@ Cloudflare AI Gateway ช่วยให้คุณเข้าถึงโม�
 
 ---
 
-### DeepSeek
+### ดีปซีค
 
 1. ไปที่ [คอนโซล DeepSeek](https://platform.deepseek.com/) สร้างบัญชี แล้วคลิก **สร้างคีย์ API ใหม่**
 
@@ -583,15 +583,15 @@ Cloudflare AI Gateway ช่วยให้คุณเข้าถึงโม�
 
 ### Firmware
 
-1. ไปที่ [แดชบอร์ด Firmware](https://app.firmware.ai/signup) สร้างบัญชี และสร้างคีย์ API
+1. ไปที่ [แดชบอร์ดเฟิร์มแวร์](https://app.firmware.ai/signup) สร้างบัญชี และสร้างคีย์ API
 
-2. เรียกใช้คำสั่ง `/connect` และค้นหา **Firmware**
+2. เรียกใช้คำสั่ง `/connect` และค้นหา **เฟิร์มแวร์**
 
    ```txt
    /connect
    ```
 
-3. ป้อนคีย์ Firmware API ของคุณ
+3. ป้อนคีย์เฟิร์มแวร์ API ของคุณ
 
    ```txt
    ┌ API key
@@ -610,7 +610,7 @@ Cloudflare AI Gateway ช่วยให้คุณเข้าถึงโม�
 
 ### Fireworks AI
 
-1. ไปที่ [คอนโซล Fireworks AI](https://app.fireworks.ai/) สร้างบัญชี แล้วคลิก **Create API Key**
+1. ไปที่ [คอนโซล AI ดอกไม้ไฟ](https://app.fireworks.ai/) สร้างบัญชี แล้วคลิก **สร้าง API คีย์**
 
 2. รันคำสั่ง `/connect` และค้นหา **Fireworks AI**
 
@@ -618,7 +618,7 @@ Cloudflare AI Gateway ช่วยให้คุณเข้าถึงโม�
    /connect
    ```
 
-3. ป้อนคีย์ Fireworks AI API ของคุณ
+3. ป้อนคีย์ดอกไม้ไฟ AI API ของคุณ
 
    ```txt
    ┌ API key
@@ -659,7 +659,7 @@ GitLab Duo ให้การแชทแบบเอเจนต์ที่ข
 
    เลือก **OAuth** และเบราว์เซอร์ของคุณจะเปิดขึ้นเพื่อรับสิทธิ์
 
-#### การใช้ Personal Access Token
+#### Using Personal Access Token
 
 1.  ไปที่ [GitLab User Settings > Access Tokens](https://gitlab.com/-/user_settings/personal_access_tokens)
 2.  คลิก **เพิ่มโทเค็นใหม่**
@@ -791,7 +791,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 :::note
 บางรุ่นอาจต้องมี [Pro+
-subscription](https://github.com/features/copilot/plans) เพื่อใช้งาน
+สมัครสมาชิก](https://github.com/features/copilot/plans) เพื่อใช้งาน
 
 บางรุ่นจำเป็นต้องเปิดใช้งานด้วยตนเองใน [การตั้งค่า GitHub Copilot](https://docs.github.com/en/copilot/how-tos/use-ai-models/configure-access-to-ai-models#setup-for-individual-use)
 :::
@@ -811,7 +811,7 @@ subscription](https://github.com/features/copilot/plans) เพื่อใช�
    │
    │ Enter code: 8F43-6FCF
    │
-   │ Waiting for authorization...
+   └ Waiting for authorization...
    ```
 
 3. ตอนนี้รันคำสั่ง `/models` เพื่อเลือกรุ่นที่คุณต้องการ
@@ -822,7 +822,7 @@ subscription](https://github.com/features/copilot/plans) เพื่อใช�
 
 ---
 
-### Google Vertex AI
+### กูเกิล เวอร์เท็กซ์ เอไอ
 
 วิธีใช้ Google Vertex AI กับ OpenCode:
 
@@ -895,9 +895,9 @@ subscription](https://github.com/features/copilot/plans) เพื่อใช�
 
 ### Hugging Face
 
-[ผู้ให้บริการการอนุมาน Hugging Face](https://huggingface.co/docs/inference-providers) ช่วยให้สามารถเข้าถึงโมเดลแบบเปิดที่รองรับโดยผู้ให้บริการมากกว่า 17 ราย
+[ผู้ให้บริการการอนุมานHugging Face](https://huggingface.co/docs/inference-providers) ช่วยให้สามารถเข้าถึงโมเดลแบบเปิดที่รองรับโดยผู้ให้บริการมากกว่า 17 ราย
 
-1. ไปที่ [การตั้งค่า Hugging Face](https://huggingface.co/settings/tokens/new?ownUserPermissions=inference.serverless.write&tokenType=fineGrained) เพื่อสร้างโทเค็นที่มีสิทธิ์ในการโทรไปยังผู้ให้บริการการอนุมาน
+1. ไปที่ [การตั้งค่าHugging Face](https://huggingface.co/settings/tokens/new?ownUserPermissions=inference.serverless.write&tokenType=fineGrained) เพื่อสร้างโทเค็นที่มีสิทธิ์ในการโทรไปยังผู้ให้บริการการอนุมาน
 
 2. เรียกใช้คำสั่ง `/connect` และค้นหา **Hugging Face**
 
@@ -922,7 +922,7 @@ subscription](https://github.com/features/copilot/plans) เพื่อใช�
 
 ---
 
-### Helicone
+### เฮลิโคน
 
 [Helicone](https://helicone.ai) เป็นแพลตฟอร์มการติดตาม LLM ที่ให้การบันทึก การตรวจสอบ และการวิเคราะห์สำหรับแอปพลิเคชัน AI ของคุณ Helicone AI Gateway กำหนดเส้นทางคำขอของคุณไปยังผู้ให้บริการที่เหมาะสมโดยอัตโนมัติตามรุ่น
 
@@ -1073,7 +1073,7 @@ npm install -g opencode-helicone-session
 
 ---
 
-### IO.NET
+### ไอโอ.NET
 
 IO.NET มี 17 โมเดลที่ได้รับการปรับให้เหมาะกับการใช้งานที่หลากหลาย:
 
@@ -1140,7 +1140,7 @@ IO.NET มี 17 โมเดลที่ได้รับการปรับ
 
 วิธีใช้ Kimi K2 จาก Moonshot AI:
 
-1. ไปที่ [Moonshot AI console](https://platform.moonshot.ai/console) สร้างบัญชี แล้วคลิก **Create API Key**
+1. ไปที่ [Moonshot AI console](https://platform.moonshot.ai/console) สร้างบัญชี แล้วคลิก **สร้าง API คีย์**
 
 2. รันคำสั่ง `/connect` และค้นหา **Moonshot AI**
 
@@ -1194,7 +1194,7 @@ IO.NET มี 17 โมเดลที่ได้รับการปรับ
 
 ### Nebius Token Factory
 
-1. ไปที่ [คอนโซล Nebius Token Factory](https://tokenfactory.nebius.com/) สร้างบัญชี แล้วคลิก **Add key**
+1. ไปที่ [คอนโซล Nebius Token Factory](https://tokenfactory.nebius.com/) สร้างบัญชี แล้วคลิก **เพิ่มรหัส**
 
 2. รันคำสั่ง `/connect` และค้นหา **Nebius Token Factory**
 
@@ -1267,7 +1267,7 @@ Ollama สามารถกำหนดค่าตัวเองสำหร�
 
 1. ไปที่ [https://ollama.com/](https://ollama.com/) แล้วลงชื่อเข้าใช้หรือสร้างบัญชี
 
-2. ไปที่ **Settings** > **Keys** แล้วคลิก **Add API Key** เพื่อสร้างคีย์ API ใหม่
+2. ไปที่ **การตั้งค่า** > **คีย์** แล้วคลิก **เพิ่ม API คีย์** เพื่อสร้างคีย์ API ใหม่
 
 3. คัดลอกคีย์ API เพื่อใช้ใน OpenCode
 
@@ -1327,13 +1327,13 @@ Ollama สามารถกำหนดค่าตัวเองสำหร�
    /models
    ```
 
-##### การใช้ API Key
+##### ใช้API Key
 
-หากคุณมีคีย์ API อยู่แล้ว คุณสามารถเลือก **Manually enter API Key** และวางลงใน terminal ของคุณ
+หากคุณมีคีย์ API อยู่แล้ว คุณสามารถเลือก **ป้อนคีย์ API ด้วยตนเอง** และวางลงใน terminal ของคุณ
 
 ---
 
-### OpenCode Zen
+### โอเพ่นโค้ดเซน
 
 OpenCode Zen คือรายการโมเดลที่ได้รับการทดสอบและตรวจสอบแล้วโดยทีมงาน OpenCode [เรียนรู้เพิ่มเติม](/docs/zen)
 

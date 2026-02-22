@@ -15,21 +15,21 @@ Bir sağlayıcı eklemek için şunları yapmanız gerekir:
 
 ---
 
-### Kimlik Bilgileri
+### Credentials
 
 Bir sağlayıcının API anahtarlarını `/connect` komutuyla eklediğinizde, bunlar saklanır
 `~/.local/share/opencode/auth.json` içinde.
 
 ---
 
-### Yapılandırma
+### Config
 
 Sağlayıcıları opencode'unuzdaki `provider` bölümü aracılığıyla özelleştirebilirsiniz.
 config.
 
 ---
 
-#### Temel URL
+#### Base URL
 
 `baseURL` seçeneğini ayarlayarak URL tabanını herhangi bir sağlayıcı için özelleştirebilirsiniz. Bu, proxy hizmetlerini veya özel uç noktaları kullanırken kullanışlıdır.
 
@@ -137,7 +137,7 @@ Amazon Bedrock'u opencode ile kullanmak için:
 
    #### Ortam Değişkenleri (Hızlı Başlangıç)
 
-   opencode'u çalıştırırken bu ortam değişkenlerinden birini ayarlayın:
+   Set one of these environment variables while running opencode:
 
    ```bash
    # Option 1: Using AWS access keys
@@ -184,46 +184,44 @@ Amazon Bedrock'u opencode ile kullanmak için:
    Yapılandırma dosyası seçenekleri ortam değişkenlerine göre önceliklidir.
    :::
 
-#### Gelişmiş: VPC Uç Noktaları
+   #### Advanced: VPC Endpoints
 
-Bedrock için VPC uç noktaları kullanıyorsanız:
+   Bedrock için VPC uç noktaları kullanıyorsanız:
 
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "amazon-bedrock": {
-      "options": {
-        "region": "us-east-1",
-        "profile": "production",
-        "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
-      }
-    }
-  }
-}
-```
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "amazon-bedrock": {
+         "options": {
+           "region": "us-east-1",
+           "profile": "production",
+           "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
+         }
+       }
+     }
+   }
+   ```
 
-:::note
-`endpoint` seçeneği, AWS'ye özgü terminolojiyi kullanan genel `baseURL` seçeneğinin takma adıdır. Hem `endpoint` hem de `baseURL` belirtilirse, `endpoint` öncelikli olur.
-:::
+   :::note
+   `endpoint` seçeneği, AWS'ye özgü terminolojiyi kullanan genel `baseURL` seçeneğinin takma adıdır. Hem `endpoint` hem de `baseURL` belirtilirse, `endpoint` öncelikli olur.
+   :::
 
-#### Kimlik Doğrulama Yöntemleri
+   #### Authentication Methods
+   - **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**: Bir IAM kullanıcısı oluşturun ve AWS Konsolunda erişim anahtarları oluşturun
+   - **`AWS_PROFILE`**: `~/.aws/credentials`'den adlandırılmış profilleri kullanın. İlk önce `aws configure --profile my-profile` veya `aws sso login` ile yapılandırın
+   - **`AWS_BEARER_TOKEN_BEDROCK`**: Amazon Bedrock konsolundan uzun vadeli API anahtarları oluşturun
+   - **`AWS_WEB_IDENTITY_TOKEN_FILE` / `AWS_ROLE_ARN`**: EKS IRSA (IAM Hizmet Hesapları için Roller) veya OIDC federasyonuna sahip diğer Kubernetes ortamları için. Bu ortam değişkenleri, hizmet hesabı ek açıklamaları kullanılırken Kubernetes tarafından otomatik olarak eklenir.
 
-- **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**: Bir IAM kullanıcısı oluşturun ve AWS Konsolunda erişim anahtarları oluşturun
-- **`AWS_PROFILE`**: `~/.aws/credentials`'den adlandırılmış profilleri kullanın. İlk önce `aws configure --profile my-profile` veya `aws sso login` ile yapılandırın
-- **`AWS_BEARER_TOKEN_BEDROCK`**: Amazon Bedrock konsolundan uzun vadeli API anahtarları oluşturun
-- **`AWS_WEB_IDENTITY_TOKEN_FILE` / `AWS_ROLE_ARN`**: EKS IRSA (IAM Hizmet Hesapları için Roller) veya OIDC federasyonuna sahip diğer Kubernetes ortamları için. Bu ortam değişkenleri, hizmet hesabı ek açıklamaları kullanılırken Kubernetes tarafından otomatik olarak eklenir.
+   #### Authentication Precedence
 
-#### Kimlik Doğrulama Önceliği
+   Amazon Bedrock aşağıdaki kimlik doğrulama önceliğini kullanır:
+   1. **Taşıyıcı Belirteç** - `AWS_BEARER_TOKEN_BEDROCK` ortam değişkeni veya `/connect` komutundan belirteç
+   2. **AWS Credential Chain** - Profile, access keys, shared credentials, IAM roles, Web Identity Tokens (EKS IRSA), instance metadata
 
-Amazon Bedrock aşağıdaki kimlik doğrulama önceliğini kullanır:
-
-1. **Taşıyıcı Belirteç** - `AWS_BEARER_TOKEN_BEDROCK` ortam değişkeni veya `/connect` komutundan belirteç
-2. **AWS Credential Chain** - Profil, erişim anahtarları, paylaşılan kimlik bilgileri, IAM rolleri, Web Identity Tokens (EKS IRSA), örnek meta verileri
-
-:::note
-Bir taşıyıcı belirteç ayarlandığında (`/connect` veya `AWS_BEARER_TOKEN_BEDROCK` yoluyla), yapılandırılmış profiller dahil olmak üzere tüm AWS kimlik bilgisi yöntemlerine göre öncelik kazanır.
-:::
+   :::note
+   When a bearer token is set (via `/connect` or `AWS_BEARER_TOKEN_BEDROCK`), it takes precedence over all AWS credential methods including configured profiles.
+   :::
 
 3. İstediğiniz modeli seçmek için `/models` komutunu çalıştırın.
 
@@ -284,7 +282,7 @@ Bir taşıyıcı belirteç ayarlandığında (`/connect` veya `AWS_BEARER_TOKEN_
 Claude Pro/Max aboneliğinizi opencode'da kullanmak [Anthropic](https://anthropic.com) tarafından resmi olarak desteklenmemektedir.
 :::
 
-##### API anahtarlarını kullanma
+##### API tuşlarını kullanma
 
 Pro/Max aboneliğiniz yoksa **API Anahtarı Oluştur** seçeneğini de seçebilirsiniz. Ayrıca tarayıcınızı açacak ve Anthropic'te oturum açmanızı isteyecek ve terminalinize yapıştırabileceğiniz bir kod verecektir.
 
@@ -355,7 +353,7 @@ Veya zaten bir API anahtarınız varsa **API Anahtarını Manuel Olarak Girin** 
    opencode'un düzgün çalışması için dağıtım adının model adıyla eşleşmesi gerekir.
    :::
 
-3. `/connect` komutunu çalıştırın ve **Azure Cognitive Services**'i arayın.
+3. `/connect` komutunu çalıştırın ve **Azure Bilişsel Hizmetler**'i arayın.
 
    ```txt
    /connect
@@ -463,7 +461,7 @@ Cloudflare AI Gateway, OpenAI, Anthropic, Workers AI ve daha fazlasındaki model
    /connect
    ```
 
-4. Cloudflare API tokenınızı girin.
+4. Cloudflare API jetonunuzu girin.
 
    ```txt
    ┌ API key
@@ -472,7 +470,7 @@ Cloudflare AI Gateway, OpenAI, Anthropic, Workers AI ve daha fazlasındaki model
    └ enter
    ```
 
-   Veya bunu bir ortam değişkeni olarak ayarlayın.
+   Or set it as an environment variable.
 
    ```bash title="~/.bash_profile"
    export CLOUDFLARE_API_TOKEN=your-api-token
@@ -684,9 +682,9 @@ GitLab Duo, GitLab'ın Anthropic proxy'si aracılığıyla yerel araç çağırm
 to store token in opencode auth storage.
 :::
 
-##### Kendi Kendine Barındırılan GitLab
+##### Self-Hosted GitLab
 
-:::note[uyumluluk notu]
+:::note[compliance note]
 opencode, oturum başlığını oluşturmak gibi bazı AI görevleri için küçük bir model kullanır.
 Varsayılan olarak Zen tarafından barındırılan gpt-5-nano'yu kullanacak şekilde yapılandırılmıştır. opencode'u kilitlemek için
 yalnızca kendi GitLab tarafından barındırılan örneğinizi kullanmak için aşağıdakileri ekleyin:
@@ -750,9 +748,9 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 Daha fazla belge [opencode-gitlab-auth](https://www.npmjs.com/package/@gitlab/opencode-gitlab-auth) ana sayfasında.
 
-##### Yapılandırma
+##### Configuration
 
-`opencode.json` üzerinden özelleştirin:
+Customize through `opencode.json`:
 
 ```json title="opencode.json"
 {
@@ -771,9 +769,9 @@ Daha fazla belge [opencode-gitlab-auth](https://www.npmjs.com/package/@gitlab/op
 }
 ```
 
-##### GitLab API Araçları (İsteğe bağlı, ancak şiddetle önerilir)
+##### GitLab API Tools (Optional, but highly recommended)
 
-GitLab araçlarına (birleştirme istekleri, sorunlar, işlem hatları, CI/CD vb.) erişmek için:
+To access GitLab tools (merge requests, issues, pipelines, CI/CD, etc.):
 
 ```json title="opencode.json"
 {
@@ -836,11 +834,11 @@ Google Vertex AI'yi opencode ile kullanmak için:
 2. Gerekli ortam değişkenlerini ayarlayın:
    - `GOOGLE_CLOUD_PROJECT`: Google Cloud proje kimliğiniz
    - `VERTEX_LOCATION` (isteğe bağlı): Vertex AI bölgesi (varsayılanı `global`'dir)
-   - Kimlik Doğrulama (birini seçin):
+   - Authentication (choose one):
      - `GOOGLE_APPLICATION_CREDENTIALS`: Hizmet hesabınızın yolu JSON anahtar dosyası
      - gcloud kullanarak kimlik doğrulaması yapın CLI: `gcloud auth application-default login`
 
-   Bunları opencode çalıştırılırken ayarlayın.
+   Set them while running opencode.
 
    ```bash
    GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
@@ -899,13 +897,13 @@ Google Vertex AI'yi opencode ile kullanmak için:
 
 1. Çıkarım Sağlayıcılara çağrı yapma iznine sahip bir belirteç oluşturmak için [Hugging Face settings](https://huggingface.co/settings/tokens/new?ownUserPermissions=inference.serverless.write&tokenType=fineGrained) adresine gidin.
 
-2. `/connect` komutunu çalıştırın ve **Hugging Face**'i arayın.
+2. `/connect` komutunu çalıştırın ve **Sarılma Yüzünü** arayın.
 
    ```txt
    /connect
    ```
 
-3. Hugging Face tokenınızı girin.
+3. Hugging Face jetonunuzu girin.
 
    ```txt
    ┌ API key
@@ -951,7 +949,7 @@ Google Vertex AI'yi opencode ile kullanmak için:
 
 Daha fazla sağlayıcı ve önbelleğe alma ve hız sınırlama gibi gelişmiş özellikler için [Helicone documentation](https://docs.helicone.ai)'yi kontrol edin.
 
-#### İsteğe Bağlı Yapılandırmalar
+#### Optional Configs
 
 Helicone'un opencode aracılığıyla otomatik olarak yapılandırılmayan bir özelliği veya modelini görmeniz durumunda bunu her zaman kendiniz yapılandırabilirsiniz.
 
@@ -981,7 +979,7 @@ Helicone'un opencode aracılığıyla otomatik olarak yapılandırılmayan bir �
 }
 ```
 
-#### Özel Başlıklar
+#### Custom Headers
 
 Helicone, önbelleğe alma, kullanıcı izleme ve oturum yönetimi gibi özellikler için özel başlıkları destekler. `options.headers` kullanarak bunları sağlayıcınızın yapılandırmasına ekleyin:
 
@@ -1022,7 +1020,7 @@ Yapılandırmanıza ekleyin.
 
 Eklenti isteklerinize `Helicone-Session-Id` ve `Helicone-Session-Name` başlıklarını enjekte eder. Helicone'un Oturumlar sayfasında her opencode görüşmesinin ayrı bir oturum olarak listelendiğini göreceksiniz.
 
-##### Yaygın Helicone başlıkları
+##### Common Helicone headers
 
 | Başlık                     | Açıklama                                                      |
 | -------------------------- | ------------------------------------------------------------- |
@@ -1327,7 +1325,7 @@ Ollama Cloud'u opencode ile kullanmak için:
    /models
    ```
 
-##### API anahtarlarını kullanma
+##### API tuşlarını kullanma
 
 Zaten bir API anahtarınız varsa, **API Anahtarını Manuel Olarak Girin** seçeneğini seçip terminalinize yapıştırabilirsiniz.
 
@@ -1637,12 +1635,12 @@ Modelleri opencode yapılandırmanız aracılığıyla da özelleştirebilirsini
 }
 ```
 
-Bazı yararlı yönlendirme seçenekleri:
+Some useful routing options:
 
 | Seçenek             | Açıklama                                                              |
 | ------------------- | --------------------------------------------------------------------- |
 | `order`             | Denenecek sağlayıcı sırası                                            |
-| `only`              | Belirli sağlayıcılarla sınırla                                        |
+| `only`              | Restrict to specific providers                                        |
 | `zeroDataRetention` | Yalnızca sıfır veri saklama politikasına sahip sağlayıcıları kullanın |
 
 ---
@@ -1820,11 +1818,11 @@ OpenAI uyumlu herhangi bir sağlayıcıyı opencode ile kullanabilirsiniz. Çoğ
 
    Yapılandırma seçenekleri şunlardır:
    - **npm**: Kullanılacak AI SDK paketi, OpenAI uyumlu sağlayıcılar için `@ai-sdk/openai-compatible`
-   - **name**: UI'daki görünen ad.
+   - **name**: Display name in UI.
    - **modeller**: Mevcut modeller.
    - **options.baseURL**: API endpoint URL.
    - **options.apiKey**: Kimlik doğrulama kullanılmıyorsa isteğe bağlı olarak API anahtarını ayarlayın.
-   - **options.headers**: İsteğe bağlı olarak özel başlıklar ayarlayın.
+   - **options.headers**: Optionally set custom headers.
 
    Aşağıdaki örnekte gelişmiş seçenekler hakkında daha fazla bilgi bulabilirsiniz.
 
@@ -1832,7 +1830,7 @@ OpenAI uyumlu herhangi bir sağlayıcıyı opencode ile kullanabilirsiniz. Çoğ
 
 ---
 
-##### Örnek
+##### Example
 
 Burada `apiKey`, `headers` ve model `limit` seçeneklerini ayarlayan bir örnek verilmiştir.
 
@@ -1864,18 +1862,18 @@ Burada `apiKey`, `headers` ve model `limit` seçeneklerini ayarlayan bir örnek 
 }
 ```
 
-Yapılandırma ayrıntıları:
+Configuration details:
 
-- **apiKey**: `env` değişken söz dizimini kullanarak ayarlayın, [daha fazla bilgi](/docs/config#env-vars).
-- **headers**: Her istekle birlikte gönderilen özel başlıklar.
-- **limit.context**: Modelin kabul ettiği maksimum giriş tokenları.
-- **limit.output**: Modelin üretebileceği maksimum token sayısı.
+- **apiKey**: `env` değişken söz dizimini kullanarak ayarlayın, [learn more](/docs/config#env-vars).
+- **başlıklar**: Her istekle birlikte gönderilen özel başlıklar.
+- **limit.context**: Modelin kabul ettiği maksimum giriş jetonları.
+- **limit.output**: Modelin üretebileceği maksimum jeton sayısı.
 
 `limit` alanları opencode'un ne kadar bağlamınız kaldığını anlamasını sağlar. Standart sağlayıcılar bunları models.dev'den otomatik olarak alır.
 
 ---
 
-## Sorun Giderme
+## Troubleshooting
 
 Sağlayıcıyı yapılandırma konusunda sorun yaşıyorsanız aşağıdakileri kontrol edin:
 

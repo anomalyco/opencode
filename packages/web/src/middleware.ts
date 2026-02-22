@@ -12,28 +12,7 @@ function docsAlias(pathname: string) {
 
   const next = locale === "root" ? `/docs${tail}` : `/docs/${locale}${tail}`
   if (next === pathname) return null
-  return {
-    path: next,
-    locale,
-  }
-}
-
-function cookie(locale: string) {
-  const value = locale === "root" ? "en" : locale
-  return `oc_locale=${encodeURIComponent(value)}; Path=/; Max-Age=31536000; SameSite=Lax`
-}
-
-function redirect(url: URL, path: string, locale?: string) {
-  const next = new URL(url.toString())
-  next.pathname = path
-  const headers = new Headers({
-    Location: next.toString(),
-  })
-  if (locale) headers.set("Set-Cookie", cookie(locale))
-  return new Response(null, {
-    status: 302,
-    headers,
-  })
+  return next
 }
 
 function localeFromCookie(header: string | null) {
@@ -80,7 +59,9 @@ function localeFromAcceptLanguage(header: string | null) {
 export const onRequest = defineMiddleware((ctx, next) => {
   const alias = docsAlias(ctx.url.pathname)
   if (alias) {
-    return redirect(ctx.url, alias.path, alias.locale)
+    const url = new URL(ctx.request.url)
+    url.pathname = alias
+    return ctx.redirect(url.toString(), 302)
   }
 
   if (ctx.url.pathname !== "/docs" && ctx.url.pathname !== "/docs/") return next()
@@ -90,5 +71,7 @@ export const onRequest = defineMiddleware((ctx, next) => {
     localeFromAcceptLanguage(ctx.request.headers.get("accept-language"))
   if (!locale || locale === "root") return next()
 
-  return redirect(ctx.url, `/docs/${locale}/`)
+  const url = new URL(ctx.request.url)
+  url.pathname = `/docs/${locale}/`
+  return ctx.redirect(url.toString(), 302)
 })

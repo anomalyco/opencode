@@ -5,7 +5,6 @@ import z from "zod"
 import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
 import { lazy } from "@/util/lazy"
-import { Filesystem } from "../util/filesystem"
 
 // Try to import bundled snapshot (generated at build time)
 // Falls back to undefined in dev mode when snapshot doesn't exist
@@ -65,7 +64,7 @@ export namespace ModelsDev {
     status: z.enum(["alpha", "beta", "deprecated"]).optional(),
     options: z.record(z.string(), z.any()),
     headers: z.record(z.string(), z.string()).optional(),
-    provider: z.object({ npm: z.string().optional(), api: z.string().optional() }).optional(),
+    provider: z.object({ npm: z.string() }).optional(),
     variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
   })
   export type Model = z.infer<typeof Model>
@@ -86,7 +85,8 @@ export namespace ModelsDev {
   }
 
   export const Data = lazy(async () => {
-    const result = await Filesystem.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).catch(() => {})
+    const file = Bun.file(Flag.OPENCODE_MODELS_PATH ?? filepath)
+    const result = await file.json().catch(() => {})
     if (result) return result
     // @ts-ignore
     const snapshot = await import("./models-snapshot")
@@ -104,6 +104,7 @@ export namespace ModelsDev {
   }
 
   export async function refresh() {
+    const file = Bun.file(filepath)
     const result = await fetch(`${url()}/api.json`, {
       headers: {
         "User-Agent": Installation.USER_AGENT,
@@ -115,13 +116,13 @@ export namespace ModelsDev {
       })
     })
     if (result && result.ok) {
-      await Filesystem.write(filepath, await result.text())
+      await Bun.write(file, await result.text())
       ModelsDev.Data.reset()
     }
   }
 }
 
-if (!Flag.OPENCODE_DISABLE_MODELS_FETCH && !process.argv.includes("--get-yargs-completions")) {
+if (!Flag.OPENCODE_DISABLE_MODELS_FETCH) {
   ModelsDev.refresh()
   setInterval(
     async () => {

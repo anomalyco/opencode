@@ -4,8 +4,7 @@ import { ulid } from "ulid"
 import { Provider } from "@/provider/provider"
 import { Session } from "@/session"
 import { MessageV2 } from "@/session/message-v2"
-import { Database, eq } from "@/storage/db"
-import { SessionShareTable } from "./share.sql"
+import { Storage } from "@/storage/storage"
 import { Log } from "@/util/log"
 import type * as SDK from "@opencode-ai/sdk/v2"
 
@@ -78,26 +77,17 @@ export namespace ShareNext {
     })
       .then((x) => x.json())
       .then((x) => x as { id: string; url: string; secret: string })
-    Database.use((db) =>
-      db
-        .insert(SessionShareTable)
-        .values({ session_id: sessionID, id: result.id, secret: result.secret, url: result.url })
-        .onConflictDoUpdate({
-          target: SessionShareTable.session_id,
-          set: { id: result.id, secret: result.secret, url: result.url },
-        })
-        .run(),
-    )
+    await Storage.write(["session_share", sessionID], result)
     fullSync(sessionID)
     return result
   }
 
   function get(sessionID: string) {
-    const row = Database.use((db) =>
-      db.select().from(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID)).get(),
-    )
-    if (!row) return
-    return { id: row.id, secret: row.secret, url: row.url }
+    return Storage.read<{
+      id: string
+      secret: string
+      url: string
+    }>(["session_share", sessionID])
   }
 
   type Data =
@@ -142,7 +132,7 @@ export namespace ShareNext {
       const queued = queue.get(sessionID)
       if (!queued) return
       queue.delete(sessionID)
-      const share = get(sessionID)
+      const share = await get(sessionID).catch(() => undefined)
       if (!share) return
 
       await fetch(`${await url()}/api/share/${share.id}/sync`, {
@@ -162,7 +152,7 @@ export namespace ShareNext {
   export async function remove(sessionID: string) {
     if (disabled) return
     log.info("removing share", { sessionID })
-    const share = get(sessionID)
+    const share = await get(sessionID)
     if (!share) return
     await fetch(`${await url()}/api/share/${share.id}`, {
       method: "DELETE",
@@ -173,7 +163,7 @@ export namespace ShareNext {
         secret: share.secret,
       }),
     })
-    Database.use((db) => db.delete(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID)).run())
+    await Storage.remove(["session_share", sessionID])
   }
 
   async function fullSync(sessionID: string) {

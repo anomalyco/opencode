@@ -64,13 +64,8 @@ const team = [
   "kommander",
   "jayair",
   "fwang",
-  "MrMushrooooom",
   "adamdotdevin",
   "iamdavidhill",
-  "Brendonovich",
-  "nexxeln",
-  "Hona",
-  "jlongster",
   "opencode-agent[bot]",
   "R44VC0RP",
 ]

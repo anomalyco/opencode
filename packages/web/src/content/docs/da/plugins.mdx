@@ -9,7 +9,7 @@ For eksempler, tjek [plugins](/docs/ecosystem#plugins) oprettet af fællesskabet
 
 ---
 
-## Brug af plugin
+## Brug et plugin
 
 Der er to måder at indlæse plugins på.
 
@@ -43,7 +43,7 @@ Gennemse tilgængelige plugins i [ecosystem](/docs/ecosystem#plugins).
 
 ---
 
-### Installation af plugins
+### Hvordan plugins installeres
 
 **npm plugins** installeres automatisk ved hjælp af Bun ved opstart. Pakker og deres afhængigheder cachelagres i `~/.cache/opencode/node_modules/`.
 
@@ -51,7 +51,7 @@ Gennemse tilgængelige plugins i [ecosystem](/docs/ecosystem#plugins).
 
 ---
 
-### Indlæsningsrækkefølge
+### Indlæs rækkefølge
 
 Plugins indlæses fra alle kilder, og alle hooks kører i rækkefølge. Indlæsningsrækkefølgen er:
 
@@ -64,7 +64,7 @@ Dublerede npm-pakker med samme navn og version indlæses én gang. Et lokalt plu
 
 ---
 
-## Oprettelse af plugin
+## Opret et plugin
 
 Et plugin er et **JavaScript/TypeScript modul**, der eksporterer et eller flere plugin
 funktioner. Hver funktion modtager et kontekstobjekt og returnerer et hooks-objekt.
@@ -156,7 +156,7 @@ Plugins kan abonnere på begivenheder som vist nedenfor i afsnittet Eksempler. H
 
 - `installation.updated`
 
-#### LSP-hændelser
+#### LSP Begivenheder
 
 - `lsp.client.diagnostics`
 - `lsp.updated`
@@ -168,7 +168,7 @@ Plugins kan abonnere på begivenheder som vist nedenfor i afsnittet Eksempler. H
 - `message.removed`
 - `message.updated`
 
-#### Tilladelseshændelser
+#### Tilladelsesbegivenheder
 
 - `permission.asked`
 - `permission.replied`
@@ -177,7 +177,7 @@ Plugins kan abonnere på begivenheder som vist nedenfor i afsnittet Eksempler. H
 
 - `server.connected`
 
-#### Sessionshændelser
+#### Sessionsbegivenheder
 
 - `session.created`
 - `session.compacted`
@@ -188,20 +188,20 @@ Plugins kan abonnere på begivenheder som vist nedenfor i afsnittet Eksempler. H
 - `session.status`
 - `session.updated`
 
-#### Todo-hændelser
+#### Todo-begivenheder
 
 - `todo.updated`
 
-#### Shell-hændelser
+#### Shell-begivenheder
 
 - `shell.env`
 
-#### Værktøjshændelser
+#### Værktøjsbegivenheder
 
 - `tool.execute.after`
 - `tool.execute.before`
 
-#### TUI-hændelser
+#### TUI Begivenheder
 
 - `tui.prompt.append`
 - `tui.command.execute`
@@ -240,7 +240,7 @@ Hvis du bruger OpenCode desktop-appen, kan den sende systemmeddelelser automatis
 
 ---
 
-### .env-beskyttelse
+###.env-beskyttelse
 
 Undgå opencode i at læse `.env` filer:
 
@@ -331,7 +331,7 @@ Niveauer: `debug`, `info`, `warn`, `error`. Se [SDK documentation](https://openc
 
 ---
 
-### Komprimerings-hooks
+### Komprimeringskroge
 
 Tilpas konteksten inkluderet, når en session komprimeres:
 

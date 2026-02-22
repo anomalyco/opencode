@@ -5,7 +5,6 @@ import { bootstrap } from "../bootstrap"
 import { UI } from "../ui"
 import { Locale } from "../../util/locale"
 import { Flag } from "../../flag/flag"
-import { Filesystem } from "../../util/filesystem"
 import { EOL } from "os"
 import path from "path"
 
@@ -18,18 +17,18 @@ function pagerCmd(): string[] {
   // user could have less installed via other options
   const lessOnPath = Bun.which("less")
   if (lessOnPath) {
-    if (Filesystem.stat(lessOnPath)?.size) return [lessOnPath, ...lessOptions]
+    if (Bun.file(lessOnPath).size) return [lessOnPath, ...lessOptions]
   }
 
   if (Flag.OPENCODE_GIT_BASH_PATH) {
     const less = path.join(Flag.OPENCODE_GIT_BASH_PATH, "..", "..", "usr", "bin", "less.exe")
-    if (Filesystem.stat(less)?.size) return [less, ...lessOptions]
+    if (Bun.file(less).size) return [less, ...lessOptions]
   }
 
   const git = Bun.which("git")
   if (git) {
     const less = path.join(git, "..", "..", "usr", "bin", "less.exe")
-    if (Filesystem.stat(less)?.size) return [less, ...lessOptions]
+    if (Bun.file(less).size) return [less, ...lessOptions]
   }
 
   // Fall back to Windows built-in more (via cmd.exe)
@@ -39,32 +38,8 @@ function pagerCmd(): string[] {
 export const SessionCommand = cmd({
   command: "session",
   describe: "manage sessions",
-  builder: (yargs: Argv) => yargs.command(SessionListCommand).command(SessionDeleteCommand).demandCommand(),
+  builder: (yargs: Argv) => yargs.command(SessionListCommand).demandCommand(),
   async handler() {},
-})
-
-export const SessionDeleteCommand = cmd({
-  command: "delete <sessionID>",
-  describe: "delete a session",
-  builder: (yargs: Argv) => {
-    return yargs.positional("sessionID", {
-      describe: "session ID to delete",
-      type: "string",
-      demandOption: true,
-    })
-  },
-  handler: async (args) => {
-    await bootstrap(process.cwd(), async () => {
-      try {
-        await Session.get(args.sessionID)
-      } catch {
-        UI.error(`Session not found: ${args.sessionID}`)
-        process.exit(1)
-      }
-      await Session.remove(args.sessionID)
-      UI.println(UI.Style.TEXT_SUCCESS_BOLD + `Session ${args.sessionID} deleted` + UI.Style.TEXT_NORMAL)
-    })
-  },
 })
 
 export const SessionListCommand = cmd({
@@ -86,17 +61,26 @@ export const SessionListCommand = cmd({
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
-      const sessions = [...Session.list({ roots: true, limit: args.maxCount })]
+      const sessions = []
+      for await (const session of Session.list()) {
+        if (!session.parentID) {
+          sessions.push(session)
+        }
+      }
 
-      if (sessions.length === 0) {
+      sessions.sort((a, b) => b.time.updated - a.time.updated)
+
+      const limitedSessions = args.maxCount ? sessions.slice(0, args.maxCount) : sessions
+
+      if (limitedSessions.length === 0) {
         return
       }
 
       let output: string
       if (args.format === "json") {
-        output = formatSessionJSON(sessions)
+        output = formatSessionJSON(limitedSessions)
       } else {
-        output = formatSessionTable(sessions)
+        output = formatSessionTable(limitedSessions)
       }
 
       const shouldPaginate = process.stdout.isTTY && !args.maxCount && args.format === "table"

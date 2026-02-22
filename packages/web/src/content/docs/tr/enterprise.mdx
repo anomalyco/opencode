@@ -1,6 +1,6 @@
 ---
-title: Kurumsal
-description: opencode'u kuruluşunuzda güvenli bir şekilde kullanma.
+title: Girişim
+description: opencode'u kısıtlamanızda güvenli bir şekilde kullanma.
 ---
 
 import config from "../../../../config.mjs"
@@ -19,9 +19,9 @@ opencode Enterprise'ı kullanmaya başlamak için:
 
 ---
 
-## Deneme
+## Trial
 
-opencode açık kaynaktır ve herhangi bir kodunuzu veya içerik verilerinizi saklamaz; böylece geliştiricileriniz [hemen başlayıp](/docs/) bir deneme gerçekleştirebilir.
+opencode açık kaynaktır ve herhangi bir kodunuzu veya içerik verilerinizi saklamaz; böylece geliştiricileriniz [get started](/docs/) yapıp bir deneme gerçekleştirebilir.
 
 ---
 
@@ -36,7 +36,7 @@ saklama alanının tek izolasyonuna bağlı `/share` özelliğidir.
 
 ---
 
-#### Konuşmaları paylaşma
+#### Sharing conversations
 
 Bir kullanıcı `/share` özelliğini etkinleştirirse, görüşme ve onunla ilişkili veriler, bu paylaşım sayfalarını opencode.ai'de barındırmak için kullandığımız hizmete gönderilir.
 
@@ -61,9 +61,9 @@ Deneme süreniz için bunu devre dışı bırakmanızı öneririz.
 
 ---
 
-## Fiyatlandırma
+## Pricing
 
-opencode Enterprise için koltuk başına model kullanıyoruz. Kendi LLM ağ geçidiniz varsa, kullanılan token'lar için ücret talep etmiyoruz. Fiyatlandırma ve uygulama seçenekleri hakkında daha fazla ayrıntı için **<a href={email}>bize ulaşın</a>**.
+opencode Enterprise için bilgisayar başına model kullanıyoruz. Kendi LLM ağ geçidiniz varsa, kullanılan jetonlar için ücret talep etmiyoruz. Fiyatlandırma ve uygulama seçenekleri hakkında daha fazla ayrıntı için **<a href={email}>bize ulaşın</a>**.
 
 ---
 
@@ -75,7 +75,7 @@ fiyatlandırma ve uygulama seçenekleri.
 
 ---
 
-### Merkezi Yapılandırma
+### Central Config
 
 opencode'u tüm organizasyonunuz için tek bir merkezi yapılandırma kullanacak şekilde ayarlayabiliriz.
 
@@ -91,7 +91,7 @@ Bu, opencode'un mevcut kimlik yönetimi sisteminiz aracılığıyla dahili AI a�
 
 ---
 
-### Dahili AI ağ geçidi
+### Internal AI gateway
 
 Merkezi yapılandırmayla opencode yalnızca dahili AI ağ geçidinizi kullanacak şekilde de yapılandırılabilir.
 
@@ -108,17 +108,17 @@ Bu şu anda yol haritamızda yer alıyor. İlgileniyorsanız **<a href={email}>b
 
 ---
 
-## SSS
+## FAQ
 
 <details>
-<summary>opencode Enterprise nedir?</summary>
+<summary>What is opencode Enterprise?</summary>
 
 opencode Enterprise, kodlarının ve verilerinin altyapılarından asla ayrılmamasını sağlamak isteyen kuruluşlar içindir. Bunu, SSO ve dahili AI ağ geçidinizle entegre olan merkezi bir yapılandırma kullanarak yapabilir.
 
 </details>
 
 <details>
-<summary>opencode Enterprise'a nasıl başlarım?</summary>
+<summary>How do I get started with opencode Enterprise?</summary>
 
 Ekibinizle dahili bir denemeyle başlayın. opencode varsayılan olarak kodunuzu veya içerik verilerinizi saklamaz, bu da başlamayı kolaylaştırır.
 
@@ -127,21 +127,21 @@ Daha sonra fiyatlandırma ve uygulama seçeneklerini görüşmek için **<a href
 </details>
 
 <details>
-<summary>Kurumsal fiyatlandırma nasıl çalışır?</summary>
+<summary>How does enterprise pricing work?</summary>
 
-Koltuk başına kurumsal fiyatlandırma sunuyoruz. Kendi LLM ağ geçidiniz varsa, kullanılan token'lar için ücret talep etmiyoruz. Daha fazla ayrıntı için kuruluşunuzun ihtiyaçlarına göre özel bir fiyat teklifi almak üzere **<a href={email}>bize ulaşın</a>**.
+Koltuk başına kurumsal fiyatlandırma sunuyoruz. Kendi LLM ağ geçidiniz varsa, kullanılan jetonlar için ücret talep etmiyoruz. Daha fazla ayrıntı için kuruluşunuzun ihtiyaçlarına göre özel bir fiyat teklifi almak üzere **<a href={email}>bize ulaşın</a>**.
 
 </details>
 
 <details>
-<summary>Verilerim opencode Enterprise ile güvende mi?</summary>
+<summary>Is my data secure with opencode Enterprise?</summary>
 
 Evet. opencode kodunuzu veya içerik verilerinizi saklamaz. Tüm işlemler yerel olarak veya AI sağlayıcınıza doğrudan API çağrıları yoluyla gerçekleşir. Merkezi yapılandırma ve SSO entegrasyonuyla verileriniz kuruluşunuzun altyapısında güvende kalır.
 
 </details>
 
 <details>
-<summary>Kendi özel NPM kayıt defterimizi kullanabilir miyiz?</summary>
+<summary>Can we use our own private NPM registry?</summary>
 
 opencode, Bun'un yerel `.npmrc` dosya desteği aracılığıyla özel npm kayıtlarını destekler. Kuruluşunuz JFrog Artifactory, Nexus veya benzeri gibi özel bir kayıt defteri kullanıyorsa, opencode'u çalıştırmadan önce geliştiricilerin kimlik doğrulamasının yapıldığından emin olun.
 
@@ -152,7 +152,7 @@ npm login --registry=https://your-company.jfrog.io/api/npm/npm-virtual/
 ```
 
 Bu, kimlik doğrulama ayrıntılarını içeren `~/.npmrc` öğesini oluşturur. opencode otomatik olarak
-bunu alır.
+şunu al.
 
 :::caution
 opencode'u çalıştırmadan önce özel kayıt defterinde oturum açmalısınız.

@@ -12,27 +12,24 @@ let selected = "/repo/worktree-a"
 
 const promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
 
-const clientFor = (directory: string) => {
-  createdClients.push(directory)
-  return {
-    session: {
-      create: async () => {
-        createdSessions.push(directory)
-        return { data: { id: `session-${createdSessions.length}` } }
-      },
-      shell: async () => {
-        sentShell.push(directory)
-        return { data: undefined }
-      },
-      prompt: async () => ({ data: undefined }),
-      command: async () => ({ data: undefined }),
-      abort: async () => ({ data: undefined }),
+const clientFor = (directory: string) => ({
+  session: {
+    create: async () => {
+      createdSessions.push(directory)
+      return { data: { id: `session-${createdSessions.length}` } }
     },
-    worktree: {
-      create: async () => ({ data: { directory: `${directory}/new` } }),
+    shell: async () => {
+      sentShell.push(directory)
+      return { data: undefined }
     },
-  }
-}
+    prompt: async () => ({ data: undefined }),
+    command: async () => ({ data: undefined }),
+    abort: async () => ({ data: undefined }),
+  },
+  worktree: {
+    create: async () => ({ data: { directory: `${directory}/new` } }),
+  },
+})
 
 beforeAll(async () => {
   const rootClient = clientFor("/repo/main")
@@ -91,17 +88,11 @@ beforeAll(async () => {
   }))
 
   mock.module("@/context/sdk", () => ({
-    useSDK: () => {
-      const sdk = {
-        directory: "/repo/main",
-        client: rootClient,
-        url: "http://localhost:4096",
-        createClient(opts: any) {
-          return clientFor(opts.directory)
-        },
-      }
-      return sdk
-    },
+    useSDK: () => ({
+      directory: "/repo/main",
+      client: rootClient,
+      url: "http://localhost:4096",
+    }),
   }))
 
   mock.module("@/context/sync", () => ({

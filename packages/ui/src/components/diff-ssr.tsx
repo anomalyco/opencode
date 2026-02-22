@@ -1,9 +1,8 @@
-import { DIFFS_TAG_NAME, FileDiff, type SelectedLineRange, VirtualizedFileDiff } from "@pierre/diffs"
+import { DIFFS_TAG_NAME, FileDiff, type SelectedLineRange } from "@pierre/diffs"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { createEffect, onCleanup, onMount, Show, splitProps } from "solid-js"
 import { Dynamic, isServer } from "solid-js/web"
 import { createDefaultOptions, styleVariables, type DiffProps } from "../pierre"
-import { acquireVirtualizer, virtualMetrics } from "../pierre/virtualizer"
 import { useWorkerPool } from "../context/worker-pool"
 
 export type SSRDiffProps<T = {}> = DiffProps<T> & {
@@ -25,20 +24,9 @@ export function Diff<T>(props: SSRDiffProps<T>) {
   const workerPool = useWorkerPool(props.diffStyle)
 
   let fileDiffInstance: FileDiff<T> | undefined
-  let sharedVirtualizer: NonNullable<ReturnType<typeof acquireVirtualizer>> | undefined
   const cleanupFunctions: Array<() => void> = []
 
   const getRoot = () => fileDiffRef?.shadowRoot ?? undefined
-
-  const getVirtualizer = () => {
-    if (sharedVirtualizer) return sharedVirtualizer.virtualizer
-
-    const result = acquireVirtualizer(container)
-    if (!result) return
-
-    sharedVirtualizer = result
-    return result.virtualizer
-  }
 
   const applyScheme = () => {
     const scheme = document.documentElement.dataset.colorScheme
@@ -82,10 +70,10 @@ export function Diff<T>(props: SSRDiffProps<T>) {
     const root = getRoot()
     if (!root) return
 
-    const diffs = root.querySelector("[data-diff]")
+    const diffs = root.querySelector("[data-diffs]")
     if (!(diffs instanceof HTMLElement)) return
 
-    const split = diffs.dataset.diffType === "split"
+    const split = diffs.dataset.type === "split"
 
     const start = rowIndex(root, split, range.start, range.side)
     const end = rowIndex(root, split, range.end, range.endSide ?? range.side)
@@ -144,19 +132,15 @@ export function Diff<T>(props: SSRDiffProps<T>) {
       node.removeAttribute("data-comment-selected")
     }
 
-    const diffs = root.querySelector("[data-diff]")
+    const diffs = root.querySelector("[data-diffs]")
     if (!(diffs instanceof HTMLElement)) return
 
-    const split = diffs.dataset.diffType === "split"
+    const split = diffs.dataset.type === "split"
 
-    const rows = Array.from(diffs.querySelectorAll("[data-line-index]")).filter(
+    const code = Array.from(diffs.querySelectorAll("[data-code]")).filter(
       (node): node is HTMLElement => node instanceof HTMLElement,
     )
-    if (rows.length === 0) return
-
-    const annotations = Array.from(diffs.querySelectorAll("[data-line-annotation]")).filter(
-      (node): node is HTMLElement => node instanceof HTMLElement,
-    )
+    if (code.length === 0) return
 
     const lineIndex = (element: HTMLElement) => {
       const raw = element.dataset.lineIndex
@@ -199,18 +183,19 @@ export function Diff<T>(props: SSRDiffProps<T>) {
       const first = Math.min(start, end)
       const last = Math.max(start, end)
 
-      for (const row of rows) {
-        const idx = lineIndex(row)
-        if (idx === undefined) continue
-        if (idx < first || idx > last) continue
-        row.setAttribute("data-comment-selected", "")
-      }
-
-      for (const annotation of annotations) {
-        const idx = parseInt(annotation.dataset.lineAnnotation?.split(",")[1] ?? "", 10)
-        if (Number.isNaN(idx)) continue
-        if (idx < first || idx > last) continue
-        annotation.setAttribute("data-comment-selected", "")
+      for (const block of code) {
+        for (const element of Array.from(block.children)) {
+          if (!(element instanceof HTMLElement)) continue
+          const idx = lineIndex(element)
+          if (idx === undefined) continue
+          if (idx > last) break
+          if (idx < first) continue
+          element.setAttribute("data-comment-selected", "")
+          const next = element.nextSibling
+          if (next instanceof HTMLElement && next.hasAttribute("data-line-annotation")) {
+            next.setAttribute("data-comment-selected", "")
+          }
+        }
       }
     }
   }
@@ -227,27 +212,14 @@ export function Diff<T>(props: SSRDiffProps<T>) {
       onCleanup(() => monitor.disconnect())
     }
 
-    const virtualizer = getVirtualizer()
-
-    fileDiffInstance = virtualizer
-      ? new VirtualizedFileDiff<T>(
-          {
-            ...createDefaultOptions(props.diffStyle),
-            ...others,
-            ...props.preloadedDiff,
-          },
-          virtualizer,
-          virtualMetrics,
-          workerPool,
-        )
-      : new FileDiff<T>(
-          {
-            ...createDefaultOptions(props.diffStyle),
-            ...others,
-            ...props.preloadedDiff,
-          },
-          workerPool,
-        )
+    fileDiffInstance = new FileDiff<T>(
+      {
+        ...createDefaultOptions(props.diffStyle),
+        ...others,
+        ...props.preloadedDiff,
+      },
+      workerPool,
+    )
     // @ts-expect-error - fileContainer is private but needed for SSR hydration
     fileDiffInstance.fileContainer = fileDiffRef
     fileDiffInstance.hydrate({
@@ -301,8 +273,6 @@ export function Diff<T>(props: SSRDiffProps<T>) {
     // Clean up FileDiff event handlers and dispose SolidJS components
     fileDiffInstance?.cleanUp()
     cleanupFunctions.forEach((dispose) => dispose())
-    sharedVirtualizer?.release()
-    sharedVirtualizer = undefined
   })
 
   return (

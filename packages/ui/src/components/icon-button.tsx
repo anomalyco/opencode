@@ -15,7 +15,6 @@ export function IconButton(props: ComponentProps<"button"> & IconButtonProps) {
     <Kobalte
       {...rest}
       data-component="icon-button"
-      data-icon={props.icon}
       data-size={split.size || "normal"}
       data-variant={split.variant || "secondary"}
       classList={{

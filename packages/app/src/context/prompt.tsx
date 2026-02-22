@@ -1,4 +1,4 @@
-import { createStore, type SetStoreFunction } from "solid-js/store"
+import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { batch, createMemo, createRoot, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
@@ -60,23 +60,27 @@ function isSelectionEqual(a?: FileSelection, b?: FileSelection) {
   )
 }
 
-function isPartEqual(partA: ContentPart, partB: ContentPart) {
-  switch (partA.type) {
-    case "text":
-      return partB.type === "text" && partA.content === partB.content
-    case "file":
-      return partB.type === "file" && partA.path === partB.path && isSelectionEqual(partA.selection, partB.selection)
-    case "agent":
-      return partB.type === "agent" && partA.name === partB.name
-    case "image":
-      return partB.type === "image" && partA.id === partB.id
-  }
-}
-
 export function isPromptEqual(promptA: Prompt, promptB: Prompt): boolean {
   if (promptA.length !== promptB.length) return false
   for (let i = 0; i < promptA.length; i++) {
-    if (!isPartEqual(promptA[i], promptB[i])) return false
+    const partA = promptA[i]
+    const partB = promptB[i]
+    if (partA.type !== partB.type) return false
+    if (partA.type === "text" && partA.content !== (partB as TextPart).content) {
+      return false
+    }
+    if (partA.type === "file") {
+      const fileA = partA as FileAttachmentPart
+      const fileB = partB as FileAttachmentPart
+      if (fileA.path !== fileB.path) return false
+      if (!isSelectionEqual(fileA.selection, fileB.selection)) return false
+    }
+    if (partA.type === "agent" && partA.name !== (partB as AgentPart).name) {
+      return false
+    }
+    if (partA.type === "image" && partA.id !== (partB as ImageAttachmentPart).id) {
+      return false
+    }
   }
   return true
 }
@@ -98,48 +102,6 @@ function clonePart(part: ContentPart): ContentPart {
 
 function clonePrompt(prompt: Prompt): Prompt {
   return prompt.map(clonePart)
-}
-
-function contextItemKey(item: ContextItem) {
-  if (item.type !== "file") return item.type
-  const start = item.selection?.startLine
-  const end = item.selection?.endLine
-  const key = `${item.type}:${item.path}:${start}:${end}`
-
-  if (item.commentID) {
-    return `${key}:c=${item.commentID}`
-  }
-
-  const comment = item.comment?.trim()
-  if (!comment) return key
-  const digest = checksum(comment) ?? comment
-  return `${key}:c=${digest.slice(0, 8)}`
-}
-
-function createPromptActions(
-  setStore: SetStoreFunction<{
-    prompt: Prompt
-    cursor?: number
-    context: {
-      items: (ContextItem & { key: string })[]
-    }
-  }>,
-) {
-  return {
-    set(prompt: Prompt, cursorPosition?: number) {
-      const next = clonePrompt(prompt)
-      batch(() => {
-        setStore("prompt", next)
-        if (cursorPosition !== undefined) setStore("cursor", cursorPosition)
-      })
-    },
-    reset() {
-      batch(() => {
-        setStore("prompt", clonePrompt(DEFAULT_PROMPT))
-        setStore("cursor", 0)
-      })
-    },
-  }
 }
 
 const WORKSPACE_KEY = "__workspace__"
@@ -172,7 +134,21 @@ function createPromptSession(dir: string, id: string | undefined) {
     }),
   )
 
-  const actions = createPromptActions(setStore)
+  function keyForItem(item: ContextItem) {
+    if (item.type !== "file") return item.type
+    const start = item.selection?.startLine
+    const end = item.selection?.endLine
+    const key = `${item.type}:${item.path}:${start}:${end}`
+
+    if (item.commentID) {
+      return `${key}:c=${item.commentID}`
+    }
+
+    const comment = item.comment?.trim()
+    if (!comment) return key
+    const digest = checksum(comment) ?? comment
+    return `${key}:c=${digest.slice(0, 8)}`
+  }
 
   return {
     ready,
@@ -182,7 +158,7 @@ function createPromptSession(dir: string, id: string | undefined) {
     context: {
       items: createMemo(() => store.context.items),
       add(item: ContextItem) {
-        const key = contextItemKey(item)
+        const key = keyForItem(item)
         if (store.context.items.find((x) => x.key === key)) return
         setStore("context", "items", (items) => [...items, { key, ...item }])
       },
@@ -190,8 +166,19 @@ function createPromptSession(dir: string, id: string | undefined) {
         setStore("context", "items", (items) => items.filter((x) => x.key !== key))
       },
     },
-    set: actions.set,
-    reset: actions.reset,
+    set(prompt: Prompt, cursorPosition?: number) {
+      const next = clonePrompt(prompt)
+      batch(() => {
+        setStore("prompt", next)
+        if (cursorPosition !== undefined) setStore("cursor", cursorPosition)
+      })
+    },
+    reset() {
+      batch(() => {
+        setStore("prompt", clonePrompt(DEFAULT_PROMPT))
+        setStore("cursor", 0)
+      })
+    },
   }
 }
 

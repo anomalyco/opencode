@@ -1,5 +1,5 @@
 ---
-title: Dodaci
+title: Plugins
 description: Napišite vlastite dodatke za proširenje OpenCode.
 ---
 
@@ -8,7 +8,7 @@ Za primjere, pogledajte [plugins](/docs/ecosystem#plugins) kreirane od strane za
 
 ---
 
-## Korištenje dodatka
+## Koristite dodatak
 
 Postoje dva načina za učitavanje dodataka.
 
@@ -22,7 +22,7 @@ Postavite JavaScript ili TypeScript datoteke u direktorij dodataka.
 
 ---
 
-### Iz npm-a
+### Od npm
 
 Navedite npm pakete u vašoj konfiguracijskoj datoteci.
 
@@ -45,7 +45,7 @@ Pregledajte dostupne dodatke u [ecosystem](/docs/ecosystem#plugins).
 
 ---
 
-### Redoslijed učitavanja
+### Učitaj redoslijed
 
 Dodaci se učitavaju iz svih izvora i svi zakačnjaci rade u nizu. Redoslijed učitavanja je:
 
@@ -57,7 +57,7 @@ Dodaci se učitavaju iz svih izvora i svi zakačnjaci rade u nizu. Redoslijed u�
 
 ---
 
-## Kreiranje dodatka
+## Kreirajte dodatak
 
 Dodatak je **JavaScript/TypeScript modul** koji izvozi jedan ili više dodataka
 funkcije. Svaka funkcija prima objekt konteksta i vraća hooks objekt.
@@ -154,14 +154,14 @@ Dodaci se mogu pretplatiti na događaje kao što je prikazano ispod u odjeljku P
 - `lsp.client.diagnostics`
 - `lsp.updated`
 
-#### Događaji poruka
+#### Poruka Događaji
 
 - `message.part.removed`
 - `message.part.updated`
 - `message.removed`
 - `message.updated`
 
-#### Događaji dozvola
+#### Događaji dozvole
 
 - `permission.asked`
 - `permission.replied`
@@ -189,7 +189,7 @@ Dodaci se mogu pretplatiti na događaje kao što je prikazano ispod u odjeljku P
 
 - `shell.env`
 
-#### Događaji alata
+#### Alat Događaji
 
 - `tool.execute.after`
 - `tool.execute.before`
@@ -206,7 +206,7 @@ Dodaci se mogu pretplatiti na događaje kao što je prikazano ispod u odjeljku P
 
 Evo nekoliko primjera dodataka koje možete koristiti za proširenje OpenCode.
 
-### Slanje obavještenja
+### Šalji obavještenja
 
 Pošaljite obavještenja kada se dogode određeni događaji:
 
@@ -248,7 +248,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 ---
 
-### Ubacivanje varijabli okruženja
+### Ubacite varijable okruženja
 
 Ubacite varijable okruženja u sva izvršavanja ljuske (AI alati i korisnički terminali):
 
@@ -299,7 +299,7 @@ Pomoćnik `tool` kreira prilagođeni alat koji opencode može pozvati. Uzima fun
 
 ---
 
-### Bilježenje
+### Logging
 
 Koristite `client.app.log()` umjesto `console.log` za strukturirano bilježenje:
 
@@ -318,7 +318,7 @@ export const MyPlugin = async ({ client }) => {
 
 Nivoi su: `debug`, `info`, `warn`, `error`. Pogledajte [SDK dokumentaciju](https://opencode.ai/docs/sdk) za detalje.
 
-### Kuke za sažimanje
+### Kuke za sabijanje
 
 Prilagodite kontekst uključen kada se sesija zbije:
 

@@ -1,19 +1,10 @@
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import {
-  createEffect,
-  createMemo,
-  createSignal,
-  type JSXElement,
-  onCleanup,
-  onMount,
-  type ParentProps,
-  Show,
-} from "solid-js"
-import { type ServerConnection, serverDisplayName } from "@/context/server"
+import { JSXElement, ParentProps, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
+import { serverDisplayName } from "@/context/server"
 import type { ServerHealth } from "@/utils/server-health"
 
 interface ServerRowProps extends ParentProps {
-  conn: ServerConnection.Any
+  url: string
   status?: ServerHealth
   class?: string
   nameClass?: string
@@ -26,7 +17,6 @@ export function ServerRow(props: ServerRowProps) {
   const [truncated, setTruncated] = createSignal(false)
   let nameRef: HTMLSpanElement | undefined
   let versionRef: HTMLSpanElement | undefined
-  const name = createMemo(() => serverDisplayName(props.conn))
 
   const check = () => {
     const nameTruncated = nameRef ? nameRef.scrollWidth > nameRef.clientWidth : false
@@ -35,24 +25,25 @@ export function ServerRow(props: ServerRowProps) {
   }
 
   createEffect(() => {
-    name()
-    props.conn.http.url
+    props.url
     props.status?.version
-    queueMicrotask(check)
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(check)
+      return
+    }
+    check()
   })
 
   onMount(() => {
     check()
-    if (typeof ResizeObserver !== "function") return
-    const observer = new ResizeObserver(check)
-    if (nameRef) observer.observe(nameRef)
-    if (versionRef) observer.observe(versionRef)
-    onCleanup(() => observer.disconnect())
+    if (typeof window === "undefined") return
+    window.addEventListener("resize", check)
+    onCleanup(() => window.removeEventListener("resize", check))
   })
 
   const tooltipValue = () => (
     <span class="flex items-center gap-2">
-      <span>{name()}</span>
+      <span>{serverDisplayName(props.url)}</span>
       <Show when={props.status?.version}>
         <span class="text-text-invert-base">{props.status?.version}</span>
       </Show>
@@ -71,7 +62,7 @@ export function ServerRow(props: ServerRowProps) {
           }}
         />
         <span ref={nameRef} class={props.nameClass ?? "truncate"}>
-          {name()}
+          {serverDisplayName(props.url)}
         </span>
         <Show when={props.status?.version}>
           <span ref={versionRef} class={props.versionClass ?? "text-text-weak text-14-regular truncate"}>

@@ -6,7 +6,6 @@ import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
 import { lazy } from "../util/lazy"
 import { $ } from "bun"
-import { Filesystem } from "../util/filesystem"
 
 import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"
 import { Log } from "@/util/log"
@@ -132,7 +131,8 @@ export namespace Ripgrep {
     }
     const filepath = path.join(Global.Path.bin, "rg" + (process.platform === "win32" ? ".exe" : ""))
 
-    if (!(await Filesystem.exists(filepath))) {
+    const file = Bun.file(filepath)
+    if (!(await file.exists())) {
       const platformKey = `${process.arch}-${process.platform}` as keyof typeof PLATFORM
       const config = PLATFORM[platformKey]
       if (!config) throw new UnsupportedPlatformError({ platform: platformKey })
@@ -144,9 +144,9 @@ export namespace Ripgrep {
       const response = await fetch(url)
       if (!response.ok) throw new DownloadFailedError({ url, status: response.status })
 
-      const arrayBuffer = await response.arrayBuffer()
+      const buffer = await response.arrayBuffer()
       const archivePath = path.join(Global.Path.bin, filename)
-      await Filesystem.write(archivePath, Buffer.from(arrayBuffer))
+      await Bun.write(archivePath, buffer)
       if (config.extension === "tar.gz") {
         const args = ["tar", "-xzf", archivePath, "--strip-components=1"]
 
@@ -166,7 +166,7 @@ export namespace Ripgrep {
           })
       }
       if (config.extension === "zip") {
-        const zipFileReader = new ZipReader(new BlobReader(new Blob([arrayBuffer])))
+        const zipFileReader = new ZipReader(new BlobReader(new Blob([await Bun.file(archivePath).arrayBuffer()])))
         const entries = await zipFileReader.getEntries()
         let rgEntry: any
         for (const entry of entries) {
@@ -190,7 +190,7 @@ export namespace Ripgrep {
             stderr: "Failed to extract rg.exe from zip archive",
           })
         }
-        await Filesystem.write(filepath, Buffer.from(await rgBlob.arrayBuffer()))
+        await Bun.write(filepath, await rgBlob.arrayBuffer())
         await zipFileReader.close()
       }
       await fs.unlink(archivePath)

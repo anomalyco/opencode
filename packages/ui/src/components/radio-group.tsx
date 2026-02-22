@@ -15,8 +15,6 @@ export type RadioGroupProps<T> = Omit<
   class?: ComponentProps<"div">["class"]
   classList?: ComponentProps<"div">["classList"]
   size?: "small" | "medium"
-  fill?: boolean
-  pad?: "none" | "normal"
 }
 
 export function RadioGroup<T>(props: RadioGroupProps<T>) {
@@ -30,8 +28,6 @@ export function RadioGroup<T>(props: RadioGroupProps<T>) {
     "label",
     "onSelect",
     "size",
-    "fill",
-    "pad",
   ])
 
   const getValue = (item: T): string => {
@@ -53,8 +49,6 @@ export function RadioGroup<T>(props: RadioGroupProps<T>) {
       {...others}
       data-component="radio-group"
       data-size={local.size ?? "medium"}
-      data-fill={local.fill ? "" : undefined}
-      data-pad={local.pad ?? "normal"}
       classList={{
         ...(local.classList ?? {}),
         [local.class ?? ""]: !!local.class,
@@ -68,11 +62,9 @@ export function RadioGroup<T>(props: RadioGroupProps<T>) {
         <div role="presentation" data-slot="radio-group-items">
           <For each={local.options}>
             {(option) => (
-              <Kobalte.Item value={getValue(option)} data-slot="radio-group-item" data-value={getValue(option)}>
+              <Kobalte.Item value={getValue(option)} data-slot="radio-group-item">
                 <Kobalte.ItemInput data-slot="radio-group-item-input" />
-                <Kobalte.ItemLabel data-slot="radio-group-item-label">
-                  <span data-slot="radio-group-item-control">{getLabel(option)}</span>
-                </Kobalte.ItemLabel>
+                <Kobalte.ItemLabel data-slot="radio-group-item-label">{getLabel(option)}</Kobalte.ItemLabel>
               </Kobalte.Item>
             )}
           </For>

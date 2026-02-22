@@ -1,9 +1,9 @@
 ---
-title: Tastebindinger
+title: Keybinds
 description: Tilpass tastebindingene dine.
 ---
 
-OpenCode har en liste over tastebindinger som du kan tilpasse gjennom OpenCode-konfigurasjonen.
+OpenCode har en liste over nøkkelbindinger som du kan tilpasse gjennom OpenCode-konfigurasjonen.
 
 ```json title="opencode.json"
 {
@@ -105,19 +105,19 @@ OpenCode har en liste over tastebindinger som du kan tilpasse gjennom OpenCode-k
 
 ---
 
-## Leader-tast
+## Ledertast
 
-OpenCode bruker en `leader`-tast for de fleste tastebindinger. Dette unngår konflikter i terminalen din.
+OpenCode bruker en `leader`-nøkkel for de fleste nøkkelbindinger. Dette unngår konflikter i terminalen din.
 
 Som standard er `ctrl+x` ledertasten, og de fleste handlinger krever at du først trykker på ledertasten og deretter snarveien. For å starte en ny økt, trykker du for eksempel først `ctrl+x` og deretter `n`.
 
-Du trenger ikke å bruke en ledertast for tastebindingene dine, men vi anbefaler at du gjør det.
+Du trenger ikke å bruke en ledernøkkel for tastebindingene dine, men vi anbefaler at du gjør det.
 
 ---
 
-## Deaktivering av tastebindinger
+## Deaktiver tastebinding
 
-Du kan deaktivere en tastebinding ved å legge til tasten til konfigurasjonen med verdien "none".
+Du kan deaktivere en nøkkelbinding ved å legge til nøkkelen til konfigurasjonen med verdien "ingen".
 
 ```json title="opencode.json"
 {
@@ -130,9 +130,9 @@ Du kan deaktivere en tastebinding ved å legge til tasten til konfigurasjonen me
 
 ---
 
-## Snarveier i skrivebordsappen
+## Snarveier på skrivebordet
 
-Prompt-feltet for OpenCode-skrivebordsappen støtter vanlige snarveier i Readline/Emacs-stil for redigering av tekst. Disse er innebygd og foreløpig ikke konfigurerbare via `opencode.json`.
+Ledetekstinngangen for OpenCode-skrivebordsappen støtter vanlige snarveier i Readline/Emacs-stil for redigering av tekst. Disse er innebygd og foreløpig ikke konfigurerbare via `opencode.json`.
 
 | Snarvei  | Handling                                 |
 | -------- | ---------------------------------------- |
@@ -147,14 +147,14 @@ Prompt-feltet for OpenCode-skrivebordsappen støtter vanlige snarveier i Readlin
 | `ctrl+u` | Slett til starten av linjen              |
 | `ctrl+w` | Slett forrige ord                        |
 | `alt+d`  | Slett neste ord                          |
-| `ctrl+t` | Bytt om tegn                             |
+| `ctrl+t` | Transponere tegn                         |
 | `ctrl+g` | Avbryt popovers / avbryt kjøring av svar |
 
 ---
 
 ## Shift+Enter
 
-Noen terminaler sender ikke modifikasjonstaster med Enter som standard. Du må kanskje konfigurere terminalen til å sende `Shift+Enter` som en escape-sekvens.
+Noen terminaler sender ikke modifikasjonsnøkler med Enter som standard. Du må kanskje konfigurere terminalen til å sende `Shift+Enter` som en escape-sekvens.
 
 ### Windows Terminal
 

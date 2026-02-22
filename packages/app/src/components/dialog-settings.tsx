@@ -67,6 +67,15 @@ export const DialogSettings: Component = () => {
         <Tabs.Content value="models" class="no-scrollbar">
           <SettingsModels />
         </Tabs.Content>
+        {/* <Tabs.Content value="agents" class="no-scrollbar"> */}
+        {/*   <SettingsAgents /> */}
+        {/* </Tabs.Content> */}
+        {/* <Tabs.Content value="commands" class="no-scrollbar"> */}
+        {/*   <SettingsCommands /> */}
+        {/* </Tabs.Content> */}
+        {/* <Tabs.Content value="mcp" class="no-scrollbar"> */}
+        {/*   <SettingsMcp /> */}
+        {/* </Tabs.Content> */}
       </Tabs>
     </Dialog>
   )

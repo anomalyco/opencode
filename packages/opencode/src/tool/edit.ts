@@ -39,7 +39,7 @@ export const EditTool = Tool.define("edit", {
     }
 
     if (params.oldString === params.newString) {
-      throw new Error("No changes to apply: oldString and newString are identical.")
+      throw new Error("oldString and newString must be different")
     }
 
     const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(getCwd(), params.filePath)
@@ -50,7 +50,7 @@ export const EditTool = Tool.define("edit", {
     let contentNew = ""
     await FileTime.withLock(filePath, async () => {
       if (params.oldString === "") {
-        const existed = await Filesystem.exists(filePath)
+        const existed = await Bun.file(filePath).exists()
         contentNew = params.newString
         diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
         await ctx.ask({
@@ -62,7 +62,7 @@ export const EditTool = Tool.define("edit", {
             diff,
           },
         })
-        await Filesystem.write(filePath, params.newString)
+        await Bun.write(filePath, params.newString)
         await Bus.publish(File.Event.Edited, {
           file: filePath,
         })
@@ -74,11 +74,12 @@ export const EditTool = Tool.define("edit", {
         return
       }
 
-      const stats = Filesystem.stat(filePath)
+      const file = Bun.file(filePath)
+      const stats = await file.stat().catch(() => {})
       if (!stats) throw new Error(`File ${filePath} not found`)
       if (stats.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`)
       await FileTime.assert(ctx.sessionID, filePath)
-      contentOld = await Filesystem.readText(filePath)
+      contentOld = await file.text()
       contentNew = replace(contentOld, params.oldString, params.newString, params.replaceAll)
 
       diff = trimDiff(
@@ -94,7 +95,7 @@ export const EditTool = Tool.define("edit", {
         },
       })
 
-      await Filesystem.write(filePath, contentNew)
+      await file.write(contentNew)
       await Bus.publish(File.Event.Edited, {
         file: filePath,
       })
@@ -102,7 +103,7 @@ export const EditTool = Tool.define("edit", {
         file: filePath,
         event: "change",
       })
-      contentNew = await Filesystem.readText(filePath)
+      contentNew = await file.text()
       diff = trimDiff(
         createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
       )
@@ -617,7 +618,7 @@ export function trimDiff(diff: string): string {
 
 export function replace(content: string, oldString: string, newString: string, replaceAll = false): string {
   if (oldString === newString) {
-    throw new Error("No changes to apply: oldString and newString are identical.")
+    throw new Error("oldString and newString must be different")
   }
 
   let notFound = true
@@ -647,9 +648,9 @@ export function replace(content: string, oldString: string, newString: string, r
   }
 
   if (notFound) {
-    throw new Error(
-      "Could not find oldString in the file. It must match exactly, including whitespace, indentation, and line endings.",
-    )
+    throw new Error("oldString not found in content")
   }
-  throw new Error("Found multiple matches for oldString. Provide more surrounding context to make the match unique.")
+  throw new Error(
+    "Found multiple matches for oldString. Provide more surrounding lines in oldString to identify the correct match.",
+  )
 }

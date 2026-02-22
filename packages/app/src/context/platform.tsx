@@ -1,12 +1,6 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import type { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
+import { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
-
-type PickerPaths = string | string[] | null
-type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
-type OpenFilePickerOptions = { title?: string; multiple?: boolean }
-type SaveFilePickerOptions = { title?: string; defaultPath?: string }
-type UpdateInfo = { updateAvailable: boolean; version?: string }
 
 export type Platform = {
   /** Platform discriminator */
@@ -37,19 +31,19 @@ export type Platform = {
   notify(title: string, description?: string, href?: string): Promise<void>
 
   /** Open directory picker dialog (native on Tauri, server-backed on web) */
-  openDirectoryPickerDialog?(opts?: OpenDirectoryPickerOptions): Promise<PickerPaths>
+  openDirectoryPickerDialog?(opts?: { title?: string; multiple?: boolean }): Promise<string | string[] | null>
 
   /** Open native file picker dialog (Tauri only) */
-  openFilePickerDialog?(opts?: OpenFilePickerOptions): Promise<PickerPaths>
+  openFilePickerDialog?(opts?: { title?: string; multiple?: boolean }): Promise<string | string[] | null>
 
   /** Save file picker dialog (Tauri only) */
-  saveFilePickerDialog?(opts?: SaveFilePickerOptions): Promise<string | null>
+  saveFilePickerDialog?(opts?: { title?: string; defaultPath?: string }): Promise<string | null>
 
   /** Storage mechanism, defaults to localStorage */
   storage?: (name?: string) => SyncStorage | AsyncStorage
 
   /** Check for updates (Tauri only) */
-  checkUpdate?(): Promise<UpdateInfo>
+  checkUpdate?(): Promise<{ updateAvailable: boolean; version?: string }>
 
   /** Install updates (Tauri only) */
   update?(): Promise<void>
@@ -58,16 +52,10 @@ export type Platform = {
   fetch?: typeof fetch
 
   /** Get the configured default server URL (platform-specific) */
-  getDefaultServerUrl?(): Promise<string | null>
+  getDefaultServerUrl?(): Promise<string | null> | string | null
 
   /** Set the default server URL to use on app startup (platform-specific) */
   setDefaultServerUrl?(url: string | null): Promise<void> | void
-
-  /** Get the configured WSL integration (desktop only) */
-  getWslEnabled?(): Promise<boolean>
-
-  /** Set the configured WSL integration (desktop only) */
-  setWslEnabled?(config: boolean): Promise<void> | void
 
   /** Get the preferred display backend (desktop only) */
   getDisplayBackend?(): Promise<DisplayBackend | null> | DisplayBackend | null

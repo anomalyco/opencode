@@ -1,6 +1,6 @@
 ---
 title: GitLab
-description: Utilisez OpenCode dans les issues GitLab et les merge requests.
+description: Utilisez OpenCode dans les problèmes GitLab et les demandes de fusion.
 ---
 
 OpenCode s'intègre à votre flux de travail GitLab via votre pipeline CI/CD GitLab ou avec GitLab Duo.
@@ -17,17 +17,17 @@ Ici, nous utilisons un composant CI/CD créé par la communauté pour OpenCode �
 
 ---
 
-### Fonctionnalités
+### Caractéristiques
 
-- **Utiliser une configuration personnalisée par tâche** : configurez OpenCode avec un répertoire de configuration personnalisé, par exemple `./config/#custom-directory` pour activer ou désactiver la fonctionnalité pour chaque appel d'OpenCode.
-- **Configuration minimale** : le composant CI configure OpenCode en arrière-plan, il vous suffit de créer la configuration OpenCode et le prompt initial.
-- **Flexible** : le composant CI prend en charge plusieurs entrées pour personnaliser son comportement
+- **Utiliser une configuration personnalisée par tâche** : configurez OpenCode avec un répertoire de configuration personnalisé, par exemple `./config/#custom-directory` pour activer ou désactiver la fonctionnalité par appel OpenCode.
+- **Configuration minimale** : le composant CI configure OpenCode en arrière-plan, il vous suffit de créer la configuration OpenCode et l'invite initiale.
+- **Flexible** : le composant CI prend en charge plusieurs entrées pour personnaliser son comportement
 
 ---
 
 ### Installation
 
-1. Stockez votre authentification OpenCode JSON en tant que variables d'environnement CI de type fichier sous **Paramètres** > **CI/CD** > **Variables**. Assurez-vous de les marquer comme « Masquées et protégées ».
+1. Stockez votre authentification OpenCode JSON en tant que variables d'environnement CI de type fichier sous **Paramètres** > **CI/CD** > **Variables**. Assurez-vous de les marquer comme « Masqués et cachés ».
 2. Ajoutez ce qui suit à votre fichier `.gitlab-ci.yml`.
 
    ```yaml title=".gitlab-ci.yml"
@@ -40,7 +40,7 @@ Ici, nous utilisons un composant CI/CD créé par la communauté pour OpenCode �
          message: "Your prompt here"
    ```
 
-Pour plus d'entrées et de cas d'utilisation [consultez la doc](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode) pour ce composant.
+Pour plus d'entrées et de cas d'utilisation [consultez la docs](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode) pour ce composant.
 
 ---
 
@@ -51,21 +51,21 @@ Mentionnez `@opencode` dans un commentaire et OpenCode exécutera les tâches au
 
 ---
 
-### Fonctionnalités
+### Caractéristiques
 
-- **Triage d'issues** : demandez à OpenCode d'examiner une issue et de vous l'expliquer.
-- **Correction et implémentation** : demandez à OpenCode de résoudre une issue ou d'implémenter une fonctionnalité.
-  Cela créera une nouvelle branche et déclenchera une merge request avec les modifications.
-- **Sécurisé** : OpenCode fonctionne sur vos runners GitLab.
+- **Problèmes de triage** : demandez à OpenCode d'examiner un problème et de vous l'expliquer.
+- **Réparer et implémenter** : demandez à OpenCode de résoudre un problème ou d'implémenter une fonctionnalité.
+  Cela créera une nouvelle branche et déclenchera une demande de fusion avec les modifications.
+- **Sécurisé** : OpenCode fonctionne sur vos runners GitLab.
 
 ---
 
 ### Installation
 
-OpenCode s'exécute dans votre pipeline CI/CD GitLab. Voici ce dont vous aurez besoin pour le configurer :
+OpenCode s'exécute dans votre pipeline CI/CD GitLab. Voici ce dont vous aurez besoin pour le configurer :
 
 :::tip
-Consultez la [**documentation GitLab**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) pour obtenir des instructions à jour.
+Consultez les [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) pour obtenir des instructions à jour.
 :::
 
 1.  Configurez votre environnement GitLab
@@ -73,7 +73,7 @@ Consultez la [**documentation GitLab**](https://docs.gitlab.com/user/duo_agent_p
 3.  Obtenez la clé API d'un fournisseur de modèles d'IA
 4.  Créer un compte de service
 5.  Configurer les variables CI/CD
-6.  Créez un fichier de configuration de flux, voici un exemple :
+6.  Créez un fichier de configuration de flux, voici un exemple :
 
         <details>
 
@@ -164,32 +164,32 @@ Voici quelques exemples de la façon dont vous pouvez utiliser OpenCode dans Git
 Vous pouvez configurer pour utiliser une phrase de déclenchement différente de `@opencode`.
 :::
 
-- **Expliquer une issue**
+- **Expliquez un problème**
 
-Ajoutez ce commentaire dans une issue GitLab.
+Ajoutez ce commentaire dans un numéro GitLab.
 
 ```
   @opencode explain this issue
 ```
 
-OpenCode lira l'issue et répondra avec une explication claire.
+OpenCode lira le problème et répondra avec une explication claire.
 
-- **Résoudre une issue**
+- **Résoudre un problème**
 
-Dans une issue GitLab, dites :
+Dans un numéro GitLab, dites :
 
 ```
   @opencode fix this
 ```
 
-OpenCode créera une nouvelle branche, mettra en œuvre les modifications et ouvrira une merge request avec les modifications.
+OpenCode créera une nouvelle branche, mettra en œuvre les modifications et ouvrira une demande de fusion avec les modifications.
 
-- **Revue de merge request**
+- **Examiner les demandes de fusion**
 
-Laissez le commentaire suivant sur une merge request GitLab.
+Laissez le commentaire suivant sur une demande de fusion GitLab.
 
 ```
   @opencode review this merge request
 ```
 
-OpenCode examinera la merge request et fournira des commentaires.
+OpenCode examinera la demande de fusion et fournira des commentaires.

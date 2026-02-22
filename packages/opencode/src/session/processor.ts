@@ -63,19 +63,17 @@ export namespace SessionProcessor {
                   if (value.id in reasoningMap) {
                     continue
                   }
-                  const reasoningPart = {
+                  reasoningMap[value.id] = {
                     id: Identifier.ascending("part"),
                     messageID: input.assistantMessage.id,
                     sessionID: input.assistantMessage.sessionID,
-                    type: "reasoning" as const,
+                    type: "reasoning",
                     text: "",
                     time: {
                       start: Date.now(),
                     },
                     metadata: value.providerMetadata,
                   }
-                  reasoningMap[value.id] = reasoningPart
-                  await Session.updatePart(reasoningPart)
                   break
 
                 case "reasoning-delta":
@@ -83,13 +81,7 @@ export namespace SessionProcessor {
                     const part = reasoningMap[value.id]
                     part.text += value.text
                     if (value.providerMetadata) part.metadata = value.providerMetadata
-                    await Session.updatePartDelta({
-                      sessionID: part.sessionID,
-                      messageID: part.messageID,
-                      partID: part.id,
-                      field: "text",
-                      delta: value.text,
-                    })
+                    if (part.text) await Session.updatePart({ part, delta: value.text })
                   }
                   break
 
@@ -296,20 +288,17 @@ export namespace SessionProcessor {
                     },
                     metadata: value.providerMetadata,
                   }
-                  await Session.updatePart(currentText)
                   break
 
                 case "text-delta":
                   if (currentText) {
                     currentText.text += value.text
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata
-                    await Session.updatePartDelta({
-                      sessionID: currentText.sessionID,
-                      messageID: currentText.messageID,
-                      partID: currentText.id,
-                      field: "text",
-                      delta: value.text,
-                    })
+                    if (currentText.text)
+                      await Session.updatePart({
+                        part: currentText,
+                        delta: value.text,
+                      })
                   }
                   break
 

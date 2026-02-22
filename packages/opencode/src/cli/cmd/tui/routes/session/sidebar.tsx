@@ -80,15 +80,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         paddingRight={2}
         position={props.overlay ? "absolute" : "relative"}
       >
-        <scrollbox
-          flexGrow={1}
-          verticalScrollbarOptions={{
-            trackOptions: {
-              backgroundColor: theme.background,
-              foregroundColor: theme.borderActive,
-            },
-          }}
-        >
+        <scrollbox flexGrow={1}>
           <box flexShrink={0} gap={1} paddingRight={1}>
             <box paddingRight={1}>
               <text fg={theme.text}>

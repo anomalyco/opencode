@@ -122,20 +122,12 @@ function createFakeAgent() {
       messages: async () => {
         return { data: [] }
       },
-      message: async (params?: any) => {
-        // Return a message with parts that can be looked up by partID
+      message: async () => {
         return {
           data: {
             info: {
               role: "assistant",
             },
-            parts: [
-              {
-                id: params?.messageID ? `${params.messageID}_part` : "part_1",
-                type: "text",
-                text: "",
-              },
-            ],
           },
         }
       },
@@ -201,7 +193,7 @@ function createFakeAgent() {
 }
 
 describe("acp.agent event subscription", () => {
-  test("routes message.part.delta by the event sessionID (no cross-session pollution)", async () => {
+  test("routes message.part.updated by the event sessionID (no cross-session pollution)", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
       directory: tmp.path,
@@ -215,12 +207,14 @@ describe("acp.agent event subscription", () => {
         controller.push({
           directory: cwd,
           payload: {
-            type: "message.part.delta",
+            type: "message.part.updated",
             properties: {
-              sessionID: sessionB,
-              messageID: "msg_1",
-              partID: "msg_1_part",
-              field: "text",
+              part: {
+                sessionID: sessionB,
+                messageID: "msg_1",
+                type: "text",
+                synthetic: false,
+              },
               delta: "hello",
             },
           },
@@ -236,7 +230,7 @@ describe("acp.agent event subscription", () => {
     })
   })
 
-  test("keeps concurrent sessions isolated when message.part.delta events are interleaved", async () => {
+  test("keeps concurrent sessions isolated when message.part.updated events are interleaved", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
       directory: tmp.path,
@@ -254,12 +248,14 @@ describe("acp.agent event subscription", () => {
           controller.push({
             directory: cwd,
             payload: {
-              type: "message.part.delta",
+              type: "message.part.updated",
               properties: {
-                sessionID: sessionId,
-                messageID,
-                partID: `${messageID}_part`,
-                field: "text",
+                part: {
+                  sessionID: sessionId,
+                  messageID,
+                  type: "text",
+                  synthetic: false,
+                },
                 delta,
               },
             },
@@ -406,12 +402,14 @@ describe("acp.agent event subscription", () => {
         controller.push({
           directory: cwd,
           payload: {
-            type: "message.part.delta",
+            type: "message.part.updated",
             properties: {
-              sessionID: sessionB,
-              messageID: "msg_b",
-              partID: "msg_b_part",
-              field: "text",
+              part: {
+                sessionID: sessionB,
+                messageID: "msg_b",
+                type: "text",
+                synthetic: false,
+              },
               delta: "session_b_message",
             },
           },

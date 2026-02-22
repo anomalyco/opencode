@@ -1,7 +1,6 @@
 import { describe, test, expect, afterAll } from "bun:test"
 import { Truncate } from "../../src/tool/truncation"
 import { Identifier } from "../../src/id/id"
-import { Filesystem } from "../../src/util/filesystem"
 import fs from "fs/promises"
 import path from "path"
 
@@ -10,7 +9,7 @@ const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 describe("Truncate", () => {
   describe("output", () => {
     test("truncates large json file by bytes", async () => {
-      const content = await Filesystem.readText(path.join(FIXTURES_DIR, "models-api.json"))
+      const content = await Bun.file(path.join(FIXTURES_DIR, "models-api.json")).text()
       const result = await Truncate.output(content)
 
       expect(result.truncated).toBe(true)
@@ -70,7 +69,7 @@ describe("Truncate", () => {
     })
 
     test("large single-line file truncates with byte message", async () => {
-      const content = await Filesystem.readText(path.join(FIXTURES_DIR, "models-api.json"))
+      const content = await Bun.file(path.join(FIXTURES_DIR, "models-api.json")).text()
       const result = await Truncate.output(content)
 
       expect(result.truncated).toBe(true)
@@ -89,7 +88,7 @@ describe("Truncate", () => {
       expect(result.outputPath).toBeDefined()
       expect(result.outputPath).toContain("tool_")
 
-      const written = await Filesystem.readText(result.outputPath!)
+      const written = await Bun.file(result.outputPath).text()
       expect(written).toBe(lines)
     })
 
@@ -140,21 +139,21 @@ describe("Truncate", () => {
       const oldTimestamp = Date.now() - 10 * DAY_MS
       const oldId = Identifier.create("tool", false, oldTimestamp)
       oldFile = path.join(Truncate.DIR, oldId)
-      await Filesystem.write(oldFile, "old content")
+      await Bun.write(Bun.file(oldFile), "old content")
 
       // Create a recent file (3 days ago)
       const recentTimestamp = Date.now() - 3 * DAY_MS
       const recentId = Identifier.create("tool", false, recentTimestamp)
       recentFile = path.join(Truncate.DIR, recentId)
-      await Filesystem.write(recentFile, "recent content")
+      await Bun.write(Bun.file(recentFile), "recent content")
 
       await Truncate.cleanup()
 
       // Old file should be deleted
-      expect(await Filesystem.exists(oldFile)).toBe(false)
+      expect(await Bun.file(oldFile).exists()).toBe(false)
 
       // Recent file should still exist
-      expect(await Filesystem.exists(recentFile)).toBe(true)
+      expect(await Bun.file(recentFile).exists()).toBe(true)
     })
   })
 })

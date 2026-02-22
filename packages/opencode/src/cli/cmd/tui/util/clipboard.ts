@@ -4,7 +4,6 @@ import clipboardy from "clipboardy"
 import { lazy } from "../../../../util/lazy.js"
 import { tmpdir } from "os"
 import path from "path"
-import { Filesystem } from "../../../../util/filesystem"
 
 /**
  * Writes text to clipboard via OSC 52 escape sequence.
@@ -35,8 +34,9 @@ export namespace Clipboard {
         await $`osascript -e 'set imageData to the clipboard as "PNGf"' -e 'set fileRef to open for access POSIX file "${tmpfile}" with write permission' -e 'set eof fileRef to 0' -e 'write imageData to fileRef' -e 'close access fileRef'`
           .nothrow()
           .quiet()
-        const buffer = await Filesystem.readBytes(tmpfile)
-        return { data: buffer.toString("base64"), mime: "image/png" }
+        const file = Bun.file(tmpfile)
+        const buffer = await file.arrayBuffer()
+        return { data: Buffer.from(buffer).toString("base64"), mime: "image/png" }
       } catch {
       } finally {
         await $`rm -f "${tmpfile}"`.nothrow().quiet()

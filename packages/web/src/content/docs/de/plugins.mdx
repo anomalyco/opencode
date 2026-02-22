@@ -9,7 +9,7 @@ Beispiele finden Sie im von der Community erstellten [plugins](/docs/ecosystem#p
 
 ---
 
-## Plugins verwenden
+## Verwenden Sie ein Plugin
 
 Es gibt zwei Möglichkeiten, Plugins zu laden.
 
@@ -43,7 +43,7 @@ Durchsuchen Sie die verfügbaren Plugins im [ecosystem](/docs/ecosystem#plugins)
 
 ---
 
-### Plugin-Installation
+### Wie Plugins installiert werden
 
 **NPM-Plugins** werden beim Start automatisch mit Bun installiert. Pakete und ihre Abhängigkeiten werden in `~/.cache/opencode/node_modules/` zwischengespeichert.
 
@@ -51,7 +51,7 @@ Durchsuchen Sie die verfügbaren Plugins im [ecosystem](/docs/ecosystem#plugins)
 
 ---
 
-### Ladereihenfolge
+### Auftrag laden
 
 Plugins werden aus allen Quellen geladen und alle Hooks werden nacheinander ausgeführt. Die Ladereihenfolge lautet:
 
@@ -64,13 +64,14 @@ Doppelte npm-Pakete mit demselben Namen und derselben Version werden einmal gela
 
 ---
 
-## Plugins erstellen
+## Erstellen Sie ein Plugin
 
-Ein Plugin ist ein **JavaScript/TypeScript-Modul**, das eine oder mehrere Plugin-Funktionen exportiert. Jede Funktion empfängt ein Kontextobjekt und gibt ein Hooks-Objekt zurück.
+A plugin is a **JavaScript/TypeScript module** that exports one or more plugin
+Funktionen. Jede Funktion empfängt ein Kontextobjekt und gibt ein Hooks-Objekt zurück.
 
 ---
 
-### Abhängigkeiten
+### Dependencies
 
 Lokale Plugins und benutzerdefinierte Tools können externe npm-Pakete verwenden. Fügen Sie Ihrem Konfigurationsverzeichnis ein `package.json` mit den benötigten Abhängigkeiten hinzu.
 
@@ -122,7 +123,7 @@ Die Plugin-Funktion erhält:
 
 ---
 
-### TypeScript-Unterstützung
+### TypeScript support
 
 Für TypeScript-Plugins können Sie Typen aus dem Plugin-Paket importieren:
 
@@ -138,7 +139,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 ---
 
-### Ereignisse
+### Events
 
 Plugins können Ereignisse abonnieren, wie unten im Abschnitt „Beispiele“ gezeigt. Hier finden Sie eine Liste der verschiedenen verfügbaren Veranstaltungen.
 
@@ -155,7 +156,7 @@ Plugins können Ereignisse abonnieren, wie unten im Abschnitt „Beispiele“ ge
 
 - `installation.updated`
 
-#### LSP-Ereignisse
+#### LSP Ereignisse
 
 - `lsp.client.diagnostics`
 - `lsp.updated`
@@ -187,11 +188,11 @@ Plugins können Ereignisse abonnieren, wie unten im Abschnitt „Beispiele“ ge
 - `session.status`
 - `session.updated`
 
-#### Todo-Ereignisse
+#### Todo-Events
 
 - `todo.updated`
 
-#### Shell-Ereignisse
+#### Shell-Events
 
 - `shell.env`
 
@@ -200,7 +201,7 @@ Plugins können Ereignisse abonnieren, wie unten im Abschnitt „Beispiele“ ge
 - `tool.execute.after`
 - `tool.execute.before`
 
-#### TUI-Ereignisse
+#### TUI Ereignisse
 
 - `tui.prompt.append`
 - `tui.command.execute`
@@ -208,13 +209,13 @@ Plugins können Ereignisse abonnieren, wie unten im Abschnitt „Beispiele“ ge
 
 ---
 
-## Beispiele
+## Examples
 
 Hier sind einige Beispiele für Plugins, mit denen Sie OpenCode erweitern können.
 
 ---
 
-### Benachrichtigungen senden
+### Senden Sie Benachrichtigungen
 
 Senden Sie Benachrichtigungen, wenn bestimmte Ereignisse eintreten:
 
@@ -239,7 +240,7 @@ Wenn Sie die OpenCode-Desktop-App verwenden, kann diese automatisch Systembenach
 
 ---
 
-### .env-Schutz
+### .env protection
 
 Verhindern Sie, dass OpenCode `.env`-Dateien liest:
 
@@ -274,7 +275,7 @@ export const InjectEnvPlugin = async () => {
 
 ---
 
-### Benutzerdefinierte Tools
+### Benutzerdefinierte Werkzeuge
 
 Plugins können OpenCode auch benutzerdefinierte Tools hinzufügen:
 
@@ -309,7 +310,7 @@ Ihre benutzerdefinierten Tools stehen neben den integrierten Tools für OpenCode
 
 ---
 
-### Protokollierung
+### Logging
 
 Verwenden Sie `client.app.log()` anstelle von `console.log` für die strukturierte Protokollierung:
 
@@ -330,7 +331,7 @@ Ebenen: `debug`, `info`, `warn`, `error`. Weitere Informationen finden Sie unter
 
 ---
 
-### Compaction-Hooks
+### Verdichtungshaken
 
 Passen Sie den Kontext an, der beim Komprimieren einer Sitzung einbezogen wird:
 

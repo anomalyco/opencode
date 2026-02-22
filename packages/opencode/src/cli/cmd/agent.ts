@@ -6,7 +6,6 @@ import { Agent } from "../../agent/agent"
 import { Provider } from "../../provider/provider"
 import path from "path"
 import fs from "fs/promises"
-import { Filesystem } from "../../util/filesystem"
 import matter from "gray-matter"
 import { Instance } from "../../project/instance"
 import { EOL } from "os"
@@ -203,7 +202,8 @@ const AgentCreateCommand = cmd({
 
         await fs.mkdir(targetPath, { recursive: true })
 
-        if (await Filesystem.exists(filePath)) {
+        const file = Bun.file(filePath)
+        if (await file.exists()) {
           if (isFullyNonInteractive) {
             console.error(`Error: Agent file already exists: ${filePath}`)
             process.exit(1)
@@ -212,7 +212,7 @@ const AgentCreateCommand = cmd({
           throw new UI.CancelledError()
         }
 
-        await Filesystem.write(filePath, content)
+        await Bun.write(filePath, content)
 
         if (isFullyNonInteractive) {
           console.log(filePath)

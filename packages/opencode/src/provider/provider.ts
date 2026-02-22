@@ -14,9 +14,6 @@ import { Env } from "../env"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
-import { Global } from "../global"
-import path from "path"
-import { Filesystem } from "../util/filesystem"
 
 // Direct imports for bundled providers
 import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
@@ -40,8 +37,6 @@ import { createTogetherAI } from "@ai-sdk/togetherai"
 import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
 import { createGitLab, VERSION as GITLAB_PROVIDER_VERSION } from "@gitlab/gitlab-ai-provider"
-import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
-import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
 
@@ -58,30 +53,6 @@ export namespace Provider {
 
   function shouldUseCopilotResponsesApi(modelID: string): boolean {
     return isGpt5OrLater(modelID) && !modelID.startsWith("gpt-5-mini")
-  }
-
-  function googleVertexVars(options: Record<string, any>) {
-    const project =
-      options["project"] ?? Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
-    const location =
-      options["location"] ?? Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "us-central1"
-    const endpoint = location === "global" ? "aiplatform.googleapis.com" : `${location}-aiplatform.googleapis.com`
-
-    return {
-      GOOGLE_VERTEX_PROJECT: project,
-      GOOGLE_VERTEX_LOCATION: location,
-      GOOGLE_VERTEX_ENDPOINT: endpoint,
-    }
-  }
-
-  function loadBaseURL(model: Model, options: Record<string, any>) {
-    const raw = options["baseURL"] ?? model.api.url
-    if (typeof raw !== "string") return raw
-    const vars = model.providerID === "google-vertex" ? googleVertexVars(options) : undefined
-    return raw.replace(/\$\{([^}]+)\}/g, (match, key) => {
-      const val = Env.get(String(key)) ?? vars?.[String(key) as keyof typeof vars]
-      return val ?? match
-    })
   }
 
   const BUNDLED_PROVIDERS: Record<string, (options: any) => SDK> = {
@@ -254,6 +225,8 @@ export namespace Provider {
       // Only use credential chain if no bearer token exists
       // Bearer token takes precedence over credential chain (profiles, access keys, IAM roles, web identity tokens)
       if (!awsBearerToken) {
+        const { fromNodeProviderChain } = await import(await BunProc.install("@aws-sdk/credential-providers"))
+
         // Build credential provider options (only pass profile if specified)
         const credentialProviderOptions = profile ? { profile } : {}
 
@@ -378,16 +351,9 @@ export namespace Provider {
         },
       }
     },
-    "google-vertex": async (provider) => {
-      const project =
-        provider.options?.project ??
-        Env.get("GOOGLE_CLOUD_PROJECT") ??
-        Env.get("GCP_PROJECT") ??
-        Env.get("GCLOUD_PROJECT")
-
-      const location =
-        provider.options?.location ?? Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "us-central1"
-
+    "google-vertex": async () => {
+      const project = Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
+      const location = Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "us-east5"
       const autoload = Boolean(project)
       if (!autoload) return { autoload: false }
       return {
@@ -395,16 +361,6 @@ export namespace Provider {
         options: {
           project,
           location,
-          fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-            const auth = new GoogleAuth()
-            const client = await auth.getApplicationDefault()
-            const token = await client.credential.getAccessToken()
-
-            const headers = new Headers(init?.headers)
-            headers.set("Authorization", `Bearer ${token.token}`)
-
-            return fetch(input, { ...init, headers })
-          },
         },
         async getModel(sdk: any, modelID: string) {
           const id = String(modelID).trim()
@@ -577,17 +533,6 @@ export namespace Provider {
         },
       }
     },
-    kilo: async () => {
-      return {
-        autoload: false,
-        options: {
-          headers: {
-            "HTTP-Referer": "https://opencode.ai/",
-            "X-Title": "opencode",
-          },
-        },
-      }
-    },
   }
 
   export const Model = z
@@ -684,7 +629,7 @@ export namespace Provider {
       family: model.family,
       api: {
         id: model.id,
-        url: model.provider?.api ?? provider.api!,
+        url: provider.api!,
         npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible",
       },
       status: model.status ?? "active",
@@ -836,7 +781,7 @@ export namespace Provider {
               existingModel?.api.npm ??
               modelsDev[providerID]?.npm ??
               "@ai-sdk/openai-compatible",
-            url: model.provider?.api ?? provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
+            url: provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
           },
           status: model.status ?? existingModel?.status ?? "active",
           name,
@@ -1047,16 +992,11 @@ export namespace Provider {
       const provider = s.providers[model.providerID]
       const options = { ...provider.options }
 
-      if (model.providerID === "google-vertex" && !model.api.npm.includes("@ai-sdk/openai-compatible")) {
-        delete options.fetch
-      }
-
       if (model.api.npm.includes("@ai-sdk/openai-compatible") && options["includeUsage"] !== false) {
         options["includeUsage"] = true
       }
 
-      const baseURL = loadBaseURL(model, options)
-      if (baseURL !== undefined) options["baseURL"] = baseURL
+      if (!options["baseURL"]) options["baseURL"] = model.api.url
       if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
       if (model.headers)
         options["headers"] = {
@@ -1289,20 +1229,9 @@ export namespace Provider {
     const cfg = await Config.get()
     if (cfg.model) return parseModel(cfg.model)
 
-    const providers = await list()
-    const recent = (await Filesystem.readJson<{ recent?: { providerID: string; modelID: string }[] }>(
-      path.join(Global.Path.state, "model.json"),
-    )
-      .then((x) => (Array.isArray(x.recent) ? x.recent : []))
-      .catch(() => [])) as { providerID: string; modelID: string }[]
-    for (const entry of recent) {
-      const provider = providers[entry.providerID]
-      if (!provider) continue
-      if (!provider.models[entry.modelID]) continue
-      return { providerID: entry.providerID, modelID: entry.modelID }
-    }
-
-    const provider = Object.values(providers).find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id))
+    const provider = await list()
+      .then((val) => Object.values(val))
+      .then((x) => x.find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id)))
     if (!provider) throw new Error("no providers found")
     const [model] = sort(Object.values(provider.models))
     if (!model) throw new Error("no models found")

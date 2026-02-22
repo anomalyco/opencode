@@ -1,7 +1,6 @@
 import { NamedError } from "@opencode-ai/util/error"
 import matter from "gray-matter"
 import { z } from "zod"
-import { Filesystem } from "../util/filesystem"
 
 export namespace ConfigMarkdown {
   export const FILE_REGEX = /(?<![\w`])@(\.?[^\s`,.]*(?:\.[^\s`,.]+)*)/g
@@ -69,7 +68,7 @@ export namespace ConfigMarkdown {
   }
 
   export async function parse(filePath: string) {
-    const template = await Filesystem.readText(filePath)
+    const template = await Bun.file(filePath).text()
 
     try {
       const md = matter(template)
