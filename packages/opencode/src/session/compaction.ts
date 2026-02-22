@@ -148,32 +148,41 @@ export namespace SessionCompaction {
       { sessionID: input.sessionID },
       { context: [], prompt: undefined },
     )
-    const defaultPrompt = `Provide a detailed prompt for continuing our conversation above.
-Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next.
-The summary that you construct will be used so that another agent can read it and continue the work.
+    const defaultPrompt = `Produce the context restoration document described in your system prompt for the conversation above.
 
-When constructing the summary, try to stick to this template:
+Structure it under these headings. Omit any heading with no content.
 ---
-## Goal
+## Objective
 
-[What goal(s) is the user trying to accomplish?]
+What you are working on right now. The immediate next action — what you would do if you had one more turn. What is currently broken or blocking progress.
 
-## Instructions
+## User Directives
 
-- [What important instructions did the user give you that are relevant]
-- [If there is a plan or spec, include information about it so next agent can continue using it]
+Every correction, preference, and rule the user stated. These accumulate across compaction cycles — carry forward all directives from prior summaries. Never drop one.
 
-## Discoveries
+## Plan
 
-[What notable things were learned during this conversation that would be useful for the next agent to know when continuing the work]
+Remaining steps in order. Reference spec or plan documents by path. Enough detail to pick up mid-step.
+
+## Failed Approaches
+
+Everything that was tried and did not work. Number each one. What was attempted, what went wrong, why. Include approaches the user rejected. Be exhaustive — this is the highest-value section.
+
+## Resolved Code & Discoveries
+
+Working code preserved verbatim in fenced blocks — query patterns, state machines, auth flows, data transforms, correct field names, API response shapes. Error workarounds, environment-specific behaviors, API quirks, correct syntax that differs from what you would guess. These are gotchas that would be painful to rediscover. If you struggled to get something working, the resolved version belongs here.
+
+## How Things Work Now
+
+The settled state of the system. Architecture, commands, patterns in place. State as direct instructions: "use X", "run Y", "the script lives at Z". Not a history of decisions.
 
 ## Accomplished
 
-[What work has been completed, what work is still in progress, and what work is left?]
+What is complete. What is in progress. What remains. Commit SHAs where relevant.
 
-## Relevant files / directories
+## Relevant files / environment
 
-[Construct a structured list of relevant files that have been read, edited, or created that pertain to the task at hand. If all the files in a directory are relevant, include the path to the directory.]
+Files that matter — with modification status (committed, uncommitted, pending). Credentials, API keys, auth tokens, endpoint URLs, environment variables, service ports. Multiple credential locations that must stay in sync — list all of them.
 ---`
 
     const promptText = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
