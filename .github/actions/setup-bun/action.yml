@@ -3,13 +3,11 @@ description: "Setup Bun with caching and install dependencies"
 runs:
   using: "composite"
   steps:
-    - name: Cache Bun dependencies
-      uses: actions/cache@v4
+    - name: Mount Bun Cache
+      uses: useblacksmith/stickydisk@v1
       with:
-        path: ~/.bun/install/cache
-        key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
-        restore-keys: |
-          ${{ runner.os }}-bun-
+        key: ${{ github.repository }}-bun-cache-${{ runner.os }}
+        path: ~/.bun
 
     - name: Setup Bun
       uses: oven-sh/setup-bun@v2

@@ -1,4 +1,4 @@
-import { Resource } from "sst"
+import { Resource } from "@opencode-ai/console-resource"
 import { defineConfig } from "drizzle-kit"
 
 export default defineConfig({
