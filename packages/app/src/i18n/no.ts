@@ -98,6 +98,10 @@ export const dict = {
   "palette.group.content": "Lokalt filinnholdstreff",
   "palette.group.chat": "Chatinnholdstreff",
   "palette.group.sessions": "Sesjonsnavnstreff",
+  "palette.group.files.count": "{{count}} resultater.",
+  "palette.group.content.count": "{{count}} resultater i {{files}} filer.",
+  "palette.group.chat.count": "{{count}} resultater i {{sessions}} økter.",
+  "palette.group.sessions.count": "{{count}} resultater.",
 
   "dialog.provider.search.placeholder": "Søk etter leverandører",
   "dialog.provider.empty": "Ingen leverandører funnet",

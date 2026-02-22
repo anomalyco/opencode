@@ -95,6 +95,10 @@ export const dict = {
   "palette.group.content": "ผลการจับคู่เนื้อหาไฟล์ในเครื่อง",
   "palette.group.chat": "ผลการจับคู่เนื้อหาแชท",
   "palette.group.sessions": "ผลการจับคู่ชื่อเซสชัน",
+  "palette.group.files.count": "{{count}} ผลลัพธ์",
+  "palette.group.content.count": "{{count}} ผลลัพธ์ใน {{files}} ไฟล์",
+  "palette.group.chat.count": "{{count}} ผลลัพธ์ใน {{sessions}} เซสชัน",
+  "palette.group.sessions.count": "{{count}} ผลลัพธ์",
 
   "dialog.provider.search.placeholder": "ค้นหาผู้ให้บริการ",
   "dialog.provider.empty": "ไม่พบผู้ให้บริการ",

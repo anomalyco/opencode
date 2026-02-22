@@ -95,6 +95,10 @@ export const dict = {
   "palette.group.content": "Lokalt filindholdssmatch",
   "palette.group.chat": "Chatindholdssmatch",
   "palette.group.sessions": "Sessionsnavnsmatch",
+  "palette.group.files.count": "{{count}} resultater.",
+  "palette.group.content.count": "{{count}} resultater i {{files}} filer.",
+  "palette.group.chat.count": "{{count}} resultater i {{sessions}} sessioner.",
+  "palette.group.sessions.count": "{{count}} resultater.",
 
   "dialog.provider.search.placeholder": "Søg udbydere",
   "dialog.provider.empty": "Ingen udbydere fundet",

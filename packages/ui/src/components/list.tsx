@@ -46,6 +46,8 @@ export interface ListProps<T> extends FilteredListProps<T> {
   divider?: boolean
   add?: ListAddProps
   groupHeader?: (group: { category: string; items: T[] }) => JSX.Element
+  /** When true for a category, only the group header is shown (items hidden). */
+  groupCollapsed?: (category: string) => boolean
 }
 
 export interface ListRef {
@@ -326,7 +328,8 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                   <Show when={group.category}>
                     <GroupHeader group={group} />
                   </Show>
-                  <div data-slot="list-items">
+                  <Show when={!props.groupCollapsed?.(group.category)}>
+                    <div data-slot="list-items">
                     <For each={group.items}>
                       {(item, i) => {
                         const node = (
@@ -372,6 +375,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                     </For>
                     <Show when={showAdd() && isLastGroup()}>{renderAdd()}</Show>
                   </div>
+                  </Show>
                 </div>
               )
             }}

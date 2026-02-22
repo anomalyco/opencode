@@ -95,6 +95,10 @@ export const dict = {
   "palette.group.content": "Совпадения содержимого локальных файлов",
   "palette.group.chat": "Совпадения содержимого чата",
   "palette.group.sessions": "Совпадения имён сессий",
+  "palette.group.files.count": "{{count}} результатов.",
+  "palette.group.content.count": "{{count}} результатов в {{files}} файлах.",
+  "palette.group.chat.count": "{{count}} результатов в {{sessions}} сессиях.",
+  "palette.group.sessions.count": "{{count}} результатов.",
 
   "dialog.provider.search.placeholder": "Поиск провайдеров",
   "dialog.provider.empty": "Провайдеры не найдены",

@@ -99,6 +99,10 @@ export const dict = {
   "palette.group.content": "本機檔案內容匹配",
   "palette.group.chat": "聊天內容匹配",
   "palette.group.sessions": "工作階段名稱匹配",
+  "palette.group.files.count": "{{count}} 個結果。",
+  "palette.group.content.count": "{{count}} 個結果，共 {{files}} 個檔案。",
+  "palette.group.chat.count": "{{count}} 個結果，共 {{sessions}} 個工作階段。",
+  "palette.group.sessions.count": "{{count}} 個結果。",
 
   "dialog.provider.search.placeholder": "搜尋提供者",
   "dialog.provider.empty": "找不到提供者",

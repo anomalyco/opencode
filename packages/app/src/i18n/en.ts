@@ -95,6 +95,10 @@ export const dict = {
   "palette.group.content": "Local File Content Matches",
   "palette.group.chat": "Chat Content Matches",
   "palette.group.sessions": "Session Name Matches",
+  "palette.group.files.count": "{{count}} results.",
+  "palette.group.content.count": "{{count}} results in {{files}} files.",
+  "palette.group.chat.count": "{{count}} results in {{sessions}} sessions.",
+  "palette.group.sessions.count": "{{count}} results.",
 
   "dialog.provider.search.placeholder": "Search providers",
   "dialog.provider.empty": "No providers found",

@@ -450,6 +450,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
   const view = createMemo(() => layout.view(sessionKey))
   const state = { cleanup: undefined as (() => void) | void, committed: false }
   const [grouped, setGrouped] = createSignal(false)
+  const [groupCollapsed, setGroupCollapsed] = createStore<Record<string, boolean>>({})
   const commandEntries = createCommandEntries({ filesOnly, command, language })
   const fileEntries = createFileEntries({ file, tabs, language })
 
@@ -672,6 +673,45 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
         key={(item) => item.id}
         disableFuzzy
         groupBy={grouped() ? (item) => item.category : () => ""}
+        groupCollapsed={grouped() ? (category) => !!groupCollapsed[category] : undefined}
+        groupHeader={
+          grouped()
+            ? (group) => {
+                const type = group.items[0]?.type
+                const collapsible = type === "file" || type === "content" || type === "chat" || type === "session"
+                const collapsed = collapsible && !!groupCollapsed[group.category]
+                const countText = () => {
+                  if (type === "content")
+                    return language.t("palette.group.content.count", {
+                      count: group.items.length,
+                      files: new Set(group.items.map((i) => i.path)).size,
+                    })
+                  if (type === "chat")
+                    return language.t("palette.group.chat.count", {
+                      count: group.items.length,
+                      sessions: new Set(group.items.map((i) => i.sessionID)).size,
+                    })
+                  if (type === "file") return language.t("palette.group.files.count", { count: group.items.length })
+                  if (type === "session")
+                    return language.t("palette.group.sessions.count", { count: group.items.length })
+                  return ""
+                }
+                if (!collapsible) return <span>{group.category}</span>
+                return (
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    class="w-full flex items-center gap-1.5 text-left cursor-pointer rounded px-1 -mx-1 hover:bg-surface-hover min-h-6"
+                    onClick={() => setGroupCollapsed(group.category, !collapsed)}
+                  >
+                    <Icon name={collapsed ? "chevron-right" : "chevron-down"} size="small" class="shrink-0 text-icon-weak" />
+                    <span class="text-12-regular text-text-weak truncate">{group.category}</span>
+                    <span class="text-12-regular text-text-weak shrink-0">{countText()}</span>
+                  </button>
+                )
+              }
+            : undefined
+        }
         onMove={handleMove}
         onSelect={handleSelect}
       >

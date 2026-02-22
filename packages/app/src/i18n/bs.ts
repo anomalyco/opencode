@@ -95,6 +95,10 @@ export const dict = {
   "palette.group.content": "Podudaranja sadržaja lokalnih datoteka",
   "palette.group.chat": "Podudaranja sadržaja chata",
   "palette.group.sessions": "Podudaranja naziva sesija",
+  "palette.group.files.count": "{{count}} rezultata.",
+  "palette.group.content.count": "{{count}} rezultata u {{files}} datoteka.",
+  "palette.group.chat.count": "{{count}} rezultata u {{sessions}} sesija.",
+  "palette.group.sessions.count": "{{count}} rezultata.",
 
   "dialog.provider.search.placeholder": "Pretraži provajdere",
   "dialog.provider.empty": "Nema pronađenih provajdera",

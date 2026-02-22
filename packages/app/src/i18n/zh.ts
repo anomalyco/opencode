@@ -122,6 +122,10 @@ export const dict = {
   "palette.group.content": "本地文件内容匹配",
   "palette.group.chat": "聊天内容匹配",
   "palette.group.sessions": "会话名匹配",
+  "palette.group.files.count": "{{count}} 个结果。",
+  "palette.group.content.count": "{{count}} 个结果，共 {{files}} 个文件。",
+  "palette.group.chat.count": "{{count}} 个结果，共 {{sessions}} 个会话。",
+  "palette.group.sessions.count": "{{count}} 个结果。",
 
   "dialog.provider.search.placeholder": "搜索提供商",
   "dialog.provider.empty": "未找到提供商",

@@ -95,6 +95,10 @@ export const dict = {
   "palette.group.content": "Coincidencias de contenido de archivos locales",
   "palette.group.chat": "Coincidencias de contenido de chat",
   "palette.group.sessions": "Coincidencias de nombres de sesión",
+  "palette.group.files.count": "{{count}} resultados.",
+  "palette.group.content.count": "{{count}} resultados en {{files}} archivos.",
+  "palette.group.chat.count": "{{count}} resultados en {{sessions}} sesiones.",
+  "palette.group.sessions.count": "{{count}} resultados.",
 
   "dialog.provider.search.placeholder": "Buscar proveedores",
   "dialog.provider.empty": "No se encontraron proveedores",
