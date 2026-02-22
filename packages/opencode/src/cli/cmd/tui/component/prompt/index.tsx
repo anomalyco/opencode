@@ -96,7 +96,7 @@ export function Prompt(props: PromptProps) {
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
   let promptPartTypeId = 0
 
-  sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
+  const unsubPromptAppend = sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
     if (!input || input.isDestroyed) return
     input.insertText(evt.properties.text)
     setTimeout(() => {
@@ -107,6 +107,7 @@ export function Prompt(props: PromptProps) {
       renderer.requestRender()
     }, 0)
   })
+  onCleanup(unsubPromptAppend)
 
   createEffect(() => {
     if (props.disabled) input.cursorColor = theme.backgroundElement
