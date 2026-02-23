@@ -364,7 +364,7 @@ export function SessionTurn(
                   <Message message={msg()} parts={parts()} interrupted={interrupted()} />
                 </div>
                 <Show when={assistantMessages().length > 0}>
-                  <div data-slot="session-turn-assistant-content" aria-hidden={working()}>
+                  <div data-slot="session-turn-assistant-content">
                     <AssistantParts
                       messages={assistantMessages()}
                       showAssistantCopyPartID={assistantCopyPartID()}
