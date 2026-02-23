@@ -31,6 +31,7 @@ import { SessionComposerRegion, createSessionComposerState } from "@/pages/sessi
 import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
+import { useAutoSelectSession } from "@/overrides/use-auto-select-session"
 
 export default function Page() {
   const layout = useLayout()
@@ -97,6 +98,9 @@ export default function Page() {
       { defer: true },
     ),
   )
+
+  useAutoSelectSession()
+
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())

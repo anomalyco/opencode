@@ -45,7 +45,7 @@ import {
   prependHistoryEntry,
   promptLength,
 } from "./prompt-input/history"
-import { createPromptSubmit } from "./prompt-input/submit"
+import { createPromptSubmit } from "@/overrides/prompt-input-submit"
 import { PromptPopover, type AtOption, type SlashCommand } from "./prompt-input/slash-popover"
 import { PromptContextItems } from "./prompt-input/context-items"
 import { PromptImageAttachments } from "./prompt-input/image-attachments"
