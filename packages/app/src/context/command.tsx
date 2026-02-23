@@ -1,5 +1,5 @@
 import { createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createStore, reconcile } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
@@ -235,16 +235,18 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     createEffect(() => {
       if (!catalogReady()) return
 
+      const next: Record<string, CommandCatalogItem> = {}
       for (const opt of registered()) {
         const id = actionId(opt.id)
-        setCatalog(id, {
+        next[id] = {
           title: opt.title,
           description: opt.description,
           category: opt.category,
           keybind: opt.keybind,
           slash: opt.slash,
-        })
+        }
       }
+      setCatalog(reconcile(next))
     })
 
     const catalogOptions = createMemo(() => Object.entries(catalog).map(([id, meta]) => ({ id, ...meta })))
