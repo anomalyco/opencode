@@ -75,7 +75,8 @@ export class R2StorageAdapter<T> implements StorageAdapter<T> {
   }
 
   async exists(key: string): Promise<boolean> {
-    const obj = await this.bucket.get(key)
+    // head() fetches only object metadata — no body download
+    const obj = await this.bucket.head(key)
     return !!obj
   }
 

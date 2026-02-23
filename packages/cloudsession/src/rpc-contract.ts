@@ -39,8 +39,9 @@ export type ProbeValueOutput = {
 export type ProbeCallback = (msg: string) => string | Promise<string>
 
 export interface ShareRpc extends RpcTarget {
-  createShare: (sessionID: string) => Promise<SyncInfo>
+  createShare: (sessionID: string, initialData?: SyncData[]) => Promise<SyncInfo>
   syncShare: (shareID: string, secret: string, data: SyncData[]) => Promise<{ success: boolean; syncCount: number }>
+  deleteShare: (shareID: string, secret: string) => Promise<{ success: boolean }>
   probeValue: (input: ProbeValueInput) => ProbeValueOutput
   probeCallback: (cb: ProbeCallback) => Promise<string>
 }
