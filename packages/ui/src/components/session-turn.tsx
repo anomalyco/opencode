@@ -140,6 +140,8 @@ export function SessionTurn(
     messageID: string
     lastUserMessageID?: string
     showReasoningSummaries?: boolean
+    shellToolDefaultOpen?: boolean
+    editToolDefaultOpen?: boolean
     onUserInteracted?: () => void
     classes?: {
       root?: string
@@ -369,6 +371,8 @@ export function SessionTurn(
                       turnDurationMs={turnDurationMs()}
                       working={working()}
                       showReasoningSummaries={showReasoningSummaries()}
+                      shellToolDefaultOpen={props.shellToolDefaultOpen}
+                      editToolDefaultOpen={props.editToolDefaultOpen}
                     />
                   </div>
                 </Show>

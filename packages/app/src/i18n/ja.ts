@@ -533,6 +533,7 @@ export const dict = {
   "settings.general.section.notifications": "システム通知",
   "settings.general.section.updates": "アップデート",
   "settings.general.section.sounds": "効果音",
+  "settings.general.section.feed": "フィード",
   "settings.general.section.display": "ディスプレイ",
   "settings.general.row.language.title": "言語",
   "settings.general.row.language.description": "OpenCodeの表示言語を変更します",
@@ -542,6 +543,12 @@ export const dict = {
   "settings.general.row.theme.description": "OpenCodeのテーマをカスタマイズします。",
   "settings.general.row.font.title": "フォント",
   "settings.general.row.font.description": "コードブロックで使用する等幅フォントをカスタマイズします",
+  "settings.general.row.shellToolPartsExpanded.title": "shell ツールパーツを展開",
+  "settings.general.row.shellToolPartsExpanded.description":
+    "タイムラインで shell ツールパーツをデフォルトで展開して表示します",
+  "settings.general.row.editToolPartsExpanded.title": "edit ツールパーツを展開",
+  "settings.general.row.editToolPartsExpanded.description":
+    "タイムラインで edit、write、patch ツールパーツをデフォルトで展開して表示します",
   "settings.general.row.wayland.title": "ネイティブWaylandを使用",
   "settings.general.row.wayland.description": "WaylandでのX11フォールバックを無効にします。再起動が必要です。",
   "settings.general.row.wayland.tooltip":
