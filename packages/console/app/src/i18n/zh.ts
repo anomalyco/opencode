@@ -327,6 +327,7 @@ export const dict = {
   "workspace.usage.table.input": "输入",
   "workspace.usage.table.output": "输出",
   "workspace.usage.table.cost": "成本",
+  "workspace.usage.table.session": "会话",
   "workspace.usage.breakdown.input": "输入",
   "workspace.usage.breakdown.cacheRead": "缓存读取",
   "workspace.usage.breakdown.cacheWrite": "缓存写入",

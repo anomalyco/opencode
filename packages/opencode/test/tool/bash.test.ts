@@ -203,8 +203,8 @@ describe("tool.bash permissions", () => {
 
         await bash.execute(
           {
-            command: "rm tmpfile",
-            description: "Remove tmpfile",
+            command: `rm -rf ${path.join(tmp.path, "nested")}`,
+            description: "remove nested dir",
           },
           testCtx,
         )

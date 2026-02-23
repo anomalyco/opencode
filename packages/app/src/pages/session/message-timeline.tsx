@@ -539,6 +539,8 @@ export function MessageTimeline(props: {
                     messageID={message.id}
                     lastUserMessageID={props.lastUserMessageID}
                     showReasoningSummaries={settings.general.showReasoningSummaries()}
+                    shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
+                    editToolDefaultOpen={settings.general.editToolPartsExpanded()}
                     classes={{
                       root: "min-w-0 w-full relative",
                       content: "flex flex-col justify-between !overflow-visible",
