@@ -105,6 +105,9 @@ export const dict = {
   "ui.message.copyMessage": "Kopiraj poruku",
   "ui.message.copyResponse": "Kopiraj odgovor",
   "ui.message.copied": "Kopirano!",
+  "ui.message.moreActions": "Message actions",
+  "ui.message.forkAndEdit": "Fork and edit",
+  "ui.message.revert": "Revert",
   "ui.message.interrupted": "Prekinuto",
   "ui.message.attachment.alt": "prilog",
 

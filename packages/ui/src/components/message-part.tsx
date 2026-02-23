@@ -48,6 +48,8 @@ import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
 import { TextShimmer } from "./text-shimmer"
+import { DropdownMenu } from "./dropdown-menu"
+import { ContextMenu } from "./context-menu"
 
 interface Diagnostic {
   range: {
@@ -94,6 +96,8 @@ export interface MessageProps {
   showAssistantCopyPartID?: string | null
   interrupted?: boolean
   showReasoningSummaries?: boolean
+  onForkFromMessage?: (messageID: string) => void
+  onRevertToMessage?: (messageID: string) => void
 }
 
 export interface MessagePartProps {
@@ -488,6 +492,8 @@ export function Message(props: MessageProps) {
             message={userMessage() as UserMessage}
             parts={props.parts}
             interrupted={props.interrupted}
+            onForkFromMessage={props.onForkFromMessage}
+            onRevertToMessage={props.onRevertToMessage}
           />
         )}
       </Match>
@@ -667,7 +673,13 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
   )
 }
 
-export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[]; interrupted?: boolean }) {
+export function UserMessageDisplay(props: {
+  message: UserMessage
+  parts: PartType[]
+  interrupted?: boolean
+  onForkFromMessage?: (messageID: string) => void
+  onRevertToMessage?: (messageID: string) => void
+}) {
   const data = useData()
   const dialog = useDialog()
   const i18n = useI18n()
@@ -738,7 +750,54 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     setTimeout(() => setCopied(false), 2000)
   }
 
-  return (
+  const actionable = createMemo(() => !!props.onForkFromMessage || !!props.onRevertToMessage)
+
+  const onFork = () => props.onForkFromMessage?.(props.message.id)
+  const onRevert = () => props.onRevertToMessage?.(props.message.id)
+
+  const menu = () => (
+    <>
+      <Show when={props.onForkFromMessage}>
+        <DropdownMenu.Item onSelect={onFork}>{i18n.t("ui.message.forkAndEdit")}</DropdownMenu.Item>
+      </Show>
+      <Show when={props.onRevertToMessage}>
+        <DropdownMenu.Item onSelect={onRevert}>{i18n.t("ui.message.revert")}</DropdownMenu.Item>
+      </Show>
+      <Show when={props.onForkFromMessage || props.onRevertToMessage}>
+        <DropdownMenu.Separator />
+      </Show>
+      <DropdownMenu.Item
+        onSelect={() => {
+          void handleCopy()
+        }}
+      >
+        {i18n.t("ui.message.copy")}
+      </DropdownMenu.Item>
+    </>
+  )
+
+  const contextMenu = () => (
+    <>
+      <Show when={props.onForkFromMessage}>
+        <ContextMenu.Item onSelect={onFork}>{i18n.t("ui.message.forkAndEdit")}</ContextMenu.Item>
+      </Show>
+      <Show when={props.onRevertToMessage}>
+        <ContextMenu.Item onSelect={onRevert}>{i18n.t("ui.message.revert")}</ContextMenu.Item>
+      </Show>
+      <Show when={props.onForkFromMessage || props.onRevertToMessage}>
+        <ContextMenu.Separator />
+      </Show>
+      <ContextMenu.Item
+        onSelect={() => {
+          void handleCopy()
+        }}
+      >
+        {i18n.t("ui.message.copy")}
+      </ContextMenu.Item>
+    </>
+  )
+
+  const content = () => (
     <div data-component="user-message" data-interrupted={props.interrupted ? "" : undefined}>
       <Show when={attachments().length > 0}>
         <div data-slot="user-message-attachments">
@@ -811,15 +870,45 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={(event) => {
                   event.stopPropagation()
-                  handleCopy()
+                  void handleCopy()
                 }}
                 aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
               />
             </Tooltip>
+            <Show when={actionable()}>
+              <DropdownMenu>
+                <Tooltip value={i18n.t("ui.message.moreActions")} placement="top" gutter={4}>
+                  <DropdownMenu.Trigger asChild>
+                    <IconButton
+                      icon="dot-grid"
+                      size="normal"
+                      variant="ghost"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={(event) => event.stopPropagation()}
+                      aria-label={i18n.t("ui.message.moreActions")}
+                    />
+                  </DropdownMenu.Trigger>
+                </Tooltip>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content>{menu()}</DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu>
+            </Show>
           </div>
         </>
       </Show>
     </div>
+  )
+
+  return (
+    <Show when={actionable()} fallback={content()}>
+      <ContextMenu>
+        <ContextMenu.Trigger asChild>{content()}</ContextMenu.Trigger>
+        <ContextMenu.Portal>
+          <ContextMenu.Content>{contextMenu()}</ContextMenu.Content>
+        </ContextMenu.Portal>
+      </ContextMenu>
+    </Show>
   )
 }
 

@@ -55,12 +55,21 @@ export namespace SessionRevert {
     }
 
     if (revert) {
-      const session = await Session.get(input.sessionID)
       revert.snapshot = session.revert?.snapshot ?? (await Snapshot.track())
       await Snapshot.revert(patches)
       if (revert.snapshot) revert.diff = await Snapshot.diff(revert.snapshot)
-      const rangeMessages = all.filter((msg) => msg.info.id >= revert!.messageID)
-      const diffs = await SessionSummary.computeDiff({ messages: rangeMessages })
+      const pivot = all.findIndex((msg) => msg.info.id === revert.messageID)
+      const preserved = all.flatMap((msg, index) => {
+        if (pivot < 0) return [msg]
+        if (index < pivot) return [msg]
+        if (index > pivot) return []
+        if (!revert.partID) return []
+
+        const part = msg.parts.findIndex((item) => item.id === revert.partID)
+        if (part < 0) return [msg]
+        return [{ ...msg, parts: msg.parts.slice(0, part) }]
+      })
+      const diffs = await SessionSummary.computeDiff({ messages: preserved })
       await Storage.write(["session_diff", input.sessionID], diffs)
       Bus.publish(Session.Event.Diff, {
         sessionID: input.sessionID,
@@ -93,20 +102,22 @@ export namespace SessionRevert {
     const sessionID = session.id
     const msgs = await Session.messages({ sessionID })
     const messageID = session.revert.messageID
-    const preserve = [] as MessageV2.WithParts[]
+    const pivot = msgs.findIndex((msg) => msg.info.id === messageID)
+    if (pivot < 0) {
+      await Session.clearRevert(sessionID)
+      return
+    }
     const remove = [] as MessageV2.WithParts[]
     let target: MessageV2.WithParts | undefined
-    for (const msg of msgs) {
-      if (msg.info.id < messageID) {
-        preserve.push(msg)
+    for (const [index, msg] of msgs.entries()) {
+      if (index < pivot) {
         continue
       }
-      if (msg.info.id > messageID) {
+      if (index > pivot) {
         remove.push(msg)
         continue
       }
       if (session.revert.partID) {
-        preserve.push(msg)
         target = msg
         continue
       }

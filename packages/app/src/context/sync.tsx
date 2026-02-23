@@ -108,6 +108,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const messagePageSize = 400
     const inflight = new Map<string, Promise<void>>()
     const inflightDiff = new Map<string, Promise<void>>()
+    const inflightDiffVersion = new Map<string, number>()
     const inflightTodo = new Map<string, Promise<void>>()
     const [meta, setMeta] = createStore({
       limit: {} as Record<string, number>,
@@ -272,18 +273,25 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
           return runInflight(inflight, key, () => Promise.all([sessionReq, messagesReq]).then(() => {}))
         },
-        async diff(sessionID: string) {
+        async diff(sessionID: string, input?: { refresh?: boolean }) {
           const directory = sdk.directory
           const client = sdk.client
           const [store, setStore] = globalSync.child(directory)
-          if (store.session_diff[sessionID] !== undefined) return
+          if (!input?.refresh && store.session_diff[sessionID] !== undefined) return
 
           const key = keyFor(directory, sessionID)
-          return runInflight(inflightDiff, key, () =>
+          const version = (inflightDiffVersion.get(key) ?? 0) + 1
+          inflightDiffVersion.set(key, version)
+
+          const fetch = () =>
             retry(() => client.session.diff({ sessionID })).then((diff) => {
+              if (inflightDiffVersion.get(key) !== version) return
               setStore("session_diff", sessionID, reconcile(diff.data ?? [], { key: "file" }))
-            }),
-          )
+            })
+
+          if (input?.refresh) return fetch()
+
+          return runInflight(inflightDiff, key, fetch)
         },
         async todo(sessionID: string) {
           const directory = sdk.directory

@@ -101,6 +101,9 @@ export const dict = {
   "ui.message.copyMessage": "메시지 복사",
   "ui.message.copyResponse": "응답 복사",
   "ui.message.copied": "복사됨!",
+  "ui.message.moreActions": "Message actions",
+  "ui.message.forkAndEdit": "Fork and edit",
+  "ui.message.revert": "Revert",
   "ui.message.interrupted": "중단됨",
   "ui.message.attachment.alt": "첨부 파일",
 

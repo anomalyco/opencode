@@ -105,6 +105,9 @@ export const dict = {
   "ui.message.copyMessage": "複製訊息",
   "ui.message.copyResponse": "複製回覆",
   "ui.message.copied": "已複製！",
+  "ui.message.moreActions": "Message actions",
+  "ui.message.forkAndEdit": "Fork and edit",
+  "ui.message.revert": "Revert",
   "ui.message.interrupted": "已中斷",
   "ui.message.attachment.alt": "附件",
 

@@ -104,6 +104,9 @@ export const dict: Record<Keys, string> = {
   "ui.message.copyMessage": "Kopier melding",
   "ui.message.copyResponse": "Kopier svar",
   "ui.message.copied": "Kopiert!",
+  "ui.message.moreActions": "Message actions",
+  "ui.message.forkAndEdit": "Fork and edit",
+  "ui.message.revert": "Revert",
   "ui.message.interrupted": "Avbrutt",
   "ui.message.attachment.alt": "vedlegg",
 

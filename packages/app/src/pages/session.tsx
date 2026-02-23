@@ -8,6 +8,7 @@ import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Select } from "@opencode-ai/ui/select"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { Mark } from "@opencode-ai/ui/logo"
+import { showToast } from "@opencode-ai/ui/toast"
 
 import { useSync } from "@/context/sync"
 import { useLayout } from "@/context/layout"
@@ -31,6 +32,7 @@ import { SessionComposerRegion, createSessionComposerState } from "@/pages/sessi
 import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
+import { extractPromptFromParts } from "@/utils/prompt"
 
 export default function Page() {
   const layout = useLayout()
@@ -157,6 +159,8 @@ export default function Page() {
   })
 
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
+  const idle = { type: "idle" as const }
+  const status = createMemo(() => sync.data.session_status[params.id ?? ""] ?? idle)
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
   const reviewCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
   const hasReview = createMemo(() => reviewCount() > 0)
@@ -187,8 +191,11 @@ export default function Page() {
   const visibleUserMessages = createMemo(
     () => {
       const revert = revertMessageID()
-      if (!revert) return userMessages()
-      return userMessages().filter((m) => m.id < revert)
+      const messages = userMessages()
+      if (!revert) return messages
+      const index = messages.findIndex((message) => message.id === revert)
+      if (index < 0) return messages
+      return messages.slice(0, index)
     },
     emptyUserMessages,
     {
@@ -449,6 +456,59 @@ export default function Page() {
     setActiveMessage,
     focusInput,
   })
+
+  const restore = (messageID: string) =>
+    extractPromptFromParts(sync.data.part[messageID] ?? [], {
+      directory: sdk.directory,
+      attachmentName: language.t("common.attachment"),
+    })
+
+  const fail = (error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error)
+    showToast({ title: language.t("common.requestFailed"), description: message })
+  }
+
+  const onForkFromMessage = async (messageID: string) => {
+    const sessionID = params.id
+    if (!sessionID) return
+
+    const restored = restore(messageID)
+    const forked = await sdk.client.session
+      .fork({ sessionID, messageID })
+      .then((result) => result.data)
+      .catch((error: unknown) => {
+        fail(error)
+        return
+      })
+    if (!forked) return
+
+    navigate(`/${base64Encode(sdk.directory)}/session/${forked.id}`)
+    requestAnimationFrame(() => prompt.set(restored))
+  }
+
+  const onRevertToMessage = async (messageID: string) => {
+    const sessionID = params.id
+    if (!sessionID) return
+
+    if (status().type !== "idle") await sdk.client.session.abort({ sessionID }).catch(() => {})
+
+    const restored = restore(messageID)
+    const done = await sdk.client.session
+      .revert({ sessionID, messageID })
+      .then(() => true)
+      .catch((error: unknown) => {
+        fail(error)
+        return false
+      })
+    if (!done) return
+
+    void sync.session.diff(sessionID, { refresh: true })
+
+    prompt.set(restored)
+    const messages = userMessages()
+    const index = messages.findIndex((message) => message.id === messageID)
+    setActiveMessage(index > 0 ? messages[index - 1] : undefined)
+  }
 
   const openReviewFile = createOpenReviewFile({
     showAllFiles,
@@ -1043,6 +1103,8 @@ export default function Page() {
                     onRegisterMessage={scrollSpy.register}
                     onUnregisterMessage={scrollSpy.unregister}
                     lastUserMessageID={lastUserMessage()?.id}
+                    onForkFromMessage={onForkFromMessage}
+                    onRevertToMessage={onRevertToMessage}
                   />
                 </Show>
               </Match>

@@ -142,6 +142,8 @@ export function SessionTurn(
     showReasoningSummaries?: boolean
     shellToolDefaultOpen?: boolean
     editToolDefaultOpen?: boolean
+    onForkFromMessage?: (messageID: string) => void
+    onRevertToMessage?: (messageID: string) => void
     onUserInteracted?: () => void
     classes?: {
       root?: string
@@ -361,7 +363,13 @@ export function SessionTurn(
                 class={props.classes?.container}
               >
                 <div data-slot="session-turn-message-content" aria-live="off">
-                  <Message message={msg()} parts={parts()} interrupted={interrupted()} />
+                  <Message
+                    message={msg()}
+                    parts={parts()}
+                    interrupted={interrupted()}
+                    onForkFromMessage={props.onForkFromMessage}
+                    onRevertToMessage={props.onRevertToMessage}
+                  />
                 </div>
                 <Show when={assistantMessages().length > 0}>
                   <div data-slot="session-turn-assistant-content" aria-hidden={working()}>

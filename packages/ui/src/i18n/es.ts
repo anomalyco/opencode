@@ -101,6 +101,9 @@ export const dict = {
   "ui.message.copyMessage": "Copiar mensaje",
   "ui.message.copyResponse": "Copiar respuesta",
   "ui.message.copied": "¡Copiado!",
+  "ui.message.moreActions": "Message actions",
+  "ui.message.forkAndEdit": "Fork and edit",
+  "ui.message.revert": "Revert",
   "ui.message.interrupted": "Interrumpido",
   "ui.message.attachment.alt": "adjunto",
 
