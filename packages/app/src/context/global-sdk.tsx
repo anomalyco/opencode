@@ -49,6 +49,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     let queue: Queued[] = []
     let buffer: Queued[] = []
     const coalesced = new Map<string, number>()
+    const voided = new Set<number>()
     let timer: ReturnType<typeof setTimeout> | undefined
     let last = 0
 
@@ -58,6 +59,19 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       if (payload.type === "message.part.updated") {
         const part = payload.properties.part
         return `message.part.updated:${directory}:${part.messageID}:${part.id}`
+      }
+    }
+
+    const voidStaleDeltasForPart = (messageID: string, partID: string) => {
+      for (let i = 0; i < queue.length; i++) {
+        const entry = queue[i]
+        if (
+          entry.payload.type === "message.part.delta" &&
+          (entry.payload.properties as { messageID: string; partID: string }).messageID === messageID &&
+          (entry.payload.properties as { messageID: string; partID: string }).partID === partID
+        ) {
+          voided.add(i)
+        }
       }
     }
 
@@ -75,11 +89,13 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
 
       last = Date.now()
       batch(() => {
-        for (const event of events) {
-          emitter.emit(event.directory, event.payload)
+        for (let i = 0; i < events.length; i++) {
+          if (voided.has(i)) continue
+          emitter.emit(events[i].directory, events[i].payload)
         }
       })
 
+      voided.clear()
       buffer.length = 0
     }
 
@@ -144,6 +160,10 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
               const i = coalesced.get(k)
               if (i !== undefined) {
                 queue[i] = { directory, payload }
+                if (payload.type === "message.part.updated") {
+                  const part = (payload.properties as { part: { messageID: string; id: string } }).part
+                  voidStaleDeltasForPart(part.messageID, part.id)
+                }
                 continue
               }
               coalesced.set(k, queue.length)
