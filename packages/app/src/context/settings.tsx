@@ -112,6 +112,14 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       document.documentElement.style.setProperty("--font-family-mono", monoFontFamily(store.appearance?.font))
     })
 
+    createEffect(() => {
+      if (typeof document === "undefined") return
+      const size = store.appearance?.fontSize ?? defaultSettings.appearance.fontSize
+      document.documentElement.style.setProperty("--font-size-base", `${size}px`)
+      document.documentElement.style.setProperty("--font-size-small", `${size - 1}px`)
+      document.documentElement.style.setProperty("--font-size-large", `${size + 2}px`)
+    })
+
     return {
       ready,
       get current() {
