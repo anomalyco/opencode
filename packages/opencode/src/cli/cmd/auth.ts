@@ -210,22 +210,26 @@ export const AuthListCommand = cmd({
     const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
     prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
 
-    const rawAuthData = await Bun.file(authPath).json().catch(() => ({}))
     const results = Object.entries(await Auth.all())
     const database = await ModelsDev.get()
 
-    // Display $schema if present
-    if (rawAuthData.$schema) {
-      prompts.log.info(`$schema ${UI.Style.TEXT_DIM}${rawAuthData.$schema}`)
-    }
-
-    // Display provider config if present
-    if (rawAuthData.provider) {
-      for (const [providerID, config] of Object.entries(rawAuthData.provider as Record<string, unknown>)) {
-        const name = database[providerID]?.name || providerID
-        const hasCredentials = results.some(([id]) => id === providerID)
-        prompts.log.info(`${name} ${UI.Style.TEXT_DIM}(${hasCredentials ? "configured" : "not configured"})`)
+    // Display $schema if present in auth.json
+    try {
+      const rawAuthData = await Bun.file(authPath).json().catch(() => ({}))
+      if (rawAuthData.$schema) {
+        prompts.log.info(`$schema ${UI.Style.TEXT_DIM}${rawAuthData.$schema}`)
       }
+
+      // Display provider config if present
+      if (rawAuthData.provider) {
+        for (const [providerID, config] of Object.entries(rawAuthData.provider as Record<string, unknown>)) {
+          const name = database[providerID]?.name || providerID
+          const hasCredentials = results.some(([id]) => id === providerID)
+          prompts.log.info(`${name} ${UI.Style.TEXT_DIM}(${hasCredentials ? "configured" : "not configured"})`)
+        }
+      }
+    } catch {
+      // Ignore file read errors
     }
 
     for (const [providerID, result] of results) {
