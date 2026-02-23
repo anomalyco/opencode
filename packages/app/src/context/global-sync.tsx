@@ -1,50 +1,60 @@
-import {
-  type Config,
-  type Path,
-  type Project,
-  type ProviderAuthResponse,
-  type ProviderListResponse,
-  createOpencodeClient,
+import type {
+  Config,
+  OpencodeClient,
+  Path,
+  Project,
+  ProviderAuthResponse,
+  ProviderListResponse,
+  Todo,
 } from "@opencode-ai/sdk/v2/client"
-import { createStore, produce, reconcile } from "solid-js/store"
-import { useGlobalSDK } from "./global-sdk"
-import type { InitError } from "../pages/error"
+import { showToast } from "@opencode-ai/ui/toast"
+import { getFilename } from "@opencode-ai/util/path"
 import {
   createContext,
   createEffect,
-  untrack,
   getOwner,
-  useContext,
+  Match,
   onCleanup,
   onMount,
   type ParentProps,
   Switch,
-  Match,
+  untrack,
+  useContext,
 } from "solid-js"
-import { showToast } from "@opencode-ai/ui/toast"
-import { getFilename } from "@opencode-ai/util/path"
-import { usePlatform } from "./platform"
+import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
-import { createRefreshQueue } from "./global-sync/queue"
-import { createChildStoreManager } from "./global-sync/child-store"
-import { trimSessions } from "./global-sync/session-trim"
-import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session-load"
-import { applyDirectoryEvent, applyGlobalEvent } from "./global-sync/event-reducer"
+import type { InitError } from "../pages/error"
+import { useGlobalSDK } from "./global-sdk"
 import { bootstrapDirectory, bootstrapGlobal } from "./global-sync/bootstrap"
-import { sanitizeProject } from "./global-sync/utils"
+import { createChildStoreManager } from "./global-sync/child-store"
+import { applyDirectoryEvent, applyGlobalEvent } from "./global-sync/event-reducer"
+import { createRefreshQueue } from "./global-sync/queue"
+import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session-load"
+import { trimSessions } from "./global-sync/session-trim"
 import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
+import { sanitizeProject } from "./global-sync/utils"
+import { usePlatform } from "./platform"
 
 type GlobalStore = {
   ready: boolean
   error?: InitError
   path: Path
   project: Project[]
+  session_todo: {
+    [sessionID: string]: Todo[]
+  }
   provider: ProviderListResponse
   provider_auth: ProviderAuthResponse
   config: Config
   reload: undefined | "pending" | "complete"
+}
+
+function errorMessage(error: unknown) {
+  if (error instanceof Error && error.message) return error.message
+  if (typeof error === "string" && error) return error
+  return "Unknown error"
 }
 
 function createGlobalSync() {
@@ -54,12 +64,7 @@ function createGlobalSync() {
   const owner = getOwner()
   if (!owner) throw new Error("GlobalSync must be created within owner")
 
-  const stats = {
-    evictions: 0,
-    loadSessionsFallback: 0,
-  }
-
-  const sdkCache = new Map<string, ReturnType<typeof createOpencodeClient>>()
+  const sdkCache = new Map<string, OpencodeClient>()
   const booting = new Map<string, Promise<void>>()
   const sessionLoads = new Map<string, Promise<void>>()
   const sessionMeta = new Map<string, { limit: number }>()
@@ -73,27 +78,25 @@ function createGlobalSync() {
     ready: false,
     path: { state: "", config: "", worktree: "", directory: "", home: "" },
     project: projectCache.value,
+    session_todo: {},
     provider: { all: [], connected: [], default: {} },
     provider_auth: {},
     config: {},
     reload: undefined,
   })
 
-  const updateStats = (activeDirectoryStores: number) => {
-    if (!import.meta.env.DEV) return
-    ;(
-      globalThis as {
-        __OPENCODE_GLOBAL_SYNC_STATS?: {
-          activeDirectoryStores: number
-          evictions: number
-          loadSessionsFullFetchFallback: number
-        }
-      }
-    ).__OPENCODE_GLOBAL_SYNC_STATS = {
-      activeDirectoryStores,
-      evictions: stats.evictions,
-      loadSessionsFullFetchFallback: stats.loadSessionsFallback,
+  const setSessionTodo = (sessionID: string, todos: Todo[] | undefined) => {
+    if (!sessionID) return
+    if (!todos) {
+      setGlobalStore(
+        "session_todo",
+        produce((draft) => {
+          delete draft[sessionID]
+        }),
+      )
+      return
     }
+    setGlobalStore("session_todo", sessionID, reconcile(todos, { key: "id" }))
   }
 
   const paused = () => untrack(() => globalStore.reload) !== undefined
@@ -106,11 +109,6 @@ function createGlobalSync() {
 
   const children = createChildStoreManager({
     owner,
-    markStats: updateStats,
-    incrementEvictions: () => {
-      stats.evictions += 1
-      updateStats(Object.keys(children.children).length)
-    },
     isBooting: (directory) => booting.has(directory),
     isLoadingSessions: (directory) => sessionLoads.has(directory),
     onBootstrap: (directory) => {
@@ -126,9 +124,7 @@ function createGlobalSync() {
   const sdkFor = (directory: string) => {
     const cached = sdkCache.get(directory)
     if (cached) return cached
-    const sdk = createOpencodeClient({
-      baseUrl: globalSDK.url,
-      fetch: platform.fetch,
+    const sdk = globalSDK.createClient({
       directory,
       throwOnError: true,
     })
@@ -168,7 +164,10 @@ function createGlobalSync() {
     const [store, setStore] = children.child(directory, { bootstrap: false })
     const meta = sessionMeta.get(directory)
     if (meta && meta.limit >= store.limit) {
-      const next = trimSessions(store.session, { limit: store.limit, permission: store.permission })
+      const next = trimSessions(store.session, {
+        limit: store.limit,
+        permission: store.permission,
+      })
       if (next.length !== store.session.length) {
         setStore("session", reconcile(next, { key: "id" }))
       }
@@ -181,10 +180,6 @@ function createGlobalSync() {
       directory,
       limit,
       list: (query) => globalSDK.client.session.list(query),
-      onFallback: () => {
-        stats.loadSessionsFallback += 1
-        updateStats(Object.keys(children.children).length)
-      },
     })
       .then((x) => {
         const nonArchived = (x.data ?? [])
@@ -193,10 +188,17 @@ function createGlobalSync() {
           .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
         const limit = store.limit
         const childSessions = store.session.filter((s) => !!s.parentID)
-        const sessions = trimSessions([...nonArchived, ...childSessions], { limit, permission: store.permission })
+        const sessions = trimSessions([...nonArchived, ...childSessions], {
+          limit,
+          permission: store.permission,
+        })
         setStore(
           "sessionTotal",
-          estimateRootSessionTotal({ count: nonArchived.length, limit: x.limit, limited: x.limited }),
+          estimateRootSessionTotal({
+            count: nonArchived.length,
+            limit: x.limit,
+            limited: x.limited,
+          }),
         )
         setStore("session", reconcile(sessions, { key: "id" }))
         sessionMeta.set(directory, { limit })
@@ -204,7 +206,10 @@ function createGlobalSync() {
       .catch((err) => {
         console.error("Failed to load sessions", err)
         const project = getFilename(directory)
-        showToast({ title: language.t("toast.session.listFailed.title", { project }), description: err.message })
+        showToast({
+          title: language.t("toast.session.listFailed.title", { project }),
+          description: errorMessage(err),
+        })
       })
 
     sessionLoads.set(directory, promise)
@@ -261,6 +266,11 @@ function createGlobalSync() {
           setGlobalStore("project", next)
         },
       })
+      if (event.type === "server.connected" || event.type === "global.disposed") {
+        for (const directory of Object.keys(children.children)) {
+          queue.push(directory)
+        }
+      }
       return
     }
 
@@ -274,6 +284,7 @@ function createGlobalSync() {
       store,
       setStore,
       push: queue.push,
+      setSessionTodo,
       vcsCache: children.vcsCache.get(directory),
       loadLsp: () => {
         sdkFor(directory)
@@ -297,7 +308,9 @@ function createGlobalSync() {
     await bootstrapGlobal({
       globalSDK: globalSDK.client,
       connectErrorTitle: language.t("dialog.server.add.error"),
-      connectErrorDescription: language.t("error.globalSync.connectFailed", { url: globalSDK.url }),
+      connectErrorDescription: language.t("error.globalSync.connectFailed", {
+        url: globalSDK.url,
+      }),
       requestFailedTitle: language.t("common.requestFailed"),
       setGlobalStore,
     })
@@ -307,12 +320,28 @@ function createGlobalSync() {
     void bootstrap()
   })
 
-  function projectMeta(directory: string, patch: ProjectMeta) {
-    children.projectMeta(directory, patch)
+  const projectApi = {
+    loadSessions,
+    meta(directory: string, patch: ProjectMeta) {
+      children.projectMeta(directory, patch)
+    },
+    icon(directory: string, value: string | undefined) {
+      children.projectIcon(directory, value)
+    },
   }
 
-  function projectIcon(directory: string, value: string | undefined) {
-    children.projectIcon(directory, value)
+  const updateConfig = async (config: Config) => {
+    setGlobalStore("reload", "pending")
+    return globalSDK.client.global.config
+      .update({ config })
+      .then(bootstrap)
+      .then(() => {
+        setGlobalStore("reload", "complete")
+      })
+      .catch((error) => {
+        setGlobalStore("reload", undefined)
+        throw error
+      })
   }
 
   return {
@@ -326,18 +355,10 @@ function createGlobalSync() {
     },
     child: children.child,
     bootstrap,
-    updateConfig: (config: Config) => {
-      setGlobalStore("reload", "pending")
-      return globalSDK.client.global.config.update({ config }).finally(() => {
-        setTimeout(() => {
-          setGlobalStore("reload", "complete")
-        }, 1000)
-      })
-    },
-    project: {
-      loadSessions,
-      meta: projectMeta,
-      icon: projectIcon,
+    updateConfig,
+    project: projectApi,
+    todo: {
+      set: setSessionTodo,
     },
   }
 }

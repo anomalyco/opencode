@@ -1,0 +1,222 @@
+---
+title: ทักษะของเอเจนต์
+description: "กำหนดพฤติกรรมที่นำมาใช้ซ้ำได้ผ่านคำจำกัดความ SKILL.md"
+---
+
+ทักษะของเจ้าหน้าที่ช่วยให้ OpenCode ค้นพบคำแนะนำที่ใช้ซ้ำได้จาก repo หรือโฮมไดเร็กทอรีของคุณ
+ทักษะจะถูกโหลดตามความต้องการผ่านเครื่องมือ `skill` ดั้งเดิม ตัวแทนจะเห็นทักษะที่มีอยู่และสามารถโหลดเนื้อหาทั้งหมดได้เมื่อจำเป็น
+
+---
+
+## วางไฟล์
+
+สร้างหนึ่งโฟลเดอร์ต่อชื่อทักษะ และใส่ `SKILL.md` ไว้ข้างใน
+OpenCode ค้นหาตำแหน่งเหล่านี้:
+
+- การกำหนดค่าโครงการ: `.opencode/skills/<name>/SKILL.md`
+- การกำหนดค่าส่วนกลาง: `~/.config/opencode/skills/<name>/SKILL.md`
+- เข้ากันได้กับโครงการ Claude: `.claude/skills/<name>/SKILL.md`
+- เข้ากันได้กับ Global Claude: `~/.claude/skills/<name>/SKILL.md`
+- เข้ากันได้กับตัวแทนโครงการ: `.agents/skills/<name>/SKILL.md`
+- รองรับตัวแทนทั่วโลก: `~/.agents/skills/<name>/SKILL.md`
+
+---
+
+## ทำความเข้าใจกับการค้นพบ
+
+สำหรับเส้นทางภายในโปรเจ็กต์ OpenCode จะเดินขึ้นมาจากไดเร็กทอรีการทำงานปัจจุบันของคุณจนกว่าจะถึงแผนผังงาน git
+โดยจะโหลด `skills/*/SKILL.md` ที่ตรงกันใน `.opencode/` และ `.claude/skills/*/SKILL.md` หรือ `.agents/skills/*/SKILL.md` ที่ตรงกันตลอดทาง
+
+คำจำกัดความสากลยังโหลดจาก `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` และ `~/.agents/skills/*/SKILL.md`
+
+---
+
+## เขียน frontmatter
+
+`SKILL.md` แต่ละอันต้องขึ้นต้นด้วย YAML frontmatter
+เฉพาะฟิลด์เหล่านี้เท่านั้นที่ได้รับการยอมรับ:
+
+- `name` (จำเป็น)
+- `description` (จำเป็น)
+- `license` (ไม่บังคับ)
+- `compatibility` (ไม่บังคับ)
+- `metadata` (ตัวเลือก แมปแบบสตริงต่อสตริง)
+
+ช่อง frontmatter ที่ไม่รู้จักจะถูกละเว้น
+
+---
+
+## ตรวจสอบชื่อ
+
+`name` ต้อง:
+
+- มีความยาว 1–64 อักขระ
+- เป็นตัวพิมพ์เล็กและตัวเลขคละกันที่มีเครื่องหมายยัติภังค์ตัวคั่นเดียว
+- ไม่ขึ้นต้นหรือลงท้ายด้วย `-`
+- ไม่มี `--` ติดต่อกัน
+- จับคู่ชื่อไดเร็กทอรีที่มี `SKILL.md`
+
+regex ที่เทียบเท่า:
+
+```text
+^[a-z0-9]+(-[a-z0-9]+)*$
+```
+
+---
+
+## ปฏิบัติตามกฎความยาว
+
+`description` ต้องมีความยาว 1-1,024 ตัวอักษร
+เจาะจงให้ตัวแทนเลือกได้ถูกต้อง
+
+---
+
+## ใช้ตัวอย่าง
+
+สร้าง `.opencode/skills/git-release/SKILL.md` แบบนี้:
+
+```markdown
+---
+name: git-release
+description: Create consistent releases and changelogs
+license: MIT
+compatibility: opencode
+metadata:
+  audience: maintainers
+  workflow: github
+---
+
+## What I do
+
+- Draft release notes from merged PRs
+- Propose a version bump
+- Provide a copy-pasteable `gh release create` command
+
+## When to use me
+
+Use this when you are preparing a tagged release.
+Ask clarifying questions if the target versioning scheme is unclear.
+```
+
+---
+
+## การค้นพบคำอธิบายเครื่องมือ
+
+OpenCode แสดงรายการทักษะที่มีอยู่ในคำอธิบายเครื่องมือ `skill`
+แต่ละรายการจะมีชื่อทักษะและคำอธิบาย:
+
+```xml
+<available_skills>
+  <skill>
+    <name>git-release</name>
+    <description>Create consistent releases and changelogs</description>
+  </skill>
+</available_skills>
+```
+
+ตัวแทนโหลดทักษะโดยการเรียกเครื่องมือ:
+
+```
+skill({ name: "git-release" })
+```
+
+---
+
+## กำหนดค่าสิทธิ์
+
+ควบคุมว่าตัวแทนทักษะใดสามารถเข้าถึงโดยใช้สิทธิ์ตามรูปแบบใน `opencode.json`:
+
+```json
+{
+  "permission": {
+    "skill": {
+      "*": "allow",
+      "pr-review": "allow",
+      "internal-*": "deny",
+      "experimental-*": "ask"
+    }
+  }
+}
+```
+
+| การอนุญาต | พฤติกรรม                                     |
+| --------- | -------------------------------------------- |
+| `allow`   | โหลดทักษะทันที                               |
+| `deny`    | ทักษะถูกซ่อนไม่ให้ตัวแทน การเข้าถึงถูกปฏิเสธ |
+| `ask`     | ผู้ใช้ได้รับแจ้งให้อนุมัติก่อนที่จะโหลด      |
+
+รูปแบบที่รองรับไวด์การ์ด: `internal-*` ตรงกับ `internal-docs`, `internal-tools` ฯลฯ
+
+---
+
+## แทนที่ต่อเอเจนต์
+
+ให้สิทธิ์แก่ตัวแทนเฉพาะเจาะจงที่แตกต่างจากค่าเริ่มต้นทั่วไป
+
+**สำหรับตัวแทนแบบกำหนดเอง** (ในตัวแทนส่วนหน้า):
+
+```yaml
+---
+permission:
+  skill:
+    "documents-*": "allow"
+---
+```
+
+**สำหรับตัวแทนในตัว** (ใน `opencode.json`):
+
+```json
+{
+  "agent": {
+    "plan": {
+      "permission": {
+        "skill": {
+          "internal-*": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+## ปิดการใช้งานเครื่องมือทักษะ
+
+ปิดการใช้งานทักษะโดยสิ้นเชิงสำหรับตัวแทนที่ไม่ควรใช้:
+
+**สำหรับตัวแทนแบบกำหนดเอง**:
+
+```yaml
+---
+tools:
+  skill: false
+---
+```
+
+**สำหรับตัวแทนในตัว**:
+
+```json
+{
+  "agent": {
+    "plan": {
+      "tools": {
+        "skill": false
+      }
+    }
+  }
+}
+```
+
+เมื่อปิดใช้งาน ส่วน `<available_skills>` จะถูกละเว้นทั้งหมด
+
+---
+
+## แก้ไขปัญหาการโหลด
+
+หากทักษะไม่แสดง:
+
+1. ตรวจสอบว่า `SKILL.md` สะกดด้วยตัวพิมพ์ใหญ่ทั้งหมด
+2. ตรวจสอบว่าส่วนหน้าประกอบด้วย `name` และ `description`
+3. ตรวจสอบให้แน่ใจว่าชื่อทักษะไม่ซ้ำกันในทุกสถานที่
+4. ตรวจสอบการอนุญาต ทักษะที่มี `deny` ถูกซ่อนไม่ให้ตัวแทนเห็น

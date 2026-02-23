@@ -1,8 +1,5 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  // "enterprise": {
-  //   "url": "https://enterprise.dev.opencode.ai",
-  // },
   "provider": {
     "opencode": {
       "options": {},

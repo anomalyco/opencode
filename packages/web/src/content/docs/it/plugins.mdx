@@ -1,0 +1,384 @@
+---
+title: Plugin
+description: Scrivi plugin per estendere OpenCode.
+---
+
+I plugin ti permettono di estendere OpenCode agganciandoti a vari eventi e personalizzando il comportamento. Puoi creare plugin per aggiungere nuove funzionalita', integrare servizi esterni o modificare il comportamento predefinito di OpenCode.
+
+Per esempi, dai un'occhiata ai [plugin](/docs/ecosystem#plugins) creati dalla community.
+
+---
+
+## Usare un plugin
+
+Ci sono due modi per caricare i plugin.
+
+---
+
+### Da file locali
+
+Metti file JavaScript o TypeScript nella directory dei plugin.
+
+- `.opencode/plugins/` - plugin a livello progetto
+- `~/.config/opencode/plugins/` - plugin globali
+
+I file in queste directory vengono caricati automaticamente all'avvio.
+
+---
+
+### Da npm
+
+Specifica i pacchetti npm nel tuo file di configurazione.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+}
+```
+
+Sono supportati sia pacchetti npm normali sia scoped.
+
+Sfoglia i plugin disponibili nell'[ecosistema](/docs/ecosystem#plugins).
+
+---
+
+### Come vengono installati i plugin
+
+I **plugin npm** vengono installati automaticamente usando Bun all'avvio. I pacchetti e le loro dipendenze vengono cache-ati in `~/.cache/opencode/node_modules/`.
+
+I **plugin locali** vengono caricati direttamente dalla directory dei plugin. Per usare pacchetti esterni, devi creare un `package.json` nella directory di configurazione (vedi [Dipendenze](#dependencies)) oppure pubblicare il plugin su npm e [aggiungerlo alla configurazione](/docs/config#plugins).
+
+---
+
+### Ordine di caricamento
+
+I plugin vengono caricati da tutte le sorgenti e tutti gli hook vengono eseguiti in sequenza. L'ordine di caricamento e':
+
+1. Config globale (`~/.config/opencode/opencode.json`)
+2. Config di progetto (`opencode.json`)
+3. Directory plugin globale (`~/.config/opencode/plugins/`)
+4. Directory plugin di progetto (`.opencode/plugins/`)
+
+I pacchetti npm duplicati con lo stesso nome e versione vengono caricati una sola volta. Tuttavia, un plugin locale e un plugin npm con nomi simili vengono entrambi caricati separatamente.
+
+---
+
+## Creare un plugin
+
+Un plugin e' un **modulo JavaScript/TypeScript** che esporta una o piu' funzioni di plugin. Ogni funzione riceve un oggetto di contesto e restituisce un oggetto di hook.
+
+---
+
+### Dipendenze
+
+I plugin locali e gli strumenti personalizzati possono usare pacchetti npm esterni. Aggiungi un `package.json` alla tua directory di configurazione con le dipendenze di cui hai bisogno.
+
+```json title=".opencode/package.json"
+{
+  "dependencies": {
+    "shescape": "^2.1.0"
+  }
+}
+```
+
+OpenCode esegue `bun install` all'avvio per installarle. I tuoi plugin e strumenti potranno poi importarle.
+
+```ts title=".opencode/plugins/my-plugin.ts"
+import { escape } from "shescape"
+
+export const MyPlugin = async (ctx) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "bash") {
+        output.args.command = escape(output.args.command)
+      }
+    },
+  }
+}
+```
+
+---
+
+### Struttura base
+
+```js title=".opencode/plugins/example.js"
+export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
+  console.log("Plugin initialized!")
+
+  return {
+    // Hook implementations go here
+  }
+}
+```
+
+La funzione del plugin riceve:
+
+- `project`: informazioni sul progetto corrente.
+- `directory`: la working directory corrente.
+- `worktree`: il path del worktree git.
+- `client`: un client SDK di opencode per interagire con l'AI.
+- `$`: la [shell API](https://bun.com/docs/runtime/shell) di Bun per eseguire comandi.
+
+---
+
+### Supporto TypeScript
+
+Per i plugin TypeScript, puoi importare i tipi dal pacchetto plugin:
+
+```ts title="my-plugin.ts" {1}
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    // Type-safe hook implementations
+  }
+}
+```
+
+---
+
+### Eventi
+
+I plugin possono sottoscrivere eventi come mostrato sotto nella sezione Esempi. Ecco l'elenco dei diversi eventi disponibili.
+
+#### Eventi dei comandi
+
+- `command.executed`
+
+#### Eventi dei file
+
+- `file.edited`
+- `file.watcher.updated`
+
+#### Eventi di installazione
+
+- `installation.updated`
+
+#### Eventi LSP
+
+- `lsp.client.diagnostics`
+- `lsp.updated`
+
+#### Eventi dei messaggi
+
+- `message.part.removed`
+- `message.part.updated`
+- `message.removed`
+- `message.updated`
+
+#### Eventi dei permessi
+
+- `permission.asked`
+- `permission.replied`
+
+#### Eventi del server
+
+- `server.connected`
+
+#### Eventi delle sessioni
+
+- `session.created`
+- `session.compacted`
+- `session.deleted`
+- `session.diff`
+- `session.error`
+- `session.idle`
+- `session.status`
+- `session.updated`
+
+#### Eventi della todo
+
+- `todo.updated`
+
+#### Eventi della shell
+
+- `shell.env`
+
+#### Eventi degli strumenti
+
+- `tool.execute.after`
+- `tool.execute.before`
+
+#### Eventi TUI
+
+- `tui.prompt.append`
+- `tui.command.execute`
+- `tui.toast.show`
+
+---
+
+## Esempi
+
+Ecco alcuni esempi di plugin che puoi usare per estendere opencode.
+
+---
+
+### Invia notifiche
+
+Invia notifiche quando avvengono certi eventi:
+
+```js title=".opencode/plugins/notification.js"
+export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    event: async ({ event }) => {
+      // Send notification on session completion
+      if (event.type === "session.idle") {
+        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+      }
+    },
+  }
+}
+```
+
+Stiamo usando `osascript` per eseguire AppleScript su macOS. Qui lo usiamo per inviare notifiche.
+
+:::note
+Se usi l'app desktop di OpenCode, puo' inviare automaticamente notifiche di sistema quando una risposta e' pronta o quando una sessione va in errore.
+:::
+
+---
+
+### Protezione .env
+
+Impedisci a opencode di leggere i file `.env`:
+
+```javascript title=".opencode/plugins/env-protection.js"
+export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "read" && output.args.filePath.includes(".env")) {
+        throw new Error("Do not read .env files")
+      }
+    },
+  }
+}
+```
+
+---
+
+### Inietta variabili d'ambiente
+
+Inietta variabili d'ambiente in tutte le esecuzioni di shell (strumenti AI e terminale utente):
+
+```javascript title=".opencode/plugins/inject-env.js"
+export const InjectEnvPlugin = async () => {
+  return {
+    "shell.env": async (input, output) => {
+      output.env.MY_API_KEY = "secret"
+      output.env.PROJECT_ROOT = input.cwd
+    },
+  }
+}
+```
+
+---
+
+### Strumenti personalizzati
+
+I plugin possono anche aggiungere strumenti personalizzati a opencode:
+
+```ts title=".opencode/plugins/custom-tools.ts"
+import { type Plugin, tool } from "@opencode-ai/plugin"
+
+export const CustomToolsPlugin: Plugin = async (ctx) => {
+  return {
+    tool: {
+      mytool: tool({
+        description: "This is a custom tool",
+        args: {
+          foo: tool.schema.string(),
+        },
+        async execute(args, context) {
+          const { directory, worktree } = context
+          return `Hello ${args.foo} from ${directory} (worktree: ${worktree})`
+        },
+      }),
+    },
+  }
+}
+```
+
+L'helper `tool` crea uno strumento personalizzato che opencode puo' chiamare. Accetta una funzione di schema Zod e restituisce una definizione di tool con:
+
+- `description`: cosa fa lo strumento
+- `args`: schema Zod per gli argomenti dello strumento
+- `execute`: funzione eseguita quando lo strumento viene chiamato
+
+I tuoi strumenti personalizzati saranno disponibili in opencode insieme agli strumenti integrati.
+
+---
+
+### Logging
+
+Usa `client.app.log()` invece di `console.log` per logging strutturato:
+
+```ts title=".opencode/plugins/my-plugin.ts"
+export const MyPlugin = async ({ client }) => {
+  await client.app.log({
+    body: {
+      service: "my-plugin",
+      level: "info",
+      message: "Plugin initialized",
+      extra: { foo: "bar" },
+    },
+  })
+}
+```
+
+Livelli: `debug`, `info`, `warn`, `error`. Vedi la [documentazione SDK](https://opencode.ai/docs/sdk) per i dettagli.
+
+---
+
+### Hook di compaction
+
+Personalizza il contesto incluso quando una sessione viene compattata:
+
+```ts title=".opencode/plugins/compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Inject additional context into the compaction prompt
+      output.context.push(`
+## Custom Context
+
+Include any state that should persist across compaction:
+- Current task status
+- Important decisions made
+- Files being actively worked on
+`)
+    },
+  }
+}
+```
+
+L'hook `experimental.session.compacting` scatta prima che l'LLM generi un riassunto di continuazione. Usalo per iniettare contesto specifico di dominio che il prompt di compaction predefinito potrebbe non includere.
+
+Puoi anche sostituire completamente il prompt di compaction impostando `output.prompt`:
+
+```ts title=".opencode/plugins/custom-compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CustomCompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Replace the entire compaction prompt
+      output.prompt = `
+You are generating a continuation prompt for a multi-agent swarm session.
+
+Summarize:
+1. The current task and its status
+2. Which files are being modified and by whom
+3. Any blockers or dependencies between agents
+4. The next steps to complete the work
+
+Format as a structured prompt that a new agent can use to resume work.
+`
+    },
+  }
+}
+```
+
+Quando `output.prompt` e' impostato, sostituisce completamente il prompt di compaction predefinito. In questo caso l'array `output.context` viene ignorato.

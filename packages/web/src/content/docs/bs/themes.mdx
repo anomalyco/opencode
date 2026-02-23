@@ -1,0 +1,369 @@
+---
+title: Teme
+description: Izaberite ugradenu temu ili napravite svoju.
+---
+
+U OpenCode mozete birati izmedu vise ugradenih tema, koristiti temu koja se prilagodava terminalu ili definisati vlastitu temu.
+
+Po defaultu, OpenCode koristi nasu `opencode` temu.
+
+---
+
+## Zahtjevi terminala
+
+Da bi teme bile prikazane ispravno sa punom paletom boja, terminal mora podrzavati **truecolor** (24-bitne boje). Vecina modernih terminala to podrzava, ali nekad ga treba ukljuciti:
+
+- **Provjerite podrsku**: Pokrenite `echo $COLORTERM` - trebalo bi vratiti `truecolor` ili `24bit`
+- **Ukljucite truecolor**: Postavite varijablu okruzenja `COLORTERM=truecolor` u shell profilu
+- **Kompatibilnost terminala**: Potvrdite da emulator terminala podrzava 24-bitne boje (vecina modernih terminala kao iTerm2, Alacritty, Kitty, Windows Terminal i novije verzije GNOME Terminala)
+
+Bez truecolor podrske, teme mogu imati slabiju preciznost boja ili pasti na najblizu 256-color aproksimaciju.
+
+---
+
+## Ugrađene teme
+
+OpenCode dolazi sa vise ugradenih tema.
+
+| Naziv                  | Opis                                                                       |
+| ---------------------- | -------------------------------------------------------------------------- |
+| `system`               | Prilagodava se boji pozadine vaseg terminala                               |
+| `tokyonight`           | Bazirana na [Tokyonight](https://github.com/folke/tokyonight.nvim) temi    |
+| `everforest`           | Bazirana na [Everforest](https://github.com/sainnhe/everforest) temi       |
+| `ayu`                  | Bazirana na [Ayu](https://github.com/ayu-theme) dark temi                  |
+| `catppuccin`           | Bazirana na [Catppuccin](https://github.com/catppuccin) temi               |
+| `catppuccin-macchiato` | Bazirana na [Catppuccin](https://github.com/catppuccin) temi               |
+| `gruvbox`              | Bazirana na [Gruvbox](https://github.com/morhetz/gruvbox) temi             |
+| `kanagawa`             | Bazirana na [Kanagawa](https://github.com/rebelot/kanagawa.nvim) temi      |
+| `nord`                 | Bazirana na [Nord](https://github.com/nordtheme/nord) temi                 |
+| `matrix`               | Hacker stil zelena-na-crnom tema                                           |
+| `one-dark`             | Bazirana na [Atom One](https://github.com/Th3Whit3Wolf/one-nvim) Dark temi |
+
+I jos mnogo njih, stalno dodajemo nove teme.
+
+---
+
+## System tema
+
+`system` tema je napravljena da se automatski prilagodi sem i boja vaseg terminala. Za razliku od tradicionalnih tema sa fiksnim bojama, _system_ tema:
+
+- **Generise sivu skalu**: Pravi prilagodenu sivu skalu na osnovu boje pozadine terminala za optimalan kontrast.
+- **Koristi ANSI boje**: Koristi standardne ANSI boje (0-15) za sintaksno isticanje i UI elemente, uz postovanje palete terminala.
+- **Cuva terminalske defaulte**: Koristi `none` za boju teksta i pozadine da zadrzi izvorni izgled terminala.
+
+System tema je za korisnike koji:
+
+- Zele da OpenCode odgovara izgledu njihovog terminala
+- Koriste prilagodene seme boja terminala
+- Preferiraju konzistentan izgled kroz sve terminalske aplikacije
+
+---
+
+## Korištenje teme
+
+Temu mozete izabrati preko selektora tema komandom `/theme`. Mozete je navesti i u [configu](/docs/config).
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "theme": "tokyonight"
+}
+```
+
+---
+
+## Prilagođene teme
+
+OpenCode podrzava fleksibilan sistem tema baziran na JSON-u koji olaksava kreiranje i prilagodavanje tema.
+
+---
+
+### Hijerarhija
+
+Teme se ucitavaju iz vise direktorija ovim redoslijedom, gdje kasniji direktoriji prepisuju ranije:
+
+1. **Ugradene teme** - Ugradene su u binarni fajl
+2. **Korisnicki config direktorij** - `~/.config/opencode/themes/*.json` ili `$XDG_CONFIG_HOME/opencode/themes/*.json`
+3. **Korijenski direktorij projekta** - `<project-root>/.opencode/themes/*.json`
+4. **Trenutni radni direktorij** - `./.opencode/themes/*.json`
+
+Ako vise direktorija sadrzi temu istog naziva, koristit ce se tema iz direktorija s vecim prioritetom.
+
+---
+
+### Kreiranje teme
+
+Da kreirate prilagodenu temu, napravite JSON datoteku u jednom od direktorija za teme.
+
+Za korisnicke teme na nivou sistema:
+
+```bash no-frame
+mkdir -p ~/.config/opencode/themes
+vim ~/.config/opencode/themes/my-theme.json
+```
+
+I za teme specificne za projekat.
+
+```bash no-frame
+mkdir -p .opencode/themes
+vim .opencode/themes/my-theme.json
+```
+
+---
+
+### JSON struktura
+
+Teme koriste fleksibilan JSON format koji podrzava:
+
+- **Hex boje**: `"#ffffff"`
+- **ANSI boje**: `3` (0-255)
+- **Reference boja**: `"primary"` ili prilagodene definicije
+- **Dark/light varijante**: `{"dark": "#000", "light": "#fff"}`
+- **Bez boje**: `"none"` - koristi defaultnu boju terminala ili transparentno
+
+---
+
+### Definicije boja
+
+Sekcija `defs` je opcionalna i omogucava da definisete boje koje se mogu ponovo koristiti kroz temu.
+
+---
+
+### Terminalske zadane vrijednosti
+
+Specijalna vrijednost `"none"` moze se koristiti za bilo koju boju da naslijedi defaultnu boju terminala. Ovo je korisno za teme koje se prirodno uklapaju u semu boja terminala:
+
+- `"text": "none"` - koristi defaultnu boju teksta terminala
+- `"background": "none"` - koristi defaultnu boju pozadine terminala
+
+---
+
+### Primjer
+
+Evo primjera prilagodene teme:
+
+```json title="my-theme.json"
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "defs": {
+    "nord0": "#2E3440",
+    "nord1": "#3B4252",
+    "nord2": "#434C5E",
+    "nord3": "#4C566A",
+    "nord4": "#D8DEE9",
+    "nord5": "#E5E9F0",
+    "nord6": "#ECEFF4",
+    "nord7": "#8FBCBB",
+    "nord8": "#88C0D0",
+    "nord9": "#81A1C1",
+    "nord10": "#5E81AC",
+    "nord11": "#BF616A",
+    "nord12": "#D08770",
+    "nord13": "#EBCB8B",
+    "nord14": "#A3BE8C",
+    "nord15": "#B48EAD"
+  },
+  "theme": {
+    "primary": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "secondary": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "accent": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "error": {
+      "dark": "nord11",
+      "light": "nord11"
+    },
+    "warning": {
+      "dark": "nord12",
+      "light": "nord12"
+    },
+    "success": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "info": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "text": {
+      "dark": "nord4",
+      "light": "nord0"
+    },
+    "textMuted": {
+      "dark": "nord3",
+      "light": "nord1"
+    },
+    "background": {
+      "dark": "nord0",
+      "light": "nord6"
+    },
+    "backgroundPanel": {
+      "dark": "nord1",
+      "light": "nord5"
+    },
+    "backgroundElement": {
+      "dark": "nord1",
+      "light": "nord4"
+    },
+    "border": {
+      "dark": "nord2",
+      "light": "nord3"
+    },
+    "borderActive": {
+      "dark": "nord3",
+      "light": "nord2"
+    },
+    "borderSubtle": {
+      "dark": "nord2",
+      "light": "nord3"
+    },
+    "diffAdded": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "diffRemoved": {
+      "dark": "nord11",
+      "light": "nord11"
+    },
+    "diffContext": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "diffHunkHeader": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "diffHighlightAdded": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "diffHighlightRemoved": {
+      "dark": "nord11",
+      "light": "nord11"
+    },
+    "diffAddedBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "diffRemovedBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "diffContextBg": {
+      "dark": "nord1",
+      "light": "nord5"
+    },
+    "diffLineNumber": {
+      "dark": "nord2",
+      "light": "nord4"
+    },
+    "diffAddedLineNumberBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "diffRemovedLineNumberBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "markdownText": {
+      "dark": "nord4",
+      "light": "nord0"
+    },
+    "markdownHeading": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "markdownLink": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "markdownLinkText": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "markdownCode": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "markdownBlockQuote": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "markdownEmph": {
+      "dark": "nord12",
+      "light": "nord12"
+    },
+    "markdownStrong": {
+      "dark": "nord13",
+      "light": "nord13"
+    },
+    "markdownHorizontalRule": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "markdownListItem": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "markdownListEnumeration": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "markdownImage": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "markdownImageText": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "markdownCodeBlock": {
+      "dark": "nord4",
+      "light": "nord0"
+    },
+    "syntaxComment": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "syntaxKeyword": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "syntaxFunction": {
+      "dark": "nord8",
+      "light": "nord8"
+    },
+    "syntaxVariable": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "syntaxString": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "syntaxNumber": {
+      "dark": "nord15",
+      "light": "nord15"
+    },
+    "syntaxType": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "syntaxOperator": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "syntaxPunctuation": {
+      "dark": "nord4",
+      "light": "nord0"
+    }
+  }
+}
+```

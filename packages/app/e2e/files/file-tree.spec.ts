@@ -1,37 +1,49 @@
 import { test, expect } from "../fixtures"
 
-test.skip("file tree can expand folders and open a file", async ({ page, gotoSession }) => {
+test("file tree can expand folders and open a file", async ({ page, gotoSession }) => {
   await gotoSession()
 
   const toggle = page.getByRole("button", { name: "Toggle file tree" })
-  const treeTabs = page.locator('[data-component="tabs"][data-variant="pill"][data-scope="filetree"]')
+  const panel = page.locator("#file-tree-panel")
+  const treeTabs = panel.locator('[data-component="tabs"][data-variant="pill"][data-scope="filetree"]')
 
+  await expect(toggle).toBeVisible()
   if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(panel).toBeVisible()
   await expect(treeTabs).toBeVisible()
 
-  await treeTabs.locator('[data-slot="tabs-trigger"]').nth(1).click()
+  const allTab = treeTabs.getByRole("tab", { name: /^all files$/i })
+  await expect(allTab).toBeVisible()
+  await allTab.click()
+  await expect(allTab).toHaveAttribute("aria-selected", "true")
 
-  const node = (name: string) => treeTabs.getByRole("button", { name, exact: true })
+  const tree = treeTabs.locator('[data-slot="tabs-content"]:not([hidden])')
+  await expect(tree).toBeVisible()
 
-  await expect(node("packages")).toBeVisible()
-  await node("packages").click()
+  const expand = async (name: string) => {
+    const folder = tree.getByRole("button", { name, exact: true }).first()
+    await expect(folder).toBeVisible()
+    await expect(folder).toHaveAttribute("aria-expanded", /true|false/)
+    if ((await folder.getAttribute("aria-expanded")) === "false") await folder.click()
+    await expect(folder).toHaveAttribute("aria-expanded", "true")
+  }
 
-  await expect(node("app")).toBeVisible()
-  await node("app").click()
+  await expand("packages")
+  await expand("app")
+  await expand("src")
+  await expand("components")
 
-  await expect(node("src")).toBeVisible()
-  await node("src").click()
-
-  await expect(node("components")).toBeVisible()
-  await node("components").click()
-
-  await expect(node("file-tree.tsx")).toBeVisible()
-  await node("file-tree.tsx").click()
+  const file = tree.getByRole("button", { name: "file-tree.tsx", exact: true }).first()
+  await expect(file).toBeVisible()
+  await file.click()
 
   const tab = page.getByRole("tab", { name: "file-tree.tsx" })
   await expect(tab).toBeVisible()
   await tab.click()
+  await expect(tab).toHaveAttribute("aria-selected", "true")
 
   const code = page.locator('[data-component="code"]').first()
-  await expect(code.getByText("export default function FileTree")).toBeVisible()
+  await expect(code).toBeVisible()
+  await expect(code).toContainText("export default function FileTree")
 })

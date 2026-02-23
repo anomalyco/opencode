@@ -68,6 +68,82 @@ const TAG = {
   tr: "tr",
 } satisfies Record<Locale, string>
 
+const DOCS = {
+  en: "root",
+  zh: "zh-cn",
+  zht: "zh-tw",
+  ko: "ko",
+  de: "de",
+  es: "es",
+  fr: "fr",
+  it: "it",
+  da: "da",
+  ja: "ja",
+  pl: "pl",
+  ru: "ru",
+  ar: "ar",
+  no: "nb",
+  br: "pt-br",
+  th: "th",
+  tr: "tr",
+} satisfies Record<Locale, string>
+
+const DOCS_SEGMENT = new Set([
+  "ar",
+  "bs",
+  "da",
+  "de",
+  "es",
+  "fr",
+  "it",
+  "ja",
+  "ko",
+  "nb",
+  "pl",
+  "pt-br",
+  "ru",
+  "th",
+  "tr",
+  "zh-cn",
+  "zh-tw",
+])
+
+function suffix(pathname: string) {
+  const index = pathname.search(/[?#]/)
+  if (index === -1) {
+    return {
+      path: fix(pathname),
+      suffix: "",
+    }
+  }
+
+  return {
+    path: fix(pathname.slice(0, index)),
+    suffix: pathname.slice(index),
+  }
+}
+
+export function docs(locale: Locale, pathname: string) {
+  const value = DOCS[locale]
+  const next = suffix(pathname)
+  if (next.path !== "/docs" && next.path !== "/docs/" && !next.path.startsWith("/docs/")) {
+    return `${next.path}${next.suffix}`
+  }
+
+  if (value === "root") return `${next.path}${next.suffix}`
+
+  if (next.path === "/docs") return `/docs/${value}${next.suffix}`
+  if (next.path === "/docs/") return `/docs/${value}/${next.suffix}`
+
+  const head = next.path.slice("/docs/".length).split("/")[0] ?? ""
+  if (!head) return `/docs/${value}/${next.suffix}`
+  if (DOCS_SEGMENT.has(head)) return `${next.path}${next.suffix}`
+  if (head.startsWith("_")) return `${next.path}${next.suffix}`
+  if (head.includes(".")) return `${next.path}${next.suffix}`
+
+  return `/docs/${value}${next.path.slice("/docs".length)}${next.suffix}`
+}
+
 export function parseLocale(value: unknown): Locale | null {
   if (typeof value !== "string") return null
   if ((LOCALES as readonly string[]).includes(value)) return value as Locale
@@ -90,7 +166,7 @@ export function strip(pathname: string) {
 
 export function route(locale: Locale, pathname: string) {
   const next = strip(pathname)
-  if (next.startsWith("/docs")) return next
+  if (next.startsWith("/docs")) return docs(locale, next)
   if (next.startsWith("/auth")) return next
   if (next.startsWith("/workspace")) return next
   if (locale === "en") return next

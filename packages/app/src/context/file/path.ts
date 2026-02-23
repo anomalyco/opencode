@@ -81,24 +81,43 @@ export function decodeFilePath(input: string) {
 }
 
 export function encodeFilePath(filepath: string): string {
-  return filepath
+  // Normalize Windows paths: convert backslashes to forward slashes
+  let normalized = filepath.replace(/\\/g, "/")
+
+  // Handle Windows absolute paths (D:/path -> /D:/path for proper file:// URLs)
+  if (/^[A-Za-z]:/.test(normalized)) {
+    normalized = "/" + normalized
+  }
+
+  // Encode each path segment (preserving forward slashes as path separators)
+  // Keep the colon in Windows drive letters (`/C:/...`) so downstream file URL parsers
+  // can reliably detect drives.
+  return normalized
     .split("/")
-    .map((segment) => encodeURIComponent(segment))
+    .map((segment, index) => {
+      if (index === 1 && /^[A-Za-z]:$/.test(segment)) return segment
+      return encodeURIComponent(segment)
+    })
     .join("/")
 }
 
 export function createPathHelpers(scope: () => string) {
   const normalize = (input: string) => {
-    const root = scope()
-    const prefix = root.endsWith("/") ? root : root + "/"
+    const root = scope().replace(/\\/g, "/")
 
-    let path = unquoteGitPath(decodeFilePath(stripQueryAndHash(stripFileProtocol(input))))
+    let path = unquoteGitPath(decodeFilePath(stripQueryAndHash(stripFileProtocol(input)))).replace(/\\/g, "/")
 
-    if (path.startsWith(prefix)) {
-      path = path.slice(prefix.length)
-    }
-
-    if (path.startsWith(root)) {
+    // Remove initial root prefix, if it's a complete match or followed by /
+    // (don't want /foo/bar to root of /f).
+    // For Windows paths, also check for case-insensitive match.
+    const windows = /^[A-Za-z]:/.test(root)
+    const canonRoot = windows ? root.toLowerCase() : root
+    const canonPath = windows ? path.toLowerCase() : path
+    if (
+      canonPath.startsWith(canonRoot) &&
+      (canonRoot.endsWith("/") || canonPath === canonRoot || canonPath.startsWith(canonRoot + "/"))
+    ) {
+      // If we match canonRoot + "/", the slash will be removed below.
       path = path.slice(root.length)
     }
 
