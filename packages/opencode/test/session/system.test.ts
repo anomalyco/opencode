@@ -1,7 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import type { Agent } from "../../src/agent/agent"
-import { NamedError } from "@opencode-ai/core/util/error"
 import { Skill } from "../../src/skill"
 import { Permission } from "../../src/permission"
 import { SystemPrompt } from "../../src/session/system"
@@ -13,23 +12,27 @@ const skills: Skill.Info[] = [
     description: "Zeta skill.",
     location: "/tmp/zeta-skill/SKILL.md",
     content: "# zeta-skill",
+    scope: "project",
   },
   {
     name: "alpha-skill",
     description: "Alpha skill.",
     location: "/tmp/alpha-skill/SKILL.md",
     content: "# alpha-skill",
+    scope: "project",
   },
   {
     name: "middle-skill",
     description: "Middle skill.",
     location: "/tmp/middle-skill/SKILL.md",
     content: "# middle-skill",
+    scope: "project",
   },
   {
     name: "manual-skill",
     location: "/tmp/manual-skill/SKILL.md",
     content: "# manual-skill",
+    scope: "project",
   },
 ]
 
@@ -62,9 +65,9 @@ describe("session.system", () => {
       const prompt = yield* SystemPrompt.Service
       const first = yield* prompt.skills(build)
       const second = yield* prompt.skills(build)
-      const output = first ?? (yield* Effect.fail(new NamedError.Unknown({ message: "missing skills output" })))
+      const output = [first.global, first.project].filter(Boolean).join("\n")
 
-      expect(first).toBe(second)
+      expect(first).toEqual(second)
 
       const alpha = output.indexOf("<name>alpha-skill</name>")
       const middle = output.indexOf("<name>middle-skill</name>")

@@ -35,8 +35,8 @@ function extract(messages: MessageV2.WithParts[]) {
 
 export interface Interface {
   readonly clear: (messageID: MessageID) => Effect.Effect<void>
-  readonly systemPaths: () => Effect.Effect<Set<string>, AppFileSystem.Error>
-  readonly system: () => Effect.Effect<string[], AppFileSystem.Error>
+  readonly systemPaths: () => Effect.Effect<SystemInstructionPaths, AppFileSystem.Error>
+  readonly system: () => Effect.Effect<SystemInstructions, AppFileSystem.Error>
   readonly find: (dir: string) => Effect.Effect<string | undefined, AppFileSystem.Error>
   readonly resolve: (
     messages: MessageV2.WithParts[],
@@ -44,6 +44,9 @@ export interface Interface {
     messageID: MessageID,
   ) => Effect.Effect<{ filepath: string; content: string }[], AppFileSystem.Error>
 }
+
+export type SystemInstructionPaths = { global: Set<string>; project: Set<string> }
+export type SystemInstructions = { global: string[]; project: string[] }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Instruction") {}
 
@@ -106,11 +109,11 @@ export const layer: Layer.Layer<
     const systemPaths = Effect.fn("Instruction.systemPaths")(function* () {
       const config = yield* cfg.get()
       const ctx = yield* InstanceState.context
-      const paths = new Set<string>()
+      const paths: SystemInstructionPaths = { global: new Set(), project: new Set() }
 
       for (const file of globalFiles) {
         if (yield* fs.existsSafe(file)) {
-          paths.add(path.resolve(file))
+          paths.global.add(path.resolve(file))
           break
         }
       }
@@ -120,7 +123,7 @@ export const layer: Layer.Layer<
         for (const file of FILES) {
           const matches = yield* fs.findUp(file, ctx.directory, ctx.worktree)
           if (matches.length > 0) {
-            matches.forEach((item) => paths.add(path.resolve(item)))
+            matches.forEach((item) => paths.project.add(path.resolve(item)))
             break
           }
         }
@@ -139,14 +142,14 @@ export const layer: Layer.Layer<
                 })
               : relative(instruction)
           ).pipe(Effect.catch(() => Effect.succeed([] as string[])))
-          matches.forEach((item) => paths.add(path.resolve(item)))
+          matches.forEach((item) => paths.project.add(path.resolve(item)))
         }
       }
 
       return paths
     })
 
-    let cached: string[] | undefined
+    let cached: SystemInstructions | undefined
 
     const system = Effect.fn("Instruction.system")(function* () {
       if (Flag.OPENCODE_EXPERIMENTAL_CACHE_STABILIZATION && cached) return cached
@@ -157,13 +160,21 @@ export const layer: Layer.Layer<
         (item) => item.startsWith("https://") || item.startsWith("http://"),
       )
 
-      const files = yield* Effect.forEach(Array.from(paths), read, { concurrency: 8 })
+      const globalPaths = Array.from(paths.global)
+      const projectPaths = Array.from(paths.project)
+      const globalFiles = yield* Effect.forEach(globalPaths, read, { concurrency: 8 })
+      const projectFiles = yield* Effect.forEach(projectPaths, read, { concurrency: 8 })
       const remote = yield* Effect.forEach(urls, fetch, { concurrency: 4 })
 
-      const result = [
-        ...Array.from(paths).flatMap((item, i) => (files[i] ? [`Instructions from: ${item}\n${files[i]}`] : [])),
-        ...urls.flatMap((item, i) => (remote[i] ? [`Instructions from: ${item}\n${remote[i]}`] : [])),
-      ]
+      const result = {
+        global: globalPaths.flatMap((item, i) => (globalFiles[i] ? [`Instructions from: ${item}\n${globalFiles[i]}`] : [])),
+        project: [
+          ...projectPaths.flatMap((item, i) =>
+            projectFiles[i] ? [`Instructions from: ${item}\n${projectFiles[i]}`] : [],
+          ),
+          ...urls.flatMap((item, i) => (remote[i] ? [`Instructions from: ${item}\n${remote[i]}`] : [])),
+        ],
+      }
       if (Flag.OPENCODE_EXPERIMENTAL_CACHE_STABILIZATION) cached = result
       return result
     })
@@ -181,7 +192,8 @@ export const layer: Layer.Layer<
       filepath: string,
       messageID: MessageID,
     ) {
-      const sys = yield* systemPaths()
+      const paths = yield* systemPaths()
+      const sys = new Set([...paths.global, ...paths.project])
       const already = extract(messages)
       const results: { filepath: string; content: string }[] = []
       const s = yield* InstanceState.get(state)
