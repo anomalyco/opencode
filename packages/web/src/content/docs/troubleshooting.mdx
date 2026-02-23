@@ -298,3 +298,16 @@ export DISPLAY=:99.0
 ```
 
 opencode will detect if you're using Wayland and prefer `wl-clipboard`, otherwise it will try to find clipboard tools in order of: `xclip` and `xsel`.
+
+---
+
+### Links not opening when clicked in the TUI
+
+If clicking links shown in the OpenCode TUI does not open them in your browser:
+
+1. When OpenCode is capturing the mouse, normal clicks are handled by the TUI instead of your terminal.
+2. Hold `Shift` while clicking to pass the click through to your terminal.
+3. In Ghostty on macOS, use `Shift+Cmd+Click`.
+4. In Ghostty on Linux, use `Shift+Ctrl+Click`.
+5. In many other Linux terminals, `Shift+Click` often works.
+6. Modifier keys vary by terminal and configuration, so check your terminal's hyperlink/link-open settings if needed.
