@@ -195,6 +195,9 @@ for (const item of targets) {
   })
 
   await $`rm -rf ./dist/${name}/bin/tui`
+  if (item.os === "darwin") {
+    await $`codesign -s - --force dist/${name}/bin/opencode`
+  }
   await Bun.file(`dist/${name}/package.json`).write(
     JSON.stringify(
       {
