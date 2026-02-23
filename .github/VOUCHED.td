@@ -10,6 +10,7 @@
 adamdotdevin
 -agusbasari29 AI PR slop
 ariane-emory
+edemaine
 -florianleibert
 fwang
 iamdavidhill
