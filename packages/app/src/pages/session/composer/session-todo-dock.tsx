@@ -87,7 +87,7 @@ export function SessionTodoDock(props: { todos: Todo[]; title: string; collapseL
             icon="chevron-down"
             size="normal"
             variant="ghost"
-            classList={{ "rotate-180": !store.collapsed }}
+            classList={{ "rotate-180": store.collapsed }}
             onMouseDown={(event) => {
               event.preventDefault()
               event.stopPropagation()
