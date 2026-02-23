@@ -267,15 +267,47 @@ export const SettingsGeneral: Component = () => {
             )}
           </Select>
         </SettingsRow>
+      </div>
+    </div>
+  )
 
+  const FeedSection = () => (
+    <div class="flex flex-col gap-1">
+      <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.feed")}</h3>
+
+      <div class="bg-surface-raised-base px-4 rounded-lg">
         <SettingsRow
           title={language.t("settings.general.row.reasoningSummaries.title")}
           description={language.t("settings.general.row.reasoningSummaries.description")}
         >
-          <div data-action="settings-reasoning-summaries">
+          <div data-action="settings-feed-reasoning-summaries">
             <Switch
               checked={settings.general.showReasoningSummaries()}
               onChange={(checked) => settings.general.setShowReasoningSummaries(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.shellToolPartsExpanded.title")}
+          description={language.t("settings.general.row.shellToolPartsExpanded.description")}
+        >
+          <div data-action="settings-feed-shell-tool-parts-expanded">
+            <Switch
+              checked={settings.general.shellToolPartsExpanded()}
+              onChange={(checked) => settings.general.setShellToolPartsExpanded(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.editToolPartsExpanded.title")}
+          description={language.t("settings.general.row.editToolPartsExpanded.description")}
+        >
+          <div data-action="settings-feed-edit-tool-parts-expanded">
+            <Switch
+              checked={settings.general.editToolPartsExpanded()}
+              onChange={(checked) => settings.general.setEditToolPartsExpanded(checked)}
             />
           </div>
         </SettingsRow>
@@ -434,6 +466,8 @@ export const SettingsGeneral: Component = () => {
 
       <div class="flex flex-col gap-8 w-full">
         <AppearanceSection />
+
+        <FeedSection />
 
         <NotificationsSection />
 

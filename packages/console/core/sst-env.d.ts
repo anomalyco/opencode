@@ -130,6 +130,15 @@ declare module "sst" {
       "product": string
       "type": "sst.sst.Linkable"
     }
+    "ZEN_LITE_LIMITS": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_LITE_PRICE": {
+      "price": string
+      "product": string
+      "type": "sst.sst.Linkable"
+    }
     "ZEN_MODELS1": {
       "type": "sst.sst.Secret"
       "value": string

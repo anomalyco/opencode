@@ -346,6 +346,7 @@ export const dict = {
   "workspace.usage.table.input": "Вход",
   "workspace.usage.table.output": "Выход",
   "workspace.usage.table.cost": "Стоимость",
+  "workspace.usage.table.session": "Сессия",
   "workspace.usage.breakdown.input": "Вход",
   "workspace.usage.breakdown.cacheRead": "Чтение кэша",
   "workspace.usage.breakdown.cacheWrite": "Запись кэша",
