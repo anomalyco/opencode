@@ -344,6 +344,7 @@ export const dict = {
   "workspace.usage.breakdown.output": "الخرج",
   "workspace.usage.breakdown.reasoning": "المنطق",
   "workspace.usage.subscription": "الاشتراك (${{amount}})",
+  "workspace.usage.byok": "BYOK (${{amount}})",
 
   "workspace.cost.title": "التكلفة",
   "workspace.cost.subtitle": "تكاليف الاستخدام مقسمة حسب النموذج.",
