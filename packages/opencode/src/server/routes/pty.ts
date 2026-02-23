@@ -182,7 +182,7 @@ export const PtyRoutes = lazy(() =>
               ws.close()
               return
             }
-            handler = Pty.connect(id, socket, cursor, ws)
+            handler = Pty.connect(id, socket, cursor)
           },
           onMessage(event) {
             if (typeof event.data !== "string") return
