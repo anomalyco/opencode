@@ -400,4 +400,16 @@ describe("tool.bash truncation", () => {
       },
     })
   })
+
+  test("tool schema does not contain Instance.directory for stable cache hash", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        expect(bash.description).not.toContain(Instance.directory)
+        const schema = JSON.stringify(bash.parameters)
+        expect(schema).not.toContain(Instance.directory)
+      },
+    })
+  })
 })
