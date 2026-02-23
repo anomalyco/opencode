@@ -917,7 +917,7 @@ export function Prompt(props: PromptProps) {
                   isSteerKey({
                     busy: !!props.sessionID && status().type !== "idle",
                     mode: store.mode,
-                    matched: keybind.match("input_steer_submit", e),
+                    matched: !!keybind.match("input_steer_submit", e),
                   })
                 ) {
                   e.preventDefault()

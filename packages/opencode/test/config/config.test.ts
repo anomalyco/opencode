@@ -32,7 +32,7 @@ test("loads config with defaults when no files exist", async () => {
     fn: async () => {
       const config = await Config.get()
       expect(config.username).toBeDefined()
-      expect(config.keybinds.input_steer_submit).toBe("alt+return,super+return,ctrl+return")
+      expect(config.keybinds?.input_steer_submit).toBe("alt+return,super+return,ctrl+return")
     },
   })
 })
