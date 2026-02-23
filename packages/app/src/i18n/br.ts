@@ -535,6 +535,7 @@ export const dict = {
   "settings.general.section.notifications": "Notificações do sistema",
   "settings.general.section.updates": "Atualizações",
   "settings.general.section.sounds": "Efeitos sonoros",
+  "settings.general.section.feed": "Feed",
   "settings.general.section.display": "Tela",
   "settings.general.row.language.title": "Idioma",
   "settings.general.row.language.description": "Alterar o idioma de exibição do OpenCode",
@@ -544,6 +545,12 @@ export const dict = {
   "settings.general.row.theme.description": "Personalize como o OpenCode é tematizado.",
   "settings.general.row.font.title": "Fonte",
   "settings.general.row.font.description": "Personalize a fonte monoespaçada usada em blocos de código",
+  "settings.general.row.shellToolPartsExpanded.title": "Expandir partes da ferramenta shell",
+  "settings.general.row.shellToolPartsExpanded.description":
+    "Mostrar partes da ferramenta shell expandidas por padrão na linha do tempo",
+  "settings.general.row.editToolPartsExpanded.title": "Expandir partes da ferramenta de edição",
+  "settings.general.row.editToolPartsExpanded.description":
+    "Mostrar partes das ferramentas de edição, escrita e patch expandidas por padrão na linha do tempo",
   "settings.general.row.wayland.title": "Usar Wayland nativo",
   "settings.general.row.wayland.description": "Desabilitar fallback X11 no Wayland. Requer reinicialização.",
   "settings.general.row.wayland.tooltip":
