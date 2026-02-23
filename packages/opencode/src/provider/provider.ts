@@ -779,6 +779,11 @@ export namespace Provider {
     log.info("init")
 
     const configProviders = Object.entries(config.provider ?? {})
+    const explicitApiKeyProviders = new Set(
+      configProviders
+        .filter(([, provider]) => provider.options?.apiKey !== undefined)
+        .map(([providerID]) => providerID),
+    )
 
     // Add GitHub Copilot Enterprise provider that inherits from GitHub Copilot
     if (database["github-copilot"]) {
@@ -917,6 +922,10 @@ export namespace Provider {
       if (!plugin.auth) continue
       const providerID = plugin.auth.provider
       if (disabled.has(providerID)) continue
+      if (explicitApiKeyProviders.has(providerID)) {
+        log.debug("skipping auth plugin due to explicit provider apiKey", { providerID })
+        continue
+      }
 
       // For github-copilot plugin, check if auth exists for either github-copilot or github-copilot-enterprise
       let hasAuth = false
@@ -944,6 +953,10 @@ export namespace Provider {
       if (providerID === "github-copilot") {
         const enterpriseProviderID = "github-copilot-enterprise"
         if (!disabled.has(enterpriseProviderID)) {
+          if (explicitApiKeyProviders.has(enterpriseProviderID)) {
+            log.debug("skipping auth plugin due to explicit provider apiKey", { providerID: enterpriseProviderID })
+            continue
+          }
           const enterpriseAuth = await Auth.get(enterpriseProviderID)
           if (enterpriseAuth) {
             const enterpriseOptions = await plugin.auth.loader(

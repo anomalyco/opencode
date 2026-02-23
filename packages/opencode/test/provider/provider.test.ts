@@ -5,6 +5,7 @@ import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
 import { Env } from "../../src/env"
+import { Auth } from "../../src/auth"
 
 test("provider loaded from env variable", async () => {
   await using tmp = await tmpdir({
@@ -279,6 +280,47 @@ test("env variable takes precedence, config merges options", async () => {
       expect(providers["anthropic"].options.timeout).toBe(60000)
     },
   })
+})
+
+test("explicit provider apiKey bypasses OAuth plugin auth overrides", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            openai: {
+              options: {
+                apiKey: "config-api-key",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  await Auth.set("openai", {
+    type: "oauth",
+    access: "oauth-access-token",
+    refresh: "oauth-refresh-token",
+    expires: Date.now() + 60_000,
+  })
+
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const providers = await Provider.list()
+        expect(providers["openai"]).toBeDefined()
+        expect(providers["openai"].options.apiKey).toBe("config-api-key")
+        expect(providers["openai"].models["gpt-4o"]).toBeDefined()
+      },
+    })
+  } finally {
+    await Auth.remove("openai")
+  }
 })
 
 test("getModel returns model for valid provider/model", async () => {
