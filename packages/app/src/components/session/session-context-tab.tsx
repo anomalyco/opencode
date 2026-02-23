@@ -1,17 +1,20 @@
-import { createMemo, createEffect, on, onCleanup, For, Show } from "solid-js"
+import { createMemo, createEffect, createSignal, on, onCleanup, For, Show } from "solid-js"
 import type { JSX } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { useSync } from "@/context/sync"
+import { useSDK } from "@/context/sdk"
 import { useLayout } from "@/context/layout"
 import { checksum } from "@opencode-ai/util/encode"
 import { findLast } from "@opencode-ai/util/array"
 import { same } from "@/utils/same"
 import { Icon } from "@opencode-ai/ui/icon"
+import { Button } from "@opencode-ai/ui/button"
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { Code } from "@opencode-ai/ui/code"
 import { Markdown } from "@opencode-ai/ui/markdown"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
+import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import type { Message, Part, UserMessage } from "@opencode-ai/sdk/v2/client"
 import { useLanguage } from "@/context/language"
 import { getSessionContextMetrics } from "./session-context-metrics"
@@ -278,6 +281,66 @@ export function SessionContextTab() {
       onScroll={handleScroll}
     >
       <div class="px-6 pt-4 flex flex-col gap-10">
+        <Show when={ctx()}>
+          {(c) => {
+            const sdk = useSDK()
+            const [compacting, setCompacting] = createSignal(false)
+            const usage = () => c().usage ?? 0
+            const color = () => usage() > 80 ? "var(--syntax-error)" : usage() > 60 ? "var(--syntax-warning)" : "var(--syntax-success)"
+
+            const compact = async () => {
+              if (!params.id || compacting()) return
+              setCompacting(true)
+              try {
+                const last = visibleUserMessages().at(-1)
+                await sdk.client.session.summarize({
+                  sessionID: params.id,
+                  directory: sdk.directory,
+                  providerID: last?.model?.providerID,
+                  modelID: last?.model?.modelID,
+                })
+              } finally {
+                setCompacting(false)
+              }
+            }
+
+            return (
+              <div class="flex flex-col gap-3 p-4 rounded-lg bg-surface-raised-base border border-border-weak-base">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-3">
+                    <ProgressCircle size={32} strokeWidth={3} percentage={usage()} />
+                    <div class="flex flex-col">
+                      <span class="text-14-medium text-text-strong">
+                        {formatter().number(c().total)} / {formatter().number(c().limit)}
+                      </span>
+                      <span class="text-12-regular text-text-weak">
+                        {usage()}% {language.t("context.usage.usage")}
+                      </span>
+                    </div>
+                  </div>
+                  <Button
+                    size="small"
+                    variant={usage() > 70 ? "primary" : "secondary"}
+                    disabled={compacting() || visibleUserMessages().length === 0}
+                    onClick={compact}
+                  >
+                    {compacting() ? language.t("command.session.compact") + "..." : language.t("command.session.compact")}
+                  </Button>
+                </div>
+                <div class="h-2 w-full rounded-full overflow-hidden" style={{ "background-color": "var(--surface-base)" }}>
+                  <div
+                    class="h-full rounded-full transition-all duration-300"
+                    style={{
+                      width: `${Math.min(usage(), 100)}%`,
+                      "background-color": color(),
+                    }}
+                  />
+                </div>
+              </div>
+            )
+          }}
+        </Show>
+
         <div class="grid grid-cols-1 @[32rem]:grid-cols-2 gap-4">
           <For each={stats}>
             {(stat) => <Stat label={language.t(stat.label as Parameters<typeof language.t>[0])} value={stat.value()} />}
