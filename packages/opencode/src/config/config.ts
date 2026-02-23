@@ -788,6 +788,12 @@ export namespace Config {
     .extend({
       whitelist: z.array(z.string()).optional(),
       blacklist: z.array(z.string()).optional(),
+      remote_models: z
+        .boolean()
+        .optional()
+        .describe(
+          "Fetch available models from the provider's /v1/models endpoint. Useful for custom/local providers that expose an OpenAI-compatible model listing.",
+        ),
       models: z
         .record(
           z.string(),

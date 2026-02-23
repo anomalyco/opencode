@@ -671,6 +671,55 @@ export namespace Provider {
       providers[providerID] = mergeDeep(match, provider)
     }
 
+    // fetch remote models for providers with remote_models: true
+    await Promise.all(
+      configProviders
+        .filter(([, provider]) => provider.remote_models)
+        .map(async ([providerID, provider]) => {
+          const baseURL = provider.options?.baseURL ?? provider.api
+          if (!baseURL) {
+            log.warn("remote_models enabled but no baseURL or api configured", { providerID })
+            return
+          }
+          const url = `${baseURL.replace(/\/$/, "")}/models`
+          try {
+            const headers: Record<string, string> = {}
+            if (provider.options?.apiKey) headers["Authorization"] = `Bearer ${provider.options.apiKey}`
+            const res = await fetch(url, {
+              headers,
+              signal: AbortSignal.timeout(10_000),
+            })
+            if (!res.ok) {
+              log.warn("failed to fetch remote models", { providerID, url, status: res.status })
+              return
+            }
+            const json = (await res.json()) as { data?: Array<{ id: string }> }
+            const models = json.data
+            if (!Array.isArray(models)) return
+            const existing = provider.models ?? {}
+            for (const m of models) {
+              if (!m.id || existing[m.id]) continue
+              existing[m.id] = {
+                id: m.id,
+                name: m.id,
+                tool_call: true,
+                temperature: true,
+                reasoning: false,
+                attachment: false,
+                limit: { context: 128000, output: 16384 },
+              }
+            }
+            provider.models = existing
+            log.info("fetched remote models", {
+              providerID,
+              count: models.length,
+            })
+          } catch (e) {
+            log.warn("error fetching remote models", { providerID, url, error: e })
+          }
+        }),
+    )
+
     // extend database from config
     for (const [providerID, provider] of configProviders) {
       const existing = database[providerID]
