@@ -204,9 +204,18 @@ else
         http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/${GH_REPO}/releases/tag/v${requested_version}")
         if [ "$http_status" = "404" ]; then
             echo -e "${RED}Error: Release v${requested_version} not found in ${GH_REPO}${NC}"
+            echo -e "${MUTED}Make sure you have created a release and uploaded the android-arm64 binary.${NC}"
             echo -e "${MUTED}Available releases: https://github.com/${GH_REPO}/releases${NC}"
             exit 1
         fi
+    fi
+
+    # Check for 404 on the asset itself
+    if ! curl -Isf "$url" > /dev/null; then
+        echo -e "${RED}Error: Binary file not found at URL:${NC}"
+        echo -e "${MUTED}$url${NC}"
+        echo -e "${ORANGE}The release exists, but the 'opencode-android-arm64.tar.gz' asset is missing.${NC}"
+        exit 1
     fi
 fi
 
