@@ -495,6 +495,7 @@ export const dict = {
   "session.review.change.other": "Changes",
   "session.review.loadingChanges": "Loading changes...",
   "session.review.empty": "No changes in this session yet",
+  "session.review.noVcs": "No git VCS detected, so session changes will not be detected",
   "session.review.noChanges": "No changes",
 
   "session.files.selectToOpen": "Select a file to open",
@@ -600,6 +601,7 @@ export const dict = {
   "settings.general.section.notifications": "System notifications",
   "settings.general.section.updates": "Updates",
   "settings.general.section.sounds": "Sound effects",
+  "settings.general.section.feed": "Feed",
   "settings.general.section.display": "Display",
 
   "settings.general.row.language.title": "Language",
@@ -612,6 +614,12 @@ export const dict = {
   "settings.general.row.font.description": "Customise the mono font used in code blocks",
   "settings.general.row.reasoningSummaries.title": "Show reasoning summaries",
   "settings.general.row.reasoningSummaries.description": "Display model reasoning summaries in the timeline",
+  "settings.general.row.shellToolPartsExpanded.title": "Expand shell tool parts",
+  "settings.general.row.shellToolPartsExpanded.description":
+    "Show shell tool parts expanded by default in the timeline",
+  "settings.general.row.editToolPartsExpanded.title": "Expand edit tool parts",
+  "settings.general.row.editToolPartsExpanded.description":
+    "Show edit, write, and patch tool parts expanded by default in the timeline",
 
   "settings.general.row.wayland.title": "Use native Wayland",
   "settings.general.row.wayland.description": "Disable X11 fallback on Wayland. Requires restart.",
