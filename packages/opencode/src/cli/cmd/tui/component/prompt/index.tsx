@@ -388,7 +388,7 @@ export function Prompt(props: PromptProps) {
   }
 
   createEffect(() => {
-    if (props.visible !== false) input?.focus()
+    if (props.visible !== false && dialog.stack.length === 0) input?.focus()
     if (props.visible === false) input?.blur()
   })
 
