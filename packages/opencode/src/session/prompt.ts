@@ -45,6 +45,7 @@ import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncation"
+import type { JSONSchema7 } from "@ai-sdk/provider"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -752,33 +753,29 @@ export namespace SessionPrompt {
      * but the AI SDK validates that all required fields are present, which causes
      * repairToolCall to fire and rename the tool to 'invalid'.
      */
-    function stripDescriptionFromRequired(schema: Record<string, any>): Record<string, any> {
+    function stripDescriptionFromRequired(schema: JSONSchema7): JSONSchema7 {
       if (!isOpenAICompatible) return schema
 
       const result = { ...schema }
-      if (Array.isArray(result.required) && result.required.includes("description")) {
-        result.required = result.required.filter((r) => r !== "description")
-        // If required is now empty, remove it entirely
-        if (result.required.length === 0) {
-          delete result.required
-        }
+      if (result.required?.includes("description")) {
+        const filtered = result.required.filter((r) => r !== "description")
+        if (filtered.length === 0) delete result.required
+        else result.required = filtered
       }
       // Recursively process nested schemas (properties, items, etc.)
-      if (result.properties && typeof result.properties === "object") {
+      if (result.properties) {
         result.properties = Object.fromEntries(
           Object.entries(result.properties).map(([key, value]) => [
             key,
-            stripDescriptionFromRequired(value as Record<string, any>),
+            typeof value === "object" ? stripDescriptionFromRequired(value) : value,
           ]),
         )
       }
-      if (result.items) {
-        result.items = stripDescriptionFromRequired(result.items as Record<string, any>)
+      if (result.items && !Array.isArray(result.items) && typeof result.items === "object") {
+        result.items = stripDescriptionFromRequired(result.items)
       }
       if (result.additionalProperties && typeof result.additionalProperties === "object") {
-        result.additionalProperties = stripDescriptionFromRequired(
-          result.additionalProperties as Record<string, any>,
-        )
+        result.additionalProperties = stripDescriptionFromRequired(result.additionalProperties)
       }
       return result
     }
@@ -875,88 +872,88 @@ export namespace SessionPrompt {
       item.inputSchema = jsonSchema(transformed)
       // Wrap execute to add plugin hooks and format output
       item.execute = async (args, opts) => {
-          const ctx = context(args, opts)
+        const ctx = context(args, opts)
 
-          await Plugin.trigger(
-            "tool.execute.before",
-            {
-              tool: key,
-              sessionID: ctx.sessionID,
-              callID: opts.toolCallId,
-            },
-            {
-              args,
-            },
-          )
+        await Plugin.trigger(
+          "tool.execute.before",
+          {
+            tool: key,
+            sessionID: ctx.sessionID,
+            callID: opts.toolCallId,
+          },
+          {
+            args,
+          },
+        )
 
-          await ctx.ask({
-            permission: key,
-            metadata: {},
-            patterns: ["*"],
-            always: ["*"],
-          })
+        await ctx.ask({
+          permission: key,
+          metadata: {},
+          patterns: ["*"],
+          always: ["*"],
+        })
 
-          const result = await execute(args, opts)
+        const result = await execute(args, opts)
 
-          await Plugin.trigger(
-            "tool.execute.after",
-            {
-              tool: key,
-              sessionID: ctx.sessionID,
-              callID: opts.toolCallId,
-              args,
-            },
-            result,
-          )
+        await Plugin.trigger(
+          "tool.execute.after",
+          {
+            tool: key,
+            sessionID: ctx.sessionID,
+            callID: opts.toolCallId,
+            args,
+          },
+          result,
+        )
 
-          const textParts: string[] = []
-          const attachments: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[] = []
+        const textParts: string[] = []
+        const attachments: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[] = []
 
-          for (const contentItem of result.content) {
-            if (contentItem.type === "text") {
-              textParts.push(contentItem.text)
-            } else if (contentItem.type === "image") {
+        for (const contentItem of result.content) {
+          if (contentItem.type === "text") {
+            textParts.push(contentItem.text)
+          } else if (contentItem.type === "image") {
+            attachments.push({
+              type: "file",
+              mime: contentItem.mimeType,
+              url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
+            })
+          } else if (contentItem.type === "resource") {
+            const { resource } = contentItem
+            if (resource.text) {
+              textParts.push(resource.text)
+            }
+            if (resource.blob) {
               attachments.push({
                 type: "file",
-                mime: contentItem.mimeType,
-                url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
+                mime: resource.mimeType ?? "application/octet-stream",
+                url: `data:${resource.mimeType ?? "application/octet-stream"};base64,${resource.blob}`,
+                filename: resource.uri,
               })
-            } else if (contentItem.type === "resource") {
-              const { resource } = contentItem
-              if (resource.text) {
-                textParts.push(resource.text)
-              }
-              if (resource.blob) {
-                attachments.push({
-                  type: "file",
-                  mime: resource.mimeType ?? "application/octet-stream",
-                  url: `data:${resource.mimeType ?? "application/octet-stream"};base64,${resource.blob}`,
-                  filename: resource.uri,
-                })
-              }
             }
           }
-
-          const truncated = await Truncate.output(textParts.join("\n\n"), {}, input.agent)
-          const metadata = {
-            ...(result.metadata ?? {}),
-            truncated: truncated.truncated,
-            ...(truncated.truncated && { outputPath: truncated.outputPath }),
-          }
-
-          return {
-            title: "",
-            metadata,
-            output: truncated.content,
-            attachments: attachments.map((attachment) => ({
-              ...attachment,
-              id: Identifier.ascending("part"),
-              sessionID: ctx.sessionID,
-              messageID: input.processor.message.id,
-            })),
-            content: result.content, // directly return content to preserve ordering when outputting to model
-          }
         }
+
+        const truncated = await Truncate.output(textParts.join("\n\n"), {}, input.agent)
+        const metadata = {
+          ...(result.metadata ?? {}),
+          truncated: truncated.truncated,
+          ...(truncated.truncated && { outputPath: truncated.outputPath }),
+        }
+
+        return {
+          title: "",
+          metadata,
+          output: truncated.content,
+          attachments: attachments.map((attachment) => ({
+            ...attachment,
+            id: Identifier.ascending("part"),
+            sessionID: ctx.sessionID,
+            messageID: input.processor.message.id,
+          })),
+          content: result.content, // directly return content to preserve ordering when outputting to model
+        }
+      }
       tools[key] = item
     }
 
