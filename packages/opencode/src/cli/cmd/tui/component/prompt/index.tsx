@@ -108,6 +108,22 @@ export function Prompt(props: PromptProps) {
     }, 0)
   })
 
+  sdk.event.on(TuiEvent.PromptInsert.type, (evt) => {
+    if (!input || input.isDestroyed) return
+    const kind = evt.properties.kind
+    if (kind === "text" && evt.properties.text) {
+      pasteText(evt.properties.text, evt.properties.label ?? "[Imported text]")
+      return
+    }
+    if (kind === "image" && evt.properties.mime && evt.properties.content) {
+      pasteImage({
+        filename: evt.properties.filename,
+        mime: evt.properties.mime,
+        content: evt.properties.content,
+      })
+    }
+  })
+
   createEffect(() => {
     if (props.disabled) input.cursorColor = theme.backgroundElement
     if (!props.disabled) input.cursorColor = theme.text

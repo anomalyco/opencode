@@ -17,7 +17,7 @@ import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
-import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
+import { CommandProvider, useCommandDialog, DialogInsertFile, DialogInsertImage } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { KeybindProvider } from "@tui/context/keybind"
@@ -586,6 +586,22 @@ function App() {
       onSelect: (dialog) => {
         renderer.console.toggle()
         dialog.clear()
+      },
+    },
+    {
+      title: "Import text",
+      value: "prompt.import.text",
+      category: "Prompt",
+      onSelect: () => {
+        dialog.replace(() => <DialogInsertFile />)
+      },
+    },
+    {
+      title: "Import image",
+      value: "prompt.import.image",
+      category: "Prompt",
+      onSelect: () => {
+        dialog.replace(() => <DialogInsertImage />)
       },
     },
     {

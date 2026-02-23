@@ -4,6 +4,7 @@ import {
   createContext,
   createMemo,
   createSignal,
+  createEffect,
   onCleanup,
   useContext,
   type Accessor,
@@ -11,7 +12,13 @@ import {
 } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 import { useKeybind } from "@tui/context/keybind"
+import { useSDK } from "@tui/context/sdk"
+import { useToast } from "../ui/toast"
+import { TuiEvent } from "../event"
 import type { KeybindsConfig } from "@opencode-ai/sdk/v2"
+import path from "path"
+import os from "os"
+import { readdir } from "fs/promises"
 
 type Context = ReturnType<typeof init>
 const ctx = createContext<Context>()
@@ -145,4 +152,186 @@ function DialogCommand(props: { options: CommandOption[]; suggestedOptions: Comm
     return [...props.suggestedOptions, ...props.options]
   }
   return <DialogSelect ref={(r) => (ref = r)} title="Commands" options={list()} />
+}
+
+export function DialogInsertFile() {
+  const dialog = useDialog()
+  const sdk = useSDK()
+  const toast = useToast()
+  const [dir, setDir] = createSignal(os.homedir())
+  const [files, setFiles] = createSignal<string[]>([])
+
+  createEffect(async () => {
+    const current = dir()
+    const entries = await readdir(current, { withFileTypes: true }).catch(() => [])
+    const items = entries
+      .filter((entry) => entry.isFile() || entry.isDirectory())
+      .map((entry) => (entry.isDirectory() ? `${entry.name}/` : entry.name))
+      .filter((name) => !name.startsWith("."))
+    setFiles(items)
+  })
+
+  const options = createMemo(() => {
+    const current = dir()
+    const items = files().map((name) => ({
+      title: name,
+      value: name,
+      description: name.endsWith("/") ? "Directory" : "File",
+    }))
+    const parent = path.dirname(current)
+    if (parent !== current) {
+      items.unshift({
+        title: "..",
+        value: "..",
+        description: "Parent directory",
+      })
+    }
+    return items
+  })
+
+  return (
+    <DialogSelect
+      title={`Import text - ${dir()}`}
+      placeholder="Search files"
+      options={options()}
+      onSelect={async (option) => {
+        const current = dir()
+        if (option.value === "..") {
+          setDir(path.dirname(current))
+          return
+        }
+        const name = option.value.endsWith("/") ? option.value.slice(0, -1) : option.value
+        const target = path.join(current, name)
+        if (option.value.endsWith("/")) {
+          setDir(target)
+          return
+        }
+        const file = Bun.file(target)
+        if (file.type.startsWith("image/") && file.type !== "image/svg+xml") {
+          toast.show({ message: "Use Import image for image files", variant: "warning" })
+          return
+        }
+        const text = await file.text().catch(() => "")
+        if (!text) {
+          toast.show({ message: "File is empty or unreadable", variant: "warning" })
+          return
+        }
+        const lines = (text.match(/\n/g)?.length ?? 0) + 1
+        const label = file.type === "image/svg+xml"
+          ? `[SVG: ${name}]`
+          : lines > 1
+            ? `[File: ${name}, ~${lines} lines]`
+            : `[File: ${name}]`
+        sdk.event.emit(TuiEvent.PromptInsert.type, {
+          type: TuiEvent.PromptInsert.type,
+          properties: {
+            kind: "text",
+            text,
+            label,
+          },
+        })
+        toast.show({ message: `Inserted ${name}`, variant: "info" })
+        dialog.clear()
+      }}
+    />
+  )
+}
+
+export function DialogInsertImage() {
+  const dialog = useDialog()
+  const sdk = useSDK()
+  const toast = useToast()
+  const [dir, setDir] = createSignal(os.homedir())
+  const [files, setFiles] = createSignal<string[]>([])
+
+  createEffect(async () => {
+    const current = dir()
+    const entries = await readdir(current, { withFileTypes: true }).catch(() => [])
+    const items = entries
+      .filter((entry) => entry.isFile() || entry.isDirectory())
+      .map((entry) => (entry.isDirectory() ? `${entry.name}/` : entry.name))
+      .filter((name) => !name.startsWith("."))
+    setFiles(items)
+  })
+
+  const options = createMemo(() => {
+    const current = dir()
+    const items = files().map((name) => ({
+      title: name,
+      value: name,
+      description: name.endsWith("/") ? "Directory" : "File",
+    }))
+    const parent = path.dirname(current)
+    if (parent !== current) {
+      items.unshift({
+        title: "..",
+        value: "..",
+        description: "Parent directory",
+      })
+    }
+    return items
+  })
+
+  return (
+    <DialogSelect
+      title={`Import image - ${dir()}`}
+      placeholder="Search images"
+      options={options()}
+      onSelect={async (option) => {
+        const current = dir()
+        if (option.value === "..") {
+          setDir(path.dirname(current))
+          return
+        }
+        const name = option.value.endsWith("/") ? option.value.slice(0, -1) : option.value
+        const target = path.join(current, name)
+        if (option.value.endsWith("/")) {
+          setDir(target)
+          return
+        }
+        const file = Bun.file(target)
+        if (file.type === "image/svg+xml") {
+          const text = await file.text().catch(() => "")
+          if (!text) {
+            toast.show({ message: "SVG is empty or unreadable", variant: "warning" })
+            return
+          }
+          sdk.event.emit(TuiEvent.PromptInsert.type, {
+            type: TuiEvent.PromptInsert.type,
+            properties: {
+              kind: "text",
+              text,
+              label: `[SVG: ${name}]`,
+            },
+          })
+          toast.show({ message: `Inserted ${name}`, variant: "info" })
+          dialog.clear()
+          return
+        }
+        if (!file.type.startsWith("image/")) {
+          toast.show({ message: "Please select an image file", variant: "warning" })
+          return
+        }
+        const content = await file
+          .arrayBuffer()
+          .then((buffer) => Buffer.from(buffer).toString("base64"))
+          .catch(() => "")
+        if (!content) {
+          toast.show({ message: "Image is empty or unreadable", variant: "warning" })
+          return
+        }
+        sdk.event.emit(TuiEvent.PromptInsert.type, {
+          type: TuiEvent.PromptInsert.type,
+          properties: {
+            kind: "image",
+            filename: name,
+            mime: file.type || "application/octet-stream",
+            content,
+          },
+        })
+        toast.show({ message: `Inserted ${name}`, variant: "info" })
+        dialog.clear()
+      }}
+    />
+  )
 }

@@ -4,6 +4,17 @@ import z from "zod"
 
 export const TuiEvent = {
   PromptAppend: BusEvent.define("tui.prompt.append", z.object({ text: z.string() })),
+  PromptInsert: BusEvent.define(
+    "tui.prompt.insert",
+    z.object({
+      kind: z.enum(["text", "image"]),
+      text: z.string().optional(),
+      label: z.string().optional(),
+      filename: z.string().optional(),
+      mime: z.string().optional(),
+      content: z.string().optional(),
+    }),
+  ),
   CommandExecute: BusEvent.define(
     "tui.command.execute",
     z.object({
