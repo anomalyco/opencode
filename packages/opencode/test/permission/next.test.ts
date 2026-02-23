@@ -565,6 +565,32 @@ test("reply - reject throws RejectedError", async () => {
   })
 })
 
+test("reply - reject with message throws CorrectedError", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const askPromise = PermissionNext.ask({
+        id: "permission_test_corrected",
+        sessionID: "session_test",
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      })
+
+      await PermissionNext.reply({
+        requestID: "permission_test_corrected",
+        reply: "reject",
+        message: "Use a different approach instead",
+      })
+
+      await expect(askPromise).rejects.toBeInstanceOf(PermissionNext.CorrectedError)
+    },
+  })
+})
+
 test("reply - always persists approval and resolves", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
