@@ -1,7 +1,7 @@
 import { cmd } from "../cmd"
 import { UI } from "@/cli/ui"
 import { tui } from "./app"
-import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
+import { win32DisableProcessedInput, win32InstallCtrlCGuard, win32SetUtf8CodePage } from "./win32"
 
 export const AttachCommand = cmd({
   command: "attach <url>",
@@ -40,6 +40,7 @@ export const AttachCommand = cmd({
     const unguard = win32InstallCtrlCGuard()
     try {
       win32DisableProcessedInput()
+      win32SetUtf8CodePage()
 
       if (args.fork && !args.continue && !args.session) {
         UI.error("--fork requires --continue or --session")

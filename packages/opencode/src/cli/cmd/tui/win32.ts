@@ -2,6 +2,7 @@ import { dlopen, ptr } from "bun:ffi"
 
 const STD_INPUT_HANDLE = -10
 const ENABLE_PROCESSED_INPUT = 0x0001
+const CP_UTF8 = 65001
 
 const kernel = () =>
   dlopen("kernel32.dll", {
@@ -9,6 +10,8 @@ const kernel = () =>
     GetConsoleMode: { args: ["ptr", "ptr"], returns: "i32" },
     SetConsoleMode: { args: ["ptr", "u32"], returns: "i32" },
     FlushConsoleInputBuffer: { args: ["ptr"], returns: "i32" },
+    SetConsoleCP: { args: ["u32"], returns: "i32" },
+    SetConsoleOutputCP: { args: ["u32"], returns: "i32" },
   })
 
 let k32: ReturnType<typeof kernel> | undefined
@@ -21,6 +24,18 @@ function load() {
   } catch {
     return false
   }
+}
+
+/**
+ * Set console code page to UTF-8 for proper Unicode input/output.
+ * This fixes character encoding issues when using CJK (Chinese, Japanese, Korean)
+ * and other non-ASCII input methods on Windows.
+ */
+export function win32SetUtf8CodePage() {
+  if (process.platform !== "win32") return
+  if (!load()) return
+  k32!.symbols.SetConsoleCP(CP_UTF8)
+  k32!.symbols.SetConsoleOutputCP(CP_UTF8)
 }
 
 /**
