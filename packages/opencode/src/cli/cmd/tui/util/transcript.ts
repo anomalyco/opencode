@@ -68,8 +68,10 @@ export function formatAssistantHeader(msg: AssistantMessage, includeMetadata: bo
 }
 
 export function formatPart(part: Part, options: TranscriptOptions): string {
-  if (part.type === "text" && !part.synthetic) {
-    return `${part.text}\n\n`
+  if (part.type === "text") {
+    if (!part.synthetic) return `${part.text}\n\n`
+    if (part.metadata?.steer) return `**Steer:** ${part.text}\n\n`
+    return ""
   }
 
   if (part.type === "reasoning") {
