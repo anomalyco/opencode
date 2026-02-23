@@ -267,6 +267,36 @@ export const SettingsGeneral: Component = () => {
             )}
           </Select>
         </SettingsRow>
+
+        <SettingsRow
+          title="Font Size"
+          description="Adjust the editor and terminal font size"
+        >
+          <div class="flex items-center gap-2">
+            <Button
+              size="small"
+              variant="secondary"
+              disabled={settings.appearance.fontSize() <= 10}
+              onClick={() => settings.appearance.setFontSize(Math.max(10, settings.appearance.fontSize() - 1))}
+            >
+              −
+            </Button>
+            <span
+              class="text-14-medium text-text-strong tabular-nums"
+              style={{ "min-width": "32px", "text-align": "center" }}
+            >
+              {settings.appearance.fontSize()}
+            </span>
+            <Button
+              size="small"
+              variant="secondary"
+              disabled={settings.appearance.fontSize() >= 24}
+              onClick={() => settings.appearance.setFontSize(Math.min(24, settings.appearance.fontSize() + 1))}
+            >
+              +
+            </Button>
+          </div>
+        </SettingsRow>
       </div>
     </div>
   )
