@@ -276,12 +276,24 @@ function renderable(part: PartType, showReasoningSummaries = true) {
   return !!PART_MAPPING[part.type]
 }
 
+function toolDefaultOpen(tool: string, shell = false, edit = false) {
+  if (tool === "bash") return shell
+  if (tool === "edit" || tool === "write" || tool === "apply_patch") return edit
+}
+
+function partDefaultOpen(part: PartType, shell = false, edit = false) {
+  if (part.type !== "tool") return
+  return toolDefaultOpen(part.tool, shell, edit)
+}
+
 export function AssistantParts(props: {
   messages: AssistantMessage[]
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number
   working?: boolean
   showReasoningSummaries?: boolean
+  shellToolDefaultOpen?: boolean
+  editToolDefaultOpen?: boolean
 }) {
   const data = useData()
   const emptyParts: PartType[] = []
@@ -372,6 +384,7 @@ export function AssistantParts(props: {
                   message={entry().message}
                   showAssistantCopyPartID={props.showAssistantCopyPartID}
                   turnDurationMs={props.turnDurationMs}
+                  defaultOpen={partDefaultOpen(entry().part, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
                 />
               )}
             </Show>
@@ -898,6 +911,42 @@ export function getTool(name: string) {
 export const ToolRegistry = {
   register: registerTool,
   render: getTool,
+}
+
+function ToolFileAccordion(props: { path: string; actions?: JSX.Element; children: JSX.Element }) {
+  const value = createMemo(() => props.path || "tool-file")
+
+  return (
+    <Accordion
+      multiple
+      data-scope="apply-patch"
+      style={{ "--sticky-accordion-offset": "40px" }}
+      defaultValue={[value()]}
+    >
+      <Accordion.Item value={value()}>
+        <StickyAccordionHeader>
+          <Accordion.Trigger>
+            <div data-slot="apply-patch-trigger-content">
+              <div data-slot="apply-patch-file-info">
+                <FileIcon node={{ path: props.path, type: "file" }} />
+                <div data-slot="apply-patch-file-name-container">
+                  <Show when={props.path.includes("/")}>
+                    <span data-slot="apply-patch-directory">{`\u202A${getDirectory(props.path)}\u202C`}</span>
+                  </Show>
+                  <span data-slot="apply-patch-filename">{getFilename(props.path)}</span>
+                </div>
+              </div>
+              <div data-slot="apply-patch-trigger-actions">
+                {props.actions}
+                <Icon name="chevron-grabber-vertical" size="small" />
+              </div>
+            </div>
+          </Accordion.Trigger>
+        </StickyAccordionHeader>
+        <Accordion.Content>{props.children}</Accordion.Content>
+      </Accordion.Item>
+    </Accordion>
+  )
 }
 
 PART_MAPPING["tool"] = function ToolPartDisplay(props) {
@@ -1479,57 +1528,67 @@ ToolRegistry.register({
     const i18n = useI18n()
     const diffComponent = useDiffComponent()
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
+    const path = createMemo(() => props.metadata?.filediff?.file || props.input.filePath || "")
     const filename = () => getFilename(props.input.filePath ?? "")
     const pending = () => props.status === "pending" || props.status === "running"
     return (
-      <BasicTool
-        {...props}
-        icon="code-lines"
-        defer
-        trigger={
-          <div data-component="edit-trigger">
-            <div data-slot="message-part-title-area">
-              <div data-slot="message-part-title">
-                <span data-slot="message-part-title-text">
-                  <Show when={pending()} fallback={i18n.t("ui.messagePart.title.edit")}>
-                    <TextShimmer text={i18n.t("ui.messagePart.title.edit")} />
+      <div data-component="edit-tool">
+        <BasicTool
+          {...props}
+          icon="code-lines"
+          defer
+          trigger={
+            <div data-component="edit-trigger">
+              <div data-slot="message-part-title-area">
+                <div data-slot="message-part-title">
+                  <span data-slot="message-part-title-text">
+                    <Show when={pending()} fallback={i18n.t("ui.messagePart.title.edit")}>
+                      <TextShimmer text={i18n.t("ui.messagePart.title.edit")} />
+                    </Show>
+                  </span>
+                  <Show when={!pending()}>
+                    <span data-slot="message-part-title-filename">{filename()}</span>
                   </Show>
-                </span>
-                <Show when={!pending()}>
-                  <span data-slot="message-part-title-filename">{filename()}</span>
+                </div>
+                <Show when={!pending() && props.input.filePath?.includes("/")}>
+                  <div data-slot="message-part-path">
+                    <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
+                  </div>
                 </Show>
               </div>
-              <Show when={!pending() && props.input.filePath?.includes("/")}>
-                <div data-slot="message-part-path">
-                  <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
-                </div>
-              </Show>
+              <div data-slot="message-part-actions">
+                <Show when={!pending() && props.metadata.filediff}>
+                  <DiffChanges changes={props.metadata.filediff} />
+                </Show>
+              </div>
             </div>
-            <div data-slot="message-part-actions">
-              <Show when={!pending() && props.metadata.filediff}>
-                <DiffChanges changes={props.metadata.filediff} />
-              </Show>
-            </div>
-          </div>
-        }
-      >
-        <Show when={props.metadata.filediff?.path || props.input.filePath}>
-          <div data-component="edit-content">
-            <Dynamic
-              component={diffComponent}
-              before={{
-                name: props.metadata?.filediff?.file || props.input.filePath,
-                contents: props.metadata?.filediff?.before || props.input.oldString,
-              }}
-              after={{
-                name: props.metadata?.filediff?.file || props.input.filePath,
-                contents: props.metadata?.filediff?.after || props.input.newString,
-              }}
-            />
-          </div>
-        </Show>
-        <DiagnosticsDisplay diagnostics={diagnostics()} />
-      </BasicTool>
+          }
+        >
+          <Show when={path()}>
+            <ToolFileAccordion
+              path={path()}
+              actions={
+                <Show when={!pending() && props.metadata.filediff}>{(diff) => <DiffChanges changes={diff()} />}</Show>
+              }
+            >
+              <div data-component="edit-content">
+                <Dynamic
+                  component={diffComponent}
+                  before={{
+                    name: props.metadata?.filediff?.file || props.input.filePath,
+                    contents: props.metadata?.filediff?.before || props.input.oldString,
+                  }}
+                  after={{
+                    name: props.metadata?.filediff?.file || props.input.filePath,
+                    contents: props.metadata?.filediff?.after || props.input.newString,
+                  }}
+                />
+              </div>
+            </ToolFileAccordion>
+          </Show>
+          <DiagnosticsDisplay diagnostics={diagnostics()} />
+        </BasicTool>
+      </div>
     )
   },
 })
@@ -1540,51 +1599,56 @@ ToolRegistry.register({
     const i18n = useI18n()
     const codeComponent = useCodeComponent()
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
+    const path = createMemo(() => props.input.filePath || "")
     const filename = () => getFilename(props.input.filePath ?? "")
     const pending = () => props.status === "pending" || props.status === "running"
     return (
-      <BasicTool
-        {...props}
-        icon="code-lines"
-        defer
-        trigger={
-          <div data-component="write-trigger">
-            <div data-slot="message-part-title-area">
-              <div data-slot="message-part-title">
-                <span data-slot="message-part-title-text">
-                  <Show when={pending()} fallback={i18n.t("ui.messagePart.title.write")}>
-                    <TextShimmer text={i18n.t("ui.messagePart.title.write")} />
+      <div data-component="write-tool">
+        <BasicTool
+          {...props}
+          icon="code-lines"
+          defer
+          trigger={
+            <div data-component="write-trigger">
+              <div data-slot="message-part-title-area">
+                <div data-slot="message-part-title">
+                  <span data-slot="message-part-title-text">
+                    <Show when={pending()} fallback={i18n.t("ui.messagePart.title.write")}>
+                      <TextShimmer text={i18n.t("ui.messagePart.title.write")} />
+                    </Show>
+                  </span>
+                  <Show when={!pending()}>
+                    <span data-slot="message-part-title-filename">{filename()}</span>
                   </Show>
-                </span>
-                <Show when={!pending()}>
-                  <span data-slot="message-part-title-filename">{filename()}</span>
+                </div>
+                <Show when={!pending() && props.input.filePath?.includes("/")}>
+                  <div data-slot="message-part-path">
+                    <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
+                  </div>
                 </Show>
               </div>
-              <Show when={!pending() && props.input.filePath?.includes("/")}>
-                <div data-slot="message-part-path">
-                  <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
-                </div>
-              </Show>
+              <div data-slot="message-part-actions">{/* <DiffChanges diff={diff} /> */}</div>
             </div>
-            <div data-slot="message-part-actions">{/* <DiffChanges diff={diff} /> */}</div>
-          </div>
-        }
-      >
-        <Show when={props.input.content}>
-          <div data-component="write-content">
-            <Dynamic
-              component={codeComponent}
-              file={{
-                name: props.input.filePath,
-                contents: props.input.content,
-                cacheKey: checksum(props.input.content),
-              }}
-              overflow="scroll"
-            />
-          </div>
-        </Show>
-        <DiagnosticsDisplay diagnostics={diagnostics()} />
-      </BasicTool>
+          }
+        >
+          <Show when={props.input.content && path()}>
+            <ToolFileAccordion path={path()}>
+              <div data-component="write-content">
+                <Dynamic
+                  component={codeComponent}
+                  file={{
+                    name: props.input.filePath,
+                    contents: props.input.content,
+                    cacheKey: checksum(props.input.content),
+                  }}
+                  overflow="scroll"
+                />
+              </div>
+            </ToolFileAccordion>
+          </Show>
+          <DiagnosticsDisplay diagnostics={diagnostics()} />
+        </BasicTool>
+      </div>
     )
   },
 })
@@ -1731,45 +1795,73 @@ ToolRegistry.register({
         }
       >
         {(file) => (
-          <BasicTool
-            {...props}
-            icon="code-lines"
-            defer
-            trigger={
-              <div data-component="edit-trigger">
-                <div data-slot="message-part-title-area">
-                  <div data-slot="message-part-title">
-                    <span data-slot="message-part-title-text">
-                      <Show when={pending()} fallback={i18n.t("ui.tool.patch")}>
-                        <TextShimmer text={i18n.t("ui.tool.patch")} />
+          <div data-component="apply-patch-tool">
+            <BasicTool
+              {...props}
+              icon="code-lines"
+              defer
+              trigger={
+                <div data-component="edit-trigger">
+                  <div data-slot="message-part-title-area">
+                    <div data-slot="message-part-title">
+                      <span data-slot="message-part-title-text">
+                        <Show when={pending()} fallback={i18n.t("ui.tool.patch")}>
+                          <TextShimmer text={i18n.t("ui.tool.patch")} />
+                        </Show>
+                      </span>
+                      <Show when={!pending()}>
+                        <span data-slot="message-part-title-filename">{getFilename(file().relativePath)}</span>
                       </Show>
-                    </span>
-                    <Show when={!pending()}>
-                      <span data-slot="message-part-title-filename">{getFilename(file().relativePath)}</span>
+                    </div>
+                    <Show when={!pending() && file().relativePath.includes("/")}>
+                      <div data-slot="message-part-path">
+                        <span data-slot="message-part-directory">{getDirectory(file().relativePath)}</span>
+                      </div>
                     </Show>
                   </div>
-                  <Show when={!pending() && file().relativePath.includes("/")}>
-                    <div data-slot="message-part-path">
-                      <span data-slot="message-part-directory">{getDirectory(file().relativePath)}</span>
-                    </div>
-                  </Show>
+                  <div data-slot="message-part-actions">
+                    <Show when={!pending()}>
+                      <DiffChanges changes={{ additions: file().additions, deletions: file().deletions }} />
+                    </Show>
+                  </div>
                 </div>
-                <div data-slot="message-part-actions">
-                  <Show when={!pending()}>
-                    <DiffChanges changes={{ additions: file().additions, deletions: file().deletions }} />
-                  </Show>
+              }
+            >
+              <ToolFileAccordion
+                path={file().relativePath}
+                actions={
+                  <Switch>
+                    <Match when={file().type === "add"}>
+                      <span data-slot="apply-patch-change" data-type="added">
+                        {i18n.t("ui.patch.action.created")}
+                      </span>
+                    </Match>
+                    <Match when={file().type === "delete"}>
+                      <span data-slot="apply-patch-change" data-type="removed">
+                        {i18n.t("ui.patch.action.deleted")}
+                      </span>
+                    </Match>
+                    <Match when={file().type === "move"}>
+                      <span data-slot="apply-patch-change" data-type="modified">
+                        {i18n.t("ui.patch.action.moved")}
+                      </span>
+                    </Match>
+                    <Match when={true}>
+                      <DiffChanges changes={{ additions: file().additions, deletions: file().deletions }} />
+                    </Match>
+                  </Switch>
+                }
+              >
+                <div data-component="apply-patch-file-diff">
+                  <Dynamic
+                    component={diffComponent}
+                    before={{ name: file().filePath, contents: file().before }}
+                    after={{ name: file().movePath ?? file().filePath, contents: file().after }}
+                  />
                 </div>
-              </div>
-            }
-          >
-            <div data-component="edit-content">
-              <Dynamic
-                component={diffComponent}
-                before={{ name: file().filePath, contents: file().before }}
-                after={{ name: file().movePath ?? file().filePath, contents: file().after }}
-              />
-            </div>
-          </BasicTool>
+              </ToolFileAccordion>
+            </BasicTool>
+          </div>
         )}
       </Show>
     )

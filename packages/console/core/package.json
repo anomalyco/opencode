@@ -37,6 +37,9 @@
     "update-black": "script/update-black.ts",
     "promote-black-to-dev": "script/promote-black.ts dev",
     "promote-black-to-prod": "script/promote-black.ts production",
+    "update-lite": "script/update-lite.ts",
+    "promote-lite-to-dev": "script/promote-lite.ts dev",
+    "promote-lite-to-prod": "script/promote-lite.ts production",
     "typecheck": "tsgo --noEmit"
   },
   "devDependencies": {

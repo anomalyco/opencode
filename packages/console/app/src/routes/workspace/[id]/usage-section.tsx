@@ -94,6 +94,7 @@ export function UsageSection() {
                 <th>{i18n.t("workspace.usage.table.input")}</th>
                 <th>{i18n.t("workspace.usage.table.output")}</th>
                 <th>{i18n.t("workspace.usage.table.cost")}</th>
+                <th>{i18n.t("workspace.usage.table.session")}</th>
               </tr>
             </thead>
             <tbody>
@@ -183,6 +184,7 @@ export function UsageSection() {
                           })}
                         </Show>
                       </td>
+                      <td data-slot="usage-session">{usage.sessionID?.slice(-8) ?? "-"}</td>
                     </tr>
                   )
                 }}
