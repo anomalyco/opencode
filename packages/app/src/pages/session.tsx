@@ -274,6 +274,11 @@ export default function Page() {
     if (!hasReview()) return true
     return sync.data.session_diff[id] !== undefined
   })
+  const reviewEmptyKey = createMemo(() => {
+    const project = sync.project
+    if (!project || project.vcs) return "session.review.empty"
+    return "session.review.noVcs"
+  })
 
   let inputRef!: HTMLDivElement
   let promptDock: HTMLDivElement | undefined
@@ -531,7 +536,7 @@ export default function Page() {
             ) : (
               <div class={input.emptyClass}>
                 <Mark class="w-14 opacity-10" />
-                <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.empty")}</div>
+                <div class="text-14-regular text-text-weak max-w-56">{language.t(reviewEmptyKey())}</div>
               </div>
             )
           }
@@ -943,15 +948,12 @@ export default function Page() {
       if (next === dockHeight) return
 
       const el = scroller
-      const stick = el ? el.scrollHeight - el.clientHeight - el.scrollTop < 10 : false
+      const delta = next - dockHeight
+      const stick = el ? el.scrollHeight - el.clientHeight - el.scrollTop < 10 + Math.max(0, delta) : false
 
       dockHeight = next
 
-      if (stick && el) {
-        requestAnimationFrame(() => {
-          el.scrollTo({ top: el.scrollHeight, behavior: "auto" })
-        })
-      }
+      if (stick) autoScroll.forceScrollToBottom()
 
       if (el) scheduleScrollState(el)
       scrollSpy.markDirty()
