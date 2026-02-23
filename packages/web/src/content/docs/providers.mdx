@@ -22,6 +22,24 @@ in `~/.local/share/opencode/auth.json`.
 
 ---
 
+### Authentication precedence
+
+For API key based providers, OpenCode resolves credentials in this order (highest to lowest):
+
+1. `provider.<id>.options.apiKey` in your config
+2. Stored credentials from `/connect` or `opencode auth login` (in `auth.json`)
+3. Provider environment variables (for example `OPENAI_API_KEY`)
+
+If `provider.<id>.options.apiKey` is set, OpenCode skips OAuth auth-plugin overrides for that provider. This is useful when targeting custom endpoints or proxies with explicit API keys.
+
+Use these commands to verify and troubleshoot auth source conflicts:
+
+- `opencode auth list` (shows the active credential file path and configured credentials)
+- `opencode auth logout` (remove a stored credential interactively)
+- `opencode debug config` (inspect resolved provider config)
+
+---
+
 ### Config
 
 You can customize the providers through the `provider` section in your OpenCode

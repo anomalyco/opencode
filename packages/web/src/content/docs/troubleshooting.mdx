@@ -24,16 +24,20 @@ You can set the log level with the `--log-level` command-line option to get more
 
 opencode stores session data and other application data on disk at:
 
-- **macOS/Linux**: `~/.local/share/opencode/`
+- **macOS/Linux**: `~/.local/share/opencode/` (or `${XDG_DATA_HOME}/opencode` if `XDG_DATA_HOME` is set)
 - **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.local\share\opencode`
 
-This directory contains:
+Common files and folders:
 
 - `auth.json` - Authentication data like API keys, OAuth tokens
+- `mcp-auth.json` - MCP OAuth token storage
+- `opencode.db` - Main SQLite database
+- `bin/` - Downloaded helper binaries (ripgrep, LSP tools, etc.)
 - `log/` - Application logs
-- `project/` - Project-specific data like session and message data
-  - If the project is within a Git repo, it is stored in `./<project-slug>/storage/`
-  - If it is not a Git repo, it is stored in `./global/storage/`
+- `storage/` - JSON storage used by migrations and compatibility layers
+- `snapshot/` - Git snapshots by project ID
+- `tool-output/` - Pruned tool output cache
+- `worktree/` - Temporary project worktree metadata
 
 ---
 
@@ -169,6 +173,24 @@ To find the directory quickly:
 
 ---
 
+### Desktop and CLI show different providers or sessions
+
+OpenCode Desktop and CLI only stay in sync if they read the same data/config directories.
+
+Check this first:
+
+1. Run `opencode auth list` in each environment and compare the `Credentials .../auth.json` path shown at the top.
+2. Run `opencode debug config` in each environment and compare resolved settings.
+3. Verify `XDG_DATA_HOME` and `XDG_CONFIG_HOME` are the same (or unset) in both environments.
+
+Common causes of split state:
+
+- Sandboxed terminals (for example Snap/Flatpak) using a different home/data path
+- Different shell startup files exporting different `XDG_*` variables
+- Launching desktop app and terminal under different OS users
+
+---
+
 ## Getting help
 
 If you're experiencing issues with OpenCode:
@@ -200,6 +222,27 @@ Here are some common issues and how to resolve them.
 1. Check the logs for error messages
 2. Try running with `--print-logs` to see output in the terminal
 3. Ensure you have the latest version with `opencode upgrade`
+
+---
+
+### Configuration is invalid
+
+If startup fails with `Configuration is invalid`, your config shape does not match the schema.
+
+Quick validation checklist:
+
+1. Ensure your config is actual config data, not a copied JSON schema file.
+2. Add `"$schema": "https://opencode.ai/config.json"` at the top of your config.
+3. Run `opencode debug config` after each change to verify the merged result.
+
+Common mistakes:
+
+- `model` must be a string like `openai/gpt-5`, not an object
+- `command.<name>` must be an object with `template` (string)
+- `agent.<name>.tools` must be an object map (`{ "bash": true }`), not an array
+- Custom `lsp` entries require an `extensions` array
+
+If you are migrating from another tool's config format, copy only supported keys from the [config schema](https://opencode.ai/config.json) and rebuild incrementally.
 
 ---
 
