@@ -414,6 +414,10 @@ export const dict = {
 
   "toast.file.loadFailed.title": "Failed to load file",
   "toast.file.listFailed.title": "Failed to list files",
+  "toast.file.copy.success.title": "File contents copied",
+  "toast.file.copy.failed.title": "Failed to copy file contents",
+  "toast.file.copy.binary.title": "Cannot copy binary file",
+  "toast.file.copy.binary.description": "Only text file contents can be copied.",
 
   "toast.context.noLineSelection.title": "No line selection",
   "toast.context.noLineSelection.description": "Select a line range in a file tab first.",
@@ -503,6 +507,11 @@ export const dict = {
   "session.files.selectToOpen": "Select a file to open",
   "session.files.all": "All files",
   "session.files.binaryContent": "Binary file (content cannot be displayed)",
+  "session.files.copyContents": "Copy file contents",
+  "session.files.copyRelativePath": "Copy relative path",
+  "session.files.copyAbsolutePath": "Copy absolute path",
+  "session.files.revealInFileManager": "Reveal in file explorer",
+  "session.files.openInDefaultApp": "Open in default app",
 
   "session.messages.renderEarlier": "Render earlier messages",
   "session.messages.loadingEarlier": "Loading earlier messages...",
