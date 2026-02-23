@@ -34,6 +34,16 @@ function isAuthorizedRpcRequest(c: { req: { header: (name: string) => string | u
   return received === configured
 }
 
+function isAuthorizedAdminRequest(c: { req: { header: (name: string) => string | undefined }; env: Env }) {
+  // The admin key reuses the same SESSIONS_RPC_SHARED_KEY env var.
+  // If it is not configured the endpoint is inaccessible to prevent
+  // unauthenticated enumeration of all sessions.
+  const configured = c.env.SESSIONS_RPC_SHARED_KEY
+  if (!configured) return false
+  const received = c.req.header("x-opencode-share-key")
+  return received === configured
+}
+
 /**
  * Main Hono application
  */
@@ -318,10 +328,13 @@ app.get("/api/share/:id/metadata", async (c) => {
 })
 
 /**
- * List all sessions (admin endpoint - could be protected)
+ * List all sessions (admin endpoint — requires SESSIONS_RPC_SHARED_KEY)
  * GET /api/sessions
  */
 app.get("/api/sessions", async (c) => {
+  if (!isAuthorizedAdminRequest(c)) {
+    return c.json({ error: "Unauthorized" }, 401)
+  }
   const { index } = getStorageAdapter(c)
   const list = await index.list({ prefix: "index/" })
 
