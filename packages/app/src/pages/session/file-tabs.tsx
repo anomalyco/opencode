@@ -15,7 +15,11 @@ import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange
 import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
-import { getSessionHandoff } from "@/pages/session/handoff"
+import { getSessionHandoff, setQuickEditHandoff } from "@/pages/session/handoff"
+import { useNavigate } from "@solidjs/router"
+import { useSDK } from "@/context/sdk"
+import { SelectionActionBar } from "@/pages/session/selection-action-bar"
+import { createSelectionPart } from "@/pages/session/selection-part"
 
 const formatCommentLabel = (range: SelectedLineRange) => {
   const start = Math.min(range.start, range.end)
@@ -31,6 +35,8 @@ export function FileTabContent(props: { tab: string }) {
   const comments = useComments()
   const language = useLanguage()
   const prompt = usePrompt()
+  const sdk = useSDK()
+  const navigate = useNavigate()
   const codeComponent = useCodeComponent()
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
@@ -167,6 +173,10 @@ export function FileTabContent(props: { tab: string }) {
     draft: "",
     positions: {} as Record<string, number>,
     draftTop: undefined as number | undefined,
+    actionBar: null as SelectedLineRange | null,
+    actionBarTop: undefined as number | undefined,
+    quickEditing: null as SelectedLineRange | null,
+    quickEditDraft: "",
   })
 
   const setCommenting = (range: SelectedLineRange | null) => {
@@ -202,6 +212,33 @@ export function FileTabContent(props: { tab: string }) {
     return rect.top - wrapperRect.top + Math.max(0, (rect.height - 20) / 2)
   }
 
+  const LINE_HEIGHT = 24
+  const LINE_OFFSET = 2
+  const LARGE_FILE_THRESHOLD = 500_000
+
+  const estimateTop = (range: SelectedLineRange) => {
+    const line = Math.max(range.start, range.end)
+    return Math.max(0, (line - 1) * LINE_HEIGHT + LINE_OFFSET)
+  }
+
+  const rangeTop = (wrapper: HTMLDivElement, root: ShadowRoot, range: SelectedLineRange, large: boolean) => {
+    const marker = findMarker(root, range)
+    if (marker) return markerTop(wrapper, marker)
+    if (!large) return undefined
+    return estimateTop(range)
+  }
+
+  const popoverBlur =
+    (onBlur: () => void) =>
+    (e: FocusEvent) => {
+      const current = e.currentTarget as HTMLDivElement
+      const target = e.relatedTarget
+      if (target instanceof Node && current.contains(target)) return
+      setTimeout(() => {
+        if (!document.activeElement || !current.contains(document.activeElement)) onBlur()
+      }, 0)
+    }
+
   const updateComments = () => {
     const el = wrap
     const root = getRoot()
@@ -211,20 +248,12 @@ export function FileTabContent(props: { tab: string }) {
       return
     }
 
-    const estimateTop = (range: SelectedLineRange) => {
-      const line = Math.max(range.start, range.end)
-      const height = 24
-      const offset = 2
-      return Math.max(0, (line - 1) * height + offset)
-    }
-
-    const large = contents().length > 500_000
+    const large = contents().length > LARGE_FILE_THRESHOLD
 
     const next: Record<string, number> = {}
     for (const comment of fileComments()) {
-      const marker = findMarker(root, comment.selection)
-      if (marker) next[comment.id] = markerTop(el, marker)
-      else if (large) next[comment.id] = estimateTop(comment.selection)
+      const top = rangeTop(el, root, comment.selection, large)
+      if (top !== undefined) next[comment.id] = top
     }
 
     const removed = Object.keys(note.positions).filter((id) => next[id] === undefined)
@@ -250,23 +279,78 @@ export function FileTabContent(props: { tab: string }) {
       return
     }
 
-    const marker = findMarker(root, range)
-    if (marker) {
-      setNote("draftTop", markerTop(el, marker))
+    setNote("draftTop", rangeTop(el, root, range, large))
+  }
+
+  const updateActionBarTop = () => {
+    const el = wrap
+    const root = getRoot()
+    const range = note.actionBar ?? note.quickEditing
+    if (!el || !root || !range) {
+      setNote("actionBarTop", undefined)
       return
     }
-
-    setNote("draftTop", large ? estimateTop(range) : undefined)
+    const large = contents().length > LARGE_FILE_THRESHOLD
+    setNote("actionBarTop", rangeTop(el, root, range, large))
   }
 
   const scheduleComments = () => {
-    requestAnimationFrame(updateComments)
+    requestAnimationFrame(() => {
+      updateComments()
+      updateActionBarTop()
+    })
+  }
+
+  const handleAddToChat = () => {
+    const range = note.actionBar
+    const p = path()
+    if (!range || !p) return
+    prompt.insertPartAtCursor(createSelectionPart(p, range, sdk.directory))
+    setNote("actionBar", null)
+  }
+
+  const handleQuickEdit = () => {
+    const range = note.actionBar
+    if (!range) return
+    setNote("quickEditing", range)
+    setNote("quickEditDraft", "")
+    setNote("actionBar", null)
+    scheduleComments()
+  }
+
+  const handleQuickEditSubmit = (instruction: string) => {
+    const range = note.quickEditing
+    const p = path()
+    if (!range || !p) return
+    const sel = selectionFromLines(range)
+    const preview = selectionPreview(contents(), sel)
+    setQuickEditHandoff({ path: p, selection: sel, instruction, preview })
+    setNote("quickEditing", null)
+    navigate(`/${params.dir}/session`)
   }
 
   createEffect(() => {
     commentLayout()
     scheduleComments()
   })
+
+  createEffect(
+    on(
+      () => file.quickEditTrigger(),
+      () => {
+        if (tabs().active() !== props.tab) return
+        const p = path()
+        if (!p) return
+        const range = file.selectedLines(p) as SelectedLineRange | null | undefined
+        if (!range) return
+        setNote("quickEditing", range)
+        setNote("quickEditDraft", "")
+        setNote("actionBar", null)
+        scheduleComments()
+      },
+      { defer: true },
+    ),
+  )
 
   createEffect(() => {
     const focus = comments.focus()
@@ -439,16 +523,20 @@ export function FileTabContent(props: { tab: string }) {
           const p = path()
           if (!p) return
           file.setSelectedLines(p, range)
-          if (!range) setCommenting(null)
+          if (!range) {
+            setCommenting(null)
+            setNote("actionBar", null)
+            setNote("quickEditing", null)
+          }
         }}
         onLineSelectionEnd={(range: SelectedLineRange | null) => {
           if (!range) {
-            setCommenting(null)
+            setNote("actionBar", null)
             return
           }
-
           setNote("openedComment", null)
-          setCommenting(range)
+          setNote("actionBar", range)
+          scheduleComments()
         }}
         overflow="scroll"
         class="select-text"
@@ -491,17 +579,31 @@ export function FileTabContent(props: { tab: string }) {
                 addCommentToContext({ file: p, selection: range(), comment: value, origin: "file" })
                 setCommenting(null)
               }}
-              onPopoverFocusOut={(e: FocusEvent) => {
-                const current = e.currentTarget as HTMLDivElement
-                const target = e.relatedTarget
-                if (target instanceof Node && current.contains(target)) return
-
-                setTimeout(() => {
-                  if (!document.activeElement || !current.contains(document.activeElement)) {
-                    setCommenting(null)
-                  }
-                }, 0)
-              }}
+              onPopoverFocusOut={popoverBlur(() => setCommenting(null))}
+            />
+          </Show>
+        )}
+      </Show>
+      <Show when={note.actionBar && !note.commenting && !note.quickEditing}>
+        <SelectionActionBar
+          top={note.actionBarTop}
+          onAddToChat={handleAddToChat}
+          onQuickEdit={handleQuickEdit}
+        />
+      </Show>
+      <Show when={note.quickEditing}>
+        {(range) => (
+          <Show when={note.actionBarTop !== undefined}>
+            <LineCommentEditor
+              top={note.actionBarTop}
+              value={note.quickEditDraft}
+              selection={formatCommentLabel(range())}
+              placeholder={language.t("selection.quickEdit.placeholder")}
+              submitLabel={language.t("selection.quickEdit.submit")}
+              onInput={(value) => setNote("quickEditDraft", value)}
+              onCancel={() => setNote("quickEditing", null)}
+              onSubmit={handleQuickEditSubmit}
+              onPopoverFocusOut={popoverBlur(() => setNote("quickEditing", null))}
             />
           </Show>
         )}

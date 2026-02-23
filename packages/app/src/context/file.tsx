@@ -1,4 +1,4 @@
-import { batch, createEffect, createMemo, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { showToast } from "@opencode-ai/ui/toast"
@@ -240,6 +240,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const setSelectedLines = (input: string, range: SelectedLineRange | null) =>
       withPath(input, (file) => view().setSelectedLines(file, range))
 
+    const [quickEditTrigger, setQuickEditTrigger] = createSignal(0)
+
     onCleanup(() => {
       stop()
       viewCache.clear()
@@ -275,6 +277,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       setSelectedLines,
       searchFiles: (query: string) => search(query, "false"),
       searchFilesAndDirectories: (query: string) => search(query, "true"),
+      quickEditTrigger,
+      triggerQuickEdit: () => setQuickEditTrigger((n) => n + 1),
     }
   },
 })

@@ -59,6 +59,14 @@ export const dict = {
 
   "command.context.addSelection": "将所选内容添加到上下文",
   "command.context.addSelection.description": "添加当前文件中选中的行",
+  "command.context.addToChat": "将所选内容添加到聊天",
+  "command.context.addToChat.description": "在光标位置插入选中的行",
+  "command.context.quickEdit": "快速编辑所选内容",
+  "command.context.quickEdit.description": "在新会话中编辑选中的代码",
+  "selection.action.addToChat": "添加到聊天",
+  "selection.action.quickEdit": "快速编辑",
+  "selection.quickEdit.placeholder": "编辑选中的代码",
+  "selection.quickEdit.submit": "开始",
 
   "command.input.focus": "聚焦输入框",
 

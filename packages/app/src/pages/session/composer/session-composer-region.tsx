@@ -3,7 +3,7 @@ import { useParams } from "@solidjs/router"
 import { PromptInput } from "@/components/prompt-input"
 import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
-import { getSessionHandoff, setSessionHandoff } from "@/pages/session/handoff"
+import { getSessionHandoff, setSessionHandoff, consumeQuickEditHandoff } from "@/pages/session/handoff"
 import { SessionPermissionDock } from "@/pages/session/composer/session-permission-dock"
 import { SessionQuestionDock } from "@/pages/session/composer/session-question-dock"
 import type { SessionComposerState } from "@/pages/session/composer/session-composer-state"
@@ -41,6 +41,20 @@ export function SessionComposerRegion(props: {
   createEffect(() => {
     if (!prompt.ready()) return
     setSessionHandoff(sessionKey(), { prompt: previewPrompt() })
+  })
+
+  createEffect(() => {
+    if (!prompt.ready()) return
+    if (params.id) return
+    const handoff = consumeQuickEditHandoff()
+    if (!handoff) return
+    prompt.context.add({
+      type: "file",
+      path: handoff.path,
+      selection: handoff.selection,
+      preview: handoff.preview,
+    })
+    prompt.set([{ type: "text", content: handoff.instruction, start: 0, end: handoff.instruction.length }])
   })
 
   return (

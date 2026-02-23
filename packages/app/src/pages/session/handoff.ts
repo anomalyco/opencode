@@ -1,4 +1,4 @@
-import type { SelectedLineRange } from "@/context/file"
+import type { FileSelection, SelectedLineRange } from "@/context/file"
 
 type HandoffSession = {
   prompt: string
@@ -34,3 +34,24 @@ export const setTerminalHandoff = (key: string, value: string[]) => {
 }
 
 export const getTerminalHandoff = (key: string) => store.terminal.get(key)
+
+export type QuickEditHandoff = {
+  path: string
+  selection: FileSelection
+  instruction: string
+  preview?: string
+}
+
+const MAX_PENDING_QUICK_EDIT = 20
+const pendingQuickEdit: QuickEditHandoff[] = []
+
+export const setQuickEditHandoff = (data: QuickEditHandoff) => {
+  pendingQuickEdit.push(data)
+  while (pendingQuickEdit.length > MAX_PENDING_QUICK_EDIT) {
+    pendingQuickEdit.shift()
+  }
+}
+
+export const consumeQuickEditHandoff = () => {
+  return pendingQuickEdit.shift()
+}

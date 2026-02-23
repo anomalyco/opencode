@@ -20,6 +20,7 @@ import { findLast } from "@opencode-ai/util/array"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { canAddSelectionContext } from "@/pages/session/session-command-helpers"
+import { createSelectionPart } from "@/pages/session/selection-part"
 
 export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
@@ -84,6 +85,17 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     prompt.context.add({ type: "file", path, selection, preview })
   }
 
+  const activeSelection = () => {
+    const active = tabs().active()
+    if (!active) return
+    const path = file.pathFromTab(active)
+    if (!path) return
+    return {
+      path,
+      range: file.selectedLines(path) as SelectedLineRange | null | undefined,
+    }
+  }
+
   const navigateMessageByOffset = actions.navigateMessageByOffset
   const setActiveMessage = actions.setActiveMessage
   const focusInput = actions.focusInput
@@ -142,12 +154,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         selectedLines: file.selectedLines,
       }),
       onSelect: () => {
-        const active = tabs().active()
-        if (!active) return
-        const path = file.pathFromTab(active)
-        if (!path) return
-
-        const range = file.selectedLines(path) as SelectedLineRange | null | undefined
+        const selected = activeSelection()
+        if (!selected) return
+        const range = selected.range
         if (!range) {
           showToast({
             title: language.t("toast.context.noLineSelection.title"),
@@ -155,8 +164,46 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
           })
           return
         }
-
-        addSelectionToContext(path, selectionFromLines(range))
+        addSelectionToContext(selected.path, selectionFromLines(range))
+      },
+    }),
+    contextCommand({
+      id: "context.addToChat",
+      title: language.t("command.context.addToChat"),
+      description: language.t("command.context.addToChat.description"),
+      keybind: "mod+l",
+      disabled: !canAddSelectionContext({
+        active: tabs().active(),
+        pathFromTab: file.pathFromTab,
+        selectedLines: file.selectedLines,
+      }),
+      onSelect: () => {
+        const selected = activeSelection()
+        if (!selected) return
+        const range = selected.range
+        if (!range) {
+          showToast({
+            title: language.t("toast.context.noLineSelection.title"),
+            description: language.t("toast.context.noLineSelection.description"),
+          })
+          return
+        }
+        prompt.insertPartAtCursor(createSelectionPart(selected.path, range, sdk.directory))
+        focusInput()
+      },
+    }),
+    contextCommand({
+      id: "context.quickEdit",
+      title: language.t("command.context.quickEdit"),
+      description: language.t("command.context.quickEdit.description"),
+      keybind: "mod+k",
+      disabled: !canAddSelectionContext({
+        active: tabs().active(),
+        pathFromTab: file.pathFromTab,
+        selectedLines: file.selectedLines,
+      }),
+      onSelect: () => {
+        file.triggerQuickEdit()
       },
     }),
   ])

@@ -116,6 +116,68 @@ function contextItemKey(item: ContextItem) {
   return `${key}:c=${digest.slice(0, 8)}`
 }
 
+function partContentLength(p: ContentPart): number {
+  return "content" in p ? p.content.length : 0
+}
+
+function totalPromptLength(prompt: Prompt): number {
+  return prompt.reduce((len, p) => len + partContentLength(p), 0)
+}
+
+function recalculatePartOffsets(prompt: Prompt) {
+  let offset = 0
+  for (const p of prompt) {
+    if (!("content" in p)) continue
+    p.start = offset
+    p.end = offset + p.content.length
+    offset = p.end
+  }
+  return offset
+}
+
+function appendWithSpacing(result: ContentPart[], part: ContentPart, after: string) {
+  result.push(clonePart(part))
+  const trailing = after.startsWith(" ") ? after : " " + after
+  result.push({ type: "text", content: trailing, start: 0, end: 0 })
+}
+
+function insertPartAtCursorPosition(prompt: Prompt, cursor: number, part: ContentPart): { prompt: Prompt; cursor: number } {
+  const result: ContentPart[] = []
+  let pos = 0
+  let inserted = false
+
+  for (const p of prompt) {
+    const len = partContentLength(p)
+    if (p.type !== "text" || inserted) {
+      result.push(clonePart(p))
+      pos += len
+      continue
+    }
+
+    if (cursor >= pos && cursor <= pos + len) {
+      const offset = cursor - pos
+      const before = p.content.slice(0, offset)
+      const after = p.content.slice(offset)
+      if (before) result.push({ type: "text", content: before, start: 0, end: 0 })
+      appendWithSpacing(result, part, after)
+      inserted = true
+    } else {
+      result.push(clonePart(p))
+    }
+    pos += len
+  }
+
+  if (!inserted) {
+    result.push(clonePart(part))
+    result.push({ type: "text", content: " ", start: 0, end: 0 })
+  }
+
+  const offset = recalculatePartOffsets(result)
+
+  const newCursor = inserted ? cursor + partContentLength(part) + 1 : offset
+  return { prompt: result, cursor: newCursor }
+}
+
 function createPromptActions(
   setStore: SetStoreFunction<{
     prompt: Prompt
@@ -124,6 +186,7 @@ function createPromptActions(
       items: (ContextItem & { key: string })[]
     }
   }>,
+  getStore: () => { prompt: Prompt; cursor?: number },
 ) {
   return {
     set(prompt: Prompt, cursorPosition?: number) {
@@ -137,6 +200,15 @@ function createPromptActions(
       batch(() => {
         setStore("prompt", clonePrompt(DEFAULT_PROMPT))
         setStore("cursor", 0)
+      })
+    },
+    insertPartAtCursor(part: ContentPart) {
+      const current = getStore()
+      const cursor = current.cursor ?? totalPromptLength(current.prompt)
+      const result = insertPartAtCursorPosition(current.prompt, cursor, part)
+      batch(() => {
+        setStore("prompt", result.prompt)
+        setStore("cursor", result.cursor)
       })
     },
   }
@@ -172,7 +244,7 @@ function createPromptSession(dir: string, id: string | undefined) {
     }),
   )
 
-  const actions = createPromptActions(setStore)
+  const actions = createPromptActions(setStore, () => store)
 
   return {
     ready,
@@ -192,6 +264,7 @@ function createPromptSession(dir: string, id: string | undefined) {
     },
     set: actions.set,
     reset: actions.reset,
+    insertPartAtCursor: actions.insertPartAtCursor,
   }
 }
 
@@ -254,6 +327,7 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
       },
       set: (prompt: Prompt, cursorPosition?: number) => session().set(prompt, cursorPosition),
       reset: () => session().reset(),
+      insertPartAtCursor: (part: ContentPart) => session().insertPartAtCursor(part),
     }
   },
 })
