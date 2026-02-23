@@ -12,6 +12,27 @@ describe("layout deep links", () => {
     expect(parseDeepLink("https://example.com")).toBeUndefined()
   })
 
+  test("ignores malformed deep links safely", () => {
+    expect(() => parseDeepLink("opencode://open-project/%E0%A4%A%")).not.toThrow()
+    expect(parseDeepLink("opencode://open-project/%E0%A4%A%")).toBeUndefined()
+  })
+
+  test("parses links when URL.canParse is unavailable", () => {
+    const original = Object.getOwnPropertyDescriptor(URL, "canParse")
+    Object.defineProperty(URL, "canParse", { configurable: true, value: undefined })
+    try {
+      expect(parseDeepLink("opencode://open-project?directory=/tmp/demo")).toBe("/tmp/demo")
+    } finally {
+      if (original) Object.defineProperty(URL, "canParse", original)
+      if (!original) Reflect.deleteProperty(URL, "canParse")
+    }
+  })
+
+  test("ignores open-project deep links without directory", () => {
+    expect(parseDeepLink("opencode://open-project")).toBeUndefined()
+    expect(parseDeepLink("opencode://open-project?directory=")).toBeUndefined()
+  })
+
   test("collects only valid open-project directories", () => {
     const result = collectOpenProjectDeepLinks([
       "opencode://open-project?directory=/a",
@@ -37,6 +58,14 @@ describe("layout workspace helpers", () => {
   test("normalizes trailing slash in workspace key", () => {
     expect(workspaceKey("/tmp/demo///")).toBe("/tmp/demo")
     expect(workspaceKey("C:\\tmp\\demo\\\\")).toBe("C:\\tmp\\demo")
+  })
+
+  test("preserves posix and drive roots in workspace key", () => {
+    expect(workspaceKey("/")).toBe("/")
+    expect(workspaceKey("///")).toBe("/")
+    expect(workspaceKey("C:\\")).toBe("C:\\")
+    expect(workspaceKey("C:\\\\\\")).toBe("C:\\")
+    expect(workspaceKey("C:///")).toBe("C:/")
   })
 
   test("keeps local first while preserving known order", () => {

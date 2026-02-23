@@ -12,6 +12,25 @@ import { popularProviders } from "@/hooks/use-providers"
 
 type ModelItem = ReturnType<ReturnType<typeof useModels>["list"]>[number]
 
+const ListLoadingState: Component<{ label: string }> = (props) => {
+  return (
+    <div class="flex flex-col items-center justify-center py-12 text-center">
+      <span class="text-14-regular text-text-weak">{props.label}</span>
+    </div>
+  )
+}
+
+const ListEmptyState: Component<{ message: string; filter: string }> = (props) => {
+  return (
+    <div class="flex flex-col items-center justify-center py-12 text-center">
+      <span class="text-14-regular text-text-weak">{props.message}</span>
+      <Show when={props.filter}>
+        <span class="text-14-regular text-text-strong mt-1">&quot;{props.filter}&quot;</span>
+      </Show>
+    </div>
+  )
+}
+
 export const SettingsModels: Component = () => {
   const language = useLanguage()
   const models = useModels()
@@ -40,7 +59,7 @@ export const SettingsModels: Component = () => {
 
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
-      <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
+      <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-4 pt-6 pb-6 max-w-[720px]">
           <h2 class="text-16-medium text-text-strong">{language.t("settings.models.title")}</h2>
           <div class="flex items-center gap-2 px-3 h-9 rounded-lg bg-surface-base">
@@ -68,24 +87,12 @@ export const SettingsModels: Component = () => {
         <Show
           when={!list.grouped.loading}
           fallback={
-            <div class="flex flex-col items-center justify-center py-12 text-center">
-              <span class="text-14-regular text-text-weak">
-                {language.t("common.loading")}
-                {language.t("common.loading.ellipsis")}
-              </span>
-            </div>
+            <ListLoadingState label={`${language.t("common.loading")}${language.t("common.loading.ellipsis")}`} />
           }
         >
           <Show
             when={list.flat().length > 0}
-            fallback={
-              <div class="flex flex-col items-center justify-center py-12 text-center">
-                <span class="text-14-regular text-text-weak">{language.t("dialog.model.empty")}</span>
-                <Show when={list.filter()}>
-                  <span class="text-14-regular text-text-strong mt-1">&quot;{list.filter()}&quot;</span>
-                </Show>
-              </div>
-            }
+            fallback={<ListEmptyState message={language.t("dialog.model.empty")} filter={list.filter()} />}
           >
             <For each={list.grouped.latest}>
               {(group) => (

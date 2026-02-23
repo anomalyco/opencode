@@ -40,7 +40,7 @@ interface McpSearchResponse {
 export const WebSearchTool = Tool.define("websearch", async () => {
   return {
     get description() {
-      return DESCRIPTION.replace("{{date}}", new Date().toISOString().slice(0, 10))
+      return DESCRIPTION.replace("{{year}}", new Date().getFullYear().toString())
     },
     parameters: z.object({
       query: z.string().describe("Websearch query"),

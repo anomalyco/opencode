@@ -1,0 +1,192 @@
+---
+title: 키바인드
+description: 키바인드를 커스터마이즈하세요.
+---
+
+OpenCode에는 OpenCode config를 통해 커스터마이즈할 수 있는 keybinds 목록이 있습니다.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "keybinds": {
+    "leader": "ctrl+x",
+    "app_exit": "ctrl+c,ctrl+d,<leader>q",
+    "editor_open": "<leader>e",
+    "theme_list": "<leader>t",
+    "sidebar_toggle": "<leader>b",
+    "scrollbar_toggle": "none",
+    "username_toggle": "none",
+    "status_view": "<leader>s",
+    "tool_details": "none",
+    "session_export": "<leader>x",
+    "session_new": "<leader>n",
+    "session_list": "<leader>l",
+    "session_timeline": "<leader>g",
+    "session_fork": "none",
+    "session_rename": "none",
+    "session_share": "none",
+    "session_unshare": "none",
+    "session_interrupt": "escape",
+    "session_compact": "<leader>c",
+    "session_child_cycle": "<leader>right",
+    "session_child_cycle_reverse": "<leader>left",
+    "session_parent": "<leader>up",
+    "messages_page_up": "pageup,ctrl+alt+b",
+    "messages_page_down": "pagedown,ctrl+alt+f",
+    "messages_line_up": "ctrl+alt+y",
+    "messages_line_down": "ctrl+alt+e",
+    "messages_half_page_up": "ctrl+alt+u",
+    "messages_half_page_down": "ctrl+alt+d",
+    "messages_first": "ctrl+g,home",
+    "messages_last": "ctrl+alt+g,end",
+    "messages_next": "none",
+    "messages_previous": "none",
+    "messages_copy": "<leader>y",
+    "messages_undo": "<leader>u",
+    "messages_redo": "<leader>r",
+    "messages_last_user": "none",
+    "messages_toggle_conceal": "<leader>h",
+    "model_list": "<leader>m",
+    "model_cycle_recent": "f2",
+    "model_cycle_recent_reverse": "shift+f2",
+    "model_cycle_favorite": "none",
+    "model_cycle_favorite_reverse": "none",
+    "variant_cycle": "ctrl+t",
+    "command_list": "ctrl+p",
+    "agent_list": "<leader>a",
+    "agent_cycle": "tab",
+    "agent_cycle_reverse": "shift+tab",
+    "input_clear": "ctrl+c",
+    "input_paste": "ctrl+v",
+    "input_submit": "return",
+    "input_newline": "shift+return,ctrl+return,alt+return,ctrl+j",
+    "input_move_left": "left,ctrl+b",
+    "input_move_right": "right,ctrl+f",
+    "input_move_up": "up",
+    "input_move_down": "down",
+    "input_select_left": "shift+left",
+    "input_select_right": "shift+right",
+    "input_select_up": "shift+up",
+    "input_select_down": "shift+down",
+    "input_line_home": "ctrl+a",
+    "input_line_end": "ctrl+e",
+    "input_select_line_home": "ctrl+shift+a",
+    "input_select_line_end": "ctrl+shift+e",
+    "input_visual_line_home": "alt+a",
+    "input_visual_line_end": "alt+e",
+    "input_select_visual_line_home": "alt+shift+a",
+    "input_select_visual_line_end": "alt+shift+e",
+    "input_buffer_home": "home",
+    "input_buffer_end": "end",
+    "input_select_buffer_home": "shift+home",
+    "input_select_buffer_end": "shift+end",
+    "input_delete_line": "ctrl+shift+d",
+    "input_delete_to_line_end": "ctrl+k",
+    "input_delete_to_line_start": "ctrl+u",
+    "input_backspace": "backspace,shift+backspace",
+    "input_delete": "ctrl+d,delete,shift+delete",
+    "input_undo": "ctrl+-,super+z",
+    "input_redo": "ctrl+.,super+shift+z",
+    "input_word_forward": "alt+f,alt+right,ctrl+right",
+    "input_word_backward": "alt+b,alt+left,ctrl+left",
+    "input_select_word_forward": "alt+shift+f,alt+shift+right",
+    "input_select_word_backward": "alt+shift+b,alt+shift+left",
+    "input_delete_word_forward": "alt+d,alt+delete,ctrl+delete",
+    "input_delete_word_backward": "ctrl+w,ctrl+backspace,alt+backspace",
+    "history_previous": "up",
+    "history_next": "down",
+    "terminal_suspend": "ctrl+z",
+    "terminal_title_toggle": "none",
+    "tips_toggle": "<leader>h",
+    "display_thinking": "none"
+  }
+}
+```
+
+---
+
+## 리더 키
+
+OpenCode는 대부분의 keybinds에 `leader` 키를 사용합니다. 이렇게 하면 terminal에서 충돌을 피할 수 있습니다.
+
+기본값으로 `ctrl+x`가 리더 키이며, 대부분의 작업은 먼저 리더 키를 누른 뒤 단축키를 누릅니다. 예를 들어 새 세션을 시작하려면 먼저 `ctrl+x`를 누르고 `n`을 누릅니다.
+
+keybinds에 리더 키를 꼭 사용할 필요는 없지만, 사용하는 것을 권장합니다.
+
+---
+
+## 키바인드 비활성화
+
+config에 해당 키를 값 `"none"`으로 추가하면 keybind를 비활성화할 수 있습니다.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "keybinds": {
+    "session_compact": "none"
+  }
+}
+```
+
+---
+
+## 데스크탑 프롬프트 단축키
+
+OpenCode 데스크톱 앱의 프롬프트 입력은 텍스트 편집을 위한 일반적인 Readline/Emacs-style 단축키를 지원합니다. 이 단축키는 내장되어 있으며 현재 `opencode.json`으로는 설정할 수 없습니다.
+
+| 단축키   | 동작                              |
+| -------- | --------------------------------- |
+| `ctrl+a` | 현재 줄 시작으로 이동             |
+| `ctrl+e` | 현재 줄 끝으로 이동               |
+| `ctrl+b` | 커서를 문자 하나 뒤로 이동        |
+| `ctrl+f` | 커서를 문자 하나 앞으로 이동      |
+| `alt+b`  | 커서를 단어 하나 뒤로 이동        |
+| `alt+f`  | 커서를 단어 하나 앞으로 이동      |
+| `ctrl+d` | 커서 아래 문자 삭제               |
+| `ctrl+k` | 줄 끝까지 삭제                    |
+| `ctrl+u` | 줄 시작까지 삭제                  |
+| `ctrl+w` | 이전 단어 삭제                    |
+| `alt+d`  | 다음 단어 삭제                    |
+| `ctrl+t` | 문자 순서 바꾸기                  |
+| `ctrl+g` | 팝오버 취소 / 실행 중인 응답 중단 |
+
+---
+
+## Shift+Enter
+
+일부 terminal은 기본적으로 Enter와 modifier 키 조합을 전송하지 않습니다. `Shift+Enter`를 이스케이프 시퀀스로 전송하도록 terminal을 설정해야 할 수도 있습니다.
+
+### Windows Terminal
+
+다음 경로의 `settings.json`을 여세요:
+
+```
+%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
+```
+
+루트 레벨 `actions` 배열에 다음을 추가하세요:
+
+```json
+"actions": [
+  {
+    "command": {
+      "action": "sendInput",
+      "input": "\u001b[13;2u"
+    },
+    "id": "User.sendInput.ShiftEnterCustom"
+  }
+]
+```
+
+루트 레벨 `keybindings` 배열에 다음을 추가하세요:
+
+```json
+"keybindings": [
+  {
+    "keys": "shift+enter",
+    "id": "User.sendInput.ShiftEnterCustom"
+  }
+]
+```
+
+파일을 저장한 뒤 Windows Terminal을 다시 시작하거나 새 탭을 여세요.
