@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import path from "path"
 import { BashTool } from "../../src/tool/bash"
 import { Instance } from "../../src/project/instance"
+import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 import type { PermissionNext } from "../../src/permission/next"
 import { Truncate } from "../../src/tool/truncation"
@@ -202,8 +203,8 @@ describe("tool.bash permissions", () => {
 
         await bash.execute(
           {
-            command: "rm tmpfile",
-            description: "Remove tmpfile",
+            command: `rm -rf ${path.join(tmp.path, "nested")}`,
+            description: "remove nested dir",
           },
           testCtx,
         )
@@ -388,7 +389,7 @@ describe("tool.bash truncation", () => {
         const filepath = (result.metadata as any).outputPath
         expect(filepath).toBeTruthy()
 
-        const saved = await Bun.file(filepath).text()
+        const saved = await Filesystem.readText(filepath)
         const lines = saved.trim().split("\n")
         expect(lines.length).toBe(lineCount)
         expect(lines[0]).toBe("1")

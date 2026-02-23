@@ -30,6 +30,26 @@
         };
       });
 
+      overlays = {
+        default =
+          final: _prev:
+          let
+            node_modules = final.callPackage ./nix/node_modules.nix {
+              inherit rev;
+            };
+            opencode = final.callPackage ./nix/opencode.nix {
+              inherit node_modules;
+            };
+            desktop = final.callPackage ./nix/desktop.nix {
+              inherit opencode;
+            };
+          in
+          {
+            inherit opencode;
+            opencode-desktop = desktop;
+          };
+      };
+
       packages = forEachSystem (
         pkgs:
         let

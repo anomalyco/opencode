@@ -135,6 +135,8 @@ To use Amazon Bedrock with OpenCode:
 
 2. **Configure authentication** using one of the following methods:
 
+   ***
+
    #### Environment Variables (Quick Start)
 
    Set one of these environment variables while running opencode:
@@ -156,6 +158,8 @@ To use Amazon Bedrock with OpenCode:
    export AWS_PROFILE=my-dev-profile
    export AWS_REGION=us-east-1
    ```
+
+   ***
 
    #### Configuration File (Recommended)
 
@@ -184,6 +188,8 @@ To use Amazon Bedrock with OpenCode:
    Configuration file options take precedence over environment variables.
    :::
 
+   ***
+
    #### Advanced: VPC Endpoints
 
    If you're using VPC endpoints for Bedrock:
@@ -207,11 +213,15 @@ To use Amazon Bedrock with OpenCode:
    The `endpoint` option is an alias for the generic `baseURL` option, using AWS-specific terminology. If both `endpoint` and `baseURL` are specified, `endpoint` takes precedence.
    :::
 
+   ***
+
    #### Authentication Methods
    - **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**: Create an IAM user and generate access keys in the AWS Console
    - **`AWS_PROFILE`**: Use named profiles from `~/.aws/credentials`. First configure with `aws configure --profile my-profile` or `aws sso login`
    - **`AWS_BEARER_TOKEN_BEDROCK`**: Generate long-term API keys from the Amazon Bedrock console
    - **`AWS_WEB_IDENTITY_TOKEN_FILE` / `AWS_ROLE_ARN`**: For EKS IRSA (IAM Roles for Service Accounts) or other Kubernetes environments with OIDC federation. These environment variables are automatically injected by Kubernetes when using service account annotations.
+
+   ***
 
    #### Authentication Precedence
 
@@ -230,7 +240,8 @@ To use Amazon Bedrock with OpenCode:
    ```
 
 :::note
-For custom inference profiles, use the model and provider name in the key and set the `id` property to the arn. This ensures correct caching:
+For custom inference profiles, use the model and provider name in the key and set the `id` property to the arn. This ensures correct caching.
+:::
 
 ```json title="opencode.json"
 {
@@ -247,8 +258,6 @@ For custom inference profiles, use the model and provider name in the key and se
   }
 }
 ```
-
-:::
 
 ---
 
@@ -791,8 +800,6 @@ To use your GitHub Copilot subscription with opencode:
 :::note
 Some models might need a [Pro+
 subscription](https://github.com/features/copilot/plans) to use.
-
-Some models need to be manually enabled in your [GitHub Copilot settings](https://docs.github.com/en/copilot/how-tos/use-ai-models/configure-access-to-ai-models#setup-for-individual-use).
 :::
 
 1. Run the `/connect` command and search for GitHub Copilot.
@@ -1473,6 +1480,39 @@ SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon
    :::
 
 5. Run the `/models` command to select from 40+ available models.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### STACKIT
+
+STACKIT AI Model Serving provides fully managed soverign hosting environment for AI models, focusing on LLMs like Llama, Mistral, and Qwen, with maximum data sovereignty on European infrastructure.
+
+1. Head over to [STACKIT Portal](https://portal.stackit.cloud), navigate to **AI Model Serving**, and create an auth token for your project.
+
+   :::tip
+   You need a STACKIT customer account, user account, and project before creating auth tokens.
+   :::
+
+2. Run the `/connect` command and search for **STACKIT**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your STACKIT AI Model Serving auth token.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select from available models like _Qwen3-VL 235B_ or _Llama 3.3 70B_.
 
    ```txt
    /models

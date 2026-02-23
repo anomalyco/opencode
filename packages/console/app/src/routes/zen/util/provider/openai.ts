@@ -18,9 +18,10 @@ export const openaiHelper: ProviderHelper = () => ({
   modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => {
     headers.set("authorization", `Bearer ${apiKey}`)
   },
-  modifyBody: (body: Record<string, any>) => {
-    return body
-  },
+  modifyBody: (body: Record<string, any>, workspaceID?: string) => ({
+    ...body,
+    ...(workspaceID ? { safety_identifier: workspaceID } : {}),
+  }),
   createBinaryStreamDecoder: () => undefined,
   streamSeparator: "\n\n",
   createUsageParser: () => {
@@ -43,6 +44,7 @@ export const openaiHelper: ProviderHelper = () => ({
         usage = json.response.usage
       },
       retrieve: () => usage,
+      buidlCostChunk: (cost: string) => `event: ping\ndata: ${JSON.stringify({ type: "ping", cost })}\n\n`,
     }
   },
   normalizeUsage: (usage: Usage) => {

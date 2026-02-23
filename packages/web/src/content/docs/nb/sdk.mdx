@@ -1,0 +1,391 @@
+---
+title: SDK
+description: Typesikker JS-klient for OpenCode-server.
+---
+
+import config from "../../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+OpenCode JS/TS SDK gir en typesikker klient for samhandling med serveren.
+Bruk den til å bygge integrasjoner og kontrollere OpenCode programmatisk.
+
+[Finn ut mer](/docs/server) om hvordan serveren fungerer. For eksempler, sjekk ut [prosjektene](/docs/ecosystem#projects) bygget av fellesskapet.
+
+---
+
+## Installasjon
+
+Installer SDK fra npm:
+
+```bash
+npm install @opencode-ai/sdk
+```
+
+---
+
+## Opprette klient
+
+Opprett en forekomst av OpenCode:
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const { client } = await createOpencode()
+```
+
+Dette starter både en server og en klient
+
+#### Alternativer
+
+| Alternativ | Type          | Beskrivelse                      | Standard    |
+| ---------- | ------------- | -------------------------------- | ----------- |
+| `hostname` | `string`      | Server vertsnavn                 | `127.0.0.1` |
+| `port`     | `number`      | Serverport                       | `4096`      |
+| `signal`   | `AbortSignal` | AbortSignal for avbrudd          | `undefined` |
+| `timeout`  | `number`      | Tidsavbrudd i ms for serverstart | `5000`      |
+| `config`   | `Config`      | Konfigurasjonsobjekt             | `{}`        |
+
+---
+
+## Konfigurasjon
+
+Du kan sende et konfigurasjonsobjekt for å tilpasse virkemåten. Forekomsten henter fortsatt din `opencode.json`, men du kan overstyre eller legge til konfigurasjon inline:
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const opencode = await createOpencode({
+  hostname: "127.0.0.1",
+  port: 4096,
+  config: {
+    model: "anthropic/claude-3-5-sonnet-20241022",
+  },
+})
+
+console.log(`Server running at ${opencode.server.url}`)
+
+opencode.server.close()
+```
+
+## Kun klient
+
+Hvis du allerede har en kjørende forekomst av OpenCode, kan du opprette en klientforekomst for å koble til den:
+
+```javascript
+import { createOpencodeClient } from "@opencode-ai/sdk"
+
+const client = createOpencodeClient({
+  baseUrl: "http://localhost:4096",
+})
+```
+
+#### Alternativer
+
+| Alternativ      | Type       | Beskrivelse                       | Standard                |
+| --------------- | ---------- | --------------------------------- | ----------------------- |
+| `baseUrl`       | `string`   | URL av serveren                   | `http://localhost:4096` |
+| `fetch`         | `function` | Egendefinert fetch-implementasjon | `globalThis.fetch`      |
+| `parseAs`       | `string`   | Metode for responsparsing         | `auto`                  |
+| `responseStyle` | `string`   | Returstil: `data` eller `fields`  | `fields`                |
+| `throwOnError`  | `boolean`  | Kast feil i stedet for retur      | `false`                 |
+
+---
+
+## Typer
+
+SDK inkluderer TypeScript-definisjoner for alle API-typer. Importer dem direkte:
+
+```typescript
+import type { Session, Message, Part } from "@opencode-ai/sdk"
+```
+
+Alle typer er generert fra serverens OpenAPI-spesifikasjon og tilgjengelig i <a href={typesUrl}>type-filen</a>.
+
+---
+
+## Feil
+
+SDK kan gi feil som du kan fange opp og håndtere:
+
+```typescript
+try {
+  await client.session.get({ path: { id: "invalid-id" } })
+} catch (error) {
+  console.error("Failed to get session:", (error as Error).message)
+}
+```
+
+---
+
+## API-er
+
+SDK-en eksponerer alle server-API-er gjennom en typesikker klient.
+
+---
+
+### Globalt
+
+| Metode            | Beskrivelse                   | Svar                                 |
+| ----------------- | ----------------------------- | ------------------------------------ |
+| `global.health()` | Sjekk serverstatus og versjon | `{ healthy: true, version: string }` |
+
+---
+
+#### Eksempler
+
+```javascript
+const health = await client.global.health()
+console.log(health.data.version)
+```
+
+---
+
+### App
+
+| Metode         | Beskrivelse                     | Svar                                        |
+| -------------- | ------------------------------- | ------------------------------------------- |
+| `app.log()`    | Skriv en loggoppføring          | `boolean`                                   |
+| `app.agents()` | List alle tilgjengelige agenter | <a href={typesUrl}><code>Agent[]</code></a> |
+
+---
+
+#### Eksempler
+
+```javascript
+// Write a log entry
+await client.app.log({
+  body: {
+    service: "my-app",
+    level: "info",
+    message: "Operation completed",
+  },
+})
+
+// List available agents
+const agents = await client.app.agents()
+```
+
+---
+
+### Prosjekt
+
+| Metode              | Beskrivelse             | Svar                                          |
+| ------------------- | ----------------------- | --------------------------------------------- |
+| `project.list()`    | List alle prosjekter    | <a href={typesUrl}><code>Project[]</code></a> |
+| `project.current()` | Hent gjeldende prosjekt | <a href={typesUrl}><code>Project</code></a>   |
+
+---
+
+#### Eksempler
+
+```javascript
+// List all projects
+const projects = await client.project.list()
+
+// Get current project
+const currentProject = await client.project.current()
+```
+
+---
+
+### Sti
+
+| Metode       | Beskrivelse         | Svar                                     |
+| ------------ | ------------------- | ---------------------------------------- |
+| `path.get()` | Hent gjeldende bane | <a href={typesUrl}><code>Path</code></a> |
+
+---
+
+#### Eksempler
+
+```javascript
+// Get current path information
+const pathInfo = await client.path.get()
+```
+
+---
+
+### Konfigurasjon
+
+| Metode               | Beskrivelse                           | Svar                                                                                                  |
+| -------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `config.get()`       | Hent konfigurasjonsinformasjon        | <a href={typesUrl}><code>Config</code></a>                                                            |
+| `config.providers()` | List leverandører og standardmodeller | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
+
+---
+
+#### Eksempler
+
+```javascript
+const config = await client.config.get()
+
+const { providers, default: defaults } = await client.config.providers()
+```
+
+---
+
+### Sesjoner
+
+| Metode                                                     | Beskrivelse                       | Merknader                                                                                                                                        |
+| ---------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `session.list()`                                           | List økter                        | Returnerer <a href={typesUrl}><code>Session[]</code></a>                                                                                         |
+| `session.get({ path })`                                    | Hent økt                          | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                           |
+| `session.children({ path })`                               | List barneøkter                   | Returnerer <a href={typesUrl}><code>Session[]</code></a>                                                                                         |
+| `session.create({ body })`                                 | Opprett økt                       | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                           |
+| `session.delete({ path })`                                 | Slett økt                         | Returnerer `boolean`                                                                                                                             |
+| `session.update({ path, body })`                           | Oppdater øktegenskaper            | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                           |
+| `session.init({ path, body })`                             | Analyser appen og lag `AGENTS.md` | Returnerer `boolean`                                                                                                                             |
+| `session.abort({ path })`                                  | Avbryt en kjørende økt            | Returnerer `boolean`                                                                                                                             |
+| `session.share({ path })`                                  | Del økten                         | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                           |
+| `session.unshare({ path })`                                | Slutt å dele økten                | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                           |
+| `session.summarize({ path, body })`                        | Oppsummer økten                   | Returnerer `boolean`                                                                                                                             |
+| `session.messages({ path })`                               | List meldinger i en økt           | Returnerer `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                       |
+| `session.message({ path })`                                | Hent meldingsdetaljer             | Returnerer `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                         |
+| `session.prompt({ path, body })`                           | Send melding                      | `body.noReply: true` returnerer UserMessage (kun kontekst). Standard returnerer <a href={typesUrl}><code>AssistantMessage</code></a> med AI svar |
+| `session.command({ path, body })`                          | Send kommando til økt             | Returnerer `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                |
+| `session.shell({ path, body })`                            | Kjør en shell-kommando            | Returnerer <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                  |
+| `session.revert({ path, body })`                           | Tilbakestill en melding           | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                           |
+| `session.unrevert({ path })`                               | Gjenopprett reverserte meldinger  | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                           |
+| `postSessionByIdPermissionsByPermissionId({ path, body })` | Svar på en tillatelsesforespørsel | Returnerer `boolean`                                                                                                                             |
+
+---
+
+#### Eksempler
+
+```javascript
+// Create and manage sessions
+const session = await client.session.create({
+  body: { title: "My session" },
+})
+
+const sessions = await client.session.list()
+
+// Send a prompt message
+const result = await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    model: { providerID: "anthropic", modelID: "claude-3-5-sonnet-20241022" },
+    parts: [{ type: "text", text: "Hello!" }],
+  },
+})
+
+// Inject context without triggering AI response (useful for plugins)
+await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    noReply: true,
+    parts: [{ type: "text", text: "You are a helpful assistant." }],
+  },
+})
+```
+
+---
+
+### Filer
+
+| Metode                    | Beskrivelse                        | Svar                                                                                       |
+| ------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------ |
+| `find.text({ query })`    | Søk etter tekst i filer            | En rekke matchobjekter med `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
+| `find.files({ query })`   | Finn filer og kataloger etter navn | `string[]` (baner)                                                                         |
+| `find.symbols({ query })` | Finn symboler i arbeidsområdet     | <a href={typesUrl}><code>Symbol[]</code></a>                                               |
+| `file.read({ query })`    | Les en fil                         | `{ type: "raw" \| "patch", content: string }`                                              |
+| `file.status({ query? })` | Hent status for sporede filer      | <a href={typesUrl}><code>File[]</code></a>                                                 |
+
+`find.files` støtter noen få valgfrie søkefelt:
+
+- `type`: `"file"` eller `"directory"`
+- `directory`: overstyr prosjektroten for søket
+- `limit`: maksimalt antall resultater (1–200)
+
+---
+
+#### Eksempler
+
+```javascript
+// Search and read files
+const textResults = await client.find.text({
+  query: { pattern: "function.*opencode" },
+})
+
+const files = await client.find.files({
+  query: { query: "*.ts", type: "file" },
+})
+
+const directories = await client.find.files({
+  query: { query: "packages", type: "directory", limit: 20 },
+})
+
+const content = await client.file.read({
+  query: { path: "src/index.ts" },
+})
+```
+
+---
+
+### TUI
+
+| Metode                         | Beskrivelse               | Svar      |
+| ------------------------------ | ------------------------- | --------- |
+| `tui.appendPrompt({ body })`   | Legg til tekst i prompten | `boolean` |
+| `tui.openHelp()`               | Åpne hjelpedialogen       | `boolean` |
+| `tui.openSessions()`           | Åpne øktvelgeren          | `boolean` |
+| `tui.openThemes()`             | Åpne temavelgeren         | `boolean` |
+| `tui.openModels()`             | Åpne modellvelgeren       | `boolean` |
+| `tui.submitPrompt()`           | Send inn gjeldende prompt | `boolean` |
+| `tui.clearPrompt()`            | Tøm prompten              | `boolean` |
+| `tui.executeCommand({ body })` | Utfør en kommando         | `boolean` |
+| `tui.showToast({ body })`      | Vis toast-varsel          | `boolean` |
+
+---
+
+#### Eksempler
+
+```javascript
+// Control TUI interface
+await client.tui.appendPrompt({
+  body: { text: "Add this to prompt" },
+})
+
+await client.tui.showToast({
+  body: { message: "Task completed", variant: "success" },
+})
+```
+
+---
+
+### Auth
+
+| Metode              | Beskrivelse                    | Svar      |
+| ------------------- | ------------------------------ | --------- |
+| `auth.set({ ... })` | Angi autentiseringsinformasjon | `boolean` |
+
+---
+
+#### Eksempler
+
+```javascript
+await client.auth.set({
+  path: { id: "anthropic" },
+  body: { type: "api", key: "your-api-key" },
+})
+```
+
+---
+
+### Hendelser
+
+| Metode              | Beskrivelse                      | Svar                             |
+| ------------------- | -------------------------------- | -------------------------------- |
+| `event.subscribe()` | Strøm av server-sendte hendelser | Strøm av server-sendte hendelser |
+
+---
+
+#### Eksempler
+
+```javascript
+// Listen to real-time events
+const events = await client.event.subscribe()
+for await (const event of events.stream) {
+  console.log("Event:", event.type, event.properties)
+}
+```

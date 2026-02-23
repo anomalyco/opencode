@@ -228,6 +228,7 @@ export const createScrollSpy = (input: Input) => {
     node.delete(key)
     visible.delete(key)
     dirty = true
+    schedule()
   }
 
   const markDirty = () => {

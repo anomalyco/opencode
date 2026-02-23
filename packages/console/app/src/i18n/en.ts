@@ -334,6 +334,7 @@ export const dict = {
   "workspace.usage.table.input": "Input",
   "workspace.usage.table.output": "Output",
   "workspace.usage.table.cost": "Cost",
+  "workspace.usage.table.session": "Session",
   "workspace.usage.breakdown.input": "Input",
   "workspace.usage.breakdown.cacheRead": "Cache Read",
   "workspace.usage.breakdown.cacheWrite": "Cache Write",
@@ -394,7 +395,7 @@ export const dict = {
   "workspace.settings.edit": "Edit",
 
   "workspace.billing.title": "Billing",
-  "workspace.billing.subtitle.beforeLink": "Manage payments methods.",
+  "workspace.billing.subtitle.beforeLink": "Manage payment methods.",
   "workspace.billing.contactUs": "Contact us",
   "workspace.billing.subtitle.afterLink": "if you have any questions.",
   "workspace.billing.currentBalance": "Current Balance",

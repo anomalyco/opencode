@@ -110,6 +110,7 @@ const table = sqliteTable("session", {
 
 - Avoid mocks as much as possible
 - Test actual implementation, do not duplicate logic into tests
+- Tests cannot run from repo root (guard: `do-not-run-tests-from-root`); run from package dirs like `packages/opencode`.
 
 ## Fork
 This is a fork of the original branch, since we want to make it easy to pull upstream change we want to limit edits to any existing files that are not in the packages/app/src/overrides directory. Do the bulk of our work in that directory.
