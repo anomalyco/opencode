@@ -337,6 +337,7 @@ export const dict = {
   "workspace.usage.table.input": "الدخل",
   "workspace.usage.table.output": "الخرج",
   "workspace.usage.table.cost": "التكلفة",
+  "workspace.usage.table.session": "الجلسة",
   "workspace.usage.breakdown.input": "الدخل",
   "workspace.usage.breakdown.cacheRead": "قراءة الكاش",
   "workspace.usage.breakdown.cacheWrite": "كتابة الكاش",
