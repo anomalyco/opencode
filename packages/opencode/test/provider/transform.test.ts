@@ -1630,6 +1630,82 @@ describe("ProviderTransform.message - claude w/bedrock custom inference profile"
 })
 
 
+describe("ProviderTransform.message - first system block gets 1h TTL when flag set", () => {
+  const anthropicModel = {
+    id: "anthropic/claude-sonnet-4-6",
+    providerID: "anthropic",
+    api: {
+      id: "claude-sonnet-4-6",
+      url: "https://api.anthropic.com",
+      npm: "@ai-sdk/anthropic",
+    },
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: true },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0.003, output: 0.015, cache: { read: 0.0003, write: 0.00375 } },
+    limit: { context: 200000, output: 8192 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("first system block gets 1h TTL when extendedTTL is true", () => {
+    const msgs = [
+      { role: "system", content: "Block 1" },
+      { role: "system", content: "Block 2" },
+      { role: "user", content: "Hello" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, { extendedTTL: true }) as any[]
+
+    expect(result[0].providerOptions.anthropic.cacheControl).toEqual({ type: "ephemeral", ttl: "1h" })
+  })
+
+  test("first system block gets default ephemeral when extendedTTL is not set", () => {
+    const msgs = [
+      { role: "system", content: "Block 1" },
+      { role: "system", content: "Block 2" },
+      { role: "user", content: "Hello" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    expect(result[0].providerOptions.anthropic.cacheControl).toEqual({ type: "ephemeral" })
+  })
+
+  test("second system block always gets default ephemeral TTL", () => {
+    const msgs = [
+      { role: "system", content: "Block 1" },
+      { role: "system", content: "Block 2" },
+      { role: "user", content: "Hello" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, { extendedTTL: true }) as any[]
+
+    expect(result[1].providerOptions.anthropic.cacheControl).toEqual({ type: "ephemeral" })
+  })
+
+  test("conversation messages get default ephemeral TTL even with extendedTTL", () => {
+    const msgs = [
+      { role: "system", content: "System" },
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: "Hi" },
+      { role: "user", content: "World" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, { extendedTTL: true }) as any[]
+
+    const last = result[result.length - 1]
+    expect(last.providerOptions.anthropic.cacheControl).toEqual({ type: "ephemeral" })
+  })
+})
+
 describe("ProviderTransform.message - cache control on gateway", () => {
   const createModel = (overrides: Partial<any> = {}) =>
     ({
