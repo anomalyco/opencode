@@ -1,35 +1,100 @@
+use futures::{FutureExt, Stream, StreamExt, future};
+use process_wrap::tokio::CommandWrap;
+#[cfg(unix)]
+use process_wrap::tokio::ProcessGroup;
+#[cfg(windows)]
+use process_wrap::tokio::{CommandWrapper, JobObject, KillOnDrop};
+#[cfg(unix)]
+use std::os::unix::process::ExitStatusExt;
+use std::sync::Arc;
+use std::{process::Stdio, time::Duration};
 use tauri::{AppHandle, Manager, path::BaseDirectory};
-use tauri_plugin_shell::{
-    ShellExt,
-    process::{Command, CommandChild, CommandEvent, TerminatedPayload},
+use tauri_specta::Event;
+use tokio::{
+    io::{AsyncBufRead, AsyncBufReadExt, BufReader},
+    process::Command,
+    sync::{mpsc, oneshot},
+    task::JoinHandle,
 };
-use tauri_plugin_store::StoreExt;
-use tokio::sync::oneshot;
+use tokio_stream::wrappers::ReceiverStream;
+use tracing::Instrument;
+#[cfg(windows)]
+use windows::Win32::System::Threading::{CREATE_NO_WINDOW, CREATE_SUSPENDED};
 
-use crate::constants::{SETTINGS_STORE, WSL_ENABLED_KEY};
+use crate::server::get_wsl_config;
+
+#[cfg(windows)]
+#[derive(Clone, Copy, Debug)]
+// Keep this as a custom wrapper instead of process_wrap::CreationFlags.
+// JobObject pre_spawn rewrites creation flags, so this must run after it.
+struct WinCreationFlags;
+
+#[cfg(windows)]
+impl CommandWrapper for WinCreationFlags {
+    fn pre_spawn(&mut self, command: &mut Command, _core: &CommandWrap) -> std::io::Result<()> {
+        command.creation_flags((CREATE_NO_WINDOW | CREATE_SUSPENDED).0);
+        Ok(())
+    }
+}
 
 const CLI_INSTALL_DIR: &str = ".opencode/bin";
 const CLI_BINARY_NAME: &str = "opencode";
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Debug)]
 pub struct ServerConfig {
     pub hostname: Option<String>,
     pub port: Option<u32>,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Debug)]
 pub struct Config {
     pub server: Option<ServerConfig>,
 }
 
+#[derive(Clone, Debug)]
+pub enum CommandEvent {
+    Stdout(String),
+    Stderr(String),
+    Error(String),
+    Terminated(TerminatedPayload),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct TerminatedPayload {
+    pub code: Option<i32>,
+    pub signal: Option<i32>,
+}
+
+#[derive(Clone, Debug)]
+pub struct CommandChild {
+    kill: mpsc::Sender<()>,
+}
+
+impl CommandChild {
+    pub fn kill(&self) -> std::io::Result<()> {
+        self.kill
+            .try_send(())
+            .map_err(|e| std::io::Error::other(e.to_string()))
+    }
+}
+
 pub async fn get_config(app: &AppHandle) -> Option<Config> {
-    create_command(app, "debug config", &[])
-        .output()
+    let (events, _) = spawn_command(app, "debug config", &[]).ok()?;
+
+    events
+        .fold(String::new(), async |mut config_str, event| {
+            if let CommandEvent::Stdout(s) = &event {
+                config_str += s.as_str()
+            }
+            if let CommandEvent::Stderr(s) = &event {
+                config_str += s.as_str()
+            }
+
+            config_str
+        })
+        .map(|v| serde_json::from_str::<Config>(&v))
         .await
-        .inspect_err(|e| tracing::warn!("Failed to read OC config: {e}"))
         .ok()
-        .and_then(|out| String::from_utf8(out.stdout.to_vec()).ok())
-        .and_then(|s| serde_json::from_str::<Config>(&s).ok())
 }
 
 fn get_cli_install_path() -> Option<std::path::PathBuf> {
@@ -152,16 +217,8 @@ fn get_user_shell() -> String {
     std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
 }
 
-fn is_wsl_enabled(app: &tauri::AppHandle) -> bool {
-    let Ok(store) = app.store(SETTINGS_STORE) else {
-        return false;
-    };
-
-    store
-        .get(WSL_ENABLED_KEY)
-        .as_ref()
-        .and_then(|value| value.as_bool())
-        .unwrap_or(false)
+fn is_wsl_enabled(_app: &tauri::AppHandle) -> bool {
+    get_wsl_config(_app.clone()).is_ok_and(|v| v.enabled)
 }
 
 fn shell_escape(input: &str) -> String {
@@ -175,7 +232,11 @@ fn shell_escape(input: &str) -> String {
     escaped
 }
 
-pub fn create_command(app: &tauri::AppHandle, args: &str, extra_env: &[(&str, String)]) -> Command {
+pub fn spawn_command(
+    app: &tauri::AppHandle,
+    args: &str,
+    extra_env: &[(&str, String)],
+) -> Result<(impl Stream<Item = CommandEvent> + 'static, CommandChild), std::io::Error> {
     let state_dir = app
         .path()
         .resolve("", BaseDirectory::AppLocalData)
@@ -202,7 +263,7 @@ pub fn create_command(app: &tauri::AppHandle, args: &str, extra_env: &[(&str, St
             .map(|(key, value)| (key.to_string(), value.clone())),
     );
 
-    if cfg!(windows) {
+    let mut cmd = if cfg!(windows) {
         if is_wsl_enabled(app) {
             tracing::info!("WSL is enabled, spawning CLI server in WSL");
             let version = app.package_info().version.to_string();
@@ -234,40 +295,125 @@ pub fn create_command(app: &tauri::AppHandle, args: &str, extra_env: &[(&str, St
 
             script.push(format!("{} exec \"$BIN\" {}", env_prefix.join(" "), args));
 
-            return app
-                .shell()
-                .command("wsl")
-                .args(["-e", "bash", "-lc", &script.join("\n")]);
+            let mut cmd = Command::new("wsl");
+            cmd.args(["-e", "bash", "-lc", &script.join("\n")]);
+            cmd
         } else {
-            let mut cmd = app
-                .shell()
-                .sidecar("opencode-cli")
-                .unwrap()
-                .args(args.split_whitespace());
+            let sidecar = get_sidecar_path(app);
+            let mut cmd = Command::new(sidecar);
+            cmd.args(args.split_whitespace());
 
             for (key, value) in envs {
-                cmd = cmd.env(key, value);
+                cmd.env(key, value);
             }
 
-            return cmd;
+            cmd
         }
     } else {
         let sidecar = get_sidecar_path(app);
         let shell = get_user_shell();
 
-        let cmd = if shell.ends_with("/nu") {
+        let line = if shell.ends_with("/nu") {
             format!("^\"{}\" {}", sidecar.display(), args)
         } else {
             format!("\"{}\" {}", sidecar.display(), args)
         };
 
-        let mut cmd = app.shell().command(&shell).args(["-il", "-c", &cmd]);
+        let mut cmd = Command::new(shell);
+        cmd.args(["-il", "-c", &line]);
 
         for (key, value) in envs {
-            cmd = cmd.env(key, value);
+            cmd.env(key, value);
         }
 
         cmd
+    };
+
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    cmd.stdin(Stdio::null());
+
+    let mut wrap = CommandWrap::from(cmd);
+
+    #[cfg(unix)]
+    {
+        wrap.wrap(ProcessGroup::leader());
+    }
+
+    #[cfg(windows)]
+    {
+        wrap.wrap(JobObject).wrap(WinCreationFlags).wrap(KillOnDrop);
+    }
+
+    let mut child = wrap.spawn()?;
+    let guard = Arc::new(tokio::sync::RwLock::new(()));
+    let (tx, rx) = mpsc::channel(256);
+    let (kill_tx, mut kill_rx) = mpsc::channel(1);
+
+    let stdout = spawn_pipe_reader(
+        tx.clone(),
+        guard.clone(),
+        BufReader::new(child.stdout().take().unwrap()),
+        CommandEvent::Stdout,
+    );
+    let stderr = spawn_pipe_reader(
+        tx.clone(),
+        guard.clone(),
+        BufReader::new(child.stderr().take().unwrap()),
+        CommandEvent::Stderr,
+    );
+
+    tokio::task::spawn(async move {
+        let mut kill_open = true;
+        let status = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break Ok(status),
+                Ok(None) => {}
+                Err(err) => break Err(err),
+            }
+
+            tokio::select! {
+                msg = kill_rx.recv(), if kill_open => {
+                    if msg.is_some() {
+                        let _ = child.start_kill();
+                    }
+                    kill_open = false;
+                }
+                _ = tokio::time::sleep(Duration::from_millis(100)) => {}
+            }
+        };
+
+        match status {
+            Ok(status) => {
+                let payload = TerminatedPayload {
+                    code: status.code(),
+                    signal: signal_from_status(status),
+                };
+                let _ = tx.send(CommandEvent::Terminated(payload)).await;
+            }
+            Err(err) => {
+                let _ = tx.send(CommandEvent::Error(err.to_string())).await;
+            }
+        }
+
+        stdout.abort();
+        stderr.abort();
+    });
+
+    let event_stream = ReceiverStream::new(rx);
+    let event_stream = sqlite_migration::logs_middleware(app.clone(), event_stream);
+
+    Ok((event_stream, CommandChild { kill: kill_tx }))
+}
+
+fn signal_from_status(status: std::process::ExitStatus) -> Option<i32> {
+    #[cfg(unix)]
+    return status.signal();
+
+    #[cfg(not(unix))]
+    {
+        let _ = status;
+        None
     }
 }
 
@@ -286,45 +432,127 @@ pub fn serve(
         ("OPENCODE_SERVER_PASSWORD", password.to_string()),
     ];
 
-    let (mut rx, child) = create_command(
+    let (events, child) = spawn_command(
         app,
         format!("--print-logs --log-level WARN serve --hostname {hostname} --port {port}").as_str(),
         &envs,
     )
-    .spawn()
     .expect("Failed to spawn opencode");
 
-    tokio::spawn(async move {
-        let mut exit_tx = Some(exit_tx);
-        while let Some(event) = rx.recv().await {
-            match event {
-                CommandEvent::Stdout(line_bytes) => {
-                    let line = String::from_utf8_lossy(&line_bytes);
-                    tracing::info!(target: "sidecar", "{line}");
-                }
-                CommandEvent::Stderr(line_bytes) => {
-                    let line = String::from_utf8_lossy(&line_bytes);
-                    tracing::info!(target: "sidecar", "{line}");
-                }
-                CommandEvent::Error(err) => {
-                    tracing::error!(target: "sidecar", "{err}");
-                }
-                CommandEvent::Terminated(payload) => {
-                    tracing::info!(
-                        target: "sidecar",
-                        code = ?payload.code,
-                        signal = ?payload.signal,
-                        "Sidecar terminated"
-                    );
+    let mut exit_tx = Some(exit_tx);
+    tokio::spawn(
+        events
+            .for_each(move |event| {
+                match event {
+                    CommandEvent::Stdout(line) => {
+                        tracing::info!("{line}");
+                    }
+                    CommandEvent::Stderr(line) => {
+                        tracing::info!("{line}");
+                    }
+                    CommandEvent::Error(err) => {
+                        tracing::error!("{err}");
+                    }
+                    CommandEvent::Terminated(payload) => {
+                        tracing::info!(
+                            code = ?payload.code,
+                            signal = ?payload.signal,
+                            "Sidecar terminated"
+                        );
 
-                    if let Some(tx) = exit_tx.take() {
-                        let _ = tx.send(payload);
+                        if let Some(tx) = exit_tx.take() {
+                            let _ = tx.send(payload);
+                        }
                     }
                 }
-                _ => {}
-            }
-        }
-    });
+
+                future::ready(())
+            })
+            .instrument(tracing::info_span!("sidecar")),
+    );
 
     (child, exit_rx)
+}
+
+pub mod sqlite_migration {
+    use super::*;
+
+    #[derive(
+        tauri_specta::Event, serde::Serialize, serde::Deserialize, Clone, Copy, Debug, specta::Type,
+    )]
+    #[serde(tag = "type", content = "value")]
+    pub enum SqliteMigrationProgress {
+        InProgress(u8),
+        Done,
+    }
+
+    pub(super) fn logs_middleware(
+        app: AppHandle,
+        stream: impl Stream<Item = CommandEvent>,
+    ) -> impl Stream<Item = CommandEvent> {
+        let app = app.clone();
+        let mut done = false;
+
+        stream.filter_map(move |event| {
+            if done {
+                return future::ready(Some(event));
+            }
+
+            future::ready(match &event {
+                CommandEvent::Stdout(s) | CommandEvent::Stderr(s) => {
+                    if let Some(s) = s.strip_prefix("sqlite-migration:").map(|s| s.trim()) {
+                        if let Ok(progress) = s.parse::<u8>() {
+                            let _ = SqliteMigrationProgress::InProgress(progress).emit(&app);
+                        } else if s == "done" {
+                            done = true;
+                            let _ = SqliteMigrationProgress::Done.emit(&app);
+                        }
+
+                        None
+                    } else {
+                        Some(event)
+                    }
+                }
+                _ => Some(event),
+            })
+        })
+    }
+}
+
+fn spawn_pipe_reader<F: Fn(String) -> CommandEvent + Send + Copy + 'static>(
+    tx: mpsc::Sender<CommandEvent>,
+    guard: Arc<tokio::sync::RwLock<()>>,
+    pipe_reader: impl AsyncBufRead + Send + Unpin + 'static,
+    wrapper: F,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let _lock = guard.read().await;
+        let reader = BufReader::new(pipe_reader);
+
+        read_line(reader, tx, wrapper).await;
+    })
+}
+
+async fn read_line<F: Fn(String) -> CommandEvent + Send + Copy + 'static>(
+    reader: BufReader<impl AsyncBufRead + Unpin>,
+    tx: mpsc::Sender<CommandEvent>,
+    wrapper: F,
+) {
+    let mut lines = reader.lines();
+    loop {
+        let line = lines.next_line().await;
+
+        match line {
+            Ok(s) => {
+                if let Some(s) = s {
+                    let _ = tx.clone().send(wrapper(s)).await;
+                }
+            }
+            Err(e) => {
+                let tx_ = tx.clone();
+                let _ = tx_.send(CommandEvent::Error(e.to_string())).await;
+                break;
+            }
+        }
+    }
 }

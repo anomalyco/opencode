@@ -11,7 +11,7 @@ Das Verhalten steuerst du ueber [Berechtigungen](/docs/permissions).
 
 ---
 
-## Configure
+## Konfiguration
 
 Nutze das Feld `permission`, um Tool-Verhalten zu steuern.
 Pro Tool kannst du erlauben, verbieten oder eine Rueckfrage verlangen.
@@ -43,7 +43,7 @@ Zum Beispiel, um fuer alle Tools eines MCP-Servers eine Freigabe zu verlangen:
 
 ---
 
-## Built-in
+## Eingebaut
 
 Hier sind alle in OpenCode verfuegbaren eingebauten Tools.
 
@@ -351,7 +351,7 @@ Each question includes a header, the question text, and a list of options. Users
 
 ---
 
-## Custom tools
+## Benutzerdefinierte Tools
 
 Mit Custom Tools definierst du eigene Funktionen, die das LLM aufrufen kann.
 Sie werden in der Konfigurationsdatei definiert und koennen beliebigen Code ausfuehren.
@@ -360,7 +360,7 @@ Sie werden in der Konfigurationsdatei definiert und koennen beliebigen Code ausf
 
 ---
 
-## MCP servers
+## MCP-Server
 
 MCP-Server (Model Context Protocol) binden externe Tools und Dienste ein.
 Dazu gehoeren Datenbanken, API-Integrationen und Drittanbieter-Services.
@@ -369,14 +369,14 @@ Dazu gehoeren Datenbanken, API-Integrationen und Drittanbieter-Services.
 
 ---
 
-## Internals
+## Interna
 
 Intern verwenden Tools wie `grep`, `glob` und `list` [ripgrep](https://github.com/BurntSushi/ripgrep).
 Standardmaessig beachtet ripgrep `.gitignore`, daher werden dort aufgefuehrte Dateien und Ordner nicht durchsucht.
 
 ---
 
-### Ignore patterns
+### Ignorier-Muster
 
 Wenn du normalerweise ignorierte Dateien einschliessen willst, lege im Projekt-Root eine `.ignore`-Datei an.
 Dort kannst du Pfade explizit erlauben.

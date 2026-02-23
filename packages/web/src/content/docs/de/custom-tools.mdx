@@ -1,5 +1,5 @@
 ---
-title: Benutzerdefinierte Werkzeuge
+title: Benutzerdefinierte Tools
 description: Erstellen Sie Tools, die der LLM in OpenCode aufrufen kann.
 ---
 
@@ -7,13 +7,13 @@ Benutzerdefinierte Tools sind von Ihnen erstellte Funktionen, die der LLM währe
 
 ---
 
-## Ein Werkzeug erstellen
+## Ein Tool erstellen
 
-Werkzeuge werden als **TypeScript**- oder **JavaScript**-Dateien definiert. Die Werkzeugdefinition kann jedoch Skripte aufrufen, die in **jeder Sprache** geschrieben sind – TypeScript oder JavaScript wird nur für die Werkzeugdefinition selbst verwendet.
+Tools werden als **TypeScript**- oder **JavaScript**-Dateien definiert. Die Tooldefinition kann jedoch Skripte aufrufen, die in **jeder Sprache** geschrieben sind – TypeScript oder JavaScript wird nur für die Tooldefinition selbst verwendet.
 
 ---
 
-### Location
+### Speicherort
 
 Sie können wie folgt definiert werden:
 
@@ -22,7 +22,7 @@ Sie können wie folgt definiert werden:
 
 ---
 
-### Structure
+### Struktur
 
 Der einfachste Weg, Tools zu erstellen, ist die Verwendung des `tool()`-Helfers, der Typsicherheit und Validierung bietet.
 
@@ -79,7 +79,7 @@ Dadurch werden zwei Tools erstellt: `math_add` und `math_multiply`.
 
 ---
 
-### Arguments
+### Argumente
 
 Sie können `tool.schema` verwenden, was nur [Zod](https://zod.dev) ist, um Argumenttypen zu definieren.
 
@@ -108,7 +108,7 @@ export default {
 
 ---
 
-### Context
+### Kontext
 
 Tools erhalten Kontext zur aktuellen Sitzung:
 
@@ -131,9 +131,9 @@ Verwenden Sie `context.worktree` für das Stammverzeichnis des Git-Arbeitsbaums.
 
 ---
 
-## Examples
+## Beispiele
 
-### Schreiben Sie ein Tool in Python
+### Ein Tool in Python schreiben
 
 Sie können Ihre Tools in jeder gewünschten Sprache schreiben. Hier ist ein Beispiel, das mit Python zwei Zahlen addiert.
 

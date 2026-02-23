@@ -23,6 +23,16 @@ function normalizeSelectedLines(range: SelectedLineRange): SelectedLineRange {
   }
 }
 
+function equalSelectedLines(a: SelectedLineRange | null | undefined, b: SelectedLineRange | null | undefined) {
+  if (!a && !b) return true
+  if (!a || !b) return false
+  const left = normalizeSelectedLines(a)
+  const right = normalizeSelectedLines(b)
+  return (
+    left.start === right.start && left.end === right.end && left.side === right.side && left.endSide === right.endSide
+  )
+}
+
 function createViewSession(dir: string, id: string | undefined) {
   const legacyViewKey = `${dir}/file${id ? "/" + id : ""}.v1`
 
@@ -65,36 +75,36 @@ function createViewSession(dir: string, id: string | undefined) {
   const selectedLines = (path: string) => view.file[path]?.selectedLines
 
   const setScrollTop = (path: string, top: number) => {
-    setView("file", path, (current) => {
-      if (current?.scrollTop === top) return current
-      return {
-        ...(current ?? {}),
-        scrollTop: top,
-      }
-    })
+    setView(
+      produce((draft) => {
+        const file = draft.file[path] ?? (draft.file[path] = {})
+        if (file.scrollTop === top) return
+        file.scrollTop = top
+      }),
+    )
     pruneView(path)
   }
 
   const setScrollLeft = (path: string, left: number) => {
-    setView("file", path, (current) => {
-      if (current?.scrollLeft === left) return current
-      return {
-        ...(current ?? {}),
-        scrollLeft: left,
-      }
-    })
+    setView(
+      produce((draft) => {
+        const file = draft.file[path] ?? (draft.file[path] = {})
+        if (file.scrollLeft === left) return
+        file.scrollLeft = left
+      }),
+    )
     pruneView(path)
   }
 
   const setSelectedLines = (path: string, range: SelectedLineRange | null) => {
     const next = range ? normalizeSelectedLines(range) : null
-    setView("file", path, (current) => {
-      if (current?.selectedLines === next) return current
-      return {
-        ...(current ?? {}),
-        selectedLines: next,
-      }
-    })
+    setView(
+      produce((draft) => {
+        const file = draft.file[path] ?? (draft.file[path] = {})
+        if (equalSelectedLines(file.selectedLines, next)) return
+        file.selectedLines = next
+      }),
+    )
     pruneView(path)
   }
 

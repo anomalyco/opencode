@@ -1,5 +1,5 @@
 ---
-title: "Agent Skills"
+title: Agenten-Skills
 description: "Definiere wiederverwendbares Verhalten ueber SKILL.md"
 ---
 
@@ -8,7 +8,7 @@ Sie werden bei Bedarf ueber das native `skill`-Tool geladen, wenn ein Agent sie 
 
 ---
 
-## Place files
+## Dateien platzieren
 
 Erstelle pro Skill-Namen einen Ordner und lege dort eine `SKILL.md` ab.
 OpenCode sucht in folgenden Pfaden:
@@ -22,7 +22,7 @@ OpenCode sucht in folgenden Pfaden:
 
 ---
 
-## Understand discovery
+## Discovery verstehen
 
 Bei projektlokalen Pfaden laeuft OpenCode vom aktuellen Verzeichnis nach oben bis zum Git-Worktree.
 Dabei werden passende `skills/*/SKILL.md` in `.opencode/` sowie passende Dateien unter `.claude/skills/*/SKILL.md` und `.agents/skills/*/SKILL.md` geladen.
@@ -31,7 +31,7 @@ Globale Definitionen kommen zusaetzlich aus `~/.config/opencode/skills/*/SKILL.m
 
 ---
 
-## Write frontmatter
+## Frontmatter schreiben
 
 Jede `SKILL.md` muss mit YAML-Frontmatter beginnen.
 Nur diese Felder werden ausgewertet:
@@ -46,7 +46,7 @@ Unbekannte Frontmatter-Felder werden ignoriert.
 
 ---
 
-## Validate names
+## Namen validieren
 
 `name` muss:
 
@@ -64,14 +64,14 @@ Entsprechender Regex:
 
 ---
 
-## Follow length rules
+## Längenregeln beachten
 
 `description` muss 1-1024 Zeichen lang sein.
 Formuliere sie so konkret, dass Agenten den Skill eindeutig auswaehlen koennen.
 
 ---
 
-## Use an example
+## Beispiel verwenden
 
 Erstelle `.opencode/skills/git-release/SKILL.md` zum Beispiel so:
 
@@ -100,7 +100,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ---
 
-## Recognize tool description
+## Tool-Beschreibung erkennen
 
 OpenCode listet verfuegbare Skills in der Beschreibung des `skill`-Tools.
 Jeder Eintrag enthaelt Namen und Beschreibung:
@@ -122,7 +122,7 @@ skill({ name: "git-release" })
 
 ---
 
-## Configure permissions
+## Berechtigungen konfigurieren
 
 Steuere in `opencode.json` per Muster, auf welche Skills Agenten zugreifen duerfen:
 
@@ -149,7 +149,7 @@ Muster unterstuetzen Wildcards: `internal-*` passt z. B. auf `internal-docs` ode
 
 ---
 
-## Override per agent
+## Pro Agent überschreiben
 
 Du kannst einzelnen Agenten andere Berechtigungen als die globalen Defaults geben.
 
@@ -181,7 +181,7 @@ permission:
 
 ---
 
-## Disable the skill tool
+## Skill-Tool deaktivieren
 
 Deaktiviere Skills komplett fuer Agenten, die sie nicht nutzen sollen:
 
@@ -212,7 +212,7 @@ Wenn deaktiviert, wird der Abschnitt `<available_skills>` komplett weggelassen.
 
 ---
 
-## Troubleshoot loading
+## Fehlerbehebung beim Laden
 
 Wenn ein Skill nicht auftaucht:
 

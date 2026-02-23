@@ -40,13 +40,13 @@ OpenCode viene con dos subagentes integrados, **General** y **Explore**. Veremos
 
 ---
 
-## Built-in
+## Integrados
 
 OpenCode viene con dos agentes primarios integrados y dos subagentes integrados.
 
 ---
 
-### Use build
+### Build
 
 _Modo_: `primary`
 
@@ -54,7 +54,7 @@ Build es el agente principal **predeterminado** con todas las herramientas habil
 
 ---
 
-### Use plan
+### Plan
 
 _Modo_: `primary`
 
@@ -68,7 +68,7 @@ Este agente es útil cuando desea que LLM analice código, sugiera cambios o cre
 
 ---
 
-### Use general
+### General
 
 _Modo_: `subagent`
 
@@ -76,7 +76,7 @@ Un agente de uso general para investigar preguntas complejas y ejecutar tareas d
 
 ---
 
-### Use explore
+### Explore
 
 _Modo_: `subagent`
 
@@ -84,7 +84,7 @@ Un agente rápido y de solo lectura para explorar bases de código. No se pueden
 
 ---
 
-### Use compaction
+### Compactación
 
 _Modo_: `primary`
 
@@ -92,7 +92,7 @@ Agente de sistema oculto que compacta un contexto largo en un resumen más peque
 
 ---
 
-### Use title
+### Título
 
 _Modo_: `primary`
 
@@ -100,7 +100,7 @@ Agente del sistema oculto que genera títulos de sesión cortos. Se ejecuta auto
 
 ---
 
-### Use summary
+### Resumen
 
 _Modo_: `primary`
 
@@ -128,7 +128,7 @@ Agente del sistema oculto que crea resúmenes de sesiones. Se ejecuta automátic
 
 ---
 
-## Configurar
+## Configuración
 
 Puede personalizar los agentes integrados o crear los suyos propios mediante la configuración. Los agentes se pueden configurar de dos maneras:
 
@@ -216,7 +216,7 @@ Veamos estas opciones de configuración en detalle.
 
 ---
 
-### Description
+### Descripción
 
 Utilice la opción `description` para proporcionar una breve descripción de lo que hace el agente y cuándo usarlo.
 
@@ -234,7 +234,7 @@ Esta es una opción de configuración **obligatoria**.
 
 ---
 
-### Temperature
+### Temperatura
 
 Controle la aleatoriedad y la creatividad de las respuestas de LLM con la configuración `temperature`.
 
@@ -281,7 +281,7 @@ Si no se especifica ninguna temperatura, OpenCode utiliza valores predeterminado
 
 ---
 
-### Max steps
+### Pasos máximos
 
 Controle la cantidad máxima de iteraciones agentes que un agente puede realizar antes de verse obligado a responder solo con texto. Esto permite a los usuarios que desean controlar los costos establecer un límite a las acciones de agencia.
 
@@ -307,7 +307,7 @@ El campo heredado `maxSteps` está en desuso. Utilice `steps` en su lugar.
 
 ---
 
-### Disable
+### Deshabilitar
 
 Establezca en `true` para deshabilitar el agente.
 
@@ -323,7 +323,7 @@ Establezca en `true` para deshabilitar el agente.
 
 ---
 
-### Prompt
+### Indicación
 
 Especifique un archivo de aviso del sistema personalizado para este agente con la configuración `prompt`. El archivo de aviso debe contener instrucciones específicas para el propósito del agente.
 
@@ -341,7 +341,7 @@ Esta ruta es relativa a donde se encuentra el archivo de configuración. Entonce
 
 ---
 
-### Model
+### Modelo
 
 Utilice la configuración `model` para anular el modelo de este agente. Útil para utilizar diferentes modelos optimizados para diferentes tareas. Por ejemplo, un modelo más rápido de planificación, un modelo más capaz de implementación.
 
@@ -363,7 +363,7 @@ El ID del modelo en su configuración OpenCode usa el formato `provider/model-id
 
 ---
 
-### Tools
+### Herramientas
 
 Controle qué herramientas están disponibles en este agente con la configuración `tools`. Puede habilitar o deshabilitar herramientas específicas configurándolas en `true` o `false`.
 
@@ -410,7 +410,7 @@ También puedes utilizar comodines para controlar varias herramientas a la vez. 
 
 ---
 
-### Permissions
+### Permisos
 
 Puede configurar permisos para administrar qué acciones puede realizar un agente. Actualmente, los permisos para las herramientas `edit`, `bash` y `webfetch` se pueden configurar para:
 
@@ -522,7 +522,7 @@ Dado que la última regla de coincidencia tiene prioridad, coloque el comodín `
 
 ---
 
-### Mode
+### Modo
 
 Controle el modo del agente con la configuración `mode`. La opción `mode` se utiliza para determinar cómo se puede utilizar el agente.
 
@@ -540,7 +540,7 @@ La opción `mode` se puede configurar en `primary`, `subagent` o `all`. Si no se
 
 ---
 
-### Hidden
+### Oculto
 
 Oculte un subagente del menú de autocompletar `@` con `hidden: true`. Útil para subagentes internos que solo deben ser invocados mediante programación por otros agentes a través de la herramienta Tarea.
 
@@ -563,7 +563,7 @@ Sólo aplica para agentes `mode: subagent`.
 
 ---
 
-### Task permissions
+### Permisos de tarea
 
 Controle qué subagentes puede invocar un agente a través de la herramienta Tarea con `permission.task`. Utiliza patrones globales para una combinación flexible.
 
@@ -635,7 +635,7 @@ Los valores oscilan entre 0,0 y 1,0. Los valores más bajos están más enfocado
 
 ---
 
-### Additional
+### Adicional
 
 Cualquier otra opción que especifique en la configuración de su agente se **pasará directamente** al proveedor como opciones de modelo. Esto le permite utilizar funciones y parámetros específicos del proveedor.
 
@@ -662,7 +662,7 @@ Ejecute `opencode models` para ver una lista de los modelos disponibles.
 
 ---
 
-## Create agents
+## Crear agentes
 
 Puede crear nuevos agentes usando el siguiente comando:
 
@@ -684,11 +684,11 @@ Este comando interactivo:
 
 A continuación se muestran algunos casos de uso comunes para diferentes agentes.
 
-- **Build agent**: trabajo de desarrollo completo con todas las herramientas habilitadas
-- **Plan agent**: Análisis y planificación sin realizar cambios
-- **Review agent**: revisión de código con acceso de solo lectura más herramientas de documentación
-- **Debug agent**: centrado en la investigación con bash y herramientas de lectura habilitadas
-- **Docs agent**: escritura de documentación con operaciones de archivos pero sin comandos del sistema.
+- **Agente Build**: trabajo de desarrollo completo con todas las herramientas habilitadas
+- **Agente Plan**: Análisis y planificación sin realizar cambios
+- **Agente Review**: revisión de código con acceso de solo lectura más herramientas de documentación
+- **Agente Debug**: centrado en la investigación con bash y herramientas de lectura habilitadas
+- **Agente Docs**: escritura de documentación con operaciones de archivos pero sin comandos del sistema.
 
 ---
 
@@ -702,7 +702,7 @@ A continuación se muestran algunos agentes de ejemplo que pueden resultarle út
 
 ---
 
-### Documentation agent
+### Agente de documentación
 
 ```markdown title="~/.config/opencode/agents/docs-writer.md"
 ---
@@ -724,7 +724,7 @@ Focus on:
 
 ---
 
-### Security auditor
+### Auditor de seguridad
 
 ```markdown title="~/.config/opencode/agents/security-auditor.md"
 ---

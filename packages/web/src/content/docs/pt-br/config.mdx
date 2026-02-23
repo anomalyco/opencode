@@ -1,5 +1,5 @@
 ---
-title: Config
+title: Configuração
 description: Usando a configuração JSON do opencode.
 ---
 
@@ -23,9 +23,9 @@ O opencode suporta os formatos **JSON** e **JSONC** (JSON com Comentários).
 
 ---
 
-## Localizações
+## Locais
 
-Você pode colocar sua configuração em algumas localizações diferentes e elas têm uma
+Você pode colocar sua configuração em alguns locais diferentes e eles têm uma
 ordem de precedência diferente.
 
 :::note
@@ -320,11 +320,11 @@ Você pode configurar agentes especializados para tarefas específicas através 
   "$schema": "https://opencode.ai/config.json",
   "agent": {
     "code-reviewer": {
-      "description": "Reviews code for best practices and potential issues",
+      "description": "Revisa código para melhores práticas e potenciais problemas",
       "model": "anthropic/claude-sonnet-4-5",
-      "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
+      "prompt": "Você é um revisor de código. Foque em segurança, performance e manutenibilidade.",
       "tools": {
-        // Disable file modification tools for review-only agent
+        // Desabilitar ferramentas de modificação de arquivo para agente de apenas revisão
         "write": false,
         "edit": false,
       },
@@ -384,14 +384,14 @@ Você pode configurar comandos personalizados para tarefas repetitivas através 
   "$schema": "https://opencode.ai/config.json",
   "command": {
     "test": {
-      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
-      "description": "Run tests with coverage",
+      "template": "Execute a suíte de testes completa com relatório de cobertura e mostre quaisquer falhas.\nConcentre-se nos testes com falha e sugira correções.",
+      "description": "Execute testes com cobertura",
       "agent": "build",
       "model": "anthropic/claude-haiku-4-5",
     },
     "component": {
-      "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",
-      "description": "Create a new component",
+      "template": "Crie um novo componente React chamado $ARGUMENTS com suporte a TypeScript.\nInclua tipagem adequada e estrutura básica.",
+      "description": "Crie um novo componente",
     },
   },
 }

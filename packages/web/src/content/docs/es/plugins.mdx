@@ -9,13 +9,13 @@ Para ver ejemplos, consulte los [complementos](/docs/ecosystem#plugins) creados 
 
 ---
 
-## Usa un complemento
+## Usar un complemento
 
 Hay dos formas de cargar complementos.
 
 ---
 
-### De archivos locales
+### Desde archivos locales
 
 Coloque los archivos JavaScript o TypeScript en el directorio del complemento.
 
@@ -26,7 +26,7 @@ Los archivos en estos directorios se cargan automáticamente al inicio.
 
 ---
 
-### De npm
+### Desde npm
 
 Especifique paquetes npm en su archivo de configuración.
 
@@ -51,7 +51,7 @@ Los **complementos npm** se instalan automáticamente usando Bun al inicio. Los 
 
 ---
 
-### Cargar orden
+### Orden de carga
 
 Los complementos se cargan desde todas las fuentes y todos los enlaces se ejecutan en secuencia. El orden de carga es:
 
@@ -123,7 +123,7 @@ La función del complemento recibe:
 
 ---
 
-### TypeScript soporte
+### Soporte TypeScript
 
 Para los complementos TypeScript, puede importar tipos desde el paquete de complementos:
 
@@ -156,7 +156,7 @@ Los complementos pueden suscribirse a eventos como se ve a continuación en la s
 
 - `installation.updated`
 
-#### LSP Eventos
+#### Eventos LSP
 
 - `lsp.client.diagnostics`
 - `lsp.updated`
@@ -188,11 +188,11 @@ Los complementos pueden suscribirse a eventos como se ve a continuación en la s
 - `session.status`
 - `session.updated`
 
-#### Todo Eventos
+#### Eventos de Todo
 
 - `todo.updated`
 
-#### Eventos Shell
+#### Eventos de Shell
 
 - `shell.env`
 
@@ -201,7 +201,7 @@ Los complementos pueden suscribirse a eventos como se ve a continuación en la s
 - `tool.execute.after`
 - `tool.execute.before`
 
-#### TUI Eventos
+#### Eventos TUI
 
 - `tui.prompt.append`
 - `tui.command.execute`
@@ -240,7 +240,7 @@ Si está utilizando la aplicación de escritorio OpenCode, puede enviar notifica
 
 ---
 
-### protección .env
+### Protección .env
 
 Evite que opencode lea archivos `.env`:
 
@@ -331,7 +331,7 @@ Niveles: `debug`, `info`, `warn`, `error`. Consulte la [documentación del SDK](
 
 ---
 
-### Ganchos de compactación
+### Hooks de compactación
 
 Personalice el contexto incluido cuando se compacta una sesión:
 
@@ -355,7 +355,7 @@ Include any state that should persist across compaction:
 }
 ```
 
-El gancho `experimental.session.compacting` se activa antes de que LLM genere un resumen de continuación. Úselo para inyectar contexto específico del dominio que el mensaje de compactación predeterminado omitiría.
+El hook `experimental.session.compacting` se activa antes de que LLM genere un resumen de continuación. Úselo para inyectar contexto específico del dominio que el mensaje de compactación predeterminado omitiría.
 
 También puede reemplazar completamente el mensaje de compactación configurando `output.prompt`:
 

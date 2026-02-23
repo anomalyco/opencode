@@ -10,13 +10,13 @@ Komanda `opencode serve` pokrece headless HTTP server koji izlaže OpenAPI endpo
 
 ---
 
-### Usage
+### Korištenje
 
 ```bash
 opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
-#### Options
+#### Opcije
 
 | Zastava         | Opis                                | Default          |
 | --------------- | ----------------------------------- | ---------------- |
@@ -34,7 +34,7 @@ opencode serve --cors http://localhost:5173 --cors https://app.example.com
 
 ---
 
-### Authentication
+### Autentifikacija
 
 Postavite `OPENCODE_SERVER_PASSWORD` da zastitite server HTTP basic auth mehanizmom. Korisnicko ime je po defaultu `opencode`, ili postavite `OPENCODE_SERVER_USERNAME` za nadjacavanje. Ovo vazi i za `opencode serve` i za `opencode web`.
 
@@ -44,7 +44,7 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve
 
 ---
 
-### How it works
+### Kako radi
 
 Kada pokrenete `opencode`, pokrecu se TUI i server. TUI je klijent koji komunicira sa serverom. Server izlaže OpenAPI 3.1 spec endpoint koji se koristi i za generisanje [SDK-a](/docs/sdk).
 
@@ -58,7 +58,7 @@ Mozete pokrenuti `opencode serve` da startate standalone server. Ako je opencode
 
 ---
 
-#### Connect to an existing server
+#### Povezivanje na postojeći server
 
 Kada pokrenete TUI, port i hostname se nasumicno dodijele. Umjesto toga, mozete zadati `--hostname` i `--port` [zastave](/docs/cli), pa se povezati na taj server.
 
@@ -66,7 +66,7 @@ Endpoint [`/tui`](#tui) mozete koristiti za upravljanje TUI-jem kroz server. Na 
 
 ---
 
-## Spec
+## Specifikacija
 
 Server objavljuje OpenAPI 3.1 specifikaciju koju mozete vidjeti na:
 
@@ -78,13 +78,13 @@ Na primjer, `http://localhost:4096/doc`. Koristite specifikaciju da generisete k
 
 ---
 
-## APIs
+## API-ji
 
 opencode server izlaže sljedece API-je.
 
 ---
 
-### Global
+### Globalno
 
 | Metoda | Putanja          | Opis                           | Odgovor                              |
 | ------ | ---------------- | ------------------------------ | ------------------------------------ |
@@ -93,7 +93,7 @@ opencode server izlaže sljedece API-je.
 
 ---
 
-### Project
+### Projekt
 
 | Metoda | Putanja            | Opis                    | Odgovor                                       |
 | ------ | ------------------ | ----------------------- | --------------------------------------------- |
@@ -102,7 +102,7 @@ opencode server izlaže sljedece API-je.
 
 ---
 
-### Path & VCS
+### Putanja i VCS
 
 | Metoda | Putanja | Opis                                 | Odgovor                                     |
 | ------ | ------- | ------------------------------------ | ------------------------------------------- |
@@ -111,7 +111,7 @@ opencode server izlaže sljedece API-je.
 
 ---
 
-### Instance
+### Instanca
 
 | Metoda | Putanja             | Opis                         | Odgovor   |
 | ------ | ------------------- | ---------------------------- | --------- |
@@ -119,7 +119,7 @@ opencode server izlaže sljedece API-je.
 
 ---
 
-### Config
+### Konfiguracija
 
 | Metoda  | Putanja             | Opis                              | Odgovor                                                                                  |
 | ------- | ------------------- | --------------------------------- | ---------------------------------------------------------------------------------------- |
@@ -129,7 +129,7 @@ opencode server izlaže sljedece API-je.
 
 ---
 
-### Provider
+### Provajder
 
 | Metoda | Putanja                          | Opis                                 | Odgovor                                                                             |
 | ------ | -------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------- |
@@ -140,7 +140,7 @@ opencode server izlaže sljedece API-je.
 
 ---
 
-### Sessions
+### Sesije
 
 | Metoda   | Putanja                                  | Opis                                  | Napomene                                                                           |
 | -------- | ---------------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------- |
@@ -165,7 +165,7 @@ opencode server izlaže sljedece API-je.
 
 ---
 
-### Messages
+### Poruke
 
 | Metoda | Putanja                           | Opis                                    | Napomene                                                                                                                                                              |
 | ------ | --------------------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -178,7 +178,7 @@ opencode server izlaže sljedece API-je.
 
 ---
 
-### Commands
+### Naredbe
 
 | Metoda | Putanja    | Opis              | Odgovor                                       |
 | ------ | ---------- | ----------------- | --------------------------------------------- |
@@ -186,7 +186,7 @@ opencode server izlaže sljedece API-je.
 
 ---
 
-### Files
+### Datoteke
 
 | Metoda | Putanja                  | Opis                               | Odgovor                                                                                     |
 | ------ | ------------------------ | ---------------------------------- | ------------------------------------------------------------------------------------------- |
@@ -197,17 +197,17 @@ opencode server izlaže sljedece API-je.
 | `GET`  | `/file/content?path=<p>` | Read a file                        | <a href={typesUrl}><code>FileContent</code></a>                                             |
 | `GET`  | `/file/status`           | Get status for tracked files       | <a href={typesUrl}><code>File[]</code></a>                                                  |
 
-#### `/find/file` query parameters
+#### `/find/file` parametri upita
 
-- `query` (required) — search string (fuzzy match)
-- `type` (optional) — limit results to `"file"` or `"directory"`
-- `directory` (optional) — override the project root for the search
-- `limit` (optional) — max results (1–200)
-- `dirs` (optional) — legacy flag (`"false"` returns only files)
+- `query` (obavezno) — niz za pretragu (fuzzy podudaranje)
+- `type` (opcionalno) — ograniči rezultate na `"file"` ili `"directory"`
+- `directory` (opcionalno) — nadjačaj korijen projekta za pretragu
+- `limit` (opcionalno) — maksimalni rezultati (1–200)
+- `dirs` (opcionalno) — zastarjela zastavica (`"false"` vraća samo datoteke)
 
 ---
 
-### Tools (Experimental)
+### Alati (Eksperimentalno)
 
 | Metoda | Putanja                                     | Opis                                     | Odgovor                                      |
 | ------ | ------------------------------------------- | ---------------------------------------- | -------------------------------------------- |
@@ -216,7 +216,7 @@ opencode server izlaže sljedece API-je.
 
 ---
 
-### LSP, Formatters & MCP
+### LSP, Formateri & MCP
 
 | Metoda | Putanja      | Opis                       | Odgovor                                                  |
 | ------ | ------------ | -------------------------- | -------------------------------------------------------- |
@@ -227,7 +227,7 @@ opencode server izlaže sljedece API-je.
 
 ---
 
-### Agents
+### Agenti
 
 | Metoda | Putanja  | Opis                      | Odgovor                                     |
 | ------ | -------- | ------------------------- | ------------------------------------------- |
@@ -235,7 +235,7 @@ opencode server izlaže sljedece API-je.
 
 ---
 
-### Logging
+### Bilježenje
 
 | Metoda | Putanja | Opis                                                         | Odgovor   |
 | ------ | ------- | ------------------------------------------------------------ | --------- |
@@ -261,7 +261,7 @@ opencode server izlaže sljedece API-je.
 
 ---
 
-### Auth
+### Autentifikacija
 
 | Metoda | Putanja     | Opis                                                            | Odgovor   |
 | ------ | ----------- | --------------------------------------------------------------- | --------- |
@@ -269,7 +269,7 @@ opencode server izlaže sljedece API-je.
 
 ---
 
-### Events
+### Događaji
 
 | Metoda | Putanja  | Opis                                                                          | Odgovor                   |
 | ------ | -------- | ----------------------------------------------------------------------------- | ------------------------- |
@@ -277,7 +277,7 @@ opencode server izlaže sljedece API-je.
 
 ---
 
-### Docs
+### Dokumentacija
 
 | Metoda | Putanja | Opis                      | Odgovor                     |
 | ------ | ------- | ------------------------- | --------------------------- |

@@ -8,7 +8,7 @@ Le skill vengono caricate on-demand tramite lo strumento nativo `skill`: gli age
 
 ---
 
-## Posiziona i file
+## Posizione dei file
 
 Crea una cartella per ogni nome di skill e metti un `SKILL.md` al suo interno.
 OpenCode cerca in queste posizioni:
@@ -22,7 +22,7 @@ OpenCode cerca in queste posizioni:
 
 ---
 
-## Comprendere la discovery
+## Discovery
 
 Per i percorsi locali al progetto, OpenCode risale dalla directory di lavoro corrente finche' non raggiunge il worktree git.
 Carica qualsiasi `skills/*/SKILL.md` corrispondente in `.opencode/` e qualsiasi `.claude/skills/*/SKILL.md` o `.agents/skills/*/SKILL.md` corrispondente lungo il percorso.
@@ -31,7 +31,7 @@ Le definizioni globali vengono caricate anche da `~/.config/opencode/skills/*/SK
 
 ---
 
-## Scrivi il frontmatter
+## Frontmatter
 
 Ogni `SKILL.md` deve iniziare con frontmatter YAML.
 Sono riconosciuti solo questi campi:
@@ -46,7 +46,7 @@ I campi di frontmatter sconosciuti vengono ignorati.
 
 ---
 
-## Valida i nomi
+## Validazione nomi
 
 `name` deve:
 
@@ -64,14 +64,14 @@ Regex equivalente:
 
 ---
 
-## Rispetta le regole di lunghezza
+## Regole di lunghezza
 
 `description` deve essere lunga 1-1024 caratteri.
 Tieni la descrizione abbastanza specifica da permettere all'agente di scegliere correttamente.
 
 ---
 
-## Usa un esempio
+## Esempio
 
 Crea `.opencode/skills/git-release/SKILL.md` cosi':
 
@@ -100,7 +100,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ---
 
-## Riconoscere la descrizione dello strumento
+## Descrizione strumento
 
 OpenCode elenca le skill disponibili nella descrizione dello strumento `skill`.
 Ogni voce include il nome della skill e la descrizione:
@@ -122,7 +122,7 @@ skill({ name: "git-release" })
 
 ---
 
-## Configura i permessi
+## Permessi
 
 Controlla a quali skill gli agenti possono accedere usando permessi basati su pattern in `opencode.json`:
 
@@ -149,7 +149,7 @@ I pattern supportano wildcard: `internal-*` corrisponde a `internal-docs`, `inte
 
 ---
 
-## Sovrascrivi per agente
+## Sovrascrittura per agente
 
 Dai ad agenti specifici permessi diversi dai default globali.
 
@@ -181,7 +181,7 @@ permission:
 
 ---
 
-## Disabilita lo strumento skill
+## Disabilitare skill
 
 Disabilita completamente le skill per agenti che non dovrebbero usarle:
 
@@ -212,7 +212,7 @@ Quando e' disabilitato, la sezione `<available_skills>` viene omessa completamen
 
 ---
 
-## Risoluzione problemi di caricamento
+## Risoluzione problemi
 
 Se una skill non compare:
 

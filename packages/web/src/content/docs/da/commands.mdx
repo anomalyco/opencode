@@ -13,7 +13,7 @@ Brugerdefinerede kommandoer er ud over de indbyggede kommandoer som `/init`, `/u
 
 ---
 
-## Opret kommandofiler
+## Oprettelse af kommandofiler
 
 Opret markdown-filer i mappen `commands/` for at definere brugerdefinerede kommandoer.
 
@@ -40,7 +40,7 @@ Brug kommandoen ved at skrive `/` efterfulgt af kommandonavnet.
 
 ---
 
-## Konfigurer
+## Konfiguration
 
 Du kan tilføje brugerdefinerede kommandoer gennem OpenCode-konfigurationen eller ved at oprette markdown-filer i `commands/`-mappen.
 
@@ -102,7 +102,7 @@ du løber:
 
 ---
 
-## Spørg config
+## Prompt-konfiguration
 
 Spørgsmålene til de brugerdefinerede kommandoer understøtter flere specielle pladsholdere og syntaks.
 
@@ -195,7 +195,7 @@ Kommandoer kører i dit projekts rodmappe, og deres output bliver en del af prom
 
 ---
 
-### Filreferencer
+### Fil-referencer
 
 Inkluder filer i din kommando ved hjælp af `@` efterfulgt af filnavnet.
 
@@ -218,7 +218,7 @@ Lad os se nærmere på konfigurationsmulighederne.
 
 ---
 
-### Skabelon
+### Skabelon (`template`)
 
 Indstillingen `template` definerer den prompt, der sendes til LLM, når kommandoen udføres.
 
@@ -236,7 +236,7 @@ Dette er en **påkrævet** konfigurationsindstilling.
 
 ---
 
-### Beskrivelse
+### Beskrivelse (`description`)
 
 Brug indstillingen `description` til at give en kort beskrivelse af, hvad kommandoen gør.
 
@@ -274,7 +274,7 @@ Dette er en **valgfri** konfigurationsindstilling. Hvis det ikke er angivet, er 
 
 ---
 
-### Underopgave
+### Underopgave (`subtask`)
 
 Brug `subtask` boolean til at tvinge kommandoen til at udløse en [subagent](/docs/agents/#subagents) påkaldelse.
 Dette er nyttigt, hvis du ønsker, at kommandoen ikke skal forurene din primære kontekst og vil **tvinge** agenten til at fungere som en underagent,
@@ -312,7 +312,7 @@ Dette er en **valgfri** konfigurationsindstilling.
 
 ---
 
-## Indbygget
+## Indbyggede kommandoer
 
 opencode indeholder flere indbyggede kommandoer som `/init`, `/undo`, `/redo`, `/share`, `/help`; [learn more](/docs/tui#commands).
 

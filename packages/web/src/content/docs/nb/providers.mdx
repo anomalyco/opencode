@@ -10,7 +10,7 @@ OpenCode bruker [AI SDK](https://ai-sdk.dev/) og [Models.dev](https://models.dev
 
 For å legge til en leverandør må du:
 
-1. Legg til API-nøklene for leverandøren ved å bruke kommandoen `/connect`.
+1. Legg til API-nøkkelen for leverandøren ved å bruke kommandoen `/connect`.
 2. Konfigurer leverandøren i OpenCode-konfigurasjonen.
 
 ---
@@ -22,16 +22,16 @@ i `~/.local/share/opencode/auth.json`.
 
 ---
 
-### Konfig
+### Konfigurasjon
 
 Du kan tilpasse leverandørene gjennom `provider`-delen i OpenCode
 konfig.
 
 ---
 
-#### Base URL
+#### Base-URL
 
-Du kan tilpasse basen URL for enhver leverandør ved å angi alternativet `baseURL`. Dette er nyttig når du bruker proxy-tjenester eller tilpassede endepunkter.
+Du kan tilpasse base-URL-en for enhver leverandør ved å angi alternativet `baseURL`. Dette er nyttig når du bruker proxy-tjenester eller tilpassede endepunkter.
 
 ```json title="opencode.json" {6}
 {
@@ -178,13 +178,13 @@ Slik bruker du Amazon Bedrock med OpenCode:
    **Tilgjengelige alternativer:**
    - `region` - AWS region (f.eks. `us-east-1`, `eu-west-1`)
    - `profile` - AWS navngitt profil fra `~/.aws/credentials`
-   - `endpoint` - Egendefinert endepunkt URL for VPC endepunkter (alias for generisk `baseURL`-alternativ)
+   - `endpoint` - Egendefinert endepunkt URL for VPC-endepunkter (alias for generisk `baseURL`-alternativ)
 
    :::tip
    Alternativer for konfigurasjonsfil har forrang over miljøvariabler.
    :::
 
-   #### Avansert: VPC Sluttpunkter
+   #### Avansert: VPC-endepunkter
 
    Hvis du bruker VPC-endepunkter for Bedrock:
 
@@ -282,7 +282,7 @@ For egendefinerte slutningsprofiler, bruk modellen og leverandørnavnet i nøkke
 Å bruke Claude Pro/Max-abonnementet ditt i opencode støttes ikke offisielt av [Anthropic](https://anthropic.com).
 :::
 
-##### Bruke API-tastene
+##### Bruke API-nøkler
 
 Du kan også velge **Opprett en API nøkkel** hvis du ikke har et Pro/Max-abonnement. Den åpner også nettleseren din og ber deg logge på Anthropic og gi deg en kode du kan lime inn i terminalen din.
 
@@ -684,7 +684,7 @@ for å lagre token i OpenCode auth-lagring.
 
 ##### Selvhostet GitLab
 
-:::note[compliance note]
+:::note[Merknad om samsvar]
 OpenCode bruker en liten modell for noen AI oppgaver som å generere økttittelen.
 Den er konfigurert til å bruke gpt-5-nano som standard, hostet av Zen. For å låse OpenCode
 for kun å bruke din egen GitLab-hostede forekomst, legg til følgende i din
@@ -980,9 +980,9 @@ Her er [Helicone's Model Directory](https://helicone.ai/models), du trenger denn
 }
 ```
 
-#### Egendefinerte topptekster
+#### Egendefinerte headere
 
-Helicone støtter tilpassede overskrifter for funksjoner som bufring, brukersporing og øktadministrasjon. Legg dem til leverandørkonfigurasjonen din ved å bruke `options.headers`:
+Helicone støtter tilpassede headere for funksjoner som bufring, brukersporing og øktadministrasjon. Legg dem til leverandørkonfigurasjonen din ved å bruke `options.headers`:
 
 ```jsonc title="~/.config/opencode/opencode.jsonc"
 {
@@ -1019,9 +1019,9 @@ Legg den til i konfigurasjonen din.
 }
 ```
 
-Programtillegget injiserer `Helicone-Session-Id` og `Helicone-Session-Name` overskrifter i forespørslene dine. På Helicones Sessions-side vil du se hver OpenCode-samtale oppført som en separat økt.
+Programtillegget injiserer `Helicone-Session-Id` og `Helicone-Session-Name` headere i forespørslene dine. På Helicones Sessions-side vil du se hver OpenCode-samtale oppført som en separat økt.
 
-##### Vanlige helikonhoder
+##### Vanlige Helicone-headere
 
 | Overskrift                 | Beskrivelse                                                                |
 | -------------------------- | -------------------------------------------------------------------------- |
@@ -1326,7 +1326,7 @@ Vi anbefaler at du registrerer deg for [ChatGPT Plus eller Pro](https://chatgpt.
    /models
    ```
 
-##### Bruke API-tastene
+##### Bruke API-nøkler
 
 Hvis du allerede har en API-nøkkel, kan du velge **Angi API-nøkkel manuelt** og lime den inn i terminalen.
 
@@ -1866,7 +1866,7 @@ Her er et eksempel på innstilling av alternativene `apiKey`, `headers` og model
 Konfigurasjonsdetaljer:
 
 - **apiKey**: Angi med `env` variabel syntaks, [finn ut mer](/docs/config#env-vars).
-- **overskrifter**: Egendefinerte overskrifter sendt med hver forespørsel.
+- **headere**: Egendefinerte headere sendt med hver forespørsel.
 - **limit.context**: Maksimalt Input Tokens som modellen godtar.
 - **limit.output**: Maksimalt antall tokens modellen kan generere.
 

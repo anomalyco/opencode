@@ -1,5 +1,5 @@
 ---
-title: MCP servere
+title: MCP-servere
 description: Tilføj lokale og eksterne MCP værktøjer.
 ---
 
@@ -9,7 +9,7 @@ Når de er tilføjet, er MCP automatisk tilgængelig for LLM sammen med indbygge
 
 ---
 
-#### Caveats
+#### Forbehold
 
 Når du bruger en MCP-server, føjes den til konteksten. Dette kan hurtigt stige, hvis du har mange værktøjer. Så vi anbefaler at være forsigtig med hvilke MCP-servere du bruger.
 
@@ -21,7 +21,7 @@ Visse MCP-servere, som GitHub MCP-servere, har en tendens til at tilføje mange 
 
 ---
 
-## Aktiver
+## Aktivering
 
 Du kan definere MCP-servere i din [OpenCode Config](https://opencode.ai/docs/config/) under `mcp`. Tilføj hver MCP med et unikt navn. Du kan henvise til denne MCP ved navn, når du spørger LLM.
 
@@ -44,7 +44,7 @@ Du kan også deaktivere en server ved at indstille `enabled` til `false`. Dette 
 
 ---
 
-### Overriding remote defaults
+### Tilsidesættelse af eksterne standarder
 
 Organisationer kan levere standard MCP-servere via deres `.well-known/opencode`-slutpunkt. Disse servere kan være deaktiveret som standard, hvilket giver brugerne mulighed for at tilmelde sig dem, de har brug for.
 
@@ -112,7 +112,7 @@ use the mcp_everything tool to add the number 3 and 4
 
 ---
 
-#### Options
+#### Indstillinger
 
 Her er alle muligheder for at konfigurere en lokal MCP-server.
 
@@ -126,7 +126,7 @@ Her er alle muligheder for at konfigurere en lokal MCP-server.
 
 ---
 
-## Remote
+## Ekstern
 
 Tilføj ekstern MCP-server ved at indstille `type` til `"remote"`.
 
@@ -150,7 +150,7 @@ Tilføj ekstern MCP-server ved at indstille `type` til `"remote"`.
 
 ---
 
-#### Options
+#### Indstillinger
 
 | Mulighed  | Skriv   | Påkrævet | Beskrivelse                                                                          |
 | --------- | ------- | -------- | ------------------------------------------------------------------------------------ |
@@ -173,7 +173,7 @@ OpenCode håndterer automatisk OAuth-godkendelse for eksterne MCP-servere. Når 
 
 ---
 
-### Automatic
+### Automatisk
 
 For de fleste OAuth-aktiverede MCP-servere kræver ingen speciel konfiguration. Bare konfigureret fjernserver:
 
@@ -193,7 +193,7 @@ Hvis serveren kræver godkendelse, vil OpenCode bede dig om at godkende, når du
 
 ---
 
-### Pre-registered
+### Forhåndsregistreret
 
 Hvis du har klientlegitimationsoplysninger fra MCP-serverudbyderen, kan du konfigurere dem:
 
@@ -216,7 +216,7 @@ Hvis du har klientlegitimationsoplysninger fra MCP-serverudbyderen, kan du konfi
 
 ---
 
-### Authenticating
+### Godkendelse
 
 Du kan manuelt udløse godkendelse eller administrere legitimationsoplysninger.
 
@@ -242,7 +242,7 @@ Kommandoen `mcp auth` åbner din browser for godkendelse. Når du har godkendt, 
 
 ---
 
-#### Disabling OAuth
+#### Deaktivering af OAuth
 
 Hvis du vil deaktivere automatisk OAuth for en server (f.eks. for servere, der bruger API-nøgler i stedet), skal du indstille `oauth` til `false`:
 
@@ -264,7 +264,7 @@ Hvis du vil deaktivere automatisk OAuth for en server (f.eks. for servere, der b
 
 ---
 
-#### OAuth Options
+#### OAuth-indstillinger
 
 | Mulighed       | Skriv           | Beskrivelse                                                                               |
 | -------------- | --------------- | ----------------------------------------------------------------------------------------- |
@@ -273,7 +273,7 @@ Hvis du vil deaktivere automatisk OAuth for en server (f.eks. for servere, der b
 | `clientSecret` | String          | OAuth-klienthemmelighed, hvis det kræves af autorisationsserveren.                        |
 | `scope`        | String          | OAuth-omfang at anmode om under godkendelse.                                              |
 
-#### Debugging
+#### Fejlfinding
 
 Hvis en ekstern MCP-server ikke kan godkendes, kan du diagnosticere problemer med:
 
@@ -289,7 +289,7 @@ Kommandoen `mcp debug` viser den aktuelle godkendelsesstatus, tester HTTP-forbin
 
 ---
 
-## Administrator
+## Administration
 
 Dine MCPs er tilgængelige som værktøjer i **TK\_** sammen med indbyggede værktøjer. Så du kan administrere dem gennem OpenCode-konfigurationen som ethvert andet værktøj.
 
@@ -375,7 +375,7 @@ Hvis du har et stort antal MCP-servere, vil du måske kun aktivere dem pr. agent
 
 ---
 
-#### Glob patterns
+#### Glob-mønstre
 
 Glob-mønsteret bruger simple regex-globing-mønstre:
 

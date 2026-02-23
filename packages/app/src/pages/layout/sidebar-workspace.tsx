@@ -82,10 +82,227 @@ export const WorkspaceDragOverlay = (props: {
   )
 }
 
+const WorkspaceHeader = (props: {
+  local: Accessor<boolean>
+  busy: Accessor<boolean>
+  open: Accessor<boolean>
+  directory: string
+  language: ReturnType<typeof useLanguage>
+  branch: Accessor<string | undefined>
+  workspaceValue: Accessor<string>
+  workspaceEditActive: Accessor<boolean>
+  InlineEditor: WorkspaceSidebarContext["InlineEditor"]
+  renameWorkspace: WorkspaceSidebarContext["renameWorkspace"]
+  setEditor: WorkspaceSidebarContext["setEditor"]
+  projectId?: string
+}): JSX.Element => (
+  <div class="flex items-center gap-1 min-w-0 flex-1">
+    <div class="flex items-center justify-center shrink-0 size-6">
+      <Show when={props.busy()} fallback={<Icon name="branch" size="small" />}>
+        <Spinner class="size-[15px]" />
+      </Show>
+    </div>
+    <span class="text-14-medium text-text-base shrink-0">
+      {props.local() ? props.language.t("workspace.type.local") : props.language.t("workspace.type.sandbox")} :
+    </span>
+    <Show
+      when={!props.local()}
+      fallback={
+        <span class="text-14-medium text-text-base min-w-0 truncate">
+          {props.branch() ?? getFilename(props.directory)}
+        </span>
+      }
+    >
+      <props.InlineEditor
+        id={`workspace:${props.directory}`}
+        value={props.workspaceValue}
+        onSave={(next) => {
+          const trimmed = next.trim()
+          if (!trimmed) return
+          props.renameWorkspace(props.directory, trimmed, props.projectId, props.branch())
+          props.setEditor("value", props.workspaceValue())
+        }}
+        class="text-14-medium text-text-base min-w-0 truncate"
+        displayClass="text-14-medium text-text-base min-w-0 truncate"
+        editing={props.workspaceEditActive()}
+        stopPropagation={false}
+        openOnDblClick={false}
+      />
+    </Show>
+    <div class="flex items-center justify-center shrink-0 overflow-hidden w-0 opacity-0 transition-all duration-200 group-hover/workspace:w-3.5 group-hover/workspace:opacity-100 group-focus-within/workspace:w-3.5 group-focus-within/workspace:opacity-100">
+      <Icon name={props.open() ? "chevron-down" : "chevron-right"} size="small" class="text-icon-base" />
+    </div>
+  </div>
+)
+
+const WorkspaceActions = (props: {
+  directory: string
+  local: Accessor<boolean>
+  busy: Accessor<boolean>
+  menuOpen: Accessor<boolean>
+  pendingRename: Accessor<boolean>
+  setMenuOpen: (open: boolean) => void
+  setPendingRename: (value: boolean) => void
+  sidebarHovering: Accessor<boolean>
+  mobile?: boolean
+  nav: Accessor<HTMLElement | undefined>
+  touch: Accessor<boolean>
+  language: ReturnType<typeof useLanguage>
+  workspaceValue: Accessor<string>
+  openEditor: WorkspaceSidebarContext["openEditor"]
+  showResetWorkspaceDialog: WorkspaceSidebarContext["showResetWorkspaceDialog"]
+  showDeleteWorkspaceDialog: WorkspaceSidebarContext["showDeleteWorkspaceDialog"]
+  root: string
+  setHoverSession: WorkspaceSidebarContext["setHoverSession"]
+  clearHoverProjectSoon: WorkspaceSidebarContext["clearHoverProjectSoon"]
+  navigateToNewSession: () => void
+}): JSX.Element => (
+  <div
+    class="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 transition-opacity"
+    classList={{
+      "opacity-100 pointer-events-auto": props.menuOpen(),
+      "opacity-0 pointer-events-none": !props.menuOpen(),
+      "group-hover/workspace:opacity-100 group-hover/workspace:pointer-events-auto": true,
+      "group-focus-within/workspace:opacity-100 group-focus-within/workspace:pointer-events-auto": true,
+    }}
+  >
+    <DropdownMenu
+      modal={!props.sidebarHovering()}
+      open={props.menuOpen()}
+      onOpenChange={(open) => props.setMenuOpen(open)}
+    >
+      <Tooltip value={props.language.t("common.moreOptions")} placement="top">
+        <DropdownMenu.Trigger
+          as={IconButton}
+          icon="dot-grid"
+          variant="ghost"
+          class="size-6 rounded-md"
+          data-action="workspace-menu"
+          data-workspace={base64Encode(props.directory)}
+          aria-label={props.language.t("common.moreOptions")}
+        />
+      </Tooltip>
+      <DropdownMenu.Portal mount={!props.mobile ? props.nav() : undefined}>
+        <DropdownMenu.Content
+          onCloseAutoFocus={(event) => {
+            if (!props.pendingRename()) return
+            event.preventDefault()
+            props.setPendingRename(false)
+            props.openEditor(`workspace:${props.directory}`, props.workspaceValue())
+          }}
+        >
+          <DropdownMenu.Item
+            disabled={props.local()}
+            onSelect={() => {
+              props.setPendingRename(true)
+              props.setMenuOpen(false)
+            }}
+          >
+            <DropdownMenu.ItemLabel>{props.language.t("common.rename")}</DropdownMenu.ItemLabel>
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            disabled={props.local() || props.busy()}
+            onSelect={() => props.showResetWorkspaceDialog(props.root, props.directory)}
+          >
+            <DropdownMenu.ItemLabel>{props.language.t("common.reset")}</DropdownMenu.ItemLabel>
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            disabled={props.local() || props.busy()}
+            onSelect={() => props.showDeleteWorkspaceDialog(props.root, props.directory)}
+          >
+            <DropdownMenu.ItemLabel>{props.language.t("common.delete")}</DropdownMenu.ItemLabel>
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu>
+    <Show when={!props.touch()}>
+      <Tooltip value={props.language.t("command.session.new")} placement="top">
+        <IconButton
+          icon="plus-small"
+          variant="ghost"
+          class="size-6 rounded-md opacity-0 pointer-events-none group-hover/workspace:opacity-100 group-hover/workspace:pointer-events-auto group-focus-within/workspace:opacity-100 group-focus-within/workspace:pointer-events-auto"
+          data-action="workspace-new-session"
+          data-workspace={base64Encode(props.directory)}
+          aria-label={props.language.t("command.session.new")}
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            props.setHoverSession(undefined)
+            props.clearHoverProjectSoon()
+            props.navigateToNewSession()
+          }}
+        />
+      </Tooltip>
+    </Show>
+  </div>
+)
+
+const WorkspaceSessionList = (props: {
+  slug: Accessor<string>
+  mobile?: boolean
+  ctx: WorkspaceSidebarContext
+  showNew: Accessor<boolean>
+  loading: Accessor<boolean>
+  sessions: Accessor<Session[]>
+  children: Accessor<Map<string, string[]>>
+  hasMore: Accessor<boolean>
+  loadMore: () => Promise<void>
+  language: ReturnType<typeof useLanguage>
+}): JSX.Element => (
+  <nav class="flex flex-col gap-1 px-2">
+    <Show when={props.showNew()}>
+      <NewSessionItem
+        slug={props.slug()}
+        mobile={props.mobile}
+        sidebarExpanded={props.ctx.sidebarExpanded}
+        clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
+        setHoverSession={props.ctx.setHoverSession}
+      />
+    </Show>
+    <Show when={props.loading()}>
+      <SessionSkeleton />
+    </Show>
+    <For each={props.sessions()}>
+      {(session) => (
+        <SessionItem
+          session={session}
+          slug={props.slug()}
+          mobile={props.mobile}
+          children={props.children()}
+          sidebarExpanded={props.ctx.sidebarExpanded}
+          sidebarHovering={props.ctx.sidebarHovering}
+          nav={props.ctx.nav}
+          hoverSession={props.ctx.hoverSession}
+          setHoverSession={props.ctx.setHoverSession}
+          clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
+          prefetchSession={props.ctx.prefetchSession}
+          archiveSession={props.ctx.archiveSession}
+        />
+      )}
+    </For>
+    <Show when={props.hasMore()}>
+      <div class="relative w-full py-1">
+        <Button
+          variant="ghost"
+          class="flex w-full text-left justify-start text-14-regular text-text-weak pl-9 pr-10"
+          size="large"
+          onClick={(e: MouseEvent) => {
+            props.loadMore()
+            ;(e.currentTarget as HTMLButtonElement).blur()
+          }}
+        >
+          {props.language.t("common.loadMore")}
+        </Button>
+      </div>
+    </Show>
+  </nav>
+)
+
 export const SortableWorkspace = (props: {
   ctx: WorkspaceSidebarContext
   directory: string
   project: LocalProject
+  sortNow: Accessor<number>
   mobile?: boolean
 }): JSX.Element => {
   const navigate = useNavigate()
@@ -99,7 +316,7 @@ export const SortableWorkspace = (props: {
     pendingRename: false,
   })
   const slug = createMemo(() => base64Encode(props.directory))
-  const sessions = createMemo(() => sortedRootSessions(workspaceStore, Date.now()))
+  const sessions = createMemo(() => sortedRootSessions(workspaceStore, props.sortNow()))
   const children = createMemo(() => childMapByParent(workspaceStore.session))
   const local = createMemo(() => props.directory === props.project.worktree)
   const active = createMemo(() => props.ctx.currentDir() === props.directory)
@@ -135,46 +352,6 @@ export const SortableWorkspace = (props: {
     globalSync.child(props.directory, { bootstrap: true })
   })
 
-  const header = () => (
-    <div class="flex items-center gap-1 min-w-0 flex-1">
-      <div class="flex items-center justify-center shrink-0 size-6">
-        <Show when={busy()} fallback={<Icon name="branch" size="small" />}>
-          <Spinner class="size-[15px]" />
-        </Show>
-      </div>
-      <span class="text-14-medium text-text-base shrink-0">
-        {local() ? language.t("workspace.type.local") : language.t("workspace.type.sandbox")} :
-      </span>
-      <Show
-        when={!local()}
-        fallback={
-          <span class="text-14-medium text-text-base min-w-0 truncate">
-            {workspaceStore.vcs?.branch ?? getFilename(props.directory)}
-          </span>
-        }
-      >
-        <props.ctx.InlineEditor
-          id={`workspace:${props.directory}`}
-          value={workspaceValue}
-          onSave={(next) => {
-            const trimmed = next.trim()
-            if (!trimmed) return
-            props.ctx.renameWorkspace(props.directory, trimmed, props.project.id, workspaceStore.vcs?.branch)
-            props.ctx.setEditor("value", workspaceValue())
-          }}
-          class="text-14-medium text-text-base min-w-0 truncate"
-          displayClass="text-14-medium text-text-base min-w-0 truncate"
-          editing={workspaceEditActive()}
-          stopPropagation={false}
-          openOnDblClick={false}
-        />
-      </Show>
-      <div class="flex items-center justify-center shrink-0 overflow-hidden w-0 opacity-0 transition-all duration-200 group-hover/workspace:w-3.5 group-hover/workspace:opacity-100 group-focus-within/workspace:w-3.5 group-focus-within/workspace:opacity-100">
-        <Icon name={open() ? "chevron-down" : "chevron-right"} size="small" class="text-icon-base" />
-      </div>
-    </div>
-  )
-
   return (
     <div
       // @ts-ignore
@@ -202,7 +379,20 @@ export const SortableWorkspace = (props: {
                     data-action="workspace-toggle"
                     data-workspace={base64Encode(props.directory)}
                   >
-                    {header()}
+                    <WorkspaceHeader
+                      local={local}
+                      busy={busy}
+                      open={open}
+                      directory={props.directory}
+                      language={language}
+                      branch={() => workspaceStore.vcs?.branch}
+                      workspaceValue={workspaceValue}
+                      workspaceEditActive={workspaceEditActive}
+                      InlineEditor={props.ctx.InlineEditor}
+                      renameWorkspace={props.ctx.renameWorkspace}
+                      setEditor={props.ctx.setEditor}
+                      projectId={props.project.id}
+                    />
                   </Collapsible.Trigger>
                 }
               >
@@ -211,139 +401,61 @@ export const SortableWorkspace = (props: {
                     menu.open ? "pr-16" : "pr-2"
                   } group-hover/workspace:pr-16 group-focus-within/workspace:pr-16`}
                 >
-                  {header()}
+                  <WorkspaceHeader
+                    local={local}
+                    busy={busy}
+                    open={open}
+                    directory={props.directory}
+                    language={language}
+                    branch={() => workspaceStore.vcs?.branch}
+                    workspaceValue={workspaceValue}
+                    workspaceEditActive={workspaceEditActive}
+                    InlineEditor={props.ctx.InlineEditor}
+                    renameWorkspace={props.ctx.renameWorkspace}
+                    setEditor={props.ctx.setEditor}
+                    projectId={props.project.id}
+                  />
                 </div>
               </Show>
-              <div
-                class="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 transition-opacity"
-                classList={{
-                  "opacity-100 pointer-events-auto": menu.open,
-                  "opacity-0 pointer-events-none": !menu.open,
-                  "group-hover/workspace:opacity-100 group-hover/workspace:pointer-events-auto": true,
-                  "group-focus-within/workspace:opacity-100 group-focus-within/workspace:pointer-events-auto": true,
-                }}
-              >
-                <DropdownMenu
-                  modal={!props.ctx.sidebarHovering()}
-                  open={menu.open}
-                  onOpenChange={(open) => setMenu("open", open)}
-                >
-                  <Tooltip value={language.t("common.moreOptions")} placement="top">
-                    <DropdownMenu.Trigger
-                      as={IconButton}
-                      icon="dot-grid"
-                      variant="ghost"
-                      class="size-6 rounded-md"
-                      data-action="workspace-menu"
-                      data-workspace={base64Encode(props.directory)}
-                      aria-label={language.t("common.moreOptions")}
-                    />
-                  </Tooltip>
-                  <DropdownMenu.Portal mount={!props.mobile ? props.ctx.nav() : undefined}>
-                    <DropdownMenu.Content
-                      onCloseAutoFocus={(event) => {
-                        if (!menu.pendingRename) return
-                        event.preventDefault()
-                        setMenu("pendingRename", false)
-                        props.ctx.openEditor(`workspace:${props.directory}`, workspaceValue())
-                      }}
-                    >
-                      <DropdownMenu.Item
-                        disabled={local()}
-                        onSelect={() => {
-                          setMenu("pendingRename", true)
-                          setMenu("open", false)
-                        }}
-                      >
-                        <DropdownMenu.ItemLabel>{language.t("common.rename")}</DropdownMenu.ItemLabel>
-                      </DropdownMenu.Item>
-                      <DropdownMenu.Item
-                        disabled={local() || busy()}
-                        onSelect={() => props.ctx.showResetWorkspaceDialog(props.project.worktree, props.directory)}
-                      >
-                        <DropdownMenu.ItemLabel>{language.t("common.reset")}</DropdownMenu.ItemLabel>
-                      </DropdownMenu.Item>
-                      <DropdownMenu.Item
-                        disabled={local() || busy()}
-                        onSelect={() => props.ctx.showDeleteWorkspaceDialog(props.project.worktree, props.directory)}
-                      >
-                        <DropdownMenu.ItemLabel>{language.t("common.delete")}</DropdownMenu.ItemLabel>
-                      </DropdownMenu.Item>
-                    </DropdownMenu.Content>
-                  </DropdownMenu.Portal>
-                </DropdownMenu>
-                <Show when={!touch()}>
-                  <Tooltip value={language.t("command.session.new")} placement="top">
-                    <IconButton
-                      icon="plus-small"
-                      variant="ghost"
-                      class="size-6 rounded-md opacity-0 pointer-events-none group-hover/workspace:opacity-100 group-hover/workspace:pointer-events-auto group-focus-within/workspace:opacity-100 group-focus-within/workspace:pointer-events-auto"
-                      data-action="workspace-new-session"
-                      data-workspace={base64Encode(props.directory)}
-                      aria-label={language.t("command.session.new")}
-                      onClick={(event) => {
-                        event.preventDefault()
-                        event.stopPropagation()
-                        props.ctx.setHoverSession(undefined)
-                        props.ctx.clearHoverProjectSoon()
-                        navigate(`/${slug()}/session`)
-                      }}
-                    />
-                  </Tooltip>
-                </Show>
-              </div>
+              <WorkspaceActions
+                directory={props.directory}
+                local={local}
+                busy={busy}
+                menuOpen={() => menu.open}
+                pendingRename={() => menu.pendingRename}
+                setMenuOpen={(open) => setMenu("open", open)}
+                setPendingRename={(value) => setMenu("pendingRename", value)}
+                sidebarHovering={props.ctx.sidebarHovering}
+                mobile={props.mobile}
+                nav={props.ctx.nav}
+                touch={touch}
+                language={language}
+                workspaceValue={workspaceValue}
+                openEditor={props.ctx.openEditor}
+                showResetWorkspaceDialog={props.ctx.showResetWorkspaceDialog}
+                showDeleteWorkspaceDialog={props.ctx.showDeleteWorkspaceDialog}
+                root={props.project.worktree}
+                setHoverSession={props.ctx.setHoverSession}
+                clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
+                navigateToNewSession={() => navigate(`/${slug()}/session`)}
+              />
             </div>
           </div>
         </div>
 
         <Collapsible.Content>
-          <nav class="flex flex-col gap-1 px-2">
-            <Show when={showNew()}>
-              <NewSessionItem
-                slug={slug()}
-                mobile={props.mobile}
-                sidebarExpanded={props.ctx.sidebarExpanded}
-                clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
-                setHoverSession={props.ctx.setHoverSession}
-              />
-            </Show>
-            <Show when={loading()}>
-              <SessionSkeleton />
-            </Show>
-            <For each={sessions()}>
-              {(session) => (
-                <SessionItem
-                  session={session}
-                  slug={slug()}
-                  mobile={props.mobile}
-                  children={children()}
-                  sidebarExpanded={props.ctx.sidebarExpanded}
-                  sidebarHovering={props.ctx.sidebarHovering}
-                  nav={props.ctx.nav}
-                  hoverSession={props.ctx.hoverSession}
-                  setHoverSession={props.ctx.setHoverSession}
-                  clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
-                  prefetchSession={props.ctx.prefetchSession}
-                  archiveSession={props.ctx.archiveSession}
-                />
-              )}
-            </For>
-            <Show when={hasMore()}>
-              <div class="relative w-full py-1">
-                <Button
-                  variant="ghost"
-                  class="flex w-full text-left justify-start text-14-regular text-text-weak pl-9 pr-10"
-                  size="large"
-                  onClick={(e: MouseEvent) => {
-                    loadMore()
-                    ;(e.currentTarget as HTMLButtonElement).blur()
-                  }}
-                >
-                  {language.t("common.loadMore")}
-                </Button>
-              </div>
-            </Show>
-          </nav>
+          <WorkspaceSessionList
+            slug={slug}
+            mobile={props.mobile}
+            ctx={props.ctx}
+            showNew={showNew}
+            loading={loading}
+            sessions={sessions}
+            children={children}
+            hasMore={hasMore}
+            loadMore={loadMore}
+            language={language}
+          />
         </Collapsible.Content>
       </Collapsible>
     </div>
@@ -353,6 +465,7 @@ export const SortableWorkspace = (props: {
 export const LocalWorkspace = (props: {
   ctx: WorkspaceSidebarContext
   project: LocalProject
+  sortNow: Accessor<number>
   mobile?: boolean
 }): JSX.Element => {
   const globalSync = useGlobalSync()
@@ -362,7 +475,7 @@ export const LocalWorkspace = (props: {
     return { store, setStore }
   })
   const slug = createMemo(() => base64Encode(props.project.worktree))
-  const sessions = createMemo(() => sortedRootSessions(workspace().store, Date.now()))
+  const sessions = createMemo(() => sortedRootSessions(workspace().store, props.sortNow()))
   const children = createMemo(() => childMapByParent(workspace().store.session))
   const booted = createMemo((prev) => prev || workspace().store.status === "complete", false)
   const loading = createMemo(() => !booted() && sessions().length === 0)

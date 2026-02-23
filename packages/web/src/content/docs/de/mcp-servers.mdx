@@ -9,7 +9,7 @@ Nach dem Hinzufügen stehen MCP-Tools automatisch neben den integrierten Tools f
 
 ---
 
-#### Caveats
+#### Hinweise
 
 Wenn Sie einen MCP-Server verwenden, wird dieser zum Kontext hinzugefügt. Wenn Sie viele Werkzeuge haben, können Sie das schnell zusammenfassen. Wir empfehlen daher, vorsichtig zu sein, welchen MCP-Server Sie verwenden.
 
@@ -21,7 +21,7 @@ Bestimmte MCP-Server, wie der GitHub-Server MCP, neigen dazu, viele Token hinzuz
 
 ---
 
-## Enable
+## Aktivierung
 
 Sie können den MCP-Server in Ihrem [OpenCode Config](https://opencode.ai/docs/config/) unter `mcp` definieren. Fügen Sie jedem MCP einen eindeutigen Namen hinzu. Sie können bei der Eingabe von LLM namentlich auf diesen MCP verweisen.
 
@@ -67,7 +67,7 @@ Ihre lokalen Konfigurationswerte überschreiben die Remote-Standardwerte. Weiter
 
 ---
 
-## Local
+## Lokal
 
 Fügen Sie lokale MCP-Server mit `type` bis `"local"` innerhalb des MCP-Objekts hinzu.
 
@@ -112,7 +112,7 @@ use the mcp_everything tool to add the number 3 and 4
 
 ---
 
-#### Options
+#### Optionen
 
 Hier finden Sie alle Optionen zum Konfigurieren eines lokalen MCP-Servers.
 
@@ -150,7 +150,7 @@ Der `url` ist der URL des Remote-Servers MCP und mit der Option `headers` könne
 
 ---
 
-#### Options
+#### Optionen
 
 | Option    | Geben Sie       | ein Erforderlich | Beschreibung                                                                                 |
 | --------- | --------------- | ---------------- | -------------------------------------------------------------------------------------------- |
@@ -173,7 +173,7 @@ OpenCode übernimmt automatisch die OAuth-Authentifizierung für Remote-MCP-Serv
 
 ---
 
-### Automatic
+### Automatisch
 
 Für die meisten OAuth-fähigen MCP-Server ist keine spezielle Konfiguration erforderlich. Konfigurieren Sie einfach den Remote-Server:
 
@@ -193,7 +193,7 @@ Wenn der Server eine Authentifizierung erfordert, werden Sie von OpenCode beim e
 
 ---
 
-### Pre-registered
+### Vorregistriert
 
 Wenn Sie über Client-Anmeldeinformationen vom Serveranbieter MCP verfügen, können Sie diese konfigurieren:
 
@@ -216,7 +216,7 @@ Wenn Sie über Client-Anmeldeinformationen vom Serveranbieter MCP verfügen, kö
 
 ---
 
-### Authenticating
+### Authentifizieren
 
 Sie können die Authentifizierung manuell auslösen oder Anmeldeinformationen verwalten.
 
@@ -289,7 +289,7 @@ Der Befehl `mcp debug` zeigt den aktuellen Authentifizierungsstatus an, testet d
 
 ---
 
-## Manage
+## Verwaltung
 
 Ihre MCPs sind neben integrierten Tools auch als Tools in OpenCode verfügbar. Sie können sie also wie jedes andere Tool über die OpenCode-Konfiguration verwalten.
 
@@ -394,7 +394,7 @@ MCP-Servertools werden mit dem Servernamen als Präfix registriert. Um alle Tool
 
 ---
 
-## Examples
+## Beispiele
 
 Nachfolgend finden Sie Beispiele einiger gängiger MCP-Server. Sie können ein PR einreichen, wenn Sie einen anderen Server dokumentieren möchten.
 
@@ -482,7 +482,7 @@ When you need to search docs, use `context7` tools.
 
 ---
 
-### Grep von Vercel
+### Grep by Vercel
 
 Fügen Sie den Server [Grep by Vercel](https://grep.app) MCP hinzu, um Codefragmente auf GitHub zu durchsuchen.
 
