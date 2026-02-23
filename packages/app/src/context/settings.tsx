@@ -32,6 +32,7 @@ export interface Settings {
   appearance: {
     fontSize: number
     font: string
+    wideMode: boolean
   }
   keybinds: Record<string, string>
   permissions: {
@@ -55,6 +56,7 @@ const defaultSettings: Settings = {
   appearance: {
     fontSize: 14,
     font: "ibm-plex-mono",
+    wideMode: false,
   },
   keybinds: {},
   permissions: {
@@ -170,6 +172,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         font: withFallback(() => store.appearance?.font, defaultSettings.appearance.font),
         setFont(value: string) {
           setStore("appearance", "font", value)
+        },
+        wideMode: withFallback(() => store.appearance?.wideMode, defaultSettings.appearance.wideMode),
+        setWideMode(value: boolean) {
+          setStore("appearance", "wideMode", value)
         },
       },
       keybinds: {

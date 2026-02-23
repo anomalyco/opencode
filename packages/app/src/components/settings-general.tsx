@@ -297,6 +297,18 @@ export const SettingsGeneral: Component = () => {
             </Button>
           </div>
         </SettingsRow>
+
+        <SettingsRow
+          title="Wide Mode"
+          description="Use full window width for chat instead of centered narrow layout"
+        >
+          <div data-action="settings-wide-mode">
+            <Switch
+              checked={settings.appearance.wideMode()}
+              onChange={(checked) => settings.appearance.setWideMode(checked)}
+            />
+          </div>
+        </SettingsRow>
       </div>
     </div>
   )
