@@ -534,18 +534,6 @@ export function Prompt(props: PromptProps) {
       exit()
       return
     }
-    const selectedModel = local.model.current()
-    if (!selectedModel) {
-      promptModelWarning()
-      return
-    }
-    const sessionID = props.sessionID
-      ? props.sessionID
-      : await (async () => {
-          const sessionID = await sdk.client.session.create({}).then((x) => x.data!.id)
-          return sessionID
-        })()
-    const messageID = Identifier.ascending("message")
     let inputText = store.prompt.input
 
     // Expand pasted text inline before submitting
@@ -566,6 +554,28 @@ export function Prompt(props: PromptProps) {
 
     // Filter out text parts (pasted content) since they're now expanded inline
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
+
+    if (inputText.trim().length === 0 && nonTextParts.length === 0) {
+      toast.show({
+        variant: "warning",
+        message: "Message cannot be empty",
+        duration: 3000,
+      })
+      return
+    }
+
+    const selectedModel = local.model.current()
+    if (!selectedModel) {
+      promptModelWarning()
+      return
+    }
+    const sessionID = props.sessionID
+      ? props.sessionID
+      : await (async () => {
+          const sessionID = await sdk.client.session.create({}).then((x) => x.data!.id)
+          return sessionID
+        })()
+    const messageID = Identifier.ascending("message")
 
     // Capture mode before it gets reset
     const currentMode = store.mode

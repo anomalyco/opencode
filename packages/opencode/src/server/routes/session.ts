@@ -720,7 +720,7 @@ export const SessionRoutes = lazy(() =>
           sessionID: z.string().meta({ description: "Session ID" }),
         }),
       ),
-      validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
+      validator("json", SessionPrompt.PromptBodyInput),
       async (c) => {
         c.status(200)
         c.header("Content-Type", "application/json")
@@ -752,7 +752,7 @@ export const SessionRoutes = lazy(() =>
           sessionID: z.string().meta({ description: "Session ID" }),
         }),
       ),
-      validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
+      validator("json", SessionPrompt.PromptBodyInput),
       async (c) => {
         c.status(204)
         c.header("Content-Type", "application/json")

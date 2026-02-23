@@ -61,6 +61,9 @@ const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested struc
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
+  const PromptEmptyMessage = "Prompt cannot be empty"
+  const hasMeaningfulPart = (input: { parts: { type: string; text?: string }[] }) =>
+    input.parts.some((part) => part.type !== "text" || (typeof part.text === "string" && part.text.trim().length > 0))
 
   const state = Instance.state(
     () => {
@@ -88,70 +91,79 @@ export namespace SessionPrompt {
     if (match) throw new Session.BusyError(sessionID)
   }
 
-  export const PromptInput = z.object({
-    sessionID: Identifier.schema("session"),
-    messageID: Identifier.schema("message").optional(),
-    model: z
-      .object({
-        providerID: z.string(),
-        modelID: z.string(),
-      })
-      .optional(),
-    agent: z.string().optional(),
-    noReply: z.boolean().optional(),
-    tools: z
-      .record(z.string(), z.boolean())
-      .optional()
-      .describe(
-        "@deprecated tools and permissions have been merged, you can set permissions on the session itself now",
+  export const PromptInput = z
+    .object({
+      sessionID: Identifier.schema("session"),
+      messageID: Identifier.schema("message").optional(),
+      model: z
+        .object({
+          providerID: z.string(),
+          modelID: z.string(),
+        })
+        .optional(),
+      agent: z.string().optional(),
+      noReply: z.boolean().optional(),
+      tools: z
+        .record(z.string(), z.boolean())
+        .optional()
+        .describe(
+          "@deprecated tools and permissions have been merged, you can set permissions on the session itself now",
+        ),
+      format: MessageV2.Format.optional(),
+      system: z.string().optional(),
+      variant: z.string().optional(),
+      parts: z.array(
+        z.discriminatedUnion("type", [
+          MessageV2.TextPart.omit({
+            messageID: true,
+            sessionID: true,
+          })
+            .partial({
+              id: true,
+            })
+            .meta({
+              ref: "TextPartInput",
+            }),
+          MessageV2.FilePart.omit({
+            messageID: true,
+            sessionID: true,
+          })
+            .partial({
+              id: true,
+            })
+            .meta({
+              ref: "FilePartInput",
+            }),
+          MessageV2.AgentPart.omit({
+            messageID: true,
+            sessionID: true,
+          })
+            .partial({
+              id: true,
+            })
+            .meta({
+              ref: "AgentPartInput",
+            }),
+          MessageV2.SubtaskPart.omit({
+            messageID: true,
+            sessionID: true,
+          })
+            .partial({
+              id: true,
+            })
+            .meta({
+              ref: "SubtaskPartInput",
+            }),
+        ]),
       ),
-    format: MessageV2.Format.optional(),
-    system: z.string().optional(),
-    variant: z.string().optional(),
-    parts: z.array(
-      z.discriminatedUnion("type", [
-        MessageV2.TextPart.omit({
-          messageID: true,
-          sessionID: true,
-        })
-          .partial({
-            id: true,
-          })
-          .meta({
-            ref: "TextPartInput",
-          }),
-        MessageV2.FilePart.omit({
-          messageID: true,
-          sessionID: true,
-        })
-          .partial({
-            id: true,
-          })
-          .meta({
-            ref: "FilePartInput",
-          }),
-        MessageV2.AgentPart.omit({
-          messageID: true,
-          sessionID: true,
-        })
-          .partial({
-            id: true,
-          })
-          .meta({
-            ref: "AgentPartInput",
-          }),
-        MessageV2.SubtaskPart.omit({
-          messageID: true,
-          sessionID: true,
-        })
-          .partial({
-            id: true,
-          })
-          .meta({
-            ref: "SubtaskPartInput",
-          }),
-      ]),
-    ),
+    })
+    .refine(hasMeaningfulPart, {
+      message: PromptEmptyMessage,
+      path: ["parts"],
+    })
+  export const PromptBodyInput = PromptInput.omit({ sessionID: true }).refine(hasMeaningfulPart, {
+    message: PromptEmptyMessage,
+    path: ["parts"],
   })
   export type PromptInput = z.infer<typeof PromptInput>
 

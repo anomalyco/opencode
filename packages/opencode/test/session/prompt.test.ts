@@ -209,3 +209,47 @@ describe("session.prompt agent variant", () => {
     }
   })
 })
+
+describe("session.prompt validation", () => {
+  const sessionID = "ses_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+
+  test("rejects text-only whitespace prompt input", () => {
+    const result = SessionPrompt.PromptInput.safeParse({
+      sessionID,
+      parts: [{ type: "text", text: "   " }],
+    })
+
+    expect(result.success).toBe(false)
+    if (result.success) return
+    expect(result.error.issues.some((issue) => issue.message === "Prompt cannot be empty")).toBe(true)
+  })
+
+  test("rejects text-only whitespace prompt body input", () => {
+    const result = SessionPrompt.PromptBodyInput.safeParse({
+      noReply: true,
+      parts: [{ type: "text", text: "   " }],
+    })
+
+    expect(result.success).toBe(false)
+    if (result.success) return
+    expect(result.error.issues.some((issue) => issue.message === "Prompt cannot be empty")).toBe(true)
+  })
+
+  test("accepts non-empty text prompt input", () => {
+    const result = SessionPrompt.PromptInput.safeParse({
+      sessionID,
+      parts: [{ type: "text", text: "hello" }],
+    })
+
+    expect(result.success).toBe(true)
+  })
+
+  test("accepts attachment-only prompt input", () => {
+    const result = SessionPrompt.PromptInput.safeParse({
+      sessionID,
+      parts: [{ type: "file", mime: "image/png", url: "data:image/png;base64,Zm9v" }],
+    })
+
+    expect(result.success).toBe(true)
+  })
+})
