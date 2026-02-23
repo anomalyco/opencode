@@ -114,7 +114,11 @@ export namespace InstructionPrompt {
     return paths
   }
 
+  let cached: string[] | undefined
+
   export async function system() {
+    if (Flag.OPENCODE_EXPERIMENTAL_CACHE_STABILIZATION && cached) return cached
+
     const config = await Config.get()
     const paths = await systemPaths()
 
@@ -138,7 +142,9 @@ export namespace InstructionPrompt {
         .then((x) => (x ? "Instructions from: " + url + "\n" + x : "")),
     )
 
-    return Promise.all([...files, ...fetches]).then((result) => result.filter(Boolean))
+    const result = await Promise.all([...files, ...fetches]).then((result) => result.filter(Boolean))
+    if (Flag.OPENCODE_EXPERIMENTAL_CACHE_STABILIZATION) cached = result
+    return result
   }
 
   export function loaded(messages: MessageV2.WithParts[]) {
