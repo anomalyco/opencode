@@ -354,7 +354,11 @@ export namespace SessionProcessor {
             })
             const error = MessageV2.fromError(e, { providerID: input.model.providerID })
             if (MessageV2.ContextOverflowError.isInstance(error)) {
-              // TODO: Handle context overflow error
+              log.info("context overflow detected, triggering compaction", {
+                sessionID: input.sessionID,
+              })
+              needsCompaction = true
+              break
             }
             const retry = SessionRetry.retryable(error)
             if (retry !== undefined) {
