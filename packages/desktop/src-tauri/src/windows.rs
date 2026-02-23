@@ -62,7 +62,6 @@ impl MainWindow {
         )
         .title("OpenCode")
         .decorations(true)
-        .disable_drag_drop_handler()
         .zoom_hotkeys_enabled(false)
         .visible(true)
         .maximized(true)
