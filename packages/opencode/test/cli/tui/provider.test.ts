@@ -4,7 +4,7 @@
  * The indicator is based on the provider's aTLS configuration (presence of
  * policyFile or policy in options) and the message error state.
  * A provider with a valid policy that responds without error → secure.
- * A provider with a policy that errors → unsecure.
+ * A provider with a policy that errors → insecure.
  * A provider without any policy → no indicator.
  */
 import { describe, expect, test } from "bun:test"
@@ -47,14 +47,14 @@ describe("getSecurityIndicator", () => {
     expect(result).toEqual({ label: "🔐 Secure Model ", status: "secure" })
   })
 
-  test("aTLS connected with error → unsecure", () => {
+  test("aTLS connected with error → insecure", () => {
     const result = getSecurityIndicator("connected", true)
-    expect(result).toEqual({ label: "⚠ Unsecure ", status: "error" })
+    expect(result).toEqual({ label: "⚠ Insecure ", status: "error" })
   })
 
-  test("aTLS error without message error → unsecure", () => {
+  test("aTLS error without message error → insecure", () => {
     const result = getSecurityIndicator("error", false)
-    expect(result).toEqual({ label: "⚠ Unsecure ", status: "error" })
+    expect(result).toEqual({ label: "⚠ Insecure ", status: "error" })
   })
 
   test("aTLS idle → no indicator (no connection yet)", () => {
@@ -83,11 +83,11 @@ describe("end-to-end: provider options → security indicator", () => {
     expect(indicator).toEqual({ label: "🔐 Secure Model ", status: "secure" })
   })
 
-  test("policy present + error (failed attestation) → ⚠ Unsecure", () => {
+  test("policy present + error (failed attestation) → ⚠ Insecure", () => {
     const options = { policyFile: "/path/to/bad_policy.json", sdk: "@ai-sdk/anthropic" }
     const atlsStatus = getAtlsStatus(options, true)
     const indicator = getSecurityIndicator(atlsStatus, true)
-    expect(indicator).toEqual({ label: "⚠ Unsecure ", status: "error" })
+    expect(indicator).toEqual({ label: "⚠ Insecure ", status: "error" })
   })
 
   test("no policy (standard provider) → no indicator", () => {

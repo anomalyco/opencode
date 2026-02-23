@@ -39,6 +39,6 @@ export function getSecurityIndicator(
     return { label: "🔐 Secure Model ", status: "secure" as const }
   }
 
-  // aTLS error or message error → unsecure
-  return { label: "⚠ Unsecure ", status: "error" as const }
+  // aTLS error or message error → insecure
+  return { label: "⚠ Insecure ", status: "error" as const }
 }
