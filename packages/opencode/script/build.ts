@@ -4,7 +4,7 @@ import { $ } from "bun"
 import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
-import solidPlugin from "../node_modules/@opentui/solid/scripts/solid-plugin"
+// dynamic import later
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -150,7 +150,22 @@ const binaries: Record<string, string> = {}
 if (!skipInstall) {
   await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
   await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
+  await $`bun install --os="*" --cpu="*" @opentui/solid@${pkg.dependencies["@opentui/solid"]}`
 }
+
+const solidPluginPath = [
+  "../node_modules/@opentui/solid/scripts/solid-plugin.ts",
+  "../node_modules/@opentui/solid/scripts/solid-plugin.js",
+  "../../../node_modules/@opentui/solid/scripts/solid-plugin.ts",
+  "../../../node_modules/@opentui/solid/scripts/solid-plugin.js",
+].find((p) => fs.existsSync(path.resolve(dir, p)))
+
+if (!solidPluginPath) {
+  throw new Error("Could not find @opentui/solid/scripts/solid-plugin")
+}
+
+const { default: solidPlugin } = await import(path.resolve(dir, solidPluginPath))
+
 for (const item of targets) {
   const name = [
     pkg.name,
