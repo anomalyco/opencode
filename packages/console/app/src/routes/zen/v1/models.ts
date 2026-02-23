@@ -17,7 +17,7 @@ export async function OPTIONS(input: APIEvent) {
 }
 
 export async function GET(input: APIEvent) {
-  const zenData = ZenData.list()
+  const zenData = ZenData.list("full")
   const disabledModels = await authenticate()
 
   return new Response(

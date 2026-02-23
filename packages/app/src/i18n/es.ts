@@ -69,6 +69,8 @@ export const dict = {
   "command.agent.cycle.reverse.description": "Cambiar al agente anterior",
   "command.model.variant.cycle": "Alternar esfuerzo de pensamiento",
   "command.model.variant.cycle.description": "Cambiar al siguiente nivel de esfuerzo",
+  "command.prompt.mode.shell": "Shell",
+  "command.prompt.mode.normal": "Prompt",
   "command.permissions.autoaccept.enable": "Aceptar ediciones automáticamente",
   "command.permissions.autoaccept.disable": "Dejar de aceptar ediciones automáticamente",
   "command.workspace.toggle": "Alternar espacios de trabajo",
@@ -227,6 +229,7 @@ export const dict = {
   "prompt.placeholder.summarizeComments": "Resumir comentarios…",
   "prompt.placeholder.summarizeComment": "Resumir comentario…",
   "prompt.mode.shell": "Shell",
+  "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "esc para salir",
 
   "prompt.example.1": "Arreglar un TODO en el código",
@@ -599,6 +602,7 @@ export const dict = {
   "settings.general.section.notifications": "Notificaciones del sistema",
   "settings.general.section.updates": "Actualizaciones",
   "settings.general.section.sounds": "Efectos de sonido",
+  "settings.general.section.feed": "Feed",
   "settings.general.section.display": "Pantalla",
 
   "settings.general.row.language.title": "Idioma",
@@ -610,6 +614,12 @@ export const dict = {
   "settings.general.row.font.title": "Fuente",
   "settings.general.row.font.description": "Personaliza la fuente monoespaciada usada en bloques de código",
 
+  "settings.general.row.shellToolPartsExpanded.title": "Expandir partes de la herramienta shell",
+  "settings.general.row.shellToolPartsExpanded.description":
+    "Mostrar las partes de la herramienta shell expandidas por defecto en la línea de tiempo",
+  "settings.general.row.editToolPartsExpanded.title": "Expandir partes de la herramienta de edición",
+  "settings.general.row.editToolPartsExpanded.description":
+    "Mostrar las partes de las herramientas de edición, escritura y parcheado expandidas por defecto en la línea de tiempo",
   "settings.general.row.wayland.title": "Usar Wayland nativo",
   "settings.general.row.wayland.description": "Deshabilitar fallback a X11 en Wayland. Requiere reinicio.",
   "settings.general.row.wayland.tooltip":
@@ -640,6 +650,7 @@ export const dict = {
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
   "font.option.geistMono": "Geist Mono",
+  "sound.option.none": "Ninguno",
   "sound.option.alert01": "Alerta 01",
   "sound.option.alert02": "Alerta 02",
   "sound.option.alert03": "Alerta 03",

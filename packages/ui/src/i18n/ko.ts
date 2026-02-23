@@ -11,7 +11,7 @@ export const dict = {
   "ui.sessionReview.image.loading": "로딩 중...",
   "ui.sessionReview.image.placeholder": "이미지",
   "ui.sessionReview.largeDiff.title": "차이가 너무 커서 렌더링할 수 없습니다",
-  "ui.sessionReview.largeDiff.meta": "제한: {{lines}}줄 / {{limit}}. 현재: {{current}}.",
+  "ui.sessionReview.largeDiff.meta": "제한: {{limit}} 변경 줄. 현재: {{current}} 변경 줄.",
   "ui.sessionReview.largeDiff.renderAnyway": "그래도 렌더링",
 
   "ui.lineComment.label.prefix": "",
@@ -33,7 +33,8 @@ export const dict = {
 
   "ui.sessionTurn.status.delegating": "작업 위임 중",
   "ui.sessionTurn.status.planning": "다음 단계 계획 중",
-  "ui.sessionTurn.status.gatheringContext": "컨텍스트 수집 중",
+  "ui.sessionTurn.status.gatheringContext": "탐색 중",
+  "ui.sessionTurn.status.gatheredContext": "탐색됨",
   "ui.sessionTurn.status.searchingCodebase": "코드베이스 검색 중",
   "ui.sessionTurn.status.searchingWeb": "웹 검색 중",
   "ui.sessionTurn.status.makingEdits": "편집 수행 중",
@@ -97,6 +98,8 @@ export const dict = {
   "ui.message.expand": "메시지 펼치기",
   "ui.message.collapse": "메시지 접기",
   "ui.message.copy": "복사",
+  "ui.message.copyMessage": "메시지 복사",
+  "ui.message.copyResponse": "응답 복사",
   "ui.message.copied": "복사됨!",
   "ui.message.interrupted": "중단됨",
   "ui.message.attachment.alt": "첨부 파일",

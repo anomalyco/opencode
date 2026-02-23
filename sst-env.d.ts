@@ -2,6 +2,7 @@
 /* tslint:disable */
 /* eslint-disable */
 /* deno-fmt-ignore-file */
+/* biome-ignore-all lint: auto-generated */
 
 declare module "sst" {
   export interface Resource {
@@ -152,6 +153,15 @@ declare module "sst" {
       "plan100": string
       "plan20": string
       "plan200": string
+      "product": string
+      "type": "sst.sst.Linkable"
+    }
+    "ZEN_LITE_LIMITS": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_LITE_PRICE": {
+      "price": string
       "product": string
       "type": "sst.sst.Linkable"
     }

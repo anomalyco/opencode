@@ -163,7 +163,7 @@ export const PtyRoutes = lazy(() =>
 
         type Socket = {
           readyState: number
-          send: (data: string | Uint8Array<ArrayBuffer> | ArrayBuffer) => void
+          send: (data: string | Uint8Array | ArrayBuffer) => void
           close: (code?: number, reason?: string) => void
         }
 
@@ -177,11 +177,16 @@ export const PtyRoutes = lazy(() =>
 
         return {
           onOpen(_event, ws) {
-            const socket = isSocket(ws.raw) ? ws.raw : ws
+            const socket = ws.raw
+            if (!isSocket(socket)) {
+              ws.close()
+              return
+            }
             handler = Pty.connect(id, socket, cursor)
           },
           onMessage(event) {
-            handler?.onMessage(String(event.data))
+            if (typeof event.data !== "string") return
+            handler?.onMessage(event.data)
           },
           onClose() {
             handler?.onClose()

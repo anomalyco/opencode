@@ -69,6 +69,8 @@ export const dict = {
   "command.agent.cycle.reverse.description": "Переключиться к предыдущему агенту",
   "command.model.variant.cycle": "Цикл режимов мышления",
   "command.model.variant.cycle.description": "Переключиться к следующему уровню усилий",
+  "command.prompt.mode.shell": "Оболочка",
+  "command.prompt.mode.normal": "Промпт",
   "command.permissions.autoaccept.enable": "Авто-принятие изменений",
   "command.permissions.autoaccept.disable": "Прекратить авто-принятие изменений",
   "command.workspace.toggle": "Переключить рабочие пространства",
@@ -227,6 +229,7 @@ export const dict = {
   "prompt.placeholder.summarizeComments": "Суммировать комментарии…",
   "prompt.placeholder.summarizeComment": "Суммировать комментарий…",
   "prompt.mode.shell": "Оболочка",
+  "prompt.mode.normal": "Промпт",
   "prompt.mode.shell.exit": "esc для выхода",
 
   "prompt.example.1": "Исправить TODO в коде",
@@ -597,6 +600,7 @@ export const dict = {
   "settings.general.section.notifications": "Системные уведомления",
   "settings.general.section.updates": "Обновления",
   "settings.general.section.sounds": "Звуковые эффекты",
+  "settings.general.section.feed": "Лента",
   "settings.general.section.display": "Дисплей",
 
   "settings.general.row.language.title": "Язык",
@@ -608,6 +612,12 @@ export const dict = {
   "settings.general.row.font.title": "Шрифт",
   "settings.general.row.font.description": "Настройте моноширинный шрифт для блоков кода",
 
+  "settings.general.row.shellToolPartsExpanded.title": "Разворачивать элементы инструмента shell",
+  "settings.general.row.shellToolPartsExpanded.description":
+    "Показывать элементы инструмента shell в ленте развернутыми по умолчанию",
+  "settings.general.row.editToolPartsExpanded.title": "Разворачивать элементы инструмента edit",
+  "settings.general.row.editToolPartsExpanded.description":
+    "Показывать элементы инструментов edit, write и patch в ленте развернутыми по умолчанию",
   "settings.general.row.wayland.title": "Использовать нативный Wayland",
   "settings.general.row.wayland.description": "Отключить X11 fallback на Wayland. Требуется перезапуск.",
   "settings.general.row.wayland.tooltip":
@@ -637,6 +647,7 @@ export const dict = {
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
   "font.option.geistMono": "Geist Mono",
+  "sound.option.none": "Нет",
   "sound.option.alert01": "Alert 01",
   "sound.option.alert02": "Alert 02",
   "sound.option.alert03": "Alert 03",

@@ -6,6 +6,7 @@ import { cmd } from "./cmd"
 import { Flag } from "../../flag/flag"
 import { bootstrap } from "../bootstrap"
 import { EOL } from "os"
+import { Filesystem } from "../../util/filesystem"
 import { createOpencodeClient, type Message, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
@@ -167,12 +168,17 @@ function websearch(info: ToolProps<typeof WebSearchTool>) {
 }
 
 function task(info: ToolProps<typeof TaskTool>) {
-  const agent = Locale.titlecase(info.input.subagent_type)
-  const desc = info.input.description
-  const started = info.part.state.status === "running"
+  const input = info.part.state.input
+  const status = info.part.state.status
+  const subagent =
+    typeof input.subagent_type === "string" && input.subagent_type.trim().length > 0 ? input.subagent_type : "unknown"
+  const agent = Locale.titlecase(subagent)
+  const desc =
+    typeof input.description === "string" && input.description.trim().length > 0 ? input.description : undefined
+  const icon = status === "error" ? "✗" : status === "running" ? "•" : "✓"
   const name = desc ?? `${agent} Task`
   inline({
-    icon: started ? "•" : "✓",
+    icon,
     title: name,
     description: desc ? `${agent} Agent` : undefined,
   })
@@ -315,19 +321,12 @@ export const RunCommand = cmd({
 
       for (const filePath of list) {
         const resolvedPath = path.resolve(process.cwd(), filePath)
-        const file = Bun.file(resolvedPath)
-        const stats = await file.stat().catch(() => {})
-        if (!stats) {
-          UI.error(`File not found: ${filePath}`)
-          process.exit(1)
-        }
-        if (!(await file.exists())) {
+        if (!(await Filesystem.exists(resolvedPath))) {
           UI.error(`File not found: ${filePath}`)
           process.exit(1)
         }
 
-        const stat = await file.stat()
-        const mime = stat.isDirectory() ? "application/x-directory" : "text/plain"
+        const mime = (await Filesystem.isDir(resolvedPath)) ? "application/x-directory" : "text/plain"
 
         files.push({
           type: "file",
@@ -457,9 +456,17 @@ export const RunCommand = cmd({
             const part = event.properties.part
             if (part.sessionID !== sessionID) continue
 
-            if (part.type === "tool" && part.state.status === "completed") {
+            if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
               if (emit("tool_use", { part })) continue
-              tool(part)
+              if (part.state.status === "completed") {
+                tool(part)
+                continue
+              }
+              inline({
+                icon: "✗",
+                title: `${part.tool} failed`,
+              })
+              UI.error(part.state.error)
             }
 
             if (

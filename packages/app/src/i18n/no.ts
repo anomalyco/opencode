@@ -72,6 +72,8 @@ export const dict = {
   "command.agent.cycle.reverse.description": "Bytt til forrige agent",
   "command.model.variant.cycle": "Bytt tenkeinnsats",
   "command.model.variant.cycle.description": "Bytt til neste innsatsnivå",
+  "command.prompt.mode.shell": "Shell",
+  "command.prompt.mode.normal": "Prompt",
   "command.permissions.autoaccept.enable": "Godta endringer automatisk",
   "command.permissions.autoaccept.disable": "Slutt å godta endringer automatisk",
   "command.workspace.toggle": "Veksle arbeidsområder",
@@ -230,6 +232,7 @@ export const dict = {
   "prompt.placeholder.summarizeComments": "Oppsummer kommentarer…",
   "prompt.placeholder.summarizeComment": "Oppsummer kommentar…",
   "prompt.mode.shell": "Shell",
+  "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "ESC for å avslutte",
 
   "prompt.example.1": "Fiks en TODO i kodebasen",
@@ -599,6 +602,7 @@ export const dict = {
   "settings.general.section.notifications": "Systemvarsler",
   "settings.general.section.updates": "Oppdateringer",
   "settings.general.section.sounds": "Lydeffekter",
+  "settings.general.section.feed": "Feed",
   "settings.general.section.display": "Skjerm",
 
   "settings.general.row.language.title": "Språk",
@@ -610,6 +614,11 @@ export const dict = {
   "settings.general.row.font.title": "Skrift",
   "settings.general.row.font.description": "Tilpass mono-skriften som brukes i kodeblokker",
 
+  "settings.general.row.shellToolPartsExpanded.title": "Utvid shell-verktøydeler",
+  "settings.general.row.shellToolPartsExpanded.description": "Vis shell-verktøydeler utvidet som standard i tidslinjen",
+  "settings.general.row.editToolPartsExpanded.title": "Utvid edit-verktøydeler",
+  "settings.general.row.editToolPartsExpanded.description":
+    "Vis edit-, write- og patch-verktøydeler utvidet som standard i tidslinjen",
   "settings.general.row.wayland.title": "Bruk innebygd Wayland",
   "settings.general.row.wayland.description": "Deaktiver X11-fallback på Wayland. Krever omstart.",
   "settings.general.row.wayland.tooltip":
@@ -639,6 +648,7 @@ export const dict = {
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
   "font.option.geistMono": "Geist Mono",
+  "sound.option.none": "Ingen",
   "sound.option.alert01": "Varsel 01",
   "sound.option.alert02": "Varsel 02",
   "sound.option.alert03": "Varsel 03",

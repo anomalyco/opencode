@@ -1,4 +1,5 @@
 import { sep } from "node:path"
+import { Glob } from "../util/glob"
 
 export namespace FileIgnore {
   const FOLDERS = new Set([
@@ -53,19 +54,17 @@ export namespace FileIgnore {
     "**/.nyc_output/**",
   ]
 
-  const FILE_GLOBS = FILES.map((p) => new Bun.Glob(p))
-
   export const PATTERNS = [...FILES, ...FOLDERS]
 
   export function match(
     filepath: string,
     opts?: {
-      extra?: Bun.Glob[]
-      whitelist?: Bun.Glob[]
+      extra?: string[]
+      whitelist?: string[]
     },
   ) {
-    for (const glob of opts?.whitelist || []) {
-      if (glob.match(filepath)) return false
+    for (const pattern of opts?.whitelist || []) {
+      if (Glob.match(pattern, filepath)) return false
     }
 
     const parts = filepath.split(sep)
@@ -74,8 +73,8 @@ export namespace FileIgnore {
     }
 
     const extra = opts?.extra || []
-    for (const glob of [...FILE_GLOBS, ...extra]) {
-      if (glob.match(filepath)) return true
+    for (const pattern of [...FILES, ...extra]) {
+      if (Glob.match(pattern, filepath)) return true
     }
 
     return false
