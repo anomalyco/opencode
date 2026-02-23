@@ -125,6 +125,7 @@ export function Prompt(props: PromptProps) {
     mode: "normal" | "shell"
     extmarkToPartIndex: Map<number, number>
     interrupt: number
+    appExitArmed: number
     placeholder: number
   }>({
     placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
@@ -135,6 +136,7 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+    appExitArmed: 0,
   })
 
   createEffect(
@@ -865,8 +867,17 @@ export function Prompt(props: PromptProps) {
                 }
                 if (keybind.match("app_exit", e)) {
                   if (store.prompt.input === "") {
-                    await exit()
-                    // Don't preventDefault - let textarea potentially handle the event
+                    const now = Date.now()
+                    if (now - store.appExitArmed < 2000) {
+                      await exit()
+                    } else {
+                      setStore("appExitArmed", now)
+                      toast.show({
+                        message: "Press Ctrl+C again to exit",
+                        variant: "warning",
+                        duration: 2000,
+                      })
+                    }
                     e.preventDefault()
                     return
                   }
