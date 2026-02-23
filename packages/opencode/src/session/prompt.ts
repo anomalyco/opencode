@@ -538,12 +538,13 @@ export namespace SessionPrompt {
         continue
       }
 
-      // context overflow, needs compaction
+      // proactive context management: prune + compact before overflow
       if (
         lastFinished &&
         lastFinished.summary !== true &&
         (await SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model }))
       ) {
+        await SessionCompaction.prune({ sessionID })
         await SessionCompaction.create({
           sessionID,
           agent: lastUser.agent,
@@ -702,6 +703,7 @@ export namespace SessionPrompt {
 
       if (result === "stop") break
       if (result === "compact") {
+        await SessionCompaction.prune({ sessionID })
         await SessionCompaction.create({
           sessionID,
           agent: lastUser.agent,
