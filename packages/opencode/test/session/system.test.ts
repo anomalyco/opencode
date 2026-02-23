@@ -41,11 +41,12 @@ description: ${description}
           const first = await SystemPrompt.skills(build!)
           const second = await SystemPrompt.skills(build!)
 
-          expect(first).toBe(second)
+          expect(first).toEqual(second)
 
-          const alpha = first!.indexOf("<name>alpha-skill</name>")
-          const middle = first!.indexOf("<name>middle-skill</name>")
-          const zeta = first!.indexOf("<name>zeta-skill</name>")
+          const combined = [first.global, first.project].filter(Boolean).join("\n")
+          const alpha = combined.indexOf("<name>alpha-skill</name>")
+          const middle = combined.indexOf("<name>middle-skill</name>")
+          const zeta = combined.indexOf("<name>zeta-skill</name>")
 
           expect(alpha).toBeGreaterThan(-1)
           expect(middle).toBeGreaterThan(alpha)

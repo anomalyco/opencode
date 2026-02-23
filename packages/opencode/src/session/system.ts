@@ -58,17 +58,31 @@ export namespace SystemPrompt {
     ]
   }
 
-  export async function skills(agent: Agent.Info) {
-    if (Permission.disabled(["skill"], agent.permission).has("skill")) return
+  export async function skills(agent: Agent.Info): Promise<{ global?: string; project?: string }> {
+    if (Permission.disabled(["skill"], agent.permission).has("skill")) return {}
 
     const list = await Skill.available(agent)
+    const globalSkills = list.filter((s) => s.scope === "global")
+    const projectSkills = list.filter((s) => s.scope === "project")
 
-    return [
+    // the agents seem to ingest the information about skills a bit better if we present a more verbose
+    // version of them here and a less verbose version in tool description, rather than vice versa.
+    const preamble = [
       "Skills provide specialized instructions and workflows for specific tasks.",
       "Use the skill tool to load a skill when a task matches its description.",
-      // the agents seem to ingest the information about skills a bit better if we present a more verbose
-      // version of them here and a less verbose version in tool description, rather than vice versa.
-      Skill.fmt(list, { verbose: true }),
     ].join("\n")
+
+    const global = globalSkills.length > 0
+      ? [preamble, Skill.fmt(globalSkills, { verbose: true })].join("\n")
+      : undefined
+
+    const project = projectSkills.length > 0
+      ? [
+          ...(globalSkills.length === 0 ? [preamble] : []),
+          Skill.fmt(projectSkills, { verbose: true }),
+        ].join("\n")
+      : undefined
+
+    return { global, project }
   }
 }

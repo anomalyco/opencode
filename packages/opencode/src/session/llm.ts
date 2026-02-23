@@ -35,6 +35,7 @@ export namespace LLM {
     agent: Agent.Info
     permission?: Permission.Ruleset
     system: string[]
+    systemSplit?: number
     abort: AbortSignal
     messages: ModelMessage[]
     small?: boolean
@@ -67,19 +68,14 @@ export namespace LLM {
     // TODO: move this to a proper hook
     const isOpenaiOauth = provider.id === "openai" && auth?.type === "oauth"
 
-    const system: string[] = []
-    system.push(
-      [
-        // use agent prompt otherwise provider prompt
-        ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
-        // any custom prompt passed into this call
-        ...input.system,
-        // any custom prompt from last user message
-        ...(input.user.system ? [input.user.system] : []),
-      ]
-        .filter((x) => x)
-        .join("\n"),
-    )
+    const prompt = input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)
+    const split = input.systemSplit ?? input.system.length
+    const system = [
+      // block 1: provider/agent prompt + global instructions (stable across repos)
+      [...prompt, ...input.system.slice(0, split)].filter(Boolean).join("\n"),
+      // block 2: env + project instructions + any custom prompt from last user message (dynamic)
+      [...input.system.slice(split), ...(input.user.system ? [input.user.system] : [])].filter(Boolean).join("\n"),
+    ].filter(Boolean)
 
     const header = system[0]
     await Plugin.trigger(

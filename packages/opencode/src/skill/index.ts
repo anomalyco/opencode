@@ -30,6 +30,7 @@ export namespace Skill {
     description: z.string(),
     location: z.string(),
     content: z.string(),
+    scope: z.enum(["global", "project"]).default("project"),
   })
   export type Info = z.infer<typeof Info>
 
@@ -68,7 +69,7 @@ export namespace Skill {
     readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
   }
 
-  const add = async (state: State, match: string) => {
+  const add = async (state: State, match: string, scope: "global" | "project" = "project") => {
     const md = await ConfigMarkdown.parse(match).catch(async (err) => {
       const message = ConfigMarkdown.FrontmatterError.isInstance(err)
         ? err.data.message
@@ -98,10 +99,16 @@ export namespace Skill {
       description: parsed.data.description,
       location: match,
       content: md.content,
+      scope,
     }
   }
 
-  const scan = async (state: State, root: string, pattern: string, opts?: { dot?: boolean; scope?: string }) => {
+  const scan = async (
+    state: State,
+    root: string,
+    pattern: string,
+    opts?: { dot?: boolean; scope?: "global" | "project" },
+  ) => {
     return Glob.scan(pattern, {
       cwd: root,
       absolute: true,
@@ -109,7 +116,7 @@ export namespace Skill {
       symlink: true,
       dot: opts?.dot,
     })
-      .then((matches) => Promise.all(matches.map((match) => add(state, match))))
+      .then((matches) => Promise.all(matches.map((match) => add(state, match, opts?.scope ?? "project"))))
       .catch((error) => {
         if (!opts?.scope) throw error
         log.error(`failed to scan ${opts.scope} skills`, { dir: root, error })
@@ -141,7 +148,7 @@ export namespace Skill {
       }
 
       for (const dir of await Config.directories()) {
-        await scan(state, dir, OPENCODE_SKILL_PATTERN)
+        await scan(state, dir, OPENCODE_SKILL_PATTERN, { scope: "global" })
       }
 
       const cfg = await Config.get()
@@ -153,13 +160,13 @@ export namespace Skill {
           continue
         }
 
-        await scan(state, dir, SKILL_PATTERN)
+        await scan(state, dir, SKILL_PATTERN, { scope: "global" })
       }
 
       for (const url of cfg.skills?.urls ?? []) {
         for (const dir of await Effect.runPromise(discovery.pull(url))) {
           state.dirs.add(dir)
-          await scan(state, dir, SKILL_PATTERN)
+          await scan(state, dir, SKILL_PATTERN, { scope: "global" })
         }
       }
 
