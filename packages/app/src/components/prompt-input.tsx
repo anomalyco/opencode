@@ -89,6 +89,8 @@ const EXAMPLES = [
   "prompt.example.25",
 ] as const
 
+const NON_EMPTY_TEXT = /[^\s\u200B]/
+
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
   const sync = useSync()
@@ -636,7 +638,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     let buffer = ""
 
     const flushText = () => {
-      const content = buffer.replace(/\r\n?/g, "\n").replace(/\u200B/g, "")
+      let content = buffer
+      if (content.includes("\r")) content = content.replace(/\r\n?/g, "\n")
+      if (content.includes("\u200B")) content = content.replace(/\u200B/g, "")
       buffer = ""
       if (!content) return
       parts.push({ type: "text", content, start: position, end: position + content.length })
@@ -714,10 +718,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const rawParts = parseFromDOM()
     const images = imageAttachments()
     const cursorPosition = getCursorPosition(editorRef)
-    const rawText = rawParts.map((p) => ("content" in p ? p.content : "")).join("")
-    const trimmed = rawText.replace(/\u200B/g, "").trim()
+    const rawText =
+      rawParts.length === 1 && rawParts[0]?.type === "text"
+        ? rawParts[0].content
+        : rawParts.map((p) => ("content" in p ? p.content : "")).join("")
     const hasNonText = rawParts.some((part) => part.type !== "text")
-    const shouldReset = trimmed.length === 0 && !hasNonText && images.length === 0
+    const shouldReset = !NON_EMPTY_TEXT.test(rawText) && !hasNonText && images.length === 0
 
     if (shouldReset) {
       closePopover()
@@ -757,19 +763,31 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const addPart = (part: ContentPart) => {
-    const selection = window.getSelection()
-    if (!selection || selection.rangeCount === 0) return
+    if (part.type === "image") return false
 
-    const cursorPosition = getCursorPosition(editorRef)
-    const currentPrompt = prompt.current()
-    const rawText = currentPrompt.map((p) => ("content" in p ? p.content : "")).join("")
-    const textBeforeCursor = rawText.substring(0, cursorPosition)
-    const atMatch = textBeforeCursor.match(/@(\S*)$/)
+    const selection = window.getSelection()
+    if (!selection) return false
+
+    if (selection.rangeCount === 0 || !editorRef.contains(selection.anchorNode)) {
+      editorRef.focus()
+      const cursor = prompt.cursor() ?? promptLength(prompt.current())
+      setCursorPosition(editorRef, cursor)
+    }
+
+    if (selection.rangeCount === 0) return false
+    const range = selection.getRangeAt(0)
+    if (!editorRef.contains(range.startContainer)) return false
 
     if (part.type === "file" || part.type === "agent") {
+      const cursorPosition = getCursorPosition(editorRef)
+      const rawText = prompt
+        .current()
+        .map((p) => ("content" in p ? p.content : ""))
+        .join("")
+      const textBeforeCursor = rawText.substring(0, cursorPosition)
+      const atMatch = textBeforeCursor.match(/@(\S*)$/)
       const pill = createPill(part)
       const gap = document.createTextNode(" ")
-      const range = selection.getRangeAt(0)
 
       if (atMatch) {
         const start = atMatch.index ?? cursorPosition - atMatch[0].length
@@ -784,8 +802,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       range.collapse(true)
       selection.removeAllRanges()
       selection.addRange(range)
-    } else if (part.type === "text") {
-      const range = selection.getRangeAt(0)
+    }
+
+    if (part.type === "text") {
       const fragment = createTextFragment(part.content)
       const last = fragment.lastChild
       range.deleteContents()
@@ -821,6 +840,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     handleInput()
     closePopover()
+    return true
   }
 
   const addToHistory = (prompt: Prompt, mode: "normal" | "shell") => {

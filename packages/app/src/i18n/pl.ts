@@ -534,6 +534,7 @@ export const dict = {
   "settings.general.section.notifications": "Powiadomienia systemowe",
   "settings.general.section.updates": "Aktualizacje",
   "settings.general.section.sounds": "Efekty dźwiękowe",
+  "settings.general.section.feed": "Kanał",
   "settings.general.section.display": "Ekran",
   "settings.general.row.language.title": "Język",
   "settings.general.row.language.description": "Zmień język wyświetlania dla OpenCode",
@@ -543,6 +544,12 @@ export const dict = {
   "settings.general.row.theme.description": "Dostosuj motyw OpenCode.",
   "settings.general.row.font.title": "Czcionka",
   "settings.general.row.font.description": "Dostosuj czcionkę mono używaną w blokach kodu",
+  "settings.general.row.shellToolPartsExpanded.title": "Rozwijaj elementy narzędzia shell",
+  "settings.general.row.shellToolPartsExpanded.description":
+    "Domyślnie pokazuj rozwinięte elementy narzędzia shell na osi czasu",
+  "settings.general.row.editToolPartsExpanded.title": "Rozwijaj elementy narzędzia edit",
+  "settings.general.row.editToolPartsExpanded.description":
+    "Domyślnie pokazuj rozwinięte elementy narzędzi edit, write i patch na osi czasu",
   "settings.general.row.wayland.title": "Użyj natywnego Wayland",
   "settings.general.row.wayland.description": "Wyłącz fallback X11 na Wayland. Wymaga restartu.",
   "settings.general.row.wayland.tooltip":
@@ -570,6 +577,7 @@ export const dict = {
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
   "font.option.geistMono": "Geist Mono",
+  "sound.option.none": "Brak",
   "sound.option.alert01": "Alert 01",
   "sound.option.alert02": "Alert 02",
   "sound.option.alert03": "Alert 03",

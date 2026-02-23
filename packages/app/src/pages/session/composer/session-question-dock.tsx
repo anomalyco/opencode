@@ -62,7 +62,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   const measure = () => {
     if (!root) return
 
-    const scroller = document.querySelector(".session-scroller")
+    const scroller = document.querySelector(".scroll-view__viewport")
     const head = scroller instanceof HTMLElement ? scroller.firstElementChild : undefined
     const top =
       head instanceof HTMLElement && head.classList.contains("sticky") ? head.getBoundingClientRect().bottom : 0
@@ -95,7 +95,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     window.addEventListener("resize", update)
 
     const dock = root?.closest('[data-component="session-prompt-dock"]')
-    const scroller = document.querySelector(".session-scroller")
+    const scroller = document.querySelector(".scroll-view__viewport")
     const observer = new ResizeObserver(update)
     if (dock instanceof HTMLElement) observer.observe(dock)
     if (scroller instanceof HTMLElement) observer.observe(scroller)
