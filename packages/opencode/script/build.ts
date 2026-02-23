@@ -71,6 +71,10 @@ const allTargets: {
     arch: "arm64",
   },
   {
+    os: "android",
+    arch: "arm64",
+  },
+  {
     os: "linux",
     arch: "x64",
   },
@@ -178,7 +182,9 @@ for (const item of targets) {
       autoloadDotenv: false,
       autoloadTsconfig: true,
       autoloadPackageJson: true,
-      target: name.replace(pkg.name, "bun") as any,
+      target: (item.os === "android"
+        ? name.replace(pkg.name + "-", "bun-")
+        : name.replace(pkg.name, "bun")) as any,
       outfile: `dist/${name}/bin/opencode`,
       execArgv: [`--user-agent=opencode/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
@@ -190,7 +196,7 @@ for (const item of targets) {
       OTUI_TREE_SITTER_WORKER_PATH: bunfsRoot + workerRelativePath,
       OPENCODE_WORKER_PATH: workerPath,
       OPENCODE_CHANNEL: `'${Script.channel}'`,
-      OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
+      OPENCODE_LIBC: item.os === "android" ? "'android'" : item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
     },
   })
 
@@ -212,7 +218,7 @@ for (const item of targets) {
 
 if (Script.release) {
   for (const key of Object.keys(binaries)) {
-    if (key.includes("linux")) {
+    if (key.includes("linux") || key.includes("android")) {
       await $`tar -czf ../../${key}.tar.gz *`.cwd(`dist/${key}/bin`)
     } else {
       await $`zip -r ../../${key}.zip *`.cwd(`dist/${key}/bin`)

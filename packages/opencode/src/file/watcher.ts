@@ -32,14 +32,24 @@ export namespace FileWatcher {
     ),
   }
 
+  const isAndroid = process.env.TERMUX_VERSION !== undefined || process.platform === "android"
+
   const watcher = lazy((): typeof import("@parcel/watcher") | undefined => {
     try {
-      const binding = require(
-        `@parcel/watcher-${process.platform}-${process.arch}${process.platform === "linux" ? `-${OPENCODE_LIBC || "glibc"}` : ""}`,
-      )
+      const platform = process.platform
+      const arch = process.arch
+      const libc = OPENCODE_LIBC || (isAndroid ? "bionic" : "glibc")
+      
+      let bindingName = `@parcel/watcher-${platform}-${arch}`
+      if (platform === "linux") {
+        bindingName += `-${libc}`
+      }
+
+      log.info("loading watcher binding", { bindingName })
+      const binding = require(bindingName)
       return createWrapper(binding) as typeof import("@parcel/watcher")
     } catch (error) {
-      log.error("failed to load watcher binding", { error })
+      log.error("failed to load watcher binding, file watching will be disabled", { error })
       return
     }
   })
@@ -51,13 +61,13 @@ export namespace FileWatcher {
       const backend = (() => {
         if (process.platform === "win32") return "windows"
         if (process.platform === "darwin") return "fs-events"
-        if (process.platform === "linux") return "inotify"
+        if (process.platform === "linux" || isAndroid) return "inotify"
       })()
       if (!backend) {
         log.error("watcher backend not supported", { platform: process.platform })
         return {}
       }
-      log.info("watcher backend", { platform: process.platform, backend })
+      log.info("watcher backend", { platform: process.platform, backend, isAndroid })
 
       const w = watcher()
       if (!w) return {}

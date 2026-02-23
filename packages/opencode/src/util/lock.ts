@@ -95,4 +95,36 @@ export namespace Lock {
       }
     })
   }
+
+  export namespace File {
+    import fs from "fs/promises"
+    import { existsSync, mkdirSync, writeFileSync, unlinkSync } from "fs"
+
+    export async function acquire(path: string): Promise<Disposable | undefined> {
+      try {
+        if (existsSync(path)) {
+          const content = await fs.readFile(path, "utf-8").catch(() => undefined)
+          const pid = content ? parseInt(content.trim(), 10) : undefined
+          if (pid && !isNaN(pid)) {
+            try {
+              process.kill(pid, 0) // Check if process exists
+              return undefined
+            } catch {
+              // Process doesn't exist, we can take the lock
+            }
+          }
+        }
+        await fs.writeFile(path, process.pid.toString())
+        return {
+          [Symbol.dispose]: () => {
+            try {
+              unlinkSync(path)
+            } catch {}
+          },
+        }
+      } catch {
+        return undefined
+      }
+    }
+  }
 }

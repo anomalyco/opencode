@@ -12,6 +12,8 @@ import { Filesystem } from "@/util/filesystem"
 import type { Event } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
+import { Global } from "@/global"
+import { Lock } from "@/util/lock"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -83,6 +85,7 @@ export const TuiThreadCommand = cmd({
     // Keep ENABLE_PROCESSED_INPUT cleared even if other code flips it.
     // (Important when running under `bun run` wrappers on Windows.)
     const unguard = win32InstallCtrlCGuard()
+    let lock: Disposable | undefined
     try {
       // Must be the very first thing — disables CTRL_C_EVENT before any Worker
       // spawn or async work so the OS cannot kill the process group.
@@ -97,6 +100,14 @@ export const TuiThreadCommand = cmd({
       // Resolve relative paths against PWD to preserve behavior when using --cwd flag
       const baseCwd = process.env.PWD ?? process.cwd()
       const cwd = args.project ? path.resolve(baseCwd, args.project) : process.cwd()
+
+      const lockPath = path.join(Global.Path.state, "opencode.lock")
+      lock = await Lock.File.acquire(lockPath)
+      if (!lock) {
+        UI.error("Another instance of opencode is already running. Please close it first.")
+        process.exit(1)
+      }
+
       const localWorker = new URL("./worker.ts", import.meta.url)
       const distWorker = new URL("./cli/cmd/tui/worker.js", import.meta.url)
       const workerPath = await iife(async () => {
@@ -185,6 +196,8 @@ export const TuiThreadCommand = cmd({
       await tuiPromise
     } finally {
       unguard?.()
+      // @ts-ignore
+      lock?.[Symbol.dispose]?.()
     }
     process.exit(0)
   },

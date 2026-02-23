@@ -80,7 +80,12 @@ else
     os=$(echo "$raw_os" | tr '[:upper:]' '[:lower:]')
     case "$raw_os" in
       Darwin*) os="darwin" ;;
-      Linux*) os="linux" ;;
+      Linux*) 
+        os="linux" 
+        if [ -d /data/data/com.termux ]; then
+          os="android"
+        fi
+        ;;
       MINGW*|MSYS*|CYGWIN*) os="windows" ;;
     esac
 
@@ -101,7 +106,7 @@ else
 
     combo="$os-$arch"
     case "$combo" in
-      linux-x64|linux-arm64|darwin-x64|darwin-arm64|windows-x64)
+      linux-x64|linux-arm64|darwin-x64|darwin-arm64|windows-x64|android-arm64)
         ;;
       *)
         echo -e "${RED}Unsupported OS/Arch: $os/$arch${NC}"
@@ -110,7 +115,7 @@ else
     esac
 
     archive_ext=".zip"
-    if [ "$os" = "linux" ]; then
+    if [ "$os" = "linux" ] || [ "$os" = "android" ]; then
       archive_ext=".tar.gz"
     fi
 
@@ -342,6 +347,15 @@ download_and_install() {
 
     mv "$tmp_dir/opencode" "$INSTALL_DIR"
     chmod 755 "${INSTALL_DIR}/opencode"
+
+    if [ "$os" = "android" ]; then
+        if command -v termux-elf-cleaner >/dev/null 2>&1; then
+            termux-elf-cleaner "${INSTALL_DIR}/opencode"
+        else
+            echo -e "${ORANGE}Warning: 'termux-elf-cleaner' not found. You might need to run 'pkg install termux-elf-cleaner' and then run it on ${INSTALL_DIR}/opencode manually.${NC}"
+        fi
+    fi
+
     rm -rf "$tmp_dir"
 }
 
