@@ -58,6 +58,7 @@ import { SessionPromptDock } from "@/pages/session/session-prompt-dock"
 import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
+import { useAutoSelectSession } from "@/overrides/use-auto-select-session"
 
 type HandoffSession = {
   prompt: string
@@ -231,6 +232,8 @@ export default function Page() {
       navMark({ dir: params.dir, to: id, name: "session:data-ready" })
     })
   }
+
+  useAutoSelectSession()
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())

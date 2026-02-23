@@ -21,9 +21,7 @@ export function SettingsPopup() {
   const project = createMemo(() => getFilename(decode64(params.dir) ?? params.dir))
   const [email, setEmail] = createSignal("")
   const dev = createMemo(() => {
-    if (typeof window !== "object") return ""
-    if (!window.location?.hostname) return ""
-    return `${window.location.origin}/preview`
+    return "https://vibe.laterdev.com/preview"
   })
   const [config] = createResource(
     () => sdk.directory,
