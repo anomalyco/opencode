@@ -115,7 +115,22 @@ function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels) {
     const parent = block.parentElement
     if (!parent) return
     const wrapped = parent.getAttribute("data-component") === "markdown-code"
-    if (wrapped) return
+    if (wrapped) {
+      const buttons = Array.from(parent.querySelectorAll('[data-slot="markdown-copy-button"]')).filter(
+        (el): el is HTMLButtonElement => el instanceof HTMLButtonElement,
+      )
+
+      if (buttons.length === 0) {
+        parent.appendChild(createCopyButton(labels))
+        return
+      }
+
+      for (const button of buttons.slice(1)) {
+        button.remove()
+      }
+
+      return
+    }
     const wrapper = document.createElement("div")
     wrapper.setAttribute("data-component", "markdown-code")
     parent.replaceChild(wrapper, block)
@@ -192,6 +207,20 @@ function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels) {
   }
 }
 
+function wrapCodeBlocks(root: HTMLDivElement) {
+  const blocks = Array.from(root.querySelectorAll("pre"))
+  for (const block of blocks) {
+    const parent = block.parentElement
+    if (!parent) continue
+    const wrapped = parent.getAttribute("data-component") === "markdown-code"
+    if (wrapped) continue
+    const wrapper = document.createElement("div")
+    wrapper.setAttribute("data-component", "markdown-code")
+    parent.replaceChild(wrapper, block)
+    wrapper.appendChild(block)
+  }
+}
+
 function touch(key: string, value: Entry) {
   cache.delete(key)
   cache.set(key, value)
@@ -255,25 +284,22 @@ export function Markdown(
 
     const temp = document.createElement("div")
     temp.innerHTML = content
+    wrapCodeBlocks(temp)
 
     morphdom(container, temp, {
       childrenOnly: true,
       onBeforeElUpdated: (fromEl, toEl) => {
         if (fromEl.isEqualNode(toEl)) return false
-        if (fromEl.getAttribute("data-component") === "markdown-code") {
+
+        const fromWrapped = fromEl.getAttribute("data-component") === "markdown-code"
+        const toWrapped = toEl.getAttribute("data-component") === "markdown-code"
+        if (fromWrapped && toWrapped) {
           const fromPre = fromEl.querySelector("pre")
           const toPre = toEl.querySelector("pre")
           if (fromPre && toPre && !fromPre.isEqualNode(toPre)) {
             morphdom(fromPre, toPre)
           }
           return false
-        }
-        return true
-      },
-      onBeforeNodeDiscarded: (node) => {
-        if (node instanceof Element) {
-          if (node.getAttribute("data-slot") === "markdown-copy-button") return false
-          if (node.getAttribute("data-component") === "markdown-code") return false
         }
         return true
       },
