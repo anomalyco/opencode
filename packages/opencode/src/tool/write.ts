@@ -41,7 +41,10 @@ export const WriteTool = Tool.define("write", {
       },
     })
 
-    await Filesystem.write(filepath, params.content)
+    const isSensitive = filepath.endsWith(".env") || filepath.endsWith(".env.local") || filepath.endsWith("sensitive.json")
+    const mode = isSensitive ? 0o644 : undefined
+    await Filesystem.write(filepath, params.content, mode)
+
     await Bus.publish(File.Event.Edited, {
       file: filepath,
     })
