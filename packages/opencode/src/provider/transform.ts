@@ -339,9 +339,10 @@ function normalizeMessages(
   return msgs
 }
 
-function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
+function applyCaching(msgs: ModelMessage[], model: Provider.Model, extendedTTL?: boolean): ModelMessage[] {
   const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
   const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
+  const anthropicCacheControl = extendedTTL ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" }
 
   const providerOptions = {
     anthropic: {
@@ -365,6 +366,7 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage
   }
 
   for (const msg of unique([...system, ...final])) {
+    const options = msg === system[0] ? { ...providerOptions, anthropic: { cacheControl: anthropicCacheControl } } : providerOptions
     const useMessageLevelOptions =
       model.providerID === "anthropic" ||
       model.providerID.includes("bedrock") ||
@@ -379,12 +381,12 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage
         lastContent.type !== "tool-approval-request" &&
         lastContent.type !== "tool-approval-response"
       ) {
-        lastContent.providerOptions = mergeDeep(lastContent.providerOptions ?? {}, providerOptions)
+        lastContent.providerOptions = mergeDeep(lastContent.providerOptions ?? {}, options)
         continue
       }
     }
 
-    msg.providerOptions = mergeDeep(msg.providerOptions ?? {}, providerOptions)
+    msg.providerOptions = mergeDeep(msg.providerOptions ?? {}, options)
   }
 
   return msgs
@@ -442,7 +444,7 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
       model.api.npm === "@ai-sdk/alibaba") &&
     model.api.npm !== "@ai-sdk/gateway"
   ) {
-    msgs = applyCaching(msgs, model)
+    msgs = applyCaching(msgs, model, (options.extendedTTL as boolean | undefined) ?? Flag.OPENCODE_EXPERIMENTAL_CACHE_1H_TTL)
   }
 
   // Remap providerOptions keys from stored providerID to expected SDK key
