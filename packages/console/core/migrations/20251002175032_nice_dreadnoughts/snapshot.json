@@ -1,9 +1,7 @@
 {
   "version": "6",
   "id": "2296e9e4-bee6-485b-a146-6666ac8dc0d0",
-  "prevIds": [
-    "14616ba2-c21e-4787-a289-f2a3eb6de04f"
-  ],
+  "prevIds": ["14616ba2-c21e-4787-a289-f2a3eb6de04f"],
   "dialect": "mysql",
   "ddl": [
     {
@@ -1103,28 +1101,19 @@
       "entityType": "indexes"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "name": "PRIMARY",
       "table": "billing",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "name": "PRIMARY",
       "table": "payment",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "name": "PRIMARY",
       "table": "usage",
       "entityType": "pks"
@@ -1166,10 +1155,7 @@
       "entityType": "indexes"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "name": "PRIMARY",
       "table": "key",
       "entityType": "pks"
@@ -1215,10 +1201,7 @@
       "entityType": "indexes"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "name": "PRIMARY",
       "table": "user",
       "entityType": "pks"
@@ -1240,9 +1223,7 @@
       "entityType": "indexes"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "name": "PRIMARY",
       "table": "workspace",
       "entityType": "pks"

@@ -1,9 +1,7 @@
 {
   "version": "6",
   "id": "4775571c-ad9c-4104-a202-2374b1963cfe",
-  "prevIds": [
-    "9cf10c24-6029-4cb4-866e-ff9b501eaf7e"
-  ],
+  "prevIds": ["9cf10c24-6029-4cb4-866e-ff9b501eaf7e"],
   "dialect": "mysql",
   "ddl": [
     {
@@ -1725,9 +1723,7 @@
       "entityType": "columns"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "name": "PRIMARY",
       "table": "account",
       "entityType": "pks"
@@ -1769,9 +1765,7 @@
       "entityType": "indexes"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "name": "PRIMARY",
       "table": "auth",
       "entityType": "pks"
@@ -1793,9 +1787,7 @@
       "entityType": "indexes"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "name": "PRIMARY",
       "table": "benchmark",
       "entityType": "pks"
@@ -1817,19 +1809,13 @@
       "entityType": "indexes"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "name": "PRIMARY",
       "table": "billing",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "name": "PRIMARY",
       "table": "payment",
       "entityType": "pks"
@@ -1855,27 +1841,19 @@
       "entityType": "indexes"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "name": "PRIMARY",
       "table": "usage",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "ip",
-        "interval"
-      ],
+      "columns": ["ip", "interval"],
       "name": "PRIMARY",
       "table": "ip_rate_limit",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "ip"
-      ],
+      "columns": ["ip"],
       "name": "PRIMARY",
       "table": "ip",
       "entityType": "pks"
@@ -1897,10 +1875,7 @@
       "entityType": "indexes"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "name": "PRIMARY",
       "table": "key",
       "entityType": "pks"
@@ -1926,10 +1901,7 @@
       "entityType": "indexes"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "name": "PRIMARY",
       "table": "model",
       "entityType": "pks"
@@ -1955,10 +1927,7 @@
       "entityType": "indexes"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "name": "PRIMARY",
       "table": "provider",
       "entityType": "pks"
@@ -2036,10 +2005,7 @@
       "entityType": "indexes"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "name": "PRIMARY",
       "table": "user",
       "entityType": "pks"
@@ -2061,9 +2027,7 @@
       "entityType": "indexes"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "name": "PRIMARY",
       "table": "workspace",
       "entityType": "pks"
