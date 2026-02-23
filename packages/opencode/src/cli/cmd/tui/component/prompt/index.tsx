@@ -34,6 +34,7 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { isSteerKey, isSubmitRequestSuccess, routeSubmit, type SubmitIntent } from "./submit-routing"
 
 export type PromptProps = {
   sessionID?: string
@@ -383,7 +384,7 @@ export function Prompt(props: PromptProps) {
       setStore("extmarkToPartIndex", new Map())
     },
     submit() {
-      submit()
+      void submit()
     },
   }
 
@@ -525,7 +526,15 @@ export function Prompt(props: PromptProps) {
     },
   ])
 
-  async function submit() {
+  function send(intent: SubmitIntent) {
+    void submitInner(intent)
+  }
+
+  function submit() {
+    send("default")
+  }
+
+  async function submitInner(intent: SubmitIntent) {
     if (props.disabled) return
     if (autocomplete?.visible) return
     if (!store.prompt.input) return
@@ -570,6 +579,47 @@ export function Prompt(props: PromptProps) {
     // Capture mode before it gets reset
     const currentMode = store.mode
     const variant = local.model.variant.current()
+    const parts = [
+      {
+        id: Identifier.ascending("part"),
+        type: "text" as const,
+        text: inputText,
+      },
+      ...nonTextParts.map((x) => ({
+        id: Identifier.ascending("part"),
+        ...x,
+      })),
+    ]
+
+    let sent = false
+    const prompt = async () => {
+      const asyncPrompt = !props.sessionID || (!!props.sessionID && status().type !== "idle")
+      const call = asyncPrompt ? sdk.client.session.promptAsync : sdk.client.session.prompt
+      const result = await call
+        .bind(sdk.client.session)({
+          sessionID,
+          ...selectedModel,
+          messageID,
+          agent: local.agent.current().name,
+          model: selectedModel,
+          variant,
+          parts,
+        })
+        .catch((error) => {
+          toast.error(error)
+          return null
+        })
+      if (result === null) return false
+      if (!isSubmitRequestSuccess(result)) {
+        toast.show({
+          variant: "error",
+          message: "Failed to send prompt",
+          duration: 3000,
+        })
+        return false
+      }
+      return true
+    }
 
     if (store.mode === "shell") {
       sdk.client.session.shell({
@@ -582,6 +632,7 @@ export function Prompt(props: PromptProps) {
         command: inputText,
       })
       setStore("mode", "normal")
+      sent = true
     } else if (
       inputText.startsWith("/") &&
       iife(() => {
@@ -612,29 +663,55 @@ export function Prompt(props: PromptProps) {
             ...x,
           })),
       })
+      sent = true
     } else {
-      sdk.client.session
-        .prompt({
-          sessionID,
-          ...selectedModel,
-          messageID,
-          agent: local.agent.current().name,
-          model: selectedModel,
-          variant,
-          parts: [
-            {
-              id: Identifier.ascending("part"),
-              type: "text",
-              text: inputText,
-            },
-            ...nonTextParts.map((x) => ({
-              id: Identifier.ascending("part"),
-              ...x,
-            })),
-          ],
+      const busy = !!props.sessionID && status().type !== "idle"
+      const route = routeSubmit({
+        busy,
+        intent,
+        hasNonText: nonTextParts.length > 0,
+      })
+      if (route === "reject-steer-nontext") {
+        toast.show({
+          variant: "warning",
+          message: "Steer while busy only supports plain text",
+          duration: 3000,
         })
-        .catch(() => {})
+        return
+      }
+      if (route === "steer") {
+        const result = await sdk.client.session
+          .steer({
+            sessionID,
+            text: inputText,
+          })
+          .catch((error) => {
+            toast.error(error)
+            return null
+          })
+        if (result === null) return
+        if (!result.data || result.error) {
+          toast.show({
+            variant: "error",
+            message: "Failed to send steer message",
+            duration: 3000,
+          })
+          return
+        }
+        if (result.data.accepted) {
+          sent = true
+        }
+        if (!result.data.accepted) {
+          sent = await prompt()
+          if (!sent) return
+        }
+      }
+      if (route === "prompt") {
+        sent = await prompt()
+        if (!sent) return
+      }
     }
+    if (!sent) return
     history.append({
       ...store.prompt,
       mode: currentMode,
@@ -834,6 +911,17 @@ export function Prompt(props: PromptProps) {
               onKeyDown={async (e) => {
                 if (props.disabled) {
                   e.preventDefault()
+                  return
+                }
+                if (
+                  isSteerKey({
+                    busy: !!props.sessionID && status().type !== "idle",
+                    mode: store.mode,
+                    matched: !!keybind.match("input_steer_submit", e),
+                  })
+                ) {
+                  e.preventDefault()
+                  send("steer")
                   return
                 }
                 // Handle clipboard paste (Ctrl+V) - check for images first on Windows
@@ -1116,12 +1204,19 @@ export function Prompt(props: PromptProps) {
                   })()}
                 </box>
               </box>
-              <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
-                esc{" "}
-                <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
-                  {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
-                </span>
-              </text>
+              <box flexDirection="row" gap={2}>
+                <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
+                  esc{" "}
+                  <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
+                    {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
+                  </span>
+                </text>
+                <Show when={store.mode === "normal"}>
+                  <text fg={theme.text}>
+                    {keybind.print("input_steer_submit")} <span style={{ fg: theme.textMuted }}>steer</span>
+                  </text>
+                </Show>
+              </box>
             </box>
           </Show>
           <Show when={status().type !== "retry"}>

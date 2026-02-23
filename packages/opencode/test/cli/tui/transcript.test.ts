@@ -75,6 +75,22 @@ describe("transcript", () => {
       expect(result).toBe("")
     })
 
+    test("formats synthetic steer text parts", () => {
+      const part: Part = {
+        id: "part_1",
+        sessionID: "ses_123",
+        messageID: "msg_123",
+        type: "text",
+        text: "make it about cats instead",
+        synthetic: true,
+        metadata: {
+          steer: true,
+        },
+      }
+      const result = formatPart(part, options)
+      expect(result).toBe("**Steer:** make it about cats instead\n\n")
+    })
+
     test("formats reasoning when thinking enabled", () => {
       const part: Part = {
         id: "part_1",

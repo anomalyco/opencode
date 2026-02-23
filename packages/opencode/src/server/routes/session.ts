@@ -381,6 +381,56 @@ export const SessionRoutes = lazy(() =>
       },
     )
     .post(
+      "/:sessionID/steer",
+      describeRoute({
+        summary: "Steer session",
+        description: "Queue user guidance for the current active turn without aborting in-flight execution.",
+        operationId: "session.steer",
+        responses: {
+          202: {
+            description: "Steer message queued",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    accepted: z.boolean(),
+                    queued: z.object({
+                      id: z.string(),
+                      text: z.string(),
+                      timestamp: z.number(),
+                    }),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: z.string(),
+        }),
+      ),
+      validator(
+        "json",
+        z.object({
+          text: z.string().trim().min(1),
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        await Session.get(sessionID)
+        const body = c.req.valid("json")
+        const result = await SessionPrompt.steer({
+          sessionID,
+          text: body.text,
+        })
+        return c.json(result, 202)
+      },
+    )
+    .post(
       "/:sessionID/share",
       describeRoute({
         summary: "Share session",
