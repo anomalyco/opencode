@@ -836,6 +836,11 @@ export namespace Config {
       input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
       input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
       input_submit: z.string().optional().default("return").describe("Submit input"),
+      input_steer_submit: z
+        .string()
+        .optional()
+        .default("alt+return,super+return,ctrl+return")
+        .describe("Submit steer guidance while session is busy"),
       input_newline: z
         .string()
         .optional()
