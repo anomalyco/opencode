@@ -454,6 +454,7 @@ export default function Page() {
     tabForPath: file.tab,
     openTab: tabs().open,
     loadFile: file.load,
+    setActive: tabs().setActive,
   })
 
   const changesOptions = ["session", "turn"] as const
