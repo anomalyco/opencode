@@ -1,7 +1,6 @@
 import { createEffect, createMemo, For, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { base64Encode } from "@opencode-ai/util/encode"
-import { getFilename } from "@opencode-ai/util/path"
 import { Button } from "@opencode-ai/ui/button"
 import { ContextMenu } from "@opencode-ai/ui/context-menu"
 import { HoverCard } from "@opencode-ai/ui/hover-card"
@@ -15,7 +14,7 @@ import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { ProjectIcon, SessionItem, type SessionItemProps } from "./sidebar-items"
 import { childMapByParent, displayName, sortedRootSessions } from "./helpers"
-import { projectSelected, projectTileActive } from "./sidebar-project-helpers"
+import { parentName, projectSelected, projectTileActive } from "./sidebar-project-helpers"
 
 export type ProjectSidebarContext = {
   currentDir: Accessor<string>
@@ -369,14 +368,6 @@ export const SortableProject = (props: {
       language={language}
     />
   )
-
-
-  const parentName = (path: string) => {
-    const clean = path.replace(/[\\/]+$/, "")
-    const idx = Math.max(clean.lastIndexOf("/"), clean.lastIndexOf("\\"))
-    if (idx <= 0) return ""
-    return getFilename(clean.slice(0, idx))
-  }
 
   return (
     // @ts-ignore

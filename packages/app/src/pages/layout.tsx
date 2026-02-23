@@ -1680,7 +1680,6 @@ export default function Layout(props: ParentProps) {
     setStore("activeWorkspace", undefined)
   }
 
-
   const createWorkspace = async (project: LocalProject) => {
     clearSidebarHoverState()
     const created = await globalSDK.client.worktree

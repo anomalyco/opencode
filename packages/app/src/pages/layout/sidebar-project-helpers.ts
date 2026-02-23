@@ -9,3 +9,11 @@ export const projectTileActive = (args: {
   hoverProject?: string
   worktree: string
 }) => args.menu || (args.preview ? args.open : args.overlay && args.hoverProject === args.worktree)
+
+
+export const parentName = (path: string) => {
+  const clean = path.replace(/[\\/]+$/, "")
+  const idx = Math.max(clean.lastIndexOf("/"), clean.lastIndexOf("\\"))
+  if (idx <= 0) return ""
+  return clean.slice(0, idx).replace(/^.*[\\/]/, "")
+}
