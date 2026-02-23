@@ -1,0 +1,192 @@
+---
+title: Tastebindinger
+description: Tilpass tastebindingene dine.
+---
+
+OpenCode har en liste over tastebindinger som du kan tilpasse gjennom OpenCode-konfigurasjonen.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "keybinds": {
+    "leader": "ctrl+x",
+    "app_exit": "ctrl+c,ctrl+d,<leader>q",
+    "editor_open": "<leader>e",
+    "theme_list": "<leader>t",
+    "sidebar_toggle": "<leader>b",
+    "scrollbar_toggle": "none",
+    "username_toggle": "none",
+    "status_view": "<leader>s",
+    "tool_details": "none",
+    "session_export": "<leader>x",
+    "session_new": "<leader>n",
+    "session_list": "<leader>l",
+    "session_timeline": "<leader>g",
+    "session_fork": "none",
+    "session_rename": "none",
+    "session_share": "none",
+    "session_unshare": "none",
+    "session_interrupt": "escape",
+    "session_compact": "<leader>c",
+    "session_child_cycle": "<leader>right",
+    "session_child_cycle_reverse": "<leader>left",
+    "session_parent": "<leader>up",
+    "messages_page_up": "pageup,ctrl+alt+b",
+    "messages_page_down": "pagedown,ctrl+alt+f",
+    "messages_line_up": "ctrl+alt+y",
+    "messages_line_down": "ctrl+alt+e",
+    "messages_half_page_up": "ctrl+alt+u",
+    "messages_half_page_down": "ctrl+alt+d",
+    "messages_first": "ctrl+g,home",
+    "messages_last": "ctrl+alt+g,end",
+    "messages_next": "none",
+    "messages_previous": "none",
+    "messages_copy": "<leader>y",
+    "messages_undo": "<leader>u",
+    "messages_redo": "<leader>r",
+    "messages_last_user": "none",
+    "messages_toggle_conceal": "<leader>h",
+    "model_list": "<leader>m",
+    "model_cycle_recent": "f2",
+    "model_cycle_recent_reverse": "shift+f2",
+    "model_cycle_favorite": "none",
+    "model_cycle_favorite_reverse": "none",
+    "variant_cycle": "ctrl+t",
+    "command_list": "ctrl+p",
+    "agent_list": "<leader>a",
+    "agent_cycle": "tab",
+    "agent_cycle_reverse": "shift+tab",
+    "input_clear": "ctrl+c",
+    "input_paste": "ctrl+v",
+    "input_submit": "return",
+    "input_newline": "shift+return,ctrl+return,alt+return,ctrl+j",
+    "input_move_left": "left,ctrl+b",
+    "input_move_right": "right,ctrl+f",
+    "input_move_up": "up",
+    "input_move_down": "down",
+    "input_select_left": "shift+left",
+    "input_select_right": "shift+right",
+    "input_select_up": "shift+up",
+    "input_select_down": "shift+down",
+    "input_line_home": "ctrl+a",
+    "input_line_end": "ctrl+e",
+    "input_select_line_home": "ctrl+shift+a",
+    "input_select_line_end": "ctrl+shift+e",
+    "input_visual_line_home": "alt+a",
+    "input_visual_line_end": "alt+e",
+    "input_select_visual_line_home": "alt+shift+a",
+    "input_select_visual_line_end": "alt+shift+e",
+    "input_buffer_home": "home",
+    "input_buffer_end": "end",
+    "input_select_buffer_home": "shift+home",
+    "input_select_buffer_end": "shift+end",
+    "input_delete_line": "ctrl+shift+d",
+    "input_delete_to_line_end": "ctrl+k",
+    "input_delete_to_line_start": "ctrl+u",
+    "input_backspace": "backspace,shift+backspace",
+    "input_delete": "ctrl+d,delete,shift+delete",
+    "input_undo": "ctrl+-,super+z",
+    "input_redo": "ctrl+.,super+shift+z",
+    "input_word_forward": "alt+f,alt+right,ctrl+right",
+    "input_word_backward": "alt+b,alt+left,ctrl+left",
+    "input_select_word_forward": "alt+shift+f,alt+shift+right",
+    "input_select_word_backward": "alt+shift+b,alt+shift+left",
+    "input_delete_word_forward": "alt+d,alt+delete,ctrl+delete",
+    "input_delete_word_backward": "ctrl+w,ctrl+backspace,alt+backspace",
+    "history_previous": "up",
+    "history_next": "down",
+    "terminal_suspend": "ctrl+z",
+    "terminal_title_toggle": "none",
+    "tips_toggle": "<leader>h",
+    "display_thinking": "none"
+  }
+}
+```
+
+---
+
+## Leader-tast
+
+OpenCode bruker en `leader`-tast for de fleste tastebindinger. Dette unngår konflikter i terminalen din.
+
+Som standard er `ctrl+x` ledertasten, og de fleste handlinger krever at du først trykker på ledertasten og deretter snarveien. For å starte en ny økt, trykker du for eksempel først `ctrl+x` og deretter `n`.
+
+Du trenger ikke å bruke en ledertast for tastebindingene dine, men vi anbefaler at du gjør det.
+
+---
+
+## Deaktivering av tastebindinger
+
+Du kan deaktivere en tastebinding ved å legge til tasten til konfigurasjonen med verdien "none".
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "keybinds": {
+    "session_compact": "none"
+  }
+}
+```
+
+---
+
+## Snarveier i skrivebordsappen
+
+Prompt-feltet for OpenCode-skrivebordsappen støtter vanlige snarveier i Readline/Emacs-stil for redigering av tekst. Disse er innebygd og foreløpig ikke konfigurerbare via `opencode.json`.
+
+| Snarvei  | Handling                                 |
+| -------- | ---------------------------------------- |
+| `ctrl+a` | Flytt til starten av gjeldende linje     |
+| `ctrl+e` | Flytt til slutten av gjeldende linje     |
+| `ctrl+b` | Flytt markøren ett tegn tilbake          |
+| `ctrl+f` | Flytt markøren ett tegn fremover         |
+| `alt+b`  | Flytt markøren ett ord tilbake           |
+| `alt+f`  | Flytt markøren ett ord fremover          |
+| `ctrl+d` | Slett tegn under markøren                |
+| `ctrl+k` | Slett til slutten av linjen              |
+| `ctrl+u` | Slett til starten av linjen              |
+| `ctrl+w` | Slett forrige ord                        |
+| `alt+d`  | Slett neste ord                          |
+| `ctrl+t` | Bytt om tegn                             |
+| `ctrl+g` | Avbryt popovers / avbryt kjøring av svar |
+
+---
+
+## Shift+Enter
+
+Noen terminaler sender ikke modifikasjonstaster med Enter som standard. Du må kanskje konfigurere terminalen til å sende `Shift+Enter` som en escape-sekvens.
+
+### Windows Terminal
+
+Åpne `settings.json` på:
+
+```
+%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
+```
+
+Legg dette til `actions`-matrisen på rotnivå:
+
+```json
+"actions": [
+  {
+    "command": {
+      "action": "sendInput",
+      "input": "\u001b[13;2u"
+    },
+    "id": "User.sendInput.ShiftEnterCustom"
+  }
+]
+```
+
+Legg dette til `keybindings`-matrisen på rotnivå:
+
+```json
+"keybindings": [
+  {
+    "keys": "shift+enter",
+    "id": "User.sendInput.ShiftEnterCustom"
+  }
+]
+```
+
+Lagre filen og start Windows Terminal på nytt eller åpne en ny fane.

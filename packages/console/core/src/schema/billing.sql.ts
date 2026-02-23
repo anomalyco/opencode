@@ -1,7 +1,8 @@
-import { bigint, boolean, index, int, json, mysqlTable, uniqueIndex, varchar } from "drizzle-orm/mysql-core"
+import { bigint, boolean, index, int, json, mysqlEnum, mysqlTable, uniqueIndex, varchar } from "drizzle-orm/mysql-core"
 import { timestamps, ulid, utc, workspaceColumns } from "../drizzle/types"
 import { workspaceIndexes } from "./workspace.sql"
 
+export const SubscriptionPlan = ["20", "100", "200"] as const
 export const BillingTable = mysqlTable(
   "billing",
   {
@@ -21,8 +22,17 @@ export const BillingTable = mysqlTable(
     reloadError: varchar("reload_error", { length: 255 }),
     timeReloadError: utc("time_reload_error"),
     timeReloadLockedTill: utc("time_reload_locked_till"),
+    subscription: json("subscription").$type<{
+      status: "subscribed"
+      seats: number
+      plan: "20" | "100" | "200"
+      useBalance?: boolean
+      coupon?: string
+    }>(),
     subscriptionID: varchar("subscription_id", { length: 28 }),
-    subscriptionCouponID: varchar("subscription_coupon_id", { length: 28 }),
+    subscriptionPlan: mysqlEnum("subscription_plan", SubscriptionPlan),
+    timeSubscriptionBooked: utc("time_subscription_booked"),
+    timeSubscriptionSelected: utc("time_subscription_selected"),
   },
   (table) => [
     ...workspaceIndexes(table),
@@ -57,7 +67,7 @@ export const PaymentTable = mysqlTable(
     timeRefunded: utc("time_refunded"),
     enrichment: json("enrichment").$type<
       | {
-          type: "subscription"
+          type: "subscription" | "lite"
           couponID?: string
         }
       | {
@@ -83,8 +93,9 @@ export const UsageTable = mysqlTable(
     cacheWrite1hTokens: int("cache_write_1h_tokens"),
     cost: bigint("cost", { mode: "number" }).notNull(),
     keyID: ulid("key_id"),
+    sessionID: varchar("session_id", { length: 30 }),
     enrichment: json("enrichment").$type<{
-      plan: "sub"
+      plan: "sub" | "byok" | "lite"
     }>(),
   },
   (table) => [...workspaceIndexes(table), index("usage_time_created").on(table.workspaceID, table.timeCreated)],

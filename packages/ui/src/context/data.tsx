@@ -1,8 +1,19 @@
-import type { Message, Session, Part, FileDiff, SessionStatus, PermissionRequest } from "@opencode-ai/sdk/v2"
+import type {
+  Message,
+  Session,
+  Part,
+  FileDiff,
+  SessionStatus,
+  PermissionRequest,
+  QuestionRequest,
+  QuestionAnswer,
+  ProviderListResponse,
+} from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "./helper"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 
 type Data = {
+  provider?: ProviderListResponse
   session: Session[]
   session_status: {
     [sessionID: string]: SessionStatus
@@ -15,6 +26,9 @@ type Data = {
   }
   permission?: {
     [sessionID: string]: PermissionRequest[]
+  }
+  question?: {
+    [sessionID: string]: QuestionRequest[]
   }
   message: {
     [sessionID: string]: Message[]
@@ -30,7 +44,13 @@ export type PermissionRespondFn = (input: {
   response: "once" | "always" | "reject"
 }) => void
 
+export type QuestionReplyFn = (input: { requestID: string; answers: QuestionAnswer[] }) => void
+
+export type QuestionRejectFn = (input: { requestID: string }) => void
+
 export type NavigateToSessionFn = (sessionID: string) => void
+
+export type SessionHrefFn = (sessionID: string) => string
 
 export const { use: useData, provider: DataProvider } = createSimpleContext({
   name: "Data",
@@ -38,7 +58,10 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     data: Data
     directory: string
     onPermissionRespond?: PermissionRespondFn
+    onQuestionReply?: QuestionReplyFn
+    onQuestionReject?: QuestionRejectFn
     onNavigateToSession?: NavigateToSessionFn
+    onSessionHref?: SessionHrefFn
   }) => {
     return {
       get store() {
@@ -48,7 +71,10 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         return props.directory
       },
       respondToPermission: props.onPermissionRespond,
+      replyToQuestion: props.onQuestionReply,
+      rejectQuestion: props.onQuestionReject,
       navigateToSession: props.onNavigateToSession,
+      sessionHref: props.onSessionHref,
     }
   },
 })

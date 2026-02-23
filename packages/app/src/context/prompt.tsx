@@ -1,9 +1,10 @@
-import { createStore } from "solid-js/store"
+import { createStore, type SetStoreFunction } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { batch, createMemo, createRoot, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
 import type { FileSelection } from "@/context/file"
 import { Persist, persisted } from "@/utils/persist"
+import { checksum } from "@opencode-ai/util/encode"
 
 interface PartBase {
   content: string
@@ -41,6 +42,10 @@ export type FileContextItem = {
   type: "file"
   path: string
   selection?: FileSelection
+  comment?: string
+  commentID?: string
+  commentOrigin?: "review" | "file"
+  preview?: string
 }
 
 export type ContextItem = FileContextItem
@@ -55,27 +60,23 @@ function isSelectionEqual(a?: FileSelection, b?: FileSelection) {
   )
 }
 
+function isPartEqual(partA: ContentPart, partB: ContentPart) {
+  switch (partA.type) {
+    case "text":
+      return partB.type === "text" && partA.content === partB.content
+    case "file":
+      return partB.type === "file" && partA.path === partB.path && isSelectionEqual(partA.selection, partB.selection)
+    case "agent":
+      return partB.type === "agent" && partA.name === partB.name
+    case "image":
+      return partB.type === "image" && partA.id === partB.id
+  }
+}
+
 export function isPromptEqual(promptA: Prompt, promptB: Prompt): boolean {
   if (promptA.length !== promptB.length) return false
   for (let i = 0; i < promptA.length; i++) {
-    const partA = promptA[i]
-    const partB = promptB[i]
-    if (partA.type !== partB.type) return false
-    if (partA.type === "text" && partA.content !== (partB as TextPart).content) {
-      return false
-    }
-    if (partA.type === "file") {
-      const fileA = partA as FileAttachmentPart
-      const fileB = partB as FileAttachmentPart
-      if (fileA.path !== fileB.path) return false
-      if (!isSelectionEqual(fileA.selection, fileB.selection)) return false
-    }
-    if (partA.type === "agent" && partA.name !== (partB as AgentPart).name) {
-      return false
-    }
-    if (partA.type === "image" && partA.id !== (partB as ImageAttachmentPart).id) {
-      return false
-    }
+    if (!isPartEqual(promptA[i], promptB[i])) return false
   }
   return true
 }
@@ -99,6 +100,48 @@ function clonePrompt(prompt: Prompt): Prompt {
   return prompt.map(clonePart)
 }
 
+function contextItemKey(item: ContextItem) {
+  if (item.type !== "file") return item.type
+  const start = item.selection?.startLine
+  const end = item.selection?.endLine
+  const key = `${item.type}:${item.path}:${start}:${end}`
+
+  if (item.commentID) {
+    return `${key}:c=${item.commentID}`
+  }
+
+  const comment = item.comment?.trim()
+  if (!comment) return key
+  const digest = checksum(comment) ?? comment
+  return `${key}:c=${digest.slice(0, 8)}`
+}
+
+function createPromptActions(
+  setStore: SetStoreFunction<{
+    prompt: Prompt
+    cursor?: number
+    context: {
+      items: (ContextItem & { key: string })[]
+    }
+  }>,
+) {
+  return {
+    set(prompt: Prompt, cursorPosition?: number) {
+      const next = clonePrompt(prompt)
+      batch(() => {
+        setStore("prompt", next)
+        if (cursorPosition !== undefined) setStore("cursor", cursorPosition)
+      })
+    },
+    reset() {
+      batch(() => {
+        setStore("prompt", clonePrompt(DEFAULT_PROMPT))
+        setStore("cursor", 0)
+      })
+    },
+  }
+}
+
 const WORKSPACE_KEY = "__workspace__"
 const MAX_PROMPT_SESSIONS = 20
 
@@ -118,25 +161,18 @@ function createPromptSession(dir: string, id: string | undefined) {
       prompt: Prompt
       cursor?: number
       context: {
-        activeTab: boolean
         items: (ContextItem & { key: string })[]
       }
     }>({
       prompt: clonePrompt(DEFAULT_PROMPT),
       cursor: undefined,
       context: {
-        activeTab: true,
         items: [],
       },
     }),
   )
 
-  function keyForItem(item: ContextItem) {
-    if (item.type !== "file") return item.type
-    const start = item.selection?.startLine
-    const end = item.selection?.endLine
-    return `${item.type}:${item.path}:${start}:${end}`
-  }
+  const actions = createPromptActions(setStore)
 
   return {
     ready,
@@ -144,16 +180,9 @@ function createPromptSession(dir: string, id: string | undefined) {
     cursor: createMemo(() => store.cursor),
     dirty: createMemo(() => !isPromptEqual(store.prompt, DEFAULT_PROMPT)),
     context: {
-      activeTab: createMemo(() => store.context.activeTab),
       items: createMemo(() => store.context.items),
-      addActive() {
-        setStore("context", "activeTab", true)
-      },
-      removeActive() {
-        setStore("context", "activeTab", false)
-      },
       add(item: ContextItem) {
-        const key = keyForItem(item)
+        const key = contextItemKey(item)
         if (store.context.items.find((x) => x.key === key)) return
         setStore("context", "items", (items) => [...items, { key, ...item }])
       },
@@ -161,19 +190,8 @@ function createPromptSession(dir: string, id: string | undefined) {
         setStore("context", "items", (items) => items.filter((x) => x.key !== key))
       },
     },
-    set(prompt: Prompt, cursorPosition?: number) {
-      const next = clonePrompt(prompt)
-      batch(() => {
-        setStore("prompt", next)
-        if (cursorPosition !== undefined) setStore("cursor", cursorPosition)
-      })
-    },
-    reset() {
-      batch(() => {
-        setStore("prompt", clonePrompt(DEFAULT_PROMPT))
-        setStore("cursor", 0)
-      })
-    },
+    set: actions.set,
+    reset: actions.reset,
   }
 }
 
@@ -230,10 +248,7 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
       cursor: () => session().cursor(),
       dirty: () => session().dirty(),
       context: {
-        activeTab: () => session().context.activeTab(),
         items: () => session().context.items(),
-        addActive: () => session().context.addActive(),
-        removeActive: () => session().context.removeActive(),
         add: (item: ContextItem) => session().context.add(item),
         remove: (key: string) => session().context.remove(key),
       },

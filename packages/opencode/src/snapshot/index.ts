@@ -2,16 +2,54 @@ import { $ } from "bun"
 import path from "path"
 import fs from "fs/promises"
 import { Log } from "../util/log"
+import { Flag } from "../flag/flag"
 import { Global } from "../global"
 import z from "zod"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
+import { Scheduler } from "../scheduler"
 
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
+  const hour = 60 * 60 * 1000
+  const prune = "7.days"
+
+  export function init() {
+    Scheduler.register({
+      id: "snapshot.cleanup",
+      interval: hour,
+      run: cleanup,
+      scope: "instance",
+    })
+  }
+
+  export async function cleanup() {
+    if (Instance.project.vcs !== "git" || Flag.OPENCODE_CLIENT === "acp") return
+    const cfg = await Config.get()
+    if (cfg.snapshot === false) return
+    const git = gitdir()
+    const exists = await fs
+      .stat(git)
+      .then(() => true)
+      .catch(() => false)
+    if (!exists) return
+    const result = await $`git --git-dir ${git} --work-tree ${Instance.worktree} gc --prune=${prune}`
+      .quiet()
+      .cwd(Instance.directory)
+      .nothrow()
+    if (result.exitCode !== 0) {
+      log.warn("cleanup failed", {
+        exitCode: result.exitCode,
+        stderr: result.stderr.toString(),
+        stdout: result.stdout.toString(),
+      })
+      return
+    }
+    log.info("cleanup", { prune })
+  }
 
   export async function track() {
-    if (Instance.project.vcs !== "git") return
+    if (Instance.project.vcs !== "git" || Flag.OPENCODE_CLIENT === "acp") return
     const cfg = await Config.get()
     if (cfg.snapshot === false) return
     const git = gitdir()
@@ -28,7 +66,7 @@ export namespace Snapshot {
       await $`git --git-dir ${git} config core.autocrlf false`.quiet().nothrow()
       log.info("initialized")
     }
-    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
+    await add(git)
     const hash = await $`git --git-dir ${git} --work-tree ${Instance.worktree} write-tree`
       .quiet()
       .cwd(Instance.directory)
@@ -46,9 +84,9 @@ export namespace Snapshot {
 
   export async function patch(hash: string): Promise<Patch> {
     const git = gitdir()
-    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
+    await add(git)
     const result =
-      await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --name-only ${hash} -- .`
+      await $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --name-only ${hash} -- .`
         .quiet()
         .cwd(Instance.directory)
         .nothrow()
@@ -67,7 +105,7 @@ export namespace Snapshot {
         .split("\n")
         .map((x) => x.trim())
         .filter(Boolean)
-        .map((x) => path.join(Instance.worktree, x)),
+        .map((x) => path.join(Instance.worktree, x).replaceAll("\\", "/")),
     }
   }
 
@@ -124,9 +162,9 @@ export namespace Snapshot {
 
   export async function diff(hash: string) {
     const git = gitdir()
-    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
+    await add(git)
     const result =
-      await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff ${hash} -- .`
+      await $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff ${hash} -- .`
         .quiet()
         .cwd(Instance.worktree)
         .nothrow()
@@ -151,6 +189,7 @@ export namespace Snapshot {
       after: z.string(),
       additions: z.number(),
       deletions: z.number(),
+      status: z.enum(["added", "deleted", "modified"]).optional(),
     })
     .meta({
       ref: "FileDiff",
@@ -159,7 +198,24 @@ export namespace Snapshot {
   export async function diffFull(from: string, to: string): Promise<FileDiff[]> {
     const git = gitdir()
     const result: FileDiff[] = []
-    for await (const line of $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --no-renames --numstat ${from} ${to} -- .`
+    const status = new Map<string, "added" | "deleted" | "modified">()
+
+    const statuses =
+      await $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --name-status --no-renames ${from} ${to} -- .`
+        .quiet()
+        .cwd(Instance.directory)
+        .nothrow()
+        .text()
+
+    for (const line of statuses.trim().split("\n")) {
+      if (!line) continue
+      const [code, file] = line.split("\t")
+      if (!code || !file) continue
+      const kind = code.startsWith("A") ? "added" : code.startsWith("D") ? "deleted" : "modified"
+      status.set(file, kind)
+    }
+
+    for await (const line of $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --no-renames --numstat ${from} ${to} -- .`
       .quiet()
       .cwd(Instance.directory)
       .nothrow()
@@ -187,6 +243,7 @@ export namespace Snapshot {
         after,
         additions: Number.isFinite(added) ? added : 0,
         deletions: Number.isFinite(deleted) ? deleted : 0,
+        status: status.get(file) ?? "modified",
       })
     }
     return result
@@ -195,5 +252,39 @@ export namespace Snapshot {
   function gitdir() {
     const project = Instance.project
     return path.join(Global.Path.data, "snapshot", project.id)
+  }
+
+  async function add(git: string) {
+    await syncExclude(git)
+    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
+  }
+
+  async function syncExclude(git: string) {
+    const file = await excludes()
+    const target = path.join(git, "info", "exclude")
+    await fs.mkdir(path.join(git, "info"), { recursive: true })
+    if (!file) {
+      await Bun.write(target, "")
+      return
+    }
+    const text = await Bun.file(file)
+      .text()
+      .catch(() => "")
+    await Bun.write(target, text)
+  }
+
+  async function excludes() {
+    const file = await $`git rev-parse --path-format=absolute --git-path info/exclude`
+      .quiet()
+      .cwd(Instance.worktree)
+      .nothrow()
+      .text()
+    if (!file.trim()) return
+    const exists = await fs
+      .stat(file.trim())
+      .then(() => true)
+      .catch(() => false)
+    if (!exists) return
+    return file.trim()
   }
 }

@@ -26,16 +26,17 @@ type Usage = {
   thoughtsTokenCount?: number
 }
 
-export const googleHelper = {
+export const googleHelper: ProviderHelper = ({ providerModel }) => ({
   format: "google",
-  modifyUrl: (providerApi: string, model?: string, isStream?: boolean) =>
-    `${providerApi}/models/${model}:${isStream ? "streamGenerateContent?alt=sse" : "generateContent"}`,
+  modifyUrl: (providerApi: string, isStream?: boolean) =>
+    `${providerApi}/models/${providerModel}:${isStream ? "streamGenerateContent?alt=sse" : "generateContent"}`,
   modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => {
     headers.set("x-goog-api-key", apiKey)
   },
   modifyBody: (body: Record<string, any>) => {
     return body
   },
+  createBinaryStreamDecoder: () => undefined,
   streamSeparator: "\r\n\r\n",
   createUsageParser: () => {
     let usage: Usage
@@ -55,6 +56,7 @@ export const googleHelper = {
         usage = json.usageMetadata
       },
       retrieve: () => usage,
+      buidlCostChunk: (cost: string) => `data: ${JSON.stringify({ type: "ping", cost })}\n\n`,
     }
   },
   normalizeUsage: (usage: Usage) => {
@@ -71,4 +73,4 @@ export const googleHelper = {
       cacheWrite1hTokens: undefined,
     }
   },
-} satisfies ProviderHelper
+})
