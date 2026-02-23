@@ -340,6 +340,7 @@ export const dict = {
   "workspace.usage.table.input": "Input",
   "workspace.usage.table.output": "Output",
   "workspace.usage.table.cost": "Kostnad",
+  "workspace.usage.table.session": "Økt",
   "workspace.usage.breakdown.input": "Input",
   "workspace.usage.breakdown.cacheRead": "Cache Lest",
   "workspace.usage.breakdown.cacheWrite": "Cache Skrevet",
