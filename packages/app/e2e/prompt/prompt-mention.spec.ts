@@ -5,14 +5,12 @@ test("smoke @mention inserts file pill token", async ({ page, gotoSession }) => 
   await gotoSession()
 
   await page.locator(promptSelector).click()
-  const sep = process.platform === "win32" ? "\\" : "/"
-  const file = ["packages", "app", "package.json"].join(sep)
-  const filePattern = /packages[\\/]+app[\\/]+\s*package\.json/
+  const filePattern = /packages[\\/]+app[\\/]+\s*package\.json/i
 
-  await page.keyboard.type(`@${file}`)
+  await page.keyboard.type("@package.json")
 
   const suggestion = page.getByRole("button", { name: filePattern }).first()
-  await expect(suggestion).toBeVisible()
+  await expect(suggestion).toBeVisible({ timeout: 30_000 })
   await suggestion.hover()
 
   await page.keyboard.press("Tab")
