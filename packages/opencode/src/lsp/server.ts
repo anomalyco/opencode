@@ -451,10 +451,6 @@ export namespace LSPServer {
       "pyrightconfig.json",
     ]),
     async spawn(root) {
-      if (!Flag.OPENCODE_EXPERIMENTAL_LSP_TY) {
-        return undefined
-      }
-
       let binary = Bun.which("ty")
 
       const initialization: Record<string, string> = {}
@@ -498,6 +494,36 @@ export namespace LSPServer {
       return {
         process: proc,
         initialization,
+      }
+    },
+  }
+
+  export const Ruff: Info = {
+    id: "ruff",
+    extensions: [".py", ".pyi"],
+    root: NearestRoot([
+      "pyproject.toml",
+      "ruff.toml",
+      ".ruff.toml",
+      "setup.py",
+      "setup.cfg",
+      "requirements.txt",
+      "Pipfile",
+    ]),
+    async spawn(root) {
+      let binary = Bun.which("ruff")
+
+      if (!binary) {
+        log.error("ruff not found, please install ruff first")
+        return
+      }
+
+      const proc = spawn(binary, ["server"], {
+        cwd: root,
+      })
+
+      return {
+        process: proc,
       }
     },
   }

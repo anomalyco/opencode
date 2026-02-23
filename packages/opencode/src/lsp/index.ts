@@ -70,9 +70,7 @@ export namespace LSP {
       }
     } else {
       // If experimental flag is disabled, disable ty
-      if (servers["ty"]) {
-        delete servers["ty"]
-      }
+      if (servers["ty"]) delete servers["ty"]
     }
   }
 
