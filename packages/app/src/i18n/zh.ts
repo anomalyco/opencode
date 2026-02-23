@@ -93,6 +93,9 @@ export const dict = {
   "command.model.variant.cycle": "切换思考强度",
   "command.model.variant.cycle.description": "切换到下一个强度等级",
 
+  "command.prompt.mode.shell": "Shell",
+  "command.prompt.mode.normal": "Prompt",
+
   "command.permissions.autoaccept.enable": "自动接受编辑",
   "command.permissions.autoaccept.disable": "停止自动接受编辑",
 
@@ -244,9 +247,11 @@ export const dict = {
 
   "prompt.placeholder.shell": "输入 shell 命令...",
   "prompt.placeholder.normal": '随便问点什么... "{{example}}"',
+  "prompt.placeholder.simple": "随便问点什么...",
   "prompt.placeholder.summarizeComments": "总结评论…",
   "prompt.placeholder.summarizeComment": "总结该评论…",
   "prompt.mode.shell": "Shell",
+  "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "按 esc 退出",
   "prompt.example.1": "修复代码库中的一个 TODO",
   "prompt.example.2": "这个项目的技术栈是什么？",
@@ -500,6 +505,9 @@ export const dict = {
   "session.messages.loading": "正在加载消息...",
   "session.messages.jumpToLatest": "跳转到最新",
   "session.context.addToContext": "将 {{selection}} 添加到上下文",
+  "session.todo.title": "待办事项",
+  "session.todo.collapse": "折叠",
+  "session.todo.expand": "展开",
   "session.new.worktree.main": "主分支",
   "session.new.worktree.mainWithBranch": "主分支（{{branch}}）",
   "session.new.worktree.create": "创建新的 worktree",
@@ -569,6 +577,7 @@ export const dict = {
   "sidebar.gettingStarted.line2": "连接任意提供商即可使用更多模型，如 Claude、GPT、Gemini 等。",
   "sidebar.project.recentSessions": "最近会话",
   "sidebar.project.viewAllSessions": "查看全部会话",
+  "sidebar.project.clearNotifications": "清除通知",
 
   "app.name.desktop": "OpenCode Desktop",
 
@@ -586,6 +595,7 @@ export const dict = {
   "settings.general.section.notifications": "系统通知",
   "settings.general.section.updates": "更新",
   "settings.general.section.sounds": "音效",
+  "settings.general.section.feed": "动态",
   "settings.general.section.display": "显示",
   "settings.general.row.language.title": "语言",
   "settings.general.row.language.description": "更改 OpenCode 的显示语言",
@@ -595,6 +605,10 @@ export const dict = {
   "settings.general.row.theme.description": "自定义 OpenCode 的主题。",
   "settings.general.row.font.title": "字体",
   "settings.general.row.font.description": "自定义代码块使用的等宽字体",
+  "settings.general.row.shellToolPartsExpanded.title": "展开 shell 工具部分",
+  "settings.general.row.shellToolPartsExpanded.description": "默认在时间线中展开 shell 工具部分",
+  "settings.general.row.editToolPartsExpanded.title": "展开编辑工具部分",
+  "settings.general.row.editToolPartsExpanded.description": "默认在时间线中展开 edit、write 和 patch 工具部分",
   "settings.general.row.wayland.title": "使用原生 Wayland",
   "settings.general.row.wayland.description": "在 Wayland 上禁用 X11 回退。需要重启。",
   "settings.general.row.wayland.tooltip": "在混合刷新率显示器的 Linux 系统上，原生 Wayland 可能更稳定。",
@@ -622,7 +636,9 @@ export const dict = {
   "font.option.robotoMono": "Roboto Mono",
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
+  "font.option.geistMono": "Geist Mono",
 
+  "sound.option.none": "无",
   "sound.option.alert01": "警报 01",
   "sound.option.alert02": "警报 02",
   "sound.option.alert03": "警报 03",

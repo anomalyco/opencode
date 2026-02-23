@@ -1,25 +1,29 @@
-import {
-  type Config,
-  type Path,
-  type PermissionRequest,
-  type Project,
-  type ProviderAuthResponse,
-  type ProviderListResponse,
-  type QuestionRequest,
-  createOpencodeClient,
+import type {
+  Config,
+  OpencodeClient,
+  Path,
+  PermissionRequest,
+  Project,
+  ProviderAuthResponse,
+  ProviderListResponse,
+  QuestionRequest,
+  Todo,
 } from "@opencode-ai/sdk/v2/client"
+import { showToast } from "@opencode-ai/ui/toast"
+import { getFilename } from "@opencode-ai/util/path"
+import { retry } from "@opencode-ai/util/retry"
 import { batch } from "solid-js"
 import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
-import { retry } from "@opencode-ai/util/retry"
-import { getFilename } from "@opencode-ai/util/path"
-import { showToast } from "@opencode-ai/ui/toast"
-import { cmp, normalizeProviderList } from "./utils"
 import type { State, VcsCache } from "./types"
+import { cmp, normalizeProviderList } from "./utils"
 
 type GlobalStore = {
   ready: boolean
   path: Path
   project: Project[]
+  session_todo: {
+    [sessionID: string]: Todo[]
+  }
   provider: ProviderListResponse
   provider_auth: ProviderAuthResponse
   config: Config
@@ -27,7 +31,7 @@ type GlobalStore = {
 }
 
 export async function bootstrapGlobal(input: {
-  globalSDK: ReturnType<typeof createOpencodeClient>
+  globalSDK: OpencodeClient
   connectErrorTitle: string
   connectErrorDescription: string
   requestFailedTitle: string
@@ -106,13 +110,13 @@ function groupBySession<T extends { id: string; sessionID: string }>(input: T[])
 
 export async function bootstrapDirectory(input: {
   directory: string
-  sdk: ReturnType<typeof createOpencodeClient>
+  sdk: OpencodeClient
   store: Store<State>
   setStore: SetStoreFunction<State>
   vcsCache: VcsCache
   loadSessions: (directory: string) => Promise<void> | void
 }) {
-  input.setStore("status", "loading")
+  if (input.store.status !== "complete") input.setStore("status", "loading")
 
   const blockingRequests = {
     project: () => input.sdk.project.current().then((x) => input.setStore("project", x.data!.id)),

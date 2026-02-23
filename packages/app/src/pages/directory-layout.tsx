@@ -30,7 +30,6 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
       onQuestionReject={(input: { requestID: string }) => sdk.client.question.reject(input)}
       onNavigateToSession={(sessionID: string) => navigate(`/${params.dir}/session/${sessionID}`)}
       onSessionHref={(sessionID: string) => `/${params.dir}/session/${sessionID}`}
-      onSyncSession={(sessionID: string) => sync.session.sync(sessionID)}
     >
       <LocalProvider>{props.children}</LocalProvider>
     </DataProvider>

@@ -9,7 +9,8 @@ import { Billing } from "@opencode-ai/console-core/billing.js"
 import { Actor } from "@opencode-ai/console-core/actor.js"
 import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
 import { ZenData } from "@opencode-ai/console-core/model.js"
-import { Black, BlackData } from "@opencode-ai/console-core/black.js"
+import { Subscription } from "@opencode-ai/console-core/subscription.js"
+import { BlackData } from "@opencode-ai/console-core/black.js"
 import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 import { ModelTable } from "@opencode-ai/console-core/schema/model.sql.js"
 import { ProviderTable } from "@opencode-ai/console-core/schema/provider.sql.js"
@@ -44,6 +45,7 @@ export async function handler(
   input: APIEvent,
   opts: {
     format: ZenData.Format
+    modelList: "lite" | "full"
     parseApiKey: (headers: Headers) => string | undefined
     parseModel: (url: string, body: any) => string
     parseIsStream: (url: string, body: any) => boolean
@@ -77,7 +79,7 @@ export async function handler(
       request: requestId,
       client: ocClient,
     })
-    const zenData = ZenData.list()
+    const zenData = ZenData.list(opts.modelList)
     const modelInfo = validateModel(zenData, model)
     const dataDumper = createDataDumper(sessionId, requestId, projectId)
     const trialLimiter = createTrialLimiter(modelInfo.trial, ip, ocClient)
@@ -107,10 +109,14 @@ export async function handler(
       const startTimestamp = Date.now()
       const reqUrl = providerInfo.modifyUrl(providerInfo.api, isStream)
       const reqBody = JSON.stringify(
-        providerInfo.modifyBody({
-          ...createBodyConverter(opts.format, providerInfo.format)(body),
-          model: providerInfo.model,
-        }),
+        providerInfo.modifyBody(
+          {
+            ...createBodyConverter(opts.format, providerInfo.format)(body),
+            model: providerInfo.model,
+            ...(providerInfo.payloadModifier ?? {}),
+          },
+          authInfo?.workspaceID,
+        ),
       )
       logger.debug("REQUEST URL: " + reqUrl)
       logger.debug("REQUEST: " + reqBody.substring(0, 300) + "...")
@@ -191,7 +197,7 @@ export async function handler(
       const costInfo = calculateCost(modelInfo, usageInfo)
       await trialLimiter?.track(usageInfo)
       await rateLimiter?.track()
-      await trackUsage(billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
+      await trackUsage(sessionId, billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
       await reload(billingSource, authInfo, costInfo)
 
       const responseConverter = createResponseConverter(providerInfo.format, opts.format)
@@ -241,7 +247,7 @@ export async function handler(
                   const usageInfo = providerInfo.normalizeUsage(usage)
                   const costInfo = calculateCost(modelInfo, usageInfo)
                   await trialLimiter?.track(usageInfo)
-                  await trackUsage(billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
+                  await trackUsage(sessionId, billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
                   await reload(billingSource, authInfo, costInfo)
                   cost = calculateOccuredCost(billingSource, costInfo)
                 }
@@ -274,8 +280,8 @@ export async function handler(
                 part = part.trim()
                 usageParser.parse(part)
 
-                if (providerInfo.bodyModifier) {
-                  for (const [k, v] of Object.entries(providerInfo.bodyModifier)) {
+                if (providerInfo.responseModifier) {
+                  for (const [k, v] of Object.entries(providerInfo.responseModifier)) {
                     part = part.replace(k, v)
                   }
                   c.enqueue(encoder.encode(part + "\n\n"))
@@ -285,7 +291,7 @@ export async function handler(
                 }
               }
 
-              if (!providerInfo.bodyModifier && providerInfo.format === opts.format) {
+              if (!providerInfo.responseModifier && providerInfo.format === opts.format) {
                 c.enqueue(value)
               }
 
@@ -536,8 +542,9 @@ export async function handler(
 
         // Check weekly limit
         if (sub.fixedUsage && sub.timeFixedUpdated) {
-          const result = Black.analyzeWeeklyUsage({
-            plan,
+          const blackData = BlackData.getLimits({ plan })
+          const result = Subscription.analyzeWeeklyUsage({
+            limit: blackData.fixedLimit,
             usage: sub.fixedUsage,
             timeUpdated: sub.timeFixedUpdated,
           })
@@ -550,8 +557,10 @@ export async function handler(
 
         // Check rolling limit
         if (sub.rollingUsage && sub.timeRollingUpdated) {
-          const result = Black.analyzeRollingUsage({
-            plan,
+          const blackData = BlackData.getLimits({ plan })
+          const result = Subscription.analyzeRollingUsage({
+            limit: blackData.rollingLimit,
+            window: blackData.rollingWindow,
             usage: sub.rollingUsage,
             timeUpdated: sub.timeRollingUpdated,
           })
@@ -682,6 +691,7 @@ export async function handler(
   }
 
   async function trackUsage(
+    sessionId: string,
     billingSource: BillingSource,
     authInfo: AuthInfo,
     modelInfo: ModelInfo,
@@ -729,6 +739,7 @@ export async function handler(
           cacheWrite1hTokens,
           cost,
           keyID: authInfo.apiKeyId,
+          sessionID: sessionId.substring(0, 30),
           enrichment: billingSource === "subscription" ? { plan: "sub" } : undefined,
         }),
         db
