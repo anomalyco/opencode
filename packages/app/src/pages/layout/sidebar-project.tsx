@@ -1,6 +1,7 @@
 import { createEffect, createMemo, For, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { base64Encode } from "@opencode-ai/util/encode"
+import { getFilename } from "@opencode-ai/util/path"
 import { Button } from "@opencode-ai/ui/button"
 import { ContextMenu } from "@opencode-ai/ui/context-menu"
 import { HoverCard } from "@opencode-ai/ui/hover-card"
@@ -369,41 +370,54 @@ export const SortableProject = (props: {
     />
   )
 
+
+  const parentName = (path: string) => {
+    const clean = path.replace(/[\\/]+$/, "")
+    const idx = Math.max(clean.lastIndexOf("/"), clean.lastIndexOf("\\"))
+    if (idx <= 0) return ""
+    return getFilename(clean.slice(0, idx))
+  }
+
   return (
     // @ts-ignore
     <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
-      <Show when={preview() && !selected()} fallback={tile()}>
-        <HoverCard
-          open={!state.suppressHover && state.open && !state.menu}
-          openDelay={0}
-          closeDelay={0}
-          placement="right-start"
-          gutter={6}
-          trigger={tile()}
-          onOpenChange={(value) => {
-            if (state.menu) return
-            if (value && state.suppressHover) return
-            setState("open", value)
-            if (value) props.ctx.setHoverSession(undefined)
-          }}
-        >
-          <ProjectPreviewPanel
-            project={props.project}
-            mobile={props.mobile}
-            selected={selected}
-            workspaceEnabled={workspaceEnabled}
-            workspaces={workspaces}
-            label={label}
-            projectSessions={projectSessions}
-            projectChildren={projectChildren}
-            workspaceSessions={workspaceSessions}
-            workspaceChildren={workspaceChildren}
-            setOpen={(value) => setState("open", value)}
-            ctx={props.ctx}
-            language={language}
-          />
-        </HoverCard>
-      </Show>
+      <div class="flex flex-col items-center">
+        <span class="text-[10px] leading-tight text-text-base text-center truncate w-10" title={parentName(props.project.worktree)}>
+          {parentName(props.project.worktree)}
+        </span>
+        <Show when={preview() && !selected()} fallback={tile()}>
+          <HoverCard
+            open={!state.suppressHover && state.open && !state.menu}
+            openDelay={0}
+            closeDelay={0}
+            placement="right-start"
+            gutter={6}
+            trigger={tile()}
+            onOpenChange={(value) => {
+              if (state.menu) return
+              if (value && state.suppressHover) return
+              setState("open", value)
+              if (value) props.ctx.setHoverSession(undefined)
+            }}
+          >
+            <ProjectPreviewPanel
+              project={props.project}
+              mobile={props.mobile}
+              selected={selected}
+              workspaceEnabled={workspaceEnabled}
+              workspaces={workspaces}
+              label={label}
+              projectSessions={projectSessions}
+              projectChildren={projectChildren}
+              workspaceSessions={workspaceSessions}
+              workspaceChildren={workspaceChildren}
+              setOpen={(value) => setState("open", value)}
+              ctx={props.ctx}
+              language={language}
+            />
+          </HoverCard>
+        </Show>
+      </div>
     </div>
   )
 }
