@@ -108,25 +108,41 @@ export namespace SessionProcessor {
                   }
                   break
 
-                case "tool-input-start":
+                case "tool-input-start": {
+                  const toolCallId = (value as any).toolCallId ?? value.id
                   const part = await Session.updatePart({
-                    id: toolcalls[value.id]?.id ?? Identifier.ascending("part"),
+                    id: toolcalls[toolCallId]?.id ?? Identifier.ascending("part"),
                     messageID: input.assistantMessage.id,
                     sessionID: input.assistantMessage.sessionID,
                     type: "tool",
                     tool: value.toolName,
-                    callID: value.id,
+                    callID: toolCallId,
                     state: {
                       status: "pending",
                       input: {},
                       raw: "",
                     },
                   })
-                  toolcalls[value.id] = part as MessageV2.ToolPart
+                  toolcalls[toolCallId] = part as MessageV2.ToolPart
                   break
+                }
 
-                case "tool-input-delta":
+                case "tool-input-delta": {
+                  const deltaCallId = (value as any).toolCallId ?? value.id
+                  const deltaText = (value as any).inputTextDelta ?? (value as any).delta ?? ""
+                  const deltaMatch = toolcalls[deltaCallId]
+                  if (deltaMatch && deltaMatch.state.status === "pending") {
+                    deltaMatch.state.raw += deltaText
+                    await Session.updatePartDelta({
+                      sessionID: deltaMatch.sessionID,
+                      messageID: deltaMatch.messageID,
+                      partID: deltaMatch.id,
+                      field: "raw",
+                      delta: deltaText,
+                    })
+                  }
                   break
+                }
 
                 case "tool-input-end":
                   break
