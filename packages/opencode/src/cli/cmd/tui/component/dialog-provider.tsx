@@ -66,6 +66,7 @@ export function createDialogProviderOptions() {
           }
           if (index == null) return
           const method = methods[index]
+          const onBack = () => dialog.replace(() => <DialogProvider />)
           if (method.type === "oauth") {
             const result = await sdk.client.provider.oauth.authorize({
               providerID: provider.id,
@@ -73,17 +74,17 @@ export function createDialogProviderOptions() {
             })
             if (result.data?.method === "code") {
               dialog.replace(() => (
-                <CodeMethod providerID={provider.id} title={method.label} index={index} authorization={result.data!} />
+                <CodeMethod providerID={provider.id} title={method.label} index={index} authorization={result.data!} onBack={onBack} />
               ))
             }
             if (result.data?.method === "auto") {
               dialog.replace(() => (
-                <AutoMethod providerID={provider.id} title={method.label} index={index} authorization={result.data!} />
+                <AutoMethod providerID={provider.id} title={method.label} index={index} authorization={result.data!} onBack={onBack} />
               ))
             }
           }
           if (method.type === "api") {
-            return dialog.replace(() => <ApiMethod providerID={provider.id} title={method.label} />)
+            return dialog.replace(() => <ApiMethod providerID={provider.id} title={method.label} onBack={onBack} />)
           }
         },
       })),
@@ -102,6 +103,7 @@ interface AutoMethodProps {
   providerID: string
   title: string
   authorization: ProviderAuthAuthorization
+  onBack?: () => void
 }
 function AutoMethod(props: AutoMethodProps) {
   const { theme } = useTheme()
@@ -116,6 +118,11 @@ function AutoMethod(props: AutoMethodProps) {
       Clipboard.copy(code)
         .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
         .catch(toast.error)
+    }
+    if (evt.name === "escape") {
+      props.onBack?.()
+      evt.preventDefault()
+      evt.stopPropagation()
     }
   })
 
@@ -139,7 +146,7 @@ function AutoMethod(props: AutoMethodProps) {
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
           {props.title}
         </text>
-        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+        <text fg={theme.textMuted} onMouseUp={() => props.onBack?.()}>
           esc
         </text>
       </box>
@@ -160,6 +167,7 @@ interface CodeMethodProps {
   title: string
   providerID: string
   authorization: ProviderAuthAuthorization
+  onBack?: () => void
 }
 function CodeMethod(props: CodeMethodProps) {
   const { theme } = useTheme()
@@ -186,6 +194,7 @@ function CodeMethod(props: CodeMethodProps) {
         }
         setError(true)
       }}
+      onCancel={props.onBack}
       description={() => (
         <box gap={1}>
           <text fg={theme.textMuted}>{props.authorization.instructions}</text>
@@ -202,6 +211,7 @@ function CodeMethod(props: CodeMethodProps) {
 interface ApiMethodProps {
   providerID: string
   title: string
+  onBack?: () => void
 }
 function ApiMethod(props: ApiMethodProps) {
   const dialog = useDialog()
@@ -238,6 +248,7 @@ function ApiMethod(props: ApiMethodProps) {
         await sync.bootstrap()
         dialog.replace(() => <DialogModel providerID={props.providerID} />)
       }}
+      onCancel={props.onBack}
     />
   )
 }

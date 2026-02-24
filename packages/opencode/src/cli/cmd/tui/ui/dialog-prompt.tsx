@@ -22,6 +22,11 @@ export function DialogPrompt(props: DialogPromptProps) {
     if (evt.name === "return") {
       props.onConfirm?.(textarea.plainText)
     }
+    if (evt.name === "escape") {
+      props.onCancel?.()
+      evt.preventDefault()
+      evt.stopPropagation()
+    }
   })
 
   onMount(() => {
