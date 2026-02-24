@@ -1013,20 +1013,6 @@ export namespace Provider {
       database[providerID] = parsed
     }
 
-    // fetch models dynamically for providers with fetchModels enabled
-    for (const [providerID, provider] of configProviders) {
-      if (!provider.fetchModels) continue
-      const options = database[providerID]?.options ?? provider.options ?? {}
-      const npm =
-        provider.npm ?? database[providerID]?.models[Object.keys(database[providerID]?.models ?? {})[0]]?.api.npm
-      const fetched = await fetchModels(providerID, { ...options, npm })
-      if (Object.keys(fetched).length === 0) continue
-      const existing = database[providerID]
-      if (!existing) continue
-      // merge fetched models as base, existing manual models override
-      existing.models = { ...fetched, ...existing.models }
-    }
-
     // load env
     const env = Env.all()
     for (const [providerID, provider] of Object.entries(database)) {
@@ -1161,6 +1147,41 @@ export namespace Provider {
       }
 
       log.info("found", { providerID })
+    }
+
+    // fetch models dynamically in background for providers with fetchModels enabled
+    const fetchTargets = configProviders.filter(([, p]) => p.fetchModels)
+    if (fetchTargets.length > 0) {
+      Promise.all(
+        fetchTargets.map(async ([providerID, provider]) => {
+          const info = database[providerID]
+          if (!info) return
+          const options = info.options ?? provider.options ?? {}
+          const npm = provider.npm ?? info.models[Object.keys(info.models)[0]]?.api.npm
+          log.info("fetchModels: fetching in background", { providerID })
+          const fetched = await fetchModels(providerID, { ...options, npm })
+          if (Object.keys(fetched).length === 0) return
+
+          const configProvider = config.provider?.[providerID]
+
+          // merge fetched models as base, existing manual models override
+          const existing = providers[providerID]
+          if (!existing) return
+          for (const [modelID, model] of Object.entries(fetched)) {
+            if (existing.models[modelID]) continue
+            if (model.status === "deprecated") continue
+            if (configProvider?.blacklist?.includes(modelID)) continue
+            if (configProvider?.whitelist && !configProvider.whitelist.includes(modelID)) continue
+            model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
+            existing.models[modelID] = model
+          }
+
+          log.info("fetchModels: background fetch complete", {
+            providerID,
+            count: Object.keys(fetched).length,
+          })
+        }),
+      ).catch((e) => log.warn("fetchModels: background fetch failed", { error: e }))
     }
 
     return {
