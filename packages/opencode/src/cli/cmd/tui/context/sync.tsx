@@ -9,6 +9,7 @@ import type {
   Command,
   PermissionRequest,
   QuestionRequest,
+  ElicitationRequest,
   LspStatus,
   McpStatus,
   McpResource,
@@ -45,6 +46,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       }
       question: {
         [sessionID: string]: QuestionRequest[]
+      }
+      elicitation: {
+        [sessionID: string]: ElicitationRequest[]
       }
       config: Config
       session: Session[]
@@ -85,6 +89,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       agent: [],
       permission: {},
       question: {},
+      elicitation: {},
       command: [],
       provider: [],
       provider_default: {},
@@ -177,6 +182,43 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           }
           setStore(
             "question",
+            request.sessionID,
+            produce((draft) => {
+              draft.splice(match.index, 0, request)
+            }),
+          )
+          break
+        }
+
+        case "elicitation.replied": {
+          const requests = store.elicitation[event.properties.sessionID]
+          if (!requests) break
+          const match = Binary.search(requests, event.properties.requestID, (r) => r.id)
+          if (!match.found) break
+          setStore(
+            "elicitation",
+            event.properties.sessionID,
+            produce((draft) => {
+              draft.splice(match.index, 1)
+            }),
+          )
+          break
+        }
+
+        case "elicitation.asked": {
+          const request = event.properties
+          const requests = store.elicitation[request.sessionID]
+          if (!requests) {
+            setStore("elicitation", request.sessionID, [request])
+            break
+          }
+          const match = Binary.search(requests, request.id, (r) => r.id)
+          if (match.found) {
+            setStore("elicitation", request.sessionID, match.index, reconcile(request))
+            break
+          }
+          setStore(
+            "elicitation",
             request.sessionID,
             produce((draft) => {
               draft.splice(match.index, 0, request)

@@ -2,6 +2,8 @@ import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { Identifier } from "@/id/id"
 import { Instance } from "@/project/instance"
+import { MCP } from "@/mcp"
+import { SessionStatus } from "@/session/status"
 import { Log } from "@/util/log"
 import z from "zod"
 
@@ -150,5 +152,22 @@ export namespace Elicitation {
 
   export async function list() {
     return state().then((x) => Object.values(x.pending).map((x) => x.info))
+  }
+
+  export function init() {
+    Bus.subscribe(MCP.BrowserOpenFailed, async (payload) => {
+      const sessions = SessionStatus.list()
+      const sessionIDs = Object.keys(sessions)
+      if (sessionIDs.length === 0) return
+
+      for (const sessionID of sessionIDs) {
+        ask({
+          sessionID,
+          mode: "url",
+          message: `MCP server "${payload.properties.mcpName}" requires authentication. Open the URL below in your browser to complete the OAuth flow.`,
+          url: payload.properties.url,
+        }).catch(() => {})
+      }
+    })
   }
 }
