@@ -19,7 +19,12 @@ import { agentColor } from "@/utils/agent"
 
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
-export const ProjectIcon = (props: { project: LocalProject; class?: string; notify?: boolean }): JSX.Element => {
+export const ProjectIcon = (props: {
+  project: LocalProject
+  class?: string
+  notify?: boolean
+  working?: boolean
+}): JSX.Element => {
   const notification = useNotification()
   const dirs = createMemo(() => [props.project.worktree, ...(props.project.sandboxes ?? [])])
   const unseenCount = createMemo(() =>
@@ -48,6 +53,11 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
             "bg-text-interactive-base": !hasError(),
           }}
         />
+      </Show>
+      <Show when={props.working}>
+        <div class="absolute bottom-px right-px size-3 rounded-full bg-background-base z-10 flex items-center justify-center">
+          <Spinner class="size-[9px]" />
+        </div>
       </Show>
     </div>
   )
