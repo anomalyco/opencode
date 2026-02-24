@@ -13,7 +13,7 @@ import { ComponentProps, createEffect, createMemo, createSignal, onCleanup, onMo
 import { Portal } from "solid-js/web"
 import { createDefaultOptions, styleVariables } from "../pierre"
 import { markCommentedFileLines } from "../pierre/commented-lines"
-import { createLineNumberSelectionBridge, restoreShadowTextSelection } from "../pierre/selection-bridge"
+import { createLineNumberSelectionBridge, restoreShadowTextSelection, toRange } from "../pierre/selection-bridge"
 import { getWorkerPool } from "../pierre/worker"
 import { Icon } from "./icon"
 
@@ -711,7 +711,7 @@ export function Code<T>(props: CodeProps<T>) {
     const domRange =
       (
         selection as unknown as {
-          getComposedRanges?: (options?: { shadowRoots?: ShadowRoot[] }) => Range[]
+          getComposedRanges?: (options?: { shadowRoots?: ShadowRoot[] }) => StaticRange[]
         }
       ).getComposedRanges?.({ shadowRoots: [root] })?.[0] ??
       (selection.rangeCount > 0 ? selection.getRangeAt(0) : undefined)
@@ -741,7 +741,7 @@ export function Code<T>(props: CodeProps<T>) {
     setSelectedLines(selected)
 
     if (!preserveTextSelection || !domRange) return
-    restoreShadowTextSelection(root, domRange.cloneRange())
+    restoreShadowTextSelection(root, toRange(domRange).cloneRange())
   }
 
   const setSelectedLines = (range: SelectedLineRange | null) => {

@@ -37,6 +37,14 @@ export function isSingleLineSelection(range: SelectedLineRange | null) {
   return range.start === range.end && (range.endSide == null || range.endSide === range.side)
 }
 
+export function toRange(source: Range | StaticRange): Range {
+  if (source instanceof Range) return source
+  const range = new Range()
+  range.setStart(source.startContainer, source.startOffset)
+  range.setEnd(source.endContainer, source.endOffset)
+  return range
+}
+
 export function restoreShadowTextSelection(root: ShadowRoot | undefined, range: Range | undefined) {
   if (!root || !range) return
 

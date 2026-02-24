@@ -4,7 +4,7 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { createEffect, createMemo, createSignal, onCleanup, splitProps } from "solid-js"
 import { createDefaultOptions, type DiffProps, styleVariables } from "../pierre"
 import { findDiffSide, markCommentedDiffLines } from "../pierre/commented-lines"
-import { createLineNumberSelectionBridge, restoreShadowTextSelection } from "../pierre/selection-bridge"
+import { createLineNumberSelectionBridge, restoreShadowTextSelection, toRange } from "../pierre/selection-bridge"
 import { acquireVirtualizer, virtualMetrics } from "../pierre/virtualizer"
 import { getWorkerPool } from "../pierre/worker"
 
@@ -312,7 +312,7 @@ export function Diff<T>(props: DiffProps<T>) {
     const domRange =
       (
         selection as unknown as {
-          getComposedRanges?: (options?: { shadowRoots?: ShadowRoot[] }) => Range[]
+          getComposedRanges?: (options?: { shadowRoots?: ShadowRoot[] }) => StaticRange[]
         }
       ).getComposedRanges?.({ shadowRoots: [root] })?.[0] ??
       (selection.rangeCount > 0 ? selection.getRangeAt(0) : undefined)
@@ -339,7 +339,7 @@ export function Diff<T>(props: DiffProps<T>) {
     if (side) selected.side = side
     if (endSide && side && endSide !== side) selected.endSide = endSide
 
-    const text = preserveTextSelection && domRange ? domRange.cloneRange() : undefined
+    const text = preserveTextSelection && domRange ? toRange(domRange).cloneRange() : undefined
     if (text) {
       setSelectedLines(selected, { root, text })
       return
