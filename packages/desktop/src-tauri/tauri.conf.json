@@ -32,6 +32,7 @@
       "icons/dev/icon.ico"
     ],
     "active": true,
+    "category": "DeveloperTool",
     "targets": ["deb", "rpm", "dmg", "nsis", "app"],
     "externalBin": ["sidecars/opencode-cli"],
     "linux": {
