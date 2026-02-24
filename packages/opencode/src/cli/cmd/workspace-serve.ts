@@ -7,11 +7,6 @@ export const WorkspaceServeCommand = cmd({
   builder: (yargs) => withNetworkOptions(yargs),
   describe: "starts a remote workspace websocket server",
   handler: async (args) => {
-    if (!Installation.isLocal()) {
-      console.log("Workspace server is experimental and not available yet")
-      process.exit(0)
-    }
-
     const opts = await resolveNetworkOptions(args)
     const server = Bun.serve<{ id: string }>({
       hostname: opts.hostname,

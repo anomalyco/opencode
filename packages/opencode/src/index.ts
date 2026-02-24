@@ -46,7 +46,7 @@ process.on("uncaughtException", (e) => {
   })
 })
 
-const cli = yargs(hideBin(process.argv))
+let cli = yargs(hideBin(process.argv))
   .parserConfiguration({ "populate--": true })
   .scriptName("opencode")
   .wrap(100)
@@ -142,7 +142,12 @@ const cli = yargs(hideBin(process.argv))
   .command(PrCommand)
   .command(SessionCommand)
   .command(DbCommand)
-  .command(WorkspaceServeCommand)
+
+if (Installation.isLocal()) {
+  cli = cli.command(WorkspaceServeCommand)
+}
+
+cli = cli
   .fail((msg, err) => {
     if (
       msg?.startsWith("Unknown argument") ||
