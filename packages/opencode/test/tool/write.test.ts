@@ -295,7 +295,17 @@ describe("tool.write", () => {
   describe("error handling", () => {
     test("throws error for paths outside project", async () => {
       await using tmp = await tmpdir()
-      const outsidePath = "/etc/passwd"
+      await using outerTmp = await tmpdir()
+      // Use a path inside a different tmpdir to guarantee it's outside the project
+      // and is an absolute path on all platforms.
+      const outsidePath = path.join(outerTmp.path, "forbidden.txt")
+
+      const rejectCtx = {
+        ...ctx,
+        ask: async () => {
+          throw new Error("permission denied")
+        },
+      }
 
       await Instance.provide({
         directory: tmp.path,
@@ -307,7 +317,7 @@ describe("tool.write", () => {
                 filePath: outsidePath,
                 content: "test",
               },
-              ctx,
+              rejectCtx,
             ),
           ).rejects.toThrow()
         },

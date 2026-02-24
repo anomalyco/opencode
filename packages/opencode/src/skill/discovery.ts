@@ -16,7 +16,7 @@ export namespace Discovery {
   }
 
   export function dir() {
-    return path.join(Global.Path.cache, "skills")
+    return path.join(Global.Path.cache, "skills").replaceAll("\\", "/")
   }
 
   async function get(url: string, dest: string): Promise<boolean> {
@@ -93,6 +93,6 @@ export namespace Discovery {
       }),
     )
 
-    return result
+    return result.map((r) => r.replaceAll("\\", "/"))
   }
 }

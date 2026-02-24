@@ -9,8 +9,21 @@ import { afterAll } from "bun:test"
 // Set XDG env vars FIRST, before any src/ imports
 const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
 await fs.mkdir(dir, { recursive: true })
-afterAll(() => {
-  fsSync.rmSync(dir, { recursive: true, force: true })
+afterAll(async () => {
+  // On Windows, files may still be locked by SQLite or other processes.
+  // Retry a few times before giving up.
+  for (let i = 0; i < 3; i++) {
+    try {
+      await fs.rm(dir, { recursive: true, force: true })
+      return
+    } catch {
+      await new Promise((r) => setTimeout(r, 200))
+    }
+  }
+  // Last attempt, let it throw if it still fails
+  try {
+    fsSync.rmSync(dir, { recursive: true, force: true })
+  } catch {}
 })
 
 process.env["XDG_DATA_HOME"] = path.join(dir, "share")

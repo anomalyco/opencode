@@ -69,7 +69,7 @@ export namespace ConfigMarkdown {
   }
 
   export async function parse(filePath: string) {
-    const template = await Filesystem.readText(filePath)
+    const template = (await Filesystem.readText(filePath)).replace(/\r\n/g, "\n")
 
     try {
       const md = matter(template)

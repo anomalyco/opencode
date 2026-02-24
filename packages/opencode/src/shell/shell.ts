@@ -62,7 +62,13 @@ export namespace Shell {
 
   export const acceptable = lazy(() => {
     const s = process.env.SHELL
-    if (s && !BLACKLIST.has(process.platform === "win32" ? path.win32.basename(s) : path.basename(s))) return s
+    if (s && !BLACKLIST.has(process.platform === "win32" ? path.win32.basename(s) : path.basename(s))) {
+      // On Windows, MSYS/Git Bash sets SHELL to a Unix-style path (e.g. /usr/bin/bash)
+      // that cannot be used directly with child_process.spawn. Fall back to finding
+      // a real Windows path for the shell.
+      if (process.platform === "win32" && !Filesystem.stat(s)?.size) return fallback()
+      return s
+    }
     return fallback()
   })
 }
