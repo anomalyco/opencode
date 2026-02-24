@@ -349,6 +349,7 @@ export const dict = {
   "workspace.usage.breakdown.output": "Çıkış",
   "workspace.usage.breakdown.reasoning": "Muhakeme",
   "workspace.usage.subscription": "abonelik (${{amount}})",
+  "workspace.usage.byok": "BYOK (${{amount}})",
 
   "workspace.cost.title": "Maliyet",
   "workspace.cost.subtitle": "Modele göre ayrılmış kullanım maliyetleri.",

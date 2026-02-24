@@ -343,6 +343,7 @@ export const dict = {
   "workspace.usage.breakdown.output": "출력",
   "workspace.usage.breakdown.reasoning": "추론",
   "workspace.usage.subscription": "구독 (${{amount}})",
+  "workspace.usage.byok": "BYOK (${{amount}})",
 
   "workspace.cost.title": "비용",
   "workspace.cost.subtitle": "모델별 사용 비용 내역.",
