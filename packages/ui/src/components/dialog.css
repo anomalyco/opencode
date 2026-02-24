@@ -4,7 +4,9 @@
   position: fixed;
   inset: 0;
   z-index: 50;
-  background-color: hsl(from var(--background-base) h s l / 0.2);
+  background-color: hsl(from var(--background-base) h s l / 0.35);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 [data-component="dialog"] {
@@ -50,7 +52,9 @@
       border-radius: var(--radius-xl);
       background: var(--surface-raised-stronger-non-alpha);
       background-clip: padding-box;
-      box-shadow: var(--shadow-lg-border-base);
+      box-shadow:
+        var(--shadow-lg-border-base),
+        0 0 0 1px var(--border-weaker-base);
 
       [data-slot="dialog-header"] {
         display: flex;
@@ -136,19 +140,29 @@
 }
 
 [data-component="dialog"][data-transition] [data-slot="dialog-content"] {
-  animation: contentHide 100ms ease-in forwards;
+  animation: contentHide 120ms cubic-bezier(0.4, 0, 1, 1) forwards;
 
   &[data-expanded] {
-    animation: contentShow 150ms ease-out;
+    animation: contentShow 250ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+[data-component="dialog"][data-transition] [data-component="dialog-overlay"] {
+  animation: overlayHide 150ms ease-in forwards;
+
+  &[data-expanded] {
+    animation: overlayShow 200ms ease-out;
   }
 }
 
 @keyframes overlayShow {
   from {
     opacity: 0;
+    backdrop-filter: blur(0);
   }
   to {
     opacity: 1;
+    backdrop-filter: blur(4px);
   }
 }
 @keyframes overlayHide {
@@ -162,20 +176,20 @@
 @keyframes contentShow {
   from {
     opacity: 0;
-    transform: scale(0.98);
+    transform: scale(0.96) translateY(4px);
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: scale(1) translateY(0);
   }
 }
 @keyframes contentHide {
   from {
     opacity: 1;
-    transform: scale(1);
+    transform: scale(1) translateY(0);
   }
   to {
     opacity: 0;
-    transform: scale(0.98);
+    transform: scale(0.96) translateY(4px);
   }
 }

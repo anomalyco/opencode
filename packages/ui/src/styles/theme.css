@@ -48,17 +48,24 @@
   --radius-xl: 0.625rem;
 
   --shadow-xs:
-    0 1px 2px -0.5px light-dark(hsl(0 0% 0% / 0.04), hsl(0 0% 0% / 0.06)),
-    0 0.5px 1.5px 0 light-dark(hsl(0 0% 0% / 0.025), hsl(0 0% 0% / 0.08)),
-    0 1px 3px 0 light-dark(hsl(0 0% 0% / 0.05), hsl(0 0% 0% / 0.1));
+    0 1px 2px -0.5px light-dark(hsl(0 0% 0% / 0.05), hsl(0 0% 0% / 0.08)),
+    0 0.5px 1.5px 0 light-dark(hsl(0 0% 0% / 0.03), hsl(0 0% 0% / 0.1)),
+    0 1px 3px 0 light-dark(hsl(0 0% 0% / 0.06), hsl(0 0% 0% / 0.12));
+  --shadow-sm:
+    0 2px 4px -1px light-dark(hsl(0 0% 0% / 0.06), hsl(0 0% 0% / 0.1)),
+    0 1px 2px 0 light-dark(hsl(0 0% 0% / 0.04), hsl(0 0% 0% / 0.08));
   --shadow-md:
-    0 6px 12px -2px light-dark(hsl(0 0% 0% / 0.075), hsl(0 0% 0% / 0.1)),
-    0 4px 8px -2px light-dark(hsl(0 0% 0% / 0.075), hsl(0 0% 0% / 0.15)),
-    0 1px 2px light-dark(hsl(0 0% 0% / 0.1), hsl(0 0% 0% / 0.15));
+    0 8px 16px -3px light-dark(hsl(0 0% 0% / 0.08), hsl(0 0% 0% / 0.12)),
+    0 4px 8px -2px light-dark(hsl(0 0% 0% / 0.06), hsl(0 0% 0% / 0.1)),
+    0 1px 3px 0 light-dark(hsl(0 0% 0% / 0.08), hsl(0 0% 0% / 0.12));
   --shadow-lg:
-    0 16px 48px -6px light-dark(hsl(0 0% 0% / 0.05), hsl(0 0% 0% / 0.15)),
-    0 6px 12px -2px light-dark(hsl(0 0% 0% / 0.025), hsl(0 0% 0% / 0.1)),
-    0 1px 2.5px light-dark(hsl(0 0% 0% / 0.025), hsl(0 0% 0% / 0.1));
+    0 20px 56px -8px light-dark(hsl(0 0% 0% / 0.08), hsl(0 0% 0% / 0.2)),
+    0 8px 16px -4px light-dark(hsl(0 0% 0% / 0.04), hsl(0 0% 0% / 0.12)),
+    0 2px 4px 0 light-dark(hsl(0 0% 0% / 0.03), hsl(0 0% 0% / 0.08));
+  --shadow-xl:
+    0 28px 72px -12px light-dark(hsl(0 0% 0% / 0.1), hsl(0 0% 0% / 0.25)),
+    0 12px 24px -4px light-dark(hsl(0 0% 0% / 0.05), hsl(0 0% 0% / 0.15)),
+    0 4px 8px 0 light-dark(hsl(0 0% 0% / 0.04), hsl(0 0% 0% / 0.1));
   --shadow-xxs-border: 0 0 0 0.5px var(--border-weak-base, rgba(0, 0, 0, 0.07));
   --shadow-xs-border:
     0 0 0 1px var(--border-base, rgba(11, 6, 0, 0.2)), 0 1px 2px -1px rgba(19, 16, 16, 0.04),

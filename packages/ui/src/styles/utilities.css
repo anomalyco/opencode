@@ -4,24 +4,84 @@
   [data-popper-positioner] {
     pointer-events: none;
   }
-
-  /* ::selection { */
-  /*   background-color: color-mix(in srgb, var(--color-primary) 33%, transparent); */
-  /*   background-color: var(--color-primary); */
-  /*   color: var(--color-background); */
-  /* } */
 }
+
+/* ---- Text selection styling ---- */
+
+::selection {
+  background-color: color-mix(in srgb, var(--border-selected, #034cff) 30%, transparent);
+  color: var(--text-strong);
+}
+
+/* ---- Global transition defaults for interactive elements ---- */
+
+button,
+a,
+[role="button"],
+[data-component="button"],
+[data-component="icon-button"],
+[data-component="card"],
+[data-component="list-item"],
+[data-component="tab"],
+input,
+select,
+textarea {
+  transition-property: background-color, border-color, color, box-shadow, opacity, transform;
+  transition-duration: var(--duration-fast, 120ms);
+  transition-timing-function: var(--ease-smooth, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+/* ---- Focus ring utility ---- */
+
+:focus-visible {
+  outline: 2px solid var(--border-selected, #034cff);
+  outline-offset: 1px;
+  border-radius: var(--radius-sm);
+}
+
+/* Suppress focus ring inside specific components that handle their own */
+[data-component="dialog"] :focus-visible,
+[data-component="text-field"] :focus-visible,
+[contenteditable]:focus-visible {
+  outline: none;
+}
+
+/* ---- Scrollbar styling ---- */
 
 .no-scrollbar {
   &::-webkit-scrollbar {
     display: none;
   }
-  /* Hide scrollbar for IE, Edge and Firefox */
   & {
-    -ms-overflow-style: none; /* IE and Edge */
-    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 }
+
+/* Thin scrollbar for scroll areas */
+[data-component="scroll-view"],
+.thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface-weak, #ccc) transparent;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background-color: var(--surface-weak, #ccc);
+    border-radius: 3px;
+
+    &:hover {
+      background-color: var(--surface-weaker, #aaa);
+    }
+  }
+}
+
+/* ---- Screen reader only ---- */
 
 .sr-only {
   position: absolute;
@@ -35,6 +95,8 @@
   border-width: 0;
 }
 
+/* ---- Truncation utilities ---- */
+
 .truncate-start {
   text-overflow: ellipsis;
   overflow: hidden;
@@ -43,12 +105,14 @@
   text-align: left;
 }
 
+/* ---- Typography scale ---- */
+
 .text-12-regular {
   font-family: var(--font-family-sans);
   font-size: var(--font-size-small);
   font-style: normal;
   font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-large); /* 166.667% */
+  line-height: var(--line-height-large);
   letter-spacing: var(--letter-spacing-normal);
 }
 
@@ -57,7 +121,7 @@
   font-size: var(--font-size-small);
   font-style: normal;
   font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-large); /* 166.667% */
+  line-height: var(--line-height-large);
   letter-spacing: var(--letter-spacing-normal);
 }
 
@@ -67,7 +131,7 @@
   font-size: var(--font-size-small);
   font-style: normal;
   font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-large); /* 166.667% */
+  line-height: var(--line-height-large);
   letter-spacing: var(--letter-spacing-normal);
 }
 
@@ -76,7 +140,7 @@
   font-size: var(--font-size-base);
   font-style: normal;
   font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-x-large); /* 171.429% */
+  line-height: var(--line-height-x-large);
   letter-spacing: var(--letter-spacing-normal);
 }
 
@@ -85,7 +149,7 @@
   font-size: var(--font-size-base);
   font-style: normal;
   font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-large); /* 171.429% */
+  line-height: var(--line-height-large);
   letter-spacing: var(--letter-spacing-normal);
 }
 
@@ -95,7 +159,7 @@
   font-size: var(--font-size-base);
   font-style: normal;
   font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-large); /* 171.429% */
+  line-height: var(--line-height-large);
   letter-spacing: var(--letter-spacing-normal);
 }
 
@@ -104,7 +168,7 @@
   font-size: var(--font-size-large);
   font-style: normal;
   font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-x-large); /* 150% */
+  line-height: var(--line-height-x-large);
   letter-spacing: var(--letter-spacing-tight);
 }
 
@@ -113,6 +177,6 @@
   font-size: var(--font-size-x-large);
   font-style: normal;
   font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-x-large); /* 120% */
+  line-height: var(--line-height-x-large);
   letter-spacing: var(--letter-spacing-tightest);
 }

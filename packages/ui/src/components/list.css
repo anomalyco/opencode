@@ -237,6 +237,9 @@
           align-items: center;
           color: var(--text-strong);
           scroll-margin-top: 28px;
+          transition:
+            background-color 100ms cubic-bezier(0.4, 0, 0.2, 1),
+            border-radius 100ms cubic-bezier(0.4, 0, 0.2, 1);
 
           /* text-14-medium */
           font-family: var(--font-family-sans);

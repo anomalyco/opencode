@@ -18,18 +18,18 @@
 [data-component="tooltip"] {
   z-index: 1000;
   max-width: 320px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background-color: var(--surface-float-base);
   color: var(--text-invert-strong);
   background: var(--surface-float-base);
-  padding: 2px 8px;
+  padding: 4px 10px;
   border: 1px solid var(--border-weak-base, rgba(0, 0, 0, 0.07));
 
   box-shadow: var(--shadow-md);
   pointer-events: none !important;
-  /* transition: all 150ms ease-out; */
-  /* transform: translate3d(0, 0, 0); */
-  /* transform-origin: var(--kb-tooltip-content-transform-origin); */
+  transition: opacity 150ms cubic-bezier(0.4, 0, 0.2, 1), transform 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translate3d(0, 0, 0);
+  transform-origin: var(--kb-tooltip-content-transform-origin);
 
   /* text-12-medium */
   font-family: var(--font-family-sans);
@@ -41,34 +41,34 @@
 
   &[data-expanded] {
     opacity: 1;
-    /* transform: translate3d(0, 0, 0); */
+    transform: translate3d(0, 0, 0);
   }
 
   &[data-closed]:not([data-force-open="true"]) {
     opacity: 0;
   }
 
-  /* &[data-placement="top"] { */
-  /*   &[data-closed] { */
-  /*     transform: translate3d(0, 4px, 0); */
-  /*   } */
-  /* } */
-  /**/
-  /* &[data-placement="bottom"] { */
-  /*   &[data-closed] { */
-  /*     transform: translate3d(0, -4px, 0); */
-  /*   } */
-  /* } */
-  /**/
-  /* &[data-placement="left"] { */
-  /*   &[data-closed] { */
-  /*     transform: translate3d(4px, 0, 0); */
-  /*   } */
-  /* } */
-  /**/
-  /* &[data-placement="right"] { */
-  /*   &[data-closed] { */
-  /*     transform: translate3d(-4px, 0, 0); */
-  /*   } */
-  /* } */
+  &[data-placement="top"] {
+    &[data-closed] {
+      transform: translate3d(0, 4px, 0);
+    }
+  }
+
+  &[data-placement="bottom"] {
+    &[data-closed] {
+      transform: translate3d(0, -4px, 0);
+    }
+  }
+
+  &[data-placement="left"] {
+    &[data-closed] {
+      transform: translate3d(4px, 0, 0);
+    }
+  }
+
+  &[data-placement="right"] {
+    &[data-closed] {
+      transform: translate3d(-4px, 0, 0);
+    }
+  }
 }

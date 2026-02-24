@@ -10,6 +10,12 @@
   cursor: default;
   outline: none;
   white-space: nowrap;
+  transition:
+    background-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 100ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 150ms cubic-bezier(0.4, 0, 0.2, 1);
 
   &[data-variant="primary"] {
     background-color: var(--button-primary-base);
@@ -22,15 +28,18 @@
 
     &:hover:not(:disabled) {
       background-color: var(--icon-strong-hover);
+      box-shadow: var(--shadow-sm);
     }
     &:focus:not(:disabled) {
       background-color: var(--icon-strong-focus);
     }
     &:active:not(:disabled) {
       background-color: var(--icon-strong-active);
+      transform: scale(0.98);
     }
     &:disabled {
       background-color: var(--icon-strong-disabled);
+      opacity: 0.6;
 
       [data-slot="icon-svg"] {
         color: var(--icon-invert-base);
@@ -45,20 +54,27 @@
 
     [data-slot="icon-svg"] {
       color: var(--icon-base);
+      transition: color 150ms cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     &:hover:not(:disabled) {
       background-color: var(--surface-base-hover);
+
+      [data-slot="icon-svg"] {
+        color: var(--icon-hover);
+      }
     }
     &:focus-visible:not(:disabled) {
       background-color: var(--surface-base-hover);
     }
     &:active:not(:disabled) {
       background-color: var(--surface-base-active);
+      transform: scale(0.97);
     }
     &:disabled {
       color: var(--text-weak);
       cursor: not-allowed;
+      opacity: 0.5;
 
       [data-slot="icon-svg"] {
         color: var(--icon-disabled);
@@ -80,6 +96,7 @@
 
     &:hover:not(:disabled) {
       background-color: var(--button-secondary-hover);
+      box-shadow: var(--shadow-xs-border-hover);
     }
     &:focus:not(:disabled) {
       background-color: var(--button-secondary-base);
@@ -93,12 +110,14 @@
     }
     &:active:not(:disabled) {
       background-color: var(--button-secondary-base);
+      transform: scale(0.98);
     }
     &:disabled {
       border-color: var(--border-disabled);
       background-color: var(--surface-disabled);
       color: var(--text-weak);
       cursor: not-allowed;
+      opacity: 0.6;
     }
 
     [data-slot="icon-svg"] {

@@ -4,10 +4,19 @@
   flex-direction: column;
   background-color: var(--surface-inset-base);
   border: 1px solid var(--border-weaker-base);
-  transition: background-color 0.15s ease;
-  border-radius: var(--radius-md);
+  transition:
+    background-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: var(--radius-lg);
   padding: 6px 12px;
   overflow: clip;
+
+  &:hover {
+    border-color: var(--border-weaker-hover);
+    box-shadow: var(--shadow-xs);
+  }
 
   &[data-variant="error"] {
     background-color: var(--surface-critical-weak);
