@@ -740,7 +740,11 @@ export async function handler(
           cost,
           keyID: authInfo.apiKeyId,
           sessionID: sessionId.substring(0, 30),
-          enrichment: billingSource === "subscription" ? { plan: "sub" } : undefined,
+          enrichment: (() => {
+            if (billingSource === "subscription") return { plan: "sub" }
+            if (billingSource === "byok") return { plan: "byok" }
+            return undefined
+          })(),
         }),
         db
           .update(KeyTable)
@@ -788,9 +792,10 @@ export async function handler(
               db
                 .update(BillingTable)
                 .set({
-                  balance: authInfo.isFree
-                    ? sql`${BillingTable.balance} - ${0}`
-                    : sql`${BillingTable.balance} - ${cost}`,
+                  balance:
+                    billingSource === "free" || billingSource === "byok"
+                      ? sql`${BillingTable.balance} - ${0}`
+                      : sql`${BillingTable.balance} - ${cost}`,
                   monthlyUsage: sql`
               CASE
                 WHEN MONTH(${BillingTable.timeMonthlyUsageUpdated}) = MONTH(now()) AND YEAR(${BillingTable.timeMonthlyUsageUpdated}) = YEAR(now()) THEN ${BillingTable.monthlyUsage} + ${cost}

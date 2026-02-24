@@ -334,6 +334,7 @@ export const dict = {
   "workspace.usage.breakdown.output": "輸出",
   "workspace.usage.breakdown.reasoning": "推理",
   "workspace.usage.subscription": "訂閱 (${{amount}})",
+  "workspace.usage.byok": "BYOK (${{amount}})",
 
   "workspace.cost.title": "成本",
   "workspace.cost.subtitle": "按模型細分的使用成本。",
