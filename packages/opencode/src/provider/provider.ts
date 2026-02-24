@@ -1149,8 +1149,8 @@ export namespace Provider {
       log.info("found", { providerID })
     }
 
-    // fetch models dynamically in background for providers with fetchModels enabled
-    const fetchTargets = configProviders.filter(([, p]) => p.fetchModels)
+    // fetch models dynamically in background for providers with shouldFetchModels enabled
+    const fetchTargets = configProviders.filter(([, p]) => p.shouldFetchModels !== false)
     if (fetchTargets.length > 0) {
       Promise.all(
         fetchTargets.map(async ([providerID, provider]) => {

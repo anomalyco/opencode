@@ -950,11 +950,12 @@ export namespace Config {
           }),
         )
         .optional(),
-      fetchModels: z
+      shouldFetchModels: z
         .boolean()
+        .default(true)
         .optional()
         .describe(
-          "Dynamically fetch available models from the provider's OpenAI-compatible /models endpoint at startup. Fetched models are merged with manually configured ones (manual config takes precedence).",
+          "Dynamically fetch available models from the provider's OpenAI-compatible /models endpoint at startup. Defaults to true. Fetched models are merged with manually configured ones (manual config takes precedence). Set to false to disable.",
         ),
       options: z
         .object({
