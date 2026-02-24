@@ -24,6 +24,11 @@ If you are unsure if a PR would be accepted, feel free to ask a maintainer or lo
 
 Want to take on an issue? Leave a comment and a maintainer may assign it to you unless it is something we are already working on.
 
+## Adding New Providers
+
+New providers shouldn't require many if ANY code changes, but if you want to add support for a new provider first make a PR to:
+https://github.com/anomalyco/models.dev
+
 ## Developing OpenCode
 
 - Requirements: Bun 1.3+

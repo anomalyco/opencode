@@ -17,8 +17,6 @@ import { canDisposeDirectory, pickDirectoriesToEvict } from "./eviction"
 
 export function createChildStoreManager(input: {
   owner: Owner
-  markStats: (activeDirectoryStores: number) => void
-  incrementEvictions: () => void
   isBooting: (directory: string) => boolean
   isLoadingSessions: (directory: string) => boolean
   onBootstrap: (directory: string) => void
@@ -36,7 +34,7 @@ export function createChildStoreManager(input: {
   const mark = (directory: string) => {
     if (!directory) return
     lifecycle.set(directory, { lastAccessAt: Date.now() })
-    runEviction()
+    runEviction(directory)
   }
 
   const pin = (directory: string) => {
@@ -102,11 +100,10 @@ export function createChildStoreManager(input: {
     }
     delete children[directory]
     input.onDispose(directory)
-    input.markStats(Object.keys(children).length)
     return true
   }
 
-  function runEviction() {
+  function runEviction(skip?: string) {
     const stores = Object.keys(children)
     if (stores.length === 0) return
     const list = pickDirectoriesToEvict({
@@ -116,11 +113,10 @@ export function createChildStoreManager(input: {
       max: MAX_DIR_STORES,
       ttl: DIR_IDLE_TTL_MS,
       now: Date.now(),
-    })
+    }).filter((directory) => directory !== skip)
     if (list.length === 0) return
     for (const directory of list) {
       if (!disposeDirectory(directory)) continue
-      input.incrementEvictions()
     }
   }
 
@@ -200,7 +196,6 @@ export function createChildStoreManager(input: {
         })
 
       runWithOwner(input.owner, init)
-      input.markStats(Object.keys(children).length)
     }
     mark(directory)
     const childStore = children[directory]
