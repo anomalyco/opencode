@@ -46,10 +46,15 @@ process.on("uncaughtException", (e) => {
   })
 })
 
-// Ensure the process exits on terminal hangup (eg. closing the terminal tab).
-// Without this, long-running commands like `serve` block on a never-resolving
-// promise and survive as orphaned processes.
-process.on("SIGHUP", () => process.exit())
+// Ensure database is properly closed on signal-based termination.
+// Also covers terminal hangup (SIGHUP) to prevent orphaned processes
+// from long-running commands like `serve`.
+for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
+  process.on(signal, () => {
+    Database.close()
+    process.exit(128 + (signal === "SIGTERM" ? 15 : signal === "SIGINT" ? 2 : 1))
+  })
+}
 
 let cli = yargs(hideBin(process.argv))
   .parserConfiguration({ "populate--": true })
@@ -208,6 +213,9 @@ try {
   }
   process.exitCode = 1
 } finally {
+  // Ensure all pending WAL writes are flushed to the main database file
+  // before exiting. Without this, sessions can be lost on exit.
+  Database.close()
   // Some subprocesses don't react properly to SIGTERM and similar signals.
   // Most notably, some docker-container-based MCP servers don't handle such signals unless
   // run using `docker run --init`.

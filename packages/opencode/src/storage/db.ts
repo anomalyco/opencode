@@ -103,6 +103,9 @@ export namespace Database {
   export function close() {
     const sqlite = state.sqlite
     if (!sqlite) return
+    try {
+      sqlite.run("PRAGMA wal_checkpoint(TRUNCATE)")
+    } catch {}
     sqlite.close()
     state.sqlite = undefined
     Client.reset()

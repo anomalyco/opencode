@@ -9,6 +9,7 @@ import { Config } from "@/config/config"
 import { GlobalBus } from "@/bus/global"
 import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
 import type { BunWebSocketData } from "hono/bun"
+import { Database } from "@/storage/db"
 import { Flag } from "@/flag/flag"
 
 await Log.init({
@@ -139,6 +140,7 @@ export const rpc = {
     if (eventStream.abort) eventStream.abort.abort()
     await Instance.disposeAll()
     if (server) server.stop(true)
+    Database.close()
   },
 }
 
