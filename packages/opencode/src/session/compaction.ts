@@ -229,10 +229,12 @@ When constructing the summary, try to stick to this template:
   }
 
   export function lastPrompt(msgs: MessageV2.WithParts[]) {
-    const match = msgs.findLast((m) => m.info.role === "user" && m.parts.some((p) => p.type === "text" && !p.synthetic))
+    const match = msgs.findLast(
+      (m) => m.info.role === "user" && m.parts.some((p) => p.type === "text" && !p.synthetic && !p.ignored),
+    )
     if (!match) return undefined
     const text = match.parts
-      .filter((p): p is MessageV2.TextPart => p.type === "text" && !p.synthetic)
+      .filter((p): p is MessageV2.TextPart => p.type === "text" && !p.synthetic && !p.ignored)
       .map((p) => p.text)
       .join("\n")
     return text || undefined
