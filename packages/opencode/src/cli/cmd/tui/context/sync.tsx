@@ -17,6 +17,7 @@ import type {
   ProviderListResponse,
   ProviderAuthMethod,
   VcsInfo,
+  PluginStatusResponse,
 } from "@opencode-ai/sdk/v2"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
@@ -75,6 +76,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       vcs: VcsInfo | undefined
       path: Path
       workspaceList: Workspace[]
+      plugin: PluginStatusResponse
     }>({
       provider_next: {
         all: [],
@@ -103,6 +105,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       vcs: undefined,
       path: { state: "", config: "", worktree: "", directory: "" },
       workspaceList: [],
+      plugin: [],
     })
 
     const sdk = useSDK()
@@ -414,6 +417,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.command.list().then((x) => setStore("command", reconcile(x.data ?? []))),
             sdk.client.lsp.status().then((x) => setStore("lsp", reconcile(x.data!))),
             sdk.client.mcp.status().then((x) => setStore("mcp", reconcile(x.data!))),
+            sdk.client.plugin.status().then((x) => setStore("plugin", reconcile(x.data!))),
             sdk.client.experimental.resource.list().then((x) => setStore("mcp_resource", reconcile(x.data ?? {}))),
             sdk.client.formatter.status().then((x) => setStore("formatter", reconcile(x.data!))),
             sdk.client.session.status().then((x) => {

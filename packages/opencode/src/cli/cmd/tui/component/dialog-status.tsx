@@ -1,5 +1,4 @@
 import { TextAttributes } from "@opentui/core"
-import { fileURLToPath } from "bun"
 import { useTheme } from "../context/theme"
 import { useDialog } from "@tui/ui/dialog"
 import { useSync } from "@tui/context/sync"
@@ -15,28 +14,8 @@ export function DialogStatus() {
   const enabledFormatters = createMemo(() => sync.data.formatter.filter((f) => f.enabled))
 
   const plugins = createMemo(() => {
-    const list = sync.data.config.plugin ?? []
-    const result = list.map((value) => {
-      if (value.startsWith("file://")) {
-        const path = fileURLToPath(value)
-        const parts = path.split("/")
-        const filename = parts.pop() || path
-        if (!filename.includes(".")) return { name: filename }
-        const basename = filename.split(".")[0]
-        if (basename === "index") {
-          const dirname = parts.pop()
-          const name = dirname || basename
-          return { name }
-        }
-        return { name: basename }
-      }
-      const index = value.lastIndexOf("@")
-      if (index <= 0) return { name: value, version: "latest" }
-      const name = value.substring(0, index)
-      const version = value.substring(index + 1)
-      return { name, version }
-    })
-    return result.toSorted((a, b) => a.name.localeCompare(b.name))
+    const list = sync.data.plugin ?? []
+    return list.toSorted((a, b) => a.name.localeCompare(b.name))
   })
 
   return (
@@ -155,7 +134,7 @@ export function DialogStatus() {
                 </text>
                 <text wrapMode="word" fg={theme.text}>
                   <b>{item.name}</b>
-                  {item.version && <span style={{ fg: theme.textMuted }}> @{item.version}</span>}
+                  {item.version && <span style={{ fg: theme.textMuted }}>@{item.version}</span>}
                 </text>
               </box>
             )}
