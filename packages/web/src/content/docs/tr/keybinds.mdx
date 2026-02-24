@@ -1,0 +1,192 @@
+---
+title: Tuş atamaları
+description: Tuş bağlantılarınızı özelleştirin.
+---
+
+opencode, opencode yapılandırması aracılığıyla özelleştirebileceğiniz bir tuş bağlantıları listesine sahiptir.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "keybinds": {
+    "leader": "ctrl+x",
+    "app_exit": "ctrl+c,ctrl+d,<leader>q",
+    "editor_open": "<leader>e",
+    "theme_list": "<leader>t",
+    "sidebar_toggle": "<leader>b",
+    "scrollbar_toggle": "none",
+    "username_toggle": "none",
+    "status_view": "<leader>s",
+    "tool_details": "none",
+    "session_export": "<leader>x",
+    "session_new": "<leader>n",
+    "session_list": "<leader>l",
+    "session_timeline": "<leader>g",
+    "session_fork": "none",
+    "session_rename": "none",
+    "session_share": "none",
+    "session_unshare": "none",
+    "session_interrupt": "escape",
+    "session_compact": "<leader>c",
+    "session_child_cycle": "<leader>right",
+    "session_child_cycle_reverse": "<leader>left",
+    "session_parent": "<leader>up",
+    "messages_page_up": "pageup,ctrl+alt+b",
+    "messages_page_down": "pagedown,ctrl+alt+f",
+    "messages_line_up": "ctrl+alt+y",
+    "messages_line_down": "ctrl+alt+e",
+    "messages_half_page_up": "ctrl+alt+u",
+    "messages_half_page_down": "ctrl+alt+d",
+    "messages_first": "ctrl+g,home",
+    "messages_last": "ctrl+alt+g,end",
+    "messages_next": "none",
+    "messages_previous": "none",
+    "messages_copy": "<leader>y",
+    "messages_undo": "<leader>u",
+    "messages_redo": "<leader>r",
+    "messages_last_user": "none",
+    "messages_toggle_conceal": "<leader>h",
+    "model_list": "<leader>m",
+    "model_cycle_recent": "f2",
+    "model_cycle_recent_reverse": "shift+f2",
+    "model_cycle_favorite": "none",
+    "model_cycle_favorite_reverse": "none",
+    "variant_cycle": "ctrl+t",
+    "command_list": "ctrl+p",
+    "agent_list": "<leader>a",
+    "agent_cycle": "tab",
+    "agent_cycle_reverse": "shift+tab",
+    "input_clear": "ctrl+c",
+    "input_paste": "ctrl+v",
+    "input_submit": "return",
+    "input_newline": "shift+return,ctrl+return,alt+return,ctrl+j",
+    "input_move_left": "left,ctrl+b",
+    "input_move_right": "right,ctrl+f",
+    "input_move_up": "up",
+    "input_move_down": "down",
+    "input_select_left": "shift+left",
+    "input_select_right": "shift+right",
+    "input_select_up": "shift+up",
+    "input_select_down": "shift+down",
+    "input_line_home": "ctrl+a",
+    "input_line_end": "ctrl+e",
+    "input_select_line_home": "ctrl+shift+a",
+    "input_select_line_end": "ctrl+shift+e",
+    "input_visual_line_home": "alt+a",
+    "input_visual_line_end": "alt+e",
+    "input_select_visual_line_home": "alt+shift+a",
+    "input_select_visual_line_end": "alt+shift+e",
+    "input_buffer_home": "home",
+    "input_buffer_end": "end",
+    "input_select_buffer_home": "shift+home",
+    "input_select_buffer_end": "shift+end",
+    "input_delete_line": "ctrl+shift+d",
+    "input_delete_to_line_end": "ctrl+k",
+    "input_delete_to_line_start": "ctrl+u",
+    "input_backspace": "backspace,shift+backspace",
+    "input_delete": "ctrl+d,delete,shift+delete",
+    "input_undo": "ctrl+-,super+z",
+    "input_redo": "ctrl+.,super+shift+z",
+    "input_word_forward": "alt+f,alt+right,ctrl+right",
+    "input_word_backward": "alt+b,alt+left,ctrl+left",
+    "input_select_word_forward": "alt+shift+f,alt+shift+right",
+    "input_select_word_backward": "alt+shift+b,alt+shift+left",
+    "input_delete_word_forward": "alt+d,alt+delete,ctrl+delete",
+    "input_delete_word_backward": "ctrl+w,ctrl+backspace,alt+backspace",
+    "history_previous": "up",
+    "history_next": "down",
+    "terminal_suspend": "ctrl+z",
+    "terminal_title_toggle": "none",
+    "tips_toggle": "<leader>h",
+    "display_thinking": "none"
+  }
+}
+```
+
+---
+
+## Leader tuşu
+
+opencode çoğu tuş ataması için `leader` anahtarını kullanır. Bu, terminalinizdeki çakışmaları önler.
+
+Varsayılan olarak `ctrl+x` lider tuştur ve çoğu eylem önce lider tuşa, ardından kısayola basmanızı gerektirir. Örneğin, yeni bir oturum başlatmak için önce `ctrl+x` tuşuna, ardından `n` tuşuna basarsınız.
+
+Tuş atamalarınız için lider anahtar kullanmanıza gerek yoktur ancak bunu yapmanızı öneririz.
+
+---
+
+## Tuş atamasını devre dışı bırak
+
+Anahtarı yapılandırmanıza "none" değeriyle ekleyerek bir tuş atamasını devre dışı bırakabilirsiniz.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "keybinds": {
+    "session_compact": "none"
+  }
+}
+```
+
+---
+
+## Masaüstü istemi kısayolları
+
+opencode masaüstü uygulaması bilgi istemi girişi, metni düzenlemek için yaygın Readline/Emacs tarzı kısayolları destekler. Bunlar yerleşiktir ve şu anda `opencode.json` aracılığıyla yapılandırılamaz.
+
+| Shortcut | Action                                   |
+| -------- | ---------------------------------------- |
+| `ctrl+a` | Geçerli satırın başına git               |
+| `ctrl+e` | Move to end of current line              |
+| `ctrl+b` | Move cursor back one character           |
+| `ctrl+f` | Move cursor forward one character        |
+| `alt+b`  | Move cursor back one word                |
+| `alt+f`  | Move cursor forward one word             |
+| `ctrl+d` | Delete character under cursor            |
+| `ctrl+k` | Kill to end of line                      |
+| `ctrl+u` | Satırın başına kadar öldür               |
+| `ctrl+w` | Kill previous word                       |
+| `alt+d`  | Kill next word                           |
+| `ctrl+t` | Transpose characters                     |
+| `ctrl+g` | Cancel popovers / abort running response |
+
+---
+
+## Shift+Enter
+
+Bazı terminaller varsayılan olarak Enter ile değiştirici tuşlar göndermez. Terminalinizi, kaçış dizisi olarak `Shift+Enter` gönderecek şekilde yapılandırmanız gerekebilir.
+
+### Windows Terminali
+
+`settings.json` cihazınızı şu adreste açın:
+
+```
+%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
+```
+
+Bunu kök düzeyindeki `actions` dizisine ekleyin:
+
+```json
+"actions": [
+  {
+    "command": {
+      "action": "sendInput",
+      "input": "\u001b[13;2u"
+    },
+    "id": "User.sendInput.ShiftEnterCustom"
+  }
+]
+```
+
+Bunu kök düzeyindeki `keybindings` dizisine ekleyin:
+
+```json
+"keybindings": [
+  {
+    "keys": "shift+enter",
+    "id": "User.sendInput.ShiftEnterCustom"
+  }
+]
+```
+
+Dosyayı kaydedin ve Windows Terminalini yeniden başlatın veya yeni bir sekme açın.

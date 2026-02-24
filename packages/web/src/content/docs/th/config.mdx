@@ -1,0 +1,685 @@
+---
+title: การกำหนดค่า
+description: การใช้การกำหนดค่า OpenCode JSON
+---
+
+คุณสามารถกำหนดค่า OpenCode ได้โดยใช้ไฟล์กำหนดค่า JSON
+
+---
+
+## รูปแบบ
+
+OpenCode รองรับทั้งรูปแบบ **JSON** และ **JSONC** (JSON พร้อมความคิดเห็น)
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Theme configuration
+  "theme": "opencode",
+  "model": "anthropic/claude-sonnet-4-5",
+  "autoupdate": true,
+}
+```
+
+---
+
+## สถานที่
+
+คุณสามารถวางการกำหนดค่าของคุณในสถานที่ต่าง ๆ สองสามแห่งและมี
+ลำดับความสำคัญที่แตกต่างกัน
+
+:::note
+ไฟล์การกำหนดค่า **ถูกรวมเข้าด้วยกัน** โดยไม่มีการแทนที่
+:::
+
+ไฟล์การกำหนดค่าจะถูกรวมเข้าด้วยกัน โดยไม่มีการแทนที่ การตั้งค่าจากตำแหน่งการกำหนดค่าต่อไปนี้จะรวมกัน การกำหนดค่าในภายหลังจะแทนที่การกำหนดค่าก่อนหน้าสำหรับคีย์ที่ขัดแย้งกันเท่านั้น การตั้งค่าที่ไม่ขัดแย้งจากการกำหนดค่าทั้งหมดจะยังคงอยู่
+
+ตัวอย่างเช่น หากการกำหนดค่าส่วนกลางของคุณตั้งค่า `theme: "opencode"` และ `autoupdate: true` และการกำหนดค่าโปรเจ็กต์ของคุณตั้งค่า `model: "anthropic/claude-sonnet-4-5"` การกำหนดค่าสุดท้ายจะรวมการตั้งค่าทั้งสามรายการไว้ด้วย
+
+---
+
+### ลำดับความสำคัญ
+
+แหล่งที่มาของการกำหนดค่าถูกโหลดตามลำดับนี้ (แหล่งที่มาภายหลังจะแทนที่แหล่งที่มาก่อนหน้า):
+
+1. **การกำหนดค่าระยะไกล** (จาก `.well-known/opencode`) - ค่าเริ่มต้นขององค์กร
+2. **การกำหนดค่าสากล** (`~/.config/opencode/opencode.json`) - การตั้งค่าของผู้ใช้
+3. **การกำหนดค่าแบบกำหนดเอง** (`OPENCODE_CONFIG` env var) - การแทนที่แบบกำหนดเอง
+4. **การกำหนดค่าโครงการ** (`opencode.json` ในโครงการ) - การตั้งค่าเฉพาะโครงการ
+5. **`.opencode` ไดเรกทอรี** - ตัวแทน คำสั่ง ปลั๊กอิน
+6. **การกำหนดค่าแบบอินไลน์** (`OPENCODE_CONFIG_CONTENT` env var) - การแทนที่รันไทม์
+
+ซึ่งหมายความว่าการกำหนดค่าโปรเจ็กต์สามารถแทนที่ค่าเริ่มต้นส่วนกลางได้ และการกำหนดค่าส่วนกลางสามารถแทนที่ค่าเริ่มต้นขององค์กรระยะไกลได้
+
+:::note
+ไดเรกทอรี `.opencode` และ `~/.config/opencode` ใช้ **ชื่อพหูพจน์** สำหรับไดเรกทอรีย่อย: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` และ `themes/` ชื่อเอกพจน์ (เช่น `agent/`) ยังรองรับความเข้ากันได้แบบย้อนหลังด้วย
+:::
+
+---
+
+### ระยะไกล
+
+องค์กรสามารถจัดเตรียมการกำหนดค่าเริ่มต้นผ่านทางจุดสิ้นสุด `.well-known/opencode` สิ่งนี้จะถูกดึงออกมาโดยอัตโนมัติเมื่อคุณตรวจสอบสิทธิ์กับผู้ให้บริการที่รองรับ
+
+โหลดการกำหนดค่าระยะไกลก่อน โดยทำหน้าที่เป็นเลเยอร์พื้นฐาน แหล่งการกำหนดค่าอื่นๆ ทั้งหมด (ส่วนกลาง โปรเจ็กต์) สามารถแทนที่ค่าเริ่มต้นเหล่านี้ได้
+
+ตัวอย่างเช่น หากองค์กรของคุณมีเซิร์ฟเวอร์ MCP ที่ถูกปิดใช้งานตามค่าเริ่มต้น:
+
+```json title="Remote config from .well-known/opencode"
+{
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": false
+    }
+  }
+}
+```
+
+คุณสามารถเปิดใช้งานเซิร์ฟเวอร์เฉพาะในการกำหนดค่าภายในเครื่องของคุณได้:
+
+```json title="opencode.json"
+{
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+---
+
+### ทั่วโลก
+
+วางการกำหนดค่า OpenCode ส่วนกลางของคุณใน `~/.config/opencode/opencode.json` ใช้การกำหนดค่าส่วนกลางสำหรับการตั้งค่าทั้งผู้ใช้ เช่น ธีม ผู้ให้บริการ หรือปุ่มลัด
+
+การกำหนดค่าส่วนกลางจะแทนที่ค่าเริ่มต้นขององค์กรระยะไกล
+
+---
+
+### ต่อโครงการ
+
+เพิ่ม `opencode.json` ในรูทโปรเจ็กต์ของคุณ การกำหนดค่าโปรเจ็กต์มีความสำคัญสูงสุดในบรรดาไฟล์กำหนดค่ามาตรฐาน โดยจะแทนที่การกำหนดค่าทั้งส่วนกลางและระยะไกล
+
+:::tip
+วางการกำหนดค่าเฉพาะโปรเจ็กต์ไว้ที่รากของโปรเจ็กต์ของคุณ
+:::
+
+เมื่อ OpenCode เริ่มต้นระบบ จะค้นหาไฟล์กำหนดค่าในไดเร็กทอรีปัจจุบันหรือข้ามไปยังไดเร็กทอรี Git ที่ใกล้ที่สุด
+
+นอกจากนี้ยังปลอดภัยที่จะตรวจสอบใน Git และใช้สคีมาเดียวกันกับสคีมาระดับโลก
+
+---
+
+### เส้นทางที่กำหนดเอง
+
+ระบุเส้นทางไฟล์กำหนดค่าที่กำหนดเองโดยใช้ตัวแปรสภาพแวดล้อม `OPENCODE_CONFIG`
+
+```bash
+export OPENCODE_CONFIG=/path/to/my/custom-config.json
+opencode run "Hello world"
+```
+
+มีการโหลดการกำหนดค่าแบบกำหนดเองระหว่างการกำหนดค่าส่วนกลางและโครงการตามลำดับความสำคัญ
+
+---
+
+### ไดเรกทอรีที่กำหนดเอง
+
+ระบุไดเร็กทอรีการกำหนดค่าที่กำหนดเองโดยใช้ `OPENCODE_CONFIG_DIR`
+ตัวแปรสภาพแวดล้อม ไดเร็กทอรีนี้จะถูกค้นหาตัวแทน, คำสั่ง,
+โหมดและปลั๊กอินเหมือนกับไดเร็กทอรี `.opencode` มาตรฐานและควร
+เป็นไปตามโครงสร้างเดียวกัน
+
+```bash
+export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+opencode run "Hello world"
+```
+
+ไดเร็กทอรีที่กำหนดเองถูกโหลดหลังจากไดเร็กทอรี config ส่วนกลางและ `.opencode` ดังนั้นจึง **สามารถแทนที่** การตั้งค่าได้
+
+---
+
+## สคีมา
+
+ไฟล์กำหนดค่ามีสคีมาที่กำหนดไว้ใน [**`opencode.ai/config.json`**](https://opencode.ai/config.json)
+
+ผู้แก้ไขของคุณควรสามารถตรวจสอบและเติมข้อความอัตโนมัติตามสคีมาได้
+
+---
+
+### TUI
+
+คุณสามารถกำหนดการตั้งค่าเฉพาะ TUI ผ่านตัวเลือก `tui`
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tui": {
+    "scroll_speed": 3,
+    "scroll_acceleration": {
+      "enabled": true
+    },
+    "diff_style": "auto"
+  }
+}
+```
+
+ตัวเลือกที่มี:
+
+- `scroll_acceleration.enabled` - ​​เปิดใช้งานการเร่งความเร็วการเลื่อนแบบ macOS **มีลำดับความสำคัญมากกว่า `scroll_speed`.**
+- `scroll_speed` - ​​ตัวคูณความเร็วการเลื่อนแบบกำหนดเอง (ค่าเริ่มต้น: `3` ขั้นต่ำ: `1`) ไม่สนใจหาก `scroll_acceleration.enabled` คือ `true`
+- `diff_style` - ​​ควบคุมการเรนเดอร์ต่าง `"auto"` ปรับให้เข้ากับความกว้างของ terminal `"stacked"` จะแสดงคอลัมน์เดียวเสมอ
+
+[เรียนรู้เพิ่มเติมเกี่ยวกับการใช้ TUI ที่นี่](/docs/tui)
+
+---
+
+### เซิร์ฟเวอร์
+
+คุณสามารถกำหนดการตั้งค่าเซิร์ฟเวอร์สำหรับคำสั่ง `opencode serve` และ `opencode web` ผ่านตัวเลือก `server`
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "server": {
+    "port": 4096,
+    "hostname": "0.0.0.0",
+    "mdns": true,
+    "mdnsDomain": "myproject.local",
+    "cors": ["http://localhost:5173"]
+  }
+}
+```
+
+ตัวเลือกที่มี:
+
+- `port` - ​​พอร์ตสำหรับฟัง
+- `hostname` - ​​ชื่อโฮสต์ที่จะฟัง เมื่อเปิดใช้งาน `mdns` และไม่ได้ตั้งชื่อโฮสต์ ค่าเริ่มต้นจะเป็น `0.0.0.0`
+- `mdns` - ​​เปิดใช้งานการค้นหาบริการ mDNS ซึ่งช่วยให้อุปกรณ์อื่นๆ บนเครือข่ายค้นพบเซิร์ฟเวอร์ OpenCode ของคุณได้
+- `mdnsDomain` - ​​ชื่อโดเมนที่กำหนดเองสำหรับบริการ mDNS ค่าเริ่มต้นเป็น `opencode.local` มีประโยชน์สำหรับการเรียกใช้หลายอินสแตนซ์บนเครือข่ายเดียวกัน
+- `cors` - ​​ต้นกำเนิดเพิ่มเติมเพื่ออนุญาต CORS เมื่อใช้เซิร์ฟเวอร์ HTTP จากไคลเอนต์ที่ใช้เบราว์เซอร์ ค่าจะต้องเป็นต้นกำเนิดแบบเต็ม (สคีมา + โฮสต์ + พอร์ตเสริม) เช่น `https://app.example.com`
+
+[เรียนรู้เพิ่มเติมเกี่ยวกับเซิร์ฟเวอร์ที่นี่](/docs/server)
+
+---
+
+### เครื่องมือ
+
+คุณสามารถจัดการเครื่องมือที่ LLM สามารถใช้ได้ผ่านตัวเลือก `tools`
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "write": false,
+    "bash": false
+  }
+}
+```
+
+[เรียนรู้เพิ่มเติมเกี่ยวกับเครื่องมือที่นี่](/docs/tools)
+
+---
+
+### Models
+
+คุณสามารถกำหนดค่าผู้ให้บริการและรุ่นที่คุณต้องการใช้ในการกำหนดค่า OpenCode ของคุณได้ผ่านตัวเลือก `provider`, `model` และ `small_model`
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {},
+  "model": "anthropic/claude-sonnet-4-5",
+  "small_model": "anthropic/claude-haiku-4-5"
+}
+```
+
+ตัวเลือก `small_model` จะกำหนดค่าโมเดลแยกต่างหากสำหรับงานที่ไม่ซับซ้อน เช่น การสร้างชื่อเรื่อง ตามค่าเริ่มต้น OpenCode จะพยายามใช้โมเดลที่ถูกกว่าหากมีให้บริการจากผู้ให้บริการของคุณ ไม่เช่นนั้นโมเดลจะกลับไปเป็นโมเดลหลักของคุณ
+
+ตัวเลือกผู้ให้บริการอาจรวมถึง `timeout` และ `setCacheKey`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "options": {
+        "timeout": 600000,
+        "setCacheKey": true
+      }
+    }
+  }
+}
+```
+
+- `timeout` - ​​คำขอหมดเวลาเป็นมิลลิวินาที (ค่าเริ่มต้น: 300000) ตั้งค่าเป็น `false` เพื่อปิดใช้งาน
+- `setCacheKey` - ​​ตรวจสอบให้แน่ใจว่าได้ตั้งค่าคีย์แคชสำหรับผู้ให้บริการที่กำหนดเสมอ
+
+คุณยังสามารถกำหนดค่า [รุ่นท้องถิ่น](/docs/models#local) ได้ [เรียนรู้เพิ่มเติม](/docs/models)
+
+---
+
+#### ตัวเลือกเฉพาะของผู้ให้บริการ
+
+ผู้ให้บริการบางรายรองรับตัวเลือกการกำหนดค่าเพิ่มเติมนอกเหนือจากการตั้งค่า `timeout` และ `apiKey` ทั่วไป
+
+##### Amazon Bedrock
+
+Amazon Bedrock รองรับ AWS-การกำหนดค่าเฉพาะ:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      "options": {
+        "region": "us-east-1",
+        "profile": "my-aws-profile",
+        "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
+      }
+    }
+  }
+}
+```
+
+- `region` - ​​AWS ภูมิภาคสำหรับ Bedrock (ค่าเริ่มต้นเป็น `AWS_REGION` env var หรือ `us-east-1`)
+- `profile` - ​​AWS ตั้งชื่อโปรไฟล์จาก `~/.aws/credentials` (ค่าเริ่มต้นเป็น `AWS_PROFILE` env var)
+- `endpoint` - ​​จุดสิ้นสุดที่กำหนดเอง URL สำหรับจุดสิ้นสุด VPC นี่เป็นนามแฝงสำหรับตัวเลือก `baseURL` ทั่วไปโดยใช้คำศัพท์เฉพาะ AWS หากระบุทั้งสองรายการ `endpoint` จะมีความสำคัญกว่า
+
+:::note
+Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีความสำคัญมากกว่าการตรวจสอบสิทธิ์ตามโปรไฟล์ ดู [ลำดับความสำคัญในการรับรองความถูกต้อง](/docs/providers#การรับรองความถูกต้อง-เหนือกว่า) สำหรับรายละเอียด
+:::
+
+[เรียนรู้เพิ่มเติมเกี่ยวกับการกำหนดค่า Amazon Bedrock](/docs/providers#amazon-bedrock)
+
+---
+
+### Themes
+
+คุณสามารถกำหนดค่าธีมที่คุณต้องการใช้ในการกำหนดค่า OpenCode ของคุณได้ผ่านตัวเลือก `theme`
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "theme": ""
+}
+```
+
+[เรียนรู้เพิ่มเติมที่นี่](/docs/themes)
+
+---
+
+### Agents
+
+คุณสามารถกำหนดค่าตัวแทนเฉพาะสำหรับงานเฉพาะผ่านตัวเลือก `agent`
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "code-reviewer": {
+      "description": "Reviews code for best practices and potential issues",
+      "model": "anthropic/claude-sonnet-4-5",
+      "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
+      "tools": {
+        // Disable file modification tools for review-only agent
+        "write": false,
+        "edit": false,
+      },
+    },
+  },
+}
+```
+
+คุณยังสามารถกำหนดตัวแทนโดยใช้ไฟล์ Markdown ใน `~/.config/opencode/agents/` หรือ `.opencode/agents/` [เรียนรู้เพิ่มเติมที่นี่](/docs/agents)
+
+---
+
+### Default Agent
+
+คุณสามารถตั้งค่าตัวแทนเริ่มต้นได้โดยใช้ตัวเลือก `default_agent` ซึ่งจะกำหนดว่าเอเจนต์ใดที่จะใช้เมื่อไม่มีการระบุอย่างชัดเจน
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "plan"
+}
+```
+
+ตัวแทนเริ่มต้นจะต้องเป็นตัวแทนหลัก (ไม่ใช่ตัวแทนย่อย) ซึ่งอาจเป็นตัวแทนในตัว เช่น `"build"` หรือ `"plan"` หรือ [ตัวแทนที่กำหนดเอง](/docs/agents) ที่คุณกำหนดไว้ หากไม่มีตัวแทนที่ระบุหรือเป็นตัวแทนย่อย OpenCode จะถอยกลับไปที่ `"build"` พร้อมคำเตือน
+
+การตั้งค่านี้ใช้กับอินเทอร์เฟซทั้งหมด: TUI, CLI (`opencode run`) แอปเดสก์ท็อป และ GitHub Action
+
+---
+
+### Sharing
+
+คุณสามารถกำหนดค่าคุณสมบัติ [แบ่งปัน](/docs/share) ได้ผ่านทางตัวเลือก `share`
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "manual"
+}
+```
+
+ใช้เวลา:
+
+- `"manual"` - ​​อนุญาตให้แชร์ด้วยตนเองผ่านคำสั่ง (ค่าเริ่มต้น)
+- `"auto"` - ​​แบ่งปันการสนทนาใหม่โดยอัตโนมัติ
+- `"disabled"` - ​​ปิดการใช้งานการแชร์ทั้งหมด
+
+ตามค่าเริ่มต้น การแชร์จะถูกตั้งค่าเป็นโหมดกำหนดเอง ซึ่งคุณต้องแชร์การสนทนาอย่างชัดเจนโดยใช้คำสั่ง `/share`
+
+---
+
+### คำสั่ง
+
+คุณสามารถกำหนดค่าคำสั่งที่กำหนดเองสำหรับงานซ้ำๆ ได้ผ่านตัวเลือก `command`
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-haiku-4-5",
+    },
+    "component": {
+      "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",
+      "description": "Create a new component",
+    },
+  },
+}
+```
+
+คุณยังสามารถกำหนดคำสั่งโดยใช้ไฟล์ Markdown ใน `~/.config/opencode/commands/` หรือ `.opencode/commands/` [เรียนรู้เพิ่มเติมที่นี่](/docs/commands)
+
+---
+
+### คีย์ลัด
+
+คุณสามารถปรับแต่งปุ่มลัดของคุณได้ผ่านตัวเลือก `keybinds`
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "keybinds": {}
+}
+```
+
+[เรียนรู้เพิ่มเติมที่นี่](/docs/keybinds)
+
+---
+
+### อัปเดตอัตโนมัติ
+
+OpenCode จะดาวน์โหลดการอัปเดตใหม่โดยอัตโนมัติเมื่อเริ่มต้นระบบ คุณสามารถปิดการใช้งานนี้ได้โดยใช้ตัวเลือก `autoupdate`
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": false
+}
+```
+
+หากคุณไม่ต้องการการอัปเดตแต่ต้องการรับการแจ้งเตือนเมื่อมีเวอร์ชันใหม่ ให้ตั้งค่า `autoupdate` เป็น `"notify"`
+โปรดสังเกตว่าสิ่งนี้ใช้ได้เฉพาะเมื่อไม่ได้ติดตั้งโดยใช้ตัวจัดการแพ็คเกจเช่น Homebrew
+
+---
+
+### ตัวจัดรูปแบบ
+
+คุณสามารถกำหนดค่าตัวจัดรูปแบบโค้ดผ่านตัวเลือก `formatter`
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "disabled": true
+    },
+    "custom-prettier": {
+      "command": ["npx", "prettier", "--write", "$FILE"],
+      "environment": {
+        "NODE_ENV": "development"
+      },
+      "extensions": [".js", ".ts", ".jsx", ".tsx"]
+    }
+  }
+}
+```
+
+[เรียนรู้เพิ่มเติมเกี่ยวกับฟอร์แมตเตอร์ที่นี่](/docs/formatters)
+
+---
+
+### การอนุญาต
+
+ตามค่าเริ่มต้น opencode **อนุญาตการดำเนินการทั้งหมด** โดยไม่ต้องมีการอนุมัติอย่างชัดเจน คุณสามารถเปลี่ยนสิ่งนี้ได้โดยใช้ตัวเลือก `permission`
+
+ตัวอย่างเช่น เพื่อให้แน่ใจว่าเครื่องมือ `edit` และ `bash` ต้องได้รับการอนุมัติจากผู้ใช้:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "ask",
+    "bash": "ask"
+  }
+}
+```
+
+[เรียนรู้เพิ่มเติมเกี่ยวกับการอนุญาตที่นี่](/docs/permissions)
+
+---
+
+### การบีบอัด
+
+คุณสามารถควบคุมลักษณะการทำงานของการบีบอัดบริบทได้โดยใช้ตัวเลือก `compaction`
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": true,
+    "prune": true
+  }
+}
+```
+
+- `auto` - ​​กระชับเซสชันโดยอัตโนมัติเมื่อบริบทเต็ม (ค่าเริ่มต้น: `true`)
+- `prune` - ​​ลบเอาท์พุตเครื่องมือเก่าเพื่อบันทึก tokens (ค่าเริ่มต้น: `true`)
+
+---
+
+### ตัวเฝ้าดู
+
+คุณสามารถกำหนดค่ารูปแบบการละเว้นตัวเฝ้าดูไฟล์ได้ผ่านตัวเลือก `watcher`
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "watcher": {
+    "ignore": ["node_modules/**", "dist/**", ".git/**"]
+  }
+}
+```
+
+รูปแบบเป็นไปตามไวยากรณ์ glob ใช้ตัวเลือกนี้เพื่อยกเว้นไดเร็กทอรีที่มีเสียงดังจากการดูไฟล์
+
+---
+
+### MCP Servers
+
+คุณสามารถกำหนดค่าเซิร์ฟเวอร์ MCP ที่คุณต้องการใช้ผ่านตัวเลือก `mcp`
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {}
+}
+```
+
+[เรียนรู้เพิ่มเติมที่นี่](/docs/mcp-servers)
+
+---
+
+### ปลั๊กอิน
+
+[ปลั๊กอิน](/docs/plugins) ขยาย OpenCode ด้วยเครื่องมือที่กำหนดเอง hooks และการผสานรวม
+
+วางไฟล์ปลั๊กอินใน `.opencode/plugins/` หรือ `~/.config/opencode/plugins/` คุณยังสามารถโหลดปลั๊กอินจาก npm ผ่านตัวเลือก `plugin`
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
+}
+```
+
+[เรียนรู้เพิ่มเติมที่นี่](/docs/plugins)
+
+---
+
+### คำแนะนำ
+
+คุณสามารถกำหนดค่าคำแนะนำสำหรับรุ่นที่คุณใช้ผ่านตัวเลือก `instructions`
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
+}
+```
+
+สิ่งนี้จะนำอาร์เรย์ของเส้นทางและรูปแบบ glob ไปยังไฟล์คำสั่ง [เรียนรู้เพิ่มเติม
+เกี่ยวกับกฎที่นี่](/docs/rules)
+
+---
+
+### Disabled Providers
+
+คุณสามารถปิดการใช้งานผู้ให้บริการที่โหลดโดยอัตโนมัติผ่านตัวเลือก `disabled_providers` สิ่งนี้มีประโยชน์เมื่อคุณต้องการป้องกันไม่ให้โหลดผู้ให้บริการบางรายแม้ว่าจะมีข้อมูลประจำตัวอยู่ก็ตาม
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "disabled_providers": ["openai", "gemini"]
+}
+```
+
+:::note
+`disabled_providers` มีลำดับความสำคัญมากกว่า `enabled_providers`
+:::
+
+ตัวเลือก `disabled_providers` ยอมรับอาร์เรย์ของรหัสผู้ให้บริการ เมื่อผู้ให้บริการถูกปิดใช้งาน:
+
+- มันจะไม่ถูกโหลดแม้ว่าจะมีการตั้งค่าตัวแปรสภาพแวดล้อมก็ตาม
+- มันจะไม่ถูกโหลดแม้ว่าจะมีการกำหนดค่าคีย์ API ผ่านคำสั่ง `/connect`
+- รุ่นของผู้ให้บริการจะไม่ปรากฏในรายการการเลือกรุ่น
+
+---
+
+### Enabled Providers
+
+คุณสามารถระบุรายชื่อผู้ให้บริการที่อนุญาตได้ผ่านตัวเลือก `enabled_providers` เมื่อตั้งค่าแล้ว เฉพาะผู้ให้บริการที่ระบุเท่านั้นที่จะเปิดใช้งาน และผู้ให้บริการอื่นๆ ทั้งหมดจะถูกละเว้น
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "enabled_providers": ["anthropic", "openai"]
+}
+```
+
+สิ่งนี้มีประโยชน์เมื่อคุณต้องการจำกัด OpenCode ให้ใช้เฉพาะผู้ให้บริการบางราย แทนที่จะปิดการใช้งานทีละราย
+
+:::note
+`disabled_providers` มีลำดับความสำคัญมากกว่า `enabled_providers`
+:::
+
+หากผู้ให้บริการปรากฏทั้ง `enabled_providers` และ `disabled_providers` `disabled_providers` จะมีลำดับความสำคัญสำหรับความเข้ากันได้แบบย้อนหลัง
+
+---
+
+### ขั้นทดลอง
+
+ปุ่ม `experimental` มีตัวเลือกที่อยู่ระหว่างการพัฒนา
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {}
+}
+```
+
+:::caution
+ตัวเลือกการทดลองไม่เสถียร อาจมีการเปลี่ยนแปลงหรือลบออกโดยไม่ต้องแจ้งให้ทราบล่วงหน้า
+:::
+
+---
+
+## ตัวแปร
+
+คุณสามารถใช้การทดแทนตัวแปรในไฟล์กำหนดค่าของคุณเพื่ออ้างอิงตัวแปรสภาพแวดล้อมและเนื้อหาไฟล์ได้
+
+---
+
+### ตัวแปร Env
+
+ใช้ `{env:VARIABLE_NAME}` เพื่อทดแทนตัวแปรสภาพแวดล้อม:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "{env:OPENCODE_MODEL}",
+  "provider": {
+    "anthropic": {
+      "models": {},
+      "options": {
+        "apiKey": "{env:ANTHROPIC_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+หากไม่ได้ตั้งค่าตัวแปรสภาพแวดล้อม ตัวแปรนั้นจะถูกแทนที่ด้วยสตริงว่าง
+
+---
+
+### ไฟล์
+
+ใช้ `{file:path/to/file}` เพื่อทดแทนเนื้อหาของไฟล์:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["./custom-instructions.md"],
+  "provider": {
+    "openai": {
+      "options": {
+        "apiKey": "{file:~/.secrets/openai-key}"
+      }
+    }
+  }
+}
+```
+
+เส้นทางไฟล์อาจเป็น:
+
+- สัมพันธ์กับไดเร็กทอรีไฟล์ปรับแต่ง
+- หรือเส้นทางที่แน่นอนเริ่มต้นด้วย `/` หรือ `~`
+
+สิ่งเหล่านี้มีประโยชน์สำหรับ:
+
+- เก็บข้อมูลที่ละเอียดอ่อนเช่นคีย์ API ไว้ในไฟล์แยกกัน
+- รวมไฟล์คำสั่งขนาดใหญ่โดยไม่ทำให้การกำหนดค่าของคุณเกะกะ
+- การแชร์ข้อมูลโค้ดการกำหนดค่าทั่วไปในไฟล์กำหนดค่าหลายไฟล์

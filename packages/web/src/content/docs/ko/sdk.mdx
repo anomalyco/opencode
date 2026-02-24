@@ -1,0 +1,391 @@
+---
+title: SDK
+description: opencode 서버를 위한 타입 안전한 JS 클라이언트.
+---
+
+import config from "../../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+opencode JS/TS SDK는 서버와 상호 작용을 위한 유형 안전한 클라이언트를 제공합니다.
+통합 및 제어 opencode programmatically를 구축하는 데 사용됩니다.
+
+[Learn more](/docs/server) 서버가 어떻게 작동하나요? 예를 들어, 커뮤니티에 의해 구축 된 [projects](/docs/ecosystem#projects)를 확인하십시오.
+
+---
+
+## 설치
+
+npm에서 SDK 설치:
+
+```bash
+npm install @opencode-ai/sdk
+```
+
+---
+
+## 클라이언트 만들기
+
+opencode의 인스턴스 만들기:
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const { client } = await createOpencode()
+```
+
+서버와 클라이언트 모두 시작
+
+#### 옵션
+
+| 옵션       | 유형          | 설명                    | 기본        |
+| ---------- | ------------- | ----------------------- | ----------- |
+| `hostname` | `string`      | 서버 호스트명           | `127.0.0.1` |
+| `port`     | `number`      | 서버포트                | `4096`      |
+| `signal`   | `AbortSignal` | 취소 신호               | `undefined` |
+| `timeout`  | `number`      | 서버 시작시의 시간 아웃 | `5000`      |
+| `config`   | `Config`      | 구성 객체               | `{}`        |
+
+---
+
+## 구성
+
+구성 객체를 전달할 수 있습니다. 인스턴스는 여전히 `opencode.json`를 선택하지만 구성 인라인을 추가 할 수 있습니다.
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const opencode = await createOpencode({
+  hostname: "127.0.0.1",
+  port: 4096,
+  config: {
+    model: "anthropic/claude-3-5-sonnet-20241022",
+  },
+})
+
+console.log(`Server running at ${opencode.server.url}`)
+
+opencode.server.close()
+```
+
+## 클라이언트만
+
+opencode의 실행 인스턴스가 이미 있다면 클라이언트 인스턴스를 만들 수 있습니다.
+
+```javascript
+import { createOpencodeClient } from "@opencode-ai/sdk"
+
+const client = createOpencodeClient({
+  baseUrl: "http://localhost:4096",
+})
+```
+
+#### 옵션
+
+| 옵션            | 유형       | 설명                              | 기본                    |
+| --------------- | ---------- | --------------------------------- | ----------------------- |
+| `baseUrl`       | `string`   | 서버의 URL                        | `http://localhost:4096` |
+| `fetch`         | `function` | 사용자 정의 fetch 구현            | `globalThis.fetch`      |
+| `parseAs`       | `string`   | 응답 파싱 방법                    | `auto`                  |
+| `responseStyle` | `string`   | 반품 스타일: `data` 또는 `fields` | `fields`                |
+| `throwOnError`  | `boolean`  | 반품 시 오류                      | `false`                 |
+
+---
+
+## 타입
+
+SDK에는 모든 API 유형의 TypeScript 정의가 포함되어 있습니다. 직접 가져 오기 :
+
+```typescript
+import type { Session, Message, Part } from "@opencode-ai/sdk"
+```
+
+모든 유형은 서버의 OpenAPI 사양에서 생성되며 <a href={typesUrl}>types 파일</a>에서 사용할 수 있습니다.
+
+---
+
+## 오류
+
+SDK는 잡을 수 있는 오류를 던질 수 있습니다:
+
+```typescript
+try {
+  await client.session.get({ path: { id: "invalid-id" } })
+} catch (error) {
+  console.error("Failed to get session:", (error as Error).message)
+}
+```
+
+---
+
+## API
+
+SDK는 type-safe 클라이언트를 통해 모든 서버 API를 노출합니다.
+
+---
+
+## 글로벌
+
+| 메서드            | 설명                   | 응답                                 |
+| ----------------- | ---------------------- | ------------------------------------ |
+| `global.health()` | 서버 건강 및 버전 확인 | `{ healthy: true, version: string }` |
+
+---
+
+#### 예제
+
+```javascript
+const health = await client.global.health()
+console.log(health.data.version)
+```
+
+---
+
+### 앱
+
+| 방법           | 설명                      | 응답                                            |
+| -------------- | ------------------------- | ----------------------------------------------- |
+| `app.log()`    | 로그 항목 작성            | `boolean`                                       |
+| `app.agents()` | 이용 가능한 모든 에이전트 | <a href={typesUrl}><code> 에이전트[]</code></a> |
+
+---
+
+#### 예제
+
+```javascript
+// Write a log entry
+await client.app.log({
+  body: {
+    service: "my-app",
+    level: "info",
+    message: "Operation completed",
+  },
+})
+
+// List available agents
+const agents = await client.app.agents()
+```
+
+---
+
+## 프로젝트
+
+| 방법                | 설명                    | 응답                                          |
+| ------------------- | ----------------------- | --------------------------------------------- |
+| `project.list()`    | 모든 프로젝트 보기      | <a href={typesUrl}><code>Project[]</code></a> |
+| `project.current()` | 현재 프로젝트 가져 오기 | <a href={typesUrl}><code>Project</code></a>   |
+
+---
+
+#### 예제
+
+```javascript
+// List all projects
+const projects = await client.project.list()
+
+// Get current project
+const currentProject = await client.project.current()
+```
+
+---
+
+### 경로
+
+| 방법         | 설명                | 응답                                     |
+| ------------ | ------------------- | ---------------------------------------- |
+| `path.get()` | 현재 경로 가져 오기 | <a href={typesUrl}><code>Path</code></a> |
+
+---
+
+#### 예제
+
+```javascript
+// Get current path information
+const pathInfo = await client.path.get()
+```
+
+---
+
+#### 구성
+
+| 방법                 | 설명                       | 응답                                                                                                  |
+| -------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `config.get()`       | 구성 정보                  | <a href={typesUrl}><code>Config</code></a>                                                            |
+| `config.providers()` | 목록 제공업체 및 기본 모델 | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
+
+---
+
+#### 예제
+
+```javascript
+const config = await client.config.get()
+
+const { providers, default: defaults } = await client.config.providers()
+```
+
+---
+
+## 세션
+
+| 메서드                                                     | 설명                          | 비고                                                                                                                             |
+| ---------------------------------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `session.list()`                                           | 세션 일람                     | <a href={typesUrl}><code>Session[]</code></a>                                                                                    |
+| `session.get({ path })`                                    | 세션 가져 오기                | <a href={typesUrl}><code>Session</code></a>                                                                                      |
+| `session.children({ path })`                               | 하위 세션 목록                | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                 |
+| `session.create({ body })`                                 | 세션 만들기                   | 리턴 <a href={typesUrl}><code>Session</code></a>                                                                                 |
+| `session.delete({ path })`                                 | 세션 삭제                     | `boolean` 반품                                                                                                                   |
+| `session.update({ path, body })`                           | 업데이트 세션 속성            | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                 |
+| `session.init({ path, body })`                             | 앱 초기화 및 `AGENTS.md` 분석 | `boolean`를 반환                                                                                                                 |
+| `session.abort({ path })`                                  | 운영 중인 세션                | 반품 `boolean`                                                                                                                   |
+| `session.share({ path })`                                  | 공유 세션                     | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                 |
+| `session.unshare({ path })`                                | 공유 세션                     | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                 |
+| `session.summarize({ path, body })`                        | 세션 요약                     | 반품 `boolean`                                                                                                                   |
+| `session.messages({ path })`                               | 세션의 메시지 목록            | `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part</code></a>`}[]`                    |
+| `session.message({ path })`                                | 메시지 상세정보               | 반품 `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`               |
+| `session.prompt({ path, body })`                           | prompt 메시지 보내기          | `body.noReply: true` 반환 UserMessage (콘텍스트 전용). 기본 반환 <a href={typesUrl}><code>AssistantMessage</code></a> 에 AI 응답 |
+| `session.command({ path, body })`                          | 세션으로 명령을 전송          | `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`           |
+| `session.shell({ path, body })`                            | shell 명령을 실행             | <a href={typesUrl}><code>AssistantMessage</code></a>                                                                             |
+| `session.revert({ path, body })`                           | 메시지 다시 변환              | <a href={typesUrl}><code>Session</code></a>                                                                                      |
+| `session.unrevert({ path })`                               | 메시지 되돌리기 취소          | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                 |
+| `postSessionByIdPermissionsByPermissionId({ path, body })` | 허가 요청 대응                | 반품 `boolean`                                                                                                                   |
+
+---
+
+#### 예제
+
+```javascript
+// Create and manage sessions
+const session = await client.session.create({
+  body: { title: "My session" },
+})
+
+const sessions = await client.session.list()
+
+// Send a prompt message
+const result = await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    model: { providerID: "anthropic", modelID: "claude-3-5-sonnet-20241022" },
+    parts: [{ type: "text", text: "Hello!" }],
+  },
+})
+
+// Inject context without triggering AI response (useful for plugins)
+await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    noReply: true,
+    parts: [{ type: "text", text: "You are a helpful assistant." }],
+  },
+})
+```
+
+---
+
+## 파일
+
+| 방법                      | 설명                         | 응답                                                                                   |
+| ------------------------- | ---------------------------- | -------------------------------------------------------------------------------------- |
+| `find.text({ query })`    | 파일에서 텍스트 검색         | `path`, `lines`, `line_number`, `absolute_offset`, `submatches`와 일치하는 개체의 배열 |
+| `find.files({ query })`   | 이름의 파일 및 디렉토리 찾기 | `string[]` (경로)                                                                      |
+| `find.symbols({ query })` | 작업 공간 심볼 찾기          | <a href={typesUrl}><code>Symbol[]</code></a>                                           |
+| `file.read({ query })`    | 파일 보기                    | `{ type: "raw" \| "patch", content: string }`                                          |
+| `file.status({ query? })` | 트랙 된 파일 상태를 확인     | <a href={typesUrl}><code>File[]</code></a>                                             |
+
+`find.files`는 몇몇 선택적인 조회 분야를 지원합니다:
+
+- `type`: `"file"` 또는 `"directory"`
+- `directory`: 검색에 대한 프로젝트 루트를 override
+- `limit`: 최대 결과 (1-200)
+
+---
+
+#### 예제
+
+```javascript
+// Search and read files
+const textResults = await client.find.text({
+  query: { pattern: "function.*opencode" },
+})
+
+const files = await client.find.files({
+  query: { query: "*.ts", type: "file" },
+})
+
+const directories = await client.find.files({
+  query: { query: "packages", type: "directory", limit: 20 },
+})
+
+const content = await client.file.read({
+  query: { path: "src/index.ts" },
+})
+```
+
+---
+
+#### TUI
+
+| 방법                           | 설명                     | 응답      |
+| ------------------------------ | ------------------------ | --------- |
+| `tui.appendPrompt({ body })`   | 프롬프트에 텍스트를 부여 | `boolean` |
+| `tui.openHelp()`               | 도움말 열기              | `boolean` |
+| `tui.openSessions()`           | 세션 선택 안내           | `boolean` |
+| `tui.openThemes()`             | 테마 선택 열기           | `boolean` |
+| `tui.openModels()`             | 모델 선택 안내           | `boolean` |
+| `tui.submitPrompt()`           | 현재 프롬프트 제출       | `boolean` |
+| `tui.clearPrompt()`            | 프롬프트 클리어          | `boolean` |
+| `tui.executeCommand({ body })` | 명령어 실행              | `boolean` |
+| `tui.showToast({ body })`      | 토스트 알림 표시         | `boolean` |
+
+---
+
+#### 예제
+
+```javascript
+// Control TUI interface
+await client.tui.appendPrompt({
+  body: { text: "Add this to prompt" },
+})
+
+await client.tui.showToast({
+  body: { message: "Task completed", variant: "success" },
+})
+```
+
+---
+
+##### 인증
+
+| 방법                | 설명           | 응답      |
+| ------------------- | -------------- | --------- |
+| `auth.set({ ... })` | 인증 자격 증명 | `boolean` |
+
+---
+
+#### 예제
+
+```javascript
+await client.auth.set({
+  path: { id: "anthropic" },
+  body: { type: "api", key: "your-api-key" },
+})
+```
+
+---
+
+## 이벤트
+
+| 방법                | 설명                    | 응답                    |
+| ------------------- | ----------------------- | ----------------------- |
+| `event.subscribe()` | 서버-sent 이벤트 스트림 | 서버-sent 이벤트 스트림 |
+
+---
+
+#### 예제
+
+```javascript
+// Listen to real-time events
+const events = await client.event.subscribe()
+for await (const event of events.stream) {
+  console.log("Event:", event.type, event.properties)
+}
+```

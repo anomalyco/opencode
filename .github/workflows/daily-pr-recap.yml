@@ -47,13 +47,17 @@ jobs:
           TODAY'S DATE: ${TODAY}
 
           STEP 1: Gather PR data
-          Run these commands to gather PR information. ONLY include PRs created or updated TODAY (${TODAY}):
+          Run these commands to gather PR information. ONLY include OPEN PRs created or updated TODAY (${TODAY}):
 
-          # PRs created today
-          gh pr list --repo ${{ github.repository }} --state all --search \"created:${TODAY}\" --json number,title,author,labels,createdAt,updatedAt,reviewDecision,isDraft,additions,deletions --limit 100
+          # Open PRs created today
+          gh pr list --repo ${{ github.repository }} --state open --search \"created:${TODAY}\" --json number,title,author,labels,createdAt,updatedAt,reviewDecision,isDraft,additions,deletions --limit 100
 
-          # PRs with activity today (updated today)
+          # Open PRs with activity today (updated today)
           gh pr list --repo ${{ github.repository }} --state open --search \"updated:${TODAY}\" --json number,title,author,labels,createdAt,updatedAt,reviewDecision,isDraft,additions,deletions --limit 100
+
+          IMPORTANT: EXCLUDE all PRs authored by Anomaly team members. Filter out PRs where the author login matches ANY of these:
+          adamdotdevin, Brendonovich, fwang, Hona, iamdavidhill, jayair, kitlangton, kommander, MrMushrooooom, R44VC0RP, rekram1-node, thdxr
+          This recap is specifically for COMMUNITY (external) contributions only.
 
 
 

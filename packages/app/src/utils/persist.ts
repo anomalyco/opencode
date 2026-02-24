@@ -1,4 +1,4 @@
-import { usePlatform } from "@/context/platform"
+import { Platform, usePlatform } from "@/context/platform"
 import { makePersisted, type AsyncStorage, type SyncStorage } from "@solid-primitives/storage"
 import { checksum } from "@opencode-ai/util/encode"
 import { createResource, type Accessor } from "solid-js"
@@ -195,6 +195,14 @@ function parse(value: string) {
   }
 }
 
+function normalize(defaults: unknown, raw: string, migrate?: (value: unknown) => unknown) {
+  const parsed = parse(raw)
+  if (parsed === undefined) return
+  const migrated = migrate ? migrate(parsed) : parsed
+  const merged = merge(defaults, migrated)
+  return JSON.stringify(merged)
+}
+
 function workspaceStorage(dir: string) {
   const head = dir.slice(0, 12) || "workspace"
   const sum = checksum(dir) ?? "0"
@@ -291,6 +299,7 @@ function localStorageDirect(): SyncStorage {
 export const PersistTesting = {
   localStorageDirect,
   localStorageWithPrefix,
+  normalize,
 }
 
 export const Persist = {
@@ -309,9 +318,8 @@ export const Persist = {
   },
 }
 
-export function removePersisted(target: { storage?: string; key: string }) {
-  const platform = usePlatform()
-  const isDesktop = platform.platform === "desktop" && !!platform.storage
+export function removePersisted(target: { storage?: string; key: string }, platform?: Platform) {
+  const isDesktop = platform?.platform === "desktop" && !!platform.storage
 
   if (isDesktop) {
     return platform.storage?.(target.storage)?.removeItem(target.key)
@@ -358,12 +366,11 @@ export function persisted<T>(
         getItem: (key) => {
           const raw = current.getItem(key)
           if (raw !== null) {
-            const parsed = parse(raw)
-            if (parsed === undefined) return raw
-
-            const migrated = config.migrate ? config.migrate(parsed) : parsed
-            const merged = merge(defaults, migrated)
-            const next = JSON.stringify(merged)
+            const next = normalize(defaults, raw, config.migrate)
+            if (next === undefined) {
+              current.removeItem(key)
+              return null
+            }
             if (raw !== next) current.setItem(key, next)
             return next
           }
@@ -372,16 +379,13 @@ export function persisted<T>(
             const legacyRaw = legacyStore.getItem(legacyKey)
             if (legacyRaw === null) continue
 
-            current.setItem(key, legacyRaw)
+            const next = normalize(defaults, legacyRaw, config.migrate)
+            if (next === undefined) {
+              legacyStore.removeItem(legacyKey)
+              continue
+            }
+            current.setItem(key, next)
             legacyStore.removeItem(legacyKey)
-
-            const parsed = parse(legacyRaw)
-            if (parsed === undefined) return legacyRaw
-
-            const migrated = config.migrate ? config.migrate(parsed) : parsed
-            const merged = merge(defaults, migrated)
-            const next = JSON.stringify(merged)
-            if (legacyRaw !== next) current.setItem(key, next)
             return next
           }
 
@@ -405,12 +409,11 @@ export function persisted<T>(
       getItem: async (key) => {
         const raw = await current.getItem(key)
         if (raw !== null) {
-          const parsed = parse(raw)
-          if (parsed === undefined) return raw
-
-          const migrated = config.migrate ? config.migrate(parsed) : parsed
-          const merged = merge(defaults, migrated)
-          const next = JSON.stringify(merged)
+          const next = normalize(defaults, raw, config.migrate)
+          if (next === undefined) {
+            await current.removeItem(key).catch(() => undefined)
+            return null
+          }
           if (raw !== next) await current.setItem(key, next)
           return next
         }
@@ -421,16 +424,13 @@ export function persisted<T>(
           const legacyRaw = await legacyStore.getItem(legacyKey)
           if (legacyRaw === null) continue
 
-          await current.setItem(key, legacyRaw)
+          const next = normalize(defaults, legacyRaw, config.migrate)
+          if (next === undefined) {
+            await legacyStore.removeItem(legacyKey).catch(() => undefined)
+            continue
+          }
+          await current.setItem(key, next)
           await legacyStore.removeItem(legacyKey)
-
-          const parsed = parse(legacyRaw)
-          if (parsed === undefined) return legacyRaw
-
-          const migrated = config.migrate ? config.migrate(parsed) : parsed
-          const merged = merge(defaults, migrated)
-          const next = JSON.stringify(merged)
-          if (legacyRaw !== next) await current.setItem(key, next)
           return next
         }
 

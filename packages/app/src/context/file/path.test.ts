@@ -13,6 +13,14 @@ describe("file path helpers", () => {
     expect(path.pathFromTab("other://src/app.ts")).toBeUndefined()
   })
 
+  test("normalizes Windows absolute paths with mixed separators", () => {
+    const path = createPathHelpers(() => "C:\\repo")
+    expect(path.normalize("C:\\repo\\src\\app.ts")).toBe("src\\app.ts")
+    expect(path.normalize("C:/repo/src/app.ts")).toBe("src/app.ts")
+    expect(path.normalize("file://C:/repo/src/app.ts")).toBe("src/app.ts")
+    expect(path.normalize("c:\\repo\\src\\app.ts")).toBe("src\\app.ts")
+  })
+
   test("keeps query/hash stripping behavior stable", () => {
     expect(stripQueryAndHash("a/b.ts#L12?x=1")).toBe("a/b.ts")
     expect(stripQueryAndHash("a/b.ts?x=1#L12")).toBe("a/b.ts")
@@ -108,7 +116,7 @@ describe("encodeFilePath", () => {
       const url = new URL(fileUrl)
       expect(url.protocol).toBe("file:")
       expect(url.pathname).toContain("README.bs.md")
-      expect(result).toBe("/D%3A/dev/projects/opencode/README.bs.md")
+      expect(result).toBe("/D:/dev/projects/opencode/README.bs.md")
     })
 
     test("should handle mixed separator path (Windows + Unix)", () => {
@@ -118,7 +126,7 @@ describe("encodeFilePath", () => {
       const fileUrl = `file://${result}`
 
       expect(() => new URL(fileUrl)).not.toThrow()
-      expect(result).toBe("/D%3A/dev/projects/opencode/README.bs.md")
+      expect(result).toBe("/D:/dev/projects/opencode/README.bs.md")
     })
 
     test("should handle Windows path with spaces", () => {
@@ -146,7 +154,7 @@ describe("encodeFilePath", () => {
       const fileUrl = `file://${result}`
 
       expect(() => new URL(fileUrl)).not.toThrow()
-      expect(result).toBe("/C%3A/")
+      expect(result).toBe("/C:/")
     })
 
     test("should handle Windows relative path with backslashes", () => {
@@ -177,7 +185,7 @@ describe("encodeFilePath", () => {
       const fileUrl = `file://${result}`
 
       expect(() => new URL(fileUrl)).not.toThrow()
-      expect(result).toBe("/c%3A/users/test/file.txt")
+      expect(result).toBe("/c:/users/test/file.txt")
     })
   })
 
@@ -193,7 +201,7 @@ describe("encodeFilePath", () => {
       const result = encodeFilePath(windowsPath)
       // Should convert to forward slashes and add leading /
       expect(result).not.toContain("\\")
-      expect(result).toMatch(/^\/[A-Za-z]%3A\//)
+      expect(result).toMatch(/^\/[A-Za-z]:\//)
     })
 
     test("should handle relative paths the same on all platforms", () => {
@@ -237,7 +245,7 @@ describe("encodeFilePath", () => {
       const result = encodeFilePath(alreadyNormalized)
 
       // Should not add another leading slash
-      expect(result).toBe("/D%3A/path/file.txt")
+      expect(result).toBe("/D:/path/file.txt")
       expect(result).not.toContain("//D")
     })
 
@@ -246,7 +254,7 @@ describe("encodeFilePath", () => {
       const result = encodeFilePath(justDrive)
       const fileUrl = `file://${result}`
 
-      expect(result).toBe("/D%3A")
+      expect(result).toBe("/D:")
       expect(() => new URL(fileUrl)).not.toThrow()
     })
 
@@ -256,7 +264,7 @@ describe("encodeFilePath", () => {
       const fileUrl = `file://${result}`
 
       expect(() => new URL(fileUrl)).not.toThrow()
-      expect(result).toBe("/C%3A/Users/test/")
+      expect(result).toBe("/C:/Users/test/")
     })
 
     test("should handle very long paths", () => {

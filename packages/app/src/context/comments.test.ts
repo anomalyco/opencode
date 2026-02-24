@@ -6,6 +6,7 @@ let createCommentSessionForTest: typeof import("./comments").createCommentSessio
 
 beforeAll(async () => {
   mock.module("@solidjs/router", () => ({
+    useNavigate: () => () => undefined,
     useParams: () => ({}),
   }))
   mock.module("@opencode-ai/ui/context", () => ({
@@ -103,6 +104,47 @@ describe("comments session indexing", () => {
       expect(comments.list("b.ts")).toEqual([])
       expect(comments.all()).toEqual([])
       expect(comments.focus()).toBeNull()
+      expect(comments.active()).toBeNull()
+
+      dispose()
+    })
+  })
+
+  test("remove keeps focus when same comment id exists in another file", () => {
+    createRoot((dispose) => {
+      const comments = createCommentSessionForTest({
+        "a.ts": [line("a.ts", "shared", 10)],
+        "b.ts": [line("b.ts", "shared", 20)],
+      })
+
+      comments.setFocus({ file: "b.ts", id: "shared" })
+      comments.remove("a.ts", "shared")
+
+      expect(comments.focus()).toEqual({ file: "b.ts", id: "shared" })
+      expect(comments.list("a.ts")).toEqual([])
+      expect(comments.list("b.ts").map((item) => item.id)).toEqual(["shared"])
+
+      dispose()
+    })
+  })
+
+  test("setFocus and setActive updater callbacks receive current state", () => {
+    createRoot((dispose) => {
+      const comments = createCommentSessionForTest()
+
+      comments.setFocus({ file: "a.ts", id: "a1" })
+      comments.setFocus((current) => {
+        expect(current).toEqual({ file: "a.ts", id: "a1" })
+        return { file: "b.ts", id: "b1" }
+      })
+
+      comments.setActive({ file: "c.ts", id: "c1" })
+      comments.setActive((current) => {
+        expect(current).toEqual({ file: "c.ts", id: "c1" })
+        return null
+      })
+
+      expect(comments.focus()).toEqual({ file: "b.ts", id: "b1" })
       expect(comments.active()).toBeNull()
 
       dispose()
