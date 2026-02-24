@@ -344,6 +344,7 @@ export const dict = {
   "workspace.usage.breakdown.output": "출력",
   "workspace.usage.breakdown.reasoning": "추론",
   "workspace.usage.subscription": "구독 (${{amount}})",
+  "workspace.usage.lite": "lite (${{amount}})",
   "workspace.usage.byok": "BYOK (${{amount}})",
 
   "workspace.cost.title": "비용",
@@ -353,6 +354,7 @@ export const dict = {
   "workspace.cost.deletedSuffix": "(삭제됨)",
   "workspace.cost.empty": "선택한 기간에 사용 데이터가 없습니다.",
   "workspace.cost.subscriptionShort": "구독",
+  "workspace.cost.liteShort": "lite",
 
   "workspace.keys.title": "API 키",
   "workspace.keys.subtitle": "OpenCode 서비스 액세스를 위한 API 키를 관리하세요.",
@@ -479,6 +481,31 @@ export const dict = {
   "workspace.black.waitlist.enrolling": "등록 중...",
   "workspace.black.waitlist.enrolled": "등록됨",
   "workspace.black.waitlist.enrollNote": "등록을 클릭하면 구독이 즉시 시작되며 카드에 요금이 청구됩니다.",
+
+  "workspace.lite.loading": "로드 중...",
+  "workspace.lite.time.day": "일",
+  "workspace.lite.time.days": "일",
+  "workspace.lite.time.hour": "시간",
+  "workspace.lite.time.hours": "시간",
+  "workspace.lite.time.minute": "분",
+  "workspace.lite.time.minutes": "분",
+  "workspace.lite.time.fewSeconds": "몇 초",
+  "workspace.lite.subscription.title": "Lite 구독",
+  "workspace.lite.subscription.message": "현재 OpenCode Lite를 구독 중입니다.",
+  "workspace.lite.subscription.manage": "구독 관리",
+  "workspace.lite.subscription.rollingUsage": "롤링 사용량",
+  "workspace.lite.subscription.weeklyUsage": "주간 사용량",
+  "workspace.lite.subscription.monthlyUsage": "월간 사용량",
+  "workspace.lite.subscription.resetsIn": "초기화까지 남은 시간:",
+  "workspace.lite.subscription.useBalance": "사용 한도 도달 후에는 보유 잔액 사용",
+  "workspace.lite.other.title": "Lite 구독",
+  "workspace.lite.other.message":
+    "이 워크스페이스의 다른 멤버가 이미 OpenCode Lite를 구독 중입니다. 워크스페이스당 한 명의 멤버만 구독할 수 있습니다.",
+  "workspace.lite.promo.title": "OpenCode Lite",
+  "workspace.lite.promo.description":
+    "월 $10의 넉넉한 사용 한도로 최고의 오픈 모델인 Kimi K2.5, GLM-5, MiniMax M2.5에 액세스하세요.",
+  "workspace.lite.promo.subscribe": "Lite 구독하기",
+  "workspace.lite.promo.subscribing": "리디렉션 중...",
 
   "download.title": "OpenCode | 다운로드",
   "download.meta.description": "macOS, Windows, Linux용 OpenCode 다운로드",

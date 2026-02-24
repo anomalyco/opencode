@@ -350,6 +350,7 @@ export const dict = {
   "workspace.usage.breakdown.output": "Çıkış",
   "workspace.usage.breakdown.reasoning": "Muhakeme",
   "workspace.usage.subscription": "abonelik (${{amount}})",
+  "workspace.usage.lite": "lite (${{amount}})",
   "workspace.usage.byok": "BYOK (${{amount}})",
 
   "workspace.cost.title": "Maliyet",
@@ -359,6 +360,7 @@ export const dict = {
   "workspace.cost.deletedSuffix": "(silindi)",
   "workspace.cost.empty": "Seçilen döneme ait kullanım verisi yok.",
   "workspace.cost.subscriptionShort": "abonelik",
+  "workspace.cost.liteShort": "lite",
 
   "workspace.keys.title": "API Anahtarları",
   "workspace.keys.subtitle": "opencode hizmetlerine erişim için API anahtarlarınızı yönetin.",
@@ -486,6 +488,31 @@ export const dict = {
   "workspace.black.waitlist.enrolled": "Kayıtlı",
   "workspace.black.waitlist.enrollNote":
     "Kayıt Ol'a tıkladığınızda aboneliğiniz hemen başlar ve kartınızdan çekim yapılır.",
+
+  "workspace.lite.loading": "Yükleniyor...",
+  "workspace.lite.time.day": "gün",
+  "workspace.lite.time.days": "gün",
+  "workspace.lite.time.hour": "saat",
+  "workspace.lite.time.hours": "saat",
+  "workspace.lite.time.minute": "dakika",
+  "workspace.lite.time.minutes": "dakika",
+  "workspace.lite.time.fewSeconds": "birkaç saniye",
+  "workspace.lite.subscription.title": "Lite Aboneliği",
+  "workspace.lite.subscription.message": "OpenCode Lite abonesisiniz.",
+  "workspace.lite.subscription.manage": "Aboneliği Yönet",
+  "workspace.lite.subscription.rollingUsage": "Devam Eden Kullanım",
+  "workspace.lite.subscription.weeklyUsage": "Haftalık Kullanım",
+  "workspace.lite.subscription.monthlyUsage": "Aylık Kullanım",
+  "workspace.lite.subscription.resetsIn": "Sıfırlama süresi",
+  "workspace.lite.subscription.useBalance": "Kullanım limitlerine ulaştıktan sonra mevcut bakiyenizi kullanın",
+  "workspace.lite.other.title": "Lite Aboneliği",
+  "workspace.lite.other.message":
+    "Bu çalışma alanındaki başka bir üye zaten OpenCode Lite abonesi. Çalışma alanı başına yalnızca bir üye abone olabilir.",
+  "workspace.lite.promo.title": "OpenCode Lite",
+  "workspace.lite.promo.description":
+    "Ayda $10 karşılığında cömert kullanım limitleriyle en iyi açık modellere — Kimi K2.5, GLM-5 ve MiniMax M2.5 — erişin.",
+  "workspace.lite.promo.subscribe": "Lite'a Abone Ol",
+  "workspace.lite.promo.subscribing": "Yönlendiriliyor...",
 
   "download.title": "OpenCode | İndir",
   "download.meta.description": "OpenCode'u macOS, Windows ve Linux için indirin",

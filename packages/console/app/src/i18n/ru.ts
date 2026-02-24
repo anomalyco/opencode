@@ -354,6 +354,7 @@ export const dict = {
   "workspace.usage.breakdown.output": "Выход",
   "workspace.usage.breakdown.reasoning": "Reasoning (рассуждения)",
   "workspace.usage.subscription": "подписка (${{amount}})",
+  "workspace.usage.lite": "lite (${{amount}})",
   "workspace.usage.byok": "BYOK (${{amount}})",
 
   "workspace.cost.title": "Расходы",
@@ -363,6 +364,7 @@ export const dict = {
   "workspace.cost.deletedSuffix": "(удалено)",
   "workspace.cost.empty": "Нет данных об использовании за выбранный период.",
   "workspace.cost.subscriptionShort": "подписка",
+  "workspace.cost.liteShort": "lite",
 
   "workspace.keys.title": "API Ключи",
   "workspace.keys.subtitle": "Управляйте вашими API ключами для доступа к сервисам opencode.",
@@ -490,6 +492,31 @@ export const dict = {
   "workspace.black.waitlist.enrolled": "Подключен",
   "workspace.black.waitlist.enrollNote":
     "Когда вы нажмете Подключиться, ваша подписка начнется немедленно, и с карты будет списана оплата.",
+
+  "workspace.lite.loading": "Загрузка...",
+  "workspace.lite.time.day": "день",
+  "workspace.lite.time.days": "дней",
+  "workspace.lite.time.hour": "час",
+  "workspace.lite.time.hours": "часов",
+  "workspace.lite.time.minute": "минута",
+  "workspace.lite.time.minutes": "минут",
+  "workspace.lite.time.fewSeconds": "несколько секунд",
+  "workspace.lite.subscription.title": "Подписка Lite",
+  "workspace.lite.subscription.message": "Вы подписаны на OpenCode Lite.",
+  "workspace.lite.subscription.manage": "Управление подпиской",
+  "workspace.lite.subscription.rollingUsage": "Скользящее использование",
+  "workspace.lite.subscription.weeklyUsage": "Недельное использование",
+  "workspace.lite.subscription.monthlyUsage": "Ежемесячное использование",
+  "workspace.lite.subscription.resetsIn": "Сброс через",
+  "workspace.lite.subscription.useBalance": "Использовать доступный баланс после достижения лимитов",
+  "workspace.lite.other.title": "Подписка Lite",
+  "workspace.lite.other.message":
+    "Другой участник в этом рабочем пространстве уже подписан на OpenCode Lite. Только один участник в рабочем пространстве может оформить подписку.",
+  "workspace.lite.promo.title": "OpenCode Lite",
+  "workspace.lite.promo.description":
+    "Получите доступ к лучшим открытым моделям — Kimi K2.5, GLM-5 и MiniMax M2.5 — с щедрыми лимитами использования за $10 в месяц.",
+  "workspace.lite.promo.subscribe": "Подписаться на Lite",
+  "workspace.lite.promo.subscribing": "Перенаправление...",
 
   "download.title": "OpenCode | Скачать",
   "download.meta.description": "Скачать OpenCode для macOS, Windows и Linux",

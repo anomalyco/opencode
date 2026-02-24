@@ -347,6 +347,7 @@ export const dict = {
   "workspace.usage.breakdown.output": "Output",
   "workspace.usage.breakdown.reasoning": "Reasoning",
   "workspace.usage.subscription": "สมัครสมาชิก (${{amount}})",
+  "workspace.usage.lite": "lite (${{amount}})",
   "workspace.usage.byok": "BYOK (${{amount}})",
 
   "workspace.cost.title": "ค่าใช้จ่าย",
@@ -356,6 +357,7 @@ export const dict = {
   "workspace.cost.deletedSuffix": "(ลบแล้ว)",
   "workspace.cost.empty": "ไม่มีข้อมูลการใช้งานในช่วงเวลาที่เลือก",
   "workspace.cost.subscriptionShort": "sub",
+  "workspace.cost.liteShort": "lite",
 
   "workspace.keys.title": "API Keys",
   "workspace.keys.subtitle": "จัดการ API keys ของคุณสำหรับการเข้าถึงบริการ OpenCode",
@@ -483,6 +485,31 @@ export const dict = {
   "workspace.black.waitlist.enrolled": "ลงทะเบียนแล้ว",
   "workspace.black.waitlist.enrollNote":
     "เมื่อคุณคลิกลงทะเบียน การสมัครสมาชิกของคุณจะเริ่มต้นทันทีและบัตรของคุณจะถูกเรียกเก็บเงิน",
+
+  "workspace.lite.loading": "กำลังโหลด...",
+  "workspace.lite.time.day": "วัน",
+  "workspace.lite.time.days": "วัน",
+  "workspace.lite.time.hour": "ชั่วโมง",
+  "workspace.lite.time.hours": "ชั่วโมง",
+  "workspace.lite.time.minute": "นาที",
+  "workspace.lite.time.minutes": "นาที",
+  "workspace.lite.time.fewSeconds": "ไม่กี่วินาที",
+  "workspace.lite.subscription.title": "การสมัครสมาชิก Lite",
+  "workspace.lite.subscription.message": "คุณได้สมัครสมาชิก OpenCode Lite แล้ว",
+  "workspace.lite.subscription.manage": "จัดการการสมัครสมาชิก",
+  "workspace.lite.subscription.rollingUsage": "การใช้งานแบบหมุนเวียน",
+  "workspace.lite.subscription.weeklyUsage": "การใช้งานรายสัปดาห์",
+  "workspace.lite.subscription.monthlyUsage": "การใช้งานรายเดือน",
+  "workspace.lite.subscription.resetsIn": "รีเซ็ตใน",
+  "workspace.lite.subscription.useBalance": "ใช้ยอดคงเหลือของคุณหลังจากถึงขีดจำกัดการใช้งาน",
+  "workspace.lite.other.title": "การสมัครสมาชิก Lite",
+  "workspace.lite.other.message":
+    "สมาชิกคนอื่นใน Workspace นี้ได้สมัคร OpenCode Lite แล้ว สามารถสมัครได้เพียงหนึ่งคนต่อหนึ่ง Workspace เท่านั้น",
+  "workspace.lite.promo.title": "OpenCode Lite",
+  "workspace.lite.promo.description":
+    "เข้าถึงโมเดลเปิดที่ดีที่สุด — Kimi K2.5, GLM-5 และ MiniMax M2.5 — พร้อมขีดจำกัดการใช้งานมากมายในราคา $10 ต่อเดือน",
+  "workspace.lite.promo.subscribe": "สมัครสมาชิก Lite",
+  "workspace.lite.promo.subscribing": "กำลังเปลี่ยนเส้นทาง...",
 
   "download.title": "OpenCode | ดาวน์โหลด",
   "download.meta.description": "ดาวน์โหลด OpenCode สำหรับ macOS, Windows และ Linux",

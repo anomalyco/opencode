@@ -349,6 +349,7 @@ export const dict = {
   "workspace.usage.breakdown.output": "Wyjście",
   "workspace.usage.breakdown.reasoning": "Rozumowanie",
   "workspace.usage.subscription": "subskrypcja (${{amount}})",
+  "workspace.usage.lite": "lite (${{amount}})",
   "workspace.usage.byok": "BYOK (${{amount}})",
 
   "workspace.cost.title": "Koszt",
@@ -358,6 +359,7 @@ export const dict = {
   "workspace.cost.deletedSuffix": "(usunięte)",
   "workspace.cost.empty": "Brak danych o użyciu dla wybranego okresu.",
   "workspace.cost.subscriptionShort": "sub",
+  "workspace.cost.liteShort": "lite",
 
   "workspace.keys.title": "Klucze API",
   "workspace.keys.subtitle": "Zarządzaj kluczami API do usług opencode.",
@@ -485,6 +487,31 @@ export const dict = {
   "workspace.black.waitlist.enrolled": "Zapisano",
   "workspace.black.waitlist.enrollNote":
     "Po kliknięciu Zapisz się, Twoja subskrypcja rozpocznie się natychmiast, a karta zostanie obciążona.",
+
+  "workspace.lite.loading": "Ładowanie...",
+  "workspace.lite.time.day": "dzień",
+  "workspace.lite.time.days": "dni",
+  "workspace.lite.time.hour": "godzina",
+  "workspace.lite.time.hours": "godzin(y)",
+  "workspace.lite.time.minute": "minuta",
+  "workspace.lite.time.minutes": "minut(y)",
+  "workspace.lite.time.fewSeconds": "kilka sekund",
+  "workspace.lite.subscription.title": "Subskrypcja Lite",
+  "workspace.lite.subscription.message": "Subskrybujesz OpenCode Lite.",
+  "workspace.lite.subscription.manage": "Zarządzaj subskrypcją",
+  "workspace.lite.subscription.rollingUsage": "Użycie kroczące",
+  "workspace.lite.subscription.weeklyUsage": "Użycie tygodniowe",
+  "workspace.lite.subscription.monthlyUsage": "Użycie miesięczne",
+  "workspace.lite.subscription.resetsIn": "Resetuje się za",
+  "workspace.lite.subscription.useBalance": "Użyj dostępnego salda po osiągnięciu limitów użycia",
+  "workspace.lite.other.title": "Subskrypcja Lite",
+  "workspace.lite.other.message":
+    "Inny członek tego obszaru roboczego już subskrybuje OpenCode Lite. Tylko jeden członek na obszar roboczy może subskrybować.",
+  "workspace.lite.promo.title": "OpenCode Lite",
+  "workspace.lite.promo.description":
+    "Uzyskaj dostęp do najlepszych otwartych modeli — Kimi K2.5, GLM-5 i MiniMax M2.5 — z hojnymi limitami użycia za $10 miesięcznie.",
+  "workspace.lite.promo.subscribe": "Subskrybuj Lite",
+  "workspace.lite.promo.subscribing": "Przekierowywanie...",
 
   "download.title": "OpenCode | Pobierz",
   "download.meta.description": "Pobierz OpenCode na macOS, Windows i Linux",
