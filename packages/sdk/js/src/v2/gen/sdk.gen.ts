@@ -2793,7 +2793,7 @@ export class Oauth extends HeyApiClient {
   }
 }
 
-export class Session2 extends HeyApiClient {
+export class Session3 extends HeyApiClient {
   /**
    * Remove browser session
    *
@@ -2822,7 +2822,7 @@ export class Session2 extends HeyApiClient {
       ProviderBrowserSessionRemoveErrors,
       ThrowOnError
     >({
-      url: "/provider/auth/browser/sessions/{recordId}",
+      url: "/provider/auth/browser-session/{recordId}",
       ...options,
       ...params,
     })
@@ -2856,7 +2856,7 @@ export class Session2 extends HeyApiClient {
       ProviderBrowserSessionStatusErrors,
       ThrowOnError
     >({
-      url: "/provider/auth/browser/sessions/{recordId}",
+      url: "/provider/auth/browser-session/{recordId}",
       ...options,
       ...params,
     })
@@ -2890,7 +2890,7 @@ export class Session2 extends HeyApiClient {
       ProviderBrowserSessionSetupErrors,
       ThrowOnError
     >({
-      url: "/provider/auth/browser/sessions/{recordId}/setup",
+      url: "/provider/auth/browser-session/{recordId}/setup",
       ...options,
       ...params,
     })
@@ -2924,7 +2924,7 @@ export class Session2 extends HeyApiClient {
       ProviderBrowserSessionRefreshErrors,
       ThrowOnError
     >({
-      url: "/provider/auth/browser/sessions/{recordId}/refresh",
+      url: "/provider/auth/browser-session/{recordId}/refresh",
       ...options,
       ...params,
     })
@@ -2945,15 +2945,15 @@ export class Browser extends HeyApiClient {
   ) {
     const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
     return (options?.client ?? this.client).get<ProviderBrowserSessionsResponses, unknown, ThrowOnError>({
-      url: "/provider/auth/browser/sessions",
+      url: "/provider/auth/browser-session",
       ...options,
       ...params,
     })
   }
 
-  private _session?: Session2
-  get session(): Session2 {
-    return (this._session ??= new Session2({ client: this.client }))
+  private _session?: Session3
+  get session(): Session3 {
+    return (this._session ??= new Session3({ client: this.client }))
   }
 }
 

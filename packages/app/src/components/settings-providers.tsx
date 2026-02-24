@@ -151,7 +151,7 @@ function ProviderDetailView(props: { providerID: string; providerName: string; o
   // Load browser sessions for all accounts
   const loadBrowserSessions = async () => {
     try {
-      const result = await doFetch(`${globalSDK.url}/provider/auth/browser/sessions`)
+      const result = await doFetch(`${globalSDK.url}/provider/auth/browser-session`)
       if (result.ok) {
         const sessions = (await result.json()) as BrowserSessionStatus[]
         const map: Record<string, BrowserSessionStatus> = {}
@@ -168,7 +168,7 @@ function ProviderDetailView(props: { providerID: string; providerName: string; o
   const setupBrowserSession = async (recordId: string) => {
     setSettingUpBrowser(recordId)
     try {
-      const result = await doFetch(`${globalSDK.url}/provider/auth/browser/sessions/${recordId}/setup`, {
+      const result = await doFetch(`${globalSDK.url}/provider/auth/browser-session/${recordId}/setup`, {
         method: "POST",
       })
       if (result.ok) {
@@ -182,7 +182,7 @@ function ProviderDetailView(props: { providerID: string; providerName: string; o
   const refreshBrowserSession = async (recordId: string) => {
     setRefreshingBrowser(recordId)
     try {
-      const result = await doFetch(`${globalSDK.url}/provider/auth/browser/sessions/${recordId}/refresh`, {
+      const result = await doFetch(`${globalSDK.url}/provider/auth/browser-session/${recordId}/refresh`, {
         method: "POST",
       })
       if (result.ok) {
@@ -202,7 +202,7 @@ function ProviderDetailView(props: { providerID: string; providerName: string; o
   const rebindBrowserSession = async (recordId: string) => {
     setRebindingBrowser(recordId)
     try {
-      const result = await doFetch(`${globalSDK.url}/provider/auth/browser/sessions/${recordId}/setup`, {
+      const result = await doFetch(`${globalSDK.url}/provider/auth/browser-session/${recordId}/setup`, {
         method: "POST",
       })
       if (result.ok) {
@@ -252,7 +252,7 @@ function ProviderDetailView(props: { providerID: string; providerName: string; o
   const removeBrowserSession = async (recordId: string) => {
     setRemovingBrowser(recordId)
     try {
-      await doFetch(`${globalSDK.url}/provider/auth/browser/sessions/${recordId}`, {
+      await doFetch(`${globalSDK.url}/provider/auth/browser-session/${recordId}`, {
         method: "DELETE",
       })
       await loadBrowserSessions()

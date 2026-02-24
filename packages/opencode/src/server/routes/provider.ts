@@ -319,7 +319,7 @@ export const ProviderRoutes = lazy(() =>
     )
     // Browser session routes for auto-relogin
     .get(
-      "/auth/browser/sessions",
+      "/auth/browser-session",
       describeRoute({
         summary: "List browser sessions",
         description: "Get status of all browser sessions configured for auto-relogin.",
@@ -361,7 +361,7 @@ export const ProviderRoutes = lazy(() =>
       },
     )
     .get(
-      "/auth/browser/sessions/:recordId",
+      "/auth/browser-session/:recordId",
       describeRoute({
         summary: "Get browser session status",
         description: "Get status of a specific browser session.",
@@ -400,7 +400,7 @@ export const ProviderRoutes = lazy(() =>
       },
     )
     .post(
-      "/auth/browser/sessions/:recordId/setup",
+      "/auth/browser-session/:recordId/setup",
       describeRoute({
         summary: "Setup browser session",
         description:
@@ -460,7 +460,7 @@ export const ProviderRoutes = lazy(() =>
       },
     )
     .post(
-      "/auth/browser/sessions/:recordId/refresh",
+      "/auth/browser-session/:recordId/refresh",
       describeRoute({
         summary: "Refresh tokens via browser session",
         description: "Attempt to refresh OAuth tokens using the existing browser session (headless).",
@@ -517,7 +517,7 @@ export const ProviderRoutes = lazy(() =>
       },
     )
     .delete(
-      "/auth/browser/sessions/:recordId",
+      "/auth/browser-session/:recordId",
       describeRoute({
         summary: "Remove browser session",
         description: "Remove a browser session and its stored profile data.",
