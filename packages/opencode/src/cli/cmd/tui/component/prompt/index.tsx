@@ -17,7 +17,7 @@ import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
-import { useRenderer } from "@opentui/solid"
+import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
@@ -40,9 +40,11 @@ export type PromptProps = {
   visible?: boolean
   disabled?: boolean
   onSubmit?: () => void
+  onFocusModeExit?: () => void
   ref?: (ref: PromptRef) => void
   hint?: JSX.Element
   showPlaceholder?: boolean
+  focusMode?: boolean
 }
 
 export type PromptRef = {
@@ -77,6 +79,8 @@ export function Prompt(props: PromptProps) {
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
   const kv = useKV()
+  const dimensions = useTerminalDimensions()
+  const focusHeight = createMemo(() => Math.max(1, dimensions().height - 7))
 
   function promptModelWarning() {
     toast.show({
@@ -800,10 +804,11 @@ export function Prompt(props: PromptProps) {
         agentStyleId={agentStyleId}
         promptPartTypeId={() => promptPartTypeId}
       />
-      <box ref={(r) => (anchor = r)} visible={props.visible !== false}>
+      <box ref={(r) => (anchor = r)} visible={props.visible !== false} flexGrow={props.focusMode ? 1 : undefined}>
         <box
           border={["left"]}
           borderColor={highlight()}
+          flexGrow={props.focusMode ? 1 : undefined}
           customBorderChars={{
             ...EmptyBorder,
             vertical: "┃",
@@ -822,8 +827,8 @@ export function Prompt(props: PromptProps) {
               placeholder={placeholderText()}
               textColor={keybind.leader ? theme.textMuted : theme.text}
               focusedTextColor={keybind.leader ? theme.textMuted : theme.text}
-              minHeight={1}
-              maxHeight={6}
+              minHeight={props.focusMode ? focusHeight() : 1}
+              maxHeight={props.focusMode ? focusHeight() : 6}
               onContentChange={() => {
                 const value = input.plainText
                 setStore("prompt", "input", value)
@@ -870,6 +875,11 @@ export function Prompt(props: PromptProps) {
                     e.preventDefault()
                     return
                   }
+                }
+                if (props.focusMode && e.name === "escape") {
+                  props.onFocusModeExit?.()
+                  e.preventDefault()
+                  return
                 }
                 if (e.name === "!" && input.visualCursor.offset === 0) {
                   setStore("placeholder", Math.floor(Math.random() * SHELL_PLACEHOLDERS.length))
