@@ -26,7 +26,7 @@
     align-items: flex-start;
     align-self: stretch;
     min-width: 0;
-    gap: 18px;
+    gap: 24px;
     overflow-anchor: none;
   }
 
@@ -35,6 +35,12 @@
     width: 100%;
     min-width: 0;
     max-width: 100%;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border-weaker-base);
+
+    &:last-child {
+      border-bottom: none;
+    }
   }
 
   [data-slot="session-turn-thinking"] {

@@ -61,7 +61,7 @@
   strong,
   b {
     color: var(--text-strong);
-    font-weight: var(--font-weight-medium);
+    font-weight: 600;
   }
 
   /* Paragraphs */
@@ -74,11 +74,13 @@
     color: var(--text-interactive-base);
     text-decoration: none;
     font-weight: inherit;
+    transition: color 150ms ease;
   }
 
   a:hover {
     text-decoration: underline;
-    text-underline-offset: 2px;
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1.5px;
   }
 
   /* Lists */
@@ -113,7 +115,8 @@
   }
 
   li::marker {
-    color: var(--text-weak);
+    color: var(--text-interactive-base);
+    font-weight: var(--font-weight-medium);
   }
 
   /* Nested lists spacing */
