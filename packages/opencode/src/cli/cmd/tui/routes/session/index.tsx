@@ -1319,10 +1319,18 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
 
   const duration = createMemo(() => {
     if (!final()) return 0
-    if (!props.message.time.completed) return 0
-    const user = messages().find((x) => x.role === "user" && x.id === props.message.parentID)
-    if (!user || !user.time) return 0
-    return props.message.time.completed - user.time.created
+    const ended = props.message.time.streamed ?? props.message.time.completed
+    if (!ended) return 0
+    const started = props.message.time.started ?? props.message.time.created
+    return ended - started
+  })
+
+  const tokensPerSecond = createMemo(() => {
+    const d = duration()
+    if (!d) return 0
+    const output = props.message.tokens.output
+    if (!output) return 0
+    return Math.round(output / (d / 1000))
   })
 
   const keybind = useKeybind()
@@ -1384,6 +1392,9 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
               <span style={{ fg: theme.textMuted }}> · {model()}</span>
               <Show when={duration()}>
                 <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
+              </Show>
+              <Show when={tokensPerSecond()}>
+                <span style={{ fg: theme.textMuted }}> · {tokensPerSecond()} token/s</span>
               </Show>
               <Show when={props.message.error?.name === "MessageAbortedError"}>
                 <span style={{ fg: theme.textMuted }}> · interrupted</span>

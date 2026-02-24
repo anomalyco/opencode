@@ -112,6 +112,8 @@ export namespace SessionProcessor {
           switch (value.type) {
             case "start":
               yield* status.set(ctx.sessionID, { type: "busy" })
+              ctx.assistantMessage.time.started = Date.now()
+              yield* session.updateMessage(ctx.assistantMessage)
               return
 
             case "reasoning-start":
@@ -356,6 +358,8 @@ export namespace SessionProcessor {
               return
 
             case "finish":
+              ctx.assistantMessage.time.streamed = Date.now()
+              yield* session.updateMessage(ctx.assistantMessage)
               return
 
             default:
