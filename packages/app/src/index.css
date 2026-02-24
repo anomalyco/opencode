@@ -146,10 +146,37 @@
   color: var(--text-interactive-base) !important;
 }
 
-/* --- Assistant message area: Add subtle left accent for visual grouping --- */
+/* --- Assistant message: Avatar icon + label via CSS --- */
 [data-slot="session-turn-assistant-content"] {
-  padding-left: 12px;
-  border-left: 2px solid color-mix(in srgb, var(--icon-interactive-base) 25%, transparent);
+  padding-left: 0;
+  border-left: none;
+  position: relative;
+}
+
+[data-slot="session-turn-assistant-content"]::before {
+  content: "⬡ Assistant";
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-family: var(--font-family-sans);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-interactive-base);
+}
+
+/* --- User message: "You" label via CSS --- */
+[data-component="user-message"]::before {
+  content: "You";
+  display: block;
+  text-align: right;
+  margin-bottom: 6px;
+  font-family: var(--font-family-sans);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--icon-agent-ask-base);
 }
 
 /* --- Tool collapsible triggers: Better hover feedback --- */
