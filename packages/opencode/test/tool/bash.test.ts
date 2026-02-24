@@ -147,7 +147,8 @@ describe("tool.bash permissions", () => {
         )
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         expect(extDirReq).toBeDefined()
-        expect(extDirReq!.patterns).toContain(`${workdir}/*`)
+        const expected = path.join(workdir, "*")
+        expect(extDirReq!.patterns).toContain(expected)
       },
     })
   })

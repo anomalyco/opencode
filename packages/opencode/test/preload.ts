@@ -10,7 +10,9 @@ import { afterAll } from "bun:test"
 const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
 await fs.mkdir(dir, { recursive: true })
 afterAll(() => {
-  fsSync.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 500 })
+  try {
+    fsSync.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 500 })
+  } catch {}
 })
 
 process.env["XDG_DATA_HOME"] = path.join(dir, "share")

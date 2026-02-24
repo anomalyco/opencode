@@ -92,7 +92,8 @@ Use this skill.
 
           const result = await tool.execute({ name: "tool-skill" }, ctx)
           const dir = [tmp.path, ".opencode", "skill", "tool-skill"].join("/")
-          const file = [dir, "scripts", "demo.txt"].join("/")
+          // path.resolve produces native separators, matching what src/tool/skill.ts does
+          const file = path.resolve(dir, "scripts", "demo.txt")
 
           expect(requests.length).toBe(1)
           expect(requests[0].permission).toBe("skill")
