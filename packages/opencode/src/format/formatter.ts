@@ -293,6 +293,15 @@ export const ocamlformat: Info = {
   },
 }
 
+export const refmt: Info = {
+  name: "refmt",
+  command: ["refmt", "--in-place", "$FILE"],
+  extensions: [".re", ".rei"],
+  async enabled() {
+    return Bun.which("refmt") !== null
+  },
+}
+
 export const terraform: Info = {
   name: "terraform",
   command: ["terraform", "fmt", "$FILE"],
