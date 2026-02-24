@@ -15,6 +15,7 @@ export default defineConfig({
     timeout: 10_000,
   },
   fullyParallel: process.env.PLAYWRIGHT_FULLY_PARALLEL === "1",
+  workers: process.env.CI ? undefined : process.platform === "win32" ? 3 : undefined,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: [["html", { outputFolder: "e2e/playwright-report", open: "never" }], ["line"]],

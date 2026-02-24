@@ -12,8 +12,7 @@ import { Log } from "@/util/log"
 import { ShareNext } from "@/share/share-next"
 import { Snapshot } from "../snapshot"
 import { Truncate } from "../tool/truncation"
-
-let unsub: (() => void) | undefined
+import { SessionPrompt } from "../session/prompt"
 
 export async function InstanceBootstrap() {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
@@ -26,9 +25,9 @@ export async function InstanceBootstrap() {
   Vcs.init()
   Snapshot.init()
   Truncate.init()
+  SessionPrompt.init()
 
-  unsub?.()
-  unsub = Bus.subscribe(Command.Event.Executed, async (payload) => {
+  Bus.subscribe(Command.Event.Executed, async (payload) => {
     if (payload.properties.name === Command.Default.INIT) {
       await Project.setInitialized(Instance.project.id)
     }

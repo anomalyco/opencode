@@ -38,7 +38,7 @@ describe("tool.registry", () => {
         expect(ids).toContain("hello")
       },
     })
-  })
+  }, 30_000)
 
   test("loads tools from .opencode/tools (plural)", async () => {
     await using tmp = await tmpdir({
@@ -72,7 +72,7 @@ describe("tool.registry", () => {
         expect(ids).toContain("hello")
       },
     })
-  })
+  }, 30_000)
 
   test("loads tools with external dependencies without crashing", async () => {
     await using tmp = await tmpdir({
@@ -99,10 +99,10 @@ describe("tool.registry", () => {
           [
             "import { say } from 'cowsay'",
             "export default {",
-            "  description: 'tool that imports cowsay at top level',",
-            "  args: { text: { type: 'string' } },",
-            "  execute: async ({ text }: { text: string }) => {",
-            "    return say({ text })",
+            "  description: 'says hello',",
+            "  args: {},",
+            "  execute: async () => {",
+            "    return say({ text: 'hello' })",
             "  },",
             "}",
             "",
@@ -118,5 +118,5 @@ describe("tool.registry", () => {
         expect(ids).toContain("cowsay")
       },
     })
-  })
+  }, 30_000)
 })

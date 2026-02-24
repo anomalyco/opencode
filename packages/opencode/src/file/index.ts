@@ -379,7 +379,8 @@ export namespace File {
       }
 
       const set = new Set<string>()
-      for await (const file of Ripgrep.files({ cwd: Instance.directory })) {
+      for await (let file of Ripgrep.files({ cwd: Instance.directory })) {
+        if (process.platform === "win32") file = file.replaceAll("\\", "/")
         result.files.push(file)
         let current = file
         while (true) {
@@ -605,7 +606,7 @@ export namespace File {
   }
 
   export async function search(input: { query: string; limit?: number; dirs?: boolean; type?: "file" | "directory" }) {
-    const query = input.query.trim()
+    const query = input.query.trim().replaceAll("\\", "/")
     const limit = input.limit ?? 100
     const kind = input.type ?? (input.dirs === false ? "file" : "all")
     log.info("search", { query, kind })

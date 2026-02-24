@@ -80,7 +80,6 @@ export namespace Bus {
     const unsub = subscribe(def, (event) => {
       if (callback(event)) unsub()
     })
-    return unsub
   }
 
   export function subscribeAll(callback: (event: any) => void) {

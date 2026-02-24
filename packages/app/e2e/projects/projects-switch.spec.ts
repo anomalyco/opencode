@@ -82,20 +82,9 @@ test("switching back to a project opens the latest workspace session", async ({ 
         workspaceDir = base64Decode(workspaceSlug)
         await openSidebar(page)
 
-        await expect
-          .poll(
-            async () => {
-              const item = page.locator(workspaceItemSelector(workspaceSlug)).first()
-              try {
-                await item.hover({ timeout: 500 })
-                return true
-              } catch {
-                return false
-              }
-            },
-            { timeout: 60_000 },
-          )
-          .toBe(true)
+        const workspace = page.locator(workspaceItemSelector(workspaceSlug)).first()
+        await expect(workspace).toBeVisible()
+        await workspace.hover()
 
         const newSession = page.locator(workspaceNewSessionSelector(workspaceSlug)).first()
         await expect(newSession).toBeVisible()

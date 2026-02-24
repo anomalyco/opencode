@@ -22,7 +22,6 @@ export namespace LSPServer {
   export interface Handle {
     process: ChildProcessWithoutNullStreams
     initialization?: Record<string, any>
-    cleanup?: () => Promise<void>
   }
 
   type RootFunction = (file: string) => Promise<string | undefined>
@@ -1225,9 +1224,6 @@ export namespace LSPServer {
             cwd: root,
           },
         ),
-        async cleanup() {
-          await fs.rm(dataDir, { recursive: true, force: true }).catch(() => {})
-        },
       }
     },
   }

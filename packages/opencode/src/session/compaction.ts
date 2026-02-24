@@ -91,8 +91,6 @@ export namespace SessionCompaction {
       for (const part of toPrune) {
         if (part.state.status === "completed") {
           part.state.time.compacted = Date.now()
-          part.state.output = "[Old tool result content cleared]"
-          part.state.attachments = []
           await Session.updatePart(part)
         }
       }

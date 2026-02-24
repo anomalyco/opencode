@@ -83,6 +83,12 @@ export namespace SessionPrompt {
     },
   )
 
+  export function init() {
+    Bus.subscribe(Session.Event.Deleted, async (payload) => {
+      cancel(payload.properties.info.id)
+    })
+  }
+
   export function assertNotBusy(sessionID: string) {
     const match = state()[sessionID]
     if (match) throw new Session.BusyError(sessionID)
@@ -331,7 +337,7 @@ export namespace SessionPrompt {
           modelID: lastUser.model.modelID,
           providerID: lastUser.model.providerID,
           history: msgs,
-        })
+        }).catch(() => {})
 
       const model = await Provider.getModel(lastUser.model.providerID, lastUser.model.modelID).catch((e) => {
         if (Provider.ModelNotFoundError.isInstance(e)) {
@@ -720,7 +726,7 @@ export namespace SessionPrompt {
       }
       return item
     }
-    throw new Error("Impossible")
+    throw new Error("no assistant message found after loop")
   })
 
   async function lastModel(sessionID: string) {

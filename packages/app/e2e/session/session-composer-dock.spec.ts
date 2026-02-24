@@ -15,7 +15,11 @@ type Sdk = Parameters<typeof clearSessionDockSeed>[0]
 async function withDockSession<T>(sdk: Sdk, title: string, fn: (session: { id: string; title: string }) => Promise<T>) {
   const session = await sdk.session.create({ title }).then((r) => r.data)
   if (!session?.id) throw new Error("Session create did not return an id")
-  return fn(session)
+  try {
+    return await fn(session)
+  } finally {
+    await sdk.session.delete({ sessionID: session.id }).catch(() => undefined)
+  }
 }
 
 test.setTimeout(120_000)
@@ -82,8 +86,7 @@ test("blocked permission flow supports allow once", async ({ page, sdk, gotoSess
       await seedSessionPermission(sdk, {
         sessionID: session.id,
         permission: "bash",
-        patterns: ["README.md"],
-        description: "Need permission for command",
+        patterns: [`REJECT_${Date.now()}.md`],
       })
 
       await expect.poll(() => page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(1)
@@ -107,7 +110,7 @@ test("blocked permission flow supports reject", async ({ page, sdk, gotoSession 
       await seedSessionPermission(sdk, {
         sessionID: session.id,
         permission: "bash",
-        patterns: ["REJECT.md"],
+        patterns: [`REJECT_${Date.now()}.md`],
       })
 
       await expect.poll(() => page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(1)
@@ -128,8 +131,7 @@ test("blocked permission flow supports allow always", async ({ page, sdk, gotoSe
       await seedSessionPermission(sdk, {
         sessionID: session.id,
         permission: "bash",
-        patterns: ["README.md"],
-        description: "Need permission for command",
+        patterns: [`REJECT_${Date.now()}.md`],
       })
 
       await expect.poll(() => page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(1)

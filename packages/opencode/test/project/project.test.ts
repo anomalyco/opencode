@@ -153,7 +153,7 @@ describe("Project.fromDirectory with worktrees", () => {
     const p = await loadProject()
     await using tmp = await tmpdir({ git: true })
 
-    const worktreePath = path.join(tmp.path, "..", path.basename(tmp.path) + "-worktree").replaceAll("\\", "/")
+    const worktreePath = path.join(tmp.path, "..", path.basename(tmp.path) + "-worktree")
     try {
       await $`git worktree add ${worktreePath} -b test-branch-${Date.now()}`.cwd(tmp.path).quiet()
 
@@ -175,8 +175,8 @@ describe("Project.fromDirectory with worktrees", () => {
     const p = await loadProject()
     await using tmp = await tmpdir({ git: true })
 
-    const worktree1 = path.join(tmp.path, "..", path.basename(tmp.path) + "-wt1").replaceAll("\\", "/")
-    const worktree2 = path.join(tmp.path, "..", path.basename(tmp.path) + "-wt2").replaceAll("\\", "/")
+    const worktree1 = path.join(tmp.path, "..", path.basename(tmp.path) + "-wt1")
+    const worktree2 = path.join(tmp.path, "..", path.basename(tmp.path) + "-wt2")
     try {
       await $`git worktree add ${worktree1} -b branch-${Date.now()}`.cwd(tmp.path).quiet()
       await $`git worktree add ${worktree2} -b branch-${Date.now() + 1}`.cwd(tmp.path).quiet()

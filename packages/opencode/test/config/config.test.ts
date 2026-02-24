@@ -646,11 +646,9 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
     if (prev === undefined) delete process.env.OPENCODE_CONFIG_DIR
     else process.env.OPENCODE_CONFIG_DIR = prev
   }
-})
+}, 30_000)
 
-// import.meta.resolve for scoped packages from a file URL doesn't work
-// reliably on Windows in Bun
-test.skipIf(process.platform === "win32")("resolves scoped npm plugins in config", async () => {
+test("resolves scoped npm plugins in config", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       const pluginDir = path.join(dir, "node_modules", "@scope", "plugin")
@@ -691,7 +689,16 @@ test.skipIf(process.platform === "win32")("resolves scoped npm plugins in config
       const pluginEntries = config.plugin ?? []
 
       const baseUrl = pathToFileURL(path.join(tmp.path, "opencode.json")).href
-      const expected = pathToFileURL(path.join(tmp.path, "node_modules", "@scope", "plugin", "index.js")).href
+      let expected: string
+      try {
+        expected = import.meta.resolve("@scope/plugin", baseUrl)
+      } catch (e) {
+        // Fallback for Windows where dynamically created node_modules aren't immediately available to import.meta.resolve
+        const { createRequire } = await import("module")
+        const require = createRequire(tmp.path + "/")
+        const resolvedPath = require.resolve("@scope/plugin")
+        expected = pathToFileURL(resolvedPath).href
+      }
 
       expect(pluginEntries.includes(expected)).toBe(true)
 

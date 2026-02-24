@@ -18,64 +18,52 @@ export namespace ShareNext {
 
   const disabled = process.env["OPENCODE_DISABLE_SHARE"] === "true" || process.env["OPENCODE_DISABLE_SHARE"] === "1"
 
-  let unsubs: (() => void)[] = []
-
   export async function init() {
     if (disabled) return
-    dispose()
-    unsubs.push(
-      Bus.subscribe(Session.Event.Updated, async (evt) => {
-        await sync(evt.properties.info.id, [
-          {
-            type: "session",
-            data: evt.properties.info,
-          },
-        ])
-      }),
-      Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
+    Bus.subscribe(Session.Event.Updated, async (evt) => {
+      await sync(evt.properties.info.id, [
+        {
+          type: "session",
+          data: evt.properties.info,
+        },
+      ])
+    })
+    Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
+      await sync(evt.properties.info.sessionID, [
+        {
+          type: "message",
+          data: evt.properties.info,
+        },
+      ])
+      if (evt.properties.info.role === "user") {
         await sync(evt.properties.info.sessionID, [
           {
-            type: "message",
-            data: evt.properties.info,
+            type: "model",
+            data: [
+              await Provider.getModel(evt.properties.info.model.providerID, evt.properties.info.model.modelID).then(
+                (m) => m,
+              ),
+            ],
           },
         ])
-        if (evt.properties.info.role === "user") {
-          await sync(evt.properties.info.sessionID, [
-            {
-              type: "model",
-              data: [
-                await Provider.getModel(evt.properties.info.model.providerID, evt.properties.info.model.modelID).then(
-                  (m) => m,
-                ),
-              ],
-            },
-          ])
-        }
-      }),
-      Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
-        await sync(evt.properties.part.sessionID, [
-          {
-            type: "part",
-            data: evt.properties.part,
-          },
-        ])
-      }),
-      Bus.subscribe(Session.Event.Diff, async (evt) => {
-        await sync(evt.properties.sessionID, [
-          {
-            type: "session_diff",
-            data: evt.properties.diff,
-          },
-        ])
-      }),
-    )
-  }
-
-  export function dispose() {
-    for (const unsub of unsubs) unsub()
-    unsubs = []
-    for (const [, entry] of queue) clearTimeout(entry.timeout)
-    queue.clear()
+      }
+    })
+    Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
+      await sync(evt.properties.part.sessionID, [
+        {
+          type: "part",
+          data: evt.properties.part,
+        },
+      ])
+    })
+    Bus.subscribe(Session.Event.Diff, async (evt) => {
+      await sync(evt.properties.sessionID, [
+        {
+          type: "session_diff",
+          data: evt.properties.diff,
+        },
+      ])
+    })
   }
 
   export async function create(sessionID: string) {
@@ -166,7 +154,7 @@ export namespace ShareNext {
           secret: share.secret,
           data: Array.from(queued.data.values()),
         }),
-      }).catch(() => {})
+      })
     }, 1000)
     queue.set(sessionID, { timeout, data: dataMap })
   }

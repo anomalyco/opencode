@@ -289,7 +289,9 @@ export namespace Config {
       [
         "install",
         // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
-        ...(proxied() ? ["--no-cache"] : []),
+        // Bypass global cache on CI and E2E to prevent concurrent lock contention
+        // when multiple processes install simultaneously.
+        ...(proxied() || !!process.env.CI || !!process.env.OPENCODE_E2E_PROJECT_DIR ? ["--no-cache"] : []),
       ],
       { cwd: dir },
     ).catch((err) => {
