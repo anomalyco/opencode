@@ -260,6 +260,27 @@ These are not strictly enforced, they are just general guidelines:
 - **Naming:** Choose concise single-word identifiers when they remain descriptive.
 - **Runtime APIs:** Use Bun helpers such as `Bun.file()` when they fit the use case.
 
+**Example Code Pattern:**
+
+```typescript
+// Good: Concise, clear, and idiomatic
+const result = await Bun.file(path).json()
+
+// Bad: Verbose and unnecessary
+const result = await Bun.file(path).json()
+```
+
+### Project Structure
+
+The repository follows a monorepo structure with separate packages for different concerns:
+
+- **Core**: Business logic and server code
+- **App**: Shared web UI components (SolidJS)
+- **Desktop**: Native desktop application (Tauri)
+- **SDK**: JavaScript/TypeScript SDK packages
+
+Each package has its own `package.json` and can be developed independently.
+
 ## Feature Requests
 
 For net-new functionality, start with a design conversation. Open an issue describing the problem, your proposed approach (optional), and why it belongs in OpenCode. The core team will help decide whether it should move forward; please wait for that approval instead of opening a feature PR directly.
