@@ -26,8 +26,8 @@ export namespace Project {
 
     name = Filesystem.windowsPath(name)
 
-    if (path.isAbsolute(name)) return path.normalize(name)
-    return path.resolve(cwd, name)
+    const result = path.isAbsolute(name) ? path.normalize(name) : path.resolve(cwd, name)
+    return result.replaceAll("\\", "/")
   }
 
   export const Info = z
@@ -95,7 +95,7 @@ export namespace Project {
       const dotgit = await matches.next().then((x) => x.value)
       await matches.return()
       if (dotgit) {
-        let sandbox = path.dirname(dotgit)
+        let sandbox = path.dirname(dotgit).replaceAll("\\", "/")
 
         const gitBinary = Bun.which("git")
 

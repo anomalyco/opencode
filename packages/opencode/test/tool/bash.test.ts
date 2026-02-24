@@ -124,6 +124,8 @@ describe("tool.bash permissions", () => {
 
   test("asks for external_directory permission when workdir is outside project", async () => {
     await using tmp = await tmpdir({ git: true })
+    await using outerTmp = await tmpdir()
+    const workdir = outerTmp.path
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
@@ -137,15 +139,15 @@ describe("tool.bash permissions", () => {
         }
         await bash.execute(
           {
-            command: "ls",
-            workdir: "/tmp",
-            description: "List /tmp",
+            command: "echo ok",
+            workdir,
+            description: "Echo in external dir",
           },
           testCtx,
         )
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         expect(extDirReq).toBeDefined()
-        expect(extDirReq!.patterns).toContain("/tmp/*")
+        expect(extDirReq!.patterns).toContain(`${workdir}/*`)
       },
     })
   })
@@ -366,7 +368,7 @@ describe("tool.bash truncation", () => {
           ctx,
         )
         expect((result.metadata as any).truncated).toBe(false)
-        expect(result.output).toBe("hello\n")
+        expect(result.output.trim()).toBe("hello")
       },
     })
   })

@@ -385,7 +385,7 @@ test("unicode filenames in subdirectories", async () => {
   })
 })
 
-test("very long filenames", async () => {
+test.skipIf(process.platform === "win32")("very long filenames", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
     directory: tmp.path,
@@ -432,7 +432,7 @@ test("hidden files", async () => {
   })
 })
 
-test("nested symlinks", async () => {
+test.skipIf(process.platform === "win32")("nested symlinks", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
     directory: tmp.path,
