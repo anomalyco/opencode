@@ -6,7 +6,6 @@ import z from "zod"
 
 import * as Formatter from "./formatter"
 import { Config } from "../config/config"
-import { mergeDeep } from "remeda"
 import { Instance } from "../project/instance"
 
 export namespace Format {
@@ -44,16 +43,19 @@ export namespace Format {
         delete formatters[name]
         continue
       }
-      const result: Formatter.Info = mergeDeep(formatters[name] ?? {}, {
-        command: [],
-        extensions: [],
-        ...item,
-      })
+      // Merge order: defaults < built-in < user config.
+      // Using Object.assign ensures user can override individual fields (e.g. only
+      // `extensions`) without discarding unspecified built-in fields (e.g. `command`).
+      const { disabled: _disabled, ...userOverride } = item
+      const base = formatters[name] ?? {
+        command: [] as string[],
+        extensions: [] as string[],
+      }
+      const result = Object.assign({}, base, userOverride, { name }) as Formatter.Info
 
       if (result.command.length === 0) continue
 
       result.enabled = async () => true
-      result.name = name
       formatters[name] = result
     }
 
