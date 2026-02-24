@@ -1,10 +1,20 @@
 [data-dock-surface="shell"] {
   background-color: var(--surface-raised-stronger-non-alpha);
-  box-shadow: var(--shadow-xs-border);
+  box-shadow:
+    var(--shadow-xs-border),
+    0 -4px 16px -4px hsl(0 0% 0% / 0.06);
   position: relative;
   z-index: 10;
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: clip;
+  transition: box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-dock-surface="shell"]:focus-within {
+  box-shadow:
+    var(--shadow-xs-border),
+    0 -4px 20px -4px hsl(0 0% 0% / 0.08),
+    0 0 0 1px var(--border-interactive-base);
 }
 
 [data-dock-surface="tray"] {
@@ -12,8 +22,9 @@
   border: 1px solid var(--border-weak-base);
   position: relative;
   z-index: 0;
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: clip;
+  transition: border-color 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 [data-dock-surface="tray"][data-dock-attach="top"] {

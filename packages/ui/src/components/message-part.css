@@ -97,10 +97,10 @@
     white-space: pre-wrap;
     word-break: break-word;
     overflow: hidden;
-    background: var(--surface-base);
-    border: 1px solid var(--border-weak-base);
-    padding: 8px 12px;
-    border-radius: 6px;
+    background: var(--surface-interactive-weak);
+    border: 1px solid var(--border-interactive-base);
+    padding: 10px 14px;
+    border-radius: 16px 16px 4px 16px;
 
     [data-highlight="file"] {
       color: var(--syntax-property);
