@@ -44,7 +44,9 @@ body::before {
   padding-left: 0;
   border-left: none;
   position: relative;
-  margin-left: 44px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 [data-slot="session-turn-assistant-content"]::before {
@@ -52,8 +54,7 @@ body::before {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 16px;
-  margin-left: -44px;
+  margin-bottom: 12px;
   font-family: var(--font-family-sans);
   font-size: 12px;
   font-weight: 700;
@@ -140,6 +141,21 @@ body::before {
   background: var(--surface-inset-strong, #1e1e2e) !important;
   box-shadow: none !important;
   overflow: hidden;
+  max-width: 100%;
+}
+
+/* Prevent code overflow in wide mode */
+[data-component="markdown"] pre code,
+[data-component="markdown"] .shiki code {
+  overflow-x: auto;
+  display: block;
+  max-width: 100%;
+}
+
+[data-component="markdown"] {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* Code block copy button: Always visible, pill with "Copy" feel */
