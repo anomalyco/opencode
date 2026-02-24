@@ -293,6 +293,17 @@ export const ocamlformat: Info = {
   },
 }
 
+export const ocamlformat_mlx: Info = {
+  name: "ocamlformat-mlx",
+  command: ["ocamlformat-mlx", "-i", "$FILE"],
+  extensions: [".mlx"],
+  async enabled() {
+    if (!Bun.which("ocamlformat-mlx")) return false
+    const items = await Filesystem.findUp(".ocamlformat", Instance.directory, Instance.worktree)
+    return items.length > 0
+  },
+}
+
 export const terraform: Info = {
   name: "terraform",
   command: ["terraform", "fmt", "$FILE"],
