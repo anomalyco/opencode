@@ -3,12 +3,8 @@ import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { useParams } from "@solidjs/router"
 import { useCodeComponent } from "@opencode-ai/ui/context/code"
-import { createHoverCommentUtility } from "@opencode-ai/ui/pierre/comment-hover"
-import { cloneSelectedLineRange, lineInSelectedRange } from "@opencode-ai/ui/pierre/selection-bridge"
-import {
-  createLineCommentAnnotationRenderer,
-  type LineCommentAnnotationMeta,
-} from "@opencode-ai/ui/line-comment-annotations"
+import { cloneSelectedLineRange, previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
+import { createLineCommentController } from "@opencode-ai/ui/line-comment-annotations"
 import { sampledChecksum } from "@opencode-ai/util/encode"
 import { decode64 } from "@/utils/base64"
 import { showToast } from "@opencode-ai/ui/toast"
@@ -21,13 +17,6 @@ import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
 import { getSessionHandoff } from "@/pages/session/handoff"
-
-const formatCommentLabel = (range: SelectedLineRange) => {
-  const start = Math.min(range.start, range.end)
-  const end = Math.max(range.start, range.end)
-  if (start === end) return `line ${start}`
-  return `lines ${start}-${end}`
-}
 
 export function FileTabContent(props: { tab: string }) {
   const params = useParams()
@@ -110,11 +99,10 @@ export function FileTabContent(props: { tab: string }) {
   })
 
   const selectionPreview = (source: string, selection: FileSelection) => {
-    const start = Math.max(1, Math.min(selection.startLine, selection.endLine))
-    const end = Math.max(selection.startLine, selection.endLine)
-    const lines = source.split("\n").slice(start - 1, end)
-    if (lines.length === 0) return undefined
-    return lines.slice(0, 2).join("\n")
+    return previewSelectedLines(source, {
+      start: selection.startLine,
+      end: selection.endLine,
+    })
   }
 
   const addCommentToContext = (input: {
@@ -158,143 +146,64 @@ export function FileTabContent(props: { tab: string }) {
 
   const commentedLines = createMemo(() => fileComments().map((comment) => comment.selection))
 
-  type Annotation = LineCommentAnnotationMeta<ReturnType<typeof fileComments>[number]>
-
   const [note, setNote] = createStore({
     openedComment: null as string | null,
     commenting: null as SelectedLineRange | null,
     selected: null as SelectedLineRange | null,
-    draft: "",
   })
+
+  const syncSelected = (range: SelectedLineRange | null) => {
+    const p = path()
+    if (!p) return
+    file.setSelectedLines(p, range ? cloneSelectedLineRange(range) : null)
+  }
 
   const activeSelection = () => note.selected ?? selectedLines()
 
-  const setCommenting = (range: SelectedLineRange | null) => {
-    setNote("draft", "")
-    setNote("commenting", range ? cloneSelectedLineRange(range) : null)
-  }
+  const commentsUi = createLineCommentController({
+    comments: fileComments,
+    label: language.t("ui.lineComment.submit"),
+    draftKey: () => path() ?? props.tab,
+    state: {
+      opened: () => note.openedComment,
+      setOpened: (id) => setNote("openedComment", id),
+      selected: () => note.selected,
+      setSelected: (range) => setNote("selected", range),
+      commenting: () => note.commenting,
+      setCommenting: (range) => setNote("commenting", range),
+      syncSelected,
+      hoverSelected: syncSelected,
+    },
+    getHoverSelectedRange: activeSelection,
+    cancelDraftOnCommentToggle: true,
+    clearSelectionOnSelectionEndNull: true,
+    onSubmit: ({ comment, selection }) => {
+      const p = path()
+      if (!p) return
+      addCommentToContext({ file: p, selection, comment, origin: "file" })
+    },
+    onDraftPopoverFocusOut: (e: FocusEvent) => {
+      const current = e.currentTarget as HTMLDivElement
+      const target = e.relatedTarget
+      if (target instanceof Node && current.contains(target)) return
+
+      setTimeout(() => {
+        if (!document.activeElement || !current.contains(document.activeElement)) {
+          setNote("commenting", null)
+        }
+      }, 0)
+    },
+  })
 
   createEffect(
     on(
       path,
       () => {
-        setNote("selected", null)
-        setNote("openedComment", null)
-        setNote("commenting", null)
+        commentsUi.note.reset()
       },
       { defer: true },
     ),
   )
-
-  const annotationLine = (range: SelectedLineRange) => Math.max(range.start, range.end)
-  const annotations = createMemo(() => {
-    const list = fileComments().map((comment) => ({
-      lineNumber: annotationLine(comment.selection),
-      metadata: {
-        kind: "comment",
-        key: `comment:${comment.id}`,
-        comment,
-      } satisfies Annotation,
-    }))
-
-    if (note.commenting) {
-      return [
-        ...list,
-        {
-          lineNumber: annotationLine(note.commenting),
-          metadata: {
-            kind: "draft",
-            key: `draft:${path() ?? props.tab}`,
-            range: note.commenting,
-          } satisfies Annotation,
-        },
-      ]
-    }
-
-    const range = activeSelection()
-    if (!range || note.openedComment) return list
-    return list
-  })
-
-  const annotationRenderer = createLineCommentAnnotationRenderer<ReturnType<typeof fileComments>[number]>({
-    renderComment: (comment) => ({
-      id: comment.id,
-      open: note.openedComment === comment.id,
-      comment: comment.comment,
-      selection: formatCommentLabel(comment.selection),
-      onMouseEnter: () => {
-        const p = path()
-        if (!p) return
-        file.setSelectedLines(p, cloneSelectedLineRange(comment.selection))
-      },
-      onClick: () => {
-        const p = path()
-        if (!p) return
-        setCommenting(null)
-        setNote("openedComment", (current) => (current === comment.id ? null : comment.id))
-        file.setSelectedLines(p, cloneSelectedLineRange(comment.selection))
-      },
-    }),
-    renderDraft: (range) => ({
-      get value() {
-        return note.draft
-      },
-      selection: formatCommentLabel(range),
-      onInput: (value) => setNote("draft", value),
-      onCancel: () => setCommenting(null),
-      onSubmit: (value) => {
-        const p = path()
-        if (!p) return
-        addCommentToContext({ file: p, selection: range, comment: value, origin: "file" })
-        setCommenting(null)
-      },
-      onPopoverFocusOut: (e: FocusEvent) => {
-        const current = e.currentTarget as HTMLDivElement
-        const target = e.relatedTarget
-        if (target instanceof Node && current.contains(target)) return
-
-        setTimeout(() => {
-          if (!document.activeElement || !current.contains(document.activeElement)) {
-            setCommenting(null)
-          }
-        }, 0)
-      },
-    }),
-  })
-
-  const renderAnnotation = annotationRenderer.render
-
-  const openDraft = (range: SelectedLineRange) => {
-    const p = path()
-    if (!p) return
-    const next = cloneSelectedLineRange(range)
-    setNote("openedComment", null)
-    setNote("selected", next)
-    file.setSelectedLines(p, cloneSelectedLineRange(next))
-    setCommenting(next)
-  }
-
-  const renderHoverUtility = (getHoveredLine: () => { lineNumber: number; side?: "additions" | "deletions" }) =>
-    createHoverCommentUtility({
-      label: language.t("ui.lineComment.submit"),
-      getHoveredLine,
-      onSelect: (hovered) => {
-        const selected = note.openedComment ? null : activeSelection()
-        const range =
-          selected && lineInSelectedRange(selected, hovered.lineNumber, hovered.side)
-            ? cloneSelectedLineRange(selected)
-            : { start: hovered.lineNumber, end: hovered.lineNumber }
-        openDraft(range)
-      },
-    })
-
-  createEffect(() => {
-    annotationRenderer.reconcile(annotations())
-  })
-
-  onCleanup(() => {
-    annotationRenderer.cleanup()
-  })
 
   createEffect(() => {
     const focus = comments.focus()
@@ -306,10 +215,7 @@ export function FileTabContent(props: { tab: string }) {
     const target = fileComments().find((comment) => comment.id === focus.id)
     if (!target) return
 
-    setNote("openedComment", target.id)
-    setNote("selected", cloneSelectedLineRange(target.selection))
-    setCommenting(null)
-    file.setSelectedLines(p, cloneSelectedLineRange(target.selection))
+    commentsUi.note.openComment(target.id, target.selection, { cancelDraft: true })
     requestAnimationFrame(() => comments.clearFocus())
   })
 
@@ -464,29 +370,15 @@ export function FileTabContent(props: { tab: string }) {
         onRendered={() => {
           requestAnimationFrame(restoreScroll)
         }}
-        annotations={annotations()}
-        renderAnnotation={renderAnnotation}
-        renderHoverUtility={renderHoverUtility}
+        annotations={commentsUi.annotations()}
+        renderAnnotation={commentsUi.renderAnnotation}
+        renderHoverUtility={commentsUi.renderHoverUtility}
         onLineSelected={(range: SelectedLineRange | null) => {
-          setNote("selected", range ? cloneSelectedLineRange(range) : null)
+          commentsUi.onLineSelected(range)
         }}
-        onLineNumberSelectionEnd={(range: SelectedLineRange | null) => {
-          if (!range) return
-          openDraft(range)
-        }}
+        onLineNumberSelectionEnd={commentsUi.onLineNumberSelectionEnd}
         onLineSelectionEnd={(range: SelectedLineRange | null) => {
-          const next = range ? cloneSelectedLineRange(range) : null
-          setNote("selected", next)
-          const p = path()
-          if (p) file.setSelectedLines(p, next ? cloneSelectedLineRange(next) : null)
-
-          if (!next) {
-            setCommenting(null)
-            return
-          }
-
-          setNote("openedComment", null)
-          setCommenting(null)
+          commentsUi.onLineSelectionEnd(range)
         }}
         overflow="scroll"
         class="select-text"

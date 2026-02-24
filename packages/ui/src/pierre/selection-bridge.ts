@@ -2,6 +2,22 @@ import { type SelectedLineRange } from "@pierre/diffs"
 
 type PointerMode = "none" | "text" | "numbers"
 type Side = SelectedLineRange["side"]
+type LineSpan = Pick<SelectedLineRange, "start" | "end">
+
+export function formatSelectedLineLabel(range: LineSpan) {
+  const start = Math.min(range.start, range.end)
+  const end = Math.max(range.start, range.end)
+  if (start === end) return `line ${start}`
+  return `lines ${start}-${end}`
+}
+
+export function previewSelectedLines(source: string, range: LineSpan) {
+  const start = Math.max(1, Math.min(range.start, range.end))
+  const end = Math.max(range.start, range.end)
+  const lines = source.split("\n").slice(start - 1, end)
+  if (lines.length === 0) return
+  return lines.slice(0, 2).join("\n")
+}
 
 export function cloneSelectedLineRange(range: SelectedLineRange): SelectedLineRange {
   const next: SelectedLineRange = {

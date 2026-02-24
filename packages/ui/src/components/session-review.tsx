@@ -15,11 +15,10 @@ import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Sw
 import { createStore } from "solid-js/store"
 import { type FileContent, type FileDiff } from "@opencode-ai/sdk/v2"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
-import { type DiffLineAnnotation, type SelectedLineRange } from "@pierre/diffs"
+import { type SelectedLineRange } from "@pierre/diffs"
 import { Dynamic } from "solid-js/web"
-import { createHoverCommentUtility } from "../pierre/comment-hover"
-import { cloneSelectedLineRange, lineInSelectedRange } from "../pierre/selection-bridge"
-import { createLineCommentAnnotationRenderer, type LineCommentAnnotationMeta } from "./line-comment-annotations"
+import { cloneSelectedLineRange, previewSelectedLines } from "../pierre/selection-bridge"
+import { createLineCommentController } from "./line-comment-annotations"
 
 const MAX_DIFF_CHANGED_LINES = 500
 
@@ -139,8 +138,6 @@ type SessionReviewSelection = {
   range: SelectedLineRange
 }
 
-type SessionReviewAnnotation = LineCommentAnnotationMeta<SessionReviewComment>
-
 export const SessionReview = (props: SessionReviewProps) => {
   let scroll: HTMLDivElement | undefined
   let focusToken = 0
@@ -172,13 +169,6 @@ export const SessionReview = (props: SessionReviewProps) => {
     handleChange(next)
   }
 
-  const selectionLabel = (range: SelectedLineRange) => {
-    const start = Math.min(range.start, range.end)
-    const end = Math.max(range.start, range.end)
-    if (start === end) return `line ${start}`
-    return `lines ${start}-${end}`
-  }
-
   const selectionSide = (range: SelectedLineRange) => range.endSide ?? range.side ?? "additions"
 
   const selectionPreview = (diff: FileDiff, range: SelectedLineRange) => {
@@ -186,11 +176,7 @@ export const SessionReview = (props: SessionReviewProps) => {
     const contents = side === "deletions" ? diff.before : diff.after
     if (typeof contents !== "string" || contents.length === 0) return undefined
 
-    const start = Math.max(1, Math.min(range.start, range.end))
-    const end = Math.max(range.start, range.end)
-    const lines = contents.split("\n").slice(start - 1, end)
-    if (lines.length === 0) return undefined
-    return lines.slice(0, 2).join("\n")
+    return previewSelectedLines(contents, range)
   }
 
   createEffect(() => {
@@ -342,116 +328,36 @@ export const SessionReview = (props: SessionReviewProps) => {
                   return current.range
                 })
 
-                const [draft, setDraft] = createSignal("")
-
-                const annotationLine = (range: SelectedLineRange) => Math.max(range.start, range.end)
-                const annotationSide = (range: SelectedLineRange) => range.endSide ?? range.side ?? "additions"
-                const selected = () => selectedLines()
-
-                const annotations = createMemo<DiffLineAnnotation<SessionReviewAnnotation>[]>(() => {
-                  const list = comments().map((comment) => ({
-                    side: annotationSide(comment.selection),
-                    lineNumber: annotationLine(comment.selection),
-                    metadata: {
-                      kind: "comment",
-                      key: `comment:${comment.id}`,
+                const commentsUi = createLineCommentController<SessionReviewComment>({
+                  comments,
+                  label: i18n.t("ui.lineComment.submit"),
+                  draftKey: () => file,
+                  state: {
+                    opened: () => {
+                      const current = opened()
+                      if (!current || current.file !== file) return null
+                      return current.id
+                    },
+                    setOpened: (id) => setOpened(id ? { file, id } : null),
+                    selected: selectedLines,
+                    setSelected: (range) => setSelection(range ? { file, range } : null),
+                    commenting: draftRange,
+                    setCommenting: (range) => setCommenting(range ? { file, range } : null),
+                  },
+                  getSide: selectionSide,
+                  clearSelectionOnSelectionEndNull: false,
+                  onSubmit: ({ comment, selection }) => {
+                    props.onLineComment?.({
+                      file,
+                      selection,
                       comment,
-                    } satisfies SessionReviewAnnotation,
-                  }))
-
-                  const range = draftRange()
-                  if (range) {
-                    return [
-                      ...list,
-                      {
-                        side: annotationSide(range),
-                        lineNumber: annotationLine(range),
-                        metadata: {
-                          kind: "draft",
-                          key: `draft:${file}`,
-                          range,
-                        } satisfies SessionReviewAnnotation,
-                      },
-                    ]
-                  }
-
-                  return list
-                })
-
-                const annotationRenderer = createLineCommentAnnotationRenderer<SessionReviewComment>({
-                  renderComment: (comment) => ({
-                    id: comment.id,
-                    open: isCommentOpen(comment),
-                    comment: comment.comment,
-                    selection: selectionLabel(comment.selection),
-                    onMouseEnter: () =>
-                      setSelection({ file: comment.file, range: cloneSelectedLineRange(comment.selection) }),
-                    onClick: () => {
-                      if (isCommentOpen(comment)) {
-                        setOpened(null)
-                        return
-                      }
-
-                      openComment(comment)
-                    },
-                  }),
-                  renderDraft: (range) => ({
-                    get value() {
-                      return draft()
-                    },
-                    selection: selectionLabel(range),
-                    onInput: setDraft,
-                    onCancel: () => {
-                      setDraft("")
-                      setCommenting(null)
-                    },
-                    onSubmit: (comment) => {
-                      props.onLineComment?.({
-                        file,
-                        selection: cloneSelectedLineRange(range),
-                        comment,
-                        preview: selectionPreview(item(), range),
-                      })
-                      setDraft("")
-                      setCommenting(null)
-                    },
-                  }),
-                })
-
-                const renderAnnotation = (annotation: DiffLineAnnotation<SessionReviewAnnotation>) =>
-                  annotationRenderer.render(annotation)
-
-                const renderHoverUtility = (
-                  getHoveredLine: () => { lineNumber: number; side?: "additions" | "deletions" },
-                ) =>
-                  createHoverCommentUtility({
-                    label: i18n.t("ui.lineComment.submit"),
-                    getHoveredLine,
-                    onSelect: (hovered) => {
-                      const current = opened()?.file === file ? null : selected()
-                      const range = (() => {
-                        if (current && lineInSelectedRange(current, hovered.lineNumber, hovered.side)) {
-                          return cloneSelectedLineRange(current)
-                        }
-                        const next: SelectedLineRange = {
-                          start: hovered.lineNumber,
-                          end: hovered.lineNumber,
-                        }
-                        if (hovered.side) next.side = hovered.side
-                        return next
-                      })()
-
-                      openDraft(range)
-                    },
-                  })
-
-                createEffect(() => {
-                  annotationRenderer.reconcile(annotations())
+                      preview: selectionPreview(item(), selection),
+                    })
+                  },
                 })
 
                 onCleanup(() => {
                   anchors.delete(file)
-                  annotationRenderer.cleanup()
                 })
 
                 createEffect(() => {
@@ -467,11 +373,6 @@ export const SessionReview = (props: SessionReviewProps) => {
                   setAudioSrc(src)
                   setAudioStatus("idle")
                   setAudioMime(undefined)
-                })
-
-                createEffect(() => {
-                  draftRange()
-                  setDraft("")
                 })
 
                 createEffect(() => {
@@ -528,48 +429,12 @@ export const SessionReview = (props: SessionReviewProps) => {
 
                 const handleLineSelected = (range: SelectedLineRange | null) => {
                   if (!props.onLineComment) return
-
-                  if (!range) {
-                    setSelection(null)
-                    setDraft("")
-                    setCommenting(null)
-                    return
-                  }
-
-                  setSelection({ file, range: cloneSelectedLineRange(range) })
-                }
-
-                const openDraft = (range: SelectedLineRange) => {
-                  const next = cloneSelectedLineRange(range)
-                  setOpened(null)
-                  setSelection({ file, range: cloneSelectedLineRange(next) })
-                  setCommenting({ file, range: next })
+                  commentsUi.onLineSelected(range)
                 }
 
                 const handleLineSelectionEnd = (range: SelectedLineRange | null) => {
                   if (!props.onLineComment) return
-
-                  if (!range) {
-                    setDraft("")
-                    setCommenting(null)
-                    return
-                  }
-
-                  const next = cloneSelectedLineRange(range)
-                  setOpened(null)
-                  setSelection({ file, range: next })
-                  setCommenting(null)
-                }
-
-                const openComment = (comment: SessionReviewComment) => {
-                  setOpened({ file: comment.file, id: comment.id })
-                  setSelection({ file: comment.file, range: cloneSelectedLineRange(comment.selection) })
-                }
-
-                const isCommentOpen = (comment: SessionReviewComment) => {
-                  const current = opened()
-                  if (!current) return false
-                  return current.file === comment.file && current.id === comment.id
+                  commentsUi.onLineSelectionEnd(range)
                 }
 
                 return (
@@ -699,13 +564,10 @@ export const SessionReview = (props: SessionReviewProps) => {
                                 enableHoverUtility={props.onLineComment != null}
                                 onLineSelected={handleLineSelected}
                                 onLineSelectionEnd={handleLineSelectionEnd}
-                                onLineNumberSelectionEnd={(range: SelectedLineRange | null) => {
-                                  if (!range) return
-                                  openDraft(range)
-                                }}
-                                annotations={annotations()}
-                                renderAnnotation={renderAnnotation}
-                                renderHoverUtility={props.onLineComment ? renderHoverUtility : undefined}
+                                onLineNumberSelectionEnd={commentsUi.onLineNumberSelectionEnd}
+                                annotations={commentsUi.annotations()}
+                                renderAnnotation={commentsUi.renderAnnotation}
+                                renderHoverUtility={props.onLineComment ? commentsUi.renderHoverUtility : undefined}
                                 selectedLines={selectedLines()}
                                 commentedLines={commentedLines()}
                                 before={{
