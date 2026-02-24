@@ -505,7 +505,13 @@ describe("acp.agent event subscription", () => {
 
         for (const output of ["a", "a", "ab"]) {
           controller.push(
-            toolEvent(sessionId, cwd, { callID: "call_1", tool: "bash", status: "running", input, metadata: { output } }),
+            toolEvent(sessionId, cwd, {
+              callID: "call_1",
+              tool: "bash",
+              status: "running",
+              input,
+              metadata: { output },
+            }),
           )
         }
         await new Promise((r) => setTimeout(r, 20))
@@ -558,7 +564,9 @@ describe("acp.agent event subscription", () => {
         const pendings = sessionUpdates.filter(
           (u) => u.sessionId === sessionId && u.update.sessionUpdate === "tool_call",
         )
-        expect(pendings.every((p) => p.update.sessionUpdate === "tool_call" && p.update.status === "pending")).toBe(true)
+        expect(pendings.every((p) => p.update.sessionUpdate === "tool_call" && p.update.status === "pending")).toBe(
+          true,
+        )
         stop()
       },
     })
@@ -574,9 +582,33 @@ describe("acp.agent event subscription", () => {
         const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
         const input = { command: "echo hello", description: "run command" }
 
-        controller.push(toolEvent(sessionId, cwd, { callID: "call_1", tool: "bash", status: "running", input, metadata: { output: "a" } }))
-        controller.push(toolEvent(sessionId, cwd, { callID: "call_1", tool: "bash", status: "pending", input, raw: '{"command":"echo hello"}' }))
-        controller.push(toolEvent(sessionId, cwd, { callID: "call_1", tool: "bash", status: "running", input, metadata: { output: "a" } }))
+        controller.push(
+          toolEvent(sessionId, cwd, {
+            callID: "call_1",
+            tool: "bash",
+            status: "running",
+            input,
+            metadata: { output: "a" },
+          }),
+        )
+        controller.push(
+          toolEvent(sessionId, cwd, {
+            callID: "call_1",
+            tool: "bash",
+            status: "pending",
+            input,
+            raw: '{"command":"echo hello"}',
+          }),
+        )
+        controller.push(
+          toolEvent(sessionId, cwd, {
+            callID: "call_1",
+            tool: "bash",
+            status: "running",
+            input,
+            metadata: { output: "a" },
+          }),
+        )
         await new Promise((r) => setTimeout(r, 20))
 
         const snapshots = sessionUpdates
