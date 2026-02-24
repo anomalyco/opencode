@@ -11,10 +11,25 @@ runs:
         restore-keys: |
           ${{ runner.os }}-bun-
 
+    - name: Get baseline download URL
+      id: bun-url
+      shell: bash
+      run: |
+        if [ "$RUNNER_ARCH" = "X64" ]; then
+          V=$(node -p "require('./package.json').packageManager.split('@')[1]")
+          case "$RUNNER_OS" in
+            macOS)   OS=darwin ;;
+            Linux)   OS=linux ;;
+            Windows) OS=windows ;;
+          esac
+          echo "url=https://bun.sh/download/${V}/${OS}/x64?avx2=false&profile=false" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Setup Bun
       uses: oven-sh/setup-bun@v2
       with:
-        bun-version-file: package.json
+        bun-version-file: ${{ !steps.bun-url.outputs.url && 'package.json' || '' }}
+        bun-download-url: ${{ steps.bun-url.outputs.url }}
 
     - name: Install dependencies
       run: bun install
