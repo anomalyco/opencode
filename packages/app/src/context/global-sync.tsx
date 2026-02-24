@@ -36,6 +36,7 @@ import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
 import { sanitizeProject } from "./global-sync/utils"
 import { usePlatform } from "./platform"
+import { formatServerError } from "@/utils/server-errors"
 
 type GlobalStore = {
   ready: boolean
@@ -51,11 +52,6 @@ type GlobalStore = {
   reload: undefined | "pending" | "complete"
 }
 
-function errorMessage(error: unknown) {
-  if (error instanceof Error && error.message) return error.message
-  if (typeof error === "string" && error) return error
-  return "Unknown error"
-}
 
 function createGlobalSync() {
   const globalSDK = useGlobalSDK()
@@ -207,8 +203,9 @@ function createGlobalSync() {
         console.error("Failed to load sessions", err)
         const project = getFilename(directory)
         showToast({
+          variant: "error",
           title: language.t("toast.session.listFailed.title", { project }),
-          description: errorMessage(err),
+          description: formatServerError(err),
         })
       })
 
