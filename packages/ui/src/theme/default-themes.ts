@@ -18,6 +18,7 @@ import auraThemeJson from "./themes/aura.json"
 import rosepineThemeJson from "./themes/rosepine.json"
 import kanagawaThemeJson from "./themes/kanagawa.json"
 import everforestThemeJson from "./themes/everforest.json"
+import midnightThemeJson from "./themes/midnight.json"
 
 export const oc1Theme = oc1ThemeJson as DesktopTheme
 export const oc2Theme = oc2ThemeJson as DesktopTheme
@@ -38,6 +39,7 @@ export const auraTheme = auraThemeJson as DesktopTheme
 export const rosepineTheme = rosepineThemeJson as DesktopTheme
 export const kanagawaTheme = kanagawaThemeJson as DesktopTheme
 export const everforestTheme = everforestThemeJson as DesktopTheme
+export const midnightTheme = midnightThemeJson as DesktopTheme
 
 export const DEFAULT_THEMES: Record<string, DesktopTheme> = {
   "oc-1": oc1Theme,
@@ -50,6 +52,7 @@ export const DEFAULT_THEMES: Record<string, DesktopTheme> = {
   everforest: everforestTheme,
   gruvbox: gruvboxTheme,
   kanagawa: kanagawaTheme,
+  midnight: midnightTheme,
   monokai: monokaiTheme,
   nightowl: nightowlTheme,
   nord: nordTheme,
