@@ -52,7 +52,6 @@ type GlobalStore = {
   reload: undefined | "pending" | "complete"
 }
 
-
 function createGlobalSync() {
   const globalSDK = useGlobalSDK()
   const platform = usePlatform()

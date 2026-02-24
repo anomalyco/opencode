@@ -134,10 +134,10 @@ export async function bootstrapDirectory(input: {
   } catch (err) {
     console.error("Failed to bootstrap instance", err)
     const project = getFilename(input.directory)
-    showToast({ 
-      variant: "error", 
-      title: `Failed to reload ${project}`, 
-      description: formatServerError(err) 
+    showToast({
+      variant: "error",
+      title: `Failed to reload ${project}`,
+      description: formatServerError(err),
     })
     input.setStore("status", "partial")
     return
