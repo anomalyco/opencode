@@ -155,6 +155,7 @@ export async function bootstrapDirectory(input: {
     input.loadSessions(input.directory),
     input.sdk.mcp.status().then((x) => input.setStore("mcp", x.data!)),
     input.sdk.lsp.status().then((x) => input.setStore("lsp", x.data!)),
+    input.sdk.plugin.status().then((x) => input.setStore("plugin", x.data!)),
     input.sdk.vcs.get().then((x) => {
       const next = x.data ?? input.store.vcs
       input.setStore("vcs", next)

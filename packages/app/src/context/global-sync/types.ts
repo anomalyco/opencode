@@ -9,6 +9,7 @@ import type {
   Part,
   Path,
   PermissionRequest,
+  PluginStatusResponse,
   Project,
   ProviderListResponse,
   QuestionRequest,
@@ -62,6 +63,7 @@ export type State = {
     [name: string]: McpStatus
   }
   lsp: LspStatus[]
+  plugin: PluginStatusResponse
   vcs: VcsInfo | undefined
   limit: number
   message: {

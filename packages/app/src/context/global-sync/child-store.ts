@@ -179,6 +179,7 @@ export function createChildStoreManager(input: {
             limit: 5,
             message: {},
             part: {},
+            plugin: [],
           })
           children[directory] = child
           disposers.set(directory, dispose)

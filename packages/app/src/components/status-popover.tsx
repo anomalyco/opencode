@@ -188,7 +188,7 @@ export function StatusPopover() {
   const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
   const lspItems = createMemo(() => sync.data.lsp ?? [])
   const lspCount = createMemo(() => lspItems().length)
-  const plugins = createMemo(() => sync.data.config.plugin ?? [])
+  const plugins = createMemo(() => sync.data.plugin ?? [])
   const pluginCount = createMemo(() => plugins().length)
   const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
   const overallHealthy = createMemo(() => {
@@ -408,7 +408,10 @@ export function StatusPopover() {
                     {(plugin) => (
                       <div class="flex items-center gap-2 w-full px-2 py-1">
                         <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
-                        <span class="text-14-regular text-text-base truncate">{plugin}</span>
+                        <span class="text-14-regular text-text-base truncate">
+                          {plugin.name}
+                          {plugin.version && <span class="text-text-weak">@{plugin.version}</span>}
+                        </span>
                       </div>
                     )}
                   </For>
