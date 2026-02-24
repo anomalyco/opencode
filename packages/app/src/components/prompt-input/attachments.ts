@@ -103,15 +103,6 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
 
     if (!plainText) return
 
-    if (largePaste(plainText)) {
-      if (input.addPart({ type: "text", content: plainText, start: 0, end: 0 })) return
-      input.focusEditor()
-      if (input.addPart({ type: "text", content: plainText, start: 0, end: 0 })) return
-    }
-
-    const inserted = typeof document.execCommand === "function" && document.execCommand("insertText", false, plainText)
-    if (inserted) return
-
     input.addPart({ type: "text", content: plainText, start: 0, end: 0 })
   }
 
