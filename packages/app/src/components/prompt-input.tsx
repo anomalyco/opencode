@@ -1,4 +1,5 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
+import { showToast } from "@opencode-ai/ui/toast"
 import { createEffect, on, Component, Show, onCleanup, Switch, Match, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createFocusSignal } from "@solid-primitives/active-element"
@@ -113,6 +114,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const mirror = { input: false }
   const inset = 44
+  let lastEscapeAt = 0
+  const DOUBLE_ESCAPE_MS = 500
 
   const scrollCursorIntoView = () => {
     const container = scrollRef
@@ -951,7 +954,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
 
       if (working()) {
-        abort()
+        const now = Date.now()
+        if (now - lastEscapeAt < DOUBLE_ESCAPE_MS) {
+          abort()
+          lastEscapeAt = 0
+        } else {
+          lastEscapeAt = now
+          showToast({
+            title: "Press Escape again to cancel",
+            description: "Press Escape once more to interrupt the response",
+          })
+        }
         event.preventDefault()
         event.stopPropagation()
         return
