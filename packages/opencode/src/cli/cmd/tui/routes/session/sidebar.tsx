@@ -3,6 +3,7 @@ import { createMemo, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
+import { fileURLToPath } from "bun"
 import path from "path"
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import { Global } from "@/global"
@@ -25,6 +26,8 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     diff: true,
     todo: true,
     lsp: true,
+    formatters: true,
+    plugins: true,
   })
 
   // Sort MCP servers alphabetically for consistent display order
@@ -39,6 +42,34 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
           item.status === "failed" || item.status === "needs_auth" || item.status === "needs_client_registration",
       ).length,
   )
+
+
+  const enabledFormatters = createMemo(() => sync.data.formatter.filter((f) => f.enabled))
+
+  const plugins = createMemo(() => {
+    const list = sync.data.config.plugin ?? []
+    const result = list.map((value) => {
+      if (value.startsWith("file://")) {
+        const fileURLPath = fileURLToPath(value)
+        const parts = fileURLPath.split("/")
+        const filename = parts.pop() || fileURLPath
+        if (!filename.includes(".")) return { name: filename }
+        const basename = filename.split(".")[0]
+        if (basename === "index") {
+          const dirname = parts.pop()
+          const name = dirname || basename
+          return { name }
+        }
+        return { name: basename }
+      }
+      const index = value.lastIndexOf("@")
+      if (index <= 0) return { name: value, version: "latest" }
+      const name = value.substring(0, index)
+      const version = value.substring(index + 1)
+      return { name, version }
+    })
+    return result.toSorted((a, b) => a.name.localeCompare(b.name))
+  })
 
   const cost = createMemo(() => {
     const total = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
@@ -210,6 +241,78 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 </For>
               </Show>
             </box>
+            
+            <Show when={enabledFormatters().length > 0}>
+              <box>
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  onMouseDown={() => enabledFormatters().length > 2 && setExpanded("formatters", !expanded.formatters)}
+                >
+                  <Show when={enabledFormatters().length > 2}>
+                    <text fg={theme.text}>{expanded.formatters ? "▼" : "▶"}</text>
+                  </Show>
+                  <text fg={theme.text}>
+                    <b>Formatters</b>
+                  </text>
+                </box>
+                <Show when={enabledFormatters().length <= 2 || expanded.formatters}>
+                  <For each={enabledFormatters()}>
+                    {(item) => (
+                      <box flexDirection="row" gap={1}>
+                        <text
+                          flexShrink={0}
+                          style={{
+                            fg: theme.success,
+                          }}
+                        >
+                          •
+                        </text>
+                        <text wrapMode="word" fg={theme.textMuted}>
+                          {item.name}
+                        </text>
+                      </box>
+                    )}
+                  </For>
+                </Show>
+              </box>
+            </Show>
+            <Show when={plugins().length > 0}>
+              <box>
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  onMouseDown={() => plugins().length > 2 && setExpanded("plugins", !expanded.plugins)}
+                >
+                  <Show when={plugins().length > 2}>
+                    <text fg={theme.text}>{expanded.plugins ? "▼" : "▶"}</text>
+                  </Show>
+                  <text fg={theme.text}>
+                    <b>Plugins</b>
+                  </text>
+                </box>
+                <Show when={plugins().length <= 2 || expanded.plugins}>
+                  <For each={plugins()}>
+                    {(item) => (
+                      <box flexDirection="row" gap={1}>
+                        <text
+                          flexShrink={0}
+                          style={{
+                            fg: theme.success,
+                          }}
+                        >
+                          •
+                        </text>
+                        <text wrapMode="word" fg={theme.textMuted}>
+                          {item.name}
+                          {item.version && <span style={{ fg: theme.textMuted }}> @{item.version}</span>}
+                        </text>
+                      </box>
+                    )}
+                  </For>
+                </Show>
+              </box>
+            </Show>
             <Show when={todo().length > 0 && todo().some((t) => t.status !== "completed")}>
               <box>
                 <box
