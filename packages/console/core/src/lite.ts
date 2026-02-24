@@ -4,9 +4,10 @@ import { Resource } from "@opencode-ai/console-resource"
 
 export namespace LiteData {
   const Schema = z.object({
-    fixedLimit: z.number().int(),
     rollingLimit: z.number().int(),
     rollingWindow: z.number().int(),
+    weeklyLimit: z.number().int(),
+    monthlyLimit: z.number().int(),
   })
 
   export const validate = fn(Schema, (input) => {
@@ -18,11 +19,7 @@ export namespace LiteData {
     return Schema.parse(json)
   })
 
-  export const planToPriceID = fn(z.void(), () => {
-    return Resource.ZEN_LITE_PRICE.price
-  })
-
-  export const priceIDToPlan = fn(z.void(), () => {
-    return "lite"
-  })
+  export const productID = fn(z.void(), () => Resource.ZEN_LITE_PRICE.product)
+  export const priceID = fn(z.void(), () => Resource.ZEN_LITE_PRICE.price)
+  export const planName = fn(z.void(), () => "lite")
 }
