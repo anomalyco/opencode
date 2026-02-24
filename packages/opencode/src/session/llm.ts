@@ -22,6 +22,7 @@ import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { PermissionNext } from "@/permission/next"
 import { Auth } from "@/auth"
+import { GitLabWorkflowLanguageModel } from "@gitlab/gitlab-ai-provider"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -148,6 +149,31 @@ export namespace LLM {
       isCodex || provider.id.includes("github-copilot") ? undefined : ProviderTransform.maxOutputTokens(input.model)
 
     const tools = await resolveTools(input)
+
+    // Wire tool executor for DWS workflow models.
+    // DWS drives the agentic loop server-side and requests tool execution via WebSocket.
+    // We bridge those requests through OpenCode's resolved tools (which include permission gating).
+    if (language instanceof GitLabWorkflowLanguageModel) {
+      const workflowModel = language as GitLabWorkflowLanguageModel
+      workflowModel.toolExecutor = async (toolName: string, argsJson: string, requestID: string) => {
+        const t = tools[toolName]
+        if (!t || !t.execute) {
+          return { result: "", error: `Unknown tool: ${toolName}` }
+        }
+        try {
+          const args = JSON.parse(argsJson)
+          const result = await t.execute(args, {
+            toolCallId: requestID,
+            messages: input.messages,
+            abortSignal: input.abort,
+          })
+          return { result: typeof result === "string" ? result : JSON.stringify(result) }
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error)
+          return { result: "", error: errorMsg }
+        }
+      }
+    }
 
     // LiteLLM and some Anthropic proxies require the tools parameter to be present
     // when message history contains tool calls, even if no tools are being used.
