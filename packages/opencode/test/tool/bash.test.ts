@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import os from "os"
 import path from "path"
 import { BashTool } from "../../src/tool/bash"
 import { Instance } from "../../src/project/instance"
@@ -124,8 +125,6 @@ describe("tool.bash permissions", () => {
 
   test("asks for external_directory permission when workdir is outside project", async () => {
     await using tmp = await tmpdir({ git: true })
-    await using outerTmp = await tmpdir()
-    const workdir = outerTmp.path
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
@@ -139,16 +138,15 @@ describe("tool.bash permissions", () => {
         }
         await bash.execute(
           {
-            command: "echo ok",
-            workdir,
-            description: "Echo in external dir",
+            command: "ls",
+            workdir: os.tmpdir(),
+            description: "List temp dir",
           },
           testCtx,
         )
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         expect(extDirReq).toBeDefined()
-        const expected = path.join(workdir, "*")
-        expect(extDirReq!.patterns).toContain(expected)
+        expect(extDirReq!.patterns).toContain(path.join(os.tmpdir(), "*"))
       },
     })
   })
@@ -369,7 +367,8 @@ describe("tool.bash truncation", () => {
           ctx,
         )
         expect((result.metadata as any).truncated).toBe(false)
-        expect(result.output.trim()).toBe("hello")
+        const eol = process.platform === "win32" ? "\r\n" : "\n"
+        expect(result.output).toBe(`hello${eol}`)
       },
     })
   })
