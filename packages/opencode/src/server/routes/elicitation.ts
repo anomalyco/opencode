@@ -8,6 +8,40 @@ import { lazy } from "../../util/lazy"
 
 export const ElicitationRoutes = lazy(() =>
   new Hono()
+    .post(
+      "/test",
+      describeRoute({
+        summary: "Create a test elicitation",
+        description: "Debug endpoint to create a test elicitation request for manual UI testing.",
+        operationId: "elicitation.test",
+        responses: {
+          200: {
+            description: "Elicitation reply from the user",
+            content: {
+              "application/json": {
+                schema: resolver(Elicitation.Reply),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          sessionID: z.string(),
+          mode: z.enum(["form", "url"]),
+          message: z.string(),
+          requestedSchema: z.record(z.string(), z.any()).optional(),
+          url: z.string().optional(),
+        }),
+      ),
+      async (c) => {
+        const json = c.req.valid("json")
+        const reply = await Elicitation.ask(json)
+        return c.json(reply)
+      },
+    )
     .get(
       "/",
       describeRoute({
