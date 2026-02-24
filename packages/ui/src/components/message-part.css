@@ -812,6 +812,8 @@
     gap: 4px;
     flex: 1;
     min-height: 0;
+    max-height: 50vh;
+    overflow: scroll;
   }
 
   [data-slot="permission-hint"] {
