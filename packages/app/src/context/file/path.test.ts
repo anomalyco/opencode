@@ -13,6 +13,14 @@ describe("file path helpers", () => {
     expect(path.pathFromTab("other://src/app.ts")).toBeUndefined()
   })
 
+  test("normalizes Windows absolute paths with mixed separators", () => {
+    const path = createPathHelpers(() => "C:\\repo")
+    expect(path.normalize("C:\\repo\\src\\app.ts")).toBe("src/app.ts")
+    expect(path.normalize("C:/repo/src/app.ts")).toBe("src/app.ts")
+    expect(path.normalize("file://C:/repo/src/app.ts")).toBe("src/app.ts")
+    expect(path.normalize("c:\\repo\\src\\app.ts")).toBe("src/app.ts")
+  })
+
   test("keeps query/hash stripping behavior stable", () => {
     expect(stripQueryAndHash("a/b.ts#L12?x=1")).toBe("a/b.ts")
     expect(stripQueryAndHash("a/b.ts?x=1#L12")).toBe("a/b.ts")
