@@ -34,7 +34,11 @@ export namespace FileTime {
     log.info("read", { sessionID, file })
     const { read } = state()
     read[sessionID] = read[sessionID] || {}
-    read[sessionID][file] = new Date()
+    // Use the file's actual mtime when available so the assert() comparison
+    // is filesystem-time vs filesystem-time. Using new Date() caused false
+    // positives on Windows where NTFS mtime can lag behind JS clock.
+    const mtime = Filesystem.stat(file)?.mtime
+    read[sessionID][file] = mtime ?? new Date()
   }
 
   export function get(sessionID: string, file: string) {
