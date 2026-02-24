@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import type { Message, Part, PermissionRequest, Project, QuestionRequest, Session } from "@opencode-ai/sdk/v2/client"
+import type {
+  ElicitationRequest,
+  Message,
+  Part,
+  PermissionRequest,
+  Project,
+  QuestionRequest,
+  Session,
+} from "@opencode-ai/sdk/v2/client"
 import { createStore } from "solid-js/store"
 import type { State } from "./types"
 import { applyDirectoryEvent, applyGlobalEvent } from "./event-reducer"
@@ -56,6 +64,20 @@ const questionRequest = (id: string, sessionID: string, title = id) =>
       },
     ],
   }) as QuestionRequest
+
+const elicitationRequest = (id: string, sessionID: string, message = id) =>
+  ({
+    id,
+    sessionID,
+    mode: "form",
+    message,
+    requestedSchema: {
+      type: "object",
+      properties: {
+        choice: { type: "string", enum: ["a", "b"] },
+      },
+    },
+  }) as ElicitationRequest
 
 const baseState = (input: Partial<State> = {}) =>
   ({
@@ -178,6 +200,7 @@ describe("applyDirectoryEvent", () => {
         todo: { ses_1: [] },
         permission: { ses_1: [] },
         question: { ses_1: [] },
+        elicitation: { ses_1: [elicitationRequest("eli_1", "ses_1")] },
         session_status: { ses_1: { type: "busy" } },
       }),
     )
@@ -199,6 +222,7 @@ describe("applyDirectoryEvent", () => {
     expect(store.todo.ses_1).toBeUndefined()
     expect(store.permission.ses_1).toBeUndefined()
     expect(store.question.ses_1).toBeUndefined()
+    expect(store.elicitation.ses_1).toBeUndefined()
     expect(store.session_status.ses_1).toBeUndefined()
   })
 
@@ -224,6 +248,7 @@ describe("applyDirectoryEvent", () => {
           todo: { [item.info.id]: [] },
           permission: { [item.info.id]: [] },
           question: { [item.info.id]: [] },
+          elicitation: { [item.info.id]: [elicitationRequest("eli_1", item.info.id)] },
           session_status: { [item.info.id]: { type: "busy" } },
         }),
       )
@@ -245,6 +270,7 @@ describe("applyDirectoryEvent", () => {
       expect(store.todo[item.info.id]).toBeUndefined()
       expect(store.permission[item.info.id]).toBeUndefined()
       expect(store.question[item.info.id]).toBeUndefined()
+      expect(store.elicitation[item.info.id]).toBeUndefined()
       expect(store.session_status[item.info.id]).toBeUndefined()
     }
   })
@@ -436,6 +462,55 @@ describe("applyDirectoryEvent", () => {
       loadLsp() {},
     })
     expect(store.question[sessionID]?.map((x) => x.id)).toEqual(["q_1", "q_3"])
+  })
+
+  test("tracks elicitation request lifecycle", () => {
+    const sessionID = "ses_1"
+    const [store, setStore] = createStore(
+      baseState({
+        elicitation: { [sessionID]: [elicitationRequest("eli_1", sessionID), elicitationRequest("eli_3", sessionID)] },
+      }),
+    )
+
+    applyDirectoryEvent({
+      event: { type: "elicitation.asked", properties: elicitationRequest("eli_2", sessionID) },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+    expect(store.elicitation[sessionID]?.map((x) => x.id)).toEqual(["eli_1", "eli_2", "eli_3"])
+
+    applyDirectoryEvent({
+      event: { type: "elicitation.asked", properties: elicitationRequest("eli_2", sessionID, "updated") },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+    expect(store.elicitation[sessionID]?.find((x) => x.id === "eli_2")?.message).toBe("updated")
+
+    applyDirectoryEvent({
+      event: { type: "elicitation.replied", properties: { sessionID, requestID: "eli_2" } },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+    expect(store.elicitation[sessionID]?.map((x) => x.id)).toEqual(["eli_1", "eli_3"])
+
+    applyDirectoryEvent({
+      event: { type: "elicitation.asked", properties: elicitationRequest("eli_4", "ses_new") },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+    expect(store.elicitation["ses_new"]?.map((x) => x.id)).toEqual(["eli_4"])
   })
 
   test("updates vcs branch in store and cache", () => {
