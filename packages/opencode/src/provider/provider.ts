@@ -1214,7 +1214,18 @@ export namespace Provider {
 
     if (cfg.small_model) {
       const parsed = parseModel(cfg.small_model)
-      return getModel(parsed.providerID, parsed.modelID)
+      try {
+        return await getModel(parsed.providerID, parsed.modelID)
+      } catch (err) {
+        if (ModelNotFoundError.isInstance(err)) {
+          log.warn("configured small_model not found, falling back to heuristic selection", {
+            small_model: cfg.small_model,
+          })
+          // fall through to heuristic selection below
+        } else {
+          throw err
+        }
+      }
     }
 
     const provider = await state().then((state) => state.providers[providerID])

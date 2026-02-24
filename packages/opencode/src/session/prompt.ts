@@ -326,11 +326,13 @@ export namespace SessionPrompt {
 
       step++
       if (step === 1)
-        ensureTitle({
+        void ensureTitle({
           session,
           modelID: lastUser.model.modelID,
           providerID: lastUser.model.providerID,
           history: msgs,
+        }).catch((err) => {
+          log.error("failed to generate session title", { error: err })
         })
 
       const model = await Provider.getModel(lastUser.model.providerID, lastUser.model.modelID).catch((e) => {
