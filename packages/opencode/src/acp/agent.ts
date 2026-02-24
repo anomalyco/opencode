@@ -640,7 +640,12 @@ export namespace ACP {
 
         await sendUsageUpdate(this.connection, this.sdk, sessionId, directory)
 
-        return result
+        // Return only fields defined by the ACP spec LoadSessionResponse (no sessionId)
+        return {
+          models: result.models,
+          modes: result.modes,
+          _meta: result._meta,
+        }
       } catch (e) {
         const error = MessageV2.fromError(e, {
           providerID: this.config.defaultModel?.providerID ?? "unknown",
