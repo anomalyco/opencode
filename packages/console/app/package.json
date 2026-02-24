@@ -7,7 +7,7 @@
     "typecheck": "tsgo --noEmit",
     "dev": "vite dev --host 0.0.0.0",
     "dev:remote": "VITE_AUTH_URL=https://auth.dev.opencode.ai VITE_STRIPE_PUBLISHABLE_KEY=pk_test_51RtuLNE7fOCwHSD4mewwzFejyytjdGoSDK7CAvhbffwaZnPbNb2rwJICw6LTOXCmWO320fSNXvb5NzI08RZVkAxd00syfqrW7t bun sst shell --stage=dev bun dev",
-    "build": "./script/generate-sitemap.ts && vite build && ../../opencode/script/schema.ts ./.output/public/config.json",
+    "build": "bun ./script/generate-sitemap.ts && vite build && bun ../../opencode/script/schema.ts ./.output/public/config.json",
     "start": "vite start"
   },
   "dependencies": {

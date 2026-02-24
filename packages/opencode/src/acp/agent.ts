@@ -41,7 +41,7 @@ import { Config } from "@/config/config"
 import { Todo } from "@/session/todo"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
-import type { AssistantMessage, Event, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Event, OpencodeClient, SessionMessageResponse, ToolPart } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
 
 type ModeOption = { id: string; name: string; description?: string }
@@ -135,6 +135,8 @@ export namespace ACP {
     private sessionManager: ACPSessionManager
     private eventAbort = new AbortController()
     private eventStarted = false
+    private bashSnapshots = new Map<string, string>()
+    private toolStarts = new Set<string>()
     private permissionQueues = new Map<string, Promise<void>>()
     private permissionOptions: PermissionOption[] = [
       { optionId: "once", kind: "allow_once", name: "Allow once" },
@@ -266,47 +268,68 @@ export namespace ACP {
           const session = this.sessionManager.tryGet(part.sessionID)
           if (!session) return
           const sessionId = session.id
-          const directory = session.cwd
-
-          const message = await this.sdk.session
-            .message(
-              {
-                sessionID: part.sessionID,
-                messageID: part.messageID,
-                directory,
-              },
-              { throwOnError: true },
-            )
-            .then((x) => x.data)
-            .catch((error) => {
-              log.error("unexpected error when fetching message", { error })
-              return undefined
-            })
-
-          if (!message || message.info.role !== "assistant") return
 
           if (part.type === "tool") {
+            if (!this.toolStarts.has(part.callID)) {
+              this.toolStarts.add(part.callID)
+              await this.connection
+                .sessionUpdate({
+                  sessionId,
+                  update: {
+                    sessionUpdate: "tool_call",
+                    toolCallId: part.callID,
+                    title: part.tool,
+                    kind: toToolKind(part.tool),
+                    status: "pending",
+                    locations: [],
+                    rawInput: {},
+                  },
+                })
+                .catch((error) => {
+                  log.error("failed to send tool pending to ACP", { error })
+                })
+            }
+
             switch (part.state.status) {
               case "pending":
-                await this.connection
-                  .sessionUpdate({
-                    sessionId,
-                    update: {
-                      sessionUpdate: "tool_call",
-                      toolCallId: part.callID,
-                      title: part.tool,
-                      kind: toToolKind(part.tool),
-                      status: "pending",
-                      locations: [],
-                      rawInput: {},
-                    },
-                  })
-                  .catch((error) => {
-                    log.error("failed to send tool pending to ACP", { error })
-                  })
+                this.bashSnapshots.delete(part.callID)
                 return
 
               case "running":
+                const output = this.bashOutput(part)
+                const content: ToolCallContent[] = []
+                if (output) {
+                  const hash = String(Bun.hash(output))
+                  if (part.tool === "bash") {
+                    if (this.bashSnapshots.get(part.callID) === hash) {
+                      await this.connection
+                        .sessionUpdate({
+                          sessionId,
+                          update: {
+                            sessionUpdate: "tool_call_update",
+                            toolCallId: part.callID,
+                            status: "in_progress",
+                            kind: toToolKind(part.tool),
+                            title: part.tool,
+                            locations: toLocations(part.tool, part.state.input),
+                            rawInput: part.state.input,
+                          },
+                        })
+                        .catch((error) => {
+                          log.error("failed to send tool in_progress to ACP", { error })
+                        })
+                      return
+                    }
+                    this.bashSnapshots.set(part.callID, hash)
+                  }
+                  content.push({
+                    type: "content",
+                    content: {
+                      type: "text",
+                      text: output,
+                    },
+                  })
+                }
                 await this.connection
                   .sessionUpdate({
                     sessionId,
@@ -318,6 +341,7 @@ export namespace ACP {
                       title: part.tool,
                       locations: toLocations(part.tool, part.state.input),
                       rawInput: part.state.input,
+                      ...(content.length > 0 && { content }),
                     },
                   })
                   .catch((error) => {
@@ -326,6 +350,8 @@ export namespace ACP {
                 return
 
               case "completed": {
+                this.toolStarts.delete(part.callID)
+                this.bashSnapshots.delete(part.callID)
                 const kind = toToolKind(part.tool)
                 const content: ToolCallContent[] = [
                   {
@@ -405,6 +431,8 @@ export namespace ACP {
                 return
               }
               case "error":
+                this.toolStarts.delete(part.callID)
+                this.bashSnapshots.delete(part.callID)
                 await this.connection
                   .sessionUpdate({
                     sessionId,
@@ -426,6 +454,7 @@ export namespace ACP {
                       ],
                       rawOutput: {
                         error: part.state.error,
+                        metadata: part.state.metadata,
                       },
                     },
                   })
@@ -802,6 +831,7 @@ export namespace ACP {
         if (part.type === "tool") {
           switch (part.state.status) {
             case "pending":
+              this.bashSnapshots.delete(part.callID)
               await this.connection
                 .sessionUpdate({
                   sessionId,
@@ -820,6 +850,17 @@ export namespace ACP {
                 })
               break
             case "running":
+              const output = this.bashOutput(part)
+              const runningContent: ToolCallContent[] = []
+              if (output) {
+                runningContent.push({
+                  type: "content",
+                  content: {
+                    type: "text",
+                    text: output,
+                  },
+                })
+              }
               await this.connection
                 .sessionUpdate({
                   sessionId,
@@ -831,6 +872,7 @@ export namespace ACP {
                     title: part.tool,
                     locations: toLocations(part.tool, part.state.input),
                     rawInput: part.state.input,
+                    ...(runningContent.length > 0 && { content: runningContent }),
                   },
                 })
                 .catch((err) => {
@@ -838,6 +880,7 @@ export namespace ACP {
                 })
               break
             case "completed":
+              this.bashSnapshots.delete(part.callID)
               const kind = toToolKind(part.tool)
               const content: ToolCallContent[] = [
                 {
@@ -916,6 +959,7 @@ export namespace ACP {
                 })
               break
             case "error":
+              this.bashSnapshots.delete(part.callID)
               await this.connection
                 .sessionUpdate({
                   sessionId,
@@ -937,6 +981,7 @@ export namespace ACP {
                     ],
                     rawOutput: {
                       error: part.state.error,
+                      metadata: part.state.metadata,
                     },
                   },
                 })
@@ -1061,6 +1106,14 @@ export namespace ACP {
           }
         }
       }
+    }
+
+    private bashOutput(part: ToolPart) {
+      if (part.tool !== "bash") return
+      if (!("metadata" in part.state) || !part.state.metadata || typeof part.state.metadata !== "object") return
+      const output = part.state.metadata["output"]
+      if (typeof output !== "string") return
+      return output
     }
 
     private async loadAvailableModes(directory: string): Promise<ModeOption[]> {
