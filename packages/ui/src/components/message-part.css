@@ -332,14 +332,6 @@
   }
 }
 
-[data-slot="collapsible-content"]:has([data-component="edit-content"]),
-[data-slot="collapsible-content"]:has([data-component="write-content"]) {
-  border: 1px solid var(--border-weak-base);
-  border-radius: 6px;
-  background: transparent;
-  overflow: hidden;
-}
-
 [data-component="bash-output"] {
   width: 100%;
   border: 1px solid var(--border-weak-base);
@@ -397,11 +389,6 @@
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
-}
-
-[data-slot="collapsible-content"]:has([data-component="edit-content"]) [data-component="edit-content"],
-[data-slot="collapsible-content"]:has([data-component="write-content"]) [data-component="write-content"] {
-  border-top: none;
 }
 
 [data-component="edit-trigger"],
@@ -492,9 +479,8 @@
 [data-component="edit-content"] {
   border-radius: inherit;
   border-top: 1px solid var(--border-weaker-base);
-  max-height: 420px;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: visible;
 
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -512,9 +498,8 @@
 [data-component="write-content"] {
   border-radius: inherit;
   border-top: 1px solid var(--border-weaker-base);
-  max-height: 240px;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: visible;
 
   [data-component="code"] {
     padding-bottom: 0 !important;
@@ -1212,9 +1197,16 @@
   }
 }
 
+[data-component="edit-tool"],
+[data-component="write-tool"],
 [data-component="apply-patch-tool"] {
   > [data-component="collapsible"].tool-collapsible {
     gap: 0px;
+  }
+
+  > [data-component="collapsible"] > [data-slot="collapsible-content"] {
+    border: none;
+    background: transparent;
   }
 
   > [data-component="collapsible"] > [data-slot="collapsible-trigger"][aria-expanded="true"] {
@@ -1298,7 +1290,7 @@
 [data-component="apply-patch-file-diff"] {
   border-radius: inherit;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: visible;
   scrollbar-width: none;
   -ms-overflow-style: none;
 

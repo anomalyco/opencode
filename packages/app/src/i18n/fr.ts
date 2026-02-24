@@ -543,6 +543,7 @@ export const dict = {
   "settings.general.section.notifications": "Notifications système",
   "settings.general.section.updates": "Mises à jour",
   "settings.general.section.sounds": "Effets sonores",
+  "settings.general.section.feed": "Flux",
   "settings.general.section.display": "Affichage",
   "settings.general.row.language.title": "Langue",
   "settings.general.row.language.description": "Changer la langue d'affichage pour OpenCode",
@@ -552,6 +553,12 @@ export const dict = {
   "settings.general.row.theme.description": "Personnaliser le thème d'OpenCode.",
   "settings.general.row.font.title": "Police",
   "settings.general.row.font.description": "Personnaliser la police mono utilisée dans les blocs de code",
+  "settings.general.row.shellToolPartsExpanded.title": "Développer les parties de l'outil shell",
+  "settings.general.row.shellToolPartsExpanded.description":
+    "Afficher les parties de l'outil shell développées par défaut dans la chronologie",
+  "settings.general.row.editToolPartsExpanded.title": "Développer les parties de l'outil edit",
+  "settings.general.row.editToolPartsExpanded.description":
+    "Afficher les parties des outils edit, write et patch développées par défaut dans la chronologie",
   "settings.general.row.wayland.title": "Utiliser Wayland natif",
   "settings.general.row.wayland.description": "Désactiver le repli X11 sur Wayland. Nécessite un redémarrage.",
   "settings.general.row.wayland.tooltip":
