@@ -111,6 +111,9 @@ export namespace Log {
       const dir = options.path ?? Global.Path.log
       const retention = options.rotate?.retention ?? 7
       await fs.mkdir(dir, { recursive: true })
+      if (fd !== undefined) closeSync(fd)
+      fd = undefined
+      deadline = 0
       rotate(dir)
       cleanup(dir, retention)
       write = (msg: any) => {
