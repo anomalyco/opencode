@@ -1,4 +1,4 @@
-export async function* readNull(stream: ReadableStream<Uint8Array>) {
+export async function* readNullTerminated(stream: ReadableStream<Uint8Array>) {
   const reader = stream.getReader()
   const decoder = new TextDecoder()
   let rest = ""

@@ -9,13 +9,21 @@ import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 import { Scheduler } from "../scheduler"
 import { EOL } from "os"
-import { readNull } from "../util/stream"
+import { readNullTerminated } from "../util/stream"
 
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
   const hour = 60 * 60 * 1000
   const prune = "7.days"
   const sizeThreshold = 1 * 1024 * 1024 * 1024 // 1 GB
+  const settings = [
+    ["core.autocrlf", "false"],
+    ["core.longpaths", "true"],
+    ["core.symlinks", "true"],
+    ["core.fsmonitor", "false"],
+    ["core.quotepath", "false"],
+  ] as const
+  const ready = new Set<string>()
 
   type Env = Record<string, string | undefined>
   type Oversized = {
@@ -56,16 +64,10 @@ export namespace Snapshot {
   }
 
   export async function cleanup(input?: { findOversized?: (env: Env) => Promise<Oversized> }): Promise<Cleanup> {
-    if (Instance.project.vcs !== "git") {
+    if (Instance.project.vcs !== "git" || Flag.OPENCODE_CLIENT === "acp") {
       return {
         status: "skipped",
-        reason: "vcs",
-      }
-    }
-    if (Flag.OPENCODE_CLIENT === "acp") {
-      return {
-        status: "skipped",
-        reason: "client",
+        reason: Instance.project.vcs !== "git" ? "vcs" : "client",
       }
     }
     const cfg = await Config.get()
@@ -149,17 +151,8 @@ export namespace Snapshot {
     const cfg = await Config.get()
     if (cfg.snapshot === false) return
     const git = gitdir()
-    const env = gitenv(git)
-    if (await fs.mkdir(git, { recursive: true })) {
-      await $`git init`.env(env).quiet().nothrow()
-      // Configure git to not convert line endings on Windows
-      await $`git config core.autocrlf false`.env(env).quiet().nothrow()
-      await $`git config core.longpaths true`.env(env).quiet().nothrow()
-      await $`git config core.symlinks true`.env(env).quiet().nothrow()
-      await $`git config core.fsmonitor false`.env(env).quiet().nothrow()
-      log.info("initialized")
-    }
-    await gitAddFiltered(git)
+    const env = await setup(git)
+    await gitAddFiltered(git, env)
     const hash = await $`git write-tree`.env(env).quiet().cwd(Instance.directory).nothrow().text()
     log.info("tracking", { hash, cwd: Instance.directory, git })
     return hash.trim()
@@ -173,14 +166,13 @@ export namespace Snapshot {
 
   export async function patch(hash: string): Promise<Patch> {
     const git = gitdir()
-    const env = gitenv(git)
-    await gitAddFiltered(git)
-    const result =
-      await $`git -c core.autocrlf=false -c core.longpaths=true -c core.symlinks=true -c core.quotepath=false diff --no-ext-diff --name-only ${hash} -- .`
-        .env(env)
-        .quiet()
-        .cwd(Instance.directory)
-        .nothrow()
+    const env = await setup(git)
+    await gitAddFiltered(git, env)
+    const result = await $`git diff --no-ext-diff --name-only ${hash} -- .`
+      .env(env)
+      .quiet()
+      .cwd(Instance.directory)
+      .nothrow()
 
     // If git diff fails, return empty patch
     if (result.exitCode !== 0) {
@@ -203,13 +195,12 @@ export namespace Snapshot {
   export async function restore(snapshot: string) {
     log.info("restore", { commit: snapshot })
     const git = gitdir()
-    const env = gitenv(git)
-    const result =
-      await $`git -c core.longpaths=true -c core.symlinks=true read-tree ${snapshot} && git -c core.longpaths=true -c core.symlinks=true checkout-index -a -f`
-        .env(env)
-        .quiet()
-        .cwd(Instance.worktree)
-        .nothrow()
+    const env = await setup(git)
+    const result = await $`git read-tree ${snapshot} && git checkout-index -a -f`
+      .env(env)
+      .quiet()
+      .cwd(Instance.worktree)
+      .nothrow()
 
     if (result.exitCode !== 0) {
       log.error("failed to restore snapshot", {
@@ -224,24 +215,19 @@ export namespace Snapshot {
   export async function revert(patches: Patch[]) {
     const files = new Set<string>()
     const git = gitdir()
-    const env = gitenv(git)
+    const env = await setup(git)
     for (const item of patches) {
       for (const file of item.files) {
         if (files.has(file)) continue
         log.info("reverting", { file, hash: item.hash })
-        const result = await $`git -c core.longpaths=true -c core.symlinks=true checkout ${item.hash} -- ${file}`
-          .env(env)
-          .quiet()
-          .cwd(Instance.worktree)
-          .nothrow()
+        const result = await $`git checkout ${item.hash} -- ${file}`.env(env).quiet().cwd(Instance.worktree).nothrow()
         if (result.exitCode !== 0) {
           const relativePath = path.relative(Instance.worktree, file)
-          const checkTree =
-            await $`git -c core.longpaths=true -c core.symlinks=true ls-tree ${item.hash} -- ${relativePath}`
-              .env(env)
-              .quiet()
-              .cwd(Instance.worktree)
-              .nothrow()
+          const checkTree = await $`git ls-tree ${item.hash} -- ${relativePath}`
+            .env(env)
+            .quiet()
+            .cwd(Instance.worktree)
+            .nothrow()
           if (checkTree.exitCode === 0 && checkTree.text().trim()) {
             log.info("file existed in snapshot but checkout failed, keeping", {
               file,
@@ -258,14 +244,9 @@ export namespace Snapshot {
 
   export async function diff(hash: string) {
     const git = gitdir()
-    const env = gitenv(git)
-    await gitAddFiltered(git)
-    const result =
-      await $`git -c core.autocrlf=false -c core.longpaths=true -c core.symlinks=true -c core.quotepath=false diff --no-ext-diff ${hash} -- .`
-        .env(env)
-        .quiet()
-        .cwd(Instance.worktree)
-        .nothrow()
+    const env = await setup(git)
+    await gitAddFiltered(git, env)
+    const result = await $`git diff --no-ext-diff ${hash} -- .`.env(env).quiet().cwd(Instance.worktree).nothrow()
 
     if (result.exitCode !== 0) {
       log.warn("failed to get diff", {
@@ -295,17 +276,16 @@ export namespace Snapshot {
   export type FileDiff = z.infer<typeof FileDiff>
   export async function diffFull(from: string, to: string): Promise<FileDiff[]> {
     const git = gitdir()
-    const env = gitenv(git)
+    const env = await setup(git)
     const result: FileDiff[] = []
     const status = new Map<string, "added" | "deleted" | "modified">()
 
-    const statuses =
-      await $`git -c core.autocrlf=false -c core.longpaths=true -c core.symlinks=true -c core.quotepath=false diff --no-ext-diff --name-status --no-renames ${from} ${to} -- .`
-        .env(env)
-        .quiet()
-        .cwd(Instance.directory)
-        .nothrow()
-        .text()
+    const statuses = await $`git diff --no-ext-diff --name-status --no-renames ${from} ${to} -- .`
+      .env(env)
+      .quiet()
+      .cwd(Instance.directory)
+      .nothrow()
+      .text()
 
     for (const line of statuses.trim().split("\n")) {
       if (!line) continue
@@ -315,7 +295,7 @@ export namespace Snapshot {
       status.set(file, kind)
     }
 
-    for await (const line of $`git -c core.autocrlf=false -c core.longpaths=true -c core.symlinks=true -c core.quotepath=false diff --no-ext-diff --no-renames --numstat ${from} ${to} -- .`
+    for await (const line of $`git diff --no-ext-diff --no-renames --numstat ${from} ${to} -- .`
       .env(env)
       .quiet()
       .cwd(Instance.directory)
@@ -324,20 +304,8 @@ export namespace Snapshot {
       if (!line) continue
       const [additions, deletions, file] = line.split("\t")
       const isBinaryFile = additions === "-" && deletions === "-"
-      const before = isBinaryFile
-        ? ""
-        : await $`git -c core.autocrlf=false -c core.longpaths=true -c core.symlinks=true show ${from}:${file}`
-            .env(env)
-            .quiet()
-            .nothrow()
-            .text()
-      const after = isBinaryFile
-        ? ""
-        : await $`git -c core.autocrlf=false -c core.longpaths=true -c core.symlinks=true show ${to}:${file}`
-            .env(env)
-            .quiet()
-            .nothrow()
-            .text()
+      const before = isBinaryFile ? "" : await $`git show ${from}:${file}`.env(env).quiet().nothrow().text()
+      const after = isBinaryFile ? "" : await $`git show ${to}:${file}`.env(env).quiet().nothrow().text()
       const added = isBinaryFile ? 0 : parseInt(additions)
       const deleted = isBinaryFile ? 0 : parseInt(deletions)
       result.push({
@@ -363,6 +331,38 @@ export namespace Snapshot {
       GIT_DIR: git,
       GIT_WORK_TREE: Instance.worktree,
     }
+  }
+
+  async function setup(git: string) {
+    const env = gitenv(git)
+    const config = path.join(git, "config")
+
+    if (ready.has(git)) {
+      const exists = await fs
+        .stat(config)
+        .then(() => true)
+        .catch(() => false)
+      if (exists) return env
+      ready.delete(git)
+    }
+
+    await fs.mkdir(git, { recursive: true })
+    const init = await $`git init`.env(env).quiet().nothrow()
+    if (init.exitCode !== 0) {
+      log.warn("git init failed", { exitCode: init.exitCode, stderr: init.stderr.toString() })
+      return env
+    }
+
+    const output = await Promise.all(
+      settings.map(([key, value]) => $`git config ${key} ${value}`.env(env).quiet().nothrow()),
+    )
+    const failed = output.flatMap((item, index) => (item.exitCode === 0 ? [] : [settings[index]![0]]))
+    if (failed.length > 0) {
+      log.warn("git config failed", { failed })
+    }
+
+    ready.add(git)
+    return env
   }
 
   async function spawn(cmds: string[], env: Env, options?: SpawnOptions): Promise<Spawned> {
@@ -420,16 +420,11 @@ export namespace Snapshot {
     })
   }
 
-  async function gitAddFiltered(git: string): Promise<string[]> {
-    const env = gitenv(git)
+  async function gitAddFiltered(git: string, env: Env): Promise<string[]> {
     await syncExclude(git)
 
     // -N (`--intent-to-add`) records new paths without staging file contents.
-    const intent = await $`git -c core.autocrlf=false -c core.longpaths=true -c core.symlinks=true add -N -- .`
-      .cwd(Instance.directory)
-      .env(env)
-      .quiet()
-      .nothrow()
+    const intent = await $`git add -N -- .`.cwd(Instance.directory).env(env).quiet().nothrow()
     if (intent.exitCode !== 0) {
       log.warn("git add -N failed", { exitCode: intent.exitCode, stderr: intent.stderr.toString() })
       return []
@@ -446,15 +441,11 @@ export namespace Snapshot {
     }
 
     const largeFiles = await findLargeFiles(stagedFiles)
-    await unstageAndExclude(env, largeFiles)
+    await unstageAndExclude(git, env, largeFiles)
 
     const large = new Set(largeFiles)
     const filesWithoutLarge = stagedFiles.filter((file) => !large.has(file))
-    const addOutput = await spawnPathspec(
-      ["git", "-c", "core.autocrlf=false", "-c", "core.longpaths=true", "-c", "core.symlinks=true", "add"],
-      env,
-      filesWithoutLarge,
-    )
+    const addOutput = await spawnPathspec(["git", "add"], env, filesWithoutLarge)
     if (addOutput.exitCode !== 0) {
       log.warn("git add failed", { exitCode: addOutput.exitCode, stderr: addOutput.stderr })
     }
@@ -463,11 +454,7 @@ export namespace Snapshot {
   }
 
   async function listStagedFiles(env: Env): Promise<string[]> {
-    const output =
-      await $`git -c core.autocrlf=false -c core.longpaths=true -c core.symlinks=true diff --name-only -z --diff-filter=AMD -- .`
-        .cwd(Instance.directory)
-        .env(env)
-        .quiet()
+    const output = await $`git diff --name-only -z --diff-filter=AMD -- .`.cwd(Instance.directory).env(env).quiet()
 
     return output.stdout.toString().split("\0").filter(Boolean)
   }
@@ -484,40 +471,24 @@ export namespace Snapshot {
     return checks.filter((item) => item.large).map((item) => item.file)
   }
 
-  async function unstageAndExclude(env: Env, files: string[]) {
+  async function unstageAndExclude(git: string, env: Env, files: string[]) {
     if (files.length === 0) return
 
     async function execGitRmCached() {
-      const output = await spawnPathspec(
-        [
-          "git",
-          "-c",
-          "core.autocrlf=false",
-          "-c",
-          "core.longpaths=true",
-          "-c",
-          "core.symlinks=true",
-          "rm",
-          "--cached",
-          "--ignore-unmatch",
-        ],
-        env,
-        files,
-        {
-          stderr: "ignore",
-        },
-      )
+      const output = await spawnPathspec(["git", "rm", "--cached", "--ignore-unmatch"], env, files, {
+        stderr: "ignore",
+      })
 
       if (output.exitCode !== 0) {
         log.warn("git rm --cached failed", { code: output.exitCode })
       }
     }
 
-    async function updateGitExclude() {
-      const exclude = path.join(gitdir(), "info", "exclude")
+    async function updateLargeExclude() {
+      const exclude = path.join(git, "info", "exclude.large")
       await fs.mkdir(path.dirname(exclude), { recursive: true })
       const current = await fs.readFile(exclude, "utf8").catch(() => "")
-      const existing = new Set(current.split(EOL).filter(Boolean))
+      const existing = new Set(current.split(/\r?\n/).filter(Boolean))
       const added = files.map(ignoreEscape).filter((file) => !existing.has(file))
       if (added.length === 0) return
       const base = current.length === 0 || current.endsWith(EOL) ? current : `${current}${EOL}`
@@ -525,21 +496,24 @@ export namespace Snapshot {
     }
 
     log.info("removing large files from snapshot", { files })
-    await Promise.all([execGitRmCached(), updateGitExclude()])
+    await Promise.all([execGitRmCached(), updateLargeExclude()])
+    await syncExclude(git)
   }
 
   async function syncExclude(git: string) {
     const file = await excludes()
+    const custom = path.join(git, "info", "exclude.large")
     const target = path.join(git, "info", "exclude")
     await fs.mkdir(path.join(git, "info"), { recursive: true })
-    if (!file) {
-      await Bun.write(target, "")
-      return
-    }
-    const text = await Bun.file(file)
+
+    const text = await Bun.file(file ?? "")
       .text()
       .catch(() => "")
-    await Bun.write(target, text)
+    const large = await Bun.file(custom)
+      .text()
+      .catch(() => "")
+    const lines = [...new Set([...text.split(/\r?\n/).filter(Boolean), ...large.split(/\r?\n/).filter(Boolean)])]
+    await Bun.write(target, lines.length === 0 ? "" : `${lines.join(EOL)}${EOL}`)
   }
 
   async function excludes() {
@@ -570,7 +544,7 @@ export namespace Snapshot {
     let count = 0
     const sample: string[] = []
 
-    for await (const line of readNull(proc.stdout)) {
+    for await (const line of readNullTerminated(proc.stdout)) {
       const [hash, type, raw] = line.split(" ")
       if (!hash || type !== "blob" || !raw) continue
       const size = Number.parseInt(raw, 10)

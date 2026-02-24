@@ -869,6 +869,70 @@ test("git info exclude keeps global excludes", async () => {
   })
 })
 
+test("track configures snapshot git settings for existing snapshot repos", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const git = path.join(Global.Path.data, "snapshot", Instance.project.id)
+      const env = {
+        ...process.env,
+        GIT_DIR: git,
+        GIT_WORK_TREE: tmp.path,
+      }
+
+      await fs.mkdir(git, { recursive: true })
+      await $`git init`.env(env).quiet()
+      await $`git config core.autocrlf true`.env(env).quiet()
+      await $`git config --unset-all core.longpaths`.env(env).quiet().nothrow()
+      await $`git config --unset-all core.symlinks`.env(env).quiet().nothrow()
+      await $`git config --unset-all core.fsmonitor`.env(env).quiet().nothrow()
+      await $`git config --unset-all core.quotepath`.env(env).quiet().nothrow()
+
+      expect(await Snapshot.track()).toBeTruthy()
+
+      const keys = ["core.autocrlf", "core.longpaths", "core.symlinks", "core.fsmonitor", "core.quotepath"]
+      const values = await Promise.all(keys.map((key) => $`git config --get ${key}`.env(env).quiet().text()))
+      expect(values.map((x) => x.trim())).toEqual(["false", "true", "true", "false", "false"])
+    },
+  })
+})
+
+test("git info exclude keeps large-file excludes after source exclude sync", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      const git = path.join(Global.Path.data, "snapshot", Instance.project.id)
+      const source = `${tmp.path}/.git/info/exclude`
+      const target = path.join(git, "info", "exclude")
+      const big = `${tmp.path}/large.bin`
+
+      await writeLarge(big)
+      const first = await Snapshot.patch(before!)
+      expect(first.files).not.toContain(big)
+
+      const targetBefore = await Bun.file(target).text()
+      expect(targetBefore).toContain("large.bin")
+
+      await $`rm ${big}`.quiet()
+      const sourceText = await Bun.file(source).text()
+      await Bun.write(source, `${sourceText.trimEnd()}\nmanual.tmp\n`)
+      await Bun.write(`${tmp.path}/normal.txt`, "normal content")
+
+      const next = await Snapshot.patch(before!)
+      expect(next.files).toContain(fwd(tmp.path, "normal.txt"))
+
+      const targetAfter = await Bun.file(target).text()
+      expect(targetAfter).toContain("large.bin")
+      expect(targetAfter).toContain("manual.tmp")
+    },
+  })
+})
+
 test("concurrent file operations during patch", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
