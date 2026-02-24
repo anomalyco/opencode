@@ -44,6 +44,7 @@ import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
+import { MODAL_PROVIDER } from "./modal"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -148,6 +149,82 @@ export namespace Provider {
       return {
         autoload: Object.keys(input.models).length > 0,
         options: hasKey ? {} : { apiKey: "public" },
+      }
+    },
+    modal: async (input) => {
+      const config = await Config.get()
+      const auth = await Auth.get("modal")
+      const env = Env.all()
+
+      const apiKey =
+        config.provider?.["modal"]?.options?.apiKey ??
+        (auth?.type === "api" ? auth.key : undefined) ??
+        input.env.map((item) => env[item]).find(Boolean)
+
+      const baseURL =
+        config.provider?.["modal"]?.options?.baseURL ??
+        config.provider?.["modal"]?.options?.api ??
+        "https://api.us-west-2.modal.direct/v1"
+
+      const discovered = await (async () => {
+        if (!apiKey) return [] as string[]
+        const result = await fetch(`${String(baseURL).replace(/\/$/, "")}/models`, {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+          },
+          signal: AbortSignal.timeout(10_000),
+        }).catch(() => undefined)
+        if (!result?.ok) return [] as string[]
+        const json = await result.json().catch(() => undefined)
+        if (!json || typeof json !== "object") return [] as string[]
+        const data = (json as { data?: unknown[] }).data
+        if (!Array.isArray(data)) return [] as string[]
+        return data
+          .map((item) => (item && typeof item === "object" ? (item as { id?: unknown }).id : undefined))
+          .filter((item): item is string => typeof item === "string" && item.length > 0)
+      })()
+
+      if (discovered.length) {
+        input.models = Object.fromEntries(
+          discovered.map((id) => [
+            id,
+            {
+              id,
+              name: id,
+              providerID: "modal",
+              api: {
+                id,
+                npm: "@ai-sdk/openai-compatible",
+                url: baseURL,
+              },
+              status: "active",
+              capabilities: {
+                temperature: true,
+                reasoning: false,
+                attachment: false,
+                toolcall: true,
+                input: { text: true, audio: false, image: false, video: false, pdf: false },
+                output: { text: true, audio: false, image: false, video: false, pdf: false },
+                interleaved: false,
+              },
+              cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+              options: {},
+              limit: { context: 8192, output: 4096 },
+              headers: {},
+              family: "",
+              release_date: "",
+              variants: {},
+            } satisfies Model,
+          ]),
+        )
+      }
+
+      return {
+        autoload: !!apiKey,
+        options: {
+          baseURL,
+          ...(apiKey ? { apiKey } : {}),
+        },
       }
     },
     openai: async () => {
@@ -793,6 +870,8 @@ export namespace Provider {
         })),
       }
     }
+
+    database["modal"] = fromModelsDevProvider(MODAL_PROVIDER)
 
     function mergeProvider(providerID: string, provider: Partial<Info>) {
       const existing = providers[providerID]

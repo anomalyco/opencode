@@ -8,6 +8,7 @@ import { ProviderAuth } from "../../provider/auth"
 import { mapValues } from "remeda"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { MODAL_PROVIDER } from "../../provider/modal"
 
 export const ProviderRoutes = lazy(() =>
   new Hono()
@@ -39,7 +40,10 @@ export const ProviderRoutes = lazy(() =>
         const disabled = new Set(config.disabled_providers ?? [])
         const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
 
-        const allProviders = await ModelsDev.get()
+        const allProviders: Record<string, ModelsDev.Provider> = {
+          ...(await ModelsDev.get()),
+          modal: MODAL_PROVIDER,
+        }
         const filteredProviders: Record<string, (typeof allProviders)[string]> = {}
         for (const [key, value] of Object.entries(allProviders)) {
           if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) {
