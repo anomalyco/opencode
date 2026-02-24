@@ -941,6 +941,39 @@ export type EventWorktreeFailed = {
   }
 }
 
+export type ElicitationRequest = {
+  id: string
+  sessionID: string
+  mode: "form" | "url"
+  message: string
+  requestedSchema?: {
+    [key: string]: unknown
+  }
+  url?: string
+  elicitationId?: string
+  tool?: {
+    messageID: string
+    callID: string
+  }
+}
+
+export type EventElicitationAsked = {
+  type: "elicitation.asked"
+  properties: ElicitationRequest
+}
+
+export type EventElicitationReplied = {
+  type: "elicitation.replied"
+  properties: {
+    sessionID: string
+    requestID: string
+    action: "accept" | "decline" | "cancel"
+    content?: {
+      [key: string]: unknown
+    }
+  }
+}
+
 export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
@@ -985,6 +1018,8 @@ export type Event =
   | EventPtyDeleted
   | EventWorktreeReady
   | EventWorktreeFailed
+  | EventElicitationAsked
+  | EventElicitationReplied
 
 export type GlobalEvent = {
   directory: string
@@ -2137,6 +2172,13 @@ export type SubtaskPartInput = {
     modelID: string
   }
   command?: string
+}
+
+export type ElicitationReply = {
+  action: "accept" | "decline" | "cancel"
+  content?: {
+    [key: string]: unknown
+  }
 }
 
 export type ProviderAuthMethod = {
@@ -4093,6 +4135,90 @@ export type QuestionRejectResponses = {
 }
 
 export type QuestionRejectResponse = QuestionRejectResponses[keyof QuestionRejectResponses]
+
+export type ElicitationListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/elicitation"
+}
+
+export type ElicitationListResponses = {
+  /**
+   * List of pending elicitations
+   */
+  200: Array<ElicitationRequest>
+}
+
+export type ElicitationListResponse = ElicitationListResponses[keyof ElicitationListResponses]
+
+export type ElicitationReplyData = {
+  body?: ElicitationReply
+  path: {
+    requestID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/elicitation/{requestID}/reply"
+}
+
+export type ElicitationReplyErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ElicitationReplyError = ElicitationReplyErrors[keyof ElicitationReplyErrors]
+
+export type ElicitationReplyResponses = {
+  /**
+   * Elicitation answered successfully
+   */
+  200: boolean
+}
+
+export type ElicitationReplyResponse = ElicitationReplyResponses[keyof ElicitationReplyResponses]
+
+export type ElicitationRejectData = {
+  body?: never
+  path: {
+    requestID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/elicitation/{requestID}/reject"
+}
+
+export type ElicitationRejectErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ElicitationRejectError = ElicitationRejectErrors[keyof ElicitationRejectErrors]
+
+export type ElicitationRejectResponses = {
+  /**
+   * Elicitation rejected successfully
+   */
+  200: boolean
+}
+
+export type ElicitationRejectResponse = ElicitationRejectResponses[keyof ElicitationRejectResponses]
 
 export type ProviderListData = {
   body?: never

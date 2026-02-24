@@ -1,6 +1,6 @@
 import { createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import type { PermissionRequest, QuestionRequest, Todo } from "@opencode-ai/sdk/v2"
+import type { ElicitationRequest, PermissionRequest, QuestionRequest, Todo } from "@opencode-ai/sdk/v2"
 import { useParams } from "@solidjs/router"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useGlobalSync } from "@/context/global-sync"
@@ -14,7 +14,7 @@ export function createSessionComposerBlocked() {
   return createMemo(() => {
     const id = params.id
     if (!id) return false
-    return !!sync.data.permission[id]?.[0] || !!sync.data.question[id]?.[0]
+    return !!sync.data.permission[id]?.[0] || !!sync.data.question[id]?.[0] || !!sync.data.elicitation[id]?.[0]
   })
 }
 
@@ -29,6 +29,12 @@ export function createSessionComposerState() {
     const id = params.id
     if (!id) return
     return sync.data.question[id]?.[0]
+  })
+
+  const elicitationRequest = createMemo((): ElicitationRequest | undefined => {
+    const id = params.id
+    if (!id) return
+    return sync.data.elicitation[id]?.[0]
   })
 
   const permissionRequest = createMemo((): PermissionRequest | undefined => {
@@ -145,6 +151,7 @@ export function createSessionComposerState() {
   return {
     blocked,
     questionRequest,
+    elicitationRequest,
     permissionRequest,
     permissionResponding,
     decide,

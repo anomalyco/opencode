@@ -1,6 +1,7 @@
 import { Binary } from "@opencode-ai/util/binary"
 import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type {
+  ElicitationRequest,
   FileDiff,
   Message,
   Part,
@@ -52,6 +53,7 @@ function cleanupSessionCaches(
     store.todo[sessionID] !== undefined ||
     store.permission[sessionID] !== undefined ||
     store.question[sessionID] !== undefined ||
+    store.elicitation[sessionID] !== undefined ||
     store.session_status[sessionID] !== undefined
   setSessionTodo?.(sessionID, undefined)
   if (!hasAny) return
@@ -70,6 +72,7 @@ function cleanupSessionCaches(
       delete draft.todo[sessionID]
       delete draft.permission[sessionID]
       delete draft.question[sessionID]
+      delete draft.elicitation[sessionID]
       delete draft.session_status[sessionID]
     }),
   )
@@ -331,6 +334,42 @@ export function applyDirectoryEvent(input: {
       if (!result.found) break
       input.setStore(
         "question",
+        props.sessionID,
+        produce((draft) => {
+          draft.splice(result.index, 1)
+        }),
+      )
+      break
+    }
+    case "elicitation.asked": {
+      const elicitation = event.properties as ElicitationRequest
+      const elicitations = input.store.elicitation[elicitation.sessionID]
+      if (!elicitations) {
+        input.setStore("elicitation", elicitation.sessionID, [elicitation])
+        break
+      }
+      const result = Binary.search(elicitations, elicitation.id, (e) => e.id)
+      if (result.found) {
+        input.setStore("elicitation", elicitation.sessionID, result.index, reconcile(elicitation))
+        break
+      }
+      input.setStore(
+        "elicitation",
+        elicitation.sessionID,
+        produce((draft) => {
+          draft.splice(result.index, 0, elicitation)
+        }),
+      )
+      break
+    }
+    case "elicitation.replied": {
+      const props = event.properties as { sessionID: string; requestID: string }
+      const elicitations = input.store.elicitation[props.sessionID]
+      if (!elicitations) break
+      const result = Binary.search(elicitations, props.requestID, (e) => e.id)
+      if (!result.found) break
+      input.setStore(
+        "elicitation",
         props.sessionID,
         produce((draft) => {
           draft.splice(result.index, 1)

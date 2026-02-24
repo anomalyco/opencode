@@ -5,6 +5,7 @@ import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
 import { getSessionHandoff, setSessionHandoff } from "@/pages/session/handoff"
 import { SessionPermissionDock } from "@/pages/session/composer/session-permission-dock"
+import { SessionElicitationDock } from "@/pages/session/composer/session-elicitation-dock"
 import { SessionQuestionDock } from "@/pages/session/composer/session-question-dock"
 import type { SessionComposerState } from "@/pages/session/composer/session-composer-state"
 import { SessionTodoDock } from "@/pages/session/composer/session-todo-dock"
@@ -59,6 +60,14 @@ export function SessionComposerRegion(props: {
           {(request) => (
             <div>
               <SessionQuestionDock request={request} onSubmit={props.onResponseSubmit} />
+            </div>
+          )}
+        </Show>
+
+        <Show when={props.state.elicitationRequest()} keyed>
+          {(request) => (
+            <div>
+              <SessionElicitationDock request={request} onSubmit={props.onResponseSubmit} />
             </div>
           )}
         </Show>

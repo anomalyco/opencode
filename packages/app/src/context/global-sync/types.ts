@@ -2,6 +2,7 @@ import type {
   Agent,
   Command,
   Config,
+  ElicitationRequest,
   FileDiff,
   LspStatus,
   McpStatus,
@@ -57,6 +58,9 @@ export type State = {
   }
   question: {
     [sessionID: string]: QuestionRequest[]
+  }
+  elicitation: {
+    [sessionID: string]: ElicitationRequest[]
   }
   mcp: {
     [name: string]: McpStatus

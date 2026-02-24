@@ -154,3 +154,16 @@ Some built-in slash commands like `/undo` and `/redo` are currently unsupported.
 - Project-specific rules from `AGENTS.md`
 - Custom formatters and linters
 - Agents and permissions system
+
+### Elicitation
+
+OpenCode supports ACP elicitation for structured user input during a session.
+
+- `mode: "form"` requests using restricted JSON Schema (flat object fields)
+- `mode: "url"` requests for out-of-band browser authorization flows
+- `accept`, `decline`, and `cancel` responses
+- Capability-aware behavior based on client-declared `elicitation` support
+- `notifications/elicitation/complete` notifications after URL flows complete
+- `URLElicitationRequiredError` (`code: -32042`) for requests that must be retried after URL authorization
+
+If your ACP client does not advertise form elicitation support, OpenCode falls back by rejecting interactive question prompts instead of blocking the session.

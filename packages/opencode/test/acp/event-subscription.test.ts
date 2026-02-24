@@ -8,6 +8,7 @@ import { tmpdir } from "../fixture/fixture"
 type SessionUpdateParams = Parameters<AgentSideConnection["sessionUpdate"]>[0]
 type RequestPermissionParams = Parameters<AgentSideConnection["requestPermission"]>[0]
 type RequestPermissionResult = Awaited<ReturnType<AgentSideConnection["requestPermission"]>>
+type ExtMethodParams = Parameters<AgentSideConnection["extMethod"]>
 
 type GlobalEventEnvelope = {
   directory?: string
@@ -121,6 +122,12 @@ function createFakeAgent() {
   const updates = new Map<string, string[]>()
   const chunks = new Map<string, string>()
   const sessionUpdates: SessionUpdateParams[] = []
+  const elicitations: Array<{ method: string; params: Record<string, unknown> }> = []
+  const notifications: Array<{ method: string; params: Record<string, unknown> }> = []
+  const questionReplies: Array<{ requestID: string; answers?: string[][]; directory?: string }> = []
+  const questionRejects: Array<{ requestID: string; directory?: string }> = []
+  let sessionPromptCalls = 0
+  let mcpAuthStartCalls = 0
   const record = (sessionId: string, type: string) => {
     const list = updates.get(sessionId) ?? []
     list.push(type)
@@ -142,6 +149,13 @@ function createFakeAgent() {
     },
     async requestPermission(_params: RequestPermissionParams): Promise<RequestPermissionResult> {
       return { outcome: { outcome: "selected", optionId: "once" } } as RequestPermissionResult
+    },
+    async extMethod(method: ExtMethodParams[0], params: ExtMethodParams[1]) {
+      elicitations.push({ method, params })
+      return { action: "accept", content: { q1: "yes" } }
+    },
+    async extNotification(method: string, params: Record<string, unknown>) {
+      notifications.push({ method, params })
     },
   } as unknown as AgentSideConnection
 
@@ -196,6 +210,24 @@ function createFakeAgent() {
           },
         }
       },
+      prompt: async () => {
+        sessionPromptCalls++
+        return {
+          data: {
+            info: {
+              tokens: {
+                input: 0,
+                output: 0,
+                reasoning: 0,
+                cache: {
+                  read: 0,
+                  write: 0,
+                },
+              },
+            },
+          },
+        }
+      },
     },
     permission: {
       respond: async () => {
@@ -241,6 +273,25 @@ function createFakeAgent() {
       add: async () => {
         return { data: true }
       },
+      status: async () => {
+        return { data: {} }
+      },
+      auth: {
+        start: async () => {
+          mcpAuthStartCalls++
+          return { data: { authorizationUrl: "https://example.com/connect" } }
+        },
+      },
+    },
+    question: {
+      reply: async (params: any) => {
+        questionReplies.push(params)
+        return { data: true }
+      },
+      reject: async (params: any) => {
+        questionRejects.push(params)
+        return { data: true }
+      },
     },
   } as any
 
@@ -254,7 +305,23 @@ function createFakeAgent() {
     ;(agent as any).eventAbort.abort()
   }
 
-  return { agent, controller, calls, updates, chunks, sessionUpdates, stop, sdk, connection }
+  return {
+    agent,
+    controller,
+    calls,
+    updates,
+    chunks,
+    sessionUpdates,
+    elicitations,
+    notifications,
+    questionReplies,
+    questionRejects,
+    getSessionPromptCalls: () => sessionPromptCalls,
+    getMcpAuthStartCalls: () => mcpAuthStartCalls,
+    stop,
+    sdk,
+    connection,
+  }
 }
 
 describe("acp.agent event subscription", () => {
@@ -676,6 +743,408 @@ describe("acp.agent event subscription", () => {
           .map((u) => inProgressText(u.update))
 
         expect(snapshots).toEqual(["a", "a"])
+        stop()
+      },
+    })
+  })
+
+  test("bridges question.asked to session/elicitation and replies on accept", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, elicitations, questionReplies, questionRejects, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        await agent.initialize({
+          protocolVersion: 1,
+          clientCapabilities: {
+            elicitation: {
+              form: {},
+            },
+          },
+        } as any)
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "question.asked",
+            properties: {
+              id: "que_1",
+              sessionID: sessionId,
+              questions: [
+                {
+                  question: "How should we continue?",
+                  header: "Approach",
+                  options: [
+                    { label: "Fast", description: "Quick path" },
+                    { label: "Safe", description: "Safer path" },
+                  ],
+                  custom: false,
+                },
+              ],
+            },
+          },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 20))
+
+        expect(elicitations.length).toBe(1)
+        expect(elicitations[0]?.method).toBe("session/elicitation")
+        expect((elicitations[0]?.params?.["mode"] as string | undefined) ?? "").toBe("form")
+        expect(questionReplies.length).toBe(1)
+        expect(questionReplies[0]?.requestID).toBe("que_1")
+        expect(questionReplies[0]?.answers).toEqual([["yes"]])
+        expect(questionRejects.length).toBe(0)
+
+        stop()
+      },
+    })
+  })
+
+  test("rejects question when elicitation form capability is unavailable", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, elicitations, questionReplies, questionRejects, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        await agent.initialize({
+          protocolVersion: 1,
+          clientCapabilities: {},
+        } as any)
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "question.asked",
+            properties: {
+              id: "que_2",
+              sessionID: sessionId,
+              questions: [
+                {
+                  question: "Need input?",
+                  header: "Input",
+                  options: [{ label: "A", description: "A" }],
+                  custom: false,
+                },
+              ],
+            },
+          },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 20))
+
+        expect(elicitations.length).toBe(0)
+        expect(questionReplies.length).toBe(0)
+        expect(questionRejects.length).toBe(1)
+        expect(questionRejects[0]?.requestID).toBe("que_2")
+
+        stop()
+      },
+    })
+  })
+
+  test("bridges mcp.browser.open.failed to url elicitation and sends completion notification", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, elicitations, notifications, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        await agent.initialize({
+          protocolVersion: 1,
+          clientCapabilities: {
+            elicitation: {
+              url: {},
+            },
+          },
+        } as any)
+        await agent.newSession({
+          cwd,
+          mcpServers: [
+            {
+              name: "github",
+              type: "remote",
+              url: "https://example.com/mcp",
+              headers: [],
+            },
+          ],
+        } as any)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "mcp.browser.open.failed",
+            properties: {
+              mcpName: "github",
+              url: "https://example.com/connect",
+            },
+          },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 20))
+
+        expect(elicitations.length).toBe(1)
+        expect(elicitations[0]?.method).toBe("session/elicitation")
+        expect(elicitations[0]?.params?.["mode"]).toBe("url")
+        expect(elicitations[0]?.params?.["url"]).toBe("https://example.com/connect")
+        const elicitationId = elicitations[0]?.params?.["elicitationId"]
+        expect(typeof elicitationId).toBe("string")
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "mcp.tools.changed",
+            properties: {
+              server: "github",
+            },
+          },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 20))
+
+        expect(notifications.length).toBe(1)
+        expect(notifications[0]?.method).toBe("notifications/elicitation/complete")
+        expect(notifications[0]?.params?.["elicitationId"]).toBe(elicitationId)
+
+        stop()
+      },
+    })
+  })
+
+  test("does not send url elicitation when client lacks url capability", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, elicitations, notifications, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        await agent.initialize({
+          protocolVersion: 1,
+          clientCapabilities: {
+            elicitation: {
+              form: {},
+            },
+          },
+        } as any)
+        await agent.newSession({
+          cwd,
+          mcpServers: [
+            {
+              name: "github",
+              type: "remote",
+              url: "https://example.com/mcp",
+              headers: [],
+            },
+          ],
+        } as any)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "mcp.browser.open.failed",
+            properties: {
+              mcpName: "github",
+              url: "https://example.com/connect",
+            },
+          },
+        } as any)
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "mcp.tools.changed",
+            properties: {
+              server: "github",
+            },
+          },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 20))
+
+        expect(elicitations.length).toBe(0)
+        expect(notifications.length).toBe(0)
+
+        stop()
+      },
+    })
+  })
+
+  test("returns URLElicitationRequiredError (-32042) from prompt when MCP auth is required", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, sdk, getSessionPromptCalls, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        await agent.initialize({
+          protocolVersion: 1,
+          clientCapabilities: {
+            elicitation: {
+              url: {},
+            },
+          },
+        } as any)
+
+        sdk.mcp.status = async () => ({
+          data: {
+            github: { status: "needs_auth" },
+          },
+        })
+        sdk.mcp.auth.start = async () => ({
+          data: { authorizationUrl: "https://example.com/connect" },
+        })
+
+        const sessionId = await agent
+          .newSession({
+            cwd,
+            mcpServers: [
+              {
+                name: "github",
+                type: "remote",
+                url: "https://example.com/mcp",
+                headers: [],
+              },
+            ],
+          } as any)
+          .then((x) => x.sessionId)
+
+        let thrown: any
+        try {
+          await agent.prompt({
+            sessionId,
+            prompt: [{ type: "text", text: "hello" }],
+          } as any)
+        } catch (error) {
+          thrown = error
+        }
+
+        expect(thrown).toBeDefined()
+        expect(thrown.code).toBe(-32042)
+        expect(thrown.message).toContain("requires authorization")
+        expect(Array.isArray(thrown.data?.elicitations)).toBe(true)
+        expect(thrown.data?.elicitations?.[0]?.mode).toBe("url")
+        expect(thrown.data?.elicitations?.[0]?.url).toBe("https://example.com/connect")
+        expect(getSessionPromptCalls()).toBe(0)
+
+        stop()
+      },
+    })
+  })
+
+  test("does not return URLElicitationRequiredError when client lacks url capability", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, sdk, getSessionPromptCalls, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        await agent.initialize({
+          protocolVersion: 1,
+          clientCapabilities: {
+            elicitation: {
+              form: {},
+            },
+          },
+        } as any)
+
+        sdk.mcp.status = async () => ({
+          data: {
+            github: { status: "needs_auth" },
+          },
+        })
+
+        const sessionId = await agent
+          .newSession({
+            cwd,
+            mcpServers: [
+              {
+                name: "github",
+                type: "remote",
+                url: "https://example.com/mcp",
+                headers: [],
+              },
+            ],
+          } as any)
+          .then((x) => x.sessionId)
+
+        const result = await agent.prompt({
+          sessionId,
+          prompt: [{ type: "text", text: "hello" }],
+        } as any)
+
+        expect(result?.stopReason).toBe("end_turn")
+        expect(getSessionPromptCalls()).toBe(1)
+
+        stop()
+      },
+    })
+  })
+
+  test("reuses pending url elicitation across prompts without restarting MCP auth", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, sdk, getMcpAuthStartCalls, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        await agent.initialize({
+          protocolVersion: 1,
+          clientCapabilities: {
+            elicitation: {
+              url: {},
+            },
+          },
+        } as any)
+
+        sdk.mcp.status = async () => ({
+          data: {
+            github: { status: "needs_auth" },
+          },
+        })
+
+        const sessionId = await agent
+          .newSession({
+            cwd,
+            mcpServers: [
+              {
+                name: "github",
+                type: "remote",
+                url: "https://example.com/mcp",
+                headers: [],
+              },
+            ],
+          } as any)
+          .then((x) => x.sessionId)
+
+        let first: any
+        let second: any
+        try {
+          await agent.prompt({
+            sessionId,
+            prompt: [{ type: "text", text: "hello" }],
+          } as any)
+        } catch (error) {
+          first = error
+        }
+        try {
+          await agent.prompt({
+            sessionId,
+            prompt: [{ type: "text", text: "hello again" }],
+          } as any)
+        } catch (error) {
+          second = error
+        }
+
+        expect(first?.code).toBe(-32042)
+        expect(second?.code).toBe(-32042)
+        const firstId = first?.data?.elicitations?.[0]?.elicitationId
+        const secondId = second?.data?.elicitations?.[0]?.elicitationId
+        expect(typeof firstId).toBe("string")
+        expect(secondId).toBe(firstId)
+        expect(getMcpAuthStartCalls()).toBe(1)
+
         stop()
       },
     })

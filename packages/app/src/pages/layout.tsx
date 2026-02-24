@@ -358,7 +358,7 @@ export default function Layout(props: ParentProps) {
           return
         }
 
-        if (e.details?.type !== "permission.asked" && e.details?.type !== "question.asked") return
+        if (e.details?.type !== "permission.asked" && e.details?.type !== "question.asked" && e.details?.type !== "elicitation.asked") return
         const title =
           e.details.type === "permission.asked"
             ? language.t("notification.permission.title")
@@ -394,7 +394,7 @@ export default function Layout(props: ParentProps) {
           }
         }
 
-        if (e.details.type === "question.asked") {
+        if (e.details.type === "question.asked" || e.details.type === "elicitation.asked") {
           if (settings.notifications.agent()) {
             void platform.notify(title, description, href)
           }

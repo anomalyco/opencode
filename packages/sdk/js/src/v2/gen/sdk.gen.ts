@@ -19,6 +19,12 @@ import type {
   ConfigProvidersResponses,
   ConfigUpdateErrors,
   ConfigUpdateResponses,
+  ElicitationListResponses,
+  ElicitationRejectErrors,
+  ElicitationRejectResponses,
+  ElicitationReply,
+  ElicitationReplyErrors,
+  ElicitationReplyResponses,
   EventSubscribeResponses,
   EventTuiCommandExecute,
   EventTuiPromptAppend,
@@ -2083,6 +2089,94 @@ export class Question extends HeyApiClient {
   }
 }
 
+export class Elicitation extends HeyApiClient {
+  /**
+   * List pending elicitations
+   *
+   * Get all pending elicitation requests across all sessions.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<ElicitationListResponses, unknown, ThrowOnError>({
+      url: "/elicitation",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Reply to elicitation request
+   *
+   * Provide a response to an elicitation request.
+   */
+  public reply<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: string
+      directory?: string
+      elicitationReply?: ElicitationReply
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { key: "elicitationReply", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ElicitationReplyResponses, ElicitationReplyErrors, ThrowOnError>({
+      url: "/elicitation/{requestID}/reply",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Reject elicitation request
+   *
+   * Reject/cancel an elicitation request.
+   */
+  public reject<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ElicitationRejectResponses, ElicitationRejectErrors, ThrowOnError>({
+      url: "/elicitation/{requestID}/reject",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Oauth extends HeyApiClient {
   /**
    * OAuth authorize
@@ -3297,6 +3391,11 @@ export class OpencodeClient extends HeyApiClient {
   private _question?: Question
   get question(): Question {
     return (this._question ??= new Question({ client: this.client }))
+  }
+
+  private _elicitation?: Elicitation
+  get elicitation(): Elicitation {
+    return (this._elicitation ??= new Elicitation({ client: this.client }))
   }
 
   private _provider?: Provider

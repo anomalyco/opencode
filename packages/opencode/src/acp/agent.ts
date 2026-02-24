@@ -32,7 +32,7 @@ import { Log } from "../util/log"
 import { pathToFileURL } from "bun"
 import { Filesystem } from "../util/filesystem"
 import { ACPSessionManager } from "./session"
-import type { ACPConfig } from "./types"
+import type { ACPConfig, ACPSessionState } from "./types"
 import { Provider } from "../provider/provider"
 import { Agent as AgentModule } from "../agent/agent"
 import { Installation } from "@/installation"
@@ -41,13 +41,72 @@ import { Config } from "@/config/config"
 import { Todo } from "@/session/todo"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
-import type { AssistantMessage, Event, OpencodeClient, SessionMessageResponse, ToolPart } from "@opencode-ai/sdk/v2"
+import type {
+  AssistantMessage,
+  Event,
+  OpencodeClient,
+  QuestionInfo,
+  QuestionRequest,
+  SessionMessageResponse,
+  ToolPart,
+} from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
 
 type ModeOption = { id: string; name: string; description?: string }
 type ModelOption = { modelId: string; name: string }
 
 const DEFAULT_VARIANT_VALUE = "default"
+
+type ElicitationSupport = {
+  form: boolean
+  url: boolean
+}
+
+type ElicitationOption = {
+  const: string
+  title?: string
+  description?: string
+}
+
+type ElicitationProperty =
+  | {
+      type: "string"
+      title?: string
+      description?: string
+      enum?: string[]
+      oneOf?: ElicitationOption[]
+      minLength?: number
+      maxLength?: number
+      pattern?: string
+      format?: "email" | "uri" | "date" | "date-time"
+      default?: string
+    }
+  | {
+      type: "array"
+      title?: string
+      description?: string
+      minItems?: number
+      maxItems?: number
+      default?: string[]
+      items: {
+        type?: "string"
+        enum?: string[]
+        anyOf?: ElicitationOption[]
+      }
+    }
+
+type ElicitationSchema = {
+  type: "object"
+  properties: Record<string, ElicitationProperty>
+  required?: string[]
+}
+
+type PendingUrlElicitation = {
+  sessionId: string
+  elicitationId: string
+  url: string
+  message: string
+}
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
@@ -138,6 +197,10 @@ export namespace ACP {
     private bashSnapshots = new Map<string, string>()
     private toolStarts = new Set<string>()
     private permissionQueues = new Map<string, Promise<void>>()
+    private questionQueues = new Map<string, Promise<void>>()
+    private elicitationQueues = new Map<string, Promise<void>>()
+    private elicitationSupport: ElicitationSupport = { form: false, url: false }
+    private pendingUrlElicitations = new Map<string, PendingUrlElicitation[]>()
     private permissionOptions: PermissionOption[] = [
       { optionId: "once", kind: "allow_once", name: "Allow once" },
       { optionId: "always", kind: "allow_always", name: "Always allow" },
@@ -258,6 +321,310 @@ export namespace ACP {
               }
             })
           this.permissionQueues.set(permission.sessionID, next)
+          return
+        }
+        case "question.asked": {
+          const request = event.properties
+          const session = this.sessionManager.tryGet(request.sessionID)
+          if (!session) return
+
+          const prev = this.questionQueues.get(request.sessionID) ?? Promise.resolve()
+          const next = prev
+            .then(async () => {
+              if (!this.elicitationSupport.form) {
+                log.warn("elicitation form not supported by client", { sessionId: request.sessionID })
+                await this.sdk.question
+                  .reject(
+                    {
+                      requestID: request.id,
+                      directory: session.cwd,
+                    },
+                    { throwOnError: true },
+                  )
+                  .catch((error) => {
+                    log.error("failed to reject question without elicitation support", { error })
+                  })
+                return
+              }
+
+              const built = buildElicitationRequest(request)
+              const result = await this.connection
+                .extMethod("session/elicitation", {
+                  sessionId: request.sessionID,
+                  mode: "form",
+                  message: built.message,
+                  requestedSchema: built.schema,
+                })
+                .catch((error) => {
+                  log.error("failed to request elicitation from ACP", { error, requestID: request.id })
+                  return undefined
+                })
+
+              if (!result) {
+                await this.sdk.question
+                  .reject(
+                    {
+                      requestID: request.id,
+                      directory: session.cwd,
+                    },
+                    { throwOnError: true },
+                  )
+                  .catch((error) => {
+                    log.error("failed to reject question after elicitation failure", { error })
+                  })
+                return
+              }
+
+              const parsed = parseElicitationResponse(result)
+              if (!parsed) {
+                await this.sdk.question
+                  .reject(
+                    {
+                      requestID: request.id,
+                      directory: session.cwd,
+                    },
+                    { throwOnError: true },
+                  )
+                  .catch((error) => {
+                    log.error("failed to reject question after invalid elicitation response", { error })
+                  })
+                return
+              }
+
+              if (parsed.action === "accept") {
+                const answers = buildQuestionAnswers(built.keys, parsed.content)
+                await this.sdk.question
+                  .reply(
+                    {
+                      requestID: request.id,
+                      directory: session.cwd,
+                      answers,
+                    },
+                    { throwOnError: true },
+                  )
+                  .catch((error) => {
+                    log.error("failed to reply to question from elicitation", { error })
+                  })
+                return
+              }
+
+              await this.sdk.question
+                .reject(
+                  {
+                    requestID: request.id,
+                    directory: session.cwd,
+                  },
+                  { throwOnError: true },
+                )
+                .catch((error) => {
+                  log.error("failed to reject question after elicitation decline", { error })
+                })
+            })
+            .catch((error) => {
+              log.error("failed to handle question", { error, requestID: request.id })
+            })
+            .finally(() => {
+              if (this.questionQueues.get(request.sessionID) === next) {
+                this.questionQueues.delete(request.sessionID)
+              }
+            })
+          this.questionQueues.set(request.sessionID, next)
+          return
+        }
+        case "elicitation.asked": {
+          const elicitation = event.properties as {
+            id: string
+            sessionID: string
+            mode: "form" | "url"
+            message: string
+            requestedSchema?: Record<string, any>
+            url?: string
+            elicitationId?: string
+          }
+          const session = this.sessionManager.tryGet(elicitation.sessionID)
+          if (!session) return
+
+          const prev = this.elicitationQueues.get(elicitation.sessionID) ?? Promise.resolve()
+          const next = prev
+            .then(async () => {
+              const isForm = elicitation.mode === "form"
+              const isUrl = elicitation.mode === "url"
+
+              if (isForm && !this.elicitationSupport.form) {
+                log.warn("elicitation form not supported by client", { sessionId: elicitation.sessionID })
+                await this.sdk.elicitation
+                  .reject(
+                    { requestID: elicitation.id, directory: session.cwd },
+                    { throwOnError: true },
+                  )
+                  .catch((error) => {
+                    log.error("failed to reject elicitation without form support", { error })
+                  })
+                return
+              }
+
+              if (isUrl && !this.elicitationSupport.url) {
+                log.warn("elicitation url not supported by client", { sessionId: elicitation.sessionID })
+                await this.sdk.elicitation
+                  .reject(
+                    { requestID: elicitation.id, directory: session.cwd },
+                    { throwOnError: true },
+                  )
+                  .catch((error) => {
+                    log.error("failed to reject elicitation without url support", { error })
+                  })
+                return
+              }
+
+              const params: Record<string, unknown> = {
+                sessionId: elicitation.sessionID,
+                mode: elicitation.mode,
+                message: elicitation.message,
+              }
+              if (isForm && elicitation.requestedSchema) {
+                params.requestedSchema = elicitation.requestedSchema
+              }
+              if (isUrl && elicitation.url) {
+                params.url = elicitation.url
+              }
+              if (elicitation.elicitationId) {
+                params.elicitationId = elicitation.elicitationId
+              }
+
+              const result = await this.connection
+                .extMethod("session/elicitation", params)
+                .catch((error) => {
+                  log.error("failed to request elicitation from ACP", { error, requestID: elicitation.id })
+                  return undefined
+                })
+
+              if (!result) {
+                await this.sdk.elicitation
+                  .reject(
+                    { requestID: elicitation.id, directory: session.cwd },
+                    { throwOnError: true },
+                  )
+                  .catch((error) => {
+                    log.error("failed to reject elicitation after ACP failure", { error })
+                  })
+                return
+              }
+
+              const parsed = parseElicitationResponse(result)
+              if (!parsed) {
+                await this.sdk.elicitation
+                  .reject(
+                    { requestID: elicitation.id, directory: session.cwd },
+                    { throwOnError: true },
+                  )
+                  .catch((error) => {
+                    log.error("failed to reject elicitation after invalid response", { error })
+                  })
+                return
+              }
+
+              if (parsed.action === "accept") {
+                await this.sdk.elicitation
+                  .reply(
+                    {
+                      requestID: elicitation.id,
+                      directory: session.cwd,
+                      elicitationReply: {
+                        action: "accept",
+                        content: parsed.content,
+                      },
+                    },
+                    { throwOnError: true },
+                  )
+                  .catch((error) => {
+                    log.error("failed to reply to elicitation", { error })
+                  })
+                return
+              }
+
+              await this.sdk.elicitation
+                .reject(
+                  { requestID: elicitation.id, directory: session.cwd },
+                  { throwOnError: true },
+                )
+                .catch((error) => {
+                  log.error("failed to reject elicitation after decline", { error })
+                })
+            })
+            .catch((error) => {
+              log.error("failed to handle elicitation", { error, requestID: elicitation.id })
+            })
+            .finally(() => {
+              if (this.elicitationQueues.get(elicitation.sessionID) === next) {
+                this.elicitationQueues.delete(elicitation.sessionID)
+              }
+            })
+          this.elicitationQueues.set(elicitation.sessionID, next)
+          return
+        }
+        case "mcp.browser.open.failed": {
+          const props = event.properties
+          if (!this.elicitationSupport.url) {
+            log.warn("elicitation url not supported by client", { mcpName: props.mcpName })
+            return
+          }
+
+          const sessions = this.sessionManager
+            .list()
+            .filter((session) => session.mcpServers.some((server) => server.name === props.mcpName))
+          if (!sessions.length) return
+
+          await Promise.all(
+            sessions.map(async (session, i) => {
+              const elicitationId = `mcp-${props.mcpName}-${Date.now()}-${i + 1}`
+              const message = `Authorization is required for MCP server "${props.mcpName}".`
+              const result = await this.connection
+                .extMethod("session/elicitation", {
+                  sessionId: session.id,
+                  mode: "url",
+                  elicitationId,
+                  url: props.url,
+                  message,
+                })
+                .catch((error) => {
+                  log.error("failed to request url elicitation from ACP", {
+                    error,
+                    mcpName: props.mcpName,
+                    sessionId: session.id,
+                  })
+                  return undefined
+                })
+              if (!result) return
+
+              const parsed = parseElicitationResponse(result)
+              if (!parsed || parsed.action !== "accept") return
+
+              this.setPendingUrlElicitation(props.mcpName, session.id, elicitationId, props.url, message)
+            }),
+          )
+          return
+        }
+        case "mcp.tools.changed": {
+          const pending = this.pendingUrlElicitations.get(event.properties.server) ?? []
+          if (!pending.length) return
+
+          await Promise.all(
+            pending.map(async (item) => {
+              await this.connection
+                .extNotification("notifications/elicitation/complete", {
+                  elicitationId: item.elicitationId,
+                })
+                .catch((error) => {
+                  log.error("failed to send elicitation completion notification", {
+                    error,
+                    server: event.properties.server,
+                    sessionId: item.sessionId,
+                    elicitationId: item.elicitationId,
+                  })
+                })
+            }),
+          )
+          this.pendingUrlElicitations.delete(event.properties.server)
           return
         }
 
@@ -516,6 +883,8 @@ export namespace ACP {
 
     async initialize(params: InitializeRequest): Promise<InitializeResponse> {
       log.info("initialize", { protocolVersion: params.protocolVersion })
+
+      this.elicitationSupport = readElicitationSupport(params.clientCapabilities)
 
       const authMethod: AuthMethod = {
         description: "Run `opencode auth login` in the terminal",
@@ -1286,6 +1655,7 @@ export namespace ACP {
       const sessionID = params.sessionId
       const session = this.sessionManager.get(sessionID)
       const directory = session.cwd
+      await this.maybeThrowUrlElicitationRequired(session)
 
       const current = session.model
       const model = current ?? (await defaultModel(this.config, directory))
@@ -1475,6 +1845,95 @@ export namespace ACP {
         { throwOnError: true },
       )
     }
+
+    private async maybeThrowUrlElicitationRequired(session: ACPSessionState) {
+      if (!this.elicitationSupport.url) return
+      if (!session.mcpServers.length) return
+
+      const status = await this.sdk.mcp
+        .status(
+          {
+            directory: session.cwd,
+          },
+          { throwOnError: true },
+        )
+        .then((resp) => resp.data ?? {})
+        .catch((error) => {
+          log.error("failed to fetch mcp status for url elicitation", { error, sessionId: session.id })
+          return {}
+        })
+
+      const needed = session.mcpServers
+        .map((server) => server.name)
+        .filter((name) => (status as Record<string, { status?: string }>)[name]?.status === "needs_auth")
+      if (!needed.length) return
+
+      const existing = needed
+        .flatMap((name) => this.pendingUrlElicitations.get(name) ?? [])
+        .filter((item) => item.sessionId === session.id)
+        .map((item) => ({
+          mode: "url" as const,
+          elicitationId: item.elicitationId,
+          url: item.url,
+          message: item.message,
+        }))
+      if (existing.length) {
+        throw new RequestError(-32042, "This request requires authorization.", {
+          elicitations: existing,
+        })
+      }
+
+      const now = Date.now()
+      const elicitations = (
+        await Promise.all(
+          needed.map(async (name, index) => {
+            const started = await this.sdk.mcp.auth
+              .start(
+                {
+                  name,
+                  directory: session.cwd,
+                },
+                { throwOnError: true },
+              )
+              .then((resp) => resp.data)
+              .catch((error) => {
+                log.error("failed to start mcp auth for url elicitation", { error, name, sessionId: session.id })
+                return undefined
+              })
+            const url = started?.authorizationUrl
+            if (!url || !isValidUrl(url)) return
+
+            const elicitationId = `mcp-${name}-${now}-${index + 1}`
+            const message = `Authorization is required for MCP server "${name}".`
+            this.setPendingUrlElicitation(name, session.id, elicitationId, url, message)
+            return {
+              mode: "url" as const,
+              elicitationId,
+              url,
+              message,
+            }
+          }),
+        )
+      ).filter((value): value is { mode: "url"; elicitationId: string; url: string; message: string } => !!value)
+
+      if (!elicitations.length) return
+
+      throw new RequestError(-32042, "This request requires authorization.", {
+        elicitations,
+      })
+    }
+
+    private setPendingUrlElicitation(server: string, sessionId: string, elicitationId: string, url: string, message: string) {
+      const pending = this.pendingUrlElicitations.get(server) ?? []
+      const filtered = pending.filter((item) => item.sessionId !== sessionId)
+      filtered.push({
+        sessionId,
+        elicitationId,
+        url,
+        message,
+      })
+      this.pendingUrlElicitations.set(server, filtered)
+    }
   }
 
   function toToolKind(toolName: string): ToolKind {
@@ -1626,6 +2085,137 @@ export namespace ACP {
         type: "text",
         text: uri,
       }
+    }
+  }
+
+  function readElicitationSupport(clientCapabilities: InitializeRequest["clientCapabilities"]): ElicitationSupport {
+    if (!clientCapabilities) return { form: false, url: false }
+    const caps = clientCapabilities as Record<string, unknown>
+    const elicitation = caps["elicitation"]
+    if (!elicitation || typeof elicitation !== "object" || Array.isArray(elicitation)) {
+      return { form: false, url: false }
+    }
+
+    const entries = Object.keys(elicitation)
+    const hasForm = Object.prototype.hasOwnProperty.call(elicitation, "form") || entries.length === 0
+    const hasUrl = Object.prototype.hasOwnProperty.call(elicitation, "url")
+    return { form: hasForm, url: hasUrl }
+  }
+
+  function buildElicitationRequest(request: QuestionRequest): {
+    message: string
+    schema: ElicitationSchema
+    keys: string[]
+  } {
+    const properties: Record<string, ElicitationProperty> = {}
+    const required: string[] = []
+    const keys = request.questions.map((question, index) => {
+      const key = `q${index + 1}`
+      required.push(key)
+      properties[key] = buildQuestionProperty(question, index)
+      return key
+    })
+
+    const message =
+      request.questions.length === 1
+        ? request.questions[0]?.question ?? "Please answer the question."
+        : "Please answer the following questions."
+
+    return {
+      message,
+      schema: {
+        type: "object",
+        properties,
+        required,
+      },
+      keys,
+    }
+  }
+
+  function buildQuestionProperty(question: QuestionInfo, index: number): ElicitationProperty {
+    const title = question.header || `Question ${index + 1}`
+    const description = question.question
+    const options = question.options ?? []
+    const custom = question.custom !== false
+    const multiple = question.multiple === true
+    const optionEntries = options.map((option) => ({
+      const: option.label,
+      title: option.label,
+      description: option.description,
+    }))
+
+    if (multiple) {
+      if (!custom && optionEntries.length) {
+        return {
+          type: "array",
+          title,
+          description,
+          items: {
+            anyOf: optionEntries,
+          },
+        }
+      }
+      const optionText = optionEntries.length ? `\nOptions: ${options.map((o) => o.label).join(", ")}` : ""
+      return {
+        type: "array",
+        title,
+        description: `${description}${optionText}`,
+        items: {
+          type: "string",
+        },
+      }
+    }
+
+    if (!custom && optionEntries.length) {
+      return {
+        type: "string",
+        title,
+        description,
+        oneOf: optionEntries,
+      }
+    }
+
+    return {
+      type: "string",
+      title,
+      description: `${description}${optionEntries.length ? `\nOptions: ${options.map((o) => o.label).join(", ")}` : ""}`,
+    }
+  }
+
+  function parseElicitationResponse(result: Record<string, unknown>): {
+    action: "accept" | "decline" | "cancel"
+    content?: Record<string, unknown>
+  } | null {
+    const action = result["action"]
+    if (action === "decline" || action === "cancel") return { action }
+    if (action !== "accept") return null
+
+    const content = result["content"]
+    if (!content || typeof content !== "object" || Array.isArray(content)) {
+      return { action: "accept", content: {} }
+    }
+    return { action: "accept", content: content as Record<string, unknown> }
+  }
+
+  function buildQuestionAnswers(keys: string[], content?: Record<string, unknown>): string[][] {
+    return keys.map((key) => normalizeAnswer(content ? content[key] : undefined))
+  }
+
+  function normalizeAnswer(value: unknown): string[] {
+    if (Array.isArray(value)) {
+      return value.flatMap((item) => normalizeAnswer(item))
+    }
+    if (typeof value === "string") return [value]
+    if (typeof value === "number" || typeof value === "boolean") return [String(value)]
+    return []
+  }
+
+  function isValidUrl(input: string) {
+    try {
+      new URL(input)
+      return true
+    } catch {
+      return false
     }
   }
 

@@ -171,6 +171,7 @@ export function createChildStoreManager(input: {
             todo: {},
             permission: {},
             question: {},
+            elicitation: {},
             mcp: {},
             lsp: [],
             vcs: vcsStore.value,

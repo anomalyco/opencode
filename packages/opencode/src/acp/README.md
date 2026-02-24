@@ -54,6 +54,16 @@ OPENCODE_ENABLE_QUESTION_TOOL=1 opencode acp
 
 Enable this only for ACP clients that support interactive question prompts.
 
+### Elicitation
+
+When interactive questions are enabled, ACP bridges them through `session/elicitation` requests.
+
+- Uses ACP extension methods as a temporary SDK workaround until typed `session/elicitation` support is available.
+- Honors client `elicitation` capabilities (`form`/`url`) from `initialize`.
+- If form elicitation is not supported by the client, question requests are rejected instead of hanging.
+- URL-mode elicitation is used for MCP browser/OAuth prompts and sends `notifications/elicitation/complete` when MCP tools become available.
+- Prompt requests can return `URLElicitationRequiredError` (`-32042`) with URL elicitations when MCP authorization is required before continuing.
+
 ### Programmatic
 
 ```typescript

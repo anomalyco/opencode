@@ -113,4 +113,8 @@ export class ACPSessionManager {
     this.sessions.set(sessionId, session)
     return session
   }
+
+  list() {
+    return [...this.sessions.values()]
+  }
 }
