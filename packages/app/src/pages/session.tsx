@@ -59,9 +59,11 @@ import { extractPromptFromParts } from "@/utils/prompt"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { usePermission } from "@/context/permission"
 import { showToast } from "@opencode-ai/ui/toast"
+import { Dialog } from "@opencode-ai/ui/dialog"
 import {
   SessionHeader,
   SessionContextTab,
+  SessionRawContextTab,
   SortableTab,
   FileVisual,
   SortableTerminalTab,
@@ -1702,6 +1704,21 @@ export default function Page() {
                   onClick={() => layout.mobileSidebar.toggle()}
                 />
               </Tooltip>
+              <Tooltip value={language.t("session.tab.rawcontext")} placement="left">
+                <IconButton
+                  data-e2e="nav-rawcontext"
+                  icon="code"
+                  variant="ghost"
+                  class="md:hidden"
+                  onClick={() =>
+                    dialog.show(() => (
+                      <Dialog title={language.t("session.tab.rawcontext")} size="x-large" class="h-[80vh]">
+                        <SessionRawContextTab view={view} />
+                      </Dialog>
+                    ))
+                  }
+                />
+              </Tooltip>
               <Tooltip value="Go to top" placement="left">
                 <IconButton
                   data-e2e="nav-top"
@@ -1823,6 +1840,11 @@ export default function Page() {
                         </div>
                       </Tabs.Trigger>
                     </Show>
+                    <Show when={true}>
+                      <Tabs.Trigger value="rawcontext">
+                        <div>{language.t("session.tab.rawcontext")}</div>
+                      </Tabs.Trigger>
+                    </Show>
                     <Show when={contextOpen()}>
                       <Tabs.Trigger
                         value="context"
@@ -1903,6 +1925,15 @@ export default function Page() {
                             </div>
                           </Match>
                         </Switch>
+                      </div>
+                    </Show>
+                  </Tabs.Content>
+                </Show>
+                <Show when={true}>
+                  <Tabs.Content value="rawcontext" class="flex flex-col h-full overflow-hidden contain-strict">
+                    <Show when={activeTab() === "rawcontext"}>
+                      <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+                        <SessionRawContextTab view={view} />
                       </div>
                     </Show>
                   </Tabs.Content>

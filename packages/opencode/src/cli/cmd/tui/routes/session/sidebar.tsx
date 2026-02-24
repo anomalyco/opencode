@@ -1,5 +1,5 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, For, Show, Switch, Match } from "solid-js"
+import { createMemo, createSignal, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
@@ -11,14 +11,18 @@ import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
+import { useDialog } from "../../ui/dialog"
+import { DialogContext } from "./dialog-context"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
   const { theme } = useTheme()
+  const dialog = useDialog()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
+  const [contextHover, setContextHover] = createSignal(false)
 
   const [expanded, setExpanded] = createStore({
     mcp: true,
@@ -90,9 +94,20 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 <text fg={theme.textMuted}>{session().share!.url}</text>
               </Show>
             </box>
-            <box>
+            <box
+              onMouseOver={() => setContextHover(true)}
+              onMouseOut={() => setContextHover(false)}
+              onMouseDown={() => dialog.replace(() => <DialogContext sessionID={props.sessionID} />)}
+              backgroundColor={contextHover() ? theme.backgroundElement : undefined}
+              paddingLeft={contextHover() ? 1 : 0}
+              marginLeft={contextHover() ? -1 : 0}
+              paddingRight={1}
+            >
               <text fg={theme.text}>
                 <b>Context</b>
+                <Show when={contextHover()}>
+                  <span style={{ fg: theme.textMuted }}> ▸</span>
+                </Show>
               </text>
               <text fg={theme.textMuted}>{context()?.tokens ?? 0} tokens</text>
               <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>

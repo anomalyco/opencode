@@ -583,6 +583,7 @@ export namespace Server {
       idleTimeout: 0,
       fetch: App().fetch,
       websocket: websocket,
+      reusePort: true,
     } as const
     const tryServe = (port: number) => {
       try {

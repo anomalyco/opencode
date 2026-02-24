@@ -254,6 +254,17 @@ export const dict = {
   "context.systemPrompt.title": "Prompt système",
   "context.rawMessages.title": "Messages bruts",
 
+  "context.rawContext.title": "Contexte LLM brut",
+  "context.rawContext.show": "Afficher le contexte complet",
+  "context.rawContext.hide": "Masquer le contexte complet",
+  "context.rawContext.loading": "Chargement du contexte brut...",
+  "context.rawContext.error": "Erreur de chargement du contexte : {{error}}",
+  "context.rawContext.model": "Modèle",
+  "context.rawContext.agent": "Agent",
+  "context.rawContext.systemPrompts": "Prompts système",
+  "context.rawContext.llmMessages": "Messages LLM",
+  "context.rawContext.systemPromptN": "Prompt système {{n}}",
+
   "context.stats.session": "Session",
   "context.stats.messages": "Messages",
   "context.stats.provider": "Fournisseur",
@@ -385,6 +396,7 @@ export const dict = {
 
   "session.tab.session": "Session",
   "session.tab.review": "Revue",
+  "session.tab.rawcontext": "Contexte brut",
   "session.tab.context": "Contexte",
   "session.panel.reviewAndFiles": "Revue et fichiers",
   "session.review.filesChanged": "{{count}} fichiers modifiés",

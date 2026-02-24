@@ -256,6 +256,17 @@ export const dict = {
   "context.systemPrompt.title": "시스템 프롬프트",
   "context.rawMessages.title": "원시 메시지",
 
+  "context.rawContext.title": "원시 LLM 컨텍스트",
+  "context.rawContext.show": "전체 컨텍스트 표시",
+  "context.rawContext.hide": "전체 컨텍스트 숨기기",
+  "context.rawContext.loading": "원시 컨텍스트 로딩 중...",
+  "context.rawContext.error": "컨텍스트 로딩 오류: {{error}}",
+  "context.rawContext.model": "모델",
+  "context.rawContext.agent": "에이전트",
+  "context.rawContext.systemPrompts": "시스템 프롬프트",
+  "context.rawContext.llmMessages": "LLM 메시지",
+  "context.rawContext.systemPromptN": "시스템 프롬프트 {{n}}",
+
   "context.stats.session": "세션",
   "context.stats.messages": "메시지",
   "context.stats.provider": "공급자",
@@ -380,6 +391,7 @@ export const dict = {
 
   "session.tab.session": "세션",
   "session.tab.review": "검토",
+  "session.tab.rawcontext": "원시 컨텍스트",
   "session.tab.context": "컨텍스트",
   "session.panel.reviewAndFiles": "검토 및 파일",
   "session.review.filesChanged": "{{count}}개 파일 변경됨",

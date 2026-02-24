@@ -325,8 +325,10 @@ function createGlobalSync() {
     const meta = sessionMeta.get(directory)
     if (meta && meta.limit >= store.limit) return
 
+    // Use projectID to fetch sessions from all worktrees of the same project
+    const projectID = store.project
     const promise = globalSDK.client.session
-      .list({ directory, roots: true })
+      .list({ projectID: projectID || undefined, roots: true })
       .then((x) => {
         const nonArchived = (x.data ?? [])
           .filter((s) => !!s?.id)

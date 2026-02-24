@@ -1,15 +1,17 @@
-import { createMemo, createEffect, on, onCleanup, For, Show } from "solid-js"
+import { createMemo, createEffect, on, onCleanup, For, Show, createSignal, createResource } from "solid-js"
 import type { JSX } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { DateTime } from "luxon"
 import { useSync } from "@/context/sync"
 import { useLayout } from "@/context/layout"
+import { useSDK } from "@/context/sdk"
 import { checksum } from "@opencode-ai/util/encode"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { Code } from "@opencode-ai/ui/code"
 import { Markdown } from "@opencode-ai/ui/markdown"
+import { Button } from "@opencode-ai/ui/button"
 import type { AssistantMessage, Message, Part, UserMessage } from "@opencode-ai/sdk/v2/client"
 import { useLanguage } from "@/context/language"
 
@@ -23,7 +25,19 @@ interface SessionContextTabProps {
 export function SessionContextTab(props: SessionContextTabProps) {
   const params = useParams()
   const sync = useSync()
+  const sdk = useSDK()
   const language = useLanguage()
+
+  // Raw LLM context state
+  const [showRawContext, setShowRawContext] = createSignal(false)
+  const [rawContext, { refetch: refetchRawContext }] = createResource(
+    () => (showRawContext() && params.id ? params.id : null),
+    async (sessionID) => {
+      if (!sessionID) return null
+      const result = await sdk.client.session.context({ sessionID })
+      return result.data
+    },
+  )
 
   const ctx = createMemo(() => {
     const last = props.messages().findLast((x) => {
@@ -415,6 +429,114 @@ export function SessionContextTab(props: SessionContextTabProps) {
             </div>
           )}
         </Show>
+
+        {/* Raw LLM Context Section */}
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <div class="text-12-regular text-text-weak">{language.t("context.rawContext.title")}</div>
+            <Button
+              variant="secondary"
+              size="small"
+              onClick={() => {
+                if (showRawContext()) {
+                  setShowRawContext(false)
+                } else {
+                  setShowRawContext(true)
+                  refetchRawContext()
+                }
+              }}
+            >
+              {showRawContext() ? language.t("context.rawContext.hide") : language.t("context.rawContext.show")}
+            </Button>
+          </div>
+          <Show when={showRawContext()}>
+            <Show when={rawContext.loading}>
+              <div class="text-12-regular text-text-weak p-4 border border-border-base rounded-md bg-surface-base">
+                {language.t("context.rawContext.loading")}
+              </div>
+            </Show>
+            <Show when={rawContext.error}>
+              <div class="text-12-regular text-syntax-error p-4 border border-border-base rounded-md bg-surface-base">
+                {language.t("context.rawContext.error", { error: String(rawContext.error) })}
+              </div>
+            </Show>
+            <Show when={rawContext()}>
+              {(ctx) => (
+                <div class="flex flex-col gap-4">
+                  <div class="text-11-regular text-text-weak">
+                    {language.t("context.rawContext.model")}: {ctx().model.providerID}/{ctx().model.modelID} |{" "}
+                    {language.t("context.rawContext.agent")}: {ctx().agent}
+                  </div>
+
+                  {/* System Prompts */}
+                  <Accordion multiple defaultValue={["system-prompts"]}>
+                    <Accordion.Item value="system-prompts">
+                      <StickyAccordionHeader>
+                        <Accordion.Trigger>
+                          <div class="flex items-center justify-between gap-2 w-full">
+                            <div class="min-w-0 truncate text-text-strong">
+                              {language.t("context.rawContext.systemPrompts")} ({ctx().system.length})
+                            </div>
+                            <Icon name="chevron-grabber-vertical" size="small" class="shrink-0 text-text-weak" />
+                          </div>
+                        </Accordion.Trigger>
+                      </StickyAccordionHeader>
+                      <Accordion.Content class="bg-background-base">
+                        <div class="p-3 flex flex-col gap-3">
+                          <For each={ctx().system}>
+                            {(prompt, i) => (
+                              <div class="flex flex-col gap-1">
+                                <div class="text-11-medium text-text-weak">
+                                  {language.t("context.rawContext.systemPromptN", { n: i() + 1 })}
+                                </div>
+                                <Code
+                                  file={{
+                                    name: `system-prompt-${i() + 1}.txt`,
+                                    contents: prompt,
+                                    cacheKey: checksum(prompt),
+                                  }}
+                                  overflow="wrap"
+                                  class="select-text"
+                                />
+                              </div>
+                            )}
+                          </For>
+                        </div>
+                      </Accordion.Content>
+                    </Accordion.Item>
+
+                    {/* LLM Messages */}
+                    <Accordion.Item value="llm-messages">
+                      <StickyAccordionHeader>
+                        <Accordion.Trigger>
+                          <div class="flex items-center justify-between gap-2 w-full">
+                            <div class="min-w-0 truncate text-text-strong">
+                              {language.t("context.rawContext.llmMessages")} ({ctx().messages.length})
+                            </div>
+                            <Icon name="chevron-grabber-vertical" size="small" class="shrink-0 text-text-weak" />
+                          </div>
+                        </Accordion.Trigger>
+                      </StickyAccordionHeader>
+                      <Accordion.Content class="bg-background-base">
+                        <div class="p-3">
+                          <Code
+                            file={{
+                              name: "llm-messages.json",
+                              contents: JSON.stringify(ctx().messages, null, 2),
+                              cacheKey: checksum(JSON.stringify(ctx().messages)),
+                            }}
+                            overflow="wrap"
+                            class="select-text max-h-96 overflow-y-auto"
+                          />
+                        </div>
+                      </Accordion.Content>
+                    </Accordion.Item>
+                  </Accordion>
+                </div>
+              )}
+            </Show>
+          </Show>
+        </div>
 
         <div class="flex flex-col gap-2">
           <div class="text-12-regular text-text-weak">{language.t("context.rawMessages.title")}</div>

@@ -304,11 +304,26 @@ export namespace SessionPrompt {
           .map((p) => p.text)
           .join("\n")
 
+        // Check if the last user message was a synthetic compaction continue
+        // If so, the model should be prompted to execute the steps it described
+        const lastUserMsg = msgs.find((m) => m.info.id === lastUser.id)
+        const wasSyntheticContinue = lastUserMsg?.parts.every((p) => p.type === "text" && p.synthetic)
+        const wasAfterCompaction = lastFinished?.summary === true
+
         const stopOutput = {
           stop: true,
           prompt: undefined as string | undefined,
           systemMessage: undefined as string | undefined,
         }
+
+        // If this was a synthetic continue after compaction and model didn't use tools,
+        // don't stop - prompt it to actually execute
+        if (wasSyntheticContinue && wasAfterCompaction) {
+          stopOutput.stop = false
+          stopOutput.prompt =
+            "You described the next steps but didn't execute them. Please proceed with the actions now using the appropriate tools."
+        }
+
         await Plugin.trigger(
           "session.stop",
           {

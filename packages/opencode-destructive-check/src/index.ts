@@ -188,6 +188,21 @@ function getSeverity(category: string): "critical" | "high" | "medium" {
   return "medium"
 }
 
+// Get human-readable label for category
+function getCategoryLabel(category: string): string {
+  const labels: Record<string, string> = {
+    rmDangerous: "Dangerous File Deletion",
+    git: "Destructive Git Operation",
+    database: "Database Modification",
+    system: "System-Level Change",
+    sudo: "Elevated Privilege Operation",
+    container: "Container/Cloud Operation",
+    packages: "Package Management",
+    network: "Network Configuration",
+  }
+  return labels[category] || category
+}
+
 // Check if a file path is dangerous
 function isDangerousPath(path: string): boolean {
   const normalized = path.replace(/\\/g, "/").toLowerCase()
@@ -320,7 +335,7 @@ const destructiveCheck: Plugin = async () => {
         metadata: Record<string, unknown>
         time?: { created: number }
       },
-      output: { status: "ask" | "deny" | "allow" },
+      output: { status: "ask" | "deny" | "allow"; metadata?: Record<string, unknown> },
     ): Promise<void> {
       const stats = getStats(input.sessionID)
 
@@ -341,12 +356,26 @@ const destructiveCheck: Plugin = async () => {
             globalStats.permissionsRequested++
             stats.lastMatch = match
 
+            // Add metadata to the permission request for UI display
+            const severityEmoji = match.severity === "critical" ? "🔴" : match.severity === "high" ? "🟠" : "🟡"
+            const categoryLabel = getCategoryLabel(match.category)
+
+            // Enhance metadata with destructive command information
+            if (!output.metadata) output.metadata = {}
+            output.metadata.destructive = {
+              severity: match.severity,
+              category: match.category,
+              categoryLabel,
+              command: pattern,
+              warning: `${severityEmoji} ${match.severity.toUpperCase()}: ${categoryLabel}`,
+            }
+
             console.warn(
-              `[destructive-check] PERMISSION REQUIRED: ${match.severity.toUpperCase()} destructive command detected`,
+              `[destructive-check] ${severityEmoji} ${match.severity.toUpperCase()} destructive command detected`,
             )
-            console.warn(`  Category: ${match.category}`)
-            console.warn(`  Severity: ${match.severity}`)
+            console.warn(`  Category: ${categoryLabel}`)
             console.warn(`  Command: ${pattern.slice(0, 100)}${pattern.length > 100 ? "..." : ""}`)
+            console.warn(`  ⚠️  This operation could cause data loss or system damage!`)
 
             // Ask for permission for all severity levels
             output.status = "ask"
@@ -363,12 +392,26 @@ const destructiveCheck: Plugin = async () => {
             globalStats.permissionsRequested++
             stats.lastMatch = match
 
+            // Add metadata to the permission request for UI display
+            const severityEmoji = match.severity === "critical" ? "🔴" : match.severity === "high" ? "🟠" : "🟡"
+            const categoryLabel = getCategoryLabel(match.category)
+
+            // Enhance metadata with destructive command information
+            if (!output.metadata) output.metadata = {}
+            output.metadata.destructive = {
+              severity: match.severity,
+              category: match.category,
+              categoryLabel,
+              command,
+              warning: `${severityEmoji} ${match.severity.toUpperCase()}: ${categoryLabel}`,
+            }
+
             console.warn(
-              `[destructive-check] PERMISSION REQUIRED: ${match.severity.toUpperCase()} destructive command detected`,
+              `[destructive-check] ${severityEmoji} ${match.severity.toUpperCase()} destructive command detected`,
             )
-            console.warn(`  Category: ${match.category}`)
-            console.warn(`  Severity: ${match.severity}`)
+            console.warn(`  Category: ${categoryLabel}`)
             console.warn(`  Command: ${command.slice(0, 100)}${command.length > 100 ? "..." : ""}`)
+            console.warn(`  ⚠️  This operation could cause data loss or system damage!`)
 
             // Ask for permission for all severity levels
             output.status = "ask"
@@ -385,8 +428,21 @@ const destructiveCheck: Plugin = async () => {
           if (isDangerousPath(p)) {
             stats.permissionsRequested++
             globalStats.permissionsRequested++
-            console.warn(`[destructive-check] PERMISSION REQUIRED: Dangerous file operation detected`)
+
+            // Add metadata for dangerous file operations
+            if (!output.metadata) output.metadata = {}
+            output.metadata.destructive = {
+              severity: "critical",
+              category: "file",
+              categoryLabel: "Dangerous File Operation",
+              path: p,
+              warning: "🔴 CRITICAL: Dangerous file operation",
+            }
+
+            console.warn(`[destructive-check] 🔴 CRITICAL: Dangerous file operation detected`)
+            console.warn(`  Operation: ${permissionType}`)
             console.warn(`  Path: ${p}`)
+            console.warn(`  ⚠️  This operation could cause data loss or system damage!`)
 
             // Ask for permission for dangerous file operations
             output.status = "ask"

@@ -272,6 +272,17 @@ export const dict = {
   "context.systemPrompt.title": "Системный промпт",
   "context.rawMessages.title": "Исходные сообщения",
 
+  "context.rawContext.title": "Исходный контекст LLM",
+  "context.rawContext.show": "Показать полный контекст",
+  "context.rawContext.hide": "Скрыть полный контекст",
+  "context.rawContext.loading": "Загрузка исходного контекста...",
+  "context.rawContext.error": "Ошибка загрузки контекста: {{error}}",
+  "context.rawContext.model": "Модель",
+  "context.rawContext.agent": "Агент",
+  "context.rawContext.systemPrompts": "Системные промпты",
+  "context.rawContext.llmMessages": "Сообщения LLM",
+  "context.rawContext.systemPromptN": "Системный промпт {{n}}",
+
   "context.stats.session": "Сессия",
   "context.stats.messages": "Сообщения",
   "context.stats.provider": "Провайдер",
@@ -397,6 +408,7 @@ export const dict = {
 
   "session.tab.session": "Сессия",
   "session.tab.review": "Обзор",
+  "session.tab.rawcontext": "Исходный контекст",
   "session.tab.context": "Контекст",
   "session.panel.reviewAndFiles": "Обзор и файлы",
   "session.review.filesChanged": "{{count}} файлов изменено",

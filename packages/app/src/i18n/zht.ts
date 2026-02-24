@@ -254,6 +254,17 @@ export const dict = {
   "context.systemPrompt.title": "系統提示詞",
   "context.rawMessages.title": "原始訊息",
 
+  "context.rawContext.title": "原始LLM上下文",
+  "context.rawContext.show": "顯示完整上下文",
+  "context.rawContext.hide": "隱藏完整上下文",
+  "context.rawContext.loading": "正在載入原始上下文...",
+  "context.rawContext.error": "載入上下文錯誤: {{error}}",
+  "context.rawContext.model": "模型",
+  "context.rawContext.agent": "代理",
+  "context.rawContext.systemPrompts": "系統提示詞",
+  "context.rawContext.llmMessages": "LLM訊息",
+  "context.rawContext.systemPromptN": "系統提示詞 {{n}}",
+
   "context.stats.session": "工作階段",
   "context.stats.messages": "訊息數",
   "context.stats.provider": "提供者",
@@ -371,6 +382,7 @@ export const dict = {
 
   "session.tab.session": "工作階段",
   "session.tab.review": "審查",
+  "session.tab.rawcontext": "原始上下文",
   "session.tab.context": "上下文",
   "session.panel.reviewAndFiles": "審查與檔案",
   "session.review.filesChanged": "{{count}} 個檔案變更",

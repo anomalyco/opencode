@@ -99,6 +99,53 @@ const DESTRUCTIVE_PATTERNS = {
   ],
 
   network: [/\biptables\s+.*-F\b/i, /\biptables\s+.*--flush\b/i, /\bufw\s+reset\b/i],
+
+  // File overwrite via shell redirection (> to sensitive files, NOT >>)
+  // Uses negative lookbehind (?<!>) to exclude >> (append)
+  fileOverwrite: [
+    // .env files (credentials, secrets)
+    /(?<!>)>\s*~\/\.env\b/i,
+    /(?<!>)>\s*\$HOME\/\.env\b/i,
+    /(?<!>)>\s*\.env\b/i,
+    /(?<!>)>\s*[^\s>]*\/\.env\b/i,
+
+    // SSH keys and config
+    /(?<!>)>\s*~\/\.ssh\//i,
+    /(?<!>)>\s*\$HOME\/\.ssh\//i,
+    /(?<!>)>\s*[^\s>]*\/\.ssh\//i,
+
+    // Shell config files
+    /(?<!>)>\s*~\/\.bashrc\b/i,
+    /(?<!>)>\s*~\/\.zshrc\b/i,
+    /(?<!>)>\s*~\/\.profile\b/i,
+    /(?<!>)>\s*~\/\.bash_profile\b/i,
+    /(?<!>)>\s*~\/\.zprofile\b/i,
+    /(?<!>)>\s*\$HOME\/\.(bashrc|zshrc|profile|bash_profile|zprofile)\b/i,
+
+    // System directories
+    /(?<!>)>\s*\/etc\//i,
+    /(?<!>)>\s*\/usr\//i,
+    /(?<!>)>\s*\/bin\//i,
+    /(?<!>)>\s*\/sbin\//i,
+    /(?<!>)>\s*\/var\//i,
+
+    // Git config
+    /(?<!>)>\s*~\/\.gitconfig\b/i,
+    /(?<!>)>\s*\.git\//i,
+
+    // Credentials and tokens
+    /(?<!>)>\s*[^\s>]*credentials\b/i,
+    /(?<!>)>\s*[^\s>]*\.pem\b/i,
+    /(?<!>)>\s*[^\s>]*\.key\b/i,
+    /(?<!>)>\s*[^\s>]*\.crt\b/i,
+    /(?<!>)>\s*[^\s>]*id_rsa\b/i,
+    /(?<!>)>\s*[^\s>]*id_ed25519\b/i,
+    /(?<!>)>\s*[^\s>]*\.secrets?\b/i,
+
+    // Config files in home directory
+    /(?<!>)>\s*~\/\.[a-z]/i,
+    /(?<!>)>\s*\$HOME\/\.[a-z]/i,
+  ],
 }
 
 const DANGEROUS_PATHS = [
@@ -156,7 +203,7 @@ function getSeverity(category: string): "critical" | "high" | "medium" {
   if (category === "rmDangerous" || category === "sudo" || category === "system") {
     return "critical"
   }
-  if (category === "git" || category === "database" || category === "container") {
+  if (category === "git" || category === "database" || category === "container" || category === "fileOverwrite") {
     return "high"
   }
   return "medium"
@@ -532,6 +579,107 @@ describe("Destructive Command Check - Network Operations", () => {
   })
 })
 
+describe("Destructive Command Check - File Overwrite via Redirect", () => {
+  test("detects echo > ~/.env", () => {
+    const match = checkCommand("echo 'SECRET=xxx' > ~/.env")
+    expect(match).not.toBeNull()
+    expect(match?.category).toBe("fileOverwrite")
+    expect(match?.severity).toBe("high")
+  })
+
+  test("detects echo > $HOME/.env", () => {
+    const match = checkCommand("echo 'API_KEY=xxx' > $HOME/.env")
+    expect(match).not.toBeNull()
+    expect(match?.category).toBe("fileOverwrite")
+  })
+
+  test("detects echo > .env", () => {
+    const match = checkCommand("echo 'DB_PASS=xxx' > .env")
+    expect(match).not.toBeNull()
+    expect(match?.category).toBe("fileOverwrite")
+  })
+
+  test("detects cat > ~/.env", () => {
+    const match = checkCommand("cat something > ~/.env")
+    expect(match).not.toBeNull()
+    expect(match?.category).toBe("fileOverwrite")
+  })
+
+  test("detects printf > ~/.env", () => {
+    const match = checkCommand("printf '%s' 'secret' > ~/.env")
+    expect(match).not.toBeNull()
+    expect(match?.category).toBe("fileOverwrite")
+  })
+
+  test("detects redirect to path/.env", () => {
+    const match = checkCommand("echo test > /home/user/project/.env")
+    expect(match).not.toBeNull()
+    expect(match?.category).toBe("fileOverwrite")
+  })
+
+  test("detects redirect to ~/.ssh/", () => {
+    const match = checkCommand("echo 'key' > ~/.ssh/authorized_keys")
+    expect(match).not.toBeNull()
+    expect(match?.category).toBe("fileOverwrite")
+  })
+
+  test("detects redirect to shell config files", () => {
+    expect(checkCommand("echo 'export FOO=bar' > ~/.bashrc")).not.toBeNull()
+    expect(checkCommand("echo 'alias x=y' > ~/.zshrc")).not.toBeNull()
+    expect(checkCommand("echo 'PATH=$PATH:/bin' > ~/.profile")).not.toBeNull()
+    expect(checkCommand("echo 'source ~/.bashrc' > ~/.bash_profile")).not.toBeNull()
+  })
+
+  test("detects redirect to /etc/", () => {
+    const match = checkCommand("echo '127.0.0.1 localhost' > /etc/hosts")
+    expect(match).not.toBeNull()
+    expect(match?.category).toBe("fileOverwrite")
+  })
+
+  test("detects redirect to system directories", () => {
+    expect(checkCommand("echo 'test' > /usr/local/bin/script")).not.toBeNull()
+    expect(checkCommand("echo 'test' > /bin/script")).not.toBeNull()
+    expect(checkCommand("echo 'test' > /var/log/custom.log")).not.toBeNull()
+  })
+
+  test("detects redirect to credentials/keys", () => {
+    expect(checkCommand("echo 'key' > ~/.ssh/id_rsa")).not.toBeNull()
+    expect(checkCommand("echo 'key' > ~/.ssh/id_ed25519")).not.toBeNull()
+    expect(checkCommand("echo 'cert' > server.pem")).not.toBeNull()
+    expect(checkCommand("echo 'key' > private.key")).not.toBeNull()
+    expect(checkCommand("echo 'cert' > server.crt")).not.toBeNull()
+    expect(checkCommand("echo 'creds' > credentials")).not.toBeNull()
+    expect(checkCommand("echo 'secret' > app.secret")).not.toBeNull()
+  })
+
+  test("detects redirect to any dotfile in home", () => {
+    expect(checkCommand("echo 'test' > ~/.vimrc")).not.toBeNull()
+    expect(checkCommand("echo 'test' > ~/.gitconfig")).not.toBeNull()
+    expect(checkCommand("echo 'test' > $HOME/.npmrc")).not.toBeNull()
+  })
+
+  test("detects redirect to .git/", () => {
+    const match = checkCommand("echo 'ref' > .git/HEAD")
+    expect(match).not.toBeNull()
+    expect(match?.category).toBe("fileOverwrite")
+  })
+
+  test("allows append >> operations (not destructive)", () => {
+    expect(checkCommand("echo 'log entry' >> ~/.env")).toBeNull()
+    expect(checkCommand("echo 'log entry' >> .env")).toBeNull()
+    expect(checkCommand("echo 'log entry' >> ~/.bashrc")).toBeNull()
+    expect(checkCommand("echo 'log entry' >> /etc/hosts")).toBeNull()
+    expect(checkCommand("cat file >> ~/.ssh/authorized_keys")).toBeNull()
+  })
+
+  test("allows safe redirect operations", () => {
+    expect(checkCommand("echo 'test' > output.txt")).toBeNull()
+    expect(checkCommand("echo 'test' > ./temp.log")).toBeNull()
+    expect(checkCommand("cat file > /tmp/output")).toBeNull()
+    expect(checkCommand("ls > listing.txt")).toBeNull()
+  })
+})
+
 describe("Dangerous Path Detection", () => {
   test("detects root path", () => {
     expect(isDangerousPath("/")).toBe(true)
@@ -616,6 +764,10 @@ describe("Severity Classification", () => {
 
   test("medium severity for network", () => {
     expect(getSeverity("network")).toBe("medium")
+  })
+
+  test("high severity for fileOverwrite", () => {
+    expect(getSeverity("fileOverwrite")).toBe("high")
   })
 })
 

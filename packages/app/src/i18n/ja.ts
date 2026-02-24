@@ -252,6 +252,17 @@ export const dict = {
   "context.systemPrompt.title": "システムプロンプト",
   "context.rawMessages.title": "生のメッセージ",
 
+  "context.rawContext.title": "生のLLMコンテキスト",
+  "context.rawContext.show": "フルコンテキストを表示",
+  "context.rawContext.hide": "フルコンテキストを非表示",
+  "context.rawContext.loading": "生のコンテキストを読み込み中...",
+  "context.rawContext.error": "コンテキストの読み込みエラー: {{error}}",
+  "context.rawContext.model": "モデル",
+  "context.rawContext.agent": "エージェント",
+  "context.rawContext.systemPrompts": "システムプロンプト",
+  "context.rawContext.llmMessages": "LLMメッセージ",
+  "context.rawContext.systemPromptN": "システムプロンプト {{n}}",
+
   "context.stats.session": "セッション",
   "context.stats.messages": "メッセージ",
   "context.stats.provider": "プロバイダー",
@@ -377,6 +388,7 @@ export const dict = {
 
   "session.tab.session": "セッション",
   "session.tab.review": "レビュー",
+  "session.tab.rawcontext": "生のコンテキスト",
   "session.tab.context": "コンテキスト",
   "session.panel.reviewAndFiles": "レビューとファイル",
   "session.review.filesChanged": "{{count}} ファイル変更",

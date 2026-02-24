@@ -259,6 +259,17 @@ export const dict = {
   "context.systemPrompt.title": "System-Prompt",
   "context.rawMessages.title": "Rohdaten der Nachrichten",
 
+  "context.rawContext.title": "Roher LLM-Kontext",
+  "context.rawContext.show": "Vollständigen Kontext anzeigen",
+  "context.rawContext.hide": "Vollständigen Kontext ausblenden",
+  "context.rawContext.loading": "Lade rohen Kontext...",
+  "context.rawContext.error": "Fehler beim Laden des Kontexts: {{error}}",
+  "context.rawContext.model": "Modell",
+  "context.rawContext.agent": "Agent",
+  "context.rawContext.systemPrompts": "System-Prompts",
+  "context.rawContext.llmMessages": "LLM-Nachrichten",
+  "context.rawContext.systemPromptN": "System-Prompt {{n}}",
+
   "context.stats.session": "Sitzung",
   "context.stats.messages": "Nachrichten",
   "context.stats.provider": "Anbieter",
@@ -386,6 +397,7 @@ export const dict = {
 
   "session.tab.session": "Sitzung",
   "session.tab.review": "Überprüfung",
+  "session.tab.rawcontext": "Rohkontext",
   "session.tab.context": "Kontext",
   "session.panel.reviewAndFiles": "Überprüfung und Dateien",
   "session.review.filesChanged": "{{count}} Dateien geändert",

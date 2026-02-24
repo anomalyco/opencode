@@ -95,7 +95,7 @@ function EditBody(props: { request: PermissionRequest }) {
   )
 }
 
-function TextBody(props: { title: string; description?: string; icon?: string }) {
+function TextBody(props: { title: string; description?: string; icon?: string; warning?: string }) {
   const { theme } = useTheme()
   return (
     <>
@@ -107,6 +107,11 @@ function TextBody(props: { title: string; description?: string; icon?: string })
         </Show>
         <text fg={theme.textMuted}>{props.title}</text>
       </box>
+      <Show when={props.warning}>
+        <box paddingLeft={1} paddingTop={1}>
+          <text fg={theme.warning}>{props.warning}</text>
+        </box>
+      </Show>
       <Show when={props.description}>
         <box paddingLeft={1}>
           <text fg={theme.text}>{props.description}</text>
@@ -215,11 +220,25 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                     <TextBody icon="→" title={`List ` + normalizePath(input().path as string)} />
                   </Match>
                   <Match when={props.request.permission === "bash"}>
-                    <TextBody
-                      icon="#"
-                      title={(input().description as string) ?? ""}
-                      description={("$ " + input().command) as string}
-                    />
+                    {(() => {
+                      const destructive = props.request.metadata?.destructive as
+                        | {
+                            severity: string
+                            category: string
+                            categoryLabel: string
+                            command: string
+                            warning: string
+                          }
+                        | undefined
+                      return (
+                        <TextBody
+                          icon="#"
+                          title={(input().description as string) ?? ""}
+                          description={("$ " + input().command) as string}
+                          warning={destructive?.warning}
+                        />
+                      )
+                    })()}
                   </Match>
                   <Match when={props.request.permission === "task"}>
                     <TextBody

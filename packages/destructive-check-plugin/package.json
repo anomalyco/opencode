@@ -1,0 +1,44 @@
+{
+  "name": "@sureshsankaran/destructive-check-plugin",
+  "version": "1.1.0",
+  "description": "OpenCode plugin that detects and requires user permission for destructive commands before execution",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "type": "module",
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {},
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "destructive-commands",
+    "safety",
+    "security",
+    "git",
+    "rm",
+    "database",
+    "docker",
+    "kubernetes"
+  ],
+  "author": "OpenCode",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anomalyco/opencode.git",
+    "directory": "packages/destructive-check-plugin"
+  },
+  "homepage": "https://github.com/anomalyco/opencode/tree/main/packages/destructive-check-plugin#readme",
+  "bugs": {
+    "url": "https://github.com/anomalyco/opencode/issues"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": "*"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

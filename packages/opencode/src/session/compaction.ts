@@ -180,7 +180,7 @@ export namespace SessionCompaction {
         sessionID: input.sessionID,
         type: "text",
         synthetic: true,
-        text: "Continue if you have next steps",
+        text: "Continue working on the remaining tasks. Execute the next steps now.",
         time: {
           start: Date.now(),
           end: Date.now(),

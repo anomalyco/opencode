@@ -228,6 +228,13 @@
         "vite": "catalog:",
       },
     },
+    "packages/destructive-check-plugin": {
+      "name": "@sureshsankaran/destructive-check-plugin",
+      "version": "1.1.0",
+      "peerDependencies": {
+        "@opencode-ai/plugin": "*",
+      },
+    },
     "packages/enterprise": {
       "name": "@opencode-ai/enterprise",
       "version": "1.1.34",
@@ -1758,6 +1765,8 @@
     "@stripe/stripe-js": ["@stripe/stripe-js@8.6.1", "", {}, "sha512-UJ05U2062XDgydbUcETH1AoRQLNhigQ2KmDn1BG8sC3xfzu6JKg95Qt6YozdzFpxl1Npii/02m2LEWFt1RYjVA=="],
 
     "@sureshsankaran/context-drain": ["@sureshsankaran/context-drain@workspace:packages/context-drain"],
+
+    "@sureshsankaran/destructive-check-plugin": ["@sureshsankaran/destructive-check-plugin@workspace:packages/destructive-check-plugin"],
 
     "@sureshsankaran/opencode-destructive-check": ["@sureshsankaran/opencode-destructive-check@workspace:packages/opencode-destructive-check"],
 

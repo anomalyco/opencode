@@ -98,6 +98,8 @@ import type {
   SessionChildrenResponses,
   SessionCommandErrors,
   SessionCommandResponses,
+  SessionContextErrors,
+  SessionContextResponses,
   SessionCreateErrors,
   SessionCreateResponses,
   SessionDeleteErrors,
@@ -850,6 +852,7 @@ export class Session extends HeyApiClient {
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
+      projectID?: string
       roots?: boolean
       start?: number
       search?: string
@@ -863,6 +866,7 @@ export class Session extends HeyApiClient {
         {
           args: [
             { in: "query", key: "directory" },
+            { in: "query", key: "projectID" },
             { in: "query", key: "roots" },
             { in: "query", key: "start" },
             { in: "query", key: "search" },
@@ -1292,6 +1296,36 @@ export class Session extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<SessionDiffResponses, unknown, ThrowOnError>({
       url: "/session/{sessionID}/diff",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get raw LLM context
+   *
+   * Get the full raw context that would be sent to the LLM, including system prompts and message history.
+   */
+  public context<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionContextResponses, SessionContextErrors, ThrowOnError>({
+      url: "/session/{sessionID}/context",
       ...options,
       ...params,
     })

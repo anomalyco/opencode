@@ -15,6 +15,7 @@
  * - sudo rm, sudo chmod, sudo chown
  * - kubectl delete, docker rm -f
  * - aws s3 rm --recursive
+ * - echo/cat/printf > ~/.env (file overwrite via shell redirect)
  *
  * The plugin will:
  * 1. Detect destructive patterns in bash commands
@@ -125,6 +126,54 @@ const DESTRUCTIVE_PATTERNS = {
     /\biptables\s+.*--flush\b/i, // Flush iptables
     /\bufw\s+reset\b/i, // Reset firewall
   ],
+
+  // File overwrite via shell redirection (> to sensitive files, NOT >>)
+  // These patterns catch ANY command redirecting to sensitive files
+  // Uses negative lookbehind (?<!>) to exclude >> (append)
+  fileOverwrite: [
+    // .env files (credentials, secrets)
+    /(?<!>)>\s*~\/\.env\b/i, // > ~/.env (not >>)
+    /(?<!>)>\s*\$HOME\/\.env\b/i, // > $HOME/.env
+    /(?<!>)>\s*\.env\b/i, // > .env (current directory)
+    /(?<!>)>\s*[^\s>]*\/\.env\b/i, // > any/path/.env
+
+    // SSH keys and config
+    /(?<!>)>\s*~\/\.ssh\//i, // > ~/.ssh/*
+    /(?<!>)>\s*\$HOME\/\.ssh\//i, // > $HOME/.ssh/*
+    /(?<!>)>\s*[^\s>]*\/\.ssh\//i, // > any/path/.ssh/*
+
+    // Shell config files
+    /(?<!>)>\s*~\/\.bashrc\b/i, // > ~/.bashrc
+    /(?<!>)>\s*~\/\.zshrc\b/i, // > ~/.zshrc
+    /(?<!>)>\s*~\/\.profile\b/i, // > ~/.profile
+    /(?<!>)>\s*~\/\.bash_profile\b/i, // > ~/.bash_profile
+    /(?<!>)>\s*~\/\.zprofile\b/i, // > ~/.zprofile
+    /(?<!>)>\s*\$HOME\/\.(bashrc|zshrc|profile|bash_profile|zprofile)\b/i, // > $HOME/.shellconfig
+
+    // System directories
+    /(?<!>)>\s*\/etc\//i, // > /etc/*
+    /(?<!>)>\s*\/usr\//i, // > /usr/*
+    /(?<!>)>\s*\/bin\//i, // > /bin/*
+    /(?<!>)>\s*\/sbin\//i, // > /sbin/*
+    /(?<!>)>\s*\/var\//i, // > /var/*
+
+    // Git config
+    /(?<!>)>\s*~\/\.gitconfig\b/i, // > ~/.gitconfig
+    /(?<!>)>\s*\.git\//i, // > .git/*
+
+    // Credentials and tokens
+    /(?<!>)>\s*[^\s>]*credentials\b/i, // > *credentials*
+    /(?<!>)>\s*[^\s>]*\.pem\b/i, // > *.pem
+    /(?<!>)>\s*[^\s>]*\.key\b/i, // > *.key
+    /(?<!>)>\s*[^\s>]*\.crt\b/i, // > *.crt
+    /(?<!>)>\s*[^\s>]*id_rsa\b/i, // > *id_rsa*
+    /(?<!>)>\s*[^\s>]*id_ed25519\b/i, // > *id_ed25519*
+    /(?<!>)>\s*[^\s>]*\.secrets?\b/i, // > *.secret or *.secrets
+
+    // Config files in home directory
+    /(?<!>)>\s*~\/\.[a-z]/i, // > ~/.* (any dotfile in home)
+    /(?<!>)>\s*\$HOME\/\.[a-z]/i, // > $HOME/.* (any dotfile in home)
+  ],
 }
 
 // File paths that are dangerous to delete/modify
@@ -190,7 +239,7 @@ function getSeverity(category: string): "critical" | "high" | "medium" {
   if (category === "rmDangerous" || category === "sudo" || category === "system") {
     return "critical"
   }
-  if (category === "git" || category === "database" || category === "container") {
+  if (category === "git" || category === "database" || category === "container" || category === "fileOverwrite") {
     return "high"
   }
   return "medium"
@@ -207,6 +256,7 @@ function getCategoryLabel(category: string): string {
     container: "Container/Cloud Operation",
     packages: "Package Management",
     network: "Network Configuration",
+    fileOverwrite: "File Overwrite via Redirect",
   }
   return labels[category] || category
 }

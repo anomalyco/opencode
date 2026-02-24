@@ -254,6 +254,17 @@ export const dict = {
   "context.systemPrompt.title": "Systemprompt",
   "context.rawMessages.title": "Rå beskeder",
 
+  "context.rawContext.title": "Rå LLM-kontekst",
+  "context.rawContext.show": "Vis fuld kontekst",
+  "context.rawContext.hide": "Skjul fuld kontekst",
+  "context.rawContext.loading": "Indlæser rå kontekst...",
+  "context.rawContext.error": "Fejl ved indlæsning af kontekst: {{error}}",
+  "context.rawContext.model": "Model",
+  "context.rawContext.agent": "Agent",
+  "context.rawContext.systemPrompts": "Systemprompter",
+  "context.rawContext.llmMessages": "LLM-beskeder",
+  "context.rawContext.systemPromptN": "Systemprompt {{n}}",
+
   "context.stats.session": "Session",
   "context.stats.messages": "Beskeder",
   "context.stats.provider": "Udbyder",
@@ -379,6 +390,7 @@ export const dict = {
 
   "session.tab.session": "Session",
   "session.tab.review": "Gennemgang",
+  "session.tab.rawcontext": "Rå kontekst",
   "session.tab.context": "Kontekst",
   "session.panel.reviewAndFiles": "Gennemgang og filer",
   "session.review.filesChanged": "{{count}} Filer ændret",

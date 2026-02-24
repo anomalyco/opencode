@@ -9,6 +9,7 @@ import { SessionCompaction } from "../../session/compaction"
 import { SessionRevert } from "../../session/revert"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
+import { SessionContext } from "@/session/context"
 import { Todo } from "../../session/todo"
 import { Agent } from "../../agent/agent"
 import { Snapshot } from "@/snapshot"
@@ -41,7 +42,11 @@ export const SessionRoutes = lazy(() =>
       validator(
         "query",
         z.object({
-          directory: z.string().optional().meta({ description: "Filter sessions by project directory" }),
+          directory: z
+            .string()
+            .optional()
+            .meta({ description: "Filter sessions by project directory (deprecated, use projectID)" }),
+          projectID: z.string().optional().meta({ description: "Filter sessions by project ID" }),
           roots: z.coerce.boolean().optional().meta({ description: "Only return root sessions (no parentID)" }),
           start: z.coerce
             .number()
@@ -56,7 +61,10 @@ export const SessionRoutes = lazy(() =>
         const term = query.search?.toLowerCase()
         const sessions: Session.Info[] = []
         for await (const session of Session.list()) {
-          if (query.directory !== undefined && session.directory !== query.directory) continue
+          if (query.projectID !== undefined && session.projectID !== query.projectID) continue
+          // Keep directory filter for backwards compatibility, but prefer projectID
+          if (query.projectID === undefined && query.directory !== undefined && session.directory !== query.directory)
+            continue
           if (query.roots && session.parentID) continue
           if (query.start !== undefined && session.time.updated < query.start) continue
           if (term !== undefined && !session.title.toLowerCase().includes(term)) continue
@@ -450,6 +458,37 @@ export const SessionRoutes = lazy(() =>
           sessionID: params.sessionID,
           messageID: query.messageID,
         })
+        return c.json(result)
+      },
+    )
+    .get(
+      "/:sessionID/context",
+      describeRoute({
+        summary: "Get raw LLM context",
+        description:
+          "Get the full raw context that would be sent to the LLM, including system prompts and message history.",
+        operationId: "session.context",
+        responses: {
+          200: {
+            description: "Successfully retrieved context",
+            content: {
+              "application/json": {
+                schema: resolver(SessionContext.RawContext),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: z.string().meta({ description: "Session ID" }),
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const result = await SessionContext.build(sessionID)
         return c.json(result)
       },
     )

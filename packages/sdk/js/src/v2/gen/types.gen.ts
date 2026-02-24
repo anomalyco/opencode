@@ -566,7 +566,7 @@ export type QuestionInfo = {
    */
   question: string
   /**
-   * Very short label (max 30 chars)
+   * Very short label (max 60 chars)
    */
   header: string
   /**
@@ -1787,6 +1787,16 @@ export type Config = {
      */
     prune?: boolean
   }
+  chime?: {
+    /**
+     * Enable chime sound when session completes or waits for input (default: true)
+     */
+    enabled?: boolean
+    /**
+     * Path to custom sound file (default: /System/Library/Sounds/Glass.aiff on macOS)
+     */
+    sound?: string
+  }
   experimental?: {
     hook?: {
       file_edited?: {
@@ -2745,9 +2755,13 @@ export type SessionListData = {
   path?: never
   query?: {
     /**
-     * Filter sessions by project directory
+     * Filter sessions by project directory (deprecated, use projectID)
      */
     directory?: string
+    /**
+     * Filter sessions by project ID
+     */
+    projectID?: string
     /**
      * Only return root sessions (no parentID)
      */
@@ -3191,6 +3205,50 @@ export type SessionDiffResponses = {
 }
 
 export type SessionDiffResponse = SessionDiffResponses[keyof SessionDiffResponses]
+
+export type SessionContextData = {
+  body?: never
+  path: {
+    /**
+     * Session ID
+     */
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/context"
+}
+
+export type SessionContextErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionContextError = SessionContextErrors[keyof SessionContextErrors]
+
+export type SessionContextResponses = {
+  /**
+   * Successfully retrieved context
+   */
+  200: {
+    system: Array<string>
+    messages: Array<unknown>
+    model: {
+      providerID: string
+      modelID: string
+    }
+    agent: string
+  }
+}
+
+export type SessionContextResponse = SessionContextResponses[keyof SessionContextResponses]
 
 export type SessionSummarizeData = {
   body?: {

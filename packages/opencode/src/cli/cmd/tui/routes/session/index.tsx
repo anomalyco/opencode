@@ -57,6 +57,8 @@ import { DialogConfirm } from "@tui/ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
+import { DialogContext } from "./dialog-context"
+import { DialogRawContext } from "./dialog-raw-context"
 import { Sidebar } from "./sidebar"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
@@ -353,6 +355,32 @@ export function Session() {
             setPrompt={(promptInfo) => prompt.set(promptInfo)}
           />
         ))
+      },
+    },
+    {
+      title: "View context",
+      description: "View session context and token usage",
+      value: "session.context",
+      suggested: route.type === "session",
+      category: "Session",
+      slash: {
+        name: "context",
+      },
+      onSelect: (dialog) => {
+        dialog.replace(() => <DialogContext sessionID={route.sessionID} />)
+      },
+    },
+    {
+      title: "View raw LLM context",
+      description: "View full context sent to the LLM (system prompts + messages)",
+      value: "session.rawcontext",
+      category: "Session",
+      slash: {
+        name: "rawcontext",
+        aliases: ["raw"],
+      },
+      onSelect: (dialog) => {
+        dialog.replace(() => <DialogRawContext sessionID={route.sessionID} />)
       },
     },
     {

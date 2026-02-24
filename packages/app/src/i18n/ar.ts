@@ -271,6 +271,17 @@ export const dict = {
   "context.systemPrompt.title": "موجه النظام",
   "context.rawMessages.title": "الرسائل الخام",
 
+  "context.rawContext.title": "سياق LLM الخام",
+  "context.rawContext.show": "إظهار السياق الكامل",
+  "context.rawContext.hide": "إخفاء السياق الكامل",
+  "context.rawContext.loading": "جاري تحميل السياق الخام...",
+  "context.rawContext.error": "خطأ في تحميل السياق: {{error}}",
+  "context.rawContext.model": "النموذج",
+  "context.rawContext.agent": "الوكيل",
+  "context.rawContext.systemPrompts": "موجهات النظام",
+  "context.rawContext.llmMessages": "رسائل LLM",
+  "context.rawContext.systemPromptN": "موجه النظام {{n}}",
+
   "context.stats.session": "جلسة",
   "context.stats.messages": "رسائل",
   "context.stats.provider": "موفر",
@@ -395,6 +406,7 @@ export const dict = {
 
   "session.tab.session": "جلسة",
   "session.tab.review": "مراجعة",
+  "session.tab.rawcontext": "السياق الخام",
   "session.tab.context": "سياق",
   "session.panel.reviewAndFiles": "المراجعة والملفات",
   "session.review.filesChanged": "تم تغيير {{count}} ملفات",
