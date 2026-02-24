@@ -22,7 +22,8 @@ export namespace ConfigMarkdown {
     if (!match) return content
 
     const frontmatter = match[1]
-    const lines = frontmatter.split("\n")
+    const eol = frontmatter.includes("\r\n") ? "\r\n" : "\n"
+    const lines = frontmatter.split(eol)
     const result: string[] = []
 
     for (const line of lines) {
@@ -64,7 +65,7 @@ export namespace ConfigMarkdown {
       result.push(line)
     }
 
-    const processed = result.join("\n")
+    const processed = result.join(eol)
     return content.replace(frontmatter, () => processed)
   }
 

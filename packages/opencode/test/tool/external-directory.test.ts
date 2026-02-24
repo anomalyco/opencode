@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import os from "os"
 import path from "path"
 import type { Tool } from "../../src/tool/tool"
 import { Instance } from "../../src/project/instance"
@@ -15,6 +16,11 @@ const baseCtx: Omit<Tool.Context, "ask"> = {
   metadata: () => {},
 }
 
+// Use cross-platform base paths so tests work on Windows and Unix
+const base = os.tmpdir()
+const projectDir = path.join(base, "project")
+const outsideDir = path.join(base, "outside")
+
 describe("tool.assertExternalDirectory", () => {
   test("no-ops for empty target", async () => {
     const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
@@ -26,7 +32,7 @@ describe("tool.assertExternalDirectory", () => {
     }
 
     await Instance.provide({
-      directory: "/tmp",
+      directory: base,
       fn: async () => {
         await assertExternalDirectory(ctx)
       },
@@ -45,9 +51,9 @@ describe("tool.assertExternalDirectory", () => {
     }
 
     await Instance.provide({
-      directory: "/tmp/project",
+      directory: projectDir,
       fn: async () => {
-        await assertExternalDirectory(ctx, path.join("/tmp/project", "file.txt"))
+        await assertExternalDirectory(ctx, path.join(projectDir, "file.txt"))
       },
     })
 
@@ -63,12 +69,11 @@ describe("tool.assertExternalDirectory", () => {
       },
     }
 
-    const directory = "/tmp/project"
-    const target = "/tmp/outside/file.txt"
+    const target = path.join(outsideDir, "file.txt")
     const expected = path.join(path.dirname(target), "*")
 
     await Instance.provide({
-      directory,
+      directory: projectDir,
       fn: async () => {
         await assertExternalDirectory(ctx, target)
       },
@@ -89,14 +94,12 @@ describe("tool.assertExternalDirectory", () => {
       },
     }
 
-    const directory = "/tmp/project"
-    const target = "/tmp/outside"
-    const expected = path.join(target, "*")
+    const expected = path.join(outsideDir, "*")
 
     await Instance.provide({
-      directory,
+      directory: projectDir,
       fn: async () => {
-        await assertExternalDirectory(ctx, target, { kind: "directory" })
+        await assertExternalDirectory(ctx, outsideDir, { kind: "directory" })
       },
     })
 
@@ -116,9 +119,9 @@ describe("tool.assertExternalDirectory", () => {
     }
 
     await Instance.provide({
-      directory: "/tmp/project",
+      directory: projectDir,
       fn: async () => {
-        await assertExternalDirectory(ctx, "/tmp/outside/file.txt", { bypass: true })
+        await assertExternalDirectory(ctx, path.join(outsideDir, "file.txt"), { bypass: true })
       },
     })
 

@@ -10,7 +10,17 @@ import { afterAll } from "bun:test"
 const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
 await fs.mkdir(dir, { recursive: true })
 afterAll(() => {
-  fsSync.rmSync(dir, { recursive: true, force: true })
+  // On Windows, files may still be locked briefly after tests finish (EBUSY).
+  // Retry a few times with a short delay to work around this.
+  for (let i = 0; i < 5; i++) {
+    try {
+      fsSync.rmSync(dir, { recursive: true, force: true })
+      return
+    } catch (err: any) {
+      if (err?.code !== "EBUSY" && err?.code !== "EPERM") throw err
+      if (i < 4) Bun.sleepSync(100)
+    }
+  }
 })
 
 process.env["XDG_DATA_HOME"] = path.join(dir, "share")

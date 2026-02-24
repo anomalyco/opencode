@@ -116,12 +116,15 @@ export const BashTool = Tool.define("bash", async () => {
         if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown", "cat"].includes(command[0])) {
           for (const arg of command.slice(1)) {
             if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
-            const resolved = await $`realpath ${arg}`
-              .cwd(cwd)
-              .quiet()
-              .nothrow()
-              .text()
-              .then((x) => x.trim())
+            const resolved =
+              process.platform === "win32"
+                ? path.resolve(cwd, arg)
+                : await $`realpath ${arg}`
+                    .cwd(cwd)
+                    .quiet()
+                    .nothrow()
+                    .text()
+                    .then((x) => x.trim())
             log.info("resolved path", { arg, resolved })
             if (resolved) {
               const normalized =

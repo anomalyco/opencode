@@ -295,7 +295,7 @@ describe("tool.write", () => {
   describe("error handling", () => {
     test("throws error for paths outside project", async () => {
       await using tmp = await tmpdir()
-      const outsidePath = "/etc/passwd"
+      const outsidePath = process.platform === "win32" ? "C:\\Windows\\System32\\drivers\\etc\\hosts" : "/etc/passwd"
 
       await Instance.provide({
         directory: tmp.path,

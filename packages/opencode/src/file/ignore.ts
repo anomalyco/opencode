@@ -1,4 +1,3 @@
-import { sep } from "node:path"
 import { Glob } from "../util/glob"
 
 export namespace FileIgnore {
@@ -67,7 +66,7 @@ export namespace FileIgnore {
       if (Glob.match(pattern, filepath)) return false
     }
 
-    const parts = filepath.split(sep)
+    const parts = filepath.split(/[/\\]/)
     for (let i = 0; i < parts.length; i++) {
       if (FOLDERS.has(parts[i])) return true
     }

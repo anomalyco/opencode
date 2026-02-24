@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
+import os from "os"
 import { BashTool } from "../../src/tool/bash"
 import { Instance } from "../../src/project/instance"
 import { Filesystem } from "../../src/util/filesystem"
@@ -124,6 +125,7 @@ describe("tool.bash permissions", () => {
 
   test("asks for external_directory permission when workdir is outside project", async () => {
     await using tmp = await tmpdir({ git: true })
+    const externalDir = os.tmpdir()
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
@@ -138,14 +140,14 @@ describe("tool.bash permissions", () => {
         await bash.execute(
           {
             command: "ls",
-            workdir: "/tmp",
-            description: "List /tmp",
+            workdir: externalDir,
+            description: "List temp dir",
           },
           testCtx,
         )
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         expect(extDirReq).toBeDefined()
-        expect(extDirReq!.patterns).toContain("/tmp/*")
+        expect(extDirReq!.patterns).toContain(path.join(externalDir, "*"))
       },
     })
   })
@@ -366,7 +368,7 @@ describe("tool.bash truncation", () => {
           ctx,
         )
         expect((result.metadata as any).truncated).toBe(false)
-        expect(result.output).toBe("hello\n")
+        expect(result.output.trim()).toBe("hello")
       },
     })
   })
