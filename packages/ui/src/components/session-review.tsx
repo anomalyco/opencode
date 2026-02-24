@@ -194,6 +194,12 @@ export const SessionReview = (props: SessionReviewProps) => {
   const diffStyle = () => props.diffStyle ?? (props.split ? "split" : "unified")
   const hasDiffs = () => files().length > 0
 
+  createEffect(() => {
+    if (props.diffs.length === 0 && store.open.length > 0) {
+      setStore("open", [])
+    }
+  })
+
   const handleChange = (open: string[]) => {
     props.onOpenChange?.(open)
     if (props.open !== undefined) return

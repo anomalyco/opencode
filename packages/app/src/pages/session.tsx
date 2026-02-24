@@ -436,6 +436,18 @@ export default function Page() {
     ),
   )
 
+  createEffect(
+    on(
+      () => params.id,
+      (id) => {
+        if (!id) {
+          setTree({ reviewScroll: undefined, pendingDiff: undefined, activeDiff: undefined })
+        }
+      },
+      { defer: true },
+    ),
+  )
+
   const showAllFiles = () => {
     if (fileTreeTab() !== "changes") return
     setFileTreeTab("all")
