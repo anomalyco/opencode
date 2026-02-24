@@ -25,6 +25,7 @@ export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
   setActiveMessage: (message: UserMessage | undefined) => void
   focusInput: () => void
+  toggleFocus: () => void
 }
 
 const withCategory = (category: string) => {
@@ -87,6 +88,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const navigateMessageByOffset = actions.navigateMessageByOffset
   const setActiveMessage = actions.setActiveMessage
   const focusInput = actions.focusInput
+  const toggleFocus = actions.toggleFocus
 
   const sessionCommand = withCategory(language.t("command.category.session"))
   const fileCommand = withCategory(language.t("command.category.file"))
@@ -186,6 +188,12 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.input.focus"),
       keybind: "ctrl+l",
       onSelect: () => focusInput(),
+    }),
+    viewCommand({
+      id: "focus.toggle",
+      title: language.t("command.focus.toggle"),
+      keybind: "mod+e",
+      onSelect: () => toggleFocus(),
     }),
     terminalCommand({
       id: "terminal.new",

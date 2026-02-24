@@ -59,6 +59,8 @@ interface PromptInputProps {
   newSessionWorktree?: string
   onNewSessionWorktreeReset?: () => void
   onSubmit?: () => void
+  focus?: boolean
+  onToggleFocus?: () => void
 }
 
 const EXAMPLES = [
@@ -1050,7 +1052,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const variants = createMemo(() => ["default", ...local.model.variant.list()])
 
   return (
-    <div class="relative size-full _max-h-[320px] flex flex-col gap-0">
+    <div
+      classList={{
+        "relative size-full _max-h-[320px] flex flex-col gap-0": true,
+        "flex-1 min-h-0": props.focus,
+      }}
+    >
       <PromptPopover
         popover={store.popover}
         setSlashPopoverRef={(el) => (slashPopoverRef = el)}
@@ -1073,6 +1080,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           "focus-within:shadow-xs-border": true,
           "border-icon-info-active border-dashed": store.draggingType !== null,
           [props.class ?? ""]: !!props.class,
+          "flex-1 flex flex-col min-h-0": props.focus,
         }}
       >
         <PromptDragOverlay
@@ -1101,7 +1109,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           removeLabel={language.t("prompt.attachment.remove")}
         />
         <div
-          class="relative"
+          classList={{
+            relative: true,
+            "flex-1 flex flex-col min-h-0": props.focus,
+          }}
           onMouseDown={(e) => {
             const target = e.target
             if (!(target instanceof HTMLElement)) return
@@ -1115,7 +1126,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             editorRef?.focus()
           }}
         >
-          <div class="relative max-h-[240px] overflow-y-auto no-scrollbar" ref={(el) => (scrollRef = el)}>
+          <div
+            classList={{
+              "relative overflow-y-auto no-scrollbar": true,
+              "max-h-[240px]": !props.focus,
+              "flex-1 min-h-0": props.focus,
+            }}
+            ref={(el) => (scrollRef = el)}
+          >
             <div
               data-component="prompt-input"
               ref={(el) => {
@@ -1373,6 +1391,22 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 </TooltipKeybind>
               </Show>
             </div>
+            <Show when={props.onToggleFocus}>
+              <TooltipKeybind
+                placement="top"
+                gutter={4}
+                openDelay={2000}
+                title={language.t("command.focus.toggle")}
+                keybind={command.keybind("focus.toggle")}
+              >
+                <IconButton
+                  icon={props.focus ? "collapse" : "expand"}
+                  size="small"
+                  variant="ghost"
+                  onClick={() => props.onToggleFocus?.()}
+                />
+              </TooltipKeybind>
+            </Show>
             <div class="shrink-0">
               <RadioGroup
                 options={["shell", "normal"] as const}

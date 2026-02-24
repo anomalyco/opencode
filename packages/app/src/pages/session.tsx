@@ -52,6 +52,7 @@ export default function Page() {
       overflow: false,
       bottom: true,
     },
+    focus: false,
   })
 
   const composer = createSessionComposerState()
@@ -327,6 +328,7 @@ export default function Page() {
       () => {
         setStore("messageId", undefined)
         setStore("changes", "session")
+        setUi("focus", false)
       },
       { defer: true },
     ),
@@ -387,6 +389,11 @@ export default function Page() {
     }
     if (dialog.active) return
 
+    if (event.key === "Escape" && ui.focus) {
+      setUi("focus", false)
+      return
+    }
+
     if (activeElement === inputRef) {
       if (event.key === "Escape") inputRef?.blur()
       return
@@ -443,10 +450,17 @@ export default function Page() {
 
   const focusInput = () => inputRef?.focus()
 
+  const toggleFocus = () => {
+    const next = !ui.focus
+    setUi("focus", next)
+    if (next) inputRef?.focus()
+  }
+
   useSessionCommands({
     navigateMessageByOffset,
     setActiveMessage,
     focusInput,
+    toggleFocus,
   })
 
   const openReviewFile = createOpenReviewFile({
@@ -995,7 +1009,7 @@ export default function Page() {
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         <SessionMobileTabs
-          open={!isDesktop() && !!params.id}
+          open={!isDesktop() && !!params.id && !ui.focus}
           mobileTab={store.mobileTab}
           hasReview={hasReview()}
           reviewCount={reviewCount()}
@@ -1014,83 +1028,92 @@ export default function Page() {
             width: sessionPanelWidth(),
           }}
         >
-          <div class="flex-1 min-h-0 overflow-hidden">
-            <Switch>
-              <Match when={params.id}>
-                <Show when={activeMessage()}>
-                  <MessageTimeline
-                    mobileChanges={mobileChanges()}
-                    mobileFallback={reviewContent({
-                      diffStyle: "unified",
-                      classes: {
-                        root: "pb-8",
-                        header: "px-4",
-                        container: "px-4",
-                      },
-                      loadingClass: "px-4 py-4 text-text-weak",
-                      emptyClass: "h-full pb-30 flex flex-col items-center justify-center text-center gap-6",
-                    })}
-                    scroll={ui.scroll}
-                    onResumeScroll={resumeScroll}
-                    setScrollRef={setScrollRef}
-                    onScheduleScrollState={scheduleScrollState}
-                    onAutoScrollHandleScroll={autoScroll.handleScroll}
-                    onMarkScrollGesture={markScrollGesture}
-                    hasScrollGesture={hasScrollGesture}
-                    isDesktop={isDesktop()}
-                    onScrollSpyScroll={scrollSpy.onScroll}
-                    onAutoScrollInteraction={autoScroll.handleInteraction}
-                    centered={centered()}
-                    setContentRef={(el) => {
-                      content = el
-                      autoScroll.contentRef(el)
+          <div
+            classList={{
+              "min-h-0 overflow-hidden": true,
+              "flex-1": !ui.focus,
+            }}
+          >
+            <Show when={!ui.focus}>
+              <Switch>
+                <Match when={params.id}>
+                  <Show when={activeMessage()}>
+                    <MessageTimeline
+                      mobileChanges={mobileChanges()}
+                      mobileFallback={reviewContent({
+                        diffStyle: "unified",
+                        classes: {
+                          root: "pb-8",
+                          header: "px-4",
+                          container: "px-4",
+                        },
+                        loadingClass: "px-4 py-4 text-text-weak",
+                        emptyClass: "h-full pb-30 flex flex-col items-center justify-center text-center gap-6",
+                      })}
+                      scroll={ui.scroll}
+                      onResumeScroll={resumeScroll}
+                      setScrollRef={setScrollRef}
+                      onScheduleScrollState={scheduleScrollState}
+                      onAutoScrollHandleScroll={autoScroll.handleScroll}
+                      onMarkScrollGesture={markScrollGesture}
+                      hasScrollGesture={hasScrollGesture}
+                      isDesktop={isDesktop()}
+                      onScrollSpyScroll={scrollSpy.onScroll}
+                      onAutoScrollInteraction={autoScroll.handleInteraction}
+                      centered={centered()}
+                      setContentRef={(el) => {
+                        content = el
+                        autoScroll.contentRef(el)
 
-                      const root = scroller
-                      if (root) scheduleScrollState(root)
+                        const root = scroller
+                        if (root) scheduleScrollState(root)
+                      }}
+                      turnStart={store.turnStart}
+                      onRenderEarlier={() => setStore("turnStart", 0)}
+                      historyMore={historyMore()}
+                      historyLoading={historyLoading()}
+                      onLoadEarlier={() => {
+                        const id = params.id
+                        if (!id) return
+                        setStore("turnStart", 0)
+                        sync.session.history.loadMore(id)
+                      }}
+                      renderedUserMessages={renderedUserMessages()}
+                      anchor={anchor}
+                      onRegisterMessage={scrollSpy.register}
+                      onUnregisterMessage={scrollSpy.unregister}
+                      lastUserMessageID={lastUserMessage()?.id}
+                    />
+                  </Show>
+                </Match>
+                <Match when={true}>
+                  <NewSessionView
+                    worktree={newSessionWorktree()}
+                    onWorktreeChange={(value) => {
+                      if (value === "create") {
+                        setStore("newSessionWorktree", value)
+                        return
+                      }
+
+                      setStore("newSessionWorktree", "main")
+
+                      const target = value === "main" ? sync.project?.worktree : value
+                      if (!target) return
+                      if (target === sdk.directory) return
+                      layout.projects.open(target)
+                      navigate(`/${base64Encode(target)}/session`)
                     }}
-                    turnStart={store.turnStart}
-                    onRenderEarlier={() => setStore("turnStart", 0)}
-                    historyMore={historyMore()}
-                    historyLoading={historyLoading()}
-                    onLoadEarlier={() => {
-                      const id = params.id
-                      if (!id) return
-                      setStore("turnStart", 0)
-                      sync.session.history.loadMore(id)
-                    }}
-                    renderedUserMessages={renderedUserMessages()}
-                    anchor={anchor}
-                    onRegisterMessage={scrollSpy.register}
-                    onUnregisterMessage={scrollSpy.unregister}
-                    lastUserMessageID={lastUserMessage()?.id}
                   />
-                </Show>
-              </Match>
-              <Match when={true}>
-                <NewSessionView
-                  worktree={newSessionWorktree()}
-                  onWorktreeChange={(value) => {
-                    if (value === "create") {
-                      setStore("newSessionWorktree", value)
-                      return
-                    }
-
-                    setStore("newSessionWorktree", "main")
-
-                    const target = value === "main" ? sync.project?.worktree : value
-                    if (!target) return
-                    if (target === sdk.directory) return
-                    layout.projects.open(target)
-                    navigate(`/${base64Encode(target)}/session`)
-                  }}
-                />
-              </Match>
-            </Switch>
+                </Match>
+              </Switch>
+            </Show>
           </div>
 
           <SessionComposerRegion
             state={composer}
             centered={centered()}
+            focus={ui.focus}
+            onToggleFocus={toggleFocus}
             inputRef={(el) => {
               inputRef = el
             }}
@@ -1099,6 +1122,7 @@ export default function Page() {
             onSubmit={() => {
               comments.clear()
               resumeScroll()
+              if (ui.focus) setUi("focus", false)
             }}
             onResponseSubmit={resumeScroll}
             setPromptDockRef={(el) => {

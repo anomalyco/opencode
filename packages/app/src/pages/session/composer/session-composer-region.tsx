@@ -12,6 +12,8 @@ import { SessionTodoDock } from "@/pages/session/composer/session-todo-dock"
 export function SessionComposerRegion(props: {
   state: SessionComposerState
   centered: boolean
+  focus?: boolean
+  onToggleFocus?: () => void
   inputRef: (el: HTMLDivElement) => void
   newSessionWorktree: string
   onNewSessionWorktreeReset: () => void
@@ -47,12 +49,17 @@ export function SessionComposerRegion(props: {
     <div
       ref={props.setPromptDockRef}
       data-component="session-prompt-dock"
-      class="shrink-0 w-full pb-3 flex flex-col justify-center items-center bg-background-stronger pointer-events-none"
+      classList={{
+        "w-full pb-3 flex flex-col justify-center items-center bg-background-stronger pointer-events-none": true,
+        "shrink-0": !props.focus,
+        "flex-1 min-h-0 pt-3": props.focus,
+      }}
     >
       <div
         classList={{
           "w-full px-3 pointer-events-auto": true,
           "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
+          "flex-1 min-h-0 flex flex-col": props.focus,
         }}
       >
         <Show when={props.state.questionRequest()} keyed>
@@ -111,6 +118,7 @@ export function SessionComposerRegion(props: {
                 "transition-[margin] duration-[400ms] ease-out": true,
                 "-mt-9": props.state.dock() && !props.state.closing(),
                 "mt-0": !props.state.dock() || props.state.closing(),
+                "flex-1 flex flex-col min-h-0": props.focus,
               }}
             >
               <PromptInput
@@ -118,6 +126,8 @@ export function SessionComposerRegion(props: {
                 newSessionWorktree={props.newSessionWorktree}
                 onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
                 onSubmit={props.onSubmit}
+                focus={props.focus}
+                onToggleFocus={props.onToggleFocus}
               />
             </div>
           </Show>
