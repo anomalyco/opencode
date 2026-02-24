@@ -810,8 +810,8 @@ export namespace Config {
         .optional()
         .default("ctrl+alt+d")
         .describe("Scroll messages down by half page"),
-      messages_first: z.string().optional().default("ctrl+g,home").describe("Navigate to first message"),
-      messages_last: z.string().optional().default("ctrl+alt+g,end").describe("Navigate to last message"),
+      messages_first: z.string().optional().default("ctrl+g").describe("Navigate to first message"),
+      messages_last: z.string().optional().default("ctrl+alt+g").describe("Navigate to last message"),
       messages_next: z.string().optional().default("none").describe("Navigate to next message"),
       messages_previous: z.string().optional().default("none").describe("Navigate to previous message"),
       messages_last_user: z.string().optional().default("none").describe("Navigate to last user message"),
