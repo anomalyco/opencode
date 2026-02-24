@@ -28,3 +28,6 @@ opencode-dev
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# Tauri build artifacts
+packages/desktop/src-tauri/binaries/
