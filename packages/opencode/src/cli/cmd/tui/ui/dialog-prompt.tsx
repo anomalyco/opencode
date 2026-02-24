@@ -22,6 +22,12 @@ export function DialogPrompt(props: DialogPromptProps) {
     if (evt.name === "return") {
       props.onConfirm?.(textarea.plainText)
     }
+    if (evt.name === "escape") {
+      if (props.onCancel) {
+        evt.preventDefault()
+        props.onCancel()
+      }
+    }
   })
 
   onMount(() => {
@@ -39,7 +45,16 @@ export function DialogPrompt(props: DialogPromptProps) {
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
           {props.title}
         </text>
-        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+        <text
+          fg={theme.textMuted}
+          onMouseUp={() => {
+            if (props.onCancel) {
+              props.onCancel()
+            } else {
+              dialog.clear()
+            }
+          }}
+        >
           esc
         </text>
       </box>
@@ -72,7 +87,15 @@ DialogPrompt.show = (dialog: DialogContext, title: string, options?: Omit<Dialog
   return new Promise<string | null>((resolve) => {
     dialog.replace(
       () => (
-        <DialogPrompt title={title} {...options} onConfirm={(value) => resolve(value)} onCancel={() => resolve(null)} />
+        <DialogPrompt
+          title={title}
+          {...options}
+          onConfirm={(value) => resolve(value)}
+          onCancel={() => {
+            resolve(null)
+            dialog.clear()
+          }}
+        />
       ),
       () => resolve(null),
     )

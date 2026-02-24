@@ -61,6 +61,7 @@ function init() {
     stack: [] as {
       element: JSX.Element
       onClose?: () => void
+      onEscape?: () => boolean | void
     }[],
     size: "medium" as "medium" | "large",
   })
@@ -73,6 +74,11 @@ function init() {
     if ((evt.name === "escape" || (evt.ctrl && evt.name === "c")) && renderer.getSelection()) return
     if (evt.name === "escape" || (evt.ctrl && evt.name === "c")) {
       const current = store.stack.at(-1)!
+      if (current.onEscape && current.onEscape() === false) {
+        evt.preventDefault()
+        evt.stopPropagation()
+        return
+      }
       current.onClose?.()
       setStore("stack", store.stack.slice(0, -1))
       evt.preventDefault()
@@ -110,7 +116,7 @@ function init() {
       })
       refocus()
     },
-    replace(input: any, onClose?: () => void) {
+    replace(input: any, onClose?: () => void, onEscape?: () => boolean | void) {
       if (store.stack.length === 0) {
         focus = renderer.currentFocusedRenderable
         focus?.blur()
@@ -123,6 +129,7 @@ function init() {
         {
           element: input,
           onClose,
+          onEscape,
         },
       ])
     },

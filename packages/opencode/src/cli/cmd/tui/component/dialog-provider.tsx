@@ -72,18 +72,54 @@ export function createDialogProviderOptions() {
               method: index,
             })
             if (result.data?.method === "code") {
-              dialog.replace(() => (
-                <CodeMethod providerID={provider.id} title={method.label} index={index} authorization={result.data!} />
-              ))
+              const back = () => {
+                dialog.replace(() => <DialogProvider />)
+                return false
+              }
+              dialog.replace(
+                () => (
+                  <CodeMethod
+                    providerID={provider.id}
+                    title={method.label}
+                    index={index}
+                    authorization={result.data!}
+                    onBack={back}
+                  />
+                ),
+                undefined,
+                back,
+              )
             }
             if (result.data?.method === "auto") {
-              dialog.replace(() => (
-                <AutoMethod providerID={provider.id} title={method.label} index={index} authorization={result.data!} />
-              ))
+              const back = () => {
+                dialog.replace(() => <DialogProvider />)
+                return false
+              }
+              dialog.replace(
+                () => (
+                  <AutoMethod
+                    providerID={provider.id}
+                    title={method.label}
+                    index={index}
+                    authorization={result.data!}
+                    onBack={back}
+                  />
+                ),
+                undefined,
+                back,
+              )
             }
           }
           if (method.type === "api") {
-            return dialog.replace(() => <ApiMethod providerID={provider.id} title={method.label} />)
+            const back = () => {
+              dialog.replace(() => <DialogProvider />)
+              return false
+            }
+            return dialog.replace(
+              () => <ApiMethod providerID={provider.id} title={method.label} onBack={back} />,
+              undefined,
+              back,
+            )
           }
         },
       })),
@@ -102,6 +138,7 @@ interface AutoMethodProps {
   providerID: string
   title: string
   authorization: ProviderAuthAuthorization
+  onBack?: () => void
 }
 function AutoMethod(props: AutoMethodProps) {
   const { theme } = useTheme()
@@ -116,6 +153,12 @@ function AutoMethod(props: AutoMethodProps) {
       Clipboard.copy(code)
         .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
         .catch(toast.error)
+    }
+    if (evt.name === "escape") {
+      if (props.onBack) {
+        evt.preventDefault()
+        props.onBack()
+      }
     }
   })
 
@@ -139,7 +182,16 @@ function AutoMethod(props: AutoMethodProps) {
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
           {props.title}
         </text>
-        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+        <text
+          fg={theme.textMuted}
+          onMouseUp={() => {
+            if (props.onBack) {
+              props.onBack()
+            } else {
+              dialog.clear()
+            }
+          }}
+        >
           esc
         </text>
       </box>
@@ -160,6 +212,7 @@ interface CodeMethodProps {
   title: string
   providerID: string
   authorization: ProviderAuthAuthorization
+  onBack?: () => void
 }
 function CodeMethod(props: CodeMethodProps) {
   const { theme } = useTheme()
@@ -172,6 +225,7 @@ function CodeMethod(props: CodeMethodProps) {
     <DialogPrompt
       title={props.title}
       placeholder="Authorization code"
+      onCancel={props.onBack}
       onConfirm={async (value) => {
         const { error } = await sdk.client.provider.oauth.callback({
           providerID: props.providerID,
@@ -202,6 +256,7 @@ function CodeMethod(props: CodeMethodProps) {
 interface ApiMethodProps {
   providerID: string
   title: string
+  onBack?: () => void
 }
 function ApiMethod(props: ApiMethodProps) {
   const dialog = useDialog()
@@ -213,6 +268,7 @@ function ApiMethod(props: ApiMethodProps) {
     <DialogPrompt
       title={props.title}
       placeholder="API key"
+      onCancel={props.onBack}
       description={
         props.providerID === "opencode" ? (
           <box gap={1}>
