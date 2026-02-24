@@ -77,8 +77,14 @@ export const ExportCommand = cmd({
           })),
         }
 
-        process.stdout.write(JSON.stringify(exportData, null, 2))
-        process.stdout.write(EOL)
+        const json = JSON.stringify(exportData, null, 2) + EOL
+        await new Promise<void>((resolve, reject) => {
+          process.stdout.write(json, (err) => {
+            if (!err) return resolve()
+            if ((err as NodeJS.ErrnoException).code === "EPIPE") return resolve()
+            reject(err)
+          })
+        })
       } catch (error) {
         UI.error(`Session not found: ${sessionID!}`)
         process.exit(1)
