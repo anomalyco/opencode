@@ -7,6 +7,7 @@
 import { render } from "solid-js/web"
 import { AppBaseProviders, AppInterface } from "@/app"
 import { Platform, PlatformProvider } from "@/context/platform"
+import { ServerConnection } from "@/context/server"
 import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
 import pkg from "../package.json"
@@ -93,11 +94,13 @@ const platform: Platform = {
   // The Web Mirror settings section will be hidden because platform.startWebMirror is undefined.
 }
 
+const server: ServerConnection.Http = { type: "http", http: { url: window.location.origin } }
+
 render(
   () => (
     <PlatformProvider value={platform}>
       <AppBaseProviders>
-        <AppInterface />
+        <AppInterface defaultServer={ServerConnection.key(server)} servers={[server]} />
       </AppBaseProviders>
     </PlatformProvider>
   ),
