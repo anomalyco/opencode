@@ -386,6 +386,15 @@ export const cljfmt: Info = {
   },
 }
 
+export const stylua: Info = {
+  name: "stylua",
+  command: ["stylua", "$FILE"],
+  extensions: [".lua"],
+  async enabled() {
+    return Bun.which("stylua") !== null
+  },
+}
+
 export const dfmt: Info = {
   name: "dfmt",
   command: ["dfmt", "-i", "$FILE"],
