@@ -670,7 +670,7 @@ export namespace Config {
     agent: z.string().optional(),
     model: ModelId.optional(),
     subtask: z.boolean().optional(),
-  })
+  }).catchall(z.any())
   export type Command = z.infer<typeof Command>
 
   export const Skills = z.object({

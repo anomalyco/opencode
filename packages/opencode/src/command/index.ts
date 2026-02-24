@@ -150,12 +150,8 @@ export namespace Command {
     // Load commands from config file (non-markdown)
     for (const [name, command] of Object.entries(cfg.command ?? {})) {
       result[name] = {
+        ...command,
         name,
-        agent: command.agent,
-        model: command.model,
-        description: command.description,
-        template: command.template,
-        subtask: command.subtask,
         hints: Command.hints(command.template),
       }
     }
@@ -166,12 +162,8 @@ export namespace Command {
       const commands = await Config.reloadCommands(dir)
       for (const [name, command] of Object.entries(commands)) {
         result[name] = {
+          ...command,
           name,
-          agent: command.agent,
-          model: command.model,
-          description: command.description,
-          template: command.template,
-          subtask: command.subtask,
           hints: Command.hints(command.template),
         }
       }
