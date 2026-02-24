@@ -1044,6 +1044,10 @@ export type KeybindsConfig = {
    */
   session_timeline?: string
   /**
+   * Jump to message from timeline
+   */
+  session_timeline_jump?: string
+  /**
    * Fork session from message
    */
   session_fork?: string

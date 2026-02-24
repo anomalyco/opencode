@@ -5,6 +5,7 @@ import type { TextPart } from "@opencode-ai/sdk/v2"
 import { Locale } from "@/util/locale"
 import { DialogMessage } from "./dialog-message"
 import { useDialog } from "../../ui/dialog"
+import { useKeybind } from "../../context/keybind"
 import type { PromptInfo } from "../../component/prompt/history"
 
 export function DialogTimeline(props: {
@@ -14,6 +15,7 @@ export function DialogTimeline(props: {
 }) {
   const sync = useSync()
   const dialog = useDialog()
+  const keybind = useKeybind()
 
   onMount(() => {
     dialog.setSize("large")
@@ -43,5 +45,21 @@ export function DialogTimeline(props: {
     return result
   })
 
-  return <DialogSelect onMove={(option) => props.onMove(option.value)} title="Timeline" options={options()} />
+  return (
+    <DialogSelect
+      onMove={(option) => props.onMove(option.value)}
+      title="Timeline"
+      options={options()}
+      keybind={[
+        {
+          keybind: keybind.all.session_timeline_jump?.[0],
+          title: "Jump",
+          onTrigger: (option) => {
+            props.onMove(option.value)
+            dialog.clear()
+          },
+        },
+      ]}
+    />
+  )
 }
