@@ -118,6 +118,10 @@ For more info on how to configure OpenCode, [**head over to our docs**](https://
 
 If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
 
+## 🤝 Greeting System
+
+Say hello to the community! You can use the [Greeting issue template](.github/ISSUE_TEMPLATE/greeting.yml) to greet the team and introduce yourself.
+
 ### Building on OpenCode
 
 If you are working on a project that's related to OpenCode and is using "opencode" as part of its name, for example "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
