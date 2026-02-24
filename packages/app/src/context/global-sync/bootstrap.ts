@@ -16,6 +16,7 @@ import { batch } from "solid-js"
 import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { State, VcsCache } from "./types"
 import { cmp, normalizeProviderList } from "./utils"
+import { formatServerError } from "@/utils/server-errors"
 
 type GlobalStore = {
   ready: boolean
@@ -133,8 +134,11 @@ export async function bootstrapDirectory(input: {
   } catch (err) {
     console.error("Failed to bootstrap instance", err)
     const project = getFilename(input.directory)
-    const message = err instanceof Error ? err.message : String(err)
-    showToast({ title: `Failed to reload ${project}`, description: message })
+    showToast({
+      variant: "error",
+      title: `Failed to reload ${project}`,
+      description: formatServerError(err),
+    })
     input.setStore("status", "partial")
     return
   }
