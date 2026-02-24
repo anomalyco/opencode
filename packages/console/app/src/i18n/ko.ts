@@ -241,6 +241,7 @@ export const dict = {
   "black.hero.title": "세계 최고의 코딩 모델에 액세스하세요",
   "black.hero.subtitle": "Claude, GPT, Gemini 등 포함",
   "black.title": "OpenCode Black | 가격",
+  "black.paused": "Black 플랜 등록이 일시적으로 중단되었습니다.",
   "black.plan.icon20": "Black 20 플랜",
   "black.plan.icon100": "Black 100 플랜",
   "black.plan.icon200": "Black 200 플랜",

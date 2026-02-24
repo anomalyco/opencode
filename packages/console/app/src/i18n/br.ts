@@ -247,6 +247,7 @@ export const dict = {
   "black.hero.title": "Acesse os melhores modelos de codificação do mundo",
   "black.hero.subtitle": "Incluindo Claude, GPT, Gemini e mais",
   "black.title": "OpenCode Black | Preços",
+  "black.paused": "A inscrição no plano Black está temporariamente pausada.",
   "black.plan.icon20": "Plano Black 20",
   "black.plan.icon100": "Plano Black 100",
   "black.plan.icon200": "Plano Black 200",

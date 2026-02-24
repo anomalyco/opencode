@@ -234,6 +234,7 @@ export const dict = {
   "black.hero.title": "存取全球最佳編碼模型",
   "black.hero.subtitle": "包括 Claude、GPT、Gemini 等",
   "black.title": "OpenCode Black | 定價",
+  "black.paused": "Black 訂閱暫時暫停註冊。",
   "black.plan.icon20": "Black 20 方案",
   "black.plan.icon100": "Black 100 方案",
   "black.plan.icon200": "Black 200 方案",

@@ -244,6 +244,7 @@ export const dict = {
   "black.hero.title": "เข้าถึงโมเดลเขียนโค้ดที่ดีที่สุดในโลก",
   "black.hero.subtitle": "รวมถึง Claude, GPT, Gemini และอื่นๆ อีกมากมาย",
   "black.title": "OpenCode Black | ราคา",
+  "black.paused": "การสมัครแผน Black หยุดชั่วคราว",
   "black.plan.icon20": "แผน Black 20",
   "black.plan.icon100": "แผน Black 100",
   "black.plan.icon200": "แผน Black 200",

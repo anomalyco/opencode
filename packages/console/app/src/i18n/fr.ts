@@ -251,6 +251,7 @@ export const dict = {
   "black.hero.title": "Accédez aux meilleurs modèles de code au monde",
   "black.hero.subtitle": "Y compris Claude, GPT, Gemini et plus",
   "black.title": "OpenCode Black | Tarification",
+  "black.paused": "L'inscription au plan Black est temporairement suspendue.",
   "black.plan.icon20": "Forfait Black 20",
   "black.plan.icon100": "Forfait Black 100",
   "black.plan.icon200": "Forfait Black 200",

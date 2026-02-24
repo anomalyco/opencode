@@ -244,6 +244,7 @@ export const dict = {
   "black.hero.title": "世界最高峰のコーディングモデルすべてにアクセス",
   "black.hero.subtitle": "Claude、GPT、Gemini などを含む",
   "black.title": "OpenCode Black | 料金",
+  "black.paused": "Blackプランの登録は一時的に停止しています。",
   "black.plan.icon20": "Black 20 プラン",
   "black.plan.icon100": "Black 100 プラン",
   "black.plan.icon200": "Black 200 プラン",

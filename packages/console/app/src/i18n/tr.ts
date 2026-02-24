@@ -247,6 +247,7 @@ export const dict = {
   "black.hero.title": "Dünyanın en iyi kodlama modellerine erişin",
   "black.hero.subtitle": "Claude, GPT, Gemini ve daha fazlası dahil",
   "black.title": "OpenCode Black | Fiyatlandırma",
+  "black.paused": "Black plan kaydı geçici olarak duraklatıldı.",
   "black.plan.icon20": "Black 20 planı",
   "black.plan.icon100": "Black 100 planı",
   "black.plan.icon200": "Black 200 planı",

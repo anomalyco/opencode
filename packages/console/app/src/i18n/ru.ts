@@ -249,6 +249,7 @@ export const dict = {
   "black.hero.title": "Доступ к лучшим моделям для кодинга в мире",
   "black.hero.subtitle": "Включая Claude, GPT, Gemini и другие",
   "black.title": "OpenCode Black | Цены",
+  "black.paused": "Регистрация на план Black временно приостановлена.",
   "black.plan.icon20": "План Black 20",
   "black.plan.icon100": "План Black 100",
   "black.plan.icon200": "План Black 200",

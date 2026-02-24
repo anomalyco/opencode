@@ -243,6 +243,7 @@ export const dict = {
   "black.hero.title": "الوصول إلى أفضل نماذج البرمجة في العالم",
   "black.hero.subtitle": "بما في ذلك Claude، GPT، Gemini والمزيد",
   "black.title": "OpenCode Black | الأسعار",
+  "black.paused": "التسجيل في خطة Black متوقف مؤقتًا.",
   "black.plan.icon20": "خطة Black 20",
   "black.plan.icon100": "خطة Black 100",
   "black.plan.icon200": "خطة Black 200",
