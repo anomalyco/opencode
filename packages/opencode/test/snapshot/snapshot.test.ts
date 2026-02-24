@@ -220,8 +220,8 @@ test("patch ignores files larger than snapshot threshold", async () => {
       await Bun.write(small, "small")
 
       const patch = await Snapshot.patch(before!)
-      expect(patch.files).toContain(small)
-      expect(patch.files).not.toContain(big)
+      expect(patch.files).toContain(fwd(tmp.path, "small.txt"))
+      expect(patch.files).not.toContain(fwd(tmp.path, "big.bin"))
       expect(await Bun.file(big).exists()).toBe(true)
     },
   })
@@ -244,9 +244,9 @@ test("patch ignores large files with spaces and leading dashes", async () => {
       await Bun.write(small, "small")
 
       const patch = await Snapshot.patch(before!)
-      expect(patch.files).toContain(small)
-      expect(patch.files).not.toContain(spaced)
-      expect(patch.files).not.toContain(dashed)
+      expect(patch.files).toContain(fwd(tmp.path, "small.txt"))
+      expect(patch.files).not.toContain(fwd(tmp.path, "big file.bin"))
+      expect(patch.files).not.toContain(fwd(tmp.path, "-big.bin"))
       expect(await Bun.file(spaced).exists()).toBe(true)
       expect(await Bun.file(dashed).exists()).toBe(true)
     },
@@ -272,10 +272,10 @@ test("patch ignores large files with gitignore metacharacters", async () => {
       await Bun.write(small, "small")
 
       const patch = await Snapshot.patch(before!)
-      expect(patch.files).toContain(small)
-      expect(patch.files).not.toContain(hashed)
-      expect(patch.files).not.toContain(negated)
-      expect(patch.files).not.toContain(bracket)
+      expect(patch.files).toContain(fwd(tmp.path, "small.txt"))
+      expect(patch.files).not.toContain(fwd(tmp.path, "#big.bin"))
+      expect(patch.files).not.toContain(fwd(tmp.path, "!big.bin"))
+      expect(patch.files).not.toContain(fwd(tmp.path, "big[1].bin"))
       expect(await Bun.file(hashed).exists()).toBe(true)
       expect(await Bun.file(negated).exists()).toBe(true)
       expect(await Bun.file(bracket).exists()).toBe(true)
@@ -296,13 +296,13 @@ test("patch keeps symlink to large file", async () => {
       const small = `${tmp.path}/small.txt`
 
       await writeLarge(big)
-      await $`ln -s ${big} ${link}`.quiet()
+      await fs.symlink(big, link, "file")
       await Bun.write(small, "small")
 
       const patch = await Snapshot.patch(before!)
-      expect(patch.files).toContain(link)
-      expect(patch.files).toContain(small)
-      expect(patch.files).not.toContain(big)
+      expect(patch.files).toContain(fwd(tmp.path, "big-link.bin"))
+      expect(patch.files).toContain(fwd(tmp.path, "small.txt"))
+      expect(patch.files).not.toContain(fwd(tmp.path, "big.bin"))
       expect(await Bun.file(link).exists()).toBe(true)
     },
   })
@@ -415,8 +415,8 @@ test("patch handles large staged file sets without argv overflow", async () => {
 
       const patch = await Snapshot.patch(before!)
       expect(patch.files.length).toBe(files.length)
-      expect(patch.files).toContain(files[0]!)
-      expect(patch.files).toContain(files[files.length - 1]!)
+      expect(patch.files).toContain(files[0]!.replaceAll("\\", "/"))
+      expect(patch.files).toContain(files[files.length - 1]!.replaceAll("\\", "/"))
     },
   })
 })

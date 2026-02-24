@@ -451,9 +451,11 @@ export namespace Snapshot {
     const checks = await Promise.all(
       files.map(async (file) => {
         const full = path.join(Instance.worktree, file)
-        // Keep symlinks by checking link size, not target size.
         const stat = await fs.lstat(full).catch(() => null)
-        return { file, large: stat ? stat.size > sizeThreshold : false }
+        return {
+          file,
+          large: stat ? !stat.isSymbolicLink() && stat.size > sizeThreshold : false,
+        }
       }),
     )
     return checks.filter((item) => item.large).map((item) => item.file)
