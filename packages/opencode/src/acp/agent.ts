@@ -270,25 +270,7 @@ export namespace ACP {
           const sessionId = session.id
 
           if (part.type === "tool") {
-            if (!this.toolStarts.has(part.callID)) {
-              this.toolStarts.add(part.callID)
-              await this.connection
-                .sessionUpdate({
-                  sessionId,
-                  update: {
-                    sessionUpdate: "tool_call",
-                    toolCallId: part.callID,
-                    title: part.tool,
-                    kind: toToolKind(part.tool),
-                    status: "pending",
-                    locations: [],
-                    rawInput: {},
-                  },
-                })
-                .catch((error) => {
-                  log.error("failed to send tool pending to ACP", { error })
-                })
-            }
+            await this.toolStart(sessionId, part)
 
             switch (part.state.status) {
               case "pending":
@@ -829,25 +811,10 @@ export namespace ACP {
 
       for (const part of message.parts) {
         if (part.type === "tool") {
+          await this.toolStart(sessionId, part)
           switch (part.state.status) {
             case "pending":
               this.bashSnapshots.delete(part.callID)
-              await this.connection
-                .sessionUpdate({
-                  sessionId,
-                  update: {
-                    sessionUpdate: "tool_call",
-                    toolCallId: part.callID,
-                    title: part.tool,
-                    kind: toToolKind(part.tool),
-                    status: "pending",
-                    locations: [],
-                    rawInput: {},
-                  },
-                })
-                .catch((err) => {
-                  log.error("failed to send tool pending to ACP", { error: err })
-                })
               break
             case "running":
               const output = this.bashOutput(part)
@@ -880,6 +847,7 @@ export namespace ACP {
                 })
               break
             case "completed":
+              this.toolStarts.delete(part.callID)
               this.bashSnapshots.delete(part.callID)
               const kind = toToolKind(part.tool)
               const content: ToolCallContent[] = [
@@ -959,6 +927,7 @@ export namespace ACP {
                 })
               break
             case "error":
+              this.toolStarts.delete(part.callID)
               this.bashSnapshots.delete(part.callID)
               await this.connection
                 .sessionUpdate({
@@ -1114,6 +1083,27 @@ export namespace ACP {
       const output = part.state.metadata["output"]
       if (typeof output !== "string") return
       return output
+    }
+
+    private async toolStart(sessionId: string, part: ToolPart) {
+      if (this.toolStarts.has(part.callID)) return
+      this.toolStarts.add(part.callID)
+      await this.connection
+        .sessionUpdate({
+          sessionId,
+          update: {
+            sessionUpdate: "tool_call",
+            toolCallId: part.callID,
+            title: part.tool,
+            kind: toToolKind(part.tool),
+            status: "pending",
+            locations: [],
+            rawInput: {},
+          },
+        })
+        .catch((error) => {
+          log.error("failed to send tool pending to ACP", { error })
+        })
     }
 
     private async loadAvailableModes(directory: string): Promise<ModeOption[]> {
