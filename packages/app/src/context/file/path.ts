@@ -103,32 +103,30 @@ export function encodeFilePath(filepath: string): string {
 
 export function createPathHelpers(scope: () => string) {
   const normalize = (input: string) => {
-    const root = scope().replace(/\\/g, "/")
+    const root = scope()
 
-    let path = unquoteGitPath(decodeFilePath(stripQueryAndHash(stripFileProtocol(input)))).replace(/\\/g, "/")
+    let path = unquoteGitPath(decodeFilePath(stripQueryAndHash(stripFileProtocol(input))))
 
-    // Remove initial root prefix, if it's a complete match or followed by /
-    // (don't want /foo/bar to root of /f).
-    // For Windows paths, also check for case-insensitive match.
-    const windows = /^[A-Za-z]:/.test(root)
-    const canonRoot = windows ? root.toLowerCase() : root
-    const canonPath = windows ? path.toLowerCase() : path
+    // Separator-agnostic prefix stripping for Cygwin/native Windows compatibility
+    // Only case-insensitive on Windows (drive letter or UNC paths)
+    const windows = /^[A-Za-z]:/.test(root) || root.startsWith("\\\\")
+    const canonRoot = windows ? root.replace(/\\/g, "/").toLowerCase() : root.replace(/\\/g, "/")
+    const canonPath = windows ? path.replace(/\\/g, "/").toLowerCase() : path.replace(/\\/g, "/")
     if (
       canonPath.startsWith(canonRoot) &&
-      (canonRoot.endsWith("/") || canonPath === canonRoot || canonPath.startsWith(canonRoot + "/"))
+      (canonRoot.endsWith("/") || canonPath === canonRoot || canonPath[canonRoot.length] === "/")
     ) {
-      // If we match canonRoot + "/", the slash will be removed below.
+      // Slice from original path to preserve native separators
       path = path.slice(root.length)
     }
 
-    if (path.startsWith("./")) {
+    if (path.startsWith("./") || path.startsWith(".\\")) {
       path = path.slice(2)
     }
 
-    if (path.startsWith("/")) {
+    if (path.startsWith("/") || path.startsWith("\\")) {
       path = path.slice(1)
     }
-
     return path
   }
 
