@@ -1,1 +1,195 @@
 @import "@opencode-ai/ui/styles/tailwind";
+
+/* ================================================================
+   OpenCode App — Visual Atmosphere Layer
+   Dramatic overrides for production-grade look & feel
+   ================================================================ */
+
+/* --- Sidebar: Distinct visual zone with subtle depth --- */
+[data-component="layout-sidebar"],
+[data-slot="layout-sidebar"] {
+  background: linear-gradient(
+    180deg,
+    var(--background-strong) 0%,
+    var(--background-base) 100%
+  ) !important;
+  border-right: 1px solid var(--border-weaker-base) !important;
+  box-shadow: inset -1px 0 0 0 var(--border-weaker-base);
+}
+
+/* --- Session panel: Subtle gradient background for depth --- */
+[data-component="session-turn"] [data-slot="session-turn-content"] {
+  background: linear-gradient(
+    180deg,
+    var(--background-stronger) 0%,
+    color-mix(in srgb, var(--background-stronger) 97%, var(--background-base)) 100%
+  );
+}
+
+/* --- Prompt dock: Floating elevated look --- */
+[data-dock-surface="shell"] {
+  box-shadow:
+    0 0 0 1px var(--border-weaker-base),
+    0 -8px 32px -8px hsl(0 0% 0% / 0.12),
+    0 -2px 8px -2px hsl(0 0% 0% / 0.06) !important;
+  border-radius: 16px !important;
+}
+
+/* --- Code blocks: Terminal-grade visual treatment --- */
+[data-component="markdown"] .shiki,
+[data-component="markdown"] pre {
+  border-radius: 10px !important;
+  border: 1px solid var(--border-weaker-base) !important;
+  box-shadow:
+    inset 0 1px 4px 0 hsl(0 0% 0% / 0.06),
+    0 1px 2px 0 hsl(0 0% 0% / 0.04) !important;
+}
+
+/* --- File write/edit collapsibles: Card-style treatment --- */
+[data-component="edit-tool"] > [data-component="collapsible"],
+[data-component="write-tool"] > [data-component="collapsible"],
+[data-component="apply-patch-tool"] > [data-component="collapsible"] {
+  border: 1px solid var(--border-weaker-base);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface-inset-base);
+}
+
+/* --- Bash output blocks: Better visual distinction --- */
+[data-component="bash-output"] {
+  border-radius: 10px !important;
+  border: 1px solid var(--border-weaker-base) !important;
+  background: var(--surface-inset-base) !important;
+  box-shadow: inset 0 1px 3px 0 hsl(0 0% 0% / 0.04) !important;
+}
+
+/* --- User messages: Distinct chat bubble feel --- */
+[data-component="user-message"] [data-slot="user-message-text"] {
+  border-radius: 18px 18px 4px 18px !important;
+  padding: 10px 16px !important;
+  background: var(--surface-interactive-weak) !important;
+  border: 1px solid color-mix(in srgb, var(--border-interactive-base) 40%, transparent) !important;
+  box-shadow: 0 1px 3px 0 hsl(0 0% 0% / 0.04) !important;
+}
+
+/* --- Titlebar: Subtle bottom border glow --- */
+[data-component="session-header"],
+[data-component="titlebar"] {
+  border-bottom: 1px solid var(--border-weaker-base);
+  box-shadow: 0 1px 3px 0 hsl(0 0% 0% / 0.03);
+}
+
+/* --- Dialog content: Premium elevated panel --- */
+[data-component="dialog"] [data-slot="dialog-content"] {
+  box-shadow:
+    0 0 0 1px var(--border-weaker-base),
+    0 24px 64px -16px hsl(0 0% 0% / 0.2),
+    0 8px 24px -8px hsl(0 0% 0% / 0.12),
+    0 2px 6px 0 hsl(0 0% 0% / 0.08) !important;
+  border-radius: 12px !important;
+}
+
+/* --- Popover/dropdown menus: Elevated with depth --- */
+[data-component="popover-content"],
+[data-component="dropdown-menu"],
+[data-component="context-menu"] {
+  box-shadow:
+    0 0 0 1px var(--border-weaker-base),
+    0 16px 48px -8px hsl(0 0% 0% / 0.15),
+    0 4px 12px -4px hsl(0 0% 0% / 0.1) !important;
+  border-radius: 10px !important;
+}
+
+/* --- Settings dialog: Refined panel borders --- */
+.settings-dialog {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* --- Tabs: Active tab indicator bar --- */
+[data-component="tabs"][data-variant="alt"] [data-slot="tabs-trigger-wrapper"]:has([data-selected]) {
+  border-bottom-color: var(--icon-interactive-base) !important;
+  border-bottom-width: 2px !important;
+}
+
+/* --- Numbered lists in markdown: More visual weight --- */
+[data-component="markdown"] ol {
+  counter-reset: list-counter;
+  padding-left: 0;
+  list-style: none;
+}
+
+[data-component="markdown"] ol > li {
+  counter-increment: list-counter;
+  padding-left: 2em;
+  position: relative;
+}
+
+[data-component="markdown"] ol > li::before {
+  content: counter(list-counter) ".";
+  position: absolute;
+  left: 0;
+  color: var(--text-interactive-base);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Thinking/loading states: Subtle pulse glow --- */
+[data-slot="session-turn-thinking"] {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--surface-base);
+  border: 1px solid var(--border-weaker-base);
+}
+
+/* --- Tool collapsible triggers: Better hover feedback --- */
+[data-component="collapsible"] > [data-slot="collapsible-trigger"] {
+  transition: background-color 150ms ease;
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin: -4px -8px;
+}
+
+[data-component="collapsible"] > [data-slot="collapsible-trigger"]:hover {
+  background: var(--surface-base-hover);
+}
+
+/* --- Permission prompts: More prominent visual treatment --- */
+[data-component="tool-part-wrapper"][data-permission="true"] {
+  border-radius: 12px !important;
+  box-shadow:
+    0 0 0 1px var(--border-warning-base),
+    0 4px 16px -4px hsl(0 0% 0% / 0.08) !important;
+}
+
+/* --- Scrollbar track on message area: Thinner, subtler --- */
+[data-slot="session-turn-content"] {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-weaker) 30%, transparent) transparent;
+}
+
+[data-slot="session-turn-content"]::-webkit-scrollbar {
+  width: 6px;
+}
+
+[data-slot="session-turn-content"]::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-slot="session-turn-content"]::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-weaker) 30%, transparent);
+  border-radius: 3px;
+}
+
+[data-slot="session-turn-content"]::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text-weaker) 50%, transparent);
+}
+
+/* --- Empty state backgrounds: Subtle radial gradient --- */
+[data-component="session-turn"] .size-full:has(> .text-20-medium) {
+  background: radial-gradient(
+    ellipse 60% 40% at 50% 60%,
+    color-mix(in srgb, var(--surface-interactive-base) 6%, transparent),
+    transparent
+  );
+}
