@@ -1,12 +1,11 @@
-import { createEffect, createMemo, For, Match, on, onCleanup, Show, Switch } from "solid-js"
+import { createEffect, createMemo, Match, on, onCleanup, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { useParams } from "@solidjs/router"
-import { useCodeComponent } from "@opencode-ai/ui/context/code"
+import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { cloneSelectedLineRange, previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { createLineCommentController } from "@opencode-ai/ui/line-comment-annotations"
 import { sampledChecksum } from "@opencode-ai/util/encode"
-import { decode64 } from "@/utils/base64"
 import { showToast } from "@opencode-ai/ui/toast"
 import { Mark } from "@opencode-ai/ui/logo"
 import { Tabs } from "@opencode-ai/ui/tabs"
@@ -25,7 +24,7 @@ export function FileTabContent(props: { tab: string }) {
   const comments = useComments()
   const language = useLanguage()
   const prompt = usePrompt()
-  const codeComponent = useCodeComponent()
+  const fileComponent = useFileComponent()
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey))
@@ -44,52 +43,11 @@ export function FileTabContent(props: { tab: string }) {
   })
   const contents = createMemo(() => state()?.content?.content ?? "")
   const cacheKey = createMemo(() => sampledChecksum(contents()))
-  const isImage = createMemo(() => {
-    const c = state()?.content
-    return c?.encoding === "base64" && c?.mimeType?.startsWith("image/") && c?.mimeType !== "image/svg+xml"
-  })
-  const isSvg = createMemo(() => {
-    const c = state()?.content
-    return c?.mimeType === "image/svg+xml"
-  })
-  const isBinary = createMemo(() => state()?.content?.type === "binary")
-  const svgContent = createMemo(() => {
-    if (!isSvg()) return
-    const c = state()?.content
-    if (!c) return
-    if (c.encoding !== "base64") return c.content
-    return decode64(c.content)
-  })
-
-  const svgDecodeFailed = createMemo(() => {
-    if (!isSvg()) return false
-    const c = state()?.content
-    if (!c) return false
-    if (c.encoding !== "base64") return false
-    return svgContent() === undefined
-  })
 
   const svgToast = { shown: false }
   createEffect(() => {
-    if (!svgDecodeFailed()) return
-    if (svgToast.shown) return
-    svgToast.shown = true
-    showToast({
-      variant: "error",
-      title: language.t("toast.file.loadFailed.title"),
-    })
-  })
-  const svgPreviewUrl = createMemo(() => {
-    if (!isSvg()) return
-    const c = state()?.content
-    if (!c) return
-    if (c.encoding === "base64") return `data:image/svg+xml;base64,${c.content}`
-    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(c.content)}`
-  })
-  const imageDataUrl = createMemo(() => {
-    if (!isImage()) return
-    const c = state()?.content
-    return `data:${c?.mimeType};base64,${c?.content}`
+    path()
+    svgToast.shown = false
   })
   const selectedLines = createMemo<SelectedLineRange | null>(() => {
     const p = path()
@@ -354,10 +312,45 @@ export function FileTabContent(props: { tab: string }) {
     cancelAnimationFrame(scrollFrame)
   })
 
-  const renderCode = (source: string, wrapperClass: string) => (
+  const renderText = (source: string, wrapperClass: string, key = cacheKey()) => (
     <div class={`relative overflow-hidden ${wrapperClass}`}>
       <Dynamic
-        component={codeComponent}
+        component={fileComponent}
+        mode="text"
+        file={{
+          name: path() ?? "",
+          contents: source,
+          cacheKey: key,
+        }}
+        enableLineSelection
+        enableHoverUtility
+        selectedLines={activeSelection()}
+        commentedLines={commentedLines()}
+        onRendered={() => {
+          requestAnimationFrame(restoreScroll)
+        }}
+        annotations={commentsUi.annotations()}
+        renderAnnotation={commentsUi.renderAnnotation}
+        renderHoverUtility={commentsUi.renderHoverUtility}
+        onLineSelected={(range: SelectedLineRange | null) => {
+          commentsUi.onLineSelected(range)
+        }}
+        onLineNumberSelectionEnd={commentsUi.onLineNumberSelectionEnd}
+        onLineSelectionEnd={(range: SelectedLineRange | null) => {
+          commentsUi.onLineSelectionEnd(range)
+        }}
+        overflow="scroll"
+        class="select-text"
+        media={{ mode: "off" }}
+      />
+    </div>
+  )
+
+  const renderFile = (source: string, wrapperClass: string) => (
+    <div class={`relative overflow-hidden ${wrapperClass}`}>
+      <Dynamic
+        component={fileComponent}
+        mode="text"
         file={{
           name: path() ?? "",
           contents: source,
@@ -382,6 +375,47 @@ export function FileTabContent(props: { tab: string }) {
         }}
         overflow="scroll"
         class="select-text"
+        media={{
+          mode: "auto",
+          path: path(),
+          current: state()?.content,
+          onLoad: () => requestAnimationFrame(restoreScroll),
+          onError: (args: { kind: "image" | "audio" | "svg" }) => {
+            if (args.kind !== "svg") return
+            if (svgToast.shown) return
+            svgToast.shown = true
+            showToast({
+              variant: "error",
+              title: language.t("toast.file.loadFailed.title"),
+            })
+          },
+          renderImage: (args: { src: string; onLoad: () => void }) => (
+            <div class="px-6 py-4 pb-40">
+              <img src={args.src} alt={path()} class="max-w-full" onLoad={args.onLoad} />
+            </div>
+          ),
+          renderSvg: (args: { src?: string; source: string; onLoad: () => void }) => (
+            <div class="flex flex-col gap-4 px-6 py-4">
+              {renderText(args.source, "", sampledChecksum(args.source))}
+              <Show when={args.src}>
+                {(src) => (
+                  <div class="flex justify-center pb-40">
+                    <img src={src()} alt={path()} class="max-w-full max-h-96" onLoad={args.onLoad} />
+                  </div>
+                )}
+              </Show>
+            </div>
+          ),
+          renderBinaryPlaceholder: () => (
+            <div class="h-full px-6 pb-42 flex flex-col items-center justify-center text-center gap-6">
+              <Mark class="w-14 opacity-10" />
+              <div class="flex flex-col gap-2 max-w-md">
+                <div class="text-14-semibold text-text-strong truncate">{path()?.split("/").pop()}</div>
+                <div class="text-14-regular text-text-weak">{language.t("session.files.binaryContent")}</div>
+              </div>
+            </div>
+          ),
+        }}
       />
     </div>
   )
@@ -397,36 +431,7 @@ export function FileTabContent(props: { tab: string }) {
         onScroll={handleScroll as any}
       >
         <Switch>
-          <Match when={state()?.loaded && isImage()}>
-            <div class="px-6 py-4 pb-40">
-              <img
-                src={imageDataUrl()}
-                alt={path()}
-                class="max-w-full"
-                onLoad={() => requestAnimationFrame(restoreScroll)}
-              />
-            </div>
-          </Match>
-          <Match when={state()?.loaded && isSvg()}>
-            <div class="flex flex-col gap-4 px-6 py-4">
-              {renderCode(svgContent() ?? "", "")}
-              <Show when={svgPreviewUrl()}>
-                <div class="flex justify-center pb-40">
-                  <img src={svgPreviewUrl()} alt={path()} class="max-w-full max-h-96" />
-                </div>
-              </Show>
-            </div>
-          </Match>
-          <Match when={state()?.loaded && isBinary()}>
-            <div class="h-full px-6 pb-42 flex flex-col items-center justify-center text-center gap-6">
-              <Mark class="w-14 opacity-10" />
-              <div class="flex flex-col gap-2 max-w-md">
-                <div class="text-14-semibold text-text-strong truncate">{path()?.split("/").pop()}</div>
-                <div class="text-14-regular text-text-weak">{language.t("session.files.binaryContent")}</div>
-              </div>
-            </div>
-          </Match>
-          <Match when={state()?.loaded}>{renderCode(contents(), "pb-40")}</Match>
+          <Match when={state()?.loaded}>{renderFile(contents(), "pb-40")}</Match>
           <Match when={state()?.loading}>
             <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
           </Match>

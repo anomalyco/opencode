@@ -7,7 +7,7 @@ import { Icon } from "./icon"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { Tooltip } from "./tooltip"
 import { ScrollView } from "./scroll-view"
-import { useDiffComponent } from "../context/diff"
+import { useFileComponent } from "../context/file"
 import { useI18n } from "../context/i18n"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
@@ -17,6 +17,7 @@ import { type FileContent, type FileDiff } from "@opencode-ai/sdk/v2"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { type SelectedLineRange } from "@pierre/diffs"
 import { Dynamic } from "solid-js/web"
+import { mediaKindFromPath } from "../pierre/media"
 import { cloneSelectedLineRange, previewSelectedLines } from "../pierre/selection-bridge"
 import { createLineCommentController } from "./line-comment-annotations"
 
@@ -65,68 +66,6 @@ export interface SessionReviewProps {
   readFile?: (path: string) => Promise<FileContent | undefined>
 }
 
-const imageExtensions = new Set(["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "ico", "tif", "tiff", "heic"])
-const audioExtensions = new Set(["mp3", "wav", "ogg", "m4a", "aac", "flac", "opus"])
-
-function normalizeMimeType(type: string | undefined): string | undefined {
-  if (!type) return
-
-  const mime = type.split(";", 1)[0]?.trim().toLowerCase()
-  if (!mime) return
-
-  if (mime === "audio/x-aac") return "audio/aac"
-  if (mime === "audio/x-m4a") return "audio/mp4"
-
-  return mime
-}
-
-function getExtension(file: string): string {
-  const idx = file.lastIndexOf(".")
-  if (idx === -1) return ""
-  return file.slice(idx + 1).toLowerCase()
-}
-
-function isImageFile(file: string): boolean {
-  return imageExtensions.has(getExtension(file))
-}
-
-function isAudioFile(file: string): boolean {
-  return audioExtensions.has(getExtension(file))
-}
-
-function dataUrl(content: FileContent | undefined): string | undefined {
-  if (!content) return
-  if (content.encoding !== "base64") return
-  const mime = normalizeMimeType(content.mimeType)
-  if (!mime) return
-  if (!mime.startsWith("image/") && !mime.startsWith("audio/")) return
-  return `data:${mime};base64,${content.content}`
-}
-
-function dataUrlFromValue(value: unknown): string | undefined {
-  if (typeof value === "string") {
-    if (value.startsWith("data:image/")) return value
-    if (value.startsWith("data:audio/x-aac;")) return value.replace("data:audio/x-aac;", "data:audio/aac;")
-    if (value.startsWith("data:audio/x-m4a;")) return value.replace("data:audio/x-m4a;", "data:audio/mp4;")
-    if (value.startsWith("data:audio/")) return value
-    return
-  }
-  if (!value || typeof value !== "object") return
-
-  const content = (value as { content?: unknown }).content
-  const encoding = (value as { encoding?: unknown }).encoding
-  const mimeType = (value as { mimeType?: unknown }).mimeType
-
-  if (typeof content !== "string") return
-  if (encoding !== "base64") return
-  if (typeof mimeType !== "string") return
-  const mime = normalizeMimeType(mimeType)
-  if (!mime) return
-  if (!mime.startsWith("image/") && !mime.startsWith("audio/")) return
-
-  return `data:${mime};base64,${content}`
-}
-
 function diffId(file: string): string | undefined {
   const sum = checksum(file)
   if (!sum) return
@@ -142,7 +81,7 @@ export const SessionReview = (props: SessionReviewProps) => {
   let scroll: HTMLDivElement | undefined
   let focusToken = 0
   const i18n = useI18n()
-  const diffComponent = useDiffComponent()
+  const fileComponent = useFileComponent()
   const anchors = new Map<string, HTMLElement>()
   const [store, setStore] = createStore({
     open: props.diffs.length > 10 ? [] : props.diffs.map((d) => d.file),
@@ -293,28 +232,18 @@ export const SessionReview = (props: SessionReviewProps) => {
                 const beforeText = () => (typeof item().before === "string" ? item().before : "")
                 const afterText = () => (typeof item().after === "string" ? item().after : "")
                 const changedLines = () => item().additions + item().deletions
+                const mediaKind = createMemo(() => mediaKindFromPath(file))
 
                 const tooLarge = createMemo(() => {
                   if (!expanded()) return false
                   if (force()) return false
-                  if (isImageFile(file)) return false
+                  if (mediaKind()) return false
                   return changedLines() > MAX_DIFF_CHANGED_LINES
                 })
 
                 const isAdded = () => item().status === "added" || (beforeText().length === 0 && afterText().length > 0)
                 const isDeleted = () =>
                   item().status === "deleted" || (afterText().length === 0 && beforeText().length > 0)
-                const isImage = () => isImageFile(file)
-                const isAudio = () => isAudioFile(file)
-
-                const diffImageSrc = createMemo(() => dataUrlFromValue(item().after) ?? dataUrlFromValue(item().before))
-                const [imageSrc, setImageSrc] = createSignal<string | undefined>(diffImageSrc())
-                const [imageStatus, setImageStatus] = createSignal<"idle" | "loading" | "error">("idle")
-
-                const diffAudioSrc = createMemo(() => dataUrlFromValue(item().after) ?? dataUrlFromValue(item().before))
-                const [audioSrc, setAudioSrc] = createSignal<string | undefined>(diffAudioSrc())
-                const [audioStatus, setAudioStatus] = createSignal<"idle" | "loading" | "error">("idle")
-                const [audioMime, setAudioMime] = createSignal<string | undefined>(undefined)
 
                 const selectedLines = createMemo(() => {
                   const current = selection()
@@ -358,73 +287,6 @@ export const SessionReview = (props: SessionReviewProps) => {
 
                 onCleanup(() => {
                   anchors.delete(file)
-                })
-
-                createEffect(() => {
-                  if (!isImage()) return
-                  const src = diffImageSrc()
-                  setImageSrc(src)
-                  setImageStatus("idle")
-                })
-
-                createEffect(() => {
-                  if (!isAudio()) return
-                  const src = diffAudioSrc()
-                  setAudioSrc(src)
-                  setAudioStatus("idle")
-                  setAudioMime(undefined)
-                })
-
-                createEffect(() => {
-                  if (!open().includes(file)) return
-                  if (!isImage()) return
-                  if (imageSrc()) return
-                  if (imageStatus() !== "idle") return
-                  if (isDeleted()) return
-
-                  const reader = props.readFile
-                  if (!reader) return
-
-                  setImageStatus("loading")
-                  reader(file)
-                    .then((result) => {
-                      const src = dataUrl(result)
-                      if (!src) {
-                        setImageStatus("error")
-                        return
-                      }
-                      setImageSrc(src)
-                      setImageStatus("idle")
-                    })
-                    .catch(() => {
-                      setImageStatus("error")
-                    })
-                })
-
-                createEffect(() => {
-                  if (!open().includes(file)) return
-                  if (!isAudio()) return
-                  if (audioSrc()) return
-                  if (audioStatus() !== "idle") return
-
-                  const reader = props.readFile
-                  if (!reader) return
-
-                  setAudioStatus("loading")
-                  reader(file)
-                    .then((result) => {
-                      const src = dataUrl(result)
-                      if (!src) {
-                        setAudioStatus("error")
-                        return
-                      }
-                      setAudioMime(normalizeMimeType(result?.mimeType))
-                      setAudioSrc(src)
-                      setAudioStatus("idle")
-                    })
-                    .catch(() => {
-                      setAudioStatus("error")
-                    })
                 })
 
                 const handleLineSelected = (range: SelectedLineRange | null) => {
@@ -487,7 +349,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                   {i18n.t("ui.sessionReview.change.removed")}
                                 </span>
                               </Match>
-                              <Match when={isImage()}>
+                              <Match when={!!mediaKind()}>
                                 <span data-slot="session-review-change" data-type="modified">
                                   {i18n.t("ui.sessionReview.change.modified")}
                                 </span>
@@ -513,28 +375,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                       >
                         <Show when={expanded()}>
                           <Switch>
-                            <Match when={isImage() && imageSrc()}>
-                              <div data-slot="session-review-image-container">
-                                <img data-slot="session-review-image" src={imageSrc()} alt={file} />
-                              </div>
-                            </Match>
-                            <Match when={isImage() && isDeleted()}>
-                              <div data-slot="session-review-image-container" data-removed>
-                                <span data-slot="session-review-image-placeholder">
-                                  {i18n.t("ui.sessionReview.change.removed")}
-                                </span>
-                              </div>
-                            </Match>
-                            <Match when={isImage() && !imageSrc()}>
-                              <div data-slot="session-review-image-container">
-                                <span data-slot="session-review-image-placeholder">
-                                  {imageStatus() === "loading"
-                                    ? i18n.t("ui.sessionReview.image.loading")
-                                    : i18n.t("ui.sessionReview.image.placeholder")}
-                                </span>
-                              </div>
-                            </Match>
-                            <Match when={!isImage() && tooLarge()}>
+                            <Match when={tooLarge()}>
                               <div data-slot="session-review-large-diff">
                                 <div data-slot="session-review-large-diff-title">
                                   {i18n.t("ui.sessionReview.largeDiff.title")}
@@ -552,9 +393,10 @@ export const SessionReview = (props: SessionReviewProps) => {
                                 </div>
                               </div>
                             </Match>
-                            <Match when={!isImage()}>
+                            <Match when={true}>
                               <Dynamic
-                                component={diffComponent}
+                                component={fileComponent}
+                                mode="diff"
                                 preloadedDiff={item().preloaded}
                                 diffStyle={diffStyle()}
                                 onRendered={() => {
@@ -577,6 +419,50 @@ export const SessionReview = (props: SessionReviewProps) => {
                                 after={{
                                   name: file,
                                   contents: typeof item().after === "string" ? item().after : "",
+                                }}
+                                media={{
+                                  mode: "auto",
+                                  path: file,
+                                  before: item().before,
+                                  after: item().after,
+                                  readFile: props.readFile,
+                                  renderImage: (args: { src: string }) => (
+                                    <div data-slot="session-review-image-container">
+                                      <img data-slot="session-review-image" src={args.src} alt={file} />
+                                    </div>
+                                  ),
+                                  renderRemoved: (args: { kind: "image" | "audio" }) =>
+                                    args.kind === "image" ? (
+                                      <div data-slot="session-review-image-container" data-removed>
+                                        <span data-slot="session-review-image-placeholder">
+                                          {i18n.t("ui.sessionReview.change.removed")}
+                                        </span>
+                                      </div>
+                                    ) : undefined,
+                                  renderPlaceholder: (args: { kind: "image" | "audio" }) =>
+                                    args.kind === "image" ? (
+                                      <div data-slot="session-review-image-container">
+                                        <span data-slot="session-review-image-placeholder">
+                                          {i18n.t("ui.sessionReview.image.placeholder")}
+                                        </span>
+                                      </div>
+                                    ) : undefined,
+                                  renderLoading: (args: { kind: "image" | "audio" }) =>
+                                    args.kind === "image" ? (
+                                      <div data-slot="session-review-image-container">
+                                        <span data-slot="session-review-image-placeholder">
+                                          {i18n.t("ui.sessionReview.image.loading")}
+                                        </span>
+                                      </div>
+                                    ) : undefined,
+                                  renderError: (args: { kind: "image" | "audio" | "svg" }) =>
+                                    args.kind === "image" ? (
+                                      <div data-slot="session-review-image-container">
+                                        <span data-slot="session-review-image-placeholder">
+                                          {i18n.t("ui.sessionReview.image.placeholder")}
+                                        </span>
+                                      </div>
+                                    ) : undefined,
                                 }}
                               />
                             </Match>

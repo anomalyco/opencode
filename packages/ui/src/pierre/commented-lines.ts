@@ -1,4 +1,5 @@
 import { type SelectedLineRange } from "@pierre/diffs"
+import { diffLineIndex, diffRowIndex, findDiffSide } from "./diff-selection"
 
 export type CommentSide = "additions" | "deletions"
 
@@ -15,46 +16,6 @@ function clear(root: ShadowRoot) {
   for (const node of marked) {
     if (!(node instanceof HTMLElement)) continue
     node.removeAttribute("data-comment-selected")
-  }
-}
-
-export function findDiffSide(node: HTMLElement): CommentSide {
-  const line = node.closest("[data-line], [data-alt-line]")
-  if (line instanceof HTMLElement) {
-    const type = line.dataset.lineType
-    if (type === "change-deletion") return "deletions"
-    if (type === "change-addition" || type === "change-additions") return "additions"
-  }
-
-  const code = node.closest("[data-code]")
-  if (!(code instanceof HTMLElement)) return "additions"
-  return code.hasAttribute("data-deletions") ? "deletions" : "additions"
-}
-
-function lineIndex(split: boolean, node: HTMLElement) {
-  const raw = node.dataset.lineIndex
-  if (!raw) return
-
-  const values = raw
-    .split(",")
-    .map((x) => parseInt(x, 10))
-    .filter((x) => !Number.isNaN(x))
-  if (values.length === 0) return
-  if (!split) return values[0]
-  if (values.length === 2) return values[1]
-  return values[0]
-}
-
-function rowIndex(root: ShadowRoot, split: boolean, line: number, side: CommentSide | undefined) {
-  const rows = Array.from(root.querySelectorAll(`[data-line="${line}"], [data-alt-line="${line}"]`)).filter(
-    (node): node is HTMLElement => node instanceof HTMLElement,
-  )
-  if (rows.length === 0) return
-
-  const target = side ?? "additions"
-  for (const row of rows) {
-    if (findDiffSide(row) === target) return lineIndex(split, row)
-    if (parseInt(row.dataset.altLine ?? "", 10) === line) return lineIndex(split, row)
   }
 }
 
@@ -75,13 +36,13 @@ export function markCommentedDiffLines(root: ShadowRoot, ranges: SelectedLineRan
   )
 
   for (const range of ranges) {
-    const start = rowIndex(root, split, range.start, range.side)
+    const start = diffRowIndex(root, split, range.start, range.side as CommentSide | undefined)
     if (start === undefined) continue
 
     const end = (() => {
       const same = range.end === range.start && (range.endSide == null || range.endSide === range.side)
       if (same) return start
-      return rowIndex(root, split, range.end, range.endSide ?? range.side)
+      return diffRowIndex(root, split, range.end, (range.endSide ?? range.side) as CommentSide | undefined)
     })()
     if (end === undefined) continue
 
@@ -89,7 +50,7 @@ export function markCommentedDiffLines(root: ShadowRoot, ranges: SelectedLineRan
     const last = Math.max(start, end)
 
     for (const row of rows) {
-      const idx = lineIndex(split, row)
+      const idx = diffLineIndex(split, row)
       if (idx === undefined || idx < first || idx > last) continue
       row.setAttribute("data-comment-selected", "")
     }
