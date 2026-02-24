@@ -648,7 +648,8 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
   }
 })
 
-test("resolves scoped npm plugins in config", async () => {
+// Bun's import.meta.resolve with file:// URLs doesn't resolve scoped packages on Windows
+test.skipIf(process.platform === "win32")("resolves scoped npm plugins in config", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       const pluginDir = path.join(dir, "node_modules", "@scope", "plugin")

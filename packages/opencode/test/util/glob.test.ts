@@ -23,7 +23,7 @@ describe("Glob", () => {
 
       const results = await Glob.scan("*.txt", { cwd: tmp.path, absolute: true })
 
-      expect(results[0]).toBe(path.join(tmp.path, "file.txt"))
+      expect(results[0]).toBe(path.join(tmp.path, "file.txt").replaceAll("\\", "/"))
     })
 
     test("excludes directories by default", async () => {

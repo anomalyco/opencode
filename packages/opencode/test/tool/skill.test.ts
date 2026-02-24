@@ -91,8 +91,8 @@ Use this skill.
           }
 
           const result = await tool.execute({ name: "tool-skill" }, ctx)
-          const dir = path.join(tmp.path, ".opencode", "skill", "tool-skill")
-          const file = path.resolve(dir, "scripts", "demo.txt")
+          const dir = path.join(tmp.path, ".opencode", "skill", "tool-skill").replaceAll("\\", "/")
+          const file = path.resolve(dir, "scripts", "demo.txt").replaceAll("\\", "/")
 
           expect(requests.length).toBe(1)
           expect(requests[0].permission).toBe("skill")
