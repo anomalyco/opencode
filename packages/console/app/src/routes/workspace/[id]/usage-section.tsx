@@ -94,6 +94,7 @@ export function UsageSection() {
                 <th>{i18n.t("workspace.usage.table.input")}</th>
                 <th>{i18n.t("workspace.usage.table.output")}</th>
                 <th>{i18n.t("workspace.usage.table.cost")}</th>
+                <th>{i18n.t("workspace.usage.table.session")}</th>
               </tr>
             </thead>
             <tbody>
@@ -176,13 +177,23 @@ export function UsageSection() {
                       <td data-slot="usage-cost">
                         <Show
                           when={usage.enrichment?.plan === "sub"}
-                          fallback={<>${((usage.cost ?? 0) / 100000000).toFixed(4)}</>}
+                          fallback={
+                            <Show
+                              when={usage.enrichment?.plan === "byok"}
+                              fallback={<>${((usage.cost ?? 0) / 100000000).toFixed(4)}</>}
+                            >
+                              {i18n.t("workspace.usage.byok", {
+                                amount: ((usage.cost ?? 0) / 100000000).toFixed(4),
+                              })}
+                            </Show>
+                          }
                         >
                           {i18n.t("workspace.usage.subscription", {
                             amount: ((usage.cost ?? 0) / 100000000).toFixed(4),
                           })}
                         </Show>
                       </td>
+                      <td data-slot="usage-session">{usage.sessionID?.slice(-8) ?? "-"}</td>
                     </tr>
                   )
                 }}
