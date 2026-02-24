@@ -1372,7 +1372,7 @@ export type KeybindsConfig = {
    */
   display_thinking?: string
   /**
-   * Toggle focus mode for expanded input
+   * Toggle focus mode
    */
   focus_mode?: string
 }
