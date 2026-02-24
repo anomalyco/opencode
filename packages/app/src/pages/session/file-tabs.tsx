@@ -236,7 +236,9 @@ export function FileTabContent(props: { tab: string }) {
       },
     }),
     renderDraft: (range) => ({
-      value: note.draft,
+      get value() {
+        return note.draft
+      },
       selection: formatCommentLabel(range),
       onInput: (value) => setNote("draft", value),
       onCancel: () => setCommenting(null),

@@ -396,7 +396,9 @@ export const SessionReview = (props: SessionReviewProps) => {
                     },
                   }),
                   renderDraft: (range) => ({
-                    value: draft(),
+                    get value() {
+                      return draft()
+                    },
                     selection: selectionLabel(range),
                     onInput: setDraft,
                     onCancel: () => {

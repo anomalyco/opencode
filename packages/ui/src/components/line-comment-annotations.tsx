@@ -44,14 +44,16 @@ export function createLineCommentAnnotationRenderer<T>(props: {
     const host = document.createElement("div")
     host.setAttribute("data-prevent-autofocus", "")
     const [current, setCurrent] = createSignal(meta)
-    if (meta.kind === "comment") {
-      const view = createMemo(() => {
-        const next = current()
-        if (next.kind !== "comment") return props.renderComment(meta.comment)
-        return props.renderComment(next.comment)
-      })
-      const dispose = renderSolid(
-        () => (
+
+    const dispose = renderSolid(() => {
+      const active = current()
+      if (active.kind === "comment") {
+        const view = createMemo(() => {
+          const next = current()
+          if (next.kind !== "comment") return props.renderComment(active.comment)
+          return props.renderComment(next.comment)
+        })
+        return (
           <LineComment
             inline
             id={view().id}
@@ -61,22 +63,15 @@ export function createLineCommentAnnotationRenderer<T>(props: {
             onClick={view().onClick}
             onMouseEnter={view().onMouseEnter}
           />
-        ),
-        host,
-      )
+        )
+      }
 
-      const node = { host, dispose, setMeta: setCurrent }
-      nodes.set(meta.key, node)
-      return node
-    }
-
-    const view = createMemo(() => {
-      const next = current()
-      if (next.kind !== "draft") return props.renderDraft(meta.range)
-      return props.renderDraft(next.range)
-    })
-    const dispose = renderSolid(
-      () => (
+      const view = createMemo(() => {
+        const next = current()
+        if (next.kind !== "draft") return props.renderDraft(active.range)
+        return props.renderDraft(next.range)
+      })
+      return (
         <LineCommentEditor
           inline
           value={view().value}
@@ -86,9 +81,8 @@ export function createLineCommentAnnotationRenderer<T>(props: {
           onSubmit={view().onSubmit}
           onPopoverFocusOut={view().onPopoverFocusOut}
         />
-      ),
-      host,
-    )
+      )
+    }, host)
 
     const node = { host, dispose, setMeta: setCurrent }
     nodes.set(meta.key, node)
