@@ -1,9 +1,9 @@
 import type { APIEvent } from "@solidjs/start/server"
 import { and, Database, eq, isNull, lt, or, sql } from "@opencode-ai/console-core/drizzle/index.js"
 import { KeyTable } from "@opencode-ai/console-core/schema/key.sql.js"
-import { BillingTable, SubscriptionTable, UsageTable } from "@opencode-ai/console-core/schema/billing.sql.js"
+import { BillingTable, LiteTable, SubscriptionTable, UsageTable } from "@opencode-ai/console-core/schema/billing.sql.js"
 import { centsToMicroCents } from "@opencode-ai/console-core/util/price.js"
-import { getWeekBounds } from "@opencode-ai/console-core/util/date.js"
+import { getMonthlyBounds, getWeekBounds } from "@opencode-ai/console-core/util/date.js"
 import { Identifier } from "@opencode-ai/console-core/identifier.js"
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import { Actor } from "@opencode-ai/console-core/actor.js"
@@ -33,13 +33,14 @@ import { createRateLimiter } from "./rateLimiter"
 import { createDataDumper } from "./dataDumper"
 import { createTrialLimiter } from "./trialLimiter"
 import { createStickyTracker } from "./stickyProviderTracker"
+import { LiteData } from "@opencode-ai/console-core/lite.js"
 
 type ZenData = Awaited<ReturnType<typeof ZenData.list>>
 type RetryOptions = {
   excludeProviders: string[]
   retryCount: number
 }
-type BillingSource = "anonymous" | "free" | "byok" | "subscription" | "balance"
+type BillingSource = "anonymous" | "free" | "byok" | "subscription" | "lite" | "balance"
 
 export async function handler(
   input: APIEvent,
@@ -454,6 +455,7 @@ export async function handler(
             reloadTrigger: BillingTable.reloadTrigger,
             timeReloadLockedTill: BillingTable.timeReloadLockedTill,
             subscription: BillingTable.subscription,
+            lite: BillingTable.lite,
           },
           user: {
             id: UserTable.id,
@@ -461,12 +463,22 @@ export async function handler(
             monthlyUsage: UserTable.monthlyUsage,
             timeMonthlyUsageUpdated: UserTable.timeMonthlyUsageUpdated,
           },
-          subscription: {
+          black: {
             id: SubscriptionTable.id,
             rollingUsage: SubscriptionTable.rollingUsage,
             fixedUsage: SubscriptionTable.fixedUsage,
             timeRollingUpdated: SubscriptionTable.timeRollingUpdated,
             timeFixedUpdated: SubscriptionTable.timeFixedUpdated,
+          },
+          lite: {
+            id: LiteTable.id,
+            timeCreated: LiteTable.timeCreated,
+            rollingUsage: LiteTable.rollingUsage,
+            weeklyUsage: LiteTable.weeklyUsage,
+            monthlyUsage: LiteTable.monthlyUsage,
+            timeRollingUpdated: LiteTable.timeRollingUpdated,
+            timeWeeklyUpdated: LiteTable.timeWeeklyUpdated,
+            timeMonthlyUpdated: LiteTable.timeMonthlyUpdated,
           },
           provider: {
             credentials: ProviderTable.credentials,
@@ -495,6 +507,14 @@ export async function handler(
             isNull(SubscriptionTable.timeDeleted),
           ),
         )
+        .leftJoin(
+          LiteTable,
+          and(
+            eq(LiteTable.workspaceID, KeyTable.workspaceID),
+            eq(LiteTable.userID, KeyTable.userID),
+            isNull(LiteTable.timeDeleted),
+          ),
+        )
         .where(and(eq(KeyTable.key, apiKey), isNull(KeyTable.timeDeleted)))
         .then((rows) => rows[0]),
     )
@@ -503,8 +523,19 @@ export async function handler(
     logger.metric({
       api_key: data.apiKey,
       workspace: data.workspaceID,
-      isSubscription: data.subscription ? true : false,
-      subscription: data.billing.subscription?.plan,
+      ...(() => {
+        if (data.billing.subscription)
+          return {
+            isSubscription: true,
+            subscription: data.billing.subscription.plan,
+          }
+        if (data.billing.lite)
+          return {
+            isSubscription: true,
+            subscription: "lite",
+          }
+        return {}
+      })(),
     })
 
     return {
@@ -512,7 +543,8 @@ export async function handler(
       workspaceID: data.workspaceID,
       billing: data.billing,
       user: data.user,
-      subscription: data.subscription,
+      black: data.black,
+      lite: data.lite,
       provider: data.provider,
       isFree: FREE_WORKSPACES.includes(data.workspaceID),
       isDisabled: !!data.timeDisabled,
@@ -525,20 +557,20 @@ export async function handler(
     if (authInfo.isFree) return "free"
     if (modelInfo.allowAnonymous) return "free"
 
-    // Validate subscription billing
-    if (authInfo.billing.subscription && authInfo.subscription) {
-      try {
-        const sub = authInfo.subscription
-        const plan = authInfo.billing.subscription.plan
+    const formatRetryTime = (seconds: number) => {
+      const days = Math.floor(seconds / 86400)
+      if (days >= 1) return `${days} day${days > 1 ? "s" : ""}`
+      const hours = Math.floor(seconds / 3600)
+      const minutes = Math.ceil((seconds % 3600) / 60)
+      if (hours >= 1) return `${hours}hr ${minutes}min`
+      return `${minutes}min`
+    }
 
-        const formatRetryTime = (seconds: number) => {
-          const days = Math.floor(seconds / 86400)
-          if (days >= 1) return `${days} day${days > 1 ? "s" : ""}`
-          const hours = Math.floor(seconds / 3600)
-          const minutes = Math.ceil((seconds % 3600) / 60)
-          if (hours >= 1) return `${hours}hr ${minutes}min`
-          return `${minutes}min`
-        }
+    // Validate black subscription billing
+    if (authInfo.billing.subscription && authInfo.black) {
+      try {
+        const sub = authInfo.black
+        const plan = authInfo.billing.subscription.plan
 
         // Check weekly limit
         if (sub.fixedUsage && sub.timeFixedUpdated) {
@@ -574,6 +606,62 @@ export async function handler(
         return "subscription"
       } catch (e) {
         if (!authInfo.billing.subscription.useBalance) throw e
+      }
+    }
+
+    // Validate lite subscription billing
+    if (opts.modelList === "lite" && authInfo.billing.lite && authInfo.lite) {
+      try {
+        const sub = authInfo.lite
+        const liteData = LiteData.getLimits()
+
+        // Check weekly limit
+        if (sub.weeklyUsage && sub.timeWeeklyUpdated) {
+          const result = Subscription.analyzeWeeklyUsage({
+            limit: liteData.weeklyLimit,
+            usage: sub.weeklyUsage,
+            timeUpdated: sub.timeWeeklyUpdated,
+          })
+          if (result.status === "rate-limited")
+            throw new SubscriptionUsageLimitError(
+              `Subscription quota exceeded. Retry in ${formatRetryTime(result.resetInSec)}.`,
+              result.resetInSec,
+            )
+        }
+
+        // Check monthly limit
+        if (sub.monthlyUsage && sub.timeMonthlyUpdated) {
+          const result = Subscription.analyzeMonthlyUsage({
+            limit: liteData.monthlyLimit,
+            usage: sub.monthlyUsage,
+            timeUpdated: sub.timeMonthlyUpdated,
+            timeSubscribed: sub.timeCreated,
+          })
+          if (result.status === "rate-limited")
+            throw new SubscriptionUsageLimitError(
+              `Subscription quota exceeded. Retry in ${formatRetryTime(result.resetInSec)}.`,
+              result.resetInSec,
+            )
+        }
+
+        // Check rolling limit
+        if (sub.monthlyUsage && sub.timeMonthlyUpdated) {
+          const result = Subscription.analyzeRollingUsage({
+            limit: liteData.rollingLimit,
+            window: liteData.rollingWindow,
+            usage: sub.monthlyUsage,
+            timeUpdated: sub.timeMonthlyUpdated,
+          })
+          if (result.status === "rate-limited")
+            throw new SubscriptionUsageLimitError(
+              `Subscription quota exceeded. Retry in ${formatRetryTime(result.resetInSec)}.`,
+              result.resetInSec,
+            )
+        }
+
+        return "lite"
+      } catch (e) {
+        if (!authInfo.billing.lite.useBalance) throw e
       }
     }
 
@@ -743,6 +831,7 @@ export async function handler(
           enrichment: (() => {
             if (billingSource === "subscription") return { plan: "sub" }
             if (billingSource === "byok") return { plan: "byok" }
+            if (billingSource === "lite") return { plan: "lite" }
             return undefined
           })(),
         }),
@@ -750,74 +839,115 @@ export async function handler(
           .update(KeyTable)
           .set({ timeUsed: sql`now()` })
           .where(and(eq(KeyTable.workspaceID, authInfo.workspaceID), eq(KeyTable.id, authInfo.apiKeyId))),
-        ...(billingSource === "subscription"
-          ? (() => {
-              const plan = authInfo.billing.subscription!.plan
-              const black = BlackData.getLimits({ plan })
-              const week = getWeekBounds(new Date())
-              const rollingWindowSeconds = black.rollingWindow * 3600
-              return [
-                db
-                  .update(SubscriptionTable)
-                  .set({
-                    fixedUsage: sql`
+        ...(() => {
+          if (billingSource === "subscription") {
+            const plan = authInfo.billing.subscription!.plan
+            const black = BlackData.getLimits({ plan })
+            const week = getWeekBounds(new Date())
+            const rollingWindowSeconds = black.rollingWindow * 3600
+            return [
+              db
+                .update(SubscriptionTable)
+                .set({
+                  fixedUsage: sql`
               CASE
                 WHEN ${SubscriptionTable.timeFixedUpdated} >= ${week.start} THEN ${SubscriptionTable.fixedUsage} + ${cost}
                 ELSE ${cost}
               END
             `,
-                    timeFixedUpdated: sql`now()`,
-                    rollingUsage: sql`
+                  timeFixedUpdated: sql`now()`,
+                  rollingUsage: sql`
               CASE
                 WHEN UNIX_TIMESTAMP(${SubscriptionTable.timeRollingUpdated}) >= UNIX_TIMESTAMP(now()) - ${rollingWindowSeconds} THEN ${SubscriptionTable.rollingUsage} + ${cost}
                 ELSE ${cost}
               END
             `,
-                    timeRollingUpdated: sql`
+                  timeRollingUpdated: sql`
               CASE
                 WHEN UNIX_TIMESTAMP(${SubscriptionTable.timeRollingUpdated}) >= UNIX_TIMESTAMP(now()) - ${rollingWindowSeconds} THEN ${SubscriptionTable.timeRollingUpdated}
                 ELSE now()
               END
             `,
-                  })
-                  .where(
-                    and(
-                      eq(SubscriptionTable.workspaceID, authInfo.workspaceID),
-                      eq(SubscriptionTable.userID, authInfo.user.id),
-                    ),
+                })
+                .where(
+                  and(
+                    eq(SubscriptionTable.workspaceID, authInfo.workspaceID),
+                    eq(SubscriptionTable.userID, authInfo.user.id),
                   ),
-              ]
-            })()
-          : [
+                ),
+            ]
+          }
+          if (billingSource === "lite") {
+            const lite = LiteData.getLimits()
+            const week = getWeekBounds(new Date())
+            const month = getMonthlyBounds(new Date(), authInfo.lite!.timeCreated)
+            const rollingWindowSeconds = lite.rollingWindow * 3600
+            return [
               db
-                .update(BillingTable)
+                .update(LiteTable)
                 .set({
-                  balance:
-                    billingSource === "free" || billingSource === "byok"
-                      ? sql`${BillingTable.balance} - ${0}`
-                      : sql`${BillingTable.balance} - ${cost}`,
                   monthlyUsage: sql`
+              CASE
+                WHEN ${LiteTable.timeMonthlyUpdated} >= ${month.start} THEN ${LiteTable.monthlyUsage} + ${cost}
+                ELSE ${cost}
+              END
+            `,
+                  timeMonthlyUpdated: sql`now()`,
+                  weeklyUsage: sql`
+              CASE
+                WHEN ${LiteTable.timeWeeklyUpdated} >= ${week.start} THEN ${LiteTable.weeklyUsage} + ${cost}
+                ELSE ${cost}
+              END
+            `,
+                  timeWeeklyUpdated: sql`now()`,
+                  rollingUsage: sql`
+              CASE
+                WHEN UNIX_TIMESTAMP(${LiteTable.timeRollingUpdated}) >= UNIX_TIMESTAMP(now()) - ${rollingWindowSeconds} THEN ${LiteTable.rollingUsage} + ${cost}
+                ELSE ${cost}
+              END
+            `,
+                  timeRollingUpdated: sql`
+              CASE
+                WHEN UNIX_TIMESTAMP(${LiteTable.timeRollingUpdated}) >= UNIX_TIMESTAMP(now()) - ${rollingWindowSeconds} THEN ${LiteTable.timeRollingUpdated}
+                ELSE now()
+              END
+            `,
+                })
+                .where(and(eq(LiteTable.workspaceID, authInfo.workspaceID), eq(LiteTable.userID, authInfo.user.id))),
+            ]
+          }
+
+          return [
+            db
+              .update(BillingTable)
+              .set({
+                balance:
+                  billingSource === "free" || billingSource === "byok"
+                    ? sql`${BillingTable.balance} - ${0}`
+                    : sql`${BillingTable.balance} - ${cost}`,
+                monthlyUsage: sql`
               CASE
                 WHEN MONTH(${BillingTable.timeMonthlyUsageUpdated}) = MONTH(now()) AND YEAR(${BillingTable.timeMonthlyUsageUpdated}) = YEAR(now()) THEN ${BillingTable.monthlyUsage} + ${cost}
                 ELSE ${cost}
               END
             `,
-                  timeMonthlyUsageUpdated: sql`now()`,
-                })
-                .where(eq(BillingTable.workspaceID, authInfo.workspaceID)),
-              db
-                .update(UserTable)
-                .set({
-                  monthlyUsage: sql`
+                timeMonthlyUsageUpdated: sql`now()`,
+              })
+              .where(eq(BillingTable.workspaceID, authInfo.workspaceID)),
+            db
+              .update(UserTable)
+              .set({
+                monthlyUsage: sql`
               CASE
                 WHEN MONTH(${UserTable.timeMonthlyUsageUpdated}) = MONTH(now()) AND YEAR(${UserTable.timeMonthlyUsageUpdated}) = YEAR(now()) THEN ${UserTable.monthlyUsage} + ${cost}
                 ELSE ${cost}
               END
             `,
-                  timeMonthlyUsageUpdated: sql`now()`,
-                })
-                .where(and(eq(UserTable.workspaceID, authInfo.workspaceID), eq(UserTable.id, authInfo.user.id))),
-            ]),
+                timeMonthlyUsageUpdated: sql`now()`,
+              })
+              .where(and(eq(UserTable.workspaceID, authInfo.workspaceID), eq(UserTable.id, authInfo.user.id))),
+          ]
+        })(),
       ]),
     )
 
