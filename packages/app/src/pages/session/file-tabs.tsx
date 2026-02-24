@@ -1,4 +1,4 @@
-import { createEffect, createMemo, For, Match, on, onCleanup, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, Show, Switch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { useParams } from "@solidjs/router"
@@ -41,6 +41,13 @@ export function FileTabContent(props: { tab: string }) {
   let scrollFrame: number | undefined
   let pending: { x: number; y: number } | undefined
   let codeScroll: HTMLElement[] = []
+  let hThumbRef: HTMLDivElement | undefined
+  const [hThumbWidth, setHThumbWidth] = createSignal(0)
+  const [hThumbLeft, setHThumbLeft] = createSignal(0)
+  const [showHThumb, setShowHThumb] = createSignal(false)
+  const [isHHovered, setIsHHovered] = createSignal(false)
+  const [isHDragging, setIsHDragging] = createSignal(false)
+  let shadowObserver: MutationObserver | undefined
 
   const path = createMemo(() => file.pathFromTab(props.tab))
   const state = createMemo(() => {
@@ -160,6 +167,13 @@ export function FileTabContent(props: { tab: string }) {
   })
 
   const commentedLines = createMemo(() => fileComments().map((comment) => comment.selection))
+
+  const commentAnchors = createMemo(() =>
+    fileComments().map((comment) => ({
+      id: comment.id,
+      line: Math.max(comment.selection.start, comment.selection.end),
+    })),
+  )
 
   const [note, setNote] = createStore({
     openedComment: null as string | null,
@@ -325,6 +339,8 @@ export function FileTabContent(props: { tab: string }) {
       x: target.scrollLeft,
       y: el.scrollTop,
     })
+
+    updateHThumb()
   }
 
   const syncCodeScroll = () => {
@@ -340,6 +356,26 @@ export function FileTabContent(props: { tab: string }) {
     for (const item of codeScroll) {
       item.addEventListener("scroll", handleCodeScroll)
     }
+  }
+
+  // Watch for DOM changes (e.g. syntax highlighting) that may recreate [data-code] elements
+  const setupShadowObserver = () => {
+    if (shadowObserver) return
+
+    const el = scroll
+    if (!el) return
+
+    const host = el.querySelector("diffs-container")
+    if (!(host instanceof HTMLElement)) return
+
+    const root = host.shadowRoot
+    if (!root) return
+
+    shadowObserver = new MutationObserver(() => {
+      syncCodeScroll()
+      updateHThumb()
+    })
+    shadowObserver.observe(root, { childList: true, subtree: true })
   }
 
   const restoreScroll = () => {
@@ -369,6 +405,70 @@ export function FileTabContent(props: { tab: string }) {
       x: codeScroll[0]?.scrollLeft ?? event.currentTarget.scrollLeft,
       y: event.currentTarget.scrollTop,
     })
+  }
+
+  const updateHThumb = () => {
+    const code = codeScroll[0]
+    if (!code) {
+      setShowHThumb(false)
+      return
+    }
+    const { scrollLeft, scrollWidth, clientWidth } = code
+    if (scrollWidth <= clientWidth || scrollWidth === 0) {
+      setShowHThumb(false)
+      return
+    }
+    setShowHThumb(true)
+    const trackPadding = 8
+    const trackWidth = clientWidth - trackPadding * 2
+    const minThumbWidth = 32
+    let width = (clientWidth / scrollWidth) * trackWidth
+    width = Math.max(width, minThumbWidth)
+    const maxScrollLeft = scrollWidth - clientWidth
+    const maxThumbLeft = trackWidth - width
+    const left = maxScrollLeft > 0 ? (scrollLeft / maxScrollLeft) * maxThumbLeft : 0
+    setHThumbWidth(width)
+    setHThumbLeft(trackPadding + Math.max(0, Math.min(left, maxThumbLeft)))
+  }
+
+  const onHThumbPointerDown = (e: PointerEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsHDragging(true)
+    const startX = e.clientX
+    const startScrollLeft = codeScroll[0]?.scrollLeft ?? 0
+    hThumbRef!.setPointerCapture(e.pointerId)
+
+    const onPointerMove = (e: PointerEvent) => {
+      const deltaX = e.clientX - startX
+      const code = codeScroll[0]
+      if (!code) return
+      const { scrollWidth, clientWidth } = code
+      const maxScrollLeft = scrollWidth - clientWidth
+      const trackPadding = 8
+      const trackWidth = clientWidth - trackPadding * 2
+      const maxThumbLeft = trackWidth - hThumbWidth()
+      if (maxThumbLeft > 0) {
+        const newLeft = startScrollLeft + deltaX * (maxScrollLeft / maxThumbLeft)
+        for (const item of codeScroll) item.scrollLeft = newLeft
+      }
+    }
+
+    const onPointerUp = (e: PointerEvent) => {
+      setIsHDragging(false)
+      hThumbRef!.releasePointerCapture(e.pointerId)
+      hThumbRef!.removeEventListener("pointermove", onPointerMove)
+      hThumbRef!.removeEventListener("pointerup", onPointerUp)
+    }
+
+    hThumbRef!.addEventListener("pointermove", onPointerMove)
+    hThumbRef!.addEventListener("pointerup", onPointerUp)
+  }
+
+  const cancelCommenting = () => {
+    const p = path()
+    if (p) file.setSelectedLines(p, null)
+    setNote("commenting", null)
   }
 
   createEffect(
@@ -409,6 +509,9 @@ export function FileTabContent(props: { tab: string }) {
       item.removeEventListener("scroll", handleCodeScroll)
     }
 
+    shadowObserver?.disconnect()
+    shadowObserver = undefined
+
     if (scrollFrame === undefined) return
     cancelAnimationFrame(scrollFrame)
   })
@@ -431,8 +534,14 @@ export function FileTabContent(props: { tab: string }) {
         enableLineSelection
         selectedLines={selectedLines()}
         commentedLines={commentedLines()}
+        commentAnchors={commentAnchors()}
         onRendered={() => {
-          requestAnimationFrame(restoreScroll)
+          requestAnimationFrame(() => {
+            syncCodeScroll()
+            restoreScroll()
+            updateHThumb()
+            setupShadowObserver()
+          })
           requestAnimationFrame(scheduleComments)
         }}
         onLineSelected={(range: SelectedLineRange | null) => {
@@ -449,6 +558,23 @@ export function FileTabContent(props: { tab: string }) {
 
           setNote("openedComment", null)
           setCommenting(range)
+        }}
+        onCommentAnchorClick={(id: string) => {
+          const p = path()
+          if (!p) return
+          const comment = fileComments().find((c) => c.id === id)
+          if (!comment) return
+          setCommenting(null)
+          setNote("openedComment", (current) => (current === id ? null : id))
+          file.setSelectedLines(p, comment.selection)
+        }}
+        onCommentAnchorHover={(id: string | null) => {
+          const p = path()
+          if (!p) return
+          if (id) {
+            const comment = fileComments().find((c) => c.id === id)
+            if (comment) file.setSelectedLines(p, comment.selection)
+          }
         }}
         overflow="scroll"
         class="select-text"
@@ -484,7 +610,7 @@ export function FileTabContent(props: { tab: string }) {
               value={note.draft}
               selection={formatCommentLabel(range())}
               onInput={(value) => setNote("draft", value)}
-              onCancel={() => setCommenting(null)}
+              onCancel={cancelCommenting}
               onSubmit={(value) => {
                 const p = path()
                 if (!p) return
@@ -498,7 +624,7 @@ export function FileTabContent(props: { tab: string }) {
 
                 setTimeout(() => {
                   if (!document.activeElement || !current.contains(document.activeElement)) {
-                    setCommenting(null)
+                    cancelCommenting()
                   }
                 }, 0)
               }}
@@ -510,7 +636,7 @@ export function FileTabContent(props: { tab: string }) {
   )
 
   return (
-    <Tabs.Content value={props.tab} class="mt-3 relative h-full">
+    <Tabs.Content value={props.tab} class="mt-3 relative h-full" onPointerEnter={() => setIsHHovered(true)} onPointerLeave={() => setIsHHovered(false)}>
       <ScrollView
         class="h-full"
         viewportRef={(el: HTMLDivElement) => {
@@ -555,6 +681,20 @@ export function FileTabContent(props: { tab: string }) {
           </Match>
           <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
         </Switch>
+        <Show when={state()?.loaded && !isImage() && !isSvg() && !isBinary()}>
+          <div class="sticky bottom-0 z-10 h-4 relative bg-background-base">
+            <Show when={showHThumb()}>
+              <div
+                ref={(el) => (hThumbRef = el)}
+                onPointerDown={onHThumbPointerDown}
+                class="scroll-view__thumb-h"
+                data-visible={isHHovered() || isHDragging()}
+                data-dragging={isHDragging()}
+                style={{ width: `${hThumbWidth()}px`, transform: `translateX(${hThumbLeft()}px)` }}
+              />
+            </Show>
+          </div>
+        </Show>
       </ScrollView>
     </Tabs.Content>
   )

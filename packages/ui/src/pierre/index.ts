@@ -112,6 +112,9 @@ const unsafeCSS = `
   [data-column-number] {
     background-color: var(--background-stronger);
     cursor: default !important;
+    position: sticky;
+    left: 0;
+    z-index: 1;
   }
 
   &[data-interactive-line-numbers] [data-column-number] {
@@ -123,7 +126,44 @@ const unsafeCSS = `
   }
   [data-code] {
     overflow-x: auto !important;
-    overflow-y: hidden !important;
+    scrollbar-width: none;
+  }
+  [data-code]::-webkit-scrollbar {
+    display: none;
+  }
+
+  [data-comment-anchor] {
+    position: absolute;
+    left: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--icon-interactive-base);
+    cursor: pointer;
+    border: none;
+    padding: 0;
+    color: white;
+    z-index: 10;
+    pointer-events: auto;
+  }
+
+  [data-comment-anchor]:hover {
+    background: var(--icon-interactive-hover, var(--icon-interactive-base));
+  }
+
+  [data-comment-anchor]:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--border-focus-base);
+  }
+
+  [data-comment-anchor] svg {
+    width: 10px;
+    height: 10px;
   }
 }`
 

@@ -24,13 +24,25 @@ const codeMetrics = {
 
 type SelectionSide = "additions" | "deletions"
 
+export type CommentAnchor = {
+  id: string
+  line: number
+}
+
 export type CodeProps<T = {}> = FileOptions<T> & {
   file: FileContents
   annotations?: LineAnnotation<T>[]
   selectedLines?: SelectedLineRange | null
   commentedLines?: SelectedLineRange[]
+  commentAnchors?: CommentAnchor[]
+  /** Width of the viewport containing this code component (for anchor positioning) */
+  anchorViewportWidth?: number
+  /** Horizontal scroll position of the viewport (for anchor positioning) */
+  anchorScrollLeft?: number
   onRendered?: () => void
   onLineSelectionEnd?: (selection: SelectedLineRange | null) => void
+  onCommentAnchorClick?: (id: string) => void
+  onCommentAnchorHover?: (id: string | null) => void
   class?: string
   classList?: ComponentProps<"div">["classList"]
 }
@@ -147,6 +159,7 @@ export function Code<T>(props: CodeProps<T>) {
   let findOverlayFrame: number | undefined
   let findOverlayScroll: HTMLElement[] = []
   let observer: MutationObserver | undefined
+  let contentObserver: MutationObserver | undefined
   let renderToken = 0
   let selectionFrame: number | undefined
   let dragFrame: number | undefined
@@ -163,7 +176,12 @@ export function Code<T>(props: CodeProps<T>) {
     "annotations",
     "selectedLines",
     "commentedLines",
+    "commentAnchors",
+    "anchorViewportWidth",
+    "anchorScrollLeft",
     "onRendered",
+    "onCommentAnchorClick",
+    "onCommentAnchorHover",
   ])
 
   const [rendered, setRendered] = createSignal(0)
@@ -591,7 +609,7 @@ export function Code<T>(props: CodeProps<T>) {
     }
   }
 
-  const text = () => {
+    const text = () => {
     const value = local.file.contents as unknown
     if (typeof value === "string") return value
     if (Array.isArray(value)) return value.join("\n")
@@ -599,6 +617,48 @@ export function Code<T>(props: CodeProps<T>) {
     return String(value)
   }
 
+
+  const applyCommentAnchors = (anchors: CommentAnchor[]) => {
+    const root = getRoot()
+    if (!root) return
+
+    // Remove existing anchors
+    const existing = Array.from(root.querySelectorAll("[data-comment-anchor]"))
+    for (const node of existing) {
+      node.remove()
+    }
+
+    // Create anchors for each comment, placed inside the line number column
+    for (const anchor of anchors) {
+      const lineEl = root.querySelector(`[data-line="${anchor.line}"]`)
+      if (!(lineEl instanceof HTMLElement)) continue
+
+      const numberCol = lineEl.querySelector("[data-column-number]")
+      if (!(numberCol instanceof HTMLElement)) continue
+
+      const btn = document.createElement("button")
+      btn.setAttribute("data-comment-anchor", anchor.id)
+      btn.setAttribute("type", "button")
+      btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H5.5L3 13.5V11H3a1 1 0 0 1-1-1V3Z"/></svg>`
+
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation()
+        local.onCommentAnchorClick?.(anchor.id)
+      })
+
+      btn.addEventListener("mouseenter", () => {
+        local.onCommentAnchorHover?.(anchor.id)
+      })
+
+      btn.addEventListener("mouseleave", () => {
+        local.onCommentAnchorHover?.(null)
+      })
+
+      numberCol.appendChild(btn)
+    }
+  }
+
+ 
   const lineCount = () => {
     const value = text()
     const total = value.split("\n").length - (value.endsWith("\n") ? 1 : 0)
@@ -672,7 +732,27 @@ export function Code<T>(props: CodeProps<T>) {
         if (token !== renderToken) return
         applySelection(lastSelection)
         applyFind({ reset: true })
+        applyCommentedLines(local.commentedLines ?? [])
+        applyCommentAnchors(local.commentAnchors ?? [])
         local.onRendered?.()
+
+        // Watch for subsequent DOM changes (e.g., syntax highlighting)
+        // and re-apply comment anchors when content is updated
+        const root = getRoot()
+        if (root && typeof MutationObserver !== "undefined") {
+          contentObserver?.disconnect()
+          contentObserver = new MutationObserver(() => {
+            if (token !== renderToken) return
+            // Re-apply anchors if they were removed by DOM updates
+            const hasAnchors = root.querySelector("[data-comment-anchor]") !== null
+            const shouldHaveAnchors = (local.commentAnchors ?? []).length > 0
+            if (shouldHaveAnchors && !hasAnchors) {
+              applyCommentedLines(local.commentedLines ?? [])
+              applyCommentAnchors(local.commentAnchors ?? [])
+            }
+          })
+          contentObserver.observe(root, { childList: true, subtree: true })
+        }
       })
     }
 
@@ -890,6 +970,8 @@ export function Code<T>(props: CodeProps<T>) {
 
     observer?.disconnect()
     observer = undefined
+    contentObserver?.disconnect()
+    contentObserver = undefined
 
     instance?.cleanUp()
     instance = undefined
@@ -949,6 +1031,12 @@ export function Code<T>(props: CodeProps<T>) {
   })
 
   createEffect(() => {
+    rendered()
+    const anchors = local.commentAnchors ?? []
+    requestAnimationFrame(() => applyCommentAnchors(anchors))
+  })
+
+  createEffect(() => {
     setSelectedLines(local.selectedLines ?? null)
   })
 
@@ -970,6 +1058,7 @@ export function Code<T>(props: CodeProps<T>) {
 
   onCleanup(() => {
     observer?.disconnect()
+    contentObserver?.disconnect()
 
     instance?.cleanUp()
     instance = undefined
@@ -1063,7 +1152,7 @@ export function Code<T>(props: CodeProps<T>) {
   return (
     <div
       data-component="code"
-      style={styleVariables}
+      style={{ ...styleVariables }}
       class="relative outline-none"
       classList={{
         ...(local.classList || {}),
