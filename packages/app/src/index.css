@@ -134,12 +134,22 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* --- Thinking/loading states: Subtle pulse glow --- */
+/* --- Thinking/loading states: Colored like the inspiration --- */
 [data-slot="session-turn-thinking"] {
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: var(--surface-base);
-  border: 1px solid var(--border-weaker-base);
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-interactive-base) 60%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-interactive-base) 40%, transparent);
+}
+
+[data-slot="session-turn-thinking-heading"] {
+  color: var(--text-interactive-base) !important;
+}
+
+/* --- Assistant message area: Add subtle left accent for visual grouping --- */
+[data-slot="session-turn-assistant-content"] {
+  padding-left: 12px;
+  border-left: 2px solid color-mix(in srgb, var(--icon-interactive-base) 25%, transparent);
 }
 
 /* --- Tool collapsible triggers: Better hover feedback --- */
