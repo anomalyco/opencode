@@ -23,7 +23,6 @@ export namespace Snapshot {
     ["core.fsmonitor", "false"],
     ["core.quotepath", "false"],
   ] as const
-  const ready = new Set<string>()
 
   type Env = Record<string, string | undefined>
   type Oversized = {
@@ -335,16 +334,6 @@ export namespace Snapshot {
 
   async function setup(git: string) {
     const env = gitenv(git)
-    const config = path.join(git, "config")
-
-    if (ready.has(git)) {
-      const exists = await fs
-        .stat(config)
-        .then(() => true)
-        .catch(() => false)
-      if (exists) return env
-      ready.delete(git)
-    }
 
     await fs.mkdir(git, { recursive: true })
     const init = await $`git init`.env(env).quiet().nothrow()
@@ -353,15 +342,14 @@ export namespace Snapshot {
       return env
     }
 
-    const output = await Promise.all(
-      settings.map(([key, value]) => $`git config ${key} ${value}`.env(env).quiet().nothrow()),
-    )
-    const failed = output.flatMap((item, index) => (item.exitCode === 0 ? [] : [settings[index]![0]]))
+    const failed: string[] = []
+    for (const [key, value] of settings) {
+      const output = await $`git config ${key} ${value}`.env(env).quiet().nothrow()
+      if (output.exitCode !== 0) failed.push(key)
+    }
     if (failed.length > 0) {
       log.warn("git config failed", { failed })
     }
-
-    ready.add(git)
     return env
   }
 
