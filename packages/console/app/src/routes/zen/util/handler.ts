@@ -9,7 +9,8 @@ import { Billing } from "@opencode-ai/console-core/billing.js"
 import { Actor } from "@opencode-ai/console-core/actor.js"
 import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
 import { ZenData } from "@opencode-ai/console-core/model.js"
-import { Black, BlackData } from "@opencode-ai/console-core/black.js"
+import { Subscription } from "@opencode-ai/console-core/subscription.js"
+import { BlackData } from "@opencode-ai/console-core/black.js"
 import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 import { ModelTable } from "@opencode-ai/console-core/schema/model.sql.js"
 import { ProviderTable } from "@opencode-ai/console-core/schema/provider.sql.js"
@@ -196,7 +197,7 @@ export async function handler(
       const costInfo = calculateCost(modelInfo, usageInfo)
       await trialLimiter?.track(usageInfo)
       await rateLimiter?.track()
-      await trackUsage(billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
+      await trackUsage(sessionId, billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
       await reload(billingSource, authInfo, costInfo)
 
       const responseConverter = createResponseConverter(providerInfo.format, opts.format)
@@ -246,7 +247,7 @@ export async function handler(
                   const usageInfo = providerInfo.normalizeUsage(usage)
                   const costInfo = calculateCost(modelInfo, usageInfo)
                   await trialLimiter?.track(usageInfo)
-                  await trackUsage(billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
+                  await trackUsage(sessionId, billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
                   await reload(billingSource, authInfo, costInfo)
                   cost = calculateOccuredCost(billingSource, costInfo)
                 }
@@ -541,8 +542,9 @@ export async function handler(
 
         // Check weekly limit
         if (sub.fixedUsage && sub.timeFixedUpdated) {
-          const result = Black.analyzeWeeklyUsage({
-            plan,
+          const blackData = BlackData.getLimits({ plan })
+          const result = Subscription.analyzeWeeklyUsage({
+            limit: blackData.fixedLimit,
             usage: sub.fixedUsage,
             timeUpdated: sub.timeFixedUpdated,
           })
@@ -555,8 +557,10 @@ export async function handler(
 
         // Check rolling limit
         if (sub.rollingUsage && sub.timeRollingUpdated) {
-          const result = Black.analyzeRollingUsage({
-            plan,
+          const blackData = BlackData.getLimits({ plan })
+          const result = Subscription.analyzeRollingUsage({
+            limit: blackData.rollingLimit,
+            window: blackData.rollingWindow,
             usage: sub.rollingUsage,
             timeUpdated: sub.timeRollingUpdated,
           })
@@ -687,6 +691,7 @@ export async function handler(
   }
 
   async function trackUsage(
+    sessionId: string,
     billingSource: BillingSource,
     authInfo: AuthInfo,
     modelInfo: ModelInfo,
@@ -734,7 +739,12 @@ export async function handler(
           cacheWrite1hTokens,
           cost,
           keyID: authInfo.apiKeyId,
-          enrichment: billingSource === "subscription" ? { plan: "sub" } : undefined,
+          sessionID: sessionId.substring(0, 30),
+          enrichment: (() => {
+            if (billingSource === "subscription") return { plan: "sub" }
+            if (billingSource === "byok") return { plan: "byok" }
+            return undefined
+          })(),
         }),
         db
           .update(KeyTable)
@@ -782,9 +792,10 @@ export async function handler(
               db
                 .update(BillingTable)
                 .set({
-                  balance: authInfo.isFree
-                    ? sql`${BillingTable.balance} - ${0}`
-                    : sql`${BillingTable.balance} - ${cost}`,
+                  balance:
+                    billingSource === "free" || billingSource === "byok"
+                      ? sql`${BillingTable.balance} - ${0}`
+                      : sql`${BillingTable.balance} - ${cost}`,
                   monthlyUsage: sql`
               CASE
                 WHEN MONTH(${BillingTable.timeMonthlyUsageUpdated}) = MONTH(now()) AND YEAR(${BillingTable.timeMonthlyUsageUpdated}) = YEAR(now()) THEN ${BillingTable.monthlyUsage} + ${cost}
