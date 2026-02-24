@@ -76,6 +76,7 @@ import type {
   PermissionRespondErrors,
   PermissionRespondResponses,
   PermissionRuleset,
+  PluginStatusResponses,
   ProjectCurrentResponses,
   ProjectInitGitResponses,
   ProjectListResponses,
@@ -3116,6 +3117,27 @@ export class Mcp extends HeyApiClient {
   }
 }
 
+export class Plugin extends HeyApiClient {
+  /**
+   * Get plugin status
+   *
+   * Get the status of all installed plugins with their resolved versions.
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<PluginStatusResponses, unknown, ThrowOnError>({
+      url: "/plugin",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Control extends HeyApiClient {
   /**
    * Get next TUI request
@@ -3980,6 +4002,11 @@ export class OpencodeClient extends HeyApiClient {
   private _mcp?: Mcp
   get mcp(): Mcp {
     return (this._mcp ??= new Mcp({ client: this.client }))
+  }
+
+  private _plugin?: Plugin
+  get plugin(): Plugin {
+    return (this._plugin ??= new Plugin({ client: this.client }))
   }
 
   private _tui?: Tui

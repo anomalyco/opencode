@@ -12,6 +12,10 @@ import { Session } from "../session"
 import { NamedError } from "@opencode-ai/util/error"
 import { CopilotAuthPlugin } from "./copilot"
 import { gitlabAuthPlugin as GitlabAuthPlugin } from "@gitlab/opencode-gitlab-auth"
+import z from "zod"
+import path from "path"
+import { Global } from "../global"
+import { Filesystem } from "../util/filesystem"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -20,6 +24,13 @@ export namespace Plugin {
 
   // Built-in plugins that are directly imported (not installed from npm)
   const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin, GitlabAuthPlugin]
+
+  export const Status = z.object({
+    name: z.string(),
+    version: z.string().optional(),
+    source: z.enum(["npm", "file", "builtin"]),
+  })
+  export type Status = z.infer<typeof Status>
 
   const state = Instance.state(async () => {
     const client = createOpencodeClient({
@@ -145,5 +156,50 @@ export namespace Plugin {
         })
       }
     })
+  }
+
+  export async function status(): Promise<Status[]> {
+    const config = await Config.get()
+    const plugins = config.plugin ?? []
+    if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
+      plugins.unshift(...BUILTIN)
+    }
+
+    const result: Status[] = []
+
+    for (const plugin of plugins) {
+      if (plugin.includes("opencode-openai-codex-auth") || plugin.includes("opencode-copilot-auth")) continue
+
+      if (plugin.startsWith("file://")) {
+        const filePath = plugin.replace("file://", "")
+        const parts = filePath.split("/")
+        const filename = parts.pop() || filePath
+        const name = filename.includes(".") ? filename.split(".")[0] : filename
+        result.push({ name, source: "file" })
+        continue
+      }
+
+      const lastAtIndex = plugin.lastIndexOf("@")
+      const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
+
+      // Read resolved version from installed package.json
+      try {
+        const pkgPath = path.join(Global.Path.cache, "node_modules", pkg, "package.json")
+        const pkgJson = await Filesystem.readJson<{ version?: string }>(pkgPath)
+        result.push({
+          name: pkg,
+          version: pkgJson.version,
+          source: BUILTIN.includes(plugin) ? "builtin" : "npm",
+        })
+      } catch {
+        // If package.json cannot be read, still add the plugin without version
+        result.push({
+          name: pkg,
+          source: BUILTIN.includes(plugin) ? "builtin" : "npm",
+        })
+      }
+    }
+
+    return result
   }
 }

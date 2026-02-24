@@ -4432,6 +4432,28 @@ export type McpDisconnectResponses = {
 
 export type McpDisconnectResponse = McpDisconnectResponses[keyof McpDisconnectResponses]
 
+export type PluginStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/plugin"
+}
+
+export type PluginStatusResponses = {
+  /**
+   * Plugin status
+   */
+  200: Array<{
+    name: string
+    version?: string
+    source: "npm" | "file" | "builtin"
+  }>
+}
+
+export type PluginStatusResponse = PluginStatusResponses[keyof PluginStatusResponses]
+
 export type TuiAppendPromptData = {
   body?: {
     text: string
