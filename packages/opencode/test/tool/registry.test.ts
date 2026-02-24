@@ -23,6 +23,7 @@ import { Format } from "@/format"
 import { Ripgrep } from "@/file/ripgrep"
 import * as Truncate from "@/tool/truncate"
 import { InstanceState } from "@/effect/instance-state"
+import { MCP } from "@/mcp"
 
 const node = CrossSpawnSpawner.defaultLayer
 const configLayer = TestConfig.layer({
@@ -32,6 +33,7 @@ const configLayer = TestConfig.layer({
 const registryLayer = ToolRegistry.layer.pipe(
   Layer.provide(configLayer),
   Layer.provide(Plugin.defaultLayer),
+  Layer.provide(MCP.defaultLayer),
   Layer.provide(Question.defaultLayer),
   Layer.provide(Todo.defaultLayer),
   Layer.provide(Skill.defaultLayer),

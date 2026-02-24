@@ -15,6 +15,8 @@ import type { Provider } from "@/provider/provider"
 import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
 import { Skill } from "@/skill"
+import { Config } from "@/config/config"
+import { MCP } from "@/mcp"
 
 export function provider(model: Provider.Model) {
   if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
@@ -35,6 +37,7 @@ export function provider(model: Provider.Model) {
 export interface Interface {
   readonly environment: (model: Provider.Model) => Effect.Effect<string[]>
   readonly skills: (agent: Agent.Info) => Effect.Effect<string | undefined>
+  readonly mcpServers: () => Effect.Effect<string[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SystemPrompt") {}
@@ -43,6 +46,8 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const skill = yield* Skill.Service
+    const config = yield* Config.Service
+    const mcp = yield* MCP.Service
 
     return Service.of({
       environment: Effect.fn("SystemPrompt.environment")(function* (model: Provider.Model) {
@@ -75,10 +80,35 @@ export const layer = Layer.effect(
           Skill.fmt(list, { verbose: true }),
         ].join("\n")
       }),
+
+      mcpServers: Effect.fn("SystemPrompt.mcpServers")(function* () {
+        const cfg = yield* config.get()
+        if (cfg.experimental?.mcp_lazy !== true) return []
+
+        const status = yield* mcp.status()
+        const servers = Object.entries(status)
+          .filter(([, s]) => s.status === "connected")
+          .map(([name]) => name)
+
+        if (servers.length === 0) return []
+
+        return [
+          [
+            `<mcp_servers>`,
+            `Available MCP servers: ${servers.join(", ")}`,
+            `Use mcp_search tool to discover and call tools from these servers.`,
+            `</mcp_servers>`,
+          ].join("\n"),
+        ]
+      }),
     })
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Skill.defaultLayer))
+export const defaultLayer = layer.pipe(
+  Layer.provide(Skill.defaultLayer),
+  Layer.provide(MCP.defaultLayer),
+  Layer.provide(Config.defaultLayer),
+)
 
 export * as SystemPrompt from "./system"

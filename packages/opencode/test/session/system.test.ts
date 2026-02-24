@@ -6,6 +6,8 @@ import { Skill } from "../../src/skill"
 import { Permission } from "../../src/permission"
 import { SystemPrompt } from "../../src/session/system"
 import { testEffect } from "../lib/effect"
+import { MCP } from "../../src/mcp"
+import { Config } from "../../src/config/config"
 
 const skills: Skill.Info[] = [
   {
@@ -35,6 +37,39 @@ const build: Agent.Info = {
   options: {},
 }
 
+const mockMcp = Layer.succeed(
+  MCP.Service,
+  MCP.Service.of({
+    status: () => Effect.succeed({}),
+    clients: () => Effect.succeed({}),
+    tools: () => Effect.succeed({}),
+    prompts: () => Effect.succeed({}),
+    resources: () => Effect.succeed({}),
+    add: () => Effect.succeed({ status: {} }),
+    connect: () => Effect.void,
+    disconnect: () => Effect.void,
+    getPrompt: () => Effect.succeed(undefined),
+    readResource: () => Effect.succeed(undefined),
+    startAuth: () => Effect.succeed({ authorizationUrl: "", oauthState: "" }),
+    authenticate: () => Effect.succeed({ status: "disabled" } as any),
+    finishAuth: () => Effect.succeed({ status: "disabled" } as any),
+    removeAuth: () => Effect.void,
+    supportsOAuth: () => Effect.succeed(false),
+    hasStoredTokens: () => Effect.succeed(false),
+    getAuthStatus: () => Effect.succeed("not_authenticated" as const),
+  }),
+)
+
+const mockConfig = Layer.succeed(
+  Config.Service,
+  Config.Service.of({
+    get: () => Effect.succeed({} as any),
+    set: () => Effect.void,
+    directories: () => Effect.succeed([]),
+    waitForDependencies: () => Effect.void,
+  } as any),
+)
+
 const it = testEffect(
   SystemPrompt.layer.pipe(
     Layer.provide(
@@ -48,6 +83,8 @@ const it = testEffect(
         }),
       ),
     ),
+    Layer.provide(mockMcp),
+    Layer.provide(mockConfig),
   ),
 )
 
