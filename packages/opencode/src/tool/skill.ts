@@ -88,7 +88,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
           if (file.includes("SKILL.md")) {
             continue
           }
-          arr.push(path.resolve(dir, file))
+          arr.push(path.resolve(dir, file).replaceAll("\\", "/"))
           if (arr.length >= limit) {
             break
           }
