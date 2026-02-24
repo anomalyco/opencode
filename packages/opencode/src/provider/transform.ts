@@ -688,7 +688,7 @@ export namespace ProviderTransform {
             },
           }
         }
-        if (model.api.id.includes("gpt") || /--o[1-9]/.test(model.api.id)) {
+        if (model.api.id.includes("gpt") || /\bo[1-9]/.test(model.api.id)) {
           return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
         }
         return {}

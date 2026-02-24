@@ -2354,8 +2354,8 @@ describe("ProviderTransform.variants", () => {
   describe("@jerome-benoit/sap-ai-provider-v2", () => {
     test("anthropic models return thinking variants", () => {
       const model = createMockModel({
-        id: "sap-ai/anthropic--claude-sonnet-4",
-        providerID: "sap-ai",
+        id: "sap-ai-core/anthropic--claude-sonnet-4",
+        providerID: "sap-ai-core",
         api: {
           id: "anthropic--claude-sonnet-4",
           url: "https://api.ai.sap",
@@ -2380,8 +2380,8 @@ describe("ProviderTransform.variants", () => {
 
     test("gemini 2.5 models return thinkingConfig variants", () => {
       const model = createMockModel({
-        id: "sap-ai/gcp--gemini-2.5-pro",
-        providerID: "sap-ai",
+        id: "sap-ai-core/gcp--gemini-2.5-pro",
+        providerID: "sap-ai-core",
         api: {
           id: "gcp--gemini-2.5-pro",
           url: "https://api.ai.sap",
@@ -2406,8 +2406,8 @@ describe("ProviderTransform.variants", () => {
 
     test("gpt models return reasoningEffort variants", () => {
       const model = createMockModel({
-        id: "sap-ai/azure-openai--gpt-4o",
-        providerID: "sap-ai",
+        id: "sap-ai-core/azure-openai--gpt-4o",
+        providerID: "sap-ai-core",
         api: {
           id: "azure-openai--gpt-4o",
           url: "https://api.ai.sap",
@@ -2422,8 +2422,8 @@ describe("ProviderTransform.variants", () => {
 
     test("o-series models return reasoningEffort variants", () => {
       const model = createMockModel({
-        id: "sap-ai/azure-openai--o3-mini",
-        providerID: "sap-ai",
+        id: "sap-ai-core/azure-openai--o3-mini",
+        providerID: "sap-ai-core",
         api: {
           id: "azure-openai--o3-mini",
           url: "https://api.ai.sap",
@@ -2436,10 +2436,26 @@ describe("ProviderTransform.variants", () => {
       expect(result.high).toEqual({ reasoningEffort: "high" })
     })
 
+    test("o1 model returns reasoningEffort variants", () => {
+      const model = createMockModel({
+        id: "sap-ai-core/azure-openai--o1",
+        providerID: "sap-ai-core",
+        api: {
+          id: "azure-openai--o1",
+          url: "https://api.ai.sap",
+          npm: "@jerome-benoit/sap-ai-provider-v2",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+      expect(result.low).toEqual({ reasoningEffort: "low" })
+    })
+
+
     test("sonar models return empty object", () => {
       const model = createMockModel({
-        id: "sap-ai/perplexity--sonar-pro",
-        providerID: "sap-ai",
+        id: "sap-ai-core/perplexity--sonar-pro",
+        providerID: "sap-ai-core",
         api: {
           id: "perplexity--sonar-pro",
           url: "https://api.ai.sap",
@@ -2452,8 +2468,8 @@ describe("ProviderTransform.variants", () => {
 
     test("mistral models return empty object", () => {
       const model = createMockModel({
-        id: "sap-ai/mistral--mistral-large",
-        providerID: "sap-ai",
+        id: "sap-ai-core/mistral--mistral-large",
+        providerID: "sap-ai-core",
         api: {
           id: "mistral--mistral-large",
           url: "https://api.ai.sap",
