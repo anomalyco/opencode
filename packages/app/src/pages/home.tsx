@@ -69,58 +69,94 @@ export default function Home() {
   }
 
   return (
-    <div class="mx-auto mt-55 w-full md:w-auto px-4">
-      <Logo class="md:w-xl opacity-12" />
-      <Button
-        size="large"
-        variant="ghost"
-        class="mt-4 mx-auto text-14-regular text-text-weak"
-        onClick={() => dialog.show(() => <DialogSelectServer />)}
+    <div class="mx-auto w-full max-w-lg px-6 flex flex-col items-center" style="padding-top: min(20vh, 160px)">
+      {/* Logo with entrance animation */}
+      <div
+        class="opacity-0"
+        style="animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.05s forwards"
       >
-        <div
-          classList={{
-            "size-2 rounded-full": true,
-            [serverDotClass()]: true,
-          }}
-        />
-        {server.name}
-      </Button>
+        <Logo class="w-40 md:w-56 opacity-20" />
+      </div>
+
+      {/* Server status badge */}
+      <div
+        class="opacity-0"
+        style="animation: fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.15s forwards"
+      >
+        <Button
+          size="large"
+          variant="ghost"
+          class="mt-4 mx-auto text-14-regular text-text-weak"
+          onClick={() => dialog.show(() => <DialogSelectServer />)}
+        >
+          <div
+            classList={{
+              "size-2 rounded-full": true,
+              [serverDotClass()]: true,
+            }}
+          />
+          {server.name}
+        </Button>
+      </div>
+
       <Switch>
         <Match when={sync.data.project.length > 0}>
-          <div class="mt-20 w-full flex flex-col gap-4">
-            <div class="flex gap-2 items-center justify-between pl-3">
-              <div class="text-14-medium text-text-strong">{language.t("home.recentProjects")}</div>
+          <div
+            class="mt-12 w-full flex flex-col gap-3 opacity-0"
+            style="animation: fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.25s forwards"
+          >
+            <div class="flex gap-2 items-center justify-between pl-1 mb-1">
+              <div class="text-12-medium text-text-weak uppercase tracking-wider">
+                {language.t("home.recentProjects")}
+              </div>
               <Button icon="folder-add-left" size="normal" class="pl-2 pr-3" onClick={chooseProject}>
                 {language.t("command.project.open")}
               </Button>
             </div>
-            <ul class="flex flex-col gap-2">
+            <ul
+              class="flex flex-col rounded-lg overflow-hidden"
+              style="border: 1px solid var(--border-weaker-base); background: var(--surface-base)"
+            >
               <For each={recent()}>
-                {(project) => (
-                  <Button
-                    size="large"
-                    variant="ghost"
-                    class="text-14-mono text-left justify-between px-3"
-                    onClick={() => openProject(project.worktree)}
+                {(project, i) => (
+                  <li
+                    class="opacity-0"
+                    style={`animation: fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) ${0.3 + i() * 0.05}s forwards`}
                   >
-                    {project.worktree.replace(homedir(), "~")}
-                    <div class="text-14-regular text-text-weak">
-                      {DateTime.fromMillis(project.time.updated ?? project.time.created).toRelative()}
-                    </div>
-                  </Button>
+                    <Button
+                      size="large"
+                      variant="ghost"
+                      class="text-14-mono text-left justify-between px-4 py-2.5 w-full rounded-none"
+                      style={i() < recent().length - 1 ? "border-bottom: 1px solid var(--border-weaker-base)" : ""}
+                      onClick={() => openProject(project.worktree)}
+                    >
+                      <span class="truncate">{project.worktree.replace(homedir(), "~")}</span>
+                      <span class="text-12-regular text-text-weaker flex-shrink-0 ml-4">
+                        {DateTime.fromMillis(project.time.updated ?? project.time.created).toRelative()}
+                      </span>
+                    </Button>
+                  </li>
                 )}
               </For>
             </ul>
           </div>
         </Match>
         <Match when={true}>
-          <div class="mt-30 mx-auto flex flex-col items-center gap-3">
-            <Icon name="folder-add-left" size="large" />
+          <div
+            class="mt-20 mx-auto flex flex-col items-center gap-4 opacity-0"
+            style="animation: fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.25s forwards"
+          >
+            <div
+              class="w-16 h-16 rounded-2xl flex items-center justify-center"
+              style="background: var(--surface-base); border: 1px solid var(--border-weaker-base)"
+            >
+              <Icon name="folder-add-left" size="large" />
+            </div>
             <div class="flex flex-col gap-1 items-center justify-center">
               <div class="text-14-medium text-text-strong">{language.t("home.empty.title")}</div>
               <div class="text-12-regular text-text-weak">{language.t("home.empty.description")}</div>
             </div>
-            <Button class="px-3 mt-1" onClick={chooseProject}>
+            <Button class="px-4 mt-1" onClick={chooseProject}>
               {language.t("command.project.open")}
             </Button>
           </div>

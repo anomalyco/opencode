@@ -9,7 +9,7 @@ import { getDirectory, getFilename } from "@opencode-ai/util/path"
 const MAIN_WORKTREE = "main"
 const CREATE_WORKTREE = "create"
 const ROOT_CLASS =
-  "size-full flex flex-col justify-end items-start gap-4 flex-[1_0_0] self-stretch max-w-200 mx-auto 2xl:max-w-[1000px] px-6 pb-16"
+  "size-full flex flex-col justify-center items-center gap-6 flex-[1_0_0] self-stretch max-w-200 mx-auto 2xl:max-w-[1000px] px-6 pb-24"
 
 interface NewSessionViewProps {
   worktree: string
@@ -50,33 +50,54 @@ export function NewSessionView(props: NewSessionViewProps) {
 
   return (
     <div class={ROOT_CLASS}>
-      <div class="text-20-medium text-text-weaker">{language.t("command.session.new")}</div>
-      <div class="flex justify-center items-center gap-3">
-        <Icon name="folder" size="small" />
-        <div class="text-12-medium text-text-weak select-text">
-          {getDirectory(projectRoot())}
-          <span class="text-text-strong">{getFilename(projectRoot())}</span>
-        </div>
+      {/* Greeting — large, centered, with subtle fade-in */}
+      <div
+        class="text-20-medium text-text-weaker opacity-0"
+        style="animation: fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards"
+      >
+        {language.t("command.session.new")}
       </div>
-      <div class="flex justify-center items-center gap-1">
-        <Icon name="branch" size="small" />
-        <div class="text-12-medium text-text-weak select-text ml-2">{label(current())}</div>
-      </div>
-      <Show when={sync.project}>
-        {(project) => (
-          <div class="flex justify-center items-center gap-3">
-            <Icon name="pencil-line" size="small" />
-            <div class="text-12-medium text-text-weak">
-              {language.t("session.new.lastModified")}&nbsp;
-              <span class="text-text-strong">
-                {DateTime.fromMillis(project().time.updated ?? project().time.created)
-                  .setLocale(language.locale())
-                  .toRelative()}
-              </span>
-            </div>
+
+      {/* Project info badges — compact, pill-shaped, staggered entrance */}
+      <div class="flex flex-col items-center gap-2">
+        <div
+          class="flex items-center gap-2 px-3 py-1.5 rounded-full opacity-0"
+          style="background: var(--surface-base); border: 1px solid var(--border-weaker-base); animation: fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.2s forwards"
+        >
+          <Icon name="folder" size="small" />
+          <div class="text-12-medium text-text-weak select-text">
+            {getDirectory(projectRoot())}
+            <span class="text-text-strong">{getFilename(projectRoot())}</span>
           </div>
-        )}
-      </Show>
+        </div>
+
+        <div
+          class="flex items-center gap-2 px-3 py-1.5 rounded-full opacity-0"
+          style="background: var(--surface-base); border: 1px solid var(--border-weaker-base); animation: fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.3s forwards"
+        >
+          <Icon name="branch" size="small" />
+          <div class="text-12-medium text-text-weak select-text">{label(current())}</div>
+        </div>
+
+        <Show when={sync.project}>
+          {(project) => (
+            <div
+              class="flex items-center gap-2 px-3 py-1.5 rounded-full opacity-0"
+              style="background: var(--surface-base); border: 1px solid var(--border-weaker-base); animation: fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.4s forwards"
+            >
+              <Icon name="pencil-line" size="small" />
+              <div class="text-12-medium text-text-weak">
+                {language.t("session.new.lastModified")}&nbsp;
+                <span class="text-text-strong">
+                  {DateTime.fromMillis(project().time.updated ?? project().time.created)
+                    .setLocale(language.locale())
+                    .toRelative()}
+                </span>
+              </div>
+            </div>
+          )}
+        </Show>
+      </div>
     </div>
   )
 }
