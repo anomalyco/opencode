@@ -111,3 +111,152 @@ const table = sqliteTable("session", {
 - Avoid mocks as much as possible
 - Test actual implementation, do not duplicate logic into tests
 - Tests cannot run from repo root (guard: `do-not-run-tests-from-root`); run from package dirs like `packages/opencode`.
+
+## Getting Started Guide
+
+### Step 1: Understand the Architecture
+
+OpenCode is built with a monorepo structure:
+
+```
+opencode/
+├── packages/
+│   ├── opencode/          # Core business logic & server
+│   ├── app/              # Shared web UI components (SolidJS)
+│   ├── desktop/          # Native desktop app (Tauri)
+│   └── sdk/              # SDK packages
+├── infra/                # Infrastructure configs
+└── script/               # Build and utility scripts
+```
+
+### Step 2: Choose Your Entry Point
+
+**Option A: Web Application**
+```bash
+cd opencode
+bun install
+bun run --cwd packages/app dev
+```
+
+**Option B: Desktop Application**
+```bash
+cd opencode
+bun install
+bun run --cwd packages/desktop tauri dev
+```
+
+**Option C: Core Server Only**
+```bash
+cd opencode
+bun install
+bun dev
+```
+
+### Step 3: Understanding the Tooling
+
+**Development Server**
+- `bun dev` - Starts development server in TUI mode
+- `bun dev serve` - Runs headless API server
+- `bun dev web` - Starts web interface
+
+**Build Commands**
+- `bun run --cwd packages/app build` - Build web app
+- `bun run --cwd packages/desktop tauri build` - Build desktop app
+- `./packages/opencode/script/build.ts --single` - Build standalone executable
+
+## Code Examples
+
+### Example 1: Creating a New Feature
+
+```typescript
+// packages/opencode/src/your-feature.ts
+export function yourFeature(param: string) {
+  const result = param.toUpperCase()
+  return result
+}
+```
+
+### Example 2: Adding a New LSP Support
+
+```typescript
+// packages/opencode/src/lsp/server.ts
+export function createCustomLSPServer() {
+  return {
+    capabilities: {
+      textDocument: {
+        completion: {
+          // LSP completion implementation
+        }
+      }
+    }
+  }
+}
+```
+
+### Example 3: Writing Tests
+
+```typescript
+// packages/opencode/src/your-feature.test.ts
+import { describe, it, expect } from 'bun:test'
+import { yourFeature } from './your-feature'
+
+describe('yourFeature', () => {
+  it('should transform text correctly', () => {
+    expect(yourFeature('hello')).toBe('HELLO')
+  })
+})
+```
+
+## Common Tasks
+
+### Adding Dependencies
+```bash
+cd packages/opencode
+bun add <package-name>
+```
+
+### Running Linting
+```bash
+bun run lint
+```
+
+### Running Type Checking
+```bash
+bun run typecheck
+```
+
+### Generating Code
+```bash
+bun run generate
+```
+
+## Debugging Tips
+
+### Enable Debug Mode
+```bash
+bun dev --debug
+```
+
+### Inspect Bun Process
+```bash
+bun run --inspect=ws://localhost:6499/ --cwd packages/opencode ./src/index.ts serve --port 4096
+```
+
+### Attach TUI to Running Server
+```bash
+opencode attach http://localhost:4096
+```
+
+## Project Specific Notes
+
+- The default branch is `dev`
+- Local `main` ref may not exist; use `dev` or `origin/dev` for diffs
+- Always use parallel tools when applicable
+- Prefer automation: execute requested actions without confirmation unless blocked
+
+## Resources
+
+- **Documentation**: https://opencode.ai/docs
+- **Discord**: https://discord.gg/opencode
+- **Discussions**: https://github.com/anomalyco/opencode/discussions
+- **Issues**: https://github.com/anomalyco/opencode/issues
