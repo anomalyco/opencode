@@ -195,6 +195,70 @@
   background: color-mix(in srgb, var(--text-weaker) 50%, transparent);
 }
 
+/* --- Markdown syntax coloring: Different colors for bold, italic, headings --- */
+[data-component="markdown"] h1,
+[data-component="markdown"] h2,
+[data-component="markdown"] h3 {
+  color: var(--markdown-heading) !important;
+}
+
+[data-component="markdown"] strong,
+[data-component="markdown"] b {
+  color: var(--markdown-strong) !important;
+}
+
+[data-component="markdown"] em,
+[data-component="markdown"] i {
+  color: var(--markdown-emph) !important;
+  font-style: italic;
+}
+
+[data-component="markdown"] blockquote {
+  color: var(--markdown-block-quote) !important;
+  border-left-color: var(--markdown-block-quote) !important;
+}
+
+[data-component="markdown"] a {
+  color: var(--markdown-link) !important;
+}
+
+[data-component="markdown"] :not(pre) > code {
+  color: var(--markdown-code) !important;
+}
+
+/* --- Code block copy button: Tasteful pill-style --- */
+[data-slot="markdown-copy-button"][data-variant="secondary"] {
+  border-radius: 8px !important;
+  padding: 4px 8px !important;
+  font-size: 11px !important;
+  height: auto !important;
+  width: auto !important;
+  aspect-ratio: unset !important;
+  background: var(--surface-raised-stronger-non-alpha) !important;
+  border: 1px solid var(--border-weaker-base) !important;
+  box-shadow: var(--shadow-xs) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* --- Reasoning/thinking: Collapsible visual treatment --- */
+[data-component="reasoning-part"] {
+  border: 1px solid var(--border-weaker-base) !important;
+  border-radius: 10px !important;
+  padding: 12px 16px !important;
+  background: color-mix(in srgb, var(--surface-info-base) 30%, transparent) !important;
+  position: relative;
+}
+
+[data-component="reasoning-part"] [data-component="markdown"] {
+  margin-top: 0 !important;
+}
+
+/* --- Bash/tool output: Contained with max-height + scroll --- */
+[data-component="bash-output"] [data-slot="bash-scroll"] {
+  max-height: 200px !important;
+}
+
 /* --- Empty state backgrounds: Subtle radial gradient --- */
 [data-component="session-turn"] .size-full:has(> .text-20-medium) {
   background: radial-gradient(
