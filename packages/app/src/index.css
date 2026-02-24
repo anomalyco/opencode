@@ -226,7 +226,12 @@
   color: var(--markdown-code) !important;
 }
 
-/* --- Code block copy button: Tasteful pill-style --- */
+/* --- Code block copy button: Always visible, tasteful pill-style --- */
+[data-slot="markdown-copy-button"] {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
 [data-slot="markdown-copy-button"][data-variant="secondary"] {
   border-radius: 8px !important;
   padding: 4px 8px !important;
@@ -234,11 +239,22 @@
   height: auto !important;
   width: auto !important;
   aspect-ratio: unset !important;
-  background: var(--surface-raised-stronger-non-alpha) !important;
+  background: color-mix(in srgb, var(--surface-raised-stronger-non-alpha) 85%, transparent) !important;
   border: 1px solid var(--border-weaker-base) !important;
   box-shadow: var(--shadow-xs) !important;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+  transition: background-color 150ms ease, box-shadow 150ms ease;
+}
+
+[data-slot="markdown-copy-button"][data-variant="secondary"]:hover {
+  background: var(--surface-raised-stronger-non-alpha) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+[data-slot="markdown-copy-button"][data-copied="true"] {
+  background: var(--surface-success-base) !important;
+  border-color: var(--border-success-base) !important;
 }
 
 /* --- Reasoning/thinking: Collapsible visual treatment --- */
