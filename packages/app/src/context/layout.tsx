@@ -5,6 +5,7 @@ import { useGlobalSync } from "./global-sync"
 import { useGlobalSDK } from "./global-sdk"
 import { useServer } from "./server"
 import { usePlatform } from "./platform"
+import { untrack } from "solid-js"
 import { Project } from "@opencode-ai/sdk/v2"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
 import { same } from "@/utils/same"
@@ -107,6 +108,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const isRecord = (value: unknown): value is Record<string, unknown> =>
       typeof value === "object" && value !== null && !Array.isArray(value)
 
+    function getInitialDiffStyle(): ReviewDiffStyle {
+      const tuiDiffStyle = untrack(() => globalSync.data.config.tui?.diff_style)
+      return tuiDiffStyle === "stacked" ? "unified" : "split"
+    }
+
     const migrate = (value: unknown) => {
       if (!isRecord(value)) return value
 
@@ -171,7 +177,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           opened: false,
         },
         review: {
-          diffStyle: "split" as ReviewDiffStyle,
+          diffStyle: getInitialDiffStyle(),
           panelOpened: true,
         },
         fileTree: {
@@ -305,6 +311,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         document.removeEventListener("visibilitychange", handleVisibility)
         scroll.dispose()
       })
+    })
+
+    createEffect(() => {
+      const configDiffStyle = getInitialDiffStyle()
+      const currentDiffStyle = store.review?.diffStyle
+      if (currentDiffStyle && currentDiffStyle !== configDiffStyle) {
+        setStore("review", "diffStyle", configDiffStyle)
+      }
     })
 
     const [colors, setColors] = createStore<Record<string, AvatarColorKey>>({})
@@ -684,7 +698,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         function setReviewPanelOpened(next: boolean) {
           const current = store.review
           if (!current) {
-            setStore("review", { diffStyle: "split" as ReviewDiffStyle, panelOpened: next })
+            setStore("review", { diffStyle: getInitialDiffStyle(), panelOpened: next })
             return
           }
 
