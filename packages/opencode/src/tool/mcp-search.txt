@@ -1,0 +1,13 @@
+Search and call MCP server tools.
+
+Operations:
+- "list": List all MCP servers and their tools
+- "search": Find tools by server name
+- "describe": Get tool's parameter schema
+- "call": Execute a tool
+
+Usage notes:
+  - The "search" query matches against server names, tool names, and descriptions. If the server name matches, all tools from that server are returned. Otherwise, individual tools whose name or description matches are returned.
+  - You MUST call "describe" before "call" to check the tool's parameters.
+  - You SHOULD NOT call a tool without first checking its parameters.
+  - Examples: search "playwright" to find all playwright tools, search "screenshot" to find screenshot tools across servers, search "context7" to find documentation lookup tools.

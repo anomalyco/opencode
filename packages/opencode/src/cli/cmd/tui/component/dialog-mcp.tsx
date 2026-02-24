@@ -7,10 +7,13 @@ import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
 import { useSDK } from "@tui/context/sdk"
 
-function Status(props: { enabled: boolean; loading: boolean }) {
+function Status(props: { enabled: boolean; loading: boolean; lazy: boolean }) {
   const { theme } = useTheme()
   if (props.loading) {
     return <span style={{ fg: theme.textMuted }}>⋯ Loading</span>
+  }
+  if (props.lazy) {
+    return <span style={{ fg: theme.success, attributes: TextAttributes.BOLD }}>⦿ Lazy</span>
   }
   if (props.enabled) {
     return <span style={{ fg: theme.success, attributes: TextAttributes.BOLD }}>✓ Enabled</span>
@@ -25,10 +28,13 @@ export function DialogMcp() {
   const [, setRef] = createSignal<DialogSelectRef<unknown>>()
   const [loading, setLoading] = createSignal<string | null>(null)
 
+  const mcpLazy = createMemo(() => sync.data.config.experimental?.mcp_lazy === true)
+
   const options = createMemo(() => {
     // Track sync data and loading state to trigger re-render when they change
     const mcpData = sync.data.mcp
     const loadingMcp = loading()
+    const lazy = mcpLazy()
 
     return pipe(
       mcpData ?? {},
@@ -38,7 +44,13 @@ export function DialogMcp() {
         value: name,
         title: name,
         description: status.status === "failed" ? "failed" : status.status,
-        footer: <Status enabled={local.mcp.isEnabled(name)} loading={loadingMcp === name} />,
+        footer: (
+          <Status
+            enabled={local.mcp.isEnabled(name)}
+            loading={loadingMcp === name}
+            lazy={lazy && local.mcp.isEnabled(name)}
+          />
+        ),
         category: undefined,
       })),
     )
