@@ -511,26 +511,3 @@ If you are unsure how to do something, use `gh_grep` to search code examples fro
 ```
 
 Vous pouvez également désactiver un serveur en définissant `enabled` sur `false`. Ceci est utile si vous souhaitez désactiver temporairement un serveur sans le supprimer de votre configuration.
-
----
-
-### Remplacement des valeurs par défaut distantes
-
-Les organisations peuvent fournir des serveurs MCP par défaut via leur point de terminaison `.well-known/opencode`. Ces serveurs peuvent être désactivés par défaut, permettant aux utilisateurs de choisir ceux dont ils ont besoin.
-
-Pour activer un serveur spécifique à partir de la configuration distante de votre organisation, ajoutez-le à votre configuration locale avec `enabled: true` :
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "jira": {
-      "type": "remote",
-      "url": "https://jira.example.com/mcp",
-      "enabled": true
-    }
-  }
-}
-```
-
-Vos valeurs de configuration locales remplacent les valeurs par défaut distantes. Voir [config precedence](/docs/config#precedence-order) pour plus de détails.
