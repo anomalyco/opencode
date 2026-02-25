@@ -74,7 +74,10 @@ export function SessionHeaderActions() {
       <Button
         variant={previewOpen() ? "primary" : "secondary"}
         class="rounded-sm h-[24px] w-[24px] p-0"
-        onClick={() => setPreviewOpen((prev) => !prev)}
+        onClick={() => {
+          if (!previewOpen()) run()
+          setPreviewOpen((prev) => !prev)
+        }}
         aria-label="Preview"
       >
         <Icon name="eye" size="small" class={previewOpen() ? "text-on-primary" : "text-icon-base"} />
