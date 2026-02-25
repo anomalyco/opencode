@@ -2,7 +2,7 @@ import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
-import { createMemo, createSignal, createResource, onMount, Show } from "solid-js"
+import { createMemo, createSignal, createResource, onMount } from "solid-js"
 import { Locale } from "@/util/locale"
 import { useKeybind } from "../context/keybind"
 import { useTheme } from "../context/theme"
@@ -11,6 +11,7 @@ import { DialogSessionRename } from "./dialog-session-rename"
 import { useKV } from "../context/kv"
 import { createDebouncedSignal } from "../util/signal"
 import { Spinner } from "./spinner"
+import { Keybind } from "@/util/keybind"
 
 export function DialogSessionList() {
   const dialog = useDialog()
@@ -23,6 +24,9 @@ export function DialogSessionList() {
 
   const [toDelete, setToDelete] = createSignal<string>()
   const [search, setSearch] = createDebouncedSignal("", 150)
+  const [favorite, setFavorite] = kv.signal<string[]>("session_favorites", [])
+  const [favoriteOnly, setFavoriteOnly] = createSignal(false)
+  const favorites = createMemo(() => new Set(favorite()))
 
   const [searchResults] = createResource(search, async (query) => {
     if (!query) return undefined
@@ -39,6 +43,7 @@ export function DialogSessionList() {
     return sessions()
       .filter((x) => x.parentID === undefined)
       .toSorted((a, b) => b.time.updated - a.time.updated)
+      .filter((x) => !favoriteOnly() || favorites().has(x.id))
       .map((x) => {
         const date = new Date(x.time.updated)
         let category = date.toDateString()
@@ -46,10 +51,13 @@ export function DialogSessionList() {
           category = "Today"
         }
         const isDeleting = toDelete() === x.id
+        const isFavorite = favorites().has(x.id)
         const status = sync.data.session_status?.[x.id]
         const isWorking = status?.type === "busy"
         return {
-          title: isDeleting ? `Press ${keybind.print("session_delete")} again to confirm` : x.title,
+          title: isDeleting
+            ? `Press ${keybind.print("session_delete")} again to confirm`
+            : `${isFavorite ? "★ " : ""}${x.title}`,
           bg: isDeleting ? theme.error : undefined,
           value: x.id,
           category,
@@ -65,7 +73,7 @@ export function DialogSessionList() {
 
   return (
     <DialogSelect
-      title="Sessions"
+      title={favoriteOnly() ? "Favorite Sessions" : "Sessions"}
       options={options()}
       skipFilter={true}
       current={currentSessionID()}
@@ -81,6 +89,28 @@ export function DialogSessionList() {
         dialog.clear()
       }}
       keybind={[
+        {
+          keybind: Keybind.parse("ctrl+f")[0],
+          title: "favorite",
+          onTrigger: (option) => {
+            setFavorite((old) => {
+              const next: string[] = Array.isArray(old) ? old : []
+              if (next.includes(option.value)) {
+                return next.filter((x) => x !== option.value)
+              }
+              return [option.value, ...next]
+            })
+            setToDelete(undefined)
+          },
+        },
+        {
+          keybind: Keybind.parse("shift+tab")[0],
+          title: favoriteOnly() ? "show all" : "show favorites",
+          onTrigger: () => {
+            setFavoriteOnly((x) => !x)
+            setToDelete(undefined)
+          },
+        },
         {
           keybind: keybind.all.session_delete?.[0],
           title: "delete",
