@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 trap 'echo "Installation failed"; exit 1' ERR
-APP=secure-opencode
+APP=private-opencode
 
 MUTED='\033[0;2m'
 RED='\033[0;31m'
@@ -10,7 +10,7 @@ NC='\033[0m' # No Color
 
 usage() {
     cat <<EOF
-Secure-OpenCode Installer
+Private-OpenCode Installer
 
 Usage: private-install.sh [options]
 
@@ -21,9 +21,9 @@ Options:
         --no-modify-path    Don't modify shell config files (.zshrc, .bashrc, etc.)
 
 Examples:
-    curl -fsSL https://raw.githubusercontent.com/concrete-security/secure-opencode/dev/private-install.sh | bash
-    curl -fsSL https://raw.githubusercontent.com/concrete-security/secure-opencode/dev/private-install.sh | bash -s -- --version 1.0.0
-    ./private-install.sh --binary /path/to/secure-opencode
+    curl -fsSL https://raw.githubusercontent.com/concrete-security/private-opencode/dev/private-install.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/concrete-security/private-opencode/dev/private-install.sh | bash -s -- --version 1.0.0
+    ./private-install.sh --binary /path/to/private-opencode
 EOF
 }
 
@@ -66,7 +66,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-INSTALL_DIR=$HOME/.secure-opencode/bin
+INSTALL_DIR=$HOME/.private-opencode/bin
 mkdir -p "$INSTALL_DIR"
 
 # If --binary is provided, skip all download/detection logic
@@ -182,8 +182,8 @@ else
     fi
 
     if [ -z "$requested_version" ]; then
-        url="https://github.com/concrete-security/secure-opencode/releases/latest/download/$filename"
-        specific_version=$(curl -s https://api.github.com/repos/concrete-security/secure-opencode/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
+        url="https://github.com/concrete-security/private-opencode/releases/latest/download/$filename"
+        specific_version=$(curl -s https://api.github.com/repos/concrete-security/private-opencode/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
 
         if [[ $? -ne 0 || -z "$specific_version" ]]; then
             echo -e "${RED}Failed to fetch version information${NC}"
@@ -192,14 +192,14 @@ else
     else
         # Strip leading 'v' if present
         requested_version="${requested_version#v}"
-        url="https://github.com/concrete-security/secure-opencode/releases/download/v${requested_version}/$filename"
+        url="https://github.com/concrete-security/private-opencode/releases/download/v${requested_version}/$filename"
         specific_version=$requested_version
 
         # Verify the release exists before downloading
-        http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/concrete-security/secure-opencode/releases/tag/v${requested_version}")
+        http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/concrete-security/private-opencode/releases/tag/v${requested_version}")
         if [ "$http_status" = "404" ]; then
             echo -e "${RED}Error: Release v${requested_version} not found${NC}"
-            echo -e "${MUTED}Available releases: https://github.com/concrete-security/secure-opencode/releases${NC}"
+            echo -e "${MUTED}Available releases: https://github.com/concrete-security/private-opencode/releases${NC}"
             exit 1
         fi
     fi
@@ -220,11 +220,11 @@ print_message() {
 }
 
 check_version() {
-    if command -v secure-opencode >/dev/null 2>&1; then
-        secure_opencode_path=$(which secure-opencode)
+    if command -v private-opencode >/dev/null 2>&1; then
+        private_opencode_path=$(which private-opencode)
 
         ## Check the installed version
-        installed_version=$(secure-opencode --version 2>/dev/null || echo "")
+        installed_version=$(private-opencode --version 2>/dev/null || echo "")
 
         if [[ "$installed_version" != "$specific_version" ]]; then
             print_message info "${MUTED}Installed version: ${NC}$installed_version."
@@ -276,7 +276,7 @@ download_with_progress() {
     fi
 
     local tmp_dir=${TMPDIR:-/tmp}
-    local basename="${tmp_dir}/secure_opencode_install_$$"
+    local basename="${tmp_dir}/private_opencode_install_$$"
     local tracefile="${basename}.trace"
 
     rm -f "$tracefile"
@@ -326,8 +326,8 @@ download_with_progress() {
 }
 
 download_and_install() {
-    print_message info "\n${MUTED}Installing ${NC}secure-opencode ${MUTED}version: ${NC}$specific_version"
-    local tmp_dir="${TMPDIR:-/tmp}/secure_opencode_install_$$"
+    print_message info "\n${MUTED}Installing ${NC}private-opencode ${MUTED}version: ${NC}$specific_version"
+    local tmp_dir="${TMPDIR:-/tmp}/private_opencode_install_$$"
     mkdir -p "$tmp_dir"
 
     if [[ "$os" == "windows" ]] || ! [ -t 2 ] || ! download_with_progress "$url" "$tmp_dir/$filename"; then
@@ -341,15 +341,15 @@ download_and_install() {
         unzip -q "$tmp_dir/$filename" -d "$tmp_dir"
     fi
 
-    mv "$tmp_dir/secure-opencode" "$INSTALL_DIR"
-    chmod 755 "${INSTALL_DIR}/secure-opencode"
+    mv "$tmp_dir/private-opencode" "$INSTALL_DIR"
+    chmod 755 "${INSTALL_DIR}/private-opencode"
     rm -rf "$tmp_dir"
 }
 
 install_from_binary() {
-    print_message info "\n${MUTED}Installing ${NC}secure-opencode ${MUTED}from: ${NC}$binary_path"
-    cp "$binary_path" "${INSTALL_DIR}/secure-opencode"
-    chmod 755 "${INSTALL_DIR}/secure-opencode"
+    print_message info "\n${MUTED}Installing ${NC}private-opencode ${MUTED}from: ${NC}$binary_path"
+    cp "$binary_path" "${INSTALL_DIR}/private-opencode"
+    chmod 755 "${INSTALL_DIR}/private-opencode"
 }
 
 if [ -n "$binary_path" ]; then
@@ -360,11 +360,11 @@ else
 fi
 
 # Download cvm_policy.json for aTLS verification
-POLICY_FILE="$HOME/.secure-opencode/cvm_policy.json"
+POLICY_FILE="$HOME/.private-opencode/cvm_policy.json"
 if [ ! -f "$POLICY_FILE" ]; then
     print_message info "${MUTED}Downloading ${NC}cvm_policy.json${MUTED}...${NC}"
     curl -fsSL -o "$POLICY_FILE" \
-        "https://raw.githubusercontent.com/concrete-security/secure-opencode/dev/cvm_policy.json"
+        "https://raw.githubusercontent.com/concrete-security/private-opencode/dev/cvm_policy.json"
     print_message info "${MUTED}Policy file saved to ${NC}$POLICY_FILE"
 fi
 
@@ -376,9 +376,9 @@ add_to_path() {
     if grep -Fxq "$command" "$config_file"; then
         print_message info "Command already exists in $config_file, skipping write."
     elif [[ -w $config_file ]]; then
-        echo -e "\n# secure-opencode" >> "$config_file"
+        echo -e "\n# private-opencode" >> "$config_file"
         echo "$command" >> "$config_file"
-        print_message info "${MUTED}Successfully added ${NC}secure-opencode ${MUTED}to \$PATH in ${NC}$config_file"
+        print_message info "${MUTED}Successfully added ${NC}private-opencode ${MUTED}to \$PATH in ${NC}$config_file"
     else
         print_message warning "Manually add the directory to $config_file (or similar):"
         print_message info "  $command"
@@ -454,13 +454,13 @@ if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" == "true" ]; then
 fi
 
 echo -e ""
-echo -e "  ${ORANGE}secure-opencode${NC}"
+echo -e "  ${ORANGE}private-opencode${NC}"
 echo -e ""
 echo -e "${MUTED}To start:${NC}"
 echo -e ""
 echo -e "source ~/.${current_shell}rc  ${MUTED}# Reload shell config${NC}"
 echo -e "cd <project>          ${MUTED}# Open directory${NC}"
-echo -e "secure-opencode       ${MUTED}# Run command${NC}"
+echo -e "private-opencode       ${MUTED}# Run command${NC}"
 echo -e ""
-echo -e "${MUTED}For more information visit ${NC}https://github.com/concrete-security/secure-opencode"
+echo -e "${MUTED}For more information visit ${NC}https://github.com/concrete-security/private-opencode"
 echo -e ""

@@ -38,18 +38,18 @@ jobs:
             target="$(basename "$dir")"
             target="${target#opencode-}"
 
-            # Rename binary: opencode → secure-opencode
+            # Rename binary: opencode → private-opencode
             if [[ "$target" == windows-* ]]; then
-              mv "$dir/bin/opencode.exe" "$dir/bin/secure-opencode.exe"
+              mv "$dir/bin/opencode.exe" "$dir/bin/private-opencode.exe"
             else
-              mv "$dir/bin/opencode" "$dir/bin/secure-opencode"
+              mv "$dir/bin/opencode" "$dir/bin/private-opencode"
             fi
 
             # Create archive: tar.gz for linux, zip for others
             if [[ "$target" == linux-* ]]; then
-              tar -czf "$OUT_DIR/secure-opencode-${target}.tar.gz" -C "$dir/bin" .
+              tar -czf "$OUT_DIR/private-opencode-${target}.tar.gz" -C "$dir/bin" .
             else
-              (cd "$dir/bin" && zip -r "$OUT_DIR/secure-opencode-${target}.zip" .)
+              (cd "$dir/bin" && zip -r "$OUT_DIR/private-opencode-${target}.zip" .)
             fi
           done
 

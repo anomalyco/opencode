@@ -122,22 +122,22 @@ If you're interested in contributing to OpenCode, please read our [contributing 
 
 If you are working on a project that's related to OpenCode and is using "opencode" as part of its name, for example "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
 
-### Secure OpenCode (aTLS)
+### Private OpenCode (aTLS)
 
 #### Installation
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/concrete-security/secure-opencode/dev/private-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/concrete-security/private-opencode/dev/private-install.sh | bash
 ```
 
 Then run:
 
 ```bash
 cd <project>
-secure-opencode
+private-opencode
 ```
 
-Secure OpenCode integrates with **any provider running a model inside a Trusted Execution Environment (TEE)**.
+Private OpenCode integrates with **any provider running a model inside a Trusted Execution Environment (TEE)**.
 
 The connection is secured using [ratls](https://github.com/Concrete-Security/ratls) and **attested TLS (aTLS)** — a TLS channel that verifies the remote server’s TEE attestation *before* any data is exchanged. This ensures the model is running inside an enclave that matches the expected configuration.
 
