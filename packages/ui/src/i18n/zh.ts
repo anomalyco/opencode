@@ -47,6 +47,10 @@ export const dict = {
   "ui.sessionTurn.status.thinkingWithTopic": "思考：{{topic}}",
   "ui.sessionTurn.status.gatheringThoughts": "正在整理思路",
   "ui.sessionTurn.status.consideringNextSteps": "正在考虑下一步",
+  "ui.sessionTurn.context.search.one": "{{count}} 次搜索",
+  "ui.sessionTurn.context.search.other": "{{count}} 次搜索",
+  "ui.sessionTurn.context.list.one": "{{count}} 次列表",
+  "ui.sessionTurn.context.list.other": "{{count}} 次列表",
 
   "ui.messagePart.diagnostic.error": "错误",
   "ui.messagePart.title.edit": "编辑",
