@@ -608,7 +608,7 @@ export namespace Provider {
 
       // Attempt dynamic model fetching (no auth required for /v1/models endpoint)
       try {
-        const response = await fetch("https://internal.llmapi.ai/v1/models", {
+        const response = await fetch("https://api.llmapi.ai/v1/models", {
           headers: {
             "Content-Type": "application/json",
           },
@@ -628,7 +628,7 @@ export namespace Provider {
                   name: model.id,
                   api: {
                     id: model.id,
-                    url: "https://internal.llmapi.ai/v1",
+                    url: "https://api.llmapi.ai/v1",
                     npm: "@ai-sdk/openai-compatible",
                   },
                   status: "active",
@@ -674,14 +674,14 @@ export namespace Provider {
         options: apiKey
           ? {
               apiKey,
-              baseURL: "https://internal.llmapi.ai/v1",
+              baseURL: "https://api.llmapi.ai/v1",
               headers: {
                 "HTTP-Referer": "https://opencode.ai/",
                 "X-Title": "opencode",
               },
             }
           : {
-              baseURL: "https://internal.llmapi.ai/v1",
+              baseURL: "https://api.llmapi.ai/v1",
               headers: {
                 "HTTP-Referer": "https://opencode.ai/",
                 "X-Title": "opencode",
