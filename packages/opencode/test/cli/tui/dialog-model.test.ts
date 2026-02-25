@@ -164,4 +164,34 @@ describe("dialog-model", () => {
     expect(result.map((x) => x.category)).toEqual(["OpenCode", "Anthropic", "Zeta"])
     expect(result[0]?.footer).toBe("Free")
   })
+
+  test("all composed option values produce unique JSON.stringify ids (no duplicate DOM ids)", () => {
+    const providers = [
+      provider("anthropic", "Anthropic", {
+        "claude-3-5-sonnet": { id: "claude-3-5-sonnet", name: "Claude 3.5 Sonnet", providerID: "anthropic" },
+        "claude-3-opus": { id: "claude-3-opus", name: "Claude 3 Opus", providerID: "anthropic" },
+      }),
+      provider("openai", "OpenAI", {
+        "gpt-4o": { id: "gpt-4o", name: "GPT-4o", providerID: "openai" },
+      }),
+    ]
+    const favorites = [{ providerID: "anthropic", modelID: "claude-3-5-sonnet" }]
+    const recents = [
+      { providerID: "anthropic", modelID: "claude-3-5-sonnet" },
+      { providerID: "openai", modelID: "gpt-4o" },
+    ]
+
+    const favoriteOptions = buildSectionOptions({ items: favorites, category: "Favorites", providers, showSections: true })
+    const recentOptions = buildSectionOptions({
+      items: recents.filter((r) => !favorites.some((f) => f.providerID === r.providerID && f.modelID === r.modelID)),
+      category: "Recent",
+      providers,
+      showSections: true,
+    })
+    const providerOptions = buildProviderOptions({ providers, favorites, connected: true })
+
+    const all = [...favoriteOptions, ...recentOptions, ...providerOptions]
+    const ids = all.map((o) => JSON.stringify(o.value))
+    expect(new Set(ids).size).toBe(ids.length)
+  })
 })
