@@ -503,6 +503,8 @@ export const dict = {
   "workspace.lite.subscription.monthlyUsage": "Månedligt forbrug",
   "workspace.lite.subscription.resetsIn": "Nulstiller i",
   "workspace.lite.subscription.useBalance": "Brug din tilgængelige saldo, når du har nået forbrugsgrænserne",
+  "workspace.lite.subscription.selectProvider":
+    'Vælg "OpenCode Go" som udbyder i din opencode-konfiguration for at bruge Go-modeller.',
   "workspace.lite.other.title": "Go-abonnement",
   "workspace.lite.other.message":
     "Et andet medlem i dette workspace abonnerer allerede på OpenCode Go. Kun ét medlem pr. workspace kan abonnere.",

@@ -515,6 +515,8 @@ export const dict = {
   "workspace.lite.subscription.resetsIn": "Réinitialisation dans",
   "workspace.lite.subscription.useBalance":
     "Utilisez votre solde disponible après avoir atteint les limites d'utilisation",
+  "workspace.lite.subscription.selectProvider":
+    'Sélectionnez "OpenCode Go" comme fournisseur dans votre configuration opencode pour utiliser les modèles Go.',
   "workspace.lite.other.title": "Abonnement Go",
   "workspace.lite.other.message":
     "Un autre membre de cet espace de travail est déjà abonné à OpenCode Go. Un seul membre par espace de travail peut s'abonner.",
