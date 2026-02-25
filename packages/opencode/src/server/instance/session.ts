@@ -271,13 +271,19 @@ export const SessionRoutes = lazy(() =>
         }),
       ),
       validator(
+        "query",
+        z.object({
+          directory: z.string().optional(),
+        }),
+      ),
+      validator(
         "json",
         z.object({
           title: z.string().optional(),
           permission: Permission.Ruleset.optional(),
           time: z
             .object({
-              archived: z.number().optional(),
+              archived: z.number().nullable().optional(),
             })
             .optional(),
         }),
@@ -296,8 +302,9 @@ export const SessionRoutes = lazy(() =>
             permission: Permission.merge(current.permission ?? [], updates.permission),
           })
         }
-        if (updates.time?.archived !== undefined) {
-          await Session.setArchived({ sessionID, time: updates.time.archived })
+        if (updates.time !== undefined && "archived" in updates.time) {
+          session = await Session.setArchived({ sessionID, time: updates.time.archived ?? undefined })
+        }
         }
 
         const session = await Session.get(sessionID)

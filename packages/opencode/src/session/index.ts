@@ -8,8 +8,12 @@ import { type ProviderMetadata, type LanguageModelUsage } from "ai"
 import { Flag } from "../flag/flag"
 import { Installation } from "../installation"
 
+<<<<<<< HEAD
 import { Database, NotFoundError, eq, and, gte, isNull, desc, like, inArray, lt } from "../storage/db"
 import { SyncEvent } from "../sync"
+=======
+import { Database, NotFoundError, eq, and, or, gte, isNull, isNotNull, desc, like, inArray, lt } from "../storage/db"
+>>>>>>> c7e985182 (wip: unarchive)
 import type { SQL } from "../storage/db"
 import { PartTable, SessionTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
@@ -691,8 +695,7 @@ export namespace Session {
         title: z.string().optional(),
         permission: Info.shape.permission,
         workspaceID: WorkspaceID.zod.optional(),
-      })
-      .optional(),
+      }),
     (input) => runPromise((svc) => svc.create(input)),
   )
 
@@ -793,7 +796,9 @@ export namespace Session {
     if (input?.search) {
       conditions.push(like(SessionTable.title, `%${input.search}%`))
     }
-    if (!input?.archived) {
+    if (input?.archived) {
+      conditions.push(isNotNull(SessionTable.time_archived))
+    } else {
       conditions.push(isNull(SessionTable.time_archived))
     }
 
