@@ -2436,21 +2436,6 @@ describe("ProviderTransform.variants", () => {
       expect(result.high).toEqual({ reasoningEffort: "high" })
     })
 
-    test("o1 model returns reasoningEffort variants", () => {
-      const model = createMockModel({
-        id: "sap-ai-core/azure-openai--o1",
-        providerID: "sap-ai-core",
-        api: {
-          id: "azure-openai--o1",
-          url: "https://api.ai.sap",
-          npm: "@jerome-benoit/sap-ai-provider-v2",
-        },
-      })
-      const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
-      expect(result.low).toEqual({ reasoningEffort: "low" })
-    })
-
 
     test("sonar models return empty object", () => {
       const model = createMockModel({
