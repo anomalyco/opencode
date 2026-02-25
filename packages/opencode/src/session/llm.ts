@@ -223,12 +223,14 @@ export namespace LLM {
       },
       maxRetries: input.retries ?? 0,
       messages: [
-        ...system.map(
-          (x): ModelMessage => ({
-            role: "system",
-            content: x,
-          }),
-        ),
+        ...(input.model.api.npm === "@ai-sdk/anthropic"
+          ? system.map(
+              (x): ModelMessage => ({
+                role: "system",
+                content: x,
+              }),
+            )
+          : ([{ role: "system", content: system.join("\n") }] as ModelMessage[])),
         ...input.messages,
       ],
       model: wrapLanguageModel({
