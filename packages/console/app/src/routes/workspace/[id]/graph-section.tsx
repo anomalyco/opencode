@@ -132,7 +132,7 @@ function formatDateLabel(dateStr: string): string {
   date.setDate(d)
   date.setHours(0, 0, 0, 0)
   const month = date.toLocaleDateString(undefined, { month: "short" })
-  const day = date.getUTCDate().toString().padStart(2, "0")
+  const day = date.getDate().toString().padStart(2, "0")
   return `${month} ${day}`
 }
 
@@ -188,7 +188,10 @@ export function GraphSection() {
     const daysInMonth = new Date(store.year, store.month + 1, 0).getDate()
     return Array.from({ length: daysInMonth }, (_, i) => {
       const date = new Date(store.year, store.month, i + 1)
-      return date.toISOString().split("T")[0]
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, "0")
+      const day = String(date.getDate()).padStart(2, "0")
+      return `${year}-${month}-${day}`
     })
   })
 
