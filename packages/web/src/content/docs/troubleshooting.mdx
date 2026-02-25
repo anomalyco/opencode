@@ -270,6 +270,49 @@ This will force opencode to download the most recent versions of provider packag
 
 ---
 
+### MCP server returns missing auth header
+
+If a remote MCP server returns an auth/header error (for example, `x-api-key header is required`):
+
+1. Confirm your API key is set in your environment (for example `EXA_API_KEY`)
+2. If using a remote MCP, pass headers explicitly in config
+3. If needed, switch to local MCP and set the key via `environment`
+
+Example remote config:
+
+```json
+{
+  "mcp": {
+    "exa": {
+      "type": "remote",
+      "url": "https://mcp.exa.ai/mcp",
+      "oauth": false,
+      "headers": {
+        "x-api-key": "{env:EXA_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+Example local config:
+
+```json
+{
+  "mcp": {
+    "exa": {
+      "type": "local",
+      "command": ["npx", "-y", "exa-mcp-server"],
+      "environment": {
+        "EXA_API_KEY": "{env:EXA_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+---
+
 ### Copy/paste not working on Linux
 
 Linux users need to have one of the following clipboard utilities installed for copy/paste functionality to work:
