@@ -156,6 +156,29 @@ export function BasicTool(props: BasicToolProps) {
   )
 }
 
-export function GenericTool(props: { tool: string; status?: string; hideDetails?: boolean }) {
-  return <BasicTool icon="mcp" status={props.status} trigger={{ title: props.tool }} hideDetails={props.hideDetails} />
+export function GenericTool(props: {
+  tool: string
+  input?: Record<string, any>
+  metadata?: Record<string, any>
+  status?: string
+  hideDetails?: boolean
+}) {
+  const title = () => {
+    // Show skill name for skill tool calls
+    if (props.tool === "skill" && props.input?.name) return `skill: ${props.input.name}`
+    return props.tool
+  }
+  const subtitle = () => {
+    // Show output title from metadata if available
+    if (props.metadata?.name) return props.metadata.name
+    return undefined
+  }
+  return (
+    <BasicTool
+      icon="mcp"
+      status={props.status}
+      trigger={{ title: title(), subtitle: subtitle() }}
+      hideDetails={props.hideDetails}
+    />
+  )
 }
