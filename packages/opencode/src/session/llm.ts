@@ -22,7 +22,8 @@ import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { PermissionNext } from "@/permission/next"
 import { Auth } from "@/auth"
-import { GitLabWorkflowLanguageModel } from "@gitlab/gitlab-ai-provider"
+import { GitLabWorkflowLanguageModel, type AiModel } from "@gitlab/gitlab-ai-provider"
+import { WorkflowModelSelect } from "@/session/workflow-model-select"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -155,6 +156,21 @@ export namespace LLM {
     // We bridge those requests through OpenCode's resolved tools (which include permission gating).
     if (language instanceof GitLabWorkflowLanguageModel) {
       const workflowModel = language as GitLabWorkflowLanguageModel
+
+      const cachedRef = await WorkflowModelSelect.getLastSelection()
+      l.debug("workflow model seed", { cachedRef, existingSelected: workflowModel.selectedModelRef })
+      if (cachedRef) {
+        workflowModel.selectedModelRef = cachedRef
+      }
+
+      workflowModel.onSelectModel = async (models: AiModel[]) => {
+        const cached = await WorkflowModelSelect.getLastSelection()
+        if (cached && models.some((m) => m.ref === cached)) {
+          return cached
+        }
+        return null
+      }
+
       workflowModel.toolExecutor = async (toolName: string, argsJson: string, requestID: string) => {
         const t = tools[toolName]
         if (!t || !t.execute) {
