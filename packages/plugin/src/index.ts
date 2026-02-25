@@ -330,4 +330,55 @@ export interface Hooks {
    * Modify tool definitions (description and parameters) sent to LLM
    */
   "tool.definition"?: (input: { toolID: string }, output: { description: string; parameters: any }) => Promise<void>
+  /**
+   * Called before every streaming delta event is published to subscribers
+   * (text-delta, reasoning-delta, tool-input-delta). Allows plugins to
+   * observe or transform the displayed stream in real time and optionally
+   * request an abort.
+   *
+   * Setting `output.delta` changes the delta published to subscribers.
+   * Setting `output.abort` to `true` will cancel the current stream before
+   * the triggering delta is displayed.
+   * The `stream.aborted` hook will then be called with the abort reason.
+   *
+   * Use cases: TTSR (Time-To-Stream Rules), content filtering, real-time
+   * monitoring, pattern detection.
+   */
+  "stream.delta"?: (
+    input: {
+      sessionID: string
+      messageID: string
+      type: "text-delta" | "reasoning-delta" | "tool-input-delta"
+      delta: string
+      accumulated: string
+    },
+    output: {
+      delta: string
+      abort: boolean
+      reason: string
+    },
+  ) => Promise<void>
+  /**
+   * Called after a stream is aborted by a `stream.delta` hook. Allows
+   * plugins to decide whether to retry the request with optional
+   * corrective context injected into the conversation.
+   *
+   * Setting `output.retry` to `true` will discard the aborted response
+   * and start a new streaming request. If `output.injectMessage` is set,
+   * it will be added as a user message before the retry.
+   */
+  "stream.aborted"?: (
+    input: {
+      sessionID: string
+      messageID: string
+      type: "text-delta" | "reasoning-delta" | "tool-input-delta"
+      reason: string
+      partialContent: string
+    },
+    output: {
+      retry: boolean
+      injectMessage: string
+      discardPartial: boolean
+    },
+  ) => Promise<void>
 }

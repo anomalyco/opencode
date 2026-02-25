@@ -26,7 +26,21 @@ import { Modelv2 } from "@/v2/model"
 import * as DateTime from "effect/DateTime"
 
 const DOOM_LOOP_THRESHOLD = 3
+const STREAM_ABORT_MAX_RETRIES = 3
 const log = Log.create({ service: "session.processor" })
+
+type StreamDeltaType = "text-delta" | "reasoning-delta" | "tool-input-delta"
+
+export class StreamAbortedError extends Error {
+  constructor(
+    public readonly reason: string,
+    public readonly partialContent: string,
+    public readonly type: StreamDeltaType,
+  ) {
+    super(`Stream aborted by plugin: ${reason}`)
+    this.name = "StreamAbortedError"
+  }
+}
 
 export type Result = "compact" | "stop" | "continue"
 
@@ -75,6 +89,7 @@ interface ProcessorContext extends Input {
   needsCompaction: boolean
   currentText: MessageV2.TextPart | undefined
   reasoningMap: Record<string, MessageV2.ReasoningPart>
+  toolInputAccumulated: Record<string, string>
 }
 
 type StreamEvent = Event
@@ -125,6 +140,7 @@ export const layer: Layer.Layer<
         needsCompaction: false,
         currentText: undefined,
         reasoningMap: {},
+        toolInputAccumulated: {},
       }
       let aborted = false
       const slog = log.clone().tag("session.id", input.sessionID).tag("messageID", input.assistantMessage.id)
@@ -217,6 +233,30 @@ export const layer: Layer.Layer<
         return true
       })
 
+      const triggerStreamDelta = Effect.fn("SessionProcessor.triggerStreamDelta")(function* (input: {
+        type: StreamDeltaType
+        delta: string
+        accumulated: string
+      }) {
+        if (!(yield* plugin.has("stream.delta"))) return input.delta
+        const output = yield* plugin.trigger(
+          "stream.delta",
+          {
+            sessionID: ctx.sessionID,
+            messageID: ctx.assistantMessage.id,
+            type: input.type,
+            delta: input.delta,
+            accumulated: input.accumulated,
+          },
+          { delta: input.delta, abort: false, reason: "" },
+        )
+        if (output.abort) {
+          slog.info("stream aborted by hook", { type: input.type, reason: output.reason })
+          throw new StreamAbortedError(output.reason, input.accumulated, input.type)
+        }
+        return output.delta
+      })
+
       const handleEvent = Effect.fnUntraced(function* (value: StreamEvent) {
         switch (value.type) {
           case "start":
@@ -247,12 +287,17 @@ export const layer: Layer.Layer<
             if (!(value.id in ctx.reasoningMap)) return
             ctx.reasoningMap[value.id].text += value.text
             if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
+            const reasoningDelta = yield* triggerStreamDelta({
+              type: "reasoning-delta",
+              delta: value.text,
+              accumulated: ctx.reasoningMap[value.id].text,
+            })
             yield* session.updatePartDelta({
               sessionID: ctx.reasoningMap[value.id].sessionID,
               messageID: ctx.reasoningMap[value.id].messageID,
               partID: ctx.reasoningMap[value.id].id,
               field: "text",
-              delta: value.text,
+              delta: reasoningDelta,
             })
             return
 
@@ -302,8 +347,18 @@ export const layer: Layer.Layer<
             }
             return
 
-          case "tool-input-delta":
+          case "tool-input-delta": {
+            const id = typeof value.id === "string" ? value.id : undefined
+            const delta = typeof value.delta === "string" ? value.delta : undefined
+            if (!id || delta === undefined) return
+            ctx.toolInputAccumulated[id] = (ctx.toolInputAccumulated[id] ?? "") + delta
+            yield* triggerStreamDelta({
+              type: "tool-input-delta",
+              delta,
+              accumulated: ctx.toolInputAccumulated[id],
+            })
             return
+          }
 
           case "tool-input-end": {
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
@@ -535,12 +590,17 @@ export const layer: Layer.Layer<
             if (!ctx.currentText) return
             ctx.currentText.text += value.text
             if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
+            const textDelta = yield* triggerStreamDelta({
+              type: "text-delta",
+              delta: value.text,
+              accumulated: ctx.currentText.text,
+            })
             yield* session.updatePartDelta({
               sessionID: ctx.currentText.sessionID,
               messageID: ctx.currentText.messageID,
               partID: ctx.currentText.id,
               field: "text",
-              delta: value.text,
+              delta: textDelta,
             })
             return
 
@@ -670,61 +730,121 @@ export const layer: Layer.Layer<
         yield* status.set(ctx.sessionID, { type: "idle" })
       })
 
+      const discardPartialStreamParts = Effect.fn("SessionProcessor.discardPartialStreamParts")(function* () {
+        if (ctx.currentText) {
+          yield* session.removePart({
+            sessionID: ctx.currentText.sessionID,
+            messageID: ctx.currentText.messageID,
+            partID: ctx.currentText.id,
+          })
+          ctx.currentText = undefined
+        }
+        for (const part of Object.values(ctx.reasoningMap)) {
+          yield* session.removePart({ sessionID: part.sessionID, messageID: part.messageID, partID: part.id })
+        }
+        ctx.reasoningMap = {}
+      })
+
       const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
         slog.info("process")
         ctx.needsCompaction = false
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
+        let currentStreamInput = streamInput
+        let streamAbortRetries = 0
 
         return yield* Effect.gen(function* () {
-          yield* Effect.gen(function* () {
-            ctx.currentText = undefined
-            ctx.reasoningMap = {}
-            const stream = llm.stream(streamInput)
+          while (true) {
+            const shouldRetry = yield* Effect.gen(function* () {
+              ctx.currentText = undefined
+              ctx.reasoningMap = {}
+              ctx.toolInputAccumulated = {}
+              const stream = llm.stream(currentStreamInput)
 
-            yield* stream.pipe(
-              Stream.tap((event) => handleEvent(event)),
-              Stream.takeUntil(() => ctx.needsCompaction),
-              Stream.runDrain,
-            )
-          }).pipe(
-            Effect.onInterrupt(() =>
-              Effect.gen(function* () {
-                aborted = true
-                if (!ctx.assistantMessage.error) {
-                  yield* halt(new DOMException("Aborted", "AbortError"))
-                }
-              }),
-            ),
-            Effect.catchCauseIf(
-              (cause) => !Cause.hasInterruptsOnly(cause),
-              (cause) => Effect.fail(Cause.squash(cause)),
-            ),
-            Effect.retry(
-              SessionRetry.policy({
-                parse,
-                set: (info) => {
-                  // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-                  EventV2.run(SessionEvent.Retried.Sync, {
-                    sessionID: ctx.sessionID,
-                    attempt: info.attempt,
-                    error: {
+              yield* stream.pipe(
+                Stream.tap((event) => handleEvent(event)),
+                Stream.takeUntil(() => ctx.needsCompaction),
+                Stream.runDrain,
+              )
+              return false
+            }).pipe(
+              Effect.onInterrupt(() =>
+                Effect.gen(function* () {
+                  aborted = true
+                  if (!ctx.assistantMessage.error) {
+                    yield* halt(new DOMException("Aborted", "AbortError"))
+                  }
+                }),
+              ),
+              Effect.catchCauseIf(
+                (cause) => !Cause.hasInterruptsOnly(cause),
+                (cause) => Effect.fail(Cause.squash(cause)),
+              ),
+              Effect.catchIf(
+                (e) => e instanceof StreamAbortedError,
+                (e) =>
+                  Effect.gen(function* () {
+                    const abortError = e as StreamAbortedError
+                    const output = yield* plugin.trigger(
+                      "stream.aborted",
+                      {
+                        sessionID: ctx.sessionID,
+                        messageID: ctx.assistantMessage.id,
+                        type: abortError.type,
+                        reason: abortError.reason,
+                        partialContent: abortError.partialContent,
+                      },
+                      { retry: false, injectMessage: "", discardPartial: true },
+                    )
+                    if (output.discardPartial) yield* discardPartialStreamParts()
+                    if (!output.retry || streamAbortRetries >= STREAM_ABORT_MAX_RETRIES) {
+                      ctx.blocked = true
+                      return false
+                    }
+                    streamAbortRetries++
+                    currentStreamInput = {
+                      ...streamInput,
+                      messages: output.injectMessage
+                        ? [
+                            ...streamInput.messages,
+                            {
+                              role: "user" as const,
+                              content: [{ type: "text" as const, text: output.injectMessage }],
+                            },
+                          ]
+                        : streamInput.messages,
+                    }
+                    return true
+                  }),
+              ),
+              Effect.retry(
+                SessionRetry.policy({
+                  parse,
+                  set: (info) => {
+                    // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+                    EventV2.run(SessionEvent.Retried.Sync, {
+                      sessionID: ctx.sessionID,
+                      attempt: info.attempt,
+                      error: {
+                        message: info.message,
+                        isRetryable: true,
+                      },
+                      timestamp: DateTime.makeUnsafe(Date.now()),
+                    })
+                    return status.set(ctx.sessionID, {
+                      type: "retry",
+                      attempt: info.attempt,
                       message: info.message,
-                      isRetryable: true,
-                    },
-                    timestamp: DateTime.makeUnsafe(Date.now()),
-                  })
-                  return status.set(ctx.sessionID, {
-                    type: "retry",
-                    attempt: info.attempt,
-                    message: info.message,
-                    next: info.next,
-                  })
-                },
-              }),
-            ),
-            Effect.catch(halt),
-            Effect.ensuring(cleanup()),
-          )
+                      next: info.next,
+                    })
+                  },
+                }),
+              ),
+              Effect.catch((e) => halt(e).pipe(Effect.as(false))),
+            )
+            if (!shouldRetry) break
+          }
+
+          yield* cleanup()
 
           if (ctx.needsCompaction) return "compact"
           if (ctx.blocked || ctx.assistantMessage.error) return "stop"

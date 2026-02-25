@@ -32,6 +32,7 @@ const log = Log.create({ service: "plugin" })
 
 type State = {
   hooks: Hooks[]
+  triggerNames: Set<TriggerName>
 }
 
 // Hook names that follow the (input, output) => Promise<void> trigger pattern
@@ -40,6 +41,7 @@ type TriggerName = {
 }[keyof Hooks]
 
 export interface Interface {
+  readonly has: <Name extends TriggerName>(name: Name) => Effect.Effect<boolean>
   readonly trigger: <
     Name extends TriggerName,
     Input = Parameters<Required<Hooks>[Name]>[0],
@@ -251,9 +253,14 @@ export const layer = Layer.effect(
           Effect.forkScoped,
         )
 
-        return { hooks }
+        return { hooks, triggerNames: new Set(hooks.flatMap((hook) => Object.keys(hook) as TriggerName[])) }
       }),
     )
+
+    const has = Effect.fn("Plugin.has")(function* <Name extends TriggerName>(name: Name) {
+      const s = yield* InstanceState.get(state)
+      return s.triggerNames.has(name)
+    })
 
     const trigger = Effect.fn("Plugin.trigger")(function* <
       Name extends TriggerName,
@@ -279,7 +286,7 @@ export const layer = Layer.effect(
       yield* InstanceState.get(state)
     })
 
-    return Service.of({ trigger, list, init })
+    return Service.of({ has, trigger, list, init })
   }),
 )
 
