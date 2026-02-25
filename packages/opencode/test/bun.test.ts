@@ -39,7 +39,7 @@ describe("BunProc registry configuration", () => {
 
       // Verify expected arguments are present
       expect(installFunction).toContain('"add"')
-      expect(installFunction).toContain('"--force"')
+      // Note: --force was removed to enable caching for faster plugin loading
       expect(installFunction).toContain('"--exact"')
       expect(installFunction).toContain('"--cwd"')
       expect(installFunction).toContain("Global.Path.cache")

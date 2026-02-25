@@ -49,7 +49,7 @@ export namespace Plugin {
       plugins.push(...BUILTIN)
     }
 
-    // Install all plugins (Lock in BunProc.install handles concurrency)
+    // Install all plugins in parallel (Lock in BunProc.install handles concurrency)
     const installed = await Promise.all(
       plugins.map(async (plugin) => {
         // ignore old codex plugin since it is supported first party now
@@ -59,7 +59,6 @@ export namespace Plugin {
         const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
         const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
         const builtin = BUILTIN.some((x) => x.startsWith(pkg + "@"))
-        const installStart = performance.now()
         const result = await BunProc.install(pkg, version).catch((err) => {
           if (!builtin) throw err
 
@@ -77,7 +76,6 @@ export namespace Plugin {
 
           return ""
         })
-        log.info("plugin install", { pkg, duration: `${(performance.now() - installStart).toFixed(0)}ms` })
         return result
       }),
     )

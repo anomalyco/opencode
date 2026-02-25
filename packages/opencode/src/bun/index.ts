@@ -62,34 +62,47 @@ export namespace BunProc {
   )
 
   export async function install(pkg: string, version = "latest") {
-    // Use lock to ensure only one install at a time
-    using _ = await Lock.write("bun-install")
-
     const mod = path.join(Global.Path.cache, "node_modules", pkg)
-    const pkgjson = Bun.file(path.join(Global.Path.cache, "package.json"))
-    const parsed = await pkgjson.json().catch(async () => {
-      const result = { dependencies: {} }
-      await Bun.write(pkgjson.name!, JSON.stringify(result, null, 2))
-      return result
-    })
+    const pkgjsonPath = path.join(Global.Path.cache, "package.json")
+    const pkgjson = Bun.file(pkgjsonPath)
+
+    // Fast path check BEFORE acquiring lock - no lock needed for reads
+    const parsed = await pkgjson.json().catch(() => ({ dependencies: {} }))
     const dependencies = parsed.dependencies ?? {}
-    if (!parsed.dependencies) parsed.dependencies = dependencies
     const modExists = await Filesystem.exists(mod)
 
     // Fast path: if version matches in package.json and module exists, skip install
-    if (dependencies[pkg] === version && modExists) return mod
+    if (dependencies[pkg] === version && modExists) {
+      log.info("package cached, skipping install", { pkg, version })
+      return mod
+    }
 
     // Additional fast path: for pinned versions, check if package exists in node_modules
     if (version !== "latest") {
       const installedPkgJson = Bun.file(path.join(mod, "package.json"))
       const installedPkg = await installedPkgJson.json().catch(() => null)
       if (installedPkg?.version === version) {
-        // Package exists with correct version, update package.json and skip install
-        parsed.dependencies[pkg] = version
-        await Bun.write(pkgjson.name!, JSON.stringify(parsed, null, 2))
         log.info("package already installed, skipping", { pkg, version })
+        // Update package.json with lock since we're writing
+        using _ = await Lock.write("bun-install")
+        const freshParsed = await pkgjson.json().catch(() => ({ dependencies: {} }))
+        if (!freshParsed.dependencies) freshParsed.dependencies = {}
+        freshParsed.dependencies[pkg] = version
+        await Bun.write(pkgjsonPath, JSON.stringify(freshParsed, null, 2))
         return mod
       }
+    }
+
+    // Only acquire lock when we actually need to install
+    using _ = await Lock.write("bun-install")
+
+    // Re-check after acquiring lock (another process might have installed it)
+    const freshParsed = await pkgjson.json().catch(() => ({ dependencies: {} }))
+    if (!freshParsed.dependencies) freshParsed.dependencies = {}
+    const freshModExists = await Filesystem.exists(mod)
+    if (freshParsed.dependencies[pkg] === version && freshModExists) {
+      log.info("package installed by another process, skipping", { pkg, version })
+      return mod
     }
 
     const proxied = !!(
@@ -99,10 +112,9 @@ export namespace BunProc {
       process.env.https_proxy
     )
 
-    // Build command arguments
+    // Build command arguments - removed --force to use Bun's cache
     const args = [
       "add",
-      "--force",
       "--exact",
       // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
       ...(proxied ? ["--no-cache"] : []),
@@ -142,8 +154,8 @@ export namespace BunProc {
       }
     }
 
-    parsed.dependencies[pkg] = resolvedVersion
-    await Bun.write(pkgjson.name!, JSON.stringify(parsed, null, 2))
+    freshParsed.dependencies[pkg] = resolvedVersion
+    await Bun.write(pkgjsonPath, JSON.stringify(freshParsed, null, 2))
     return mod
   }
 }
