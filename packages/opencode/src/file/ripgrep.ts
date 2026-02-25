@@ -7,6 +7,8 @@ import { NamedError } from "@opencode-ai/util/error"
 import { lazy } from "../util/lazy"
 import { $ } from "bun"
 import { Filesystem } from "../util/filesystem"
+import { Process } from "../util/process"
+import { text } from "node:stream/consumers"
 
 import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"
 import { Log } from "@/util/log"
@@ -153,17 +155,19 @@ export namespace Ripgrep {
         if (platformKey.endsWith("-darwin")) args.push("--include=*/rg")
         if (platformKey.endsWith("-linux")) args.push("--wildcards", "*/rg")
 
-        const proc = Bun.spawn(args, {
+        const proc = Process.spawn(args, {
           cwd: Global.Path.bin,
           stderr: "pipe",
           stdout: "pipe",
         })
-        await proc.exited
-        if (proc.exitCode !== 0)
+        const exit = await proc.exited
+        if (exit !== 0) {
+          const stderr = proc.stderr ? await text(proc.stderr) : ""
           throw new ExtractionFailedError({
             filepath,
-            stderr: await Bun.readableStreamToText(proc.stderr),
+            stderr,
           })
+        }
       }
       if (config.extension === "zip") {
         const zipFileReader = new ZipReader(new BlobReader(new Blob([arrayBuffer])))
@@ -227,8 +231,7 @@ export namespace Ripgrep {
       }
     }
 
-    // Bun.spawn should throw this, but it incorrectly reports that the executable does not exist.
-    // See https://github.com/oven-sh/bun/issues/24012
+    // Guard against invalid cwd to provide a consistent ENOENT error.
     if (!(await fs.stat(input.cwd).catch(() => undefined))?.isDirectory()) {
       throw Object.assign(new Error(`No such file or directory: '${input.cwd}'`), {
         code: "ENOENT",
@@ -237,40 +240,34 @@ export namespace Ripgrep {
       })
     }
 
-    const proc = Bun.spawn(args, {
+    const proc = Process.spawn(args, {
       cwd: input.cwd,
       stdout: "pipe",
       stderr: "ignore",
-      maxBuffer: 1024 * 1024 * 20,
-      signal: input.signal,
+      abort: input.signal,
     })
 
-    const reader = proc.stdout.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ""
-
-    try {
-      while (true) {
-        input.signal?.throwIfAborted()
-
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        // Handle both Unix (\n) and Windows (\r\n) line endings
-        const lines = buffer.split(/\r?\n/)
-        buffer = lines.pop() || ""
-
-        for (const line of lines) {
-          if (line) yield line
-        }
-      }
-
-      if (buffer) yield buffer
-    } finally {
-      reader.releaseLock()
-      await proc.exited
+    if (!proc.stdout) {
+      throw new Error("Process output not available")
     }
+
+    let buffer = ""
+    const stream = proc.stdout as AsyncIterable<Buffer | string>
+    for await (const chunk of stream) {
+      input.signal?.throwIfAborted()
+
+      buffer += typeof chunk === "string" ? chunk : chunk.toString()
+      // Handle both Unix (\n) and Windows (\r\n) line endings
+      const lines = buffer.split(/\r?\n/)
+      buffer = lines.pop() || ""
+
+      for (const line of lines) {
+        if (line) yield line
+      }
+    }
+
+    if (buffer) yield buffer
+    await proc.exited
 
     input.signal?.throwIfAborted()
   }

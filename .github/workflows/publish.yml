@@ -77,6 +77,8 @@ jobs:
           fetch-tags: true
 
       - uses: ./.github/actions/setup-bun
+        with:
+          cross-compile: "true"
 
       - name: Setup git committer
         id: committer
@@ -88,7 +90,7 @@ jobs:
       - name: Build
         id: build
         run: |
-          ./packages/opencode/script/build.ts
+          ./packages/opencode/script/build.ts --all
         env:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
