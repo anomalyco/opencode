@@ -27,6 +27,7 @@ import {
   type ScrollAcceleration,
   TextAttributes,
   RGBA,
+  detectLinks,
 } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
@@ -1467,6 +1468,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
               content={props.part.text.trim()}
               conceal={ctx.conceal()}
               fg={theme.text}
+              onChunks={detectLinks}
             />
           </Match>
         </Switch>
