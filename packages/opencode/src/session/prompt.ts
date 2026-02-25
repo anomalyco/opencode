@@ -1936,6 +1936,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     providerID: string
     modelID: string
   }) {
+    const blocked = (model: Provider.Model) =>
+      model.providerID === "anthropic" && (model.id === "claude-haiku-4-5" || model.id === "claude-haiku-4.5")
+    const add = (list: Provider.Model[], model?: Provider.Model) => {
+      if (!model || blocked(model)) return
+      if (list.some((item) => item.providerID === model.providerID && item.id === model.id)) return
+      list.push(model)
+    }
+
     if (input.session.parentID) return
     if (!Session.isDefaultTitle(input.session.title)) return
 
@@ -1962,40 +1970,63 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
     const agent = await Agent.get("title")
     if (!agent) return
-    const model = await iife(async () => {
-      if (agent.model) return await Provider.getModel(agent.model.providerID, agent.model.modelID)
-      return (
-        (await Provider.getSmallModel(input.providerID)) ?? (await Provider.getModel(input.providerID, input.modelID))
-      )
-    })
-    const result = await LLM.stream({
-      agent,
-      user: firstRealUser.info as MessageV2.User,
-      system: [],
-      small: true,
-      tools: {},
-      model,
-      abort: new AbortController().signal,
-      sessionID: input.session.id,
-      retries: 2,
-      messages: [
-        {
-          role: "user",
-          content: "Generate a title for this conversation:\n",
-        },
-        ...(hasOnlySubtaskParts
-          ? [{ role: "user" as const, content: subtaskParts.map((p) => p.prompt).join("\n") }]
-          : MessageV2.toModelMessages(contextMessages, model)),
-      ],
-    })
-    const text = await result.text.catch((err) => log.error("failed to generate title", { error: err }))
-    if (text) {
+    const candidates: Provider.Model[] = []
+    if (agent.model) {
+      const model = await Provider.getModel(agent.model.providerID, agent.model.modelID).catch(() => undefined)
+      add(candidates, model)
+    }
+    add(candidates, await Provider.getModel(input.providerID, input.modelID).catch(() => undefined))
+    add(candidates, await Provider.getModel("AxonHub-anthropic", "claude-haiku-4-5").catch(() => undefined))
+    add(candidates, await Provider.getModel("AxonHub", "gpt-5-nano").catch(() => undefined))
+    add(candidates, await Provider.getSmallModel(input.providerID).catch(() => undefined))
+    if (!candidates.length) return
+
+    for (const model of candidates) {
+      const result = await LLM.stream({
+        agent,
+        user: firstRealUser.info as MessageV2.User,
+        system: [],
+        small: false,
+        tools: {},
+        model,
+        abort: new AbortController().signal,
+        sessionID: input.session.id,
+        retries: 1,
+        messages: [
+          {
+            role: "user",
+            content: "Generate a title for this conversation:\n",
+          },
+          ...(hasOnlySubtaskParts
+            ? [{ role: "user" as const, content: subtaskParts.map((p) => p.prompt).join("\n") }]
+            : MessageV2.toModelMessages(contextMessages, model)),
+        ],
+      }).catch((error) => {
+        log.warn("ensureTitle attempt failed", {
+          providerID: model.providerID,
+          modelID: model.id,
+          error,
+        })
+        return undefined
+      })
+      if (!result) continue
+
+      const text = await result.text.catch((error) => {
+        log.warn("ensureTitle no text", {
+          providerID: model.providerID,
+          modelID: model.id,
+          error,
+        })
+        return undefined
+      })
+      if (!text) continue
+
       const cleaned = text
         .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
         .split("\n")
         .map((line) => line.trim())
         .find((line) => line.length > 0)
-      if (!cleaned) return
+      if (!cleaned) continue
 
       const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
       return Session.setTitle({ sessionID: input.session.id, title })
@@ -2005,6 +2036,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   export async function generateTitle(input: { sessionID: string }) {
     const session = await Session.get(input.sessionID)
     const history = await Session.messages({ sessionID: input.sessionID })
+    const blocked = (model: Provider.Model) =>
+      model.providerID === "anthropic" && (model.id === "claude-haiku-4-5" || model.id === "claude-haiku-4.5")
+    const add = (list: Provider.Model[], model?: Provider.Model) => {
+      if (!model || blocked(model)) return
+      if (list.some((item) => item.providerID === model.providerID && item.id === model.id)) return
+      list.push(model)
+    }
 
     // Find first non-synthetic user message
     const firstRealUserIdx = history.findIndex(
@@ -2043,19 +2081,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
     const candidates: Provider.Model[] = []
     if (agent.model) {
-      try {
-        candidates.push(await Provider.getModel(agent.model.providerID, agent.model.modelID))
-      } catch {}
+      add(candidates, await Provider.getModel(agent.model.providerID, agent.model.modelID).catch(() => undefined))
     }
-    try {
-      candidates.push(await Provider.getModel(providerID, modelID))
-    } catch {}
-    try {
-      const small = await Provider.getSmallModel(providerID)
-      if (small && !candidates.some((c) => c.providerID === small.providerID && c.id === small.id)) {
-        candidates.push(small)
-      }
-    } catch {}
+    add(candidates, await Provider.getModel(providerID, modelID).catch(() => undefined))
+    add(candidates, await Provider.getModel("AxonHub-anthropic", "claude-haiku-4-5").catch(() => undefined))
+    add(candidates, await Provider.getModel("AxonHub", "gpt-5-nano").catch(() => undefined))
+    add(candidates, await Provider.getSmallModel(providerID).catch(() => undefined))
 
     if (candidates.length === 0) throw new Error("No available model for title generation")
 
