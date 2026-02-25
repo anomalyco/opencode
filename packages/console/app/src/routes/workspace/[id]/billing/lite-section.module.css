@@ -147,10 +147,24 @@
   }
 
   [data-slot="promo-description"] {
-    font-size: var(--font-size-sm);
+    font-size: var(--font-size-md);
     color: var(--color-text-secondary);
     line-height: 1.5;
     margin-top: var(--space-2);
+  }
+
+  [data-slot="promo-models-title"] {
+    font-size: var(--font-size-md);
+    font-weight: 600;
+    margin-top: var(--space-4);
+  }
+
+  [data-slot="promo-models"] {
+    margin: var(--space-2) 0 0 var(--space-4);
+    padding: 0;
+    font-size: var(--font-size-md);
+    color: var(--color-text-secondary);
+    line-height: 1.4;
   }
 
   [data-slot="subscribe-button"] {
