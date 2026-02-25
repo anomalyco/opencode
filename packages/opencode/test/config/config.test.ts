@@ -567,10 +567,47 @@ test("updates config and writes to file", async () => {
     directory: tmp.path,
     fn: async () => {
       const newConfig = { model: "updated/model" }
-      await Config.update(newConfig as any)
+      const result = await Config.update(newConfig as any)
 
-      const writtenConfig = await Filesystem.readJson(path.join(tmp.path, "config.json"))
+      // Should return merged config
+      expect(result.model).toBe("updated/model")
+      
+      // Should write to opencode.json by default (not config.json)
+      const writtenConfig = await Filesystem.readJson(path.join(tmp.path, "opencode.json"))
       expect(writtenConfig.model).toBe("updated/model")
+    },
+  })
+})
+
+test("updates existing opencode.json instead of creating config.json", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      // Create an existing opencode.json file
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        model: "original/model",
+        username: "testuser",
+      })
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const newConfig = { model: "updated/model" }
+      const result = await Config.update(newConfig as any)
+
+      // Should return merged config with both old and new fields
+      expect(result.model).toBe("updated/model")
+      expect(result.username).toBe("testuser")
+      
+      // Should update existing opencode.json (not create config.json)
+      const writtenConfig = await Filesystem.readJson(path.join(tmp.path, "opencode.json"))
+      expect(writtenConfig.model).toBe("updated/model")
+      expect(writtenConfig.username).toBe("testuser") // Should preserve existing fields
+      
+      // config.json should not be created
+      const configJsonExists = await Filesystem.exists(path.join(tmp.path, "config.json"))
+      expect(configJsonExists).toBe(false)
     },
   })
 })

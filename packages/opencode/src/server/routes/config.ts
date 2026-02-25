@@ -54,8 +54,8 @@ export const ConfigRoutes = lazy(() =>
       validator("json", Config.Info),
       async (c) => {
         const config = c.req.valid("json")
-        await Config.update(config)
-        return c.json(config)
+        const next = await Config.update(config)
+        return c.json(next)
       },
     )
     .get(
