@@ -403,6 +403,13 @@ export namespace MCP {
           }
         }
       }
+      if (status?.status === "failed" && lastError) {
+        log.warn("all transports failed for remote mcp server", {
+          key,
+          url: mcp.url,
+          error: lastError.message,
+        })
+      }
     }
 
     if (mcp.type === "local") {

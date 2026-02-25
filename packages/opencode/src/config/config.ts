@@ -1258,7 +1258,14 @@ export namespace Config {
     const isFile = "path" in options
 
     text = text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
-      return process.env[varName] || ""
+      const value = process.env[varName]
+      if (value === undefined) {
+        log.info("env var referenced in config is not set", {
+          variable: varName,
+          source,
+        })
+      }
+      return value ?? ""
     })
 
     const fileMatches = text.match(/\{file:[^}]+\}/g)
