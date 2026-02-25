@@ -1,0 +1,188 @@
+---
+title: LSPサーバー
+description: OpenCode は LSP サーバーと統合します。
+---
+
+OpenCode は言語サーバープロトコル (LSP) と統合して、LLM がコードベースと対話できるようにします。診断を使用して LLM にフィードバックを提供します。
+
+---
+
+## 組み込み
+
+OpenCode には、一般的な言語用のいくつかの組み込み LSP サーバーが付属しています。
+
+| LSP Server         | Extensions                                                          | Requirements                                                 |
+| ------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------ |
+| astro              | .astro                                                              | Auto-installs for Astro projects                             |
+| bash               | .sh, .bash, .zsh, .ksh                                              | Auto-installs bash-language-server                           |
+| clangd             | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++                | Auto-installs for C/C++ projects                             |
+| csharp             | .cs                                                                 | `.NET SDK` installed                                         |
+| clojure-lsp        | .clj, .cljs, .cljc, .edn                                            | `clojure-lsp` command available                              |
+| dart               | .dart                                                               | `dart` command available                                     |
+| deno               | .ts, .tsx, .js, .jsx, .mjs                                          | `deno` command available (auto-detects deno.json/deno.jsonc) |
+| elixir-ls          | .ex, .exs                                                           | `elixir` command available                                   |
+| eslint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                  | `eslint` dependency in project                               |
+| fsharp             | .fs, .fsi, .fsx, .fsscript                                          | `.NET SDK` installed                                         |
+| gleam              | .gleam                                                              | `gleam` command available                                    |
+| gopls              | .go                                                                 | `go` command available                                       |
+| hls                | .hs, .lhs                                                           | `haskell-language-server-wrapper` command available          |
+| jdtls              | .java                                                               | `Java SDK (version 21+)` installed                           |
+| kotlin-ls          | .kt, .kts                                                           | Auto-installs for Kotlin projects                            |
+| lua-ls             | .lua                                                                | Auto-installs for Lua projects                               |
+| nixd               | .nix                                                                | `nixd` command available                                     |
+| ocaml-lsp          | .ml, .mli                                                           | `ocamllsp` command available                                 |
+| oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | `oxlint` dependency in project                               |
+| php intelephense   | .php                                                                | Auto-installs for PHP projects                               |
+| prisma             | .prisma                                                             | `prisma` command available                                   |
+| pyright            | .py, .pyi                                                           | `pyright` dependency installed                               |
+| ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | `ruby` and `gem` commands available                          |
+| rust               | .rs                                                                 | `rust-analyzer` command available                            |
+| sourcekit-lsp      | .swift, .objc, .objcpp                                              | `swift` installed (`xcode` on macOS)                         |
+| svelte             | .svelte                                                             | Auto-installs for Svelte projects                            |
+| terraform          | .tf, .tfvars                                                        | Auto-installs from GitHub releases                           |
+| tinymist           | .typ, .typc                                                         | Auto-installs from GitHub releases                           |
+| typescript         | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | `typescript` dependency in project                           |
+| vue                | .vue                                                                | Auto-installs for Vue projects                               |
+| yaml-ls            | .yaml, .yml                                                         | Auto-installs Red Hat yaml-language-server                   |
+| zls                | .zig, .zon                                                          | `zig` command available                                      |
+
+上記のファイル拡張子のいずれかが検出され、要件が満たされると、LSP サーバーは自動的に有効になります。
+
+:::note
+`OPENCODE_DISABLE_LSP_DOWNLOAD` 環境変数を `true` に設定すると、LSP サーバーの自動ダウンロードを無効にできます。
+:::
+
+---
+
+## 仕組み
+
+OpenCode がファイルを開くと、次のようになります。
+
+1. 有効なすべての LSP サーバーに対してファイル拡張子をチェックします。
+2. 適切な LSP サーバーがまだ実行されていない場合は開始します。
+
+---
+
+## 設定
+
+OpenCode 設定の `lsp` セクションを通じて LSP サーバーをカスタマイズできます。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {}
+}
+```
+
+各 LSP サーバーは以下をサポートします。
+
+| プロパティ       | タイプ       | 説明                                                       |
+| ---------------- | ------------ | ---------------------------------------------------------- |
+| `disabled`       | ブール値     | LSP サーバーを無効にするには、これを `true` に設定します。 |
+| `command`        | 文字列[]     | LSP サーバーを起動するコマンド                             |
+| `extensions`     | 文字列[]     | この LSP サーバーが処理するファイル拡張子                  |
+| `env`            | オブジェクト | サーバーの起動時に設定する環境変数                         |
+| `initialization` | オブジェクト | LSP サーバーに送信する初期化オプション                     |
+
+いくつかの例を見てみましょう。
+
+---
+
+### 環境変数
+
+LSP サーバーの起動時に `env` プロパティを使用して環境変数を設定します。
+
+```json title="opencode.json" {5-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "rust": {
+      "env": {
+        "RUST_LOG": "debug"
+      }
+    }
+  }
+}
+```
+
+---
+
+### 初期化オプション
+
+`initialization` プロパティを使用して、初期化オプションを LSP サーバーに渡します。これらは、LSP `initialize` リクエスト中に送信されるサーバー固有の設定です。
+
+```json title="opencode.json" {5-9}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "typescript": {
+      "initialization": {
+        "preferences": {
+          "importModuleSpecifierPreference": "relative"
+        }
+      }
+    }
+  }
+}
+```
+
+:::note
+初期化オプションは LSP サーバーによって異なります。利用可能なオプションについては、LSP サーバーのドキュメントを確認してください。
+:::
+
+---
+
+### LSPサーバーの無効化
+
+**すべて** LSP サーバーをグローバルに無効にするには、`lsp` を `false` に設定します。
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": false
+}
+```
+
+**特定** LSP サーバーを無効にするには、`disabled` を `true` に設定します。
+
+```json title="opencode.json" {5}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "typescript": {
+      "disabled": true
+    }
+  }
+}
+```
+
+---
+
+### カスタム LSP サーバー
+
+コマンドとファイル拡張子を指定して、カスタム LSP サーバーを追加できます。
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "custom-lsp": {
+      "command": ["custom-lsp-server", "--stdio"],
+      "extensions": [".custom"]
+    }
+  }
+}
+```
+
+---
+
+## 追加情報
+
+### PHP Intelephense
+
+PHP Intelephense は、ライセンスキーを通じてプレミアム機能を提供します。ライセンスキーを指定するには、次の場所にあるテキストファイルにキー (のみ) を配置します。
+
+- macOS/Linux の場合: `$HOME/intelephense/license.txt`
+- Windows の場合: `%USERPROFILE%/intelephense/license.txt`
+
+ファイルにはライセンスキーのみが含まれており、追加のコンテンツは含まれていません。

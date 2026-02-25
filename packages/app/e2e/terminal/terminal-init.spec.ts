@@ -6,6 +6,7 @@ test("smoke terminal mounts and can create a second tab", async ({ page, gotoSes
   await gotoSession()
 
   const terminals = page.locator(terminalSelector)
+  const tabs = page.locator('#terminal-panel [data-slot="tabs-trigger"]')
   const opened = await terminals.first().isVisible()
 
   if (!opened) {
@@ -21,6 +22,7 @@ test("smoke terminal mounts and can create a second tab", async ({ page, gotoSes
   await page.locator(promptSelector).click()
   await page.keyboard.press("Control+Alt+T")
 
-  await expect(terminals).toHaveCount(2)
-  await expect(terminals.nth(1).locator("textarea")).toHaveCount(1)
+  await expect(tabs).toHaveCount(2)
+  await expect(terminals).toHaveCount(1)
+  await expect(terminals.first().locator("textarea")).toHaveCount(1)
 })

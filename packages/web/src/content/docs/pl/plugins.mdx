@@ -1,0 +1,385 @@
+---
+title: Wtyczki
+description: Napisz własną wtyczkę, aby rozszerzyć opencode.
+---
+
+Wtyczki umożliwiające wyłączenie opencode poprzez podjęcie różnych zdarzeń i zachowanie. Można utworzyć wtyczkę, aby sprawdzić nowe funkcje, integrować się z usługami lub sprawdzaniem zachowania opencode.
+
+Aby znaleźć się z przykładami, przejrzyj [wtyczki](/docs/ecosystem#plugins) utworzone przez społeczność.
+
+---
+
+## użyj wtyczki
+
+Istnieją dwa sposoby ładowania wtyczek.
+
+---
+
+### Z plików lokalnych
+
+Miejsce plików JavaScript lub TypeScript w katalogu wtyczki.
+
+- `.opencode/plugins/` - Wtyczki na poziomie projektu
+- `~/.config/opencode/plugins/` - Wtyczki globalne
+
+Pliki w tych katalogach są automatycznie ładowane podczas uruchamiania.
+
+---
+
+### Z npm
+
+szczegółowy pakiet npm w pliku konfiguracyjnym.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+}
+```
+
+Obsługiwane są zarówno pakiety zwykłe, jak i pakiety npm o określonym zakresie.
+
+Przeglądaj dostępną wtyczkę w [ekosystemie](/docs/ecosystem#plugins).
+
+---
+
+### Sposób instalacji wtyczek
+
+**wtyczki npm** są instalowane automatycznie przy użyciu Bun podczas uruchamiania. Pakiety i ich zależności są buforowane w `~/.cache/opencode/node_modules/`.
+
+**Wtyczki lokalne** są ładowane bezpośrednio z katalogu wtyczek. Aby uzyskać dostęp do zewnętrznych pakietów, musisz zainstalować `package.json` w swoim katalogu konfiguracyjnym (zobacz [Zależności](#dependencies)) lub opublikować wtyczkę w npm i [dodaj ją do swojej konfiguracji](/docs/config#plugins).
+
+---
+
+### Załaduj zamówienie
+
+Wtyczki są ładowane ze wszystkich źródeł, a wszystkie hooki napisane po kolei. Kolejność ładowania do:
+
+1. Konfiguracja globalna (`~/.config/opencode/opencode.json`)
+2. Konfiguracja projektu (`opencode.json`)
+3. Globalny katalog wtyczek (`~/.config/opencode/plugins/`)
+4. Katalog wtyczek projektu (`.opencode/plugins/`)
+
+Zduplikowane pakiety npm o tej samej nazwie i wersji są ładowane raz. Równie ważny jest dostęp lokalny i zewnętrzny npm o dodatkowych nazwach, które są zewnętrzne.
+
+---
+
+## Utwórz wtyczkę
+
+Wtyczka do **moduł JavaScript/TypeScript**, który eksportuje jeden lub więcej wtyczek
+funkcje. dostępna funkcja korzystania z obiektu kontekstu i głównego obiektu hooks.
+
+---
+
+### Zależności
+
+Lokalne narzędzie i narzędzie, które można wykorzystać z zewnętrznych pakietów npm. Dodaj `package.json` do swojego katalogu konfiguracyjnego z zależnościami.
+
+```json title=".opencode/package.json"
+{
+  "dependencies": {
+    "shescape": "^2.1.0"
+  }
+}
+```
+
+opencode uruchomienie `bun install` przy uruchomieniu, aby je uruchomić. Twoje dodatkowe funkcje będą dostępne po zaimportowaniu.
+
+```ts title=".opencode/plugins/my-plugin.ts"
+import { escape } from "shescape"
+
+export const MyPlugin = async (ctx) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "bash") {
+        output.args.command = escape(output.args.command)
+      }
+    },
+  }
+}
+```
+
+---
+
+### Podstawowa struktura
+
+```js title=".opencode/plugins/example.js"
+export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
+  console.log("Plugin initialized!")
+
+  return {
+    // Hook implementations go here
+  }
+}
+```
+
+Funkcja dostępu do:
+
+- `project`: Aktualne informacje o projekcie.
+- `directory`: Bieżący katalog roboczy.
+- `worktree`: Ścieżka eksploatacyjna Git.
+- `client`: Klient SDK z opencode do sztucznej inteligencji.
+- `$`: [API obudowy](https://bun.com/docs/runtime/shell) Buna do wykonywania oprogramowania.
+
+---
+
+### Obsługa TypeScriptu
+
+W przypadku wtyczek TypeScript możesz importować typy z pakietu wtyczek:
+
+```ts title="my-plugin.ts" {1}
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    // Type-safe hook implementations
+  }
+}
+```
+
+---
+
+### Wydarzenia
+
+Wtyczki mogą subskrybować zdarzenia, jak zastosować poniżej sekcji Przykłady. Oto lista różnych działań.
+
+#### Wydarzenia dowodzenia
+
+- `command.executed`
+
+#### Plik Wydarzenia
+
+- `file.edited`
+- `file.watcher.updated`
+
+#### Wydarzenia instalacyjne
+
+- `installation.updated`
+
+#### Wydarzenia LSP
+
+- `lsp.client.diagnostics`
+- `lsp.updated`
+
+#### Wydarzenia w wiadomościach
+
+- `message.part.removed`
+- `message.part.updated`
+- `message.removed`
+- `message.updated`
+
+#### Wydarzenia związane z uprawnieniami
+
+- `permission.asked`
+- `permission.replied`
+
+#### Wydarzenia serwerowe
+
+- `server.connected`
+
+#### Wydarzenia sesyjne
+
+- `session.created`
+- `session.compacted`
+- `session.deleted`
+- `session.diff`
+- `session.error`
+- `session.idle`
+- `session.status`
+- `session.updated`
+
+#### Wydarzenia do zrobienia
+
+- `todo.updated`
+
+#### Wydarzenia shell
+
+- `shell.env`
+
+#### Wydarzenia narzędziowe
+
+- `tool.execute.after`
+- `tool.execute.before`
+
+#### Wydarzenia TUI
+
+- `tui.prompt.append`
+- `tui.command.execute`
+- `tui.toast.show`
+
+---
+
+## Przykłady
+
+Oto kilka dostępnych wtyczek, które można udostępnić do opencode.
+
+---
+
+### Wysyłaj powiadomienia
+
+Wysyłaj powiadomienia, gdy wystąpią określone zdarzenia:
+
+```js title=".opencode/plugins/notification.js"
+export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    event: async ({ event }) => {
+      // Send notification on session completion
+      if (event.type === "session.idle") {
+        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+      }
+    },
+  }
+}
+```
+
+Używamy `osascript` do uruchamiania AppleScript na macOS. Tutaj możesz przejść do wysyłania pozostałości.
+
+:::note
+Jeśli korzystasz z aplikacji komputerowej opencode, może ona automatycznie wysłać wiadomość systemową, gdy odpowiedź jest gotowa lub gdy wystąpią błędy sesji.
+:::
+
+---
+
+### ochrona .env
+
+Zablokuj opencode czytanie plików `.env`:
+
+```javascript title=".opencode/plugins/env-protection.js"
+export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "read" && output.args.filePath.includes(".env")) {
+        throw new Error("Do not read .env files")
+      }
+    },
+  }
+}
+```
+
+---
+
+### Wstrzyknij zmienne środowiskowe
+
+Wstrzyknij zmienne konsekwencje dla wszystkich wykonań (narzędzia AI i terminale użytkownika):
+
+```javascript title=".opencode/plugins/inject-env.js"
+export const InjectEnvPlugin = async () => {
+  return {
+    "shell.env": async (input, output) => {
+      output.env.MY_API_KEY = "secret"
+      output.env.PROJECT_ROOT = input.cwd
+    },
+  }
+}
+```
+
+---
+
+### Niestandardowe narzędzia
+
+Wtyczki mogą również dodawać niestandardowe narzędzia do opencode:
+
+```ts title=".opencode/plugins/custom-tools.ts"
+import { type Plugin, tool } from "@opencode-ai/plugin"
+
+export const CustomToolsPlugin: Plugin = async (ctx) => {
+  return {
+    tool: {
+      mytool: tool({
+        description: "This is a custom tool",
+        args: {
+          foo: tool.schema.string(),
+        },
+        async execute(args, context) {
+          const { directory, worktree } = context
+          return `Hello ${args.foo} from ${directory} (worktree: ${worktree})`
+        },
+      }),
+    },
+  }
+}
+```
+
+Pomocnik `tool` tworzy narzędzie użytkowe, które może wywołać kod opencode. Pobierane schematu Zoda i narzędzie wyszukiwania za pomocą:
+
+- `description`: Co robi do narzędzia
+- `args`: Schemat Zoda dla narzędzi argumentów
+- `execute`: Funkcja uruchamiania po wywołaniu narzędzia
+
+Twoje narzędzie będzie dostępne dla otwartego kodu wraz z narzędziami użytkowymi.
+
+---
+
+### Wycięcie lasu
+
+użyj `client.app.log()` zamiast `console.log` do rejestracji strukturalnego:
+
+```ts title=".opencode/plugins/my-plugin.ts"
+export const MyPlugin = async ({ client }) => {
+  await client.app.log({
+    body: {
+      service: "my-plugin",
+      level: "info",
+      message: "Plugin initialized",
+      extra: { foo: "bar" },
+    },
+  })
+}
+```
+
+Poziomy: `debug`, `info`, `warn`, `error`. Aby uzyskać szczegółowe informacje, zobacz [dokumentację pakietu SDK](https://opencode.ai/docs/sdk).
+
+---
+
+### Haki zagęszczające
+
+Dostosuj kontekst dołączony podczas kompaktowania sesji:
+
+```ts title=".opencode/plugins/compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Inject additional context into the compaction prompt
+      output.context.push(`
+## Custom Context
+
+Include any state that should persist across compaction:
+- Current task status
+- Important decisions made
+- Files being actively worked on
+`)
+    },
+  }
+}
+```
+
+Hak `experimental.session.compacting` jest uruchamiany, zanim LLM wygeneruje podsumowanie kontynuacji. go, aby wstrzyknąć kontekst kontekstu dla domeny, której nie dostrzeżono przez domyślny monit o zagęszczenie.
+
+Można także umieścić kompletny monit o zagęszczenie, ustawiając `output.prompt`:
+
+```ts title=".opencode/plugins/custom-compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CustomCompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Replace the entire compaction prompt
+      output.prompt = `
+You are generating a continuation prompt for a multi-agent swarm session.
+
+Summarize:
+1. The current task and its status
+2. Which files are being modified and by whom
+3. Any blockers or dependencies between agents
+4. The next steps to complete the work
+
+Format as a structured prompt that a new agent can use to resume work.
+`
+    },
+  }
+}
+```
+
+Gdy urządzenie jest `output.prompt`, jest całkowicie dostępne na domyślnym monit o zagęszczanie. Tablica `output.context` jest w tym przypadku poniesiona.

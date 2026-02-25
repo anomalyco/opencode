@@ -29,15 +29,16 @@ opencode [project]
 
 #### Flags
 
-| Flag         | Short | Description                                |
-| ------------ | ----- | ------------------------------------------ |
-| `--continue` | `-c`  | Continue the last session                  |
-| `--session`  | `-s`  | Session ID to continue                     |
-| `--prompt`   |       | Prompt to use                              |
-| `--model`    | `-m`  | Model to use in the form of provider/model |
-| `--agent`    |       | Agent to use                               |
-| `--port`     |       | Port to listen on                          |
-| `--hostname` |       | Hostname to listen on                      |
+| Flag         | Short | Description                                                             |
+| ------------ | ----- | ----------------------------------------------------------------------- |
+| `--continue` | `-c`  | Continue the last session                                               |
+| `--session`  | `-s`  | Session ID to continue                                                  |
+| `--fork`     |       | Fork the session when continuing (use with `--continue` or `--session`) |
+| `--prompt`   |       | Prompt to use                                                           |
+| `--model`    | `-m`  | Model to use in the form of provider/model                              |
+| `--agent`    |       | Agent to use                                                            |
+| `--port`     |       | Port to listen on                                                       |
+| `--hostname` |       | Hostname to listen on                                                   |
 
 ---
 
@@ -334,19 +335,20 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 #### Flags
 
-| Flag         | Short | Description                                                        |
-| ------------ | ----- | ------------------------------------------------------------------ |
-| `--command`  |       | The command to run, use message for args                           |
-| `--continue` | `-c`  | Continue the last session                                          |
-| `--session`  | `-s`  | Session ID to continue                                             |
-| `--share`    |       | Share the session                                                  |
-| `--model`    | `-m`  | Model to use in the form of provider/model                         |
-| `--agent`    |       | Agent to use                                                       |
-| `--file`     | `-f`  | File(s) to attach to message                                       |
-| `--format`   |       | Format: default (formatted) or json (raw JSON events)              |
-| `--title`    |       | Title for the session (uses truncated prompt if no value provided) |
-| `--attach`   |       | Attach to a running opencode server (e.g., http://localhost:4096)  |
-| `--port`     |       | Port for the local server (defaults to random port)                |
+| Flag         | Short | Description                                                             |
+| ------------ | ----- | ----------------------------------------------------------------------- |
+| `--command`  |       | The command to run, use message for args                                |
+| `--continue` | `-c`  | Continue the last session                                               |
+| `--session`  | `-s`  | Session ID to continue                                                  |
+| `--fork`     |       | Fork the session when continuing (use with `--continue` or `--session`) |
+| `--share`    |       | Share the session                                                       |
+| `--model`    | `-m`  | Model to use in the form of provider/model                              |
+| `--agent`    |       | Agent to use                                                            |
+| `--file`     | `-f`  | File(s) to attach to message                                            |
+| `--format`   |       | Format: default (formatted) or json (raw JSON events)                   |
+| `--title`    |       | Title for the session (uses truncated prompt if no value provided)      |
+| `--attach`   |       | Attach to a running opencode server (e.g., http://localhost:4096)       |
+| `--port`     |       | Port for the local server (defaults to random port)                     |
 
 ---
 

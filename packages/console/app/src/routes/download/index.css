@@ -114,6 +114,7 @@
             border-radius: 4px;
             font-weight: 500;
             text-decoration: none;
+            white-space: nowrap;
 
             @media (max-width: 55rem) {
               display: none;
