@@ -161,7 +161,14 @@ export const BatchTool = Tool.define("batch", async () => {
 
       const outputMessage =
         failedCalls > 0
-          ? `Executed ${successfulCalls}/${results.length} tools successfully. ${failedCalls} failed.`
+          ? [
+              `Executed ${successfulCalls}/${results.length} tools successfully. ${failedCalls} failed.`,
+              "",
+              "Failed tools:",
+              ...results
+                .filter((r) => !r.success)
+                .map((r) => `- ${r.tool}: ${r.error instanceof Error ? r.error.message : String(r.error)}`),
+            ].join("\n")
           : `All ${successfulCalls} tools executed successfully.\n\nKeep using the batch tool for optimal performance in your next response!`
 
       return {

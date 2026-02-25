@@ -93,6 +93,11 @@ export namespace SessionRetry {
       if (json.type === "error" && json.error?.code?.includes("rate_limit")) {
         return "Rate Limited"
       }
+      // Respect explicit isRetryable: false from provider SDKs (e.g. Bedrock)
+      if (json.isRetryable === false) return undefined
+      // 4xx errors are client errors — not retryable
+      const status = typeof json.status === "number" ? json.status : typeof json.statusCode === "number" ? json.statusCode : undefined
+      if (status !== undefined && status >= 400 && status < 500) return undefined
       return JSON.stringify(json)
     } catch {
       return undefined

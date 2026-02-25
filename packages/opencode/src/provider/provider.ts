@@ -740,6 +740,17 @@ export namespace Provider {
 
     m.variants = mapValues(ProviderTransform.variants(m), (v) => v)
 
+    // Bedrock enforces 200K context unless the context-1m beta header is sent.
+    // models-snapshot.ts (auto-generated) lists capability (1M) not runtime limit.
+    const BEDROCK_CONTEXT_CAP = 200_000
+    if (
+      provider.id === "amazon-bedrock" &&
+      m.limit.context > BEDROCK_CONTEXT_CAP &&
+      m.id.includes("anthropic")
+    ) {
+      m.limit.context = BEDROCK_CONTEXT_CAP
+    }
+
     return m
   }
 
@@ -885,6 +896,16 @@ export namespace Provider {
           pickBy(merged, (v) => !v.disabled),
           (v) => omit(v, ["disabled"]),
         )
+        // Bedrock enforces 200K context unless the context-1m beta header is sent.
+        // models-snapshot.ts (auto-generated) lists capability (1M) not runtime limit.
+        const BEDROCK_CONTEXT_CAP = 200_000
+        if (
+          providerID === "amazon-bedrock" &&
+          parsedModel.limit.context > BEDROCK_CONTEXT_CAP &&
+          parsedModel.id.includes("anthropic")
+        ) {
+          parsedModel.limit.context = BEDROCK_CONTEXT_CAP
+        }
         parsed.models[modelID] = parsedModel
       }
       database[providerID] = parsed

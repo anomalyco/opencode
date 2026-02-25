@@ -113,6 +113,31 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error)).toBeUndefined()
   })
 
+  test("does not retry when json has isRetryable: false", () => {
+    const error = wrap(JSON.stringify({ isRetryable: false, message: "prompt is too long" }))
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
+
+  test("does not retry 400 status in json body", () => {
+    const error = wrap(JSON.stringify({ status: 400, message: "Bad request" }))
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
+
+  test("does not retry 403 statusCode in json body", () => {
+    const error = wrap(JSON.stringify({ statusCode: 403, message: "Forbidden" }))
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
+
+  test("retries 500 status in json body", () => {
+    const error = wrap(JSON.stringify({ status: 500, message: "Internal Server Error" }))
+    expect(SessionRetry.retryable(error)).toBe(JSON.stringify({ status: 500, message: "Internal Server Error" }))
+  })
+
+  test("retries json without status or isRetryable fields", () => {
+    const error = wrap(JSON.stringify({ error: { message: "some_unknown_error" } }))
+    expect(SessionRetry.retryable(error)).toBe(JSON.stringify({ error: { message: "some_unknown_error" } }))
+  })
+
   test("does not retry context overflow errors", () => {
     const error = new MessageV2.ContextOverflowError({
       message: "Input exceeds context window of this model",
