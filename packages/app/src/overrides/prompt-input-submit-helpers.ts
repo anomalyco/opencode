@@ -16,6 +16,19 @@ export function resolveSession(
 }
 
 /**
+ * Find the latest existing session to reuse instead of creating a new one.
+ *
+ * Returns `{ id }` of the latest session when sessions exist,
+ * or `undefined` when no sessions are available (caller should create one).
+ */
+export function findReusableSession(
+  sessions: { id: string }[],
+): { id: string } | undefined {
+  if (sessions.length === 0) return undefined
+  return { id: sessions[sessions.length - 1].id }
+}
+
+/**
  * Extract a human-readable message from various error shapes.
  *
  * Handles API-style errors with `data.message`, standard Error instances,

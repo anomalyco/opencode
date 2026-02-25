@@ -16,7 +16,7 @@ import { Worktree as WorktreeState } from "@/utils/worktree"
 import type { FileSelection } from "@/context/file"
 import { setCursorPosition } from "@/components/prompt-input/editor-dom"
 import { buildRequestParts } from "@/components/prompt-input/build-request-parts"
-import { resolveSession, extractErrorMessage } from "./prompt-input-submit-helpers"
+import { resolveSession, extractErrorMessage, findReusableSession } from "./prompt-input-submit-helpers"
 
 type PendingPrompt = {
   abort: AbortController
@@ -179,19 +179,25 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
     let session = input.info()
     if (!session && isNewSession) {
-      session = await client.session
-        .create()
-        .then((x) => x.data ?? undefined)
-        .catch((err) => {
-          showToast({
-            title: language.t("prompt.toast.sessionCreateFailed.title"),
-            description: errorMessage(err),
+      const reusable = findReusableSession(sync.data.session)
+      if (reusable) {
+        session = reusable
+        navigate(`/${base64Encode(sessionDirectory)}/session/${reusable.id}`)
+      } else {
+        session = await client.session
+          .create()
+          .then((x) => x.data ?? undefined)
+          .catch((err) => {
+            showToast({
+              title: language.t("prompt.toast.sessionCreateFailed.title"),
+              description: errorMessage(err),
+            })
+            return undefined
           })
-          return undefined
-        })
-      if (session) {
-        layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
-        navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
+        if (session) {
+          layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
+          navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
+        }
       }
     }
     session = resolveSession(session, isNewSession, params.id)
