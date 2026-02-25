@@ -685,7 +685,7 @@ export namespace Config {
 
   export const Agent = z
     .object({
-      model: ModelId.optional(),
+      model: z.union([ModelId, z.literal("inherit")]).optional(),
       variant: z
         .string()
         .optional()
@@ -760,8 +760,9 @@ export namespace Config {
 
       // Convert legacy maxSteps to steps
       const steps = agent.steps ?? agent.maxSteps
+      const model = agent.model === "inherit" ? undefined : agent.model
 
-      return { ...agent, options, permission, steps } as typeof agent & {
+      return { ...agent, model, options, permission, steps } as typeof agent & {
         options?: Record<string, unknown>
         permission?: Permission
         steps?: number

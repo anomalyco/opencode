@@ -275,6 +275,31 @@ test("handles agent configuration", async () => {
   })
 })
 
+test("treats agent model inherit as unset", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        agent: {
+          test_agent: {
+            model: "inherit",
+            description: "test agent",
+          },
+        },
+      })
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      const agent = config.agent?.["test_agent"]
+      expect(agent?.model).toBeUndefined()
+      expect(agent?.description).toBe("test agent")
+    },
+  })
+})
+
 test("treats agent variant as model-scoped setting (not provider option)", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

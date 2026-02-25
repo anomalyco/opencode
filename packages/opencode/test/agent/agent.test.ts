@@ -148,6 +148,30 @@ test("custom agent from config creates new agent", async () => {
   })
 })
 
+test("agent model inherit uses default model resolution", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        my_custom_agent: {
+          model: "inherit",
+          description: "My custom agent",
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const custom = await Agent.get("my_custom_agent")
+      expect(custom).toBeDefined()
+      expect(custom?.model).toBeUndefined()
+      expect(custom?.description).toBe("My custom agent")
+      expect(custom?.native).toBe(false)
+      expect(custom?.mode).toBe("all")
+    },
+  })
+})
+
 test("custom agent config overrides native agent properties", async () => {
   await using tmp = await tmpdir({
     config: {
