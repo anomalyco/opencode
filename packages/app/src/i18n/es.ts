@@ -69,6 +69,8 @@ export const dict = {
   "command.agent.cycle.reverse.description": "Cambiar al agente anterior",
   "command.model.variant.cycle": "Alternar esfuerzo de pensamiento",
   "command.model.variant.cycle.description": "Cambiar al siguiente nivel de esfuerzo",
+  "command.prompt.mode.shell": "Shell",
+  "command.prompt.mode.normal": "Prompt",
   "command.permissions.autoaccept.enable": "Aceptar ediciones automáticamente",
   "command.permissions.autoaccept.disable": "Dejar de aceptar ediciones automáticamente",
   "command.workspace.toggle": "Alternar espacios de trabajo",
@@ -98,7 +100,7 @@ export const dict = {
   "dialog.provider.tag.recommended": "Recomendado",
   "dialog.provider.opencode.note": "Modelos seleccionados incluyendo Claude, GPT, Gemini y más",
   "dialog.provider.anthropic.note": "Acceso directo a modelos Claude, incluyendo Pro y Max",
-  "dialog.provider.copilot.note": "Modelos Claude para asistencia de codificación",
+  "dialog.provider.copilot.note": "Modelos de IA para asistencia de codificación a través de GitHub Copilot",
   "dialog.provider.openai.note": "Modelos GPT para tareas de IA generales rápidas y capaces",
   "dialog.provider.google.note": "Modelos Gemini para respuestas rápidas y estructuradas",
   "dialog.provider.openrouter.note": "Accede a todos los modelos soportados desde un solo proveedor",
@@ -223,9 +225,11 @@ export const dict = {
 
   "prompt.placeholder.shell": "Introduce comando de shell...",
   "prompt.placeholder.normal": 'Pregunta cualquier cosa... "{{example}}"',
+  "prompt.placeholder.simple": "Pregunta cualquier cosa...",
   "prompt.placeholder.summarizeComments": "Resumir comentarios…",
   "prompt.placeholder.summarizeComment": "Resumir comentario…",
   "prompt.mode.shell": "Shell",
+  "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "esc para salir",
 
   "prompt.example.1": "Arreglar un TODO en el código",
@@ -506,6 +510,9 @@ export const dict = {
   "session.messages.jumpToLatest": "Ir al último",
 
   "session.context.addToContext": "Añadir {{selection}} al contexto",
+  "session.todo.title": "Tareas",
+  "session.todo.collapse": "Contraer",
+  "session.todo.expand": "Expandir",
 
   "session.new.worktree.main": "Rama principal",
   "session.new.worktree.mainWithBranch": "Rama principal ({{branch}})",
@@ -579,6 +586,7 @@ export const dict = {
   "sidebar.gettingStarted.line2": "Conecta cualquier proveedor para usar modelos, inc. Claude, GPT, Gemini etc.",
   "sidebar.project.recentSessions": "Sesiones recientes",
   "sidebar.project.viewAllSessions": "Ver todas las sesiones",
+  "sidebar.project.clearNotifications": "Borrar notificaciones",
 
   "app.name.desktop": "OpenCode Desktop",
 
@@ -594,6 +602,7 @@ export const dict = {
   "settings.general.section.notifications": "Notificaciones del sistema",
   "settings.general.section.updates": "Actualizaciones",
   "settings.general.section.sounds": "Efectos de sonido",
+  "settings.general.section.feed": "Feed",
   "settings.general.section.display": "Pantalla",
 
   "settings.general.row.language.title": "Idioma",
@@ -605,6 +614,12 @@ export const dict = {
   "settings.general.row.font.title": "Fuente",
   "settings.general.row.font.description": "Personaliza la fuente monoespaciada usada en bloques de código",
 
+  "settings.general.row.shellToolPartsExpanded.title": "Expandir partes de la herramienta shell",
+  "settings.general.row.shellToolPartsExpanded.description":
+    "Mostrar las partes de la herramienta shell expandidas por defecto en la línea de tiempo",
+  "settings.general.row.editToolPartsExpanded.title": "Expandir partes de la herramienta de edición",
+  "settings.general.row.editToolPartsExpanded.description":
+    "Mostrar las partes de las herramientas de edición, escritura y parcheado expandidas por defecto en la línea de tiempo",
   "settings.general.row.wayland.title": "Usar Wayland nativo",
   "settings.general.row.wayland.description": "Deshabilitar fallback a X11 en Wayland. Requiere reinicio.",
   "settings.general.row.wayland.tooltip":
@@ -634,6 +649,8 @@ export const dict = {
   "font.option.robotoMono": "Roboto Mono",
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
+  "font.option.geistMono": "Geist Mono",
+  "sound.option.none": "Ninguno",
   "sound.option.alert01": "Alerta 01",
   "sound.option.alert02": "Alerta 02",
   "sound.option.alert03": "Alerta 03",

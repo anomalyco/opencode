@@ -12,6 +12,11 @@ export const dict = {
   "ui.sessionReview.change.added": "Dodano",
   "ui.sessionReview.change.removed": "Uklonjeno",
   "ui.sessionReview.change.modified": "Izmijenjeno",
+  "ui.sessionReview.image.loading": "Učitavanje...",
+  "ui.sessionReview.image.placeholder": "Slika",
+  "ui.sessionReview.largeDiff.title": "Diff je prevelik za prikaz",
+  "ui.sessionReview.largeDiff.meta": "Limit: {{limit}} izmijenjenih linija. Trenutno: {{current}} izmijenjenih linija.",
+  "ui.sessionReview.largeDiff.renderAnyway": "Prikaži svejedno",
 
   "ui.lineComment.label.prefix": "Komentar na ",
   "ui.lineComment.label.suffix": "",
@@ -27,10 +32,13 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "ponovni pokušaj",
   "ui.sessionTurn.retry.inSeconds": "za {{seconds}}s",
+  "ui.sessionTurn.error.freeUsageExceeded": "Besplatna upotreba premašena",
+  "ui.sessionTurn.error.addCredits": "Dodaj kredite",
 
   "ui.sessionTurn.status.delegating": "Delegiranje posla",
   "ui.sessionTurn.status.planning": "Planiranje sljedećih koraka",
-  "ui.sessionTurn.status.gatheringContext": "Prikupljanje konteksta",
+  "ui.sessionTurn.status.gatheringContext": "Istraživanje",
+  "ui.sessionTurn.status.gatheredContext": "Istraženo",
   "ui.sessionTurn.status.searchingCodebase": "Pretraživanje baze koda",
   "ui.sessionTurn.status.searchingWeb": "Pretraživanje weba",
   "ui.sessionTurn.status.makingEdits": "Pravljenje izmjena",
@@ -79,6 +87,7 @@ export const dict = {
   "ui.common.question.other": "pitanja",
 
   "ui.common.add": "Dodaj",
+  "ui.common.back": "Nazad",
   "ui.common.cancel": "Otkaži",
   "ui.common.confirm": "Potvrdi",
   "ui.common.dismiss": "Odbaci",
@@ -93,7 +102,10 @@ export const dict = {
   "ui.message.expand": "Proširi poruku",
   "ui.message.collapse": "Sažmi poruku",
   "ui.message.copy": "Kopiraj",
+  "ui.message.copyMessage": "Kopiraj poruku",
+  "ui.message.copyResponse": "Kopiraj odgovor",
   "ui.message.copied": "Kopirano!",
+  "ui.message.interrupted": "Prekinuto",
   "ui.message.attachment.alt": "prilog",
 
   "ui.patch.action.deleted": "Obrisano",
@@ -104,6 +116,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} odgovoreno",
   "ui.question.answer.none": "(nema odgovora)",
   "ui.question.review.notAnswered": "(nije odgovoreno)",
-  "ui.question.multiHint": "(odaberi sve što važi)",
+  "ui.question.multiHint": "Odaberi sve što važi",
+  "ui.question.singleHint": "Odaberi jedan odgovor",
   "ui.question.custom.placeholder": "Unesi svoj odgovor...",
 } satisfies Partial<Record<Keys, string>>

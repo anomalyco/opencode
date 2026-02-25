@@ -33,5 +33,6 @@ jobs:
         with:
           issue-id: ${{ github.event.issue.number }}
           comment-id: ${{ github.event.comment.id }}
+          roles: admin,maintain
         env:
           GITHUB_TOKEN: ${{ steps.committer.outputs.token }}

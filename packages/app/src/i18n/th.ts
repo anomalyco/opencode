@@ -69,6 +69,8 @@ export const dict = {
   "command.agent.cycle.reverse.description": "สลับไปยังเอเจนต์ก่อนหน้า",
   "command.model.variant.cycle": "เปลี่ยนความพยายามในการคิด",
   "command.model.variant.cycle.description": "สลับไปยังระดับความพยายามถัดไป",
+  "command.prompt.mode.shell": "เชลล์",
+  "command.prompt.mode.normal": "พรอมต์",
   "command.permissions.autoaccept.enable": "ยอมรับการแก้ไขโดยอัตโนมัติ",
   "command.permissions.autoaccept.disable": "หยุดยอมรับการแก้ไขโดยอัตโนมัติ",
   "command.workspace.toggle": "สลับพื้นที่ทำงาน",
@@ -98,7 +100,7 @@ export const dict = {
   "dialog.provider.tag.recommended": "แนะนำ",
   "dialog.provider.opencode.note": "โมเดลที่คัดสรร รวมถึง Claude, GPT, Gemini และอื่น ๆ",
   "dialog.provider.anthropic.note": "เข้าถึงโมเดล Claude โดยตรง รวมถึง Pro และ Max",
-  "dialog.provider.copilot.note": "โมเดล Claude สำหรับการช่วยเหลือในการเขียนโค้ด",
+  "dialog.provider.copilot.note": "โมเดล AI สำหรับการช่วยเหลือในการเขียนโค้ดผ่าน GitHub Copilot",
   "dialog.provider.openai.note": "โมเดล GPT สำหรับงาน AI ทั่วไปที่รวดเร็วและมีความสามารถ",
   "dialog.provider.google.note": "โมเดล Gemini สำหรับการตอบสนองที่รวดเร็วและมีโครงสร้าง",
   "dialog.provider.openrouter.note": "เข้าถึงโมเดลที่รองรับทั้งหมดจากผู้ให้บริการเดียว",
@@ -223,9 +225,11 @@ export const dict = {
 
   "prompt.placeholder.shell": "ป้อนคำสั่งเชลล์...",
   "prompt.placeholder.normal": 'ถามอะไรก็ได้... "{{example}}"',
+  "prompt.placeholder.simple": "ถามอะไรก็ได้...",
   "prompt.placeholder.summarizeComments": "สรุปความคิดเห็น…",
   "prompt.placeholder.summarizeComment": "สรุปความคิดเห็น…",
   "prompt.mode.shell": "เชลล์",
+  "prompt.mode.normal": "พรอมต์",
   "prompt.mode.shell.exit": "กด esc เพื่อออก",
 
   "prompt.example.1": "แก้ไข TODO ในโค้ดเบส",
@@ -501,6 +505,9 @@ export const dict = {
   "session.messages.jumpToLatest": "ไปที่ล่าสุด",
 
   "session.context.addToContext": "เพิ่ม {{selection}} ไปยังบริบท",
+  "session.todo.title": "สิ่งที่ต้องทำ",
+  "session.todo.collapse": "ย่อ",
+  "session.todo.expand": "ขยาย",
 
   "session.new.worktree.main": "สาขาหลัก",
   "session.new.worktree.mainWithBranch": "สาขาหลัก ({{branch}})",
@@ -571,6 +578,7 @@ export const dict = {
   "sidebar.gettingStarted.line2": "เชื่อมต่อผู้ให้บริการใด ๆ เพื่อใช้โมเดล รวมถึง Claude, GPT, Gemini ฯลฯ",
   "sidebar.project.recentSessions": "เซสชันล่าสุด",
   "sidebar.project.viewAllSessions": "ดูเซสชันทั้งหมด",
+  "sidebar.project.clearNotifications": "ล้างการแจ้งเตือน",
 
   "app.name.desktop": "OpenCode Desktop",
 
@@ -586,6 +594,7 @@ export const dict = {
   "settings.general.section.notifications": "การแจ้งเตือนระบบ",
   "settings.general.section.updates": "การอัปเดต",
   "settings.general.section.sounds": "เสียงเอฟเฟกต์",
+  "settings.general.section.feed": "ฟีด",
   "settings.general.section.display": "การแสดงผล",
 
   "settings.general.row.language.title": "ภาษา",
@@ -597,6 +606,11 @@ export const dict = {
   "settings.general.row.font.title": "ฟอนต์",
   "settings.general.row.font.description": "ปรับแต่งฟอนต์โมโนที่ใช้ในบล็อกโค้ด",
 
+  "settings.general.row.shellToolPartsExpanded.title": "ขยายส่วนเครื่องมือ shell",
+  "settings.general.row.shellToolPartsExpanded.description": "แสดงส่วนเครื่องมือ shell แบบขยายตามค่าเริ่มต้นในไทม์ไลน์",
+  "settings.general.row.editToolPartsExpanded.title": "ขยายส่วนเครื่องมือ edit",
+  "settings.general.row.editToolPartsExpanded.description":
+    "แสดงส่วนเครื่องมือ edit, write และ patch แบบขยายตามค่าเริ่มต้นในไทม์ไลน์",
   "settings.general.row.wayland.title": "ใช้ Wayland แบบเนทีฟ",
   "settings.general.row.wayland.description": "ปิดใช้งาน X11 fallback บน Wayland ต้องรีสตาร์ท",
   "settings.general.row.wayland.tooltip": "บน Linux ที่มีจอภาพรีเฟรชเรตแบบผสม Wayland แบบเนทีฟอาจเสถียรกว่า",
@@ -625,6 +639,8 @@ export const dict = {
   "font.option.robotoMono": "Roboto Mono",
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
+  "font.option.geistMono": "Geist Mono",
+  "sound.option.none": "ไม่มี",
   "sound.option.alert01": "เสียงเตือน 01",
   "sound.option.alert02": "เสียงเตือน 02",
   "sound.option.alert03": "เสียงเตือน 03",

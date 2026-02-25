@@ -5,7 +5,7 @@ import { Font } from "@opencode-ai/ui/font"
 import { Splash } from "@opencode-ai/ui/logo"
 import { Progress } from "@opencode-ai/ui/progress"
 import "./styles.css"
-import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { commands, events, InitStep } from "./bindings"
 import { Channel } from "@tauri-apps/api/core"
 
@@ -29,36 +29,20 @@ render(() => {
   channel.onmessage = (next) => setStep(next)
   commands.awaitInitialization(channel as any).catch(() => undefined)
 
-  createEffect(() => {
-    if (phase() !== "sqlite_waiting") return
-
+  onMount(() => {
     setLine(0)
     setPercent(0)
 
     const timers = delays.map((ms, i) => setTimeout(() => setLine(i + 1), ms))
 
-    let stop: (() => void) | undefined
-    let active = true
-
-    void events.sqliteMigrationProgress
-      .listen((e) => {
-        if (e.payload.type === "InProgress") setPercent(Math.max(0, Math.min(100, e.payload.value)))
-        if (e.payload.type === "Done") setPercent(100)
-      })
-      .then((unlisten) => {
-        if (active) {
-          stop = unlisten
-          return
-        }
-
-        unlisten()
-      })
-      .catch(() => undefined)
+    const listener = events.sqliteMigrationProgress.listen((e) => {
+      if (e.payload.type === "InProgress") setPercent(Math.max(0, Math.min(100, e.payload.value)))
+      if (e.payload.type === "Done") setPercent(100)
+    })
 
     onCleanup(() => {
-      active = false
+      listener.then((cb) => cb())
       timers.forEach(clearTimeout)
-      stop?.()
     })
   })
 

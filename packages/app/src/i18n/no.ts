@@ -72,6 +72,8 @@ export const dict = {
   "command.agent.cycle.reverse.description": "Bytt til forrige agent",
   "command.model.variant.cycle": "Bytt tenkeinnsats",
   "command.model.variant.cycle.description": "Bytt til neste innsatsnivå",
+  "command.prompt.mode.shell": "Shell",
+  "command.prompt.mode.normal": "Prompt",
   "command.permissions.autoaccept.enable": "Godta endringer automatisk",
   "command.permissions.autoaccept.disable": "Slutt å godta endringer automatisk",
   "command.workspace.toggle": "Veksle arbeidsområder",
@@ -101,7 +103,7 @@ export const dict = {
   "dialog.provider.tag.recommended": "Anbefalt",
   "dialog.provider.opencode.note": "Utvalgte modeller inkludert Claude, GPT, Gemini og mer",
   "dialog.provider.anthropic.note": "Direkte tilgang til Claude-modeller, inkludert Pro og Max",
-  "dialog.provider.copilot.note": "Claude-modeller for kodeassistanse",
+  "dialog.provider.copilot.note": "AI-modeller for kodeassistanse via GitHub Copilot",
   "dialog.provider.openai.note": "GPT-modeller for raske, dyktige generelle AI-oppgaver",
   "dialog.provider.google.note": "Gemini-modeller for raske, strukturerte svar",
   "dialog.provider.openrouter.note": "Tilgang til alle støttede modeller fra én leverandør",
@@ -226,9 +228,11 @@ export const dict = {
 
   "prompt.placeholder.shell": "Skriv inn shell-kommando...",
   "prompt.placeholder.normal": 'Spør om hva som helst... "{{example}}"',
+  "prompt.placeholder.simple": "Spør om hva som helst...",
   "prompt.placeholder.summarizeComments": "Oppsummer kommentarer…",
   "prompt.placeholder.summarizeComment": "Oppsummer kommentar…",
   "prompt.mode.shell": "Shell",
+  "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "ESC for å avslutte",
 
   "prompt.example.1": "Fiks en TODO i kodebasen",
@@ -506,6 +510,9 @@ export const dict = {
   "session.messages.jumpToLatest": "Hopp til nyeste",
 
   "session.context.addToContext": "Legg til {{selection}} i kontekst",
+  "session.todo.title": "Oppgaver",
+  "session.todo.collapse": "Skjul",
+  "session.todo.expand": "Utvid",
 
   "session.new.worktree.main": "Hovedgren",
   "session.new.worktree.mainWithBranch": "Hovedgren ({{branch}})",
@@ -579,6 +586,7 @@ export const dict = {
   "sidebar.gettingStarted.line2": "Koble til en leverandør for å bruke modeller, inkl. Claude, GPT, Gemini osv.",
   "sidebar.project.recentSessions": "Nylige sesjoner",
   "sidebar.project.viewAllSessions": "Vis alle sesjoner",
+  "sidebar.project.clearNotifications": "Fjern varsler",
 
   "app.name.desktop": "OpenCode Desktop",
 
@@ -594,6 +602,7 @@ export const dict = {
   "settings.general.section.notifications": "Systemvarsler",
   "settings.general.section.updates": "Oppdateringer",
   "settings.general.section.sounds": "Lydeffekter",
+  "settings.general.section.feed": "Feed",
   "settings.general.section.display": "Skjerm",
 
   "settings.general.row.language.title": "Språk",
@@ -605,6 +614,11 @@ export const dict = {
   "settings.general.row.font.title": "Skrift",
   "settings.general.row.font.description": "Tilpass mono-skriften som brukes i kodeblokker",
 
+  "settings.general.row.shellToolPartsExpanded.title": "Utvid shell-verktøydeler",
+  "settings.general.row.shellToolPartsExpanded.description": "Vis shell-verktøydeler utvidet som standard i tidslinjen",
+  "settings.general.row.editToolPartsExpanded.title": "Utvid edit-verktøydeler",
+  "settings.general.row.editToolPartsExpanded.description":
+    "Vis edit-, write- og patch-verktøydeler utvidet som standard i tidslinjen",
   "settings.general.row.wayland.title": "Bruk innebygd Wayland",
   "settings.general.row.wayland.description": "Deaktiver X11-fallback på Wayland. Krever omstart.",
   "settings.general.row.wayland.tooltip":
@@ -633,6 +647,8 @@ export const dict = {
   "font.option.robotoMono": "Roboto Mono",
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
+  "font.option.geistMono": "Geist Mono",
+  "sound.option.none": "Ingen",
   "sound.option.alert01": "Varsel 01",
   "sound.option.alert02": "Varsel 02",
   "sound.option.alert03": "Varsel 03",

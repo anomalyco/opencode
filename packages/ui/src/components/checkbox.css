@@ -1,6 +1,6 @@
 [data-component="checkbox"] {
   display: flex;
-  align-items: center;
+  align-items: var(--checkbox-align, center);
   gap: 12px;
   cursor: default;
 
@@ -23,6 +23,7 @@
     width: 16px;
     height: 16px;
     padding: 2px;
+    margin-top: var(--checkbox-offset, 0px);
     aspect-ratio: 1;
     flex-shrink: 0;
     border-radius: var(--radius-sm);

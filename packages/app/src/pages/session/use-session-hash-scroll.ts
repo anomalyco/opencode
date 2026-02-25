@@ -1,4 +1,4 @@
-import { createEffect, on, onCleanup } from "solid-js"
+import { createEffect, createMemo, on, onCleanup } from "solid-js"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 
 export const messageIdFromHash = (hash: string) => {
@@ -26,6 +26,10 @@ export const useSessionHashScroll = (input: {
   scheduleScrollState: (el: HTMLDivElement) => void
   consumePendingMessage: (key: string) => string | undefined
 }) => {
+  const visibleUserMessages = createMemo(() => input.visibleUserMessages())
+  const messageById = createMemo(() => new Map(visibleUserMessages().map((m) => [m.id, m])))
+  const messageIndex = createMemo(() => new Map(visibleUserMessages().map((m, i) => [m.id, i])))
+
   const clearMessageHash = () => {
     if (!window.location.hash) return
     window.history.replaceState(null, "", window.location.href.replace(/#.*$/, ""))
@@ -41,16 +45,17 @@ export const useSessionHashScroll = (input: {
 
     const a = el.getBoundingClientRect()
     const b = root.getBoundingClientRect()
-    const top = a.top - b.top + root.scrollTop
+    const sticky = root.querySelector("[data-session-title]")
+    const inset = sticky instanceof HTMLElement ? sticky.offsetHeight : 0
+    const top = Math.max(0, a.top - b.top + root.scrollTop - inset)
     root.scrollTo({ top, behavior })
     return true
   }
 
   const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
-    input.setActiveMessage(message)
+    if (input.currentMessageId() !== message.id) input.setActiveMessage(message)
 
-    const msgs = input.visibleUserMessages()
-    const index = msgs.findIndex((m) => m.id === message.id)
+    const index = messageIndex().get(message.id) ?? -1
     if (index !== -1 && index < input.turnStart()) {
       input.setTurnStart(index)
       input.scheduleTurnBackfill()
@@ -107,7 +112,7 @@ export const useSessionHashScroll = (input: {
     const messageId = messageIdFromHash(hash)
     if (messageId) {
       input.autoScroll.pause()
-      const msg = input.visibleUserMessages().find((m) => m.id === messageId)
+      const msg = messageById().get(messageId)
       if (msg) {
         scrollToMessage(msg, behavior)
         return
@@ -144,14 +149,14 @@ export const useSessionHashScroll = (input: {
   createEffect(() => {
     if (!input.sessionID() || !input.messagesReady()) return
 
-    input.visibleUserMessages().length
+    visibleUserMessages()
     input.turnStart()
 
     const targetId = input.pendingMessage() ?? messageIdFromHash(window.location.hash)
     if (!targetId) return
     if (input.currentMessageId() === targetId) return
 
-    const msg = input.visibleUserMessages().find((m) => m.id === targetId)
+    const msg = messageById().get(targetId)
     if (!msg) return
 
     if (input.pendingMessage() === targetId) input.setPendingMessage(undefined)

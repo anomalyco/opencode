@@ -131,6 +131,8 @@ OpenCode로 Amazon Bedrock을 사용하려면:
 
 2. 다음 방법 중 하나를 사용하여 **설정**합니다:
 
+---
+
 ### 환경 변수 (빠른 시작)
 
 OpenCode를 실행하는 동안 다음 환경 변수 중 하나를 설정합니다:
@@ -152,6 +154,8 @@ OpenCode를 실행하는 동안 다음 환경 변수 중 하나를 설정합니�
    export AWS_PROFILE=my-dev-profile
    export AWS_REGION=us-east-1
 ```
+
+---
 
 #### 설정 파일 (권장)
 
@@ -181,6 +185,8 @@ OpenCode를 실행하는 동안 다음 환경 변수 중 하나를 설정합니�
   구성 파일 옵션은 환경 변수보다 우선 순위가 높습니다.
   :::
 
+---
+
 #### 고급: VPC 엔드포인트
 
 Bedrock의 VPC 엔드포인트를 사용하는 경우:
@@ -204,12 +210,16 @@ Bedrock의 VPC 엔드포인트를 사용하는 경우:
 `endpoint` 옵션은 일반적인 `baseURL` 옵션의 별칭입니다. `endpoint`와 `baseURL` 둘 다 지정된 경우 `endpoint`가 우선합니다.
 :::
 
+---
+
 #### 인증 방법
 
 - **`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`**: IAM 사용자 및 AWS 콘솔에서 액세스 키 생성
 - **`AWS_PROFILE`**: `~/.aws/credentials`의 프로필 이름을 사용합니다. `aws configure --profile my-profile` 또는 `aws sso login`으로 먼저 구성하십시오.
 - **`AWS_BEARER_TOKEN_BEDROCK`**: Amazon Bedrock 콘솔에서 임시 API 키 생성
 - **`AWS_WEB_IDENTITY_TOKEN_FILE` / `AWS_ROLE_ARN`**: EKS IRSA (서비스 계정용 IAM 역할) 또는 다른 Kubernetes 환경의 OIDC 연동. 이 환경 변수는 서비스 계정을 사용할 때 Kubernetes에 의해 자동으로 주입됩니다.
+
+---
 
 #### 인증 우선 순위
 
@@ -229,7 +239,8 @@ Amazon Bedrock은 다음과 같은 인증 우선 순위를 사용합니다.
    ```
 
 :::note
-사용자 정의 추론 프로필(custom inference profiles)의 경우, 키에 모델과 공급자 이름을 사용하고 `id` 속성에 ARN을 설정하십시오. 이렇게 하면 올바른 캐싱이 보장됩니다:
+사용자 정의 추론 프로필(custom inference profiles)의 경우, 키에 모델과 공급자 이름을 사용하고 `id` 속성에 ARN을 설정하십시오. 이렇게 하면 올바른 캐싱이 보장됩니다.
+:::
 
 ```json title="opencode.json"
 {
@@ -246,8 +257,6 @@ Amazon Bedrock은 다음과 같은 인증 우선 순위를 사용합니다.
   }
 }
 ```
-
-:::
 
 ---
 
@@ -656,6 +665,8 @@ GitLab Duo는 GitLab의 Anthropic 프록시를 통해 기본 도구 호출 기�
 #### OAuth 사용 (권장)
 
 **OAuth**를 선택하면 브라우저에서 권한 부여를 요청합니다.
+
+---
 
 ### 개인 액세스 토큰 사용
 
