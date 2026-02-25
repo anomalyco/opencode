@@ -1,7 +1,60 @@
+/**
+ * WebSocket transport for the OpenAI Responses API.
+ *
+ * Instead of one HTTP request per response.create, this module keeps a
+ * persistent WebSocket connection and multiplexes requests over it. The
+ * main win is eliminating the TLS + HTTP round-trip on every tool-call
+ * continuation within a single session.
+ *
+ * ## Codex vs OpenAI differences
+ *
+ * - **Terminal event**: OpenAI sends `response.completed`; Codex sends
+ *   `response.done`. Both carry `{ response: { id, output, … } }`.
+ * - **`store` field**: Codex requires `store=false` (or omitted). Sending
+ *   `store=true` immediately closes the connection with code 1008.
+ * - **`previous_response_id`**: Works on both endpoints for plain-text
+ *   continuations on the same connection. However, Codex returns
+ *   `server_error` when combining `previous_response_id` with
+ *   `function_call_output` input items — this works fine on regular
+ *   OpenAI. Until Codex fixes this, incremental input trimming is only
+ *   useful for non-tool-calling turns.
+ *
+ * ## Connection lifecycle
+ *
+ * After a response completes the connection is kept alive (idle timeout
+ * 90 s). When `OPENCODE_EXPERIMENTAL_WS_INCREMENTAL` is off, we
+ * proactively close and reopen the socket because the Codex endpoint
+ * rejects a second `response.create` on the same connection. When the
+ * flag is on we keep the socket so `previous_response_id` can reference
+ * the in-memory response cache.
+ */
+import { Flag } from "@/flag/flag"
 import { Instance } from "@/project/instance"
 import { Log } from "@/util/log"
 
 const log = Log.create({ service: "provider.websocket" })
+
+/** Behavioral differences between OpenAI and Codex WebSocket endpoints. */
+type Dialect = {
+  /** Codex rejects previous_response_id + function_call_output with server_error. */
+  skipIncrementalOnToolOutput: boolean
+  /** Codex rejects a second response.create on the same connection (non-incremental mode). */
+  reconnectAfterResponse: boolean
+}
+
+const DIALECT_CODEX: Dialect = {
+  skipIncrementalOnToolOutput: true,
+  reconnectAfterResponse: true,
+}
+
+const DIALECT_OPENAI: Dialect = {
+  skipIncrementalOnToolOutput: false,
+  reconnectAfterResponse: false,
+}
+
+function detectDialect(url: URL): Dialect {
+  return url.hostname === "chatgpt.com" ? DIALECT_CODEX : DIALECT_OPENAI
+}
 
 type Entry = {
   key: string
@@ -12,6 +65,10 @@ type Entry = {
   opening?: Promise<WebSocket>
   active: boolean
   idleTimer?: Timer
+  // previous_response_id tracking (when OPENCODE_EXPERIMENTAL_WS_INCREMENTAL is on)
+  lastResponseId?: string
+  lastInputLength?: number
+  lastOutputLength?: number
 }
 
 type Store = {
@@ -19,7 +76,10 @@ type Store = {
   sessions: Map<string, Set<string>>
 }
 
-function parseBody(body: RequestInit["body"]) {
+const IDLE_MS = 90_000
+const encoder = new TextEncoder()
+
+function parseBody(body: RequestInit["body"]): Record<string, unknown> | undefined {
   if (typeof body !== "string") return
   try {
     return JSON.parse(body)
@@ -36,27 +96,50 @@ function toWebSocketURL(input: URL): string {
   return `${wsProtocol}//${input.host}${input.pathname}${input.search}`
 }
 
-function messageDataToString(data: MessageEvent["data"]) {
+function messageDataToString(data: MessageEvent["data"]): string {
   if (typeof data === "string") return data
   if (data instanceof ArrayBuffer) return Buffer.from(data).toString("utf8")
   if (ArrayBuffer.isView(data)) return Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString("utf8")
   return String(data)
 }
 
-const TERMINAL_TYPES = new Set(["response.completed", "response.done", "response.incomplete", "response.failed", "error"])
+// OpenAI uses `response.completed`; Codex uses `response.done`.
+// Both carry `{ response: { id, output, ... } }` on success.
+const TERMINAL_TYPES = new Set(["response.completed", "response.done", "response.failed", "error"])
 
-function resetEntry(entry: Entry) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null
+}
+
+function clearIdleTimer(entry: Entry): void {
+  if (!entry.idleTimer) return
+  clearTimeout(entry.idleTimer)
+  entry.idleTimer = undefined
+}
+
+function scheduleIdleClose(store: Store, entry: Entry): void {
+  const timer = setTimeout(() => closeEntry(store, entry.key), IDLE_MS)
+  if (typeof timer === "object") timer.unref?.()
+  entry.idleTimer = timer
+}
+
+function toURL(request: RequestInfo | URL): URL {
+  if (request instanceof Request) return new URL(request.url)
+  return new URL(request)
+}
+
+function resetEntry(entry: Entry): void {
   entry.active = false
   entry.opening = undefined
-  if (entry.idleTimer) {
-    clearTimeout(entry.idleTimer)
-    entry.idleTimer = undefined
-  }
+  entry.lastResponseId = undefined
+  entry.lastInputLength = undefined
+  entry.lastOutputLength = undefined
+  clearIdleTimer(entry)
   entry.ws?.close()
   entry.ws = undefined
 }
 
-function closeStore(store: Store) {
+function closeStore(store: Store): void {
   for (const entry of store.entries.values()) {
     resetEntry(entry)
   }
@@ -74,14 +157,14 @@ const state = Instance.state(
   },
 )
 
-function unlink(store: Store, entry: Entry) {
+function unlink(store: Store, entry: Entry): void {
   const set = store.sessions.get(entry.sessionID)
   if (!set) return
   set.delete(entry.key)
   if (set.size === 0) store.sessions.delete(entry.sessionID)
 }
 
-function closeEntry(store: Store, key: string) {
+function closeEntry(store: Store, key: string): void {
   const entry = store.entries.get(key)
   if (!entry) return
   resetEntry(entry)
@@ -97,7 +180,7 @@ function upsertEntry(
     url: string
     headers: Headers
   },
-) {
+): Entry {
   const existing = store.entries.get(input.key)
   if (existing) return existing
 
@@ -117,7 +200,7 @@ function upsertEntry(
   return entry
 }
 
-function key(input: { sessionID: string; url: URL; headers: Headers }) {
+function key(input: { sessionID: string; url: URL; headers: Headers }): string {
   const auth = input.headers.get("authorization") ?? ""
   const account = input.headers.get("chatgpt-account-id") ?? ""
   const org = input.headers.get("openai-organization") ?? ""
@@ -127,36 +210,25 @@ function key(input: { sessionID: string; url: URL; headers: Headers }) {
     .toString()
 }
 
-function abortError(signal: AbortSignal) {
+function abortError(signal: AbortSignal): Error {
   if (signal.reason instanceof Error) return signal.reason
   return new DOMException("aborted", "AbortError")
 }
 
-function connectWithAbort(entry: Entry, signal?: AbortSignal | null) {
+function connectWithAbort(entry: Entry, signal?: AbortSignal | null): Promise<WebSocket> {
   if (!signal) return connect(entry)
   if (signal.aborted) return Promise.reject(abortError(signal))
 
   return new Promise<WebSocket>((resolve, reject) => {
-    const onAbort = () => {
+    const onAbort = () => reject(abortError(signal))
+    signal.addEventListener("abort", onAbort, { once: true })
+    connect(entry).then(resolve, reject).finally(() => {
       signal.removeEventListener("abort", onAbort)
-      reject(abortError(signal))
-    }
-
-    signal.addEventListener("abort", onAbort)
-    connect(entry).then(
-      (ws) => {
-        signal.removeEventListener("abort", onAbort)
-        resolve(ws)
-      },
-      (error) => {
-        signal.removeEventListener("abort", onAbort)
-        reject(error)
-      },
-    )
+    })
   })
 }
 
-async function connect(entry: Entry) {
+async function connect(entry: Entry): Promise<WebSocket> {
   if (entry.ws?.readyState === WebSocket.OPEN) return entry.ws
   if (entry.opening) return entry.opening
 
@@ -206,23 +278,17 @@ async function connect(entry: Entry) {
 }
 
 export namespace OpenAIWebSocket {
-  export async function stream(input: { request: RequestInfo | URL; init?: RequestInit }) {
+  export async function stream(input: { request: RequestInfo | URL; init?: RequestInit }): Promise<Response | undefined> {
     const method = (
       input.init?.method ?? (input.request instanceof Request ? input.request.method : "GET")
     ).toUpperCase()
     if (method !== "POST") return
 
-    const url = new URL(
-      input.request instanceof URL
-        ? input.request.toString()
-        : typeof input.request === "string"
-          ? input.request
-          : input.request.url,
-    )
+    const url = toURL(input.request)
     if (!url.pathname.endsWith("/responses")) return
 
     const body = parseBody(input.init?.body)
-    if (!body || typeof body !== "object") return
+    if (!body) return
     if (body.stream !== true) return
     if (!("input" in body) && !("previous_response_id" in body)) return
 
@@ -258,10 +324,7 @@ export namespace OpenAIWebSocket {
       return
     }
 
-    if (entry.idleTimer) {
-      clearTimeout(entry.idleTimer)
-      entry.idleTimer = undefined
-    }
+    clearIdleTimer(entry)
 
     const reused = entry.ws?.readyState === WebSocket.OPEN
     const signal = input.init?.signal
@@ -277,23 +340,45 @@ export namespace OpenAIWebSocket {
     }
     log.info("connected", { sessionID, reused, readyState: ws.readyState })
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       ...body,
       type: "response.create",
     }
     delete payload.stream
     delete payload.background
 
+    // When incremental mode is on and we have a previous response on this
+    // connection, trim the input array to only the new messages and set
+    // previous_response_id so the server uses its in-memory history.
+    const incremental = Flag.OPENCODE_EXPERIMENTAL_WS_INCREMENTAL
+    const dialect = detectDialect(url)
+    const fullInputLength = Array.isArray(payload.input) ? payload.input.length : 0
+    if (incremental && entry.lastResponseId && Array.isArray(payload.input)) {
+      const skip = (entry.lastInputLength ?? 0) + (entry.lastOutputLength ?? 0)
+      if (skip > 0 && skip < payload.input.length) {
+        const nextInput = payload.input.slice(skip)
+        const hasToolOutput =
+          dialect.skipIncrementalOnToolOutput && nextInput.some((item: any) => item.type === "function_call_output")
+        if (!hasToolOutput) {
+          payload.input = nextInput
+          payload.previous_response_id = entry.lastResponseId
+          log.info("incremental", {
+            sessionID,
+            previousResponseId: entry.lastResponseId,
+            skipped: skip,
+            remaining: nextInput.length,
+          })
+        }
+      }
+    }
+
     log.info("send", {
       sessionID,
       model: payload.model,
       hasPreviousResponseId: !!payload.previous_response_id,
       inputLength: Array.isArray(payload.input) ? payload.input.length : 0,
-      keys: Object.keys(payload),
     })
     entry.active = true
-    const encoder = new TextEncoder()
-    const idleMs = 90_000
 
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
@@ -310,41 +395,56 @@ export namespace OpenAIWebSocket {
           signal?.removeEventListener("abort", onAbort)
           if (closeSocket) {
             closeEntry(store, entry.key)
+          } else if (payload.previous_response_id || !dialect.reconnectAfterResponse) {
+            scheduleIdleClose(store, entry)
           } else {
-            // OpenAI's WebSocket server rejects the first `response.create` sent
-            // on a connection that already completed a response (same connection,
-            // after `response.done`). Rather than eating the ~200ms error+retry
-            // penalty on every continuation, we close the old socket and open a
-            // fresh one in the background so it's ready by the next request.
             entry.ws = undefined
             ws.close()
             connect(entry).catch(() => {})
-            const timer = setTimeout(() => closeEntry(store, entry.key), idleMs)
-            if (typeof timer === "object") timer.unref?.()
-            entry.idleTimer = timer
+            scheduleIdleClose(store, entry)
           }
         }
 
         const onMessage = (event: MessageEvent) => {
           if (done) return
           const value = messageDataToString(event.data)
-          let json: any
+          let parsed: unknown
           try {
-            json = JSON.parse(value)
+            parsed = JSON.parse(value)
           } catch {
             return
           }
+          if (!isRecord(parsed)) return
 
-          if (json.type === "error") {
-            log.info("message", { sessionID, type: json.type, error: json.error })
+          const type = parsed.type
+          if (type === "error") {
+            log.info("message", { sessionID, type, error: parsed.error })
           } else {
-            log.info("message", { sessionID, type: json.type })
+            log.info("message", { sessionID, type })
           }
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(json)}\n\n`))
-          if (!TERMINAL_TYPES.has(json.type)) return
-          log.info("terminal", { sessionID, type: json.type })
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(parsed)}\n\n`))
+          if (typeof type !== "string" || !TERMINAL_TYPES.has(type)) return
+
+          // Only update incremental state on success; clear on error so
+          // the next retry sends the full input instead of a stale ref.
+          if (incremental) {
+            if (type === "response.completed" || type === "response.done") {
+              const response = parsed.response
+              if (isRecord(response)) {
+                entry.lastResponseId = response.id as string | undefined
+                entry.lastInputLength = fullInputLength
+                entry.lastOutputLength = Array.isArray(response.output) ? response.output.length : 0
+              }
+            } else {
+              entry.lastResponseId = undefined
+              entry.lastInputLength = undefined
+              entry.lastOutputLength = undefined
+            }
+          }
+          log.info("terminal", { sessionID, type })
           controller.enqueue(encoder.encode("data: [DONE]\n\n"))
-          const closeSocket = json.type === "error" && json.error?.code === "websocket_connection_limit_reached"
+          const closeSocket =
+            type === "error" && isRecord(parsed.error) && parsed.error.code === "websocket_connection_limit_reached"
           release(closeSocket)
           controller.close()
         }
@@ -399,7 +499,7 @@ export namespace OpenAIWebSocket {
     })
   }
 
-  export function closeSession(sessionID: string) {
+  export function closeSession(sessionID: string): void {
     const store = state()
     const keys = store.sessions.get(sessionID)
     if (!keys) return
@@ -408,7 +508,7 @@ export namespace OpenAIWebSocket {
     }
   }
 
-  export function closeAll() {
+  export function closeAll(): void {
     closeStore(state())
   }
 }
