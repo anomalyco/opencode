@@ -105,6 +105,7 @@ export const AttachCommand = cmd({
           if (prompts.isCancel(selected)) throw new UI.CancelledError()
           url = selected
         }
+        prompts.outro("Done")
       }
 
       if (!url) throw new Error("No URL provided")
