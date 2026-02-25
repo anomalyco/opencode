@@ -43,6 +43,10 @@ export namespace PermissionNext {
   })
   export type Ruleset = z.infer<typeof Ruleset>
 
+  export function expandRuleset(ruleset: Ruleset): Ruleset {
+    return ruleset.map((rule) => ({ ...rule, pattern: expand(rule.pattern) }))
+  }
+
   export function fromConfig(permission: Config.Permission) {
     const ruleset: Ruleset = []
     for (const [key, value] of Object.entries(permission)) {

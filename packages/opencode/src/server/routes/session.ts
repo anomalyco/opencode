@@ -203,6 +203,7 @@ export const SessionRoutes = lazy(() =>
       validator("json", Session.create.schema.optional()),
       async (c) => {
         const body = c.req.valid("json") ?? {}
+        if (body.permission) body.permission = PermissionNext.expandRuleset(body.permission)
         const session = await Session.create(body)
         return c.json(session)
       },
@@ -270,6 +271,7 @@ export const SessionRoutes = lazy(() =>
               archived: z.number().optional(),
             })
             .optional(),
+          permission: PermissionNext.Ruleset.optional(),
         }),
       ),
       async (c) => {
@@ -282,6 +284,12 @@ export const SessionRoutes = lazy(() =>
         }
         if (updates.time?.archived !== undefined) {
           session = await Session.setArchived({ sessionID, time: updates.time.archived })
+        }
+        if (updates.permission !== undefined) {
+          session = await Session.setPermission({
+            sessionID,
+            permission: PermissionNext.expandRuleset(updates.permission),
+          })
         }
 
         return c.json(session)
