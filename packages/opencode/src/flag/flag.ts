@@ -17,6 +17,17 @@ function number(key: string) {
 export namespace Flag {
   export const types = meta as Readonly<Record<string, "boolean" | "number">>
 
+  export function getExperimental() {
+    const entries = Object.entries(types)
+      .filter(([key]) => key.includes("EXPERIMENTAL"))
+      .map(([key, type]) => ({ key, type }))
+    const set = new Set(entries.map((item) => item.key))
+    const extras = Object.keys(Flag)
+      .filter((key) => key.includes("EXPERIMENTAL") && !set.has(key))
+      .map((key) => ({ key, type: "boolean" as const }))
+    return [...entries, ...extras].toSorted((a, b) => a.key.localeCompare(b.key))
+  }
+
   export const OPENCODE_AUTO_SHARE = truthy("OPENCODE_AUTO_SHARE")
   export const OPENCODE_GIT_BASH_PATH = process.env["OPENCODE_GIT_BASH_PATH"]
   export const OPENCODE_CONFIG = process.env["OPENCODE_CONFIG"]

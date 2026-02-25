@@ -1,35 +1,24 @@
 import path from "path"
-import { createMemo, createResource } from "solid-js"
+import { rename } from "node:fs/promises"
+import { parse } from "dotenv"
+import { createEffect, createMemo, createResource } from "solid-js"
 import { DialogSelect } from "../ui/dialog-select"
 import { useSync } from "../context/sync"
 import { useDialog } from "../ui/dialog"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { useToast } from "../ui/toast"
 import { Flag } from "@/flag/flag"
-
-function esc(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-}
-
-function parse(text: string) {
-  return text.split(/\r?\n/).reduce(
-    (result, line) => {
-      const trimmed = line.trim()
-      if (!trimmed || trimmed.startsWith("#")) return result
-      const clean = trimmed.startsWith("export ") ? trimmed.slice(7).trim() : trimmed
-      const index = clean.indexOf("=")
-      if (index <= 0) return result
-      result[clean.slice(0, index).trim()] = clean.slice(index + 1).trim()
-      return result
-    },
-    {} as Record<string, string>,
-  )
-}
+import { ENV_EXPORT, ENV_KEY, ENV_LABEL, ENV_LINE, ENV_NUMBER } from "./dialog-experimental.const"
 
 function edit(text: string, key: string, value: string) {
   const line = `${key}=${value}`
-  const lines = text.split(/\r?\n/)
-  const index = lines.findIndex((item) => new RegExp(`^\\s*(?:export\\s+)?${esc(key)}\\s*=`).test(item))
+  const lines = text.split(ENV_LINE)
+  const index = lines.findIndex((item) => {
+    const match = item.match(ENV_KEY)
+    if (!match?.[1]) return false
+    const name = match[1].replace(ENV_EXPORT, "")
+    return name === key
+  })
   if (index !== -1) {
     lines[index] = line
     return lines.join("\n")
@@ -40,7 +29,7 @@ function edit(text: string, key: string, value: string) {
 }
 
 function label(key: string) {
-  return key.replace(/^OPENCODE_/, "").toLowerCase().replaceAll("_", " ")
+  return key.replace(ENV_LABEL, "").toLowerCase().replaceAll("_", " ")
 }
 
 export function DialogExperimental() {
@@ -51,21 +40,22 @@ export function DialogExperimental() {
   const file = createMemo(() => path.join(sync.data.path.directory || process.cwd(), ".env"))
   const [text, { refetch }] = createResource(
     file,
-    (target) => {
-      return Bun.file(target).text().catch(() => "")
+    async (target) => {
+      const source = Bun.file(target)
+      if (!(await source.exists())) return ""
+      return source.text()
     },
     { initialValue: "" },
   )
   const vars = createMemo(() => parse(text() ?? ""))
-  const flags = createMemo(() => {
-    const entries = Object.entries(Flag.types)
-      .filter(([key]) => key.includes("EXPERIMENTAL"))
-      .map(([key, type]) => ({ key, type }))
-    const set = new Set(entries.map((item) => item.key))
-    const extras = Object.keys(Flag)
-      .filter((key) => key.includes("EXPERIMENTAL") && !set.has(key))
-      .map((key) => ({ key, type: "boolean" as const }))
-    return [...entries, ...extras].toSorted((a, b) => a.key.localeCompare(b.key))
+  const flags = createMemo(() => Flag.getExperimental())
+
+  createEffect(() => {
+    if (!text.error) return
+    toast.show({
+      variant: "error",
+      message: `Failed to read ${file()}: ${text.error.message}`,
+    })
   })
 
   const options = createMemo(() =>
@@ -99,7 +89,7 @@ export function DialogExperimental() {
             })
             if (result === null) return
             value = result.trim()
-            if (/^[1-9]\d*$/.test(value)) break
+            if (ENV_NUMBER.test(value)) break
             toast.show({
               variant: "error",
               message: "Value must be a positive integer",
@@ -109,17 +99,22 @@ export function DialogExperimental() {
         }
 
         const output = edit(text() ?? "", flag.key, value)
-        const saved = await Bun.write(file(), output)
+        const temp = `${file()}.${process.pid}.${Date.now()}.tmp`
+        const saved = await Bun.write(temp, output)
+          .then(() => rename(temp, file()))
           .then(() => true)
-          .catch(() => false)
-
-        if (!saved) {
-          toast.show({
-            variant: "error",
-            message: `Failed to write ${file()}`,
+          .catch(async (error) => {
+            await Bun.file(temp)
+              .delete()
+              .catch(() => {})
+            toast.show({
+              variant: "error",
+              message: `Failed to write ${file()}: ${error instanceof Error ? error.message : String(error)}`,
+            })
+            return false
           })
-          return
-        }
+
+        if (!saved) return
 
         process.env[flag.key] = value
         await refetch()
