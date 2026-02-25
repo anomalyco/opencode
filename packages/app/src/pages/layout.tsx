@@ -1813,32 +1813,33 @@ export default function Layout(props: ParentProps) {
                 <Show
                   when={workspacesEnabled()}
                   fallback={
-                    <>
-                      <div class="shrink-0 py-4 px-3">
-                        <TooltipKeybind
-                          title={language.t("command.session.new")}
-                          keybind={command.keybind("session.new")}
-                          placement="top"
-                        >
-                          <Button
-                            size="large"
-                            icon="plus-small"
-                            class="w-full"
-                            onClick={() => navigateWithSidebarReset(`/${base64Encode(p().worktree)}/session`)}
-                          >
-                            {language.t("command.session.new")}
-                          </Button>
-                        </TooltipKeybind>
-                      </div>
-                      <div class="flex-1 min-h-0">
-                        <LocalWorkspace
-                          ctx={workspaceSidebarCtx}
-                          project={p()}
-                          sortNow={sortNow}
-                          mobile={panelProps.mobile}
-                        />
-                      </div>
-                    </>
+                    <div class="flex-1 min-h-0">
+                      {/* LATER OVERRIDE: one-session-per-project. On conflict: keep newSessionButton prop. */}
+                      <LocalWorkspace
+                        ctx={workspaceSidebarCtx}
+                        project={p()}
+                        sortNow={sortNow}
+                        mobile={panelProps.mobile}
+                        newSessionButton={
+                          <div class="shrink-0 py-4 px-3">
+                            <TooltipKeybind
+                              title={language.t("command.session.new")}
+                              keybind={command.keybind("session.new")}
+                              placement="top"
+                            >
+                              <Button
+                                size="large"
+                                icon="plus-small"
+                                class="w-full"
+                                onClick={() => navigateWithSidebarReset(`/${base64Encode(p().worktree)}/session`)}
+                              >
+                                {language.t("command.session.new")}
+                              </Button>
+                            </TooltipKeybind>
+                          </div>
+                        }
+                      />
+                    </div>
                   }
                 >
                   <>

@@ -469,6 +469,7 @@ export const LocalWorkspace = (props: {
   project: LocalProject
   sortNow: Accessor<number>
   mobile?: boolean
+  newSessionButton?: JSX.Element
 }): JSX.Element => {
   const globalSync = useGlobalSync()
   const language = useLanguage()
@@ -482,54 +483,60 @@ export const LocalWorkspace = (props: {
   const booted = createMemo((prev) => prev || workspace().store.status === "complete", false)
   const loading = createMemo(() => !booted() && sessions().length === 0)
   const hasMore = createMemo(() => workspace().store.sessionTotal > sessions().length)
+  const showNewSessionButton = createMemo(() => sessions().length === 0)
   const loadMore = async () => {
     workspace().setStore("limit", (limit) => (limit ?? 0) + 5)
     await globalSync.project.loadSessions(props.project.worktree)
   }
 
   return (
-    <div
-      ref={(el) => props.ctx.setScrollContainerRef(el, props.mobile)}
-      class="size-full flex flex-col py-2 overflow-y-auto no-scrollbar [overflow-anchor:none]"
-    >
-      <nav class="flex flex-col gap-1 px-2">
-        <Show when={loading()}>
-          <SessionSkeleton />
-        </Show>
-        <For each={sessions()}>
-          {(session) => (
-            <SessionItem
-              session={session}
-              slug={slug()}
-              mobile={props.mobile}
-              children={children()}
-              sidebarExpanded={props.ctx.sidebarExpanded}
-              sidebarHovering={props.ctx.sidebarHovering}
-              nav={props.ctx.nav}
-              hoverSession={props.ctx.hoverSession}
-              setHoverSession={props.ctx.setHoverSession}
-              clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
-              prefetchSession={props.ctx.prefetchSession}
-              archiveSession={props.ctx.archiveSession}
-            />
-          )}
-        </For>
-        <Show when={hasMore()}>
-          <div class="relative w-full py-1">
-            <Button
-              variant="ghost"
-              class="flex w-full text-left justify-start text-14-regular text-text-weak pl-9 pr-10"
-              size="large"
-              onClick={(e: MouseEvent) => {
-                loadMore()
-                ;(e.currentTarget as HTMLButtonElement).blur()
-              }}
-            >
-              {language.t("common.loadMore")}
-            </Button>
-          </div>
-        </Show>
-      </nav>
-    </div>
+    <>
+      <Show when={showNewSessionButton() && props.newSessionButton}>
+        {props.newSessionButton}
+      </Show>
+      <div
+        ref={(el) => props.ctx.setScrollContainerRef(el, props.mobile)}
+        class="size-full flex flex-col py-2 overflow-y-auto no-scrollbar [overflow-anchor:none]"
+      >
+        <nav class="flex flex-col gap-1 px-2">
+          <Show when={loading()}>
+            <SessionSkeleton />
+          </Show>
+          <For each={sessions()}>
+            {(session) => (
+              <SessionItem
+                session={session}
+                slug={slug()}
+                mobile={props.mobile}
+                children={children()}
+                sidebarExpanded={props.ctx.sidebarExpanded}
+                sidebarHovering={props.ctx.sidebarHovering}
+                nav={props.ctx.nav}
+                hoverSession={props.ctx.hoverSession}
+                setHoverSession={props.ctx.setHoverSession}
+                clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
+                prefetchSession={props.ctx.prefetchSession}
+                archiveSession={props.ctx.archiveSession}
+              />
+            )}
+          </For>
+          <Show when={hasMore()}>
+            <div class="relative w-full py-1">
+              <Button
+                variant="ghost"
+                class="flex w-full text-left justify-start text-14-regular text-text-weak pl-9 pr-10"
+                size="large"
+                onClick={(e: MouseEvent) => {
+                  loadMore()
+                  ;(e.currentTarget as HTMLButtonElement).blur()
+                }}
+              >
+                {language.t("common.loadMore")}
+              </Button>
+            </div>
+          </Show>
+        </nav>
+      </div>
+    </>
   )
 }
