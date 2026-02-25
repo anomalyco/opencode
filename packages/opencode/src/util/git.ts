@@ -1,5 +1,7 @@
 import { $ } from "bun"
+import { buffer } from "node:stream/consumers"
 import { Flag } from "../flag/flag"
+import { Process } from "./process"
 
 export interface GitResult {
   exitCode: number
@@ -14,12 +16,12 @@ export interface GitResult {
  * Uses Bun's lightweight `$` shell by default.  When the process is running
  * as an ACP client, child processes inherit the parent's stdin pipe which
  * carries protocol data – on Windows this causes git to deadlock.  In that
- * case we fall back to `Bun.spawn` with `stdin: "ignore"`.
+ * case we fall back to `Process.spawn` with `stdin: "ignore"`.
  */
 export async function git(args: string[], opts: { cwd: string; env?: Record<string, string> }): Promise<GitResult> {
   if (Flag.OPENCODE_CLIENT === "acp") {
     try {
-      const proc = Bun.spawn(["git", ...args], {
+      const proc = Process.spawn(["git", ...args], {
         stdin: "ignore",
         stdout: "pipe",
         stderr: "pipe",
@@ -27,18 +29,15 @@ export async function git(args: string[], opts: { cwd: string; env?: Record<stri
         env: opts.env ? { ...process.env, ...opts.env } : process.env,
       })
       // Read output concurrently with exit to avoid pipe buffer deadlock
-      const [exitCode, stdout, stderr] = await Promise.all([
-        proc.exited,
-        new Response(proc.stdout).arrayBuffer(),
-        new Response(proc.stderr).arrayBuffer(),
-      ])
-      const stdoutBuf = Buffer.from(stdout)
-      const stderrBuf = Buffer.from(stderr)
+      if (!proc.stdout || !proc.stderr) {
+        throw new Error("Process output not available")
+      }
+      const [exitCode, out, err] = await Promise.all([proc.exited, buffer(proc.stdout), buffer(proc.stderr)])
       return {
         exitCode,
-        text: () => stdoutBuf.toString(),
-        stdout: stdoutBuf,
-        stderr: stderrBuf,
+        text: () => out.toString(),
+        stdout: out,
+        stderr: err,
       }
     } catch (error) {
       const stderr = Buffer.from(error instanceof Error ? error.message : String(error))
