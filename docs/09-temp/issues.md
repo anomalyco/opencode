@@ -582,20 +582,18 @@ const outputMessage = failedCalls > 0
 ## Implementation Order
 
 ```
-TODAY (P0 — Stop The Bleeding):
-  #1  processor-max-retries     → 3.5hr freeze prevention
-  #2  bedrock-undefined-message → Bedrock overflow detection
-  #3  task-swallows-errors      → Silent failure surfacing
+✅ DONE — Commit 3670d5f2f:
+  #1  processor-max-retries     → MAX_RETRIES=10 cap
+  #2  bedrock-undefined-message → "undefined" → responseBody fallback
+  #3  task-swallows-errors      → result.info.error check in task.ts
+  #8  tool-error-metadata       → metadata preserved on tool-error
 
-THIS SPRINT (P0 — Root Cause):
-  #4  bedrock-context-cap       → Context limit accuracy
+✅ DONE — Commit a8758b20f:
+  #4  bedrock-context-cap       → 200K cap in both fromModelsDevModel + config path
+  #7  retry-catch-all           → isRetryable:false + 4xx status guards
+  #9  batch-error-details       → per-tool error details in output
+
+REMAINING (P0 — Needs deep plumbing):
   #5  subagent-timeout          → Hung subagent prevention
   #6  permission-abort          → Permission hang prevention
-
-NEXT SPRINT (P1 — Robustness):
-  #7  retry-catch-all           → Smart retry classification
-  #8  tool-error-metadata       → Error UI metadata
-  
-BACKLOG (P2):
-  #9  batch-error-details       → Batch error visibility
 ```
