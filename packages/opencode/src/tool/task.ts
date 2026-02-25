@@ -142,6 +142,24 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         parts: promptParts,
       })
 
+      if ((result.info as MessageV2.Assistant).error) {
+        const errorObj = (result.info as MessageV2.Assistant).error!
+        const msg = ("data" in errorObj && "message" in errorObj.data)
+          ? errorObj.data.message
+          : errorObj.name
+        return {
+          title: params.description,
+          metadata: { sessionId: session.id, model },
+          output: [
+            `task_id: ${session.id} (for resuming to continue this task if needed)`,
+            "",
+            "<task_result>",
+            `ERROR: ${msg}`,
+            "</task_result>",
+          ].join("\n"),
+        }
+      }
+
       const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
 
       const output = [

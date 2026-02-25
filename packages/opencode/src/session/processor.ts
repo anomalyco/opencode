@@ -18,6 +18,7 @@ import { Question } from "@/question"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
+  const MAX_RETRIES = 10
   const log = Log.create({ service: "session.processor" })
 
   export type Info = Awaited<ReturnType<typeof create>>
@@ -210,6 +211,7 @@ export namespace SessionProcessor {
                         status: "error",
                         input: value.input ?? match.state.input,
                         error: (value.error as any).toString(),
+                        metadata: match.state.metadata,
                         time: {
                           start: match.state.time.start,
                           end: Date.now(),
@@ -363,6 +365,23 @@ export namespace SessionProcessor {
             const retry = SessionRetry.retryable(error)
             if (retry !== undefined) {
               attempt++
+              if (attempt >= MAX_RETRIES) {
+                log.error("max retries exceeded", {
+                  sessionID: input.sessionID,
+                  attempt,
+                  message: retry,
+                })
+                input.assistantMessage.error = MessageV2.fromError(
+                  new Error(`Maximum retries (${MAX_RETRIES}) exceeded. Last error: ${retry}`),
+                  { providerID: input.model.providerID },
+                )
+                Bus.publish(Session.Event.Error, {
+                  sessionID: input.assistantMessage.sessionID,
+                  error: input.assistantMessage.error,
+                })
+                SessionStatus.set(input.sessionID, { type: "idle" })
+                break
+              }
               const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
               SessionStatus.set(input.sessionID, {
                 type: "retry",
