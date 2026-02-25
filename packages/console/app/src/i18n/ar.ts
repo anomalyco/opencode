@@ -344,7 +344,7 @@ export const dict = {
   "workspace.usage.breakdown.cacheWrite": "كتابة الكاش",
   "workspace.usage.breakdown.output": "الخرج",
   "workspace.usage.breakdown.reasoning": "المنطق",
-  "workspace.usage.subscription": "الاشتراك (${{amount}})",
+  "workspace.usage.subscription": "Black (${{amount}})",
   "workspace.usage.lite": "Go (${{amount}})",
   "workspace.usage.byok": "BYOK (${{amount}})",
 

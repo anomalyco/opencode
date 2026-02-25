@@ -343,7 +343,7 @@ export const dict = {
   "workspace.usage.breakdown.cacheWrite": "캐시 쓰기",
   "workspace.usage.breakdown.output": "출력",
   "workspace.usage.breakdown.reasoning": "추론",
-  "workspace.usage.subscription": "구독 (${{amount}})",
+  "workspace.usage.subscription": "Black (${{amount}})",
   "workspace.usage.lite": "Go (${{amount}})",
   "workspace.usage.byok": "BYOK (${{amount}})",
 

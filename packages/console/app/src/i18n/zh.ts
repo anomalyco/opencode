@@ -334,7 +334,7 @@ export const dict = {
   "workspace.usage.breakdown.cacheWrite": "缓存写入",
   "workspace.usage.breakdown.output": "输出",
   "workspace.usage.breakdown.reasoning": "推理",
-  "workspace.usage.subscription": "订阅 (${{amount}})",
+  "workspace.usage.subscription": "Black (${{amount}})",
   "workspace.usage.lite": "Go (${{amount}})",
   "workspace.usage.byok": "BYOK (${{amount}})",
 
