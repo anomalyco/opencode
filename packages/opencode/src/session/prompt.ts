@@ -257,14 +257,12 @@ export namespace SessionPrompt {
     log.info("cancel", { sessionID })
     const s = state()
     const match = s[sessionID]
-    if (!match) {
-      SessionStatus.set(sessionID, { type: "idle" })
-      return
+    if (match) {
+      match.abort.abort()
+      delete s[sessionID]
     }
-    match.abort.abort()
-    delete s[sessionID]
+    Provider.closeSessionTransport(sessionID)
     SessionStatus.set(sessionID, { type: "idle" })
-    return
   }
 
   export const LoopInput = z.object({

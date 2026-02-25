@@ -44,6 +44,7 @@ import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
+import { OpenAIWebSocket } from "./transport/openai-websocket"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -1103,6 +1104,21 @@ export namespace Provider {
           }
         }
 
+        const requestURL =
+          input instanceof URL ? input : typeof input === "string" ? new URL(input) : new URL(input.url)
+        if (
+          Flag.OPENCODE_EXPERIMENTAL_WS_TRANSPORT &&
+          model.providerID === "openai" &&
+          !customFetch &&
+          requestURL.hostname === "api.openai.com"
+        ) {
+          const response = await OpenAIWebSocket.stream({
+            request: input,
+            init: opts,
+          })
+          if (response) return response
+        }
+
         return fetchFn(input, {
           ...opts,
           // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
@@ -1145,6 +1161,10 @@ export namespace Provider {
 
   export async function getProvider(providerID: string) {
     return state().then((s) => s.providers[providerID])
+  }
+
+  export function closeSessionTransport(sessionID: string) {
+    OpenAIWebSocket.closeSession(sessionID)
   }
 
   export async function getModel(providerID: string, modelID: string) {
