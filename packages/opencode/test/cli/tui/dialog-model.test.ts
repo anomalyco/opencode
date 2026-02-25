@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { buildProviderOptions, buildSectionOptions } from "../../../src/cli/cmd/tui/component/dialog-model"
+import { buildProviderOptions, buildSectionOptions } from "../../../src/cli/cmd/tui/component/dialog-model-utils"
 
 function provider(id: string, name: string, models: Record<string, { id: string; name?: string; status?: string; providerID?: string; cost?: { input?: number } }>) {
   return { id, name, models }
