@@ -445,8 +445,11 @@ pub fn open_in_powershell(path: String) -> Result<(), String> {
     let path = PathBuf::from(path);
     let dir = if path.is_dir() {
         path
+    } else if let Some(parent) = path.parent() {
+        parent.to_path_buf()
     } else {
-        path.parent().map(Path::to_path_buf).unwrap_or(path)
+        std::env::current_dir()
+            .map_err(|e| format!("Failed to determine current directory: {e}"))?
     };
 
     Command::new("powershell.exe")
