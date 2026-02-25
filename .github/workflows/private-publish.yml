@@ -1,0 +1,84 @@
+name: private-publish
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-bun
+        with:
+          cross-compile: "true"
+
+      - name: Extract upstream version from package.json
+        id: version
+        run: echo "value=$(node -p 'require("./packages/opencode/package.json").version')" >> "$GITHUB_OUTPUT"
+
+      - name: Build all targets
+        run: ./packages/opencode/script/build.ts --all
+        env:
+          OPENCODE_VERSION: ${{ steps.version.outputs.value }}
+
+      - name: Rename binaries and create archives
+        run: |
+          DIST_DIR="$GITHUB_WORKSPACE/packages/opencode/dist"
+          OUT_DIR="$GITHUB_WORKSPACE/release-archives"
+          mkdir -p "$OUT_DIR"
+
+          for dir in "$DIST_DIR"/opencode-*; do
+            [ -d "$dir" ] || continue
+            target="$(basename "$dir")"
+            target="${target#opencode-}"
+
+            # Rename binary: opencode → secure-opencode
+            if [[ "$target" == windows-* ]]; then
+              mv "$dir/bin/opencode.exe" "$dir/bin/secure-opencode.exe"
+            else
+              mv "$dir/bin/opencode" "$dir/bin/secure-opencode"
+            fi
+
+            # Create archive: tar.gz for linux, zip for others
+            if [[ "$target" == linux-* ]]; then
+              tar -czf "$OUT_DIR/secure-opencode-${target}.tar.gz" -C "$dir/bin" .
+            else
+              (cd "$dir/bin" && zip -r "$OUT_DIR/secure-opencode-${target}.zip" .)
+            fi
+          done
+
+          echo "Archives created:"
+          ls -lh "$OUT_DIR/"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-archives
+          path: release-archives/
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-archives
+          path: release-archives/
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --generate-notes \
+            release-archives/*

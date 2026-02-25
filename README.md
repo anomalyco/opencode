@@ -124,6 +124,19 @@ If you are working on a project that's related to OpenCode and is using "opencod
 
 ### Secure OpenCode (aTLS)
 
+#### Installation
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/concrete-security/secure-opencode/dev/private-install.sh | bash
+```
+
+Then run:
+
+```bash
+cd <project>
+secure-opencode
+```
+
 Secure OpenCode integrates with **any provider running a model inside a Trusted Execution Environment (TEE)**.
 
 The connection is secured using [ratls](https://github.com/Concrete-Security/ratls) and **attested TLS (aTLS)** — a TLS channel that verifies the remote server’s TEE attestation *before* any data is exchanged. This ensures the model is running inside an enclave that matches the expected configuration.
