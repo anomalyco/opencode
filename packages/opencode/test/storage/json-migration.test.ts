@@ -128,6 +128,28 @@ describe("JSON to SQLite migration", () => {
     expect(projects[0].sandboxes).toEqual(["/test/sandbox"])
   })
 
+  test("uses filename for project id when JSON has different value", async () => {
+    await Bun.write(
+      path.join(storageDir, "project", "proj_filename.json"),
+      JSON.stringify({
+        id: "proj_different_in_json", // Stale! Should be ignored
+        worktree: "/test/path",
+        vcs: "git",
+        name: "Test Project",
+        sandboxes: [],
+      }),
+    )
+
+    const stats = await JsonMigration.run(sqlite)
+
+    expect(stats?.projects).toBe(1)
+
+    const db = drizzle({ client: sqlite })
+    const projects = db.select().from(ProjectTable).all()
+    expect(projects.length).toBe(1)
+    expect(projects[0].id).toBe("proj_filename") // Uses filename, not JSON id
+  })
+
   test("migrates project with commands", async () => {
     await writeProject(storageDir, {
       id: "proj_with_commands",
@@ -285,6 +307,74 @@ describe("JSON to SQLite migration", () => {
     expect(parts[0].data).not.toHaveProperty("sessionID")
   })
 
+  test("uses filename for message id when JSON has different value", async () => {
+    await writeProject(storageDir, {
+      id: "proj_test123abc",
+      worktree: "/",
+      time: { created: Date.now(), updated: Date.now() },
+      sandboxes: [],
+    })
+    await writeSession(storageDir, "proj_test123abc", { ...fixtures.session })
+    await Bun.write(
+      path.join(storageDir, "message", "ses_test456def", "msg_from_filename.json"),
+      JSON.stringify({
+        id: "msg_different_in_json", // Stale! Should be ignored
+        sessionID: "ses_test456def",
+        role: "user",
+        agent: "default",
+        time: { created: 1700000000000 },
+      }),
+    )
+
+    const stats = await JsonMigration.run(sqlite)
+
+    expect(stats?.messages).toBe(1)
+
+    const db = drizzle({ client: sqlite })
+    const messages = db.select().from(MessageTable).all()
+    expect(messages.length).toBe(1)
+    expect(messages[0].id).toBe("msg_from_filename") // Uses filename, not JSON id
+    expect(messages[0].session_id).toBe("ses_test456def")
+  })
+
+  test("uses paths for part id and messageID when JSON has different values", async () => {
+    await writeProject(storageDir, {
+      id: "proj_test123abc",
+      worktree: "/",
+      time: { created: Date.now(), updated: Date.now() },
+      sandboxes: [],
+    })
+    await writeSession(storageDir, "proj_test123abc", { ...fixtures.session })
+    await Bun.write(
+      path.join(storageDir, "message", "ses_test456def", "msg_realmsgid.json"),
+      JSON.stringify({
+        role: "user",
+        agent: "default",
+        time: { created: 1700000000000 },
+      }),
+    )
+    await Bun.write(
+      path.join(storageDir, "part", "msg_realmsgid", "prt_from_filename.json"),
+      JSON.stringify({
+        id: "prt_different_in_json", // Stale! Should be ignored
+        messageID: "msg_different_in_json", // Stale! Should be ignored
+        sessionID: "ses_test456def",
+        type: "text",
+        text: "Hello",
+      }),
+    )
+
+    const stats = await JsonMigration.run(sqlite)
+
+    expect(stats?.parts).toBe(1)
+
+    const db = drizzle({ client: sqlite })
+    const parts = db.select().from(PartTable).all()
+    expect(parts.length).toBe(1)
+    expect(parts[0].id).toBe("prt_from_filename") // Uses filename, not JSON id
+    expect(parts[0].message_id).toBe("msg_realmsgid") // Uses parent dir, not JSON messageID
+  })
+
   test("skips orphaned sessions (no parent project)", async () => {
     await Bun.write(
       path.join(storageDir, "session", "proj_test123abc", "ses_orphan.json"),
@@ -302,6 +392,72 @@ describe("JSON to SQLite migration", () => {
     const stats = await JsonMigration.run(sqlite)
 
     expect(stats?.sessions).toBe(0)
+  })
+
+  test("uses directory path for projectID when JSON has stale value", async () => {
+    // Simulates the scenario where earlier migration moved sessions to new
+    // git-based project directories but didn't update the projectID field
+    const gitBasedProjectID = "abc123gitcommit"
+    await writeProject(storageDir, {
+      id: gitBasedProjectID,
+      worktree: "/test/path",
+      vcs: "git",
+      time: { created: Date.now(), updated: Date.now() },
+      sandboxes: [],
+    })
+
+    // Session is in the git-based directory but JSON still has old projectID
+    await writeSession(storageDir, gitBasedProjectID, {
+      id: "ses_migrated",
+      projectID: "old-project-name", // Stale! Should be ignored
+      slug: "migrated-session",
+      directory: "/test/path",
+      title: "Migrated Session",
+      version: "1.0.0",
+      time: { created: 1700000000000, updated: 1700000001000 },
+    })
+
+    const stats = await JsonMigration.run(sqlite)
+
+    expect(stats?.sessions).toBe(1)
+
+    const db = drizzle({ client: sqlite })
+    const sessions = db.select().from(SessionTable).all()
+    expect(sessions.length).toBe(1)
+    expect(sessions[0].id).toBe("ses_migrated")
+    expect(sessions[0].project_id).toBe(gitBasedProjectID) // Uses directory, not stale JSON
+  })
+
+  test("uses filename for session id when JSON has different value", async () => {
+    await writeProject(storageDir, {
+      id: "proj_test123abc",
+      worktree: "/test/path",
+      time: { created: Date.now(), updated: Date.now() },
+      sandboxes: [],
+    })
+
+    await Bun.write(
+      path.join(storageDir, "session", "proj_test123abc", "ses_from_filename.json"),
+      JSON.stringify({
+        id: "ses_different_in_json", // Stale! Should be ignored
+        projectID: "proj_test123abc",
+        slug: "test-session",
+        directory: "/test/path",
+        title: "Test Session",
+        version: "1.0.0",
+        time: { created: 1700000000000, updated: 1700000001000 },
+      }),
+    )
+
+    const stats = await JsonMigration.run(sqlite)
+
+    expect(stats?.sessions).toBe(1)
+
+    const db = drizzle({ client: sqlite })
+    const sessions = db.select().from(SessionTable).all()
+    expect(sessions.length).toBe(1)
+    expect(sessions[0].id).toBe("ses_from_filename") // Uses filename, not JSON id
+    expect(sessions[0].project_id).toBe("proj_test123abc")
   })
 
   test("is idempotent (running twice doesn't duplicate)", async () => {
@@ -666,8 +822,11 @@ describe("JSON to SQLite migration", () => {
 
     const stats = await JsonMigration.run(sqlite)
 
-    expect(stats.projects).toBe(1)
-    expect(stats.sessions).toBe(1)
+    // Projects: proj_test123abc (valid), proj_missing_id (now derives id from filename)
+    // Sessions: ses_test456def (valid), ses_missing_project (now uses dir path),
+    // ses_orphan (now uses dir path, ignores stale projectID)
+    expect(stats.projects).toBe(2)
+    expect(stats.sessions).toBe(3)
     expect(stats.messages).toBe(1)
     expect(stats.parts).toBe(1)
     expect(stats.todos).toBe(1)
@@ -676,8 +835,8 @@ describe("JSON to SQLite migration", () => {
     expect(stats.errors.length).toBeGreaterThanOrEqual(6)
 
     const db = drizzle({ client: sqlite })
-    expect(db.select().from(ProjectTable).all().length).toBe(1)
-    expect(db.select().from(SessionTable).all().length).toBe(1)
+    expect(db.select().from(ProjectTable).all().length).toBe(2)
+    expect(db.select().from(SessionTable).all().length).toBe(3)
     expect(db.select().from(MessageTable).all().length).toBe(1)
     expect(db.select().from(PartTable).all().length).toBe(1)
     expect(db.select().from(TodoTable).all().length).toBe(1)

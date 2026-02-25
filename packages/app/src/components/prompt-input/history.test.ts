@@ -73,7 +73,7 @@ describe("prompt-input history", () => {
     expect(original[1].selection?.startLine).toBe(1)
   })
 
-  test("canNavigateHistoryAtCursor only allows multiline boundaries", () => {
+  test("canNavigateHistoryAtCursor only allows prompt boundaries", () => {
     const value = "a\nb\nc"
 
     expect(canNavigateHistoryAtCursor("up", value, 0)).toBe(true)
@@ -85,7 +85,16 @@ describe("prompt-input history", () => {
     expect(canNavigateHistoryAtCursor("up", value, 5)).toBe(false)
     expect(canNavigateHistoryAtCursor("down", value, 5)).toBe(true)
 
-    expect(canNavigateHistoryAtCursor("up", "abc", 1)).toBe(true)
-    expect(canNavigateHistoryAtCursor("down", "abc", 1)).toBe(true)
+    expect(canNavigateHistoryAtCursor("up", "abc", 0)).toBe(true)
+    expect(canNavigateHistoryAtCursor("down", "abc", 3)).toBe(true)
+    expect(canNavigateHistoryAtCursor("up", "abc", 1)).toBe(false)
+    expect(canNavigateHistoryAtCursor("down", "abc", 1)).toBe(false)
+
+    expect(canNavigateHistoryAtCursor("up", "abc", 0, true)).toBe(true)
+    expect(canNavigateHistoryAtCursor("up", "abc", 3, true)).toBe(true)
+    expect(canNavigateHistoryAtCursor("down", "abc", 0, true)).toBe(true)
+    expect(canNavigateHistoryAtCursor("down", "abc", 3, true)).toBe(true)
+    expect(canNavigateHistoryAtCursor("up", "abc", 1, true)).toBe(false)
+    expect(canNavigateHistoryAtCursor("down", "abc", 1, true)).toBe(false)
   })
 })

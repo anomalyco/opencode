@@ -36,7 +36,7 @@ const getModelsInfo = query(async (workspaceID: string) => {
   "use server"
   return withActor(async () => {
     return {
-      all: Object.entries(ZenData.list().models)
+      all: Object.entries(ZenData.list("full").models)
         .filter(([id, _model]) => !["claude-3-5-haiku"].includes(id))
         .filter(([id, _model]) => !id.startsWith("alpha-"))
         .sort(([idA, modelA], [idB, modelB]) => {

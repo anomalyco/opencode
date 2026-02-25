@@ -69,6 +69,8 @@ export const dict = {
   "command.agent.cycle.reverse.description": "Switch to the previous agent",
   "command.model.variant.cycle": "Cycle thinking effort",
   "command.model.variant.cycle.description": "Switch to the next effort level",
+  "command.prompt.mode.shell": "Shell",
+  "command.prompt.mode.normal": "Prompt",
   "command.permissions.autoaccept.enable": "Auto-accept edits",
   "command.permissions.autoaccept.disable": "Stop auto-accepting edits",
   "command.workspace.toggle": "Toggle workspaces",
@@ -224,9 +226,11 @@ export const dict = {
 
   "prompt.placeholder.shell": "Enter shell command...",
   "prompt.placeholder.normal": 'Ask anything... "{{example}}"',
+  "prompt.placeholder.simple": "Ask anything...",
   "prompt.placeholder.summarizeComments": "Summarize comments…",
   "prompt.placeholder.summarizeComment": "Summarize comment…",
   "prompt.mode.shell": "Shell",
+  "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "esc to exit",
 
   "prompt.example.1": "Fix a TODO in the codebase",
@@ -266,7 +270,7 @@ export const dict = {
   "prompt.context.includeActiveFile": "Include active file",
   "prompt.context.removeActiveFile": "Remove active file from context",
   "prompt.context.removeFile": "Remove file from context",
-  "prompt.action.attachFile": "Attach file",
+  "prompt.action.attachFile": "Add file",
   "prompt.attachment.remove": "Remove attachment",
   "prompt.action.send": "Send",
   "prompt.action.stop": "Stop",
@@ -502,6 +506,7 @@ export const dict = {
   "session.review.change.other": "Changes",
   "session.review.loadingChanges": "Loading changes...",
   "session.review.empty": "No changes in this session yet",
+  "session.review.noVcs": "No git VCS detected, so session changes will not be detected",
   "session.review.noChanges": "No changes",
 
   "session.files.selectToOpen": "Select a file to open",
@@ -515,6 +520,9 @@ export const dict = {
   "session.messages.jumpToLatest": "Jump to latest",
 
   "session.context.addToContext": "Add {{selection}} to context",
+  "session.todo.title": "Todos",
+  "session.todo.collapse": "Collapse",
+  "session.todo.expand": "Expand",
 
   "session.new.worktree.main": "Main branch",
   "session.new.worktree.mainWithBranch": "Main branch ({{branch}})",
@@ -527,7 +535,7 @@ export const dict = {
   "session.header.open.action": "Open {{app}}",
   "session.header.open.ariaLabel": "Open in {{app}}",
   "session.header.open.menu": "Open options",
-  "session.header.open.copyPath": "Copy Path",
+  "session.header.open.copyPath": "Copy path",
 
   "status.popover.trigger": "Status",
   "status.popover.ariaLabel": "Server configurations",
@@ -588,6 +596,7 @@ export const dict = {
   "sidebar.gettingStarted.line2": "Connect any provider to use models, inc. Claude, GPT, Gemini etc.",
   "sidebar.project.recentSessions": "Recent sessions",
   "sidebar.project.viewAllSessions": "View all sessions",
+  "sidebar.project.clearNotifications": "Clear notifications",
 
   "app.name.desktop": "OpenCode Desktop",
 
@@ -603,6 +612,7 @@ export const dict = {
   "settings.general.section.notifications": "System notifications",
   "settings.general.section.updates": "Updates",
   "settings.general.section.sounds": "Sound effects",
+  "settings.general.section.feed": "Feed",
   "settings.general.section.display": "Display",
 
   "settings.general.row.language.title": "Language",
@@ -613,6 +623,14 @@ export const dict = {
   "settings.general.row.theme.description": "Customise how OpenCode is themed.",
   "settings.general.row.font.title": "Font",
   "settings.general.row.font.description": "Customise the mono font used in code blocks",
+  "settings.general.row.reasoningSummaries.title": "Show reasoning summaries",
+  "settings.general.row.reasoningSummaries.description": "Display model reasoning summaries in the timeline",
+  "settings.general.row.shellToolPartsExpanded.title": "Expand shell tool parts",
+  "settings.general.row.shellToolPartsExpanded.description":
+    "Show shell tool parts expanded by default in the timeline",
+  "settings.general.row.editToolPartsExpanded.title": "Expand edit tool parts",
+  "settings.general.row.editToolPartsExpanded.description":
+    "Show edit, write, and patch tool parts expanded by default in the timeline",
 
   "settings.general.row.wayland.title": "Use native Wayland",
   "settings.general.row.wayland.description": "Disable X11 fallback on Wayland. Requires restart.",
@@ -642,6 +660,8 @@ export const dict = {
   "font.option.robotoMono": "Roboto Mono",
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
+  "font.option.geistMono": "Geist Mono",
+  "sound.option.none": "None",
   "sound.option.alert01": "Alert 01",
   "sound.option.alert02": "Alert 02",
   "sound.option.alert03": "Alert 03",
