@@ -1775,7 +1775,7 @@ function Write(props: ToolProps<typeof WriteTool>) {
               content={code()}
             />
           </line_number>
-          <Diagnostics diagnostics={props.metadata.diagnostics} filePath={props.input.filePath ?? ""} theme={theme} />
+          <Diagnostics diagnostics={props.metadata.diagnostics} filePath={props.input.filePath ?? ""} />
         </BlockTool>
       </Match>
       <Match when={true}>
@@ -1984,7 +1984,7 @@ function Edit(props: ToolProps<typeof EditTool>) {
               removedLineNumberBg={theme.diffRemovedLineNumberBg}
             />
           </box>
-          <Diagnostics diagnostics={props.metadata.diagnostics} filePath={props.input.filePath ?? ""} theme={theme} />
+          <Diagnostics diagnostics={props.metadata.diagnostics} filePath={props.input.filePath ?? ""} />
         </BlockTool>
       </Match>
       <Match when={true}>
@@ -2056,11 +2056,7 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
                 }
               >
                 <Diff diff={file.diff} filePath={file.filePath} />
-                <Diagnostics
-                  diagnostics={props.metadata.diagnostics}
-                  filePath={file.movePath ?? file.filePath}
-                  theme={theme}
-                />
+                <Diagnostics diagnostics={props.metadata.diagnostics} filePath={file.movePath ?? file.filePath} />
               </Show>
             </BlockTool>
           )}
@@ -2138,11 +2134,8 @@ function Skill(props: ToolProps<typeof SkillTool>) {
   )
 }
 
-function Diagnostics(props: {
-  diagnostics?: Record<string, Record<string, any>[]>
-  filePath: string
-  theme: { error: any }
-}) {
+function Diagnostics(props: { diagnostics?: Record<string, Record<string, any>[]>; filePath: string }) {
+  const { theme } = useTheme()
   const errors = createMemo(() => {
     const normalized = Filesystem.normalizePath(props.filePath)
     const arr = props.diagnostics?.[normalized] ?? []
@@ -2154,7 +2147,7 @@ function Diagnostics(props: {
       <box>
         <For each={errors()}>
           {(diagnostic) => (
-            <text fg={props.theme.error}>
+            <text fg={theme.error}>
               Error [{diagnostic.range.start.line + 1}:{diagnostic.range.start.character + 1}] {diagnostic.message}
             </text>
           )}
