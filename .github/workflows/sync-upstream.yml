@@ -5,6 +5,10 @@ on:
     - cron: "0 6 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -14,14 +18,26 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
       - name: Rebase on upstream
         id: rebase
         continue-on-error: true
         run: |
           git remote add upstream https://github.com/anomalyco/opencode.git || true
           git fetch upstream
-          git checkout dev
           git rebase upstream/dev
+
+          # Replace third-party runners with GitHub standard runners
+          sed -i -E 's/(runs-on|host|runner): [a-zA-Z]+-[a-zA-Z0-9_-]*(ubuntu|linux)[a-zA-Z0-9_-]*/\1: ubuntu-24.04/g' .github/workflows/*.yml
+          sed -i -E 's/(runs-on|host|runner): [a-zA-Z]+-[a-zA-Z0-9_-]*(windows)[a-zA-Z0-9_-]*/\1: windows-latest/g' .github/workflows/*.yml
+
+          git add .github/workflows/*.yml
+          git diff --cached --quiet || git commit -m "ci: replace third-party runners with GitHub standard runners"
+
           git push origin dev --force-with-lease
 
       - name: Create PR on conflict
