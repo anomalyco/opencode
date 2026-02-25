@@ -3,14 +3,29 @@
 import os from "os"
 import path from "path"
 import fs from "fs/promises"
-import fsSync from "fs"
 import { afterAll } from "bun:test"
 
 // Set XDG env vars FIRST, before any src/ imports
 const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
 await fs.mkdir(dir, { recursive: true })
-afterAll(() => {
-  fsSync.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 500 })
+afterAll(async () => {
+  const { Database } = await import("../src/storage/db")
+  Database.close()
+  const busy = (error: unknown) =>
+    typeof error === "object" && error !== null && "code" in error && error.code === "EBUSY"
+  const rm = async (left: number): Promise<void> => {
+    Bun.gc(true)
+    await Bun.sleep(100)
+    return fs.rm(dir, { recursive: true, force: true }).catch((error) => {
+      if (!busy(error)) throw error
+      if (left <= 1) throw error
+      return rm(left - 1)
+    })
+  }
+
+  // Windows can keep SQLite WAL handles alive until GC finalizers run, so we
+  // force GC and retry teardown to avoid flaky EBUSY in test cleanup.
+  await rm(30)
 })
 
 process.env["XDG_DATA_HOME"] = path.join(dir, "share")
