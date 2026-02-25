@@ -8,17 +8,7 @@
       "options": {},
     },
   },
-  "mcp": {
-    "exa": {
-      "type": "local",
-      "command": [
-        "sh",
-        "-lc",
-        "set -a; . \"$HOME/.config/opencode/.env\"; set +a; npx -y exa-mcp-server"
-      ],
-      "timeout": 60000,
-    },
-  },
+  "mcp": {},
   "tools": {
     "github-triage": false,
     "github-pr-search": false,
