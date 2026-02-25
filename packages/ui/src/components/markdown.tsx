@@ -115,7 +115,12 @@ function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels) {
     const parent = block.parentElement
     if (!parent) return
     const wrapped = parent.getAttribute("data-component") === "markdown-code"
-    if (wrapped) return
+    if (wrapped) {
+      if (!parent.querySelector('[data-slot="markdown-copy-button"]')) {
+        parent.appendChild(createCopyButton(labels))
+      }
+      return
+    }
     const wrapper = document.createElement("div")
     wrapper.setAttribute("data-component", "markdown-code")
     parent.replaceChild(wrapper, block)
@@ -201,6 +206,18 @@ function touch(key: string, value: Entry) {
   const first = cache.keys().next().value
   if (!first) return
   cache.delete(first)
+}
+
+function wrapCodeBlocks(container: HTMLElement) {
+  for (const block of Array.from(container.querySelectorAll("pre"))) {
+    const parent = block.parentElement
+    if (!parent) continue
+    if (parent.getAttribute("data-component") === "markdown-code") continue
+    const wrapper = document.createElement("div")
+    wrapper.setAttribute("data-component", "markdown-code")
+    parent.replaceChild(wrapper, block)
+    wrapper.appendChild(block)
+  }
 }
 
 function normalize(text: string) {
@@ -359,6 +376,7 @@ export function Markdown(
 
     const temp = document.createElement("div")
     temp.innerHTML = content
+    wrapCodeBlocks(temp)
 
     morphdom(container, temp, {
       childrenOnly: true,

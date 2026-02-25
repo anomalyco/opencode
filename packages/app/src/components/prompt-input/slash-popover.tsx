@@ -80,7 +80,10 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
                       onClick={() => props.onAtSelect(item)}
                       onMouseEnter={() => props.setAtActive(key)}
                     >
-                      <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-4" />
+                      <FileIcon
+                        node={{ path: item.path, type: isDirectory ? "directory" : "file" }}
+                        class="shrink-0 size-4"
+                      />
                       <div class="flex items-center text-14-regular min-w-0">
                         <span class="text-text-weak whitespace-nowrap truncate min-w-0">{directory}</span>
                         <Show when={!isDirectory}>

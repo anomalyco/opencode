@@ -27,7 +27,7 @@ export const PromptImageAttachments: Component<PromptImageAttachmentsProps> = (p
                 when={attachment.mime.startsWith("image/")}
                 fallback={
                   <div class={fallbackClass}>
-                    <Icon name="folder" class="size-6 text-text-weak" />
+                    <Icon name="photo" class="size-6 text-text-weak" />
                   </div>
                 }
               >
