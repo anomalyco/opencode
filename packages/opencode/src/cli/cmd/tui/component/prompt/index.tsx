@@ -817,6 +817,7 @@ export function Prompt(props: PromptProps) {
             flexShrink={0}
             backgroundColor={theme.backgroundElement}
             flexGrow={1}
+            overflow="hidden"
           >
             <textarea
               placeholder={placeholderText()}
@@ -824,6 +825,7 @@ export function Prompt(props: PromptProps) {
               focusedTextColor={theme.text}
               minHeight={1}
               maxHeight={6}
+              minWidth={1}
               onContentChange={() => {
                 const value = input.plainText
                 setStore("prompt", "input", value)
