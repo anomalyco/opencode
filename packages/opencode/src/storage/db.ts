@@ -10,7 +10,8 @@ import { Log } from "../util/log"
 import { NamedError } from "@opencode-ai/util/error"
 import z from "zod"
 import path from "path"
-import { readFileSync, readdirSync, existsSync } from "fs"
+import { readFileSync, readdirSync, existsSync, statfsSync, unlinkSync, mkdirSync } from "fs"
+import os from "os"
 import * as schema from "./schema"
 
 declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number }[] | undefined
@@ -25,7 +26,8 @@ export const NotFoundError = NamedError.create(
 const log = Log.create({ service: "db" })
 
 export namespace Database {
-  export const Path = path.join(Global.Path.data, "opencode.db")
+  /** Actual database path, set when Client is initialized. Falls back to default. */
+  export let Path = path.join(Global.Path.data, "opencode.db")
   type Schema = typeof schema
   export type Transaction = SQLiteTransaction<"sync", void, Schema>
 
@@ -69,18 +71,70 @@ export namespace Database {
     return sql.sort((a, b) => a.timestamp - b.timestamp)
   }
 
-  export const Client = lazy(() => {
-    log.info("opening database", { path: path.join(Global.Path.data, "opencode.db") })
+  function isNFS(dir: string): boolean {
+    try {
+      // NFS magic number: 0x6969
+      return statfsSync(dir).type === 0x6969
+    } catch {
+      return false
+    }
+  }
 
-    const sqlite = new BunDatabase(path.join(Global.Path.data, "opencode.db"), { create: true })
-    state.sqlite = sqlite
+  function removeDatabase(dbPath: string) {
+    for (const suffix of ["", "-shm", "-wal"]) {
+      try {
+        unlinkSync(dbPath + suffix)
+      } catch {}
+    }
+  }
+
+  /** Resolve the database directory, falling back to a local path on NFS. */
+  function resolveDbDir(): string {
+    const dataDir = Global.Path.data
+    if (!isNFS(dataDir)) return dataDir
+
+    // SQLite's WAL mode requires shared memory via mmap, which is broken on
+    // NFS. Instead of downgrading journal mode (slower, still fragile), just
+    // put the database on a local filesystem.
+    const localDir = path.join(os.tmpdir(), "opencode-" + os.userInfo().uid)
+    mkdirSync(localDir, { recursive: true })
+    log.info("NFS detected, using local database path", { nfs: dataDir, local: localDir })
+    return localDir
+  }
+
+  export const Client = lazy(() => {
+    const dbDir = resolveDbDir()
+    const dbPath = path.join(dbDir, "opencode.db")
+    Path = dbPath
+    log.info("opening database", { path: dbPath })
+
+    let sqlite: BunDatabase
+    try {
+      sqlite = new BunDatabase(dbPath, { create: true })
+
+      // Integrity check — detect corruption before it causes harder-to-debug errors
+      const result = sqlite.prepare("PRAGMA integrity_check").get() as { integrity_check: string } | undefined
+      if (result?.integrity_check !== "ok") {
+        log.warn("database corrupted, recreating", { path: dbPath, integrity: result?.integrity_check })
+        sqlite.close()
+        removeDatabase(dbPath)
+        sqlite = new BunDatabase(dbPath, { create: true })
+      }
+    } catch (e) {
+      // Database file itself may be unreadable/corrupt — remove and retry
+      log.warn("database open failed, recreating", { path: dbPath, error: String(e) })
+      removeDatabase(dbPath)
+      sqlite = new BunDatabase(dbPath, { create: true })
+    }
 
     sqlite.run("PRAGMA journal_mode = WAL")
+    try { sqlite.run("PRAGMA wal_checkpoint(PASSIVE)") } catch {}
     sqlite.run("PRAGMA synchronous = NORMAL")
     sqlite.run("PRAGMA busy_timeout = 5000")
     sqlite.run("PRAGMA cache_size = -64000")
     sqlite.run("PRAGMA foreign_keys = ON")
-    sqlite.run("PRAGMA wal_checkpoint(PASSIVE)")
+
+    state.sqlite = sqlite
 
     const db = drizzle({ client: sqlite, schema })
 
