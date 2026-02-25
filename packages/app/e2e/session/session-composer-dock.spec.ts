@@ -15,7 +15,11 @@ type Sdk = Parameters<typeof clearSessionDockSeed>[0]
 async function withDockSession<T>(sdk: Sdk, title: string, fn: (session: { id: string; title: string }) => Promise<T>) {
   const session = await sdk.session.create({ title }).then((r) => r.data)
   if (!session?.id) throw new Error("Session create did not return an id")
-  return fn(session)
+  try {
+    return await fn(session)
+  } finally {
+    await sdk.session.delete({ sessionID: session.id }).catch(() => undefined)
+  }
 }
 
 test.setTimeout(120_000)
@@ -142,6 +146,94 @@ test("blocked permission flow supports allow always", async ({ page, sdk, gotoSe
       await expect.poll(() => page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(0)
       await expect(page.locator(promptSelector)).toBeVisible()
     })
+  })
+})
+
+test("child session question request blocks parent dock and unblocks after submit", async ({
+  page,
+  sdk,
+  gotoSession,
+}) => {
+  await withDockSession(sdk, "e2e composer dock child question parent", async (session) => {
+    await gotoSession(session.id)
+
+    const child = await sdk.session
+      .create({
+        title: "e2e composer dock child question",
+        parentID: session.id,
+      })
+      .then((r) => r.data)
+    if (!child?.id) throw new Error("Child session create did not return an id")
+
+    try {
+      await withDockSeed(sdk, child.id, async () => {
+        await seedSessionQuestion(sdk, {
+          sessionID: child.id,
+          questions: [
+            {
+              header: "Child input",
+              question: "Pick one child option",
+              options: [
+                { label: "Continue", description: "Continue child" },
+                { label: "Stop", description: "Stop child" },
+              ],
+            },
+          ],
+        })
+
+        const dock = page.locator(questionDockSelector)
+        await expect.poll(() => dock.count(), { timeout: 10_000 }).toBe(1)
+        await expect(page.locator(promptSelector)).toHaveCount(0)
+
+        await dock.locator('[data-slot="question-option"]').first().click()
+        await dock.getByRole("button", { name: /submit/i }).click()
+
+        await expect.poll(() => page.locator(questionDockSelector).count(), { timeout: 10_000 }).toBe(0)
+        await expect(page.locator(promptSelector)).toBeVisible()
+      })
+    } finally {
+      await sdk.session.delete({ sessionID: child.id }).catch(() => undefined)
+    }
+  })
+})
+
+test("child session permission request blocks parent dock and supports allow once", async ({
+  page,
+  sdk,
+  gotoSession,
+}) => {
+  await withDockSession(sdk, "e2e composer dock child permission parent", async (session) => {
+    await gotoSession(session.id)
+
+    const child = await sdk.session
+      .create({
+        title: "e2e composer dock child permission",
+        parentID: session.id,
+      })
+      .then((r) => r.data)
+    if (!child?.id) throw new Error("Child session create did not return an id")
+
+    try {
+      await withDockSeed(sdk, child.id, async () => {
+        await seedSessionPermission(sdk, {
+          sessionID: child.id,
+          permission: "bash",
+          patterns: ["CHILD_PERMISSION.md"],
+          description: "Need child permission",
+        })
+
+        const dock = page.locator(permissionDockSelector)
+        await expect.poll(() => dock.count(), { timeout: 10_000 }).toBe(1)
+        await expect(page.locator(promptSelector)).toHaveCount(0)
+
+        await dock.getByRole("button", { name: /allow once/i }).click()
+
+        await expect.poll(() => page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(0)
+        await expect(page.locator(promptSelector)).toBeVisible()
+      })
+    } finally {
+      await sdk.session.delete({ sessionID: child.id }).catch(() => undefined)
+    }
   })
 })
 
