@@ -26,10 +26,6 @@ export namespace Tool {
   }
   export interface Info<Parameters extends z.ZodType = z.ZodType, M extends Metadata = Metadata> {
     id: string
-    /**
-     * Optional list of provider IDs this tool is scoped to.
-     * When set, the tool is only included for matching providers.
-     */
     providers?: string[]
     init: (ctx?: InitContext) => Promise<{
       description: string

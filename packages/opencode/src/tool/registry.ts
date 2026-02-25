@@ -138,10 +138,7 @@ export namespace ToolRegistry {
   ) {
     const allTools = await all()
 
-    // Filter out provider-scoped tools that don't match the active provider,
-    // then deduplicate by id (last wins). This ensures that when a plugin
-    // overrides a built-in tool (e.g. "bash") but scopes it to a specific
-    // provider, the built-in is preserved for other providers.
+    // dedup by id (last wins) so filtered-out plugin overrides fall back to built-ins
     const filtered = allTools.filter((t) => {
       if (t.providers?.length && !t.providers.includes(model.providerID)) {
         return false
