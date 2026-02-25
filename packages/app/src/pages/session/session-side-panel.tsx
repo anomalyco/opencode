@@ -218,6 +218,26 @@ export function SessionSidePanel(props: {
                       <Tabs.List
                         ref={(el: HTMLDivElement) => {
                           const stop = createFileTabListSync({ el, contextOpen })
+                          let prevActiveTab = activeTab()
+                          createEffect(() => {
+                            const currentTab = activeTab()
+                            if (currentTab && currentTab !== prevActiveTab) {
+                              const trigger = el.querySelector(`[data-value="${currentTab}"]`) as HTMLElement
+                              if (trigger) {
+                                const containerRect = el.getBoundingClientRect()
+                                const triggerRect = trigger.getBoundingClientRect()
+                                const isOverflowed = triggerRect.right > containerRect.right || triggerRect.left < containerRect.left
+                                if (isOverflowed) {
+                                  const scrollLeft = el.scrollLeft + (triggerRect.left - containerRect.left)
+                                  el.scrollTo({
+                                    left: scrollLeft,
+                                    behavior: "smooth",
+                                  })
+                                }
+                              }
+                            }
+                            prevActiveTab = currentTab
+                          })
                           onCleanup(stop)
                         }}
                       >

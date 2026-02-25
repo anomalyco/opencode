@@ -58,6 +58,12 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     let totalDiff = ""
 
     for (const hunk of hunks) {
+      if (process.platform === "win32" && hunk.path.includes("USERNAME")) {
+        throw new Error(
+          `apply_patch verification failed: Path contains "USERNAME" which may indicate an unexpanded ` +
+          `environment variable or corrupted patch: ${hunk.path}`,
+        )
+      }
       const filePath = path.resolve(Instance.directory, hunk.path)
       await assertExternalDirectory(ctx, filePath)
 
@@ -92,8 +98,11 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
         case "update": {
           // Check if file exists for update
           const stats = await fs.stat(filePath).catch(() => null)
-          if (!stats || stats.isDirectory()) {
+          if (!stats) {
             throw new Error(`apply_patch verification failed: Failed to read file to update: ${filePath}`)
+          }
+          if (stats.isDirectory()) {
+            throw new Error(`apply_patch verification failed: Path is a directory, not a file: ${filePath}`)
           }
 
           const oldContent = await fs.readFile(filePath, "utf-8")
