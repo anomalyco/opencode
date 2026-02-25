@@ -1104,14 +1104,7 @@ export namespace Provider {
           }
         }
 
-        const requestURL =
-          input instanceof URL ? input : typeof input === "string" ? new URL(input) : new URL(input.url)
-        if (
-          Flag.OPENCODE_EXPERIMENTAL_WS_TRANSPORT &&
-          model.providerID === "openai" &&
-          !customFetch &&
-          requestURL.hostname === "api.openai.com"
-        ) {
+        if (Flag.OPENCODE_EXPERIMENTAL_WS_TRANSPORT && model.providerID === "openai" && !customFetch) {
           const response = await OpenAIWebSocket.stream({
             request: input,
             init: opts,
