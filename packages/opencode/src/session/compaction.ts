@@ -137,17 +137,16 @@ export namespace SessionCompaction {
   /**
    * Get the pre-computed checkpoint summary for a swap.
    */
-  export function getCheckpointSummary(sessionID: string): string | null {
-    // Dynamic import to avoid circular deps
-    const { DoubleBuffer } = require("./double-buffer")
+  export async function getCheckpointSummary(sessionID: string): Promise<string | null> {
+    const { DoubleBuffer } = await import("./double-buffer")
     return DoubleBuffer.getState(sessionID).checkpointSummary
   }
 
   /**
    * Mark swap as complete.
    */
-  export function completeSwap(sessionID: string): void {
-    const { DoubleBuffer } = require("./double-buffer")
+  export async function completeSwap(sessionID: string): Promise<void> {
+    const { DoubleBuffer } = await import("./double-buffer")
     DoubleBuffer.completeSwap(sessionID)
   }
 

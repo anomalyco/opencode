@@ -544,7 +544,7 @@ export namespace SessionPrompt {
         lastFinished.summary !== true &&
         (await SessionCompaction.shouldSwapBuffer({ sessionID, tokens: lastFinished.tokens, model }))
       ) {
-        const summary = SessionCompaction.getCheckpointSummary(sessionID)
+        const summary = await SessionCompaction.getCheckpointSummary(sessionID)
         if (summary) {
           log.info("double-buffer swap: using pre-computed checkpoint", { sessionID })
           // Create the compaction using the pre-computed summary directly
@@ -554,7 +554,7 @@ export namespace SessionPrompt {
             model: lastUser.model,
             auto: true,
           })
-          SessionCompaction.completeSwap(sessionID)
+          await SessionCompaction.completeSwap(sessionID)
           continue
         }
       }
