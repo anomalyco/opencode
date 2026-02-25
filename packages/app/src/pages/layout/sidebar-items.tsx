@@ -352,7 +352,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       >
         <Tooltip value={language.t("session.generateTitle")} placement="top">
           <IconButton
-            icon="brain"
+            icon="models"
             variant="ghost"
             class="size-6 rounded-md"
             aria-label={language.t("session.generateTitle")}

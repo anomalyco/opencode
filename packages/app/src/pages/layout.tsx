@@ -2376,7 +2376,7 @@ export default function Layout(props: ParentProps) {
         >
           <Tooltip value={language.t("session.generateTitle")} placement="top">
             <IconButton
-              icon="brain"
+              icon="models"
               variant="ghost"
               class="size-6 rounded-md cursor-pointer"
               aria-label={language.t("session.generateTitle")}
