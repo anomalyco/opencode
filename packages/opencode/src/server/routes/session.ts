@@ -352,6 +352,36 @@ export const SessionRoutes = lazy(() =>
       },
     )
     .post(
+      "/:sessionID/generate-title",
+      describeRoute({
+        summary: "Generate session title",
+        description: "Manually trigger AI-powered title generation for a session based on its conversation content.",
+        operationId: "session.generateTitle",
+        responses: {
+          200: {
+            description: "Session with updated title",
+            content: {
+              "application/json": {
+                schema: resolver(Session.Info),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: z.string().meta({ description: "Session ID" }),
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const result = await Session.generateTitle({ sessionID })
+        return c.json(result)
+      },
+    )
+    .post(
       "/:sessionID/abort",
       describeRoute({
         summary: "Abort session",

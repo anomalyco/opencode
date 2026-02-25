@@ -68,6 +68,7 @@ export type SessionItemProps = {
   clearHoverProjectSoon: () => void
   prefetchSession: (session: Session, priority?: "high" | "low") => void
   archiveSession: (session: Session) => Promise<void>
+  generateSessionTitle: (session: Session) => Promise<void>
 }
 
 const SessionRow = (props: {
@@ -349,6 +350,19 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
           "group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto": true,
         }}
       >
+        <Tooltip value={language.t("session.generateTitle")} placement="top">
+          <IconButton
+            icon="brain"
+            variant="ghost"
+            class="size-6 rounded-md"
+            aria-label={language.t("session.generateTitle")}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              void props.generateSessionTitle(props.session)
+            }}
+          />
+        </Tooltip>
         <Tooltip value={language.t("common.archive")} placement="top">
           <IconButton
             icon="archive"

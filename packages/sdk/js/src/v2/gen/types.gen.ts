@@ -3146,7 +3146,7 @@ export type SessionUpdateData = {
   body?: {
     title?: string
     time?: {
-      archived?: number
+      archived?: number | null
     }
   }
   path: {
@@ -3310,6 +3310,42 @@ export type SessionForkResponses = {
 }
 
 export type SessionForkResponse = SessionForkResponses[keyof SessionForkResponses]
+
+export type SessionGenerateTitleData = {
+  body?: never
+  path: {
+    /**
+     * Session ID
+     */
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/generate-title"
+}
+
+export type SessionGenerateTitleErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionGenerateTitleError = SessionGenerateTitleErrors[keyof SessionGenerateTitleErrors]
+
+export type SessionGenerateTitleResponses = {
+  /**
+   * Session with updated title
+   */
+  200: Session
+}
+
+export type SessionGenerateTitleResponse = SessionGenerateTitleResponses[keyof SessionGenerateTitleResponses]
 
 export type SessionAbortData = {
   body?: never

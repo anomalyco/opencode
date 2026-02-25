@@ -450,6 +450,9 @@ export const dict = {
   "toast.session.unshare.failed.title": "Failed to unshare session",
   "toast.session.unshare.failed.description": "An error occurred while unsharing the session",
 
+  "toast.session.generateTitle.success.title": "Title generated",
+  "toast.session.generateTitle.failed.title": "Failed to generate title",
+
   "toast.session.listFailed.title": "Failed to load sessions for {{project}}",
 
   "toast.update.title": "Update available",
@@ -519,6 +522,7 @@ export const dict = {
   "session.review.loadingChanges": "Loading changes...",
   "session.review.empty": "No changes in this session yet",
   "session.review.noChanges": "No changes",
+  "session.generateTitle": "Generate title",
 
   "session.files.selectToOpen": "Select a file to open",
   "session.files.all": "All files",

@@ -1025,6 +1025,34 @@ export default function Layout(props: ParentProps) {
     }
   }
 
+  async function generateSessionTitle(session: Session) {
+    const [, setStore] = globalSync.child(session.directory)
+    try {
+      const result = await globalSDK.client.session.generateTitle({ sessionID: session.id })
+      if (result.error) {
+        throw result.error
+      }
+      const updated = result.data
+      setStore(
+        produce((draft) => {
+          const match = Binary.search(draft.session, session.id, (s) => s.id)
+          if (match.found) {
+            draft.session[match.index].title = updated.title
+          }
+        }),
+      )
+      showToast({
+        title: language.t("toast.session.generateTitle.success.title"),
+        description: updated.title,
+      })
+    } catch (err) {
+      showToast({
+        title: language.t("toast.session.generateTitle.failed.title"),
+        description: errorMessage(err),
+      })
+    }
+  }
+
   const collectRemovedSessionIDs = (sessions: Session[], sessionID: string) => {
     const removed = new Set<string>([sessionID])
     const byParent = new Map<string, string[]>()
@@ -2346,6 +2374,19 @@ export default function Layout(props: ParentProps) {
             "group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto": true,
           }}
         >
+          <Tooltip value={language.t("session.generateTitle")} placement="top">
+            <IconButton
+              icon="brain"
+              variant="ghost"
+              class="size-6 rounded-md cursor-pointer"
+              aria-label={language.t("session.generateTitle")}
+              onClick={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                void generateSessionTitle(props.session)
+              }}
+            />
+          </Tooltip>
           <Tooltip value={language.t("common.archive")} placement="top">
             <IconButton
               icon="archive"

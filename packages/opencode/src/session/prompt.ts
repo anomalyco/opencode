@@ -2001,4 +2001,126 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       return Session.setTitle({ sessionID: input.session.id, title })
     }
   }
+
+  export async function generateTitle(input: { sessionID: string }) {
+    const session = await Session.get(input.sessionID)
+    const history = await Session.messages({ sessionID: input.sessionID })
+
+    // Find first non-synthetic user message
+    const firstRealUserIdx = history.findIndex(
+      (m: MessageV2.WithParts) =>
+        m.info.role === "user" && !m.parts.every((p: MessageV2.Part) => "synthetic" in p && p.synthetic),
+    )
+    if (firstRealUserIdx === -1) throw new Error("No user messages found in session")
+
+    const firstRealUser = history[firstRealUserIdx]
+
+    // Extract text content from the user message
+    const subtaskParts = firstRealUser.parts.filter(
+      (p: MessageV2.Part) => p.type === "subtask",
+    ) as MessageV2.SubtaskPart[]
+    const hasOnlySubtaskParts =
+      subtaskParts.length > 0 && firstRealUser.parts.every((p: MessageV2.Part) => p.type === "subtask")
+
+    const textParts = firstRealUser.parts
+      .filter((p: MessageV2.Part) => p.type === "text" && !("synthetic" in p && p.synthetic))
+      .map((p) => (p as MessageV2.TextPart).text)
+      .filter((t) => t.length > 0)
+
+    const content = hasOnlySubtaskParts ? subtaskParts.map((p) => p.prompt).join("\n") : textParts.join("\n")
+
+    if (!content) throw new Error("No text content found in user message")
+
+    const agent = await Agent.get("title")
+    if (!agent) throw new Error("Title agent not found")
+
+    // Build a list of models to try in order:
+    // 1. Title agent's configured model (if any)
+    // 2. The session's original model (proven to work for chat)
+    // 3. getSmallModel fallback from the session's provider
+    const providerID = firstRealUser.info.role === "user" ? firstRealUser.info.model.providerID : "anthropic"
+    const modelID = firstRealUser.info.role === "user" ? firstRealUser.info.model.modelID : "claude-3-5-sonnet-20241022"
+
+    const candidates: Provider.Model[] = []
+    if (agent.model) {
+      try {
+        candidates.push(await Provider.getModel(agent.model.providerID, agent.model.modelID))
+      } catch {}
+    }
+    try {
+      candidates.push(await Provider.getModel(providerID, modelID))
+    } catch {}
+    try {
+      const small = await Provider.getSmallModel(providerID)
+      if (small && !candidates.some((c) => c.providerID === small.providerID && c.id === small.id)) {
+        candidates.push(small)
+      }
+    } catch {}
+
+    if (candidates.length === 0) throw new Error("No available model for title generation")
+
+    const msg = "Generate a title for this conversation:\n" + content
+    let lastError: unknown
+
+    for (const model of candidates) {
+      log.info("generateTitle", {
+        sessionID: input.sessionID,
+        providerID: model.providerID,
+        modelID: model.id,
+        contentLength: content.length,
+        attempt: candidates.indexOf(model) + 1,
+        total: candidates.length,
+      })
+
+      try {
+        const result = await LLM.stream({
+          agent,
+          user: firstRealUser.info as MessageV2.User,
+          system: [],
+          small: false,
+          tools: {},
+          model,
+          abort: new AbortController().signal,
+          sessionID: input.sessionID,
+          retries: 1,
+          messages: [{ role: "user", content: msg }],
+        })
+
+        const text = await result.text
+
+        if (!text) {
+          lastError = new Error("Empty output from " + model.providerID + "/" + model.id)
+          log.warn("generateTitle empty output, trying next", {
+            providerID: model.providerID,
+            modelID: model.id,
+          })
+          continue
+        }
+
+        const cleaned = text
+          .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+          .split("\n")
+          .map((line) => line.trim())
+          .find((line) => line.length > 0)
+
+        if (!cleaned) {
+          lastError = new Error("Generated title is empty after cleaning from " + model.providerID + "/" + model.id)
+          continue
+        }
+
+        const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
+        return Session.setTitle({ sessionID: input.sessionID, title })
+      } catch (err) {
+        lastError = err
+        log.warn("generateTitle attempt failed, trying next", {
+          providerID: model.providerID,
+          modelID: model.id,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
+    }
+
+    log.error("generateTitle all attempts failed", { error: lastError })
+    throw lastError ?? new Error("Failed to generate title")
+  }
 }
