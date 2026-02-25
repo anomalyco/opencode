@@ -687,7 +687,7 @@ function App() {
     if (discoveredForModel === modelKey && !isRetrigger) return
     discoveredForModel = modelKey
     untrack(() => {
-      toast.show({ variant: "info", message: "Discovering workflow models...", duration: 3000 })
+      toast.show({ variant: "info", message: "Discovering workflow models...", duration: 60000 })
       sdk
         .fetch(`${sdk.url}/workflow-model-select/discover`, {
           method: "POST",
@@ -797,6 +797,7 @@ function App() {
         })
         .catch(() => {})
     }
+    toast.dismiss()
     dialog.replace(
       () => (
         <DialogWorkflowModel

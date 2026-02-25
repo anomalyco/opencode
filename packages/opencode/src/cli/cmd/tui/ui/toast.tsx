@@ -64,6 +64,10 @@ function init() {
         setStore("currentToast", null)
       }, duration).unref()
     },
+    dismiss() {
+      if (timeoutHandle) clearTimeout(timeoutHandle)
+      setStore("currentToast", null)
+    },
     error: (err: any) => {
       if (err instanceof Error)
         return toast.show({
