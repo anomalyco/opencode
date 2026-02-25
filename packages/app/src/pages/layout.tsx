@@ -73,7 +73,7 @@ import {
   SortableWorkspace,
   WorkspaceDragOverlay,
   type WorkspaceSidebarContext,
-} from "./layout/sidebar-workspace"
+} from "@/overrides/sidebar-workspace"
 import { workspaceOpenState } from "./layout/sidebar-workspace-helpers"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "@/overrides/sidebar-shell"
