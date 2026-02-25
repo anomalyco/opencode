@@ -1,3 +1,4 @@
+import { jsonrepair } from "jsonrepair"
 import { Installation } from "@/installation"
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
@@ -186,6 +187,18 @@ export namespace LLM {
             ...failed.toolCall,
             toolName: lower,
           }
+        }
+        // Attempt to repair malformed JSON args (e.g. invalid unicode escapes
+        // like \u6\uC218 produced by CJK tokenization drift in the model)
+        try {
+          const repaired = jsonrepair(failed.toolCall.args)
+          JSON.parse(repaired) // validate it actually parses
+          l.info("repaired malformed tool call args via jsonrepair", {
+            tool: failed.toolCall.toolName,
+          })
+          return { ...failed.toolCall, args: repaired }
+        } catch {
+          // jsonrepair could not fix it, fall through to invalid
         }
         return {
           ...failed.toolCall,
