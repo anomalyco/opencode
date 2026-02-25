@@ -36,7 +36,7 @@ export function buildSectionOptions(input: {
     return [
       {
         key: item,
-        value: { providerID: provider.id, modelID: model.id },
+        value: { providerID: provider.id, modelID: model.id, section: input.category },
         title: model.name ?? item.modelID,
         description: provider.name,
         category: input.category,

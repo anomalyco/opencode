@@ -43,7 +43,7 @@ export function DialogModel(props: { providerID?: string }) {
       ...option,
       onSelect: () => {
         dialog.clear()
-        local.model.set(option.value, { recent: true })
+        local.model.set({ providerID: option.value.providerID, modelID: option.value.modelID }, { recent: true })
       },
     }))
 
@@ -58,7 +58,7 @@ export function DialogModel(props: { providerID?: string }) {
       ...option,
       onSelect: () => {
         dialog.clear()
-        local.model.set(option.value, { recent: true })
+        local.model.set({ providerID: option.value.providerID, modelID: option.value.modelID }, { recent: true })
       },
     }))
 
@@ -118,7 +118,8 @@ export function DialogModel(props: { providerID?: string }) {
           title: "Favorite",
           disabled: !connected(),
           onTrigger: (option) => {
-            local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
+            const value = option.value as { providerID: string; modelID: string }
+            local.model.toggleFavorite({ providerID: value.providerID, modelID: value.modelID })
           },
         },
       ]}
