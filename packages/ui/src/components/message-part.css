@@ -252,6 +252,12 @@
   }
 }
 
+@media (prefers-color-scheme: dark) {
+  [data-component="reasoning-part"] [data-component="markdown"] :not(pre) > code {
+    opacity: 0.6;
+  }
+}
+
 [data-component="tool-error"] {
   display: flex;
   align-items: start;
