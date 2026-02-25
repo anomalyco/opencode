@@ -65,6 +65,9 @@ test("switching back to a project opens the latest workspace session", async ({ 
         await setWorkspacesEnabled(page, slug, true)
 
         await page.getByRole("button", { name: "New workspace" }).first().click()
+        const dialog = page.getByRole("dialog")
+        await expect(dialog).toBeVisible()
+        await dialog.getByRole("button", { name: "New workspace" }).click({ force: true })
 
         await expect
           .poll(
