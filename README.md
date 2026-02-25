@@ -161,7 +161,8 @@ Create `.opencode/opencode.jsonc` at the root of your project:
       "models": {
         "secure-gpt-oss-120b": {
           "id": "openai/gpt-oss-120b",
-          "name": "Secure gpt-oss-120b"
+          "name": "Secure gpt-oss-120b",
+          "systemPrompt": "anthropic" // Override the auto-selected system prompt. Available: anthropic, beast, codex, gemini, qwen, trinity
         }
       }
     }

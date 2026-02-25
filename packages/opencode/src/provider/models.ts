@@ -6,6 +6,7 @@ import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
 import { lazy } from "@/util/lazy"
 import { Filesystem } from "../util/filesystem"
+import { SystemPromptSchema } from "../session/prompt/registry"
 
 // Try to import bundled snapshot (generated at build time)
 // Falls back to undefined in dev mode when snapshot doesn't exist
@@ -67,6 +68,7 @@ export namespace ModelsDev {
     headers: z.record(z.string(), z.string()).optional(),
     provider: z.object({ npm: z.string().optional(), api: z.string().optional() }).optional(),
     variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
+    systemPrompt: SystemPromptSchema,
   })
   export type Model = z.infer<typeof Model>
 
