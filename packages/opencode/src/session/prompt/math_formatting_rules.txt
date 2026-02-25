@@ -1,0 +1,12 @@
+Math formatting:
+  * Inline LaTeX equations: use `$...$` (never `\( ... \)`)
+  * Prefer display equations for complex formulas or multi-term expressions.
+  * Display equations: use `$$ ... $$` (never `\[ ... \]`), with a blank line before the opening `$$` and after the closing `$$`.
+  * Display equations: the `$$` delimiter lines must be flush-left (no indentation), or some renderers treat it as code.
+  * Example (with required blank lines):
+
+$$
+E = mc^2
+$$
+
+  * Do not wrap display equations in code fences (this prevents rendering in the browser).
