@@ -60,8 +60,8 @@ body:
   - type: input
     id: terminal
     attributes:
-      label: Terminal
-      description: what terminal are you using?
+      label: Dekstop / Terminal
+      description: what terminal are you using? Enter "desktop" if you're using OpenCode Desktop.
       placeholder: e.g., iTerm2, Ghostty, Alacritty, Windows Terminal
     validations:
       required: false
