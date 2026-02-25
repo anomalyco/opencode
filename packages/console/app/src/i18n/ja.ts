@@ -347,7 +347,7 @@ export const dict = {
   "workspace.usage.breakdown.output": "出力",
   "workspace.usage.breakdown.reasoning": "推論",
   "workspace.usage.subscription": "サブスクリプション (${{amount}})",
-  "workspace.usage.lite": "lite (${{amount}})",
+  "workspace.usage.lite": "Go (${{amount}})",
   "workspace.usage.byok": "BYOK (${{amount}})",
 
   "workspace.cost.title": "コスト",
