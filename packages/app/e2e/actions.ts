@@ -416,13 +416,25 @@ export async function seedSessionPermission(
     description?: string
   },
 ) {
+  const tool = (() => {
+    if (input.permission === "read") {
+      return {
+        name: "read",
+        json: { filePath: input.patterns[0] ?? "README.md" },
+      }
+    }
+    return {
+      name: "bash",
+      json: {
+        command: input.patterns[0] ? `ls ${JSON.stringify(input.patterns[0])}` : "pwd",
+        description: input.description ?? `seed ${input.permission} permission request`,
+      },
+    }
+  })()
+
   const text = [
-    "Your only valid response is one bash tool call.",
-    `Use this JSON input: ${JSON.stringify({
-      command: input.patterns[0] ? `ls ${JSON.stringify(input.patterns[0])}` : "pwd",
-      workdir: "/",
-      description: input.description ?? `seed ${input.permission} permission request`,
-    })}`,
+    `Your only valid response is one ${tool.name} tool call.`,
+    `Use this JSON input: ${JSON.stringify(tool.json)}`,
     "Do not output plain text.",
   ].join("\n")
 
@@ -433,7 +445,7 @@ export async function seedSessionPermission(
     timeout: 30_000,
     probe: async () => {
       const list = await sdk.permission.list().then((x) => x.data ?? [])
-      return list.find((item) => item.sessionID === input.sessionID)
+      return list.find((item) => item.sessionID === input.sessionID && item.permission === input.permission)
     },
   })
 

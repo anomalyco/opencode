@@ -209,6 +209,7 @@ test("child session permission request blocks parent dock and supports allow onc
       .create({
         title: "e2e composer dock child permission",
         parentID: session.id,
+        permission: [{ permission: "read", pattern: "*", action: "ask" }],
       })
       .then((r) => r.data)
     if (!child?.id) throw new Error("Child session create did not return an id")
@@ -217,8 +218,8 @@ test("child session permission request blocks parent dock and supports allow onc
       await withDockSeed(sdk, child.id, async () => {
         await seedSessionPermission(sdk, {
           sessionID: child.id,
-          permission: "bash",
-          patterns: ["CHILD_PERMISSION.md"],
+          permission: "read",
+          patterns: ["README.md"],
           description: "Need child permission",
         })
 
