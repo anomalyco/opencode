@@ -132,10 +132,13 @@ export namespace MCP {
       description: mcpTool.description ?? "",
       inputSchema: jsonSchema(schema),
       execute: async (args: unknown) => {
+        const filteredArgs = (args && typeof args === "object" && "_placeholder" in args)
+          ? Object.fromEntries(Object.entries(args as Record<string, unknown>).filter(([k]) => k !== "_placeholder"))
+          : args
         return client.callTool(
           {
             name: mcpTool.name,
-            arguments: (args || {}) as Record<string, unknown>,
+            arguments: (filteredArgs || {}) as Record<string, unknown>,
           },
           CallToolResultSchema,
           {
