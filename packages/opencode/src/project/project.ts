@@ -322,7 +322,9 @@ export namespace Project {
 
           id = roots?.[0]
           if (id) {
-            writeCache(commonDir, id)
+            await Bun.file(cacheFile)
+              .write(id)
+              .catch(() => undefined)
           }
         }
 
