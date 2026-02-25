@@ -601,6 +601,19 @@
     min-width: 0;
     padding: 6px 0;
   }
+
+  [data-slot="context-tool-group-item"][data-kind="reasoning"] {
+    padding-top: 2px;
+    padding-bottom: 2px;
+
+    [data-component="reasoning-part"] {
+      opacity: 0.72;
+    }
+
+    [data-component="markdown"] {
+      margin-top: 6px;
+    }
+  }
 }
 
 [data-component="diagnostics"] {

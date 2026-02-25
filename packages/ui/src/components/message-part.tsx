@@ -257,12 +257,23 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
   }
 }
 
-const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
+const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "search", "list", "list_files"])
 const HIDDEN_TOOLS = new Set(["todowrite", "todoread"])
+
+type ContextEntry = {
+  message: AssistantMessage
+  part: ToolPart | ReasoningPart
+}
 
 function list<T>(value: T[] | undefined | null, fallback: T[]) {
   if (Array.isArray(value)) return value
   return fallback
+}
+
+function normalizePath(path: string) {
+  const normalized = path.replaceAll("\\", "/").trim().replace(/\/+/g, "/")
+  if (!normalized || normalized === "/") return normalized
+  return normalized.replace(/\/+$/, "")
 }
 
 function renderable(part: PartType, showReasoningSummaries = true) {
@@ -302,11 +313,11 @@ export function AssistantParts(props: {
     const keys: string[] = []
     const items: Record<
       string,
-      { type: "part"; part: PartType; message: AssistantMessage } | { type: "context"; parts: ToolPart[] }
+      { type: "part"; part: PartType; message: AssistantMessage } | { type: "context"; entries: ContextEntry[] }
     > = {}
     const push = (
       key: string,
-      item: { type: "part"; part: PartType; message: AssistantMessage } | { type: "context"; parts: ToolPart[] },
+      item: { type: "part"; part: PartType; message: AssistantMessage } | { type: "context"; entries: ContextEntry[] },
     ) => {
       keys.push(key)
       items[key] = item
@@ -330,10 +341,10 @@ export function AssistantParts(props: {
       }
       push(`context:${first.part.id}`, {
         type: "context",
-        parts: parts
-          .slice(start, end + 1)
-          .map((x) => x.part)
-          .filter((part): part is ToolPart => isContextGroupTool(part)),
+        entries: parts.slice(start, end + 1).flatMap((item) => {
+          if (!isContextEntry(item.part)) return []
+          return [{ message: item.message, part: item.part }]
+        }),
       })
       start = -1
     }
@@ -343,6 +354,8 @@ export function AssistantParts(props: {
         if (start < 0) start = index
         return
       }
+
+      if (item.part.type === "reasoning" && start >= 0) return
 
       flush(index - 1)
       push(`part:${item.message.id}:${item.part.id}`, { type: "part", part: item.part, message: item.message })
@@ -375,7 +388,7 @@ export function AssistantParts(props: {
         return (
           <>
             <Show when={ctx()}>
-              {(entry) => <ContextToolGroup parts={entry().parts} busy={props.working && tail()} />}
+              {(entry) => <ContextToolGroup entries={entry().entries} busy={props.working && tail()} />}
             </Show>
             <Show when={part()}>
               {(entry) => (
@@ -397,6 +410,15 @@ export function AssistantParts(props: {
 
 function isContextGroupTool(part: PartType): part is ToolPart {
   return part.type === "tool" && CONTEXT_GROUP_TOOLS.has(part.tool)
+}
+
+function isContextGroupReasoning(part: PartType): part is ReasoningPart {
+  return part.type === "reasoning" && !!part.text?.trim()
+}
+
+function isContextEntry(part: PartType): part is ToolPart | ReasoningPart {
+  if (isContextGroupTool(part)) return true
+  return isContextGroupReasoning(part)
 }
 
 function contextToolDetail(part: ToolPart): string | undefined {
@@ -431,6 +453,7 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
       }
     }
     case "list":
+    case "list_files":
       return {
         title: i18n.t("ui.tool.list"),
         subtitle: getDirectory(path),
@@ -441,6 +464,16 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
         subtitle: getDirectory(path),
         args: pattern ? ["pattern=" + pattern] : [],
       }
+    case "search": {
+      const args: string[] = []
+      if (pattern) args.push("pattern=" + pattern)
+      if (include) args.push("include=" + include)
+      return {
+        title: i18n.t("ui.tool.grep"),
+        subtitle: getDirectory(path),
+        args,
+      }
+    }
     case "grep": {
       const args: string[] = []
       if (pattern) args.push("pattern=" + pattern)
@@ -462,14 +495,46 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
   }
 }
 
-function contextToolSummary(parts: ToolPart[]) {
-  const read = parts.filter((part) => part.tool === "read").length
-  const search = parts.filter((part) => part.tool === "glob" || part.tool === "grep").length
-  const list = parts.filter((part) => part.tool === "list").length
+function contextToolSummary(parts: ToolPart[], i18n: ReturnType<typeof useI18n>) {
+  const reads = new Set<string>()
+  let readWithoutPath = 0
+  let search = 0
+  let list = 0
+
+  for (const part of parts) {
+    if (part.tool === "read") {
+      const input = part.state.input as Record<string, unknown>
+      const filePath = typeof input.filePath === "string" ? normalizePath(input.filePath) : ""
+      if (filePath) {
+        reads.add(filePath)
+        continue
+      }
+      readWithoutPath += 1
+      continue
+    }
+
+    if (part.tool === "glob" || part.tool === "grep" || part.tool === "search") {
+      search += 1
+      continue
+    }
+
+    if (part.tool === "list" || part.tool === "list_files") {
+      list += 1
+    }
+  }
+
+  const fileCount = reads.size + readWithoutPath
+
   return [
-    read ? `${read} ${read === 1 ? "read" : "reads"}` : undefined,
-    search ? `${search} ${search === 1 ? "search" : "searches"}` : undefined,
-    list ? `${list} ${list === 1 ? "list" : "lists"}` : undefined,
+    fileCount
+      ? `${fileCount} ${i18n.t(fileCount === 1 ? "ui.common.file.one" : "ui.common.file.other")}`
+      : undefined,
+    search
+      ? i18n.t(search === 1 ? "ui.sessionTurn.context.search.one" : "ui.sessionTurn.context.search.other", {
+          count: search,
+        })
+      : undefined,
+    list ? i18n.t(list === 1 ? "ui.sessionTurn.context.list.one" : "ui.sessionTurn.context.list.other", { count: list }) : undefined,
   ].filter((value): value is string => !!value)
 }
 
@@ -511,8 +576,11 @@ export function AssistantMessageDisplay(props: {
 }) {
   const grouped = createMemo(() => {
     const keys: string[] = []
-    const items: Record<string, { type: "part"; part: PartType } | { type: "context"; parts: ToolPart[] }> = {}
-    const push = (key: string, item: { type: "part"; part: PartType } | { type: "context"; parts: ToolPart[] }) => {
+    const items: Record<string, { type: "part"; part: PartType } | { type: "context"; entries: ContextEntry[] }> = {}
+    const push = (
+      key: string,
+      item: { type: "part"; part: PartType } | { type: "context"; entries: ContextEntry[] },
+    ) => {
       keys.push(key)
       items[key] = item
     }
@@ -530,7 +598,10 @@ export function AssistantMessageDisplay(props: {
       }
       push(`context:${first.id}`, {
         type: "context",
-        parts: parts.slice(start, end + 1).filter((part): part is ToolPart => isContextGroupTool(part)),
+        entries: parts.slice(start, end + 1).flatMap((part) => {
+          if (!isContextEntry(part)) return []
+          return [{ message: props.message, part }]
+        }),
       })
       start = -1
     }
@@ -542,6 +613,8 @@ export function AssistantMessageDisplay(props: {
         if (start < 0) start = index
         return
       }
+
+      if (part.type === "reasoning" && start >= 0) return
 
       flush(index - 1)
       push(`part:${part.id}`, { type: "part", part })
@@ -570,7 +643,7 @@ export function AssistantMessageDisplay(props: {
         })
         return (
           <>
-            <Show when={ctx()}>{(entry) => <ContextToolGroup parts={entry().parts} />}</Show>
+            <Show when={ctx()}>{(entry) => <ContextToolGroup entries={entry().entries} />}</Show>
             <Show when={part()}>
               {(entry) => (
                 <Part
@@ -587,14 +660,15 @@ export function AssistantMessageDisplay(props: {
   )
 }
 
-function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
+function ContextToolGroup(props: { entries: ContextEntry[]; busy?: boolean }) {
   const i18n = useI18n()
   const [open, setOpen] = createSignal(false)
+  const tools = createMemo(() => props.entries.flatMap((entry) => (isContextGroupTool(entry.part) ? [entry.part] : [])))
   const pending = createMemo(
     () =>
-      !!props.busy || props.parts.some((part) => part.state.status === "pending" || part.state.status === "running"),
+      !!props.busy || tools().some((part) => part.state.status === "pending" || part.state.status === "running"),
   )
-  const summary = createMemo(() => contextToolSummary(props.parts))
+  const summary = createMemo(() => contextToolSummary(tools(), i18n))
   const details = createMemo(() => summary().join(", "))
 
   return (
@@ -626,10 +700,19 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
       </Collapsible.Trigger>
       <Collapsible.Content>
         <div data-component="context-tool-group-list">
-          <For each={props.parts}>
-            {(part) => {
-              const trigger = contextToolTrigger(part, i18n)
-              const running = part.state.status === "pending" || part.state.status === "running"
+          <For each={props.entries}>
+            {(entry) => {
+              if (entry.part.type === "reasoning") {
+                return (
+                  <div data-slot="context-tool-group-item" data-kind="reasoning">
+                    <Part part={entry.part} message={entry.message} />
+                  </div>
+                )
+              }
+
+              const trigger = contextToolTrigger(entry.part, i18n)
+              const running = entry.part.state.status === "pending" || entry.part.state.status === "running"
+
               return (
                 <div data-slot="context-tool-group-item">
                   <div data-component="tool-trigger">

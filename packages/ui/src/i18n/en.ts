@@ -43,6 +43,10 @@ export const dict = {
   "ui.sessionTurn.status.thinkingWithTopic": "Thinking - {{topic}}",
   "ui.sessionTurn.status.gatheringThoughts": "Gathering thoughts",
   "ui.sessionTurn.status.consideringNextSteps": "Considering next steps",
+  "ui.sessionTurn.context.search.one": "{{count}} search",
+  "ui.sessionTurn.context.search.other": "{{count}} searches",
+  "ui.sessionTurn.context.list.one": "{{count}} list",
+  "ui.sessionTurn.context.list.other": "{{count}} lists",
 
   "ui.messagePart.diagnostic.error": "Error",
   "ui.messagePart.title.edit": "Edit",
