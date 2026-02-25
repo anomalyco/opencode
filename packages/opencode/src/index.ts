@@ -208,6 +208,8 @@ try {
   }
   process.exitCode = 1
 } finally {
+  // Allow pending microtasks and stream flushes (like stdout from export) to complete
+  await new Promise(resolve => setImmediate(resolve))
   // Some subprocesses don't react properly to SIGTERM and similar signals.
   // Most notably, some docker-container-based MCP servers don't handle such signals unless
   // run using `docker run --init`.

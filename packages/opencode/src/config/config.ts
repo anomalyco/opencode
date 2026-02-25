@@ -911,6 +911,24 @@ export namespace Config {
       ref: "KeybindsConfig",
     })
 
+  export const TUI = z.object({
+    message_limit: z
+      .union([z.number().int().positive(), z.literal("none")])
+      .optional()
+      .describe("Maximum number of messages to render in TUI to prevent lag on long sessions. Use 'none' for unlimited."),
+    scroll_speed: z.number().min(0.001).optional().describe("TUI scroll speed"),
+    scroll_acceleration: z
+      .object({
+        enabled: z.boolean().describe("Enable scroll acceleration"),
+      })
+      .optional()
+      .describe("Scroll acceleration settings"),
+    diff_style: z
+      .enum(["auto", "stacked"])
+      .optional()
+      .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+  })
+  export type TUI = z.infer<typeof TUI>
   export const Server = z
     .object({
       port: z.number().int().positive().optional().describe("Port to listen on"),

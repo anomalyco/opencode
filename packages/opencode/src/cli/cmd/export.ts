@@ -77,8 +77,15 @@ export const ExportCommand = cmd({
           })),
         }
 
-        process.stdout.write(JSON.stringify(exportData, null, 2))
-        process.stdout.write(EOL)
+        const json = JSON.stringify(exportData, null, 2) + EOL
+        
+        // Wait for stdout to finish writing before process.exit() is called in the bootstrap finally block
+        await new Promise<void>((resolve, reject) => {
+          process.stdout.write(json, (err) => {
+            if (err) reject(err)
+            else resolve()
+          })
+        })
       } catch (error) {
         UI.error(`Session not found: ${sessionID!}`)
         process.exit(1)

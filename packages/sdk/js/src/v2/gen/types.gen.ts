@@ -1309,6 +1309,32 @@ export type Config = {
    */
   $schema?: string
   logLevel?: LogLevel
+  /**
+   * TUI specific settings
+   */
+  tui?: {
+    /**
+     * Maximum number of messages to render in TUI to prevent lag on long sessions. Use 'none' for unlimited.
+     */
+    message_limit?: number | "none"
+    /**
+     * TUI scroll speed
+     */
+    scroll_speed?: number
+    /**
+     * Scroll acceleration settings
+     */
+    scroll_acceleration?: {
+      /**
+       * Enable scroll acceleration
+       */
+      enabled: boolean
+    }
+    /**
+     * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
+     */
+    diff_style?: "auto" | "stacked"
+  }
   server?: ServerConfig
   /**
    * Command configuration, see https://opencode.ai/docs/commands

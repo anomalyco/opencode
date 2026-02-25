@@ -128,7 +128,12 @@ export function Session() {
       .filter((x) => x.parentID === parentID || x.id === parentID)
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
-  const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  const messages = createMemo(() => {
+    const msgs = sync.data.message[route.sessionID] ?? []
+    const limit = sync.data.config.tui?.message_limit
+    if (!limit || limit === "none") return msgs
+    return msgs.slice(-limit)
+  })
   const permissions = createMemo(() => {
     if (session()?.parentID) return []
     return children().flatMap((x) => sync.data.permission[x.id] ?? [])
