@@ -47,6 +47,110 @@ export namespace SessionCompaction {
     return count >= usable
   }
 
+  /**
+   * Check if a background checkpoint should start (double-buffer phase 1).
+   * Called after each LLM response to capture a high-quality early summary.
+   */
+  export async function checkpointIfNeeded(input: {
+    sessionID: string
+    tokens: MessageV2.Assistant["tokens"]
+    model: Provider.Model
+    messages: MessageV2.WithParts[]
+    parentID: string
+    abort: AbortSignal
+  }): Promise<void> {
+    const { DoubleBuffer } = await import("./double-buffer")
+    const should = await DoubleBuffer.shouldCheckpoint({
+      sessionID: input.sessionID,
+      tokens: input.tokens,
+      model: input.model,
+    })
+    if (!should) return
+
+    const messageCount = input.messages.length
+    DoubleBuffer.beginCheckpoint(input.sessionID, messageCount)
+
+    // Fire and forget: run compaction in background
+    // The summary will be stored in double-buffer state for later swap
+    process({
+      parentID: input.parentID,
+      messages: input.messages,
+      sessionID: input.sessionID,
+      abort: input.abort,
+      auto: true,
+    })
+      .then((result) => {
+        // Extract the summary from the last assistant message
+        // The compaction process creates a summary message
+        if (result === "continue") {
+          Session.messages({ sessionID: input.sessionID })
+            .then((msgs) => {
+              const lastAssistant = msgs.findLast(
+                (m) => m.info.role === "assistant" && (m.info as any).summary === true,
+              )
+              if (lastAssistant) {
+                const textPart = lastAssistant.parts.find((p) => p.type === "text")
+                if (textPart && textPart.type === "text" && textPart.text) {
+                  DoubleBuffer.finishCheckpoint(input.sessionID, textPart.text)
+                } else {
+                  log.warn("checkpoint produced no text summary", { sessionID: input.sessionID })
+                  DoubleBuffer.getState(input.sessionID).phase = "normal"
+                }
+              } else {
+                log.warn("checkpoint produced no assistant summary message", { sessionID: input.sessionID })
+                DoubleBuffer.getState(input.sessionID).phase = "normal"
+              }
+            })
+            .catch((err) => {
+              log.error("failed to read checkpoint summary", { sessionID: input.sessionID, error: err })
+              DoubleBuffer.getState(input.sessionID).phase = "normal"
+            })
+        } else {
+          log.warn("checkpoint compaction returned stop", { sessionID: input.sessionID })
+          DoubleBuffer.getState(input.sessionID).phase = "normal"
+        }
+      })
+      .catch((err) => {
+        log.error("background checkpoint failed", { sessionID: input.sessionID, error: err })
+        DoubleBuffer.getState(input.sessionID).phase = "normal"
+      })
+  }
+
+  /**
+   * Check if we should swap to the pre-computed checkpoint (double-buffer phase 3).
+   * Returns true if a swap should occur, in which case the caller should use
+   * the checkpoint summary instead of doing stop-the-world compaction.
+   */
+  export async function shouldSwapBuffer(input: {
+    sessionID: string
+    tokens: MessageV2.Assistant["tokens"]
+    model: Provider.Model
+  }): Promise<boolean> {
+    const { DoubleBuffer } = await import("./double-buffer")
+    return DoubleBuffer.shouldSwap({
+      sessionID: input.sessionID,
+      tokens: input.tokens,
+      model: input.model,
+    })
+  }
+
+  /**
+   * Get the pre-computed checkpoint summary for a swap.
+   */
+  export function getCheckpointSummary(sessionID: string): string | null {
+    // Dynamic import to avoid circular deps
+    const { DoubleBuffer } = require("./double-buffer")
+    return DoubleBuffer.getState(sessionID).checkpointSummary
+  }
+
+  /**
+   * Mark swap as complete.
+   */
+  export function completeSwap(sessionID: string): void {
+    const { DoubleBuffer } = require("./double-buffer")
+    DoubleBuffer.completeSwap(sessionID)
+  }
+
   export const PRUNE_MINIMUM = 20_000
   export const PRUNE_PROTECT = 40_000
 

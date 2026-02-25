@@ -1143,6 +1143,18 @@ export namespace Config {
             .min(0)
             .optional()
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
+          checkpointThreshold: z
+            .number()
+            .min(0)
+            .max(1)
+            .optional()
+            .describe("Fraction of context capacity to trigger background checkpoint (default: 0.50)"),
+          swapThreshold: z
+            .number()
+            .min(0)
+            .max(1)
+            .optional()
+            .describe("Fraction of context capacity to trigger buffer swap (default: 0.75)"),
         })
         .optional(),
       experimental: z

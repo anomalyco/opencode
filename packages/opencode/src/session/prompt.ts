@@ -538,7 +538,28 @@ export namespace SessionPrompt {
         continue
       }
 
-      // context overflow, needs compaction
+      // Double-buffer swap: use pre-computed checkpoint if available
+      if (
+        lastFinished &&
+        lastFinished.summary !== true &&
+        (await SessionCompaction.shouldSwapBuffer({ sessionID, tokens: lastFinished.tokens, model }))
+      ) {
+        const summary = SessionCompaction.getCheckpointSummary(sessionID)
+        if (summary) {
+          log.info("double-buffer swap: using pre-computed checkpoint", { sessionID })
+          // Create the compaction using the pre-computed summary directly
+          await SessionCompaction.create({
+            sessionID,
+            agent: lastUser.agent,
+            model: lastUser.model,
+            auto: true,
+          })
+          SessionCompaction.completeSwap(sessionID)
+          continue
+        }
+      }
+
+      // Fallback: standard overflow -> stop-the-world compaction
       if (
         lastFinished &&
         lastFinished.summary !== true &&
@@ -701,6 +722,20 @@ export namespace SessionPrompt {
       }
 
       if (result === "stop") break
+
+      // Double-buffer: trigger background checkpoint if at threshold
+      if (result === "continue" && lastFinished) {
+        // Don't await - this runs in the background
+        SessionCompaction.checkpointIfNeeded({
+          sessionID,
+          tokens: processor.message.tokens,
+          model,
+          messages: msgs,
+          parentID: lastUser.id,
+          abort,
+        })
+      }
+
       if (result === "compact") {
         await SessionCompaction.create({
           sessionID,
