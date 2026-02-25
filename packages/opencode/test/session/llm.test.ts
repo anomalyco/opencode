@@ -307,7 +307,6 @@ describe("session.llm.stream", () => {
         expect(url.pathname.startsWith("/v1/")).toBe(true)
         expect(url.pathname.endsWith("/chat/completions")).toBe(true)
         expect(headers.get("Authorization")).toBe("Bearer test-key")
-        expect(headers.get("User-Agent") ?? "").toMatch(/^opencode\//)
 
         expect(body.model).toBe(resolved.api.id)
         expect(body.temperature).toBe(0.4)

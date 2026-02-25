@@ -10,8 +10,10 @@ import { Flag } from "../flag/flag"
 import { Identifier } from "../id/id"
 import { Installation } from "../installation"
 
-import { Database, NotFoundError, eq, and, or, gte, isNull, desc, like } from "../storage/db"
+import { Database, NotFoundError, eq, and, or, gte, isNull, desc, like, inArray, lt } from "../storage/db"
+import type { SQL } from "../storage/db"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
+import { ProjectTable } from "../project/project.sql"
 import { Storage } from "@/storage/storage"
 import { Log } from "../util/log"
 import { MessageV2 } from "./message-v2"
@@ -153,6 +155,24 @@ export namespace Session {
       ref: "Session",
     })
   export type Info = z.output<typeof Info>
+
+  export const ProjectInfo = z
+    .object({
+      id: z.string(),
+      name: z.string().optional(),
+      worktree: z.string(),
+    })
+    .meta({
+      ref: "ProjectSummary",
+    })
+  export type ProjectInfo = z.output<typeof ProjectInfo>
+
+  export const GlobalInfo = Info.extend({
+    project: ProjectInfo.nullable(),
+  }).meta({
+    ref: "GlobalSession",
+  })
+  export type GlobalInfo = z.output<typeof GlobalInfo>
 
   export const Event = {
     Created: BusEvent.define(
@@ -544,6 +564,75 @@ export namespace Session {
     }
   }
 
+  export function* listGlobal(input?: {
+    directory?: string
+    roots?: boolean
+    start?: number
+    cursor?: number
+    search?: string
+    limit?: number
+    archived?: boolean
+  }) {
+    const conditions: SQL[] = []
+
+    if (input?.directory) {
+      conditions.push(eq(SessionTable.directory, input.directory))
+    }
+    if (input?.roots) {
+      conditions.push(isNull(SessionTable.parent_id))
+    }
+    if (input?.start) {
+      conditions.push(gte(SessionTable.time_updated, input.start))
+    }
+    if (input?.cursor) {
+      conditions.push(lt(SessionTable.time_updated, input.cursor))
+    }
+    if (input?.search) {
+      conditions.push(like(SessionTable.title, `%${input.search}%`))
+    }
+    if (!input?.archived) {
+      conditions.push(isNull(SessionTable.time_archived))
+    }
+
+    const limit = input?.limit ?? 100
+
+    const rows = Database.use((db) => {
+      const query =
+        conditions.length > 0
+          ? db
+              .select()
+              .from(SessionTable)
+              .where(and(...conditions))
+          : db.select().from(SessionTable)
+      return query.orderBy(desc(SessionTable.time_updated), desc(SessionTable.id)).limit(limit).all()
+    })
+
+    const ids = [...new Set(rows.map((row) => row.project_id))]
+    const projects = new Map<string, ProjectInfo>()
+
+    if (ids.length > 0) {
+      const items = Database.use((db) =>
+        db
+          .select({ id: ProjectTable.id, name: ProjectTable.name, worktree: ProjectTable.worktree })
+          .from(ProjectTable)
+          .where(inArray(ProjectTable.id, ids))
+          .all(),
+      )
+      for (const item of items) {
+        projects.set(item.id, {
+          id: item.id,
+          name: item.name ?? undefined,
+          worktree: item.worktree,
+        })
+      }
+    }
+
+    for (const row of rows) {
+      const project = projects.get(row.project_id) ?? null
+      yield { ...fromRow(row), project }
+    }
+  }
+
   export const children = fn(Identifier.schema("session"), async (parentID) => {
     const project = Instance.project
     const rows = Database.use((db) =>
@@ -608,7 +697,9 @@ export namespace Session {
     async (input) => {
       // CASCADE delete handles parts automatically
       Database.use((db) => {
-        db.delete(MessageTable).where(eq(MessageTable.id, input.messageID)).run()
+        db.delete(MessageTable)
+          .where(and(eq(MessageTable.id, input.messageID), eq(MessageTable.session_id, input.sessionID)))
+          .run()
         Database.effect(() =>
           Bus.publish(MessageV2.Event.Removed, {
             sessionID: input.sessionID,
@@ -628,7 +719,9 @@ export namespace Session {
     }),
     async (input) => {
       Database.use((db) => {
-        db.delete(PartTable).where(eq(PartTable.id, input.partID)).run()
+        db.delete(PartTable)
+          .where(and(eq(PartTable.id, input.partID), eq(PartTable.session_id, input.sessionID)))
+          .run()
         Database.effect(() =>
           Bus.publish(MessageV2.Event.PartRemoved, {
             sessionID: input.sessionID,

@@ -103,7 +103,7 @@ export const dict = {
   "dialog.provider.tag.recommended": "Anbefalt",
   "dialog.provider.opencode.note": "Utvalgte modeller inkludert Claude, GPT, Gemini og mer",
   "dialog.provider.anthropic.note": "Direkte tilgang til Claude-modeller, inkludert Pro og Max",
-  "dialog.provider.copilot.note": "Claude-modeller for kodeassistanse",
+  "dialog.provider.copilot.note": "AI-modeller for kodeassistanse via GitHub Copilot",
   "dialog.provider.openai.note": "GPT-modeller for raske, dyktige generelle AI-oppgaver",
   "dialog.provider.google.note": "Gemini-modeller for raske, strukturerte svar",
   "dialog.provider.openrouter.note": "Tilgang til alle støttede modeller fra én leverandør",
@@ -602,6 +602,7 @@ export const dict = {
   "settings.general.section.notifications": "Systemvarsler",
   "settings.general.section.updates": "Oppdateringer",
   "settings.general.section.sounds": "Lydeffekter",
+  "settings.general.section.feed": "Feed",
   "settings.general.section.display": "Skjerm",
 
   "settings.general.row.language.title": "Språk",
@@ -613,6 +614,11 @@ export const dict = {
   "settings.general.row.font.title": "Skrift",
   "settings.general.row.font.description": "Tilpass mono-skriften som brukes i kodeblokker",
 
+  "settings.general.row.shellToolPartsExpanded.title": "Utvid shell-verktøydeler",
+  "settings.general.row.shellToolPartsExpanded.description": "Vis shell-verktøydeler utvidet som standard i tidslinjen",
+  "settings.general.row.editToolPartsExpanded.title": "Utvid edit-verktøydeler",
+  "settings.general.row.editToolPartsExpanded.description":
+    "Vis edit-, write- og patch-verktøydeler utvidet som standard i tidslinjen",
   "settings.general.row.wayland.title": "Bruk innebygd Wayland",
   "settings.general.row.wayland.description": "Deaktiver X11-fallback på Wayland. Krever omstart.",
   "settings.general.row.wayland.tooltip":
@@ -642,6 +648,7 @@ export const dict = {
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
   "font.option.geistMono": "Geist Mono",
+  "sound.option.none": "Ingen",
   "sound.option.alert01": "Varsel 01",
   "sound.option.alert02": "Varsel 02",
   "sound.option.alert03": "Varsel 03",

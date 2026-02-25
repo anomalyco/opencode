@@ -10,8 +10,14 @@
     display: none;
   }
 
+  .scroll-view__viewport {
+    display: flex;
+    flex-direction: column;
+  }
+
   [data-slot="session-review-container"] {
     flex: 1 1 auto;
+    padding-right: 4px;
   }
 
   [data-slot="session-review-header"] {
@@ -40,7 +46,6 @@
     display: flex;
     align-items: center;
     column-gap: 12px;
-    padding-right: 1px;
   }
 
   [data-slot="session-review-actions"] [data-component="radio-group"] {

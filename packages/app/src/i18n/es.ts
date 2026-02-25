@@ -100,7 +100,7 @@ export const dict = {
   "dialog.provider.tag.recommended": "Recomendado",
   "dialog.provider.opencode.note": "Modelos seleccionados incluyendo Claude, GPT, Gemini y más",
   "dialog.provider.anthropic.note": "Acceso directo a modelos Claude, incluyendo Pro y Max",
-  "dialog.provider.copilot.note": "Modelos Claude para asistencia de codificación",
+  "dialog.provider.copilot.note": "Modelos de IA para asistencia de codificación a través de GitHub Copilot",
   "dialog.provider.openai.note": "Modelos GPT para tareas de IA generales rápidas y capaces",
   "dialog.provider.google.note": "Modelos Gemini para respuestas rápidas y estructuradas",
   "dialog.provider.openrouter.note": "Accede a todos los modelos soportados desde un solo proveedor",
@@ -602,6 +602,7 @@ export const dict = {
   "settings.general.section.notifications": "Notificaciones del sistema",
   "settings.general.section.updates": "Actualizaciones",
   "settings.general.section.sounds": "Efectos de sonido",
+  "settings.general.section.feed": "Feed",
   "settings.general.section.display": "Pantalla",
 
   "settings.general.row.language.title": "Idioma",
@@ -613,6 +614,12 @@ export const dict = {
   "settings.general.row.font.title": "Fuente",
   "settings.general.row.font.description": "Personaliza la fuente monoespaciada usada en bloques de código",
 
+  "settings.general.row.shellToolPartsExpanded.title": "Expandir partes de la herramienta shell",
+  "settings.general.row.shellToolPartsExpanded.description":
+    "Mostrar las partes de la herramienta shell expandidas por defecto en la línea de tiempo",
+  "settings.general.row.editToolPartsExpanded.title": "Expandir partes de la herramienta de edición",
+  "settings.general.row.editToolPartsExpanded.description":
+    "Mostrar las partes de las herramientas de edición, escritura y parcheado expandidas por defecto en la línea de tiempo",
   "settings.general.row.wayland.title": "Usar Wayland nativo",
   "settings.general.row.wayland.description": "Deshabilitar fallback a X11 en Wayland. Requiere reinicio.",
   "settings.general.row.wayland.tooltip":
@@ -643,6 +650,7 @@ export const dict = {
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
   "font.option.geistMono": "Geist Mono",
+  "sound.option.none": "Ninguno",
   "sound.option.alert01": "Alerta 01",
   "sound.option.alert02": "Alerta 02",
   "sound.option.alert03": "Alerta 03",

@@ -2,6 +2,7 @@
 
 import { $ } from "bun"
 import { Script } from "@opencode-ai/script"
+import { fileURLToPath } from "url"
 
 const highlightsTemplate = `
 <!--
@@ -46,7 +47,7 @@ for (const file of pkgjsons) {
   await Bun.file(file).write(pkg)
 }
 
-const extensionToml = new URL("../packages/extensions/zed/extension.toml", import.meta.url).pathname
+const extensionToml = fileURLToPath(new URL("../packages/extensions/zed/extension.toml", import.meta.url))
 let toml = await Bun.file(extensionToml).text()
 toml = toml.replace(/^version = "[^"]+"/m, `version = "${Script.version}"`)
 toml = toml.replaceAll(/releases\/download\/v[^/]+\//g, `releases/download/v${Script.version}/`)
@@ -57,13 +58,16 @@ await $`bun install`
 await import(`../packages/sdk/js/script/build.ts`)
 
 if (Script.release) {
-  await $`git commit -am "release: v${Script.version}"`
-  await $`git tag v${Script.version}`
-  await $`git fetch origin`
-  await $`git cherry-pick HEAD..origin/dev`.nothrow()
-  await $`git push origin HEAD --tags --no-verify --force-with-lease`
-  await new Promise((resolve) => setTimeout(resolve, 5_000))
-  await $`gh release edit v${Script.version} --draft=false`
+  if (!Script.preview) {
+    await $`git commit -am "release: v${Script.version}"`
+    await $`git tag v${Script.version}`
+    await $`git fetch origin`
+    await $`git cherry-pick HEAD..origin/dev`.nothrow()
+    await $`git push origin HEAD --tags --no-verify --force-with-lease`
+    await new Promise((resolve) => setTimeout(resolve, 5_000))
+  }
+
+  await $`gh release edit v${Script.version} --draft=false --repo ${process.env.GH_REPO}`
 }
 
 console.log("\n=== cli ===\n")
@@ -75,5 +79,5 @@ await import(`../packages/sdk/js/script/publish.ts`)
 console.log("\n=== plugin ===\n")
 await import(`../packages/plugin/script/publish.ts`)
 
-const dir = new URL("..", import.meta.url).pathname
+const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)

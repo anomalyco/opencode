@@ -26,13 +26,16 @@
     [data-slot="collapsible-arrow"] {
       opacity: 0;
       transition: opacity 0.15s ease;
+      will-change: opacity;
+      transform: translateZ(0);
     }
 
     [data-slot="collapsible-arrow-icon"] {
       display: inline-flex;
       color: var(--icon-weaker);
-      transform: rotate(-90deg);
+      transform: translateZ(0) rotate(-90deg);
       transition: transform 0.15s ease;
+      will-change: transform;
     }
 
     &:hover [data-slot="collapsible-arrow"] {
@@ -74,7 +77,7 @@
     }
 
     [data-slot="collapsible-arrow-icon"] {
-      transform: rotate(0deg);
+      transform: translateZ(0) rotate(0deg);
     }
   }
 

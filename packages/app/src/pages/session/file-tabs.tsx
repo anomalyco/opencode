@@ -9,6 +9,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { LineComment as LineCommentView, LineCommentEditor } from "@opencode-ai/ui/line-comment"
 import { Mark } from "@opencode-ai/ui/logo"
 import { Tabs } from "@opencode-ai/ui/tabs"
+import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { useLayout } from "@/context/layout"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { useComments } from "@/context/comments"
@@ -370,6 +371,12 @@ export function FileTabContent(props: { tab: string }) {
     })
   }
 
+  const cancelCommenting = () => {
+    const p = path()
+    if (p) file.setSelectedLines(p, null)
+    setNote("commenting", null)
+  }
+
   createEffect(
     on(
       () => state()?.loaded,
@@ -483,7 +490,7 @@ export function FileTabContent(props: { tab: string }) {
               value={note.draft}
               selection={formatCommentLabel(range())}
               onInput={(value) => setNote("draft", value)}
-              onCancel={() => setCommenting(null)}
+              onCancel={cancelCommenting}
               onSubmit={(value) => {
                 const p = path()
                 if (!p) return
@@ -497,7 +504,7 @@ export function FileTabContent(props: { tab: string }) {
 
                 setTimeout(() => {
                   if (!document.activeElement || !current.contains(document.activeElement)) {
-                    setCommenting(null)
+                    cancelCommenting()
                   }
                 }, 0)
               }}
@@ -509,51 +516,52 @@ export function FileTabContent(props: { tab: string }) {
   )
 
   return (
-    <Tabs.Content
-      value={props.tab}
-      class="mt-3 relative"
-      ref={(el: HTMLDivElement) => {
-        scroll = el
-        restoreScroll()
-      }}
-      onScroll={handleScroll}
-    >
-      <Switch>
-        <Match when={state()?.loaded && isImage()}>
-          <div class="px-6 py-4 pb-40">
-            <img
-              src={imageDataUrl()}
-              alt={path()}
-              class="max-w-full"
-              onLoad={() => requestAnimationFrame(restoreScroll)}
-            />
-          </div>
-        </Match>
-        <Match when={state()?.loaded && isSvg()}>
-          <div class="flex flex-col gap-4 px-6 py-4">
-            {renderCode(svgContent() ?? "", "")}
-            <Show when={svgPreviewUrl()}>
-              <div class="flex justify-center pb-40">
-                <img src={svgPreviewUrl()} alt={path()} class="max-w-full max-h-96" />
-              </div>
-            </Show>
-          </div>
-        </Match>
-        <Match when={state()?.loaded && isBinary()}>
-          <div class="h-full px-6 pb-42 flex flex-col items-center justify-center text-center gap-6">
-            <Mark class="w-14 opacity-10" />
-            <div class="flex flex-col gap-2 max-w-md">
-              <div class="text-14-semibold text-text-strong truncate">{path()?.split("/").pop()}</div>
-              <div class="text-14-regular text-text-weak">{language.t("session.files.binaryContent")}</div>
+    <Tabs.Content value={props.tab} class="mt-3 relative h-full">
+      <ScrollView
+        class="h-full"
+        viewportRef={(el: HTMLDivElement) => {
+          scroll = el
+          restoreScroll()
+        }}
+        onScroll={handleScroll as any}
+      >
+        <Switch>
+          <Match when={state()?.loaded && isImage()}>
+            <div class="px-6 py-4 pb-40">
+              <img
+                src={imageDataUrl()}
+                alt={path()}
+                class="max-w-full"
+                onLoad={() => requestAnimationFrame(restoreScroll)}
+              />
             </div>
-          </div>
-        </Match>
-        <Match when={state()?.loaded}>{renderCode(contents(), "pb-40")}</Match>
-        <Match when={state()?.loading}>
-          <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
-        </Match>
-        <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
-      </Switch>
+          </Match>
+          <Match when={state()?.loaded && isSvg()}>
+            <div class="flex flex-col gap-4 px-6 py-4">
+              {renderCode(svgContent() ?? "", "")}
+              <Show when={svgPreviewUrl()}>
+                <div class="flex justify-center pb-40">
+                  <img src={svgPreviewUrl()} alt={path()} class="max-w-full max-h-96" />
+                </div>
+              </Show>
+            </div>
+          </Match>
+          <Match when={state()?.loaded && isBinary()}>
+            <div class="h-full px-6 pb-42 flex flex-col items-center justify-center text-center gap-6">
+              <Mark class="w-14 opacity-10" />
+              <div class="flex flex-col gap-2 max-w-md">
+                <div class="text-14-semibold text-text-strong truncate">{path()?.split("/").pop()}</div>
+                <div class="text-14-regular text-text-weak">{language.t("session.files.binaryContent")}</div>
+              </div>
+            </div>
+          </Match>
+          <Match when={state()?.loaded}>{renderCode(contents(), "pb-40")}</Match>
+          <Match when={state()?.loading}>
+            <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
+          </Match>
+          <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
+        </Switch>
+      </ScrollView>
     </Tabs.Content>
   )
 }
