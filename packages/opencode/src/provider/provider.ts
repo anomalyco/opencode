@@ -588,6 +588,23 @@ export namespace Provider {
         },
       }
     },
+    "bailian-coding-plan": async (input) => {
+      const hasKey = await (async () => {
+        const env = Env.all()
+        if (input.env.some((item) => env[item])) return true
+        if (await Auth.get(input.id)) return true
+        const config = await Config.get()
+        if (config.provider?.["bailian-coding-plan"]?.options?.apiKey) return true
+        return false
+      })()
+
+      return {
+        autoload: hasKey,
+        options: {
+          baseURL: "https://coding.dashscope.aliyuncs.com/apps/anthropic/v1",
+        },
+      }
+    },
   }
 
   export const Model = z

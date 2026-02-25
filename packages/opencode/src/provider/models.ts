@@ -98,9 +98,158 @@ export namespace ModelsDev {
     return JSON.parse(json)
   })
 
+  export const BUILTIN_PROVIDERS: Record<string, Provider> = {
+    "bailian-coding-plan": {
+      id: "bailian-coding-plan",
+      env: ["BAILIAN_CODING_PLAN_API_KEY"],
+      npm: "@ai-sdk/anthropic",
+      api: "https://coding.dashscope.aliyuncs.com/apps/anthropic/v1",
+      name: "Model Studio Coding Plan",
+      models: {
+        "qwen3.5-plus": {
+          id: "qwen3.5-plus",
+          name: "Qwen3.5 Plus",
+          family: "qwen",
+          attachment: true,
+          reasoning: true,
+          tool_call: true,
+          temperature: true,
+          release_date: "2024-09-01",
+          modalities: { input: ["text", "image"], output: ["text"] },
+          cost: { input: 0, output: 0 },
+          limit: { context: 131072, output: 8192 },
+          options: {
+            thinking: {
+              type: "enabled",
+              budgetTokens: 1024,
+            },
+          },
+        },
+        "qwen3-max-2026-01-23": {
+          id: "qwen3-max-2026-01-23",
+          name: "Qwen3 Max 2026-01-23",
+          family: "qwen",
+          attachment: true,
+          reasoning: false,
+          tool_call: true,
+          temperature: true,
+          release_date: "2026-01-23",
+          modalities: { input: ["text", "image"], output: ["text"] },
+          cost: { input: 0, output: 0 },
+          limit: { context: 131072, output: 8192 },
+          options: {},
+        },
+        "qwen3-coder-next": {
+          id: "qwen3-coder-next",
+          name: "Qwen3 Coder Next",
+          family: "qwen",
+          attachment: true,
+          reasoning: false,
+          tool_call: true,
+          temperature: true,
+          release_date: "2025-01-01",
+          modalities: { input: ["text", "image"], output: ["text"] },
+          cost: { input: 0, output: 0 },
+          limit: { context: 131072, output: 8192 },
+          options: {},
+        },
+        "qwen3-coder-plus": {
+          id: "qwen3-coder-plus",
+          name: "Qwen3 Coder Plus",
+          family: "qwen",
+          attachment: true,
+          reasoning: false,
+          tool_call: true,
+          temperature: true,
+          release_date: "2025-01-01",
+          modalities: { input: ["text", "image"], output: ["text"] },
+          cost: { input: 0, output: 0 },
+          limit: { context: 131072, output: 8192 },
+          options: {},
+        },
+        "MiniMax-M2.5": {
+          id: "MiniMax-M2.5",
+          name: "MiniMax M2.5",
+          family: "minimax",
+          attachment: true,
+          reasoning: true,
+          tool_call: true,
+          temperature: true,
+          release_date: "2025-01-01",
+          modalities: { input: ["text", "image"], output: ["text"] },
+          cost: { input: 0, output: 0 },
+          limit: { context: 131072, output: 8192 },
+          options: {
+            thinking: {
+              type: "enabled",
+              budgetTokens: 1024,
+            },
+          },
+        },
+        "glm-5": {
+          id: "glm-5",
+          name: "GLM-5",
+          family: "glm",
+          attachment: true,
+          reasoning: true,
+          tool_call: true,
+          temperature: true,
+          release_date: "2025-01-01",
+          modalities: { input: ["text", "image"], output: ["text"] },
+          cost: { input: 0, output: 0 },
+          limit: { context: 131072, output: 8192 },
+          options: {
+            thinking: {
+              type: "enabled",
+              budgetTokens: 1024,
+            },
+          },
+        },
+        "glm-4.7": {
+          id: "glm-4.7",
+          name: "GLM-4.7",
+          family: "glm",
+          attachment: true,
+          reasoning: true,
+          tool_call: true,
+          temperature: true,
+          release_date: "2025-01-01",
+          modalities: { input: ["text", "image"], output: ["text"] },
+          cost: { input: 0, output: 0 },
+          limit: { context: 131072, output: 8192 },
+          options: {
+            thinking: {
+              type: "enabled",
+              budgetTokens: 1024,
+            },
+          },
+        },
+        "kimi-k2.5": {
+          id: "kimi-k2.5",
+          name: "Kimi K2.5",
+          family: "kimi",
+          attachment: true,
+          reasoning: true,
+          tool_call: true,
+          temperature: true,
+          release_date: "2025-01-01",
+          modalities: { input: ["text", "image"], output: ["text"] },
+          cost: { input: 0, output: 0 },
+          limit: { context: 131072, output: 8192 },
+          options: {
+            thinking: {
+              type: "enabled",
+              budgetTokens: 1024,
+            },
+          },
+        },
+      },
+    },
+  }
+
   export async function get() {
     const result = await Data()
-    return result as Record<string, Provider>
+    return { ...result, ...BUILTIN_PROVIDERS } as Record<string, Provider>
   }
 
   export async function refresh() {
