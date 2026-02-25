@@ -49,9 +49,11 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     let queue: Queued[] = []
     let buffer: Queued[] = []
     const coalesced = new Map<string, number>()
-    const voided = new Set<number>()
+    const staleDeltas = new Set<string>()
     let timer: ReturnType<typeof setTimeout> | undefined
     let last = 0
+
+    const deltaKey = (directory: string, messageID: string, partID: string) => `${directory}:${messageID}:${partID}`
 
     const key = (directory: string, payload: Event) => {
       if (payload.type === "session.status") return `session.status:${directory}:${payload.properties.sessionID}`
@@ -62,19 +64,6 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       }
     }
 
-    const voidStaleDeltasForPart = (messageID: string, partID: string) => {
-      for (let i = 0; i < queue.length; i++) {
-        const entry = queue[i]
-        if (
-          entry.payload.type === "message.part.delta" &&
-          (entry.payload.properties as { messageID: string; partID: string }).messageID === messageID &&
-          (entry.payload.properties as { messageID: string; partID: string }).partID === partID
-        ) {
-          voided.add(i)
-        }
-      }
-    }
-
     const flush = () => {
       if (timer) clearTimeout(timer)
       timer = undefined
@@ -82,20 +71,24 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       if (queue.length === 0) return
 
       const events = queue
+      const skip = staleDeltas.size > 0 ? new Set(staleDeltas) : undefined
       queue = buffer
       buffer = events
       queue.length = 0
       coalesced.clear()
+      staleDeltas.clear()
 
       last = Date.now()
       batch(() => {
-        for (let i = 0; i < events.length; i++) {
-          if (voided.has(i)) continue
-          emitter.emit(events[i].directory, events[i].payload)
+        for (const event of events) {
+          if (skip && event.payload.type === "message.part.delta") {
+            const props = event.payload.properties
+            if (skip.has(deltaKey(event.directory, props.messageID, props.partID))) continue
+          }
+          emitter.emit(event.directory, event.payload)
         }
       })
 
-      voided.clear()
       buffer.length = 0
     }
 
@@ -161,8 +154,8 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
               if (i !== undefined) {
                 queue[i] = { directory, payload }
                 if (payload.type === "message.part.updated") {
-                  const part = (payload.properties as { part: { messageID: string; id: string } }).part
-                  voidStaleDeltasForPart(part.messageID, part.id)
+                  const part = payload.properties.part
+                  staleDeltas.add(deltaKey(directory, part.messageID, part.id))
                 }
                 continue
               }
