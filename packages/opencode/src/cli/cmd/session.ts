@@ -6,6 +6,7 @@ import { UI } from "../ui"
 import { Locale } from "../../util/locale"
 import { Flag } from "../../flag/flag"
 import { Filesystem } from "../../util/filesystem"
+import { Process } from "../../util/process"
 import { EOL } from "os"
 import path from "path"
 
@@ -102,12 +103,16 @@ export const SessionListCommand = cmd({
       const shouldPaginate = process.stdout.isTTY && !args.maxCount && args.format === "table"
 
       if (shouldPaginate) {
-        const proc = Bun.spawn({
-          cmd: pagerCmd(),
+        const proc = Process.spawn(pagerCmd(), {
           stdin: "pipe",
           stdout: "inherit",
           stderr: "inherit",
         })
+
+        if (!proc.stdin) {
+          console.log(output)
+          return
+        }
 
         proc.stdin.write(output)
         proc.stdin.end()
