@@ -9,8 +9,6 @@ import { findLast } from "@opencode-ai/util/array"
 import { same } from "@/utils/same"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Button } from "@opencode-ai/ui/button"
-import { Select } from "@opencode-ai/ui/select"
-import { showToast } from "@opencode-ai/ui/toast"
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { Code } from "@opencode-ai/ui/code"
@@ -287,54 +285,8 @@ export function SessionContextTab() {
           {(c) => {
             const sdk = useSDK()
             const [compacting, setCompacting] = createSignal(false)
-            const [stripping, setStripping] = createSignal(false)
-            const [strategy, setStrategy] = createSignal<"none" | "strip" | "compact">("none")
             const usage = () => c().usage ?? 0
             const color = () => usage() > 80 ? "var(--syntax-error)" : usage() > 60 ? "var(--syntax-warning)" : "var(--syntax-success)"
-
-            // Load current strategy from backend
-            sdk.client.config.get().then((res) => {
-              const val = (res.data as any)?.compaction?.thinking_strategy
-              if (val === "none" || val === "strip" || val === "compact") setStrategy(val)
-            }).catch(() => {})
-
-            const strategyOptions = [
-              { value: "none" as const, label: "None (default)" },
-              { value: "strip" as const, label: "Strip thinking" },
-              { value: "compact" as const, label: "Compact on error" },
-            ]
-
-            const updateStrategy = (value: "none" | "strip" | "compact") => {
-              setStrategy(value)
-              sdk.client.config
-                .update({ config: { compaction: { thinking_strategy: value } } as any })
-                .then(() => showToast({
-                  variant: "success",
-                  title: "Strategy updated",
-                  description: value === "strip"
-                    ? "Thinking blocks stripped before sending"
-                    : "Thinking preserved, auto-compact on error",
-                }))
-                .catch((err) => {
-                  setStrategy(strategy() === "strip" ? "compact" : "strip")
-                  showToast({ title: "Failed", description: err instanceof Error ? err.message : String(err) })
-                })
-            }
-
-            // Detect if the last assistant message has a thinking block error
-            const thinkingError = createMemo(() => {
-              const all = messages()
-              for (let i = all.length - 1; i >= 0; i--) {
-                const msg = all[i]
-                if (msg.role !== "assistant") continue
-                const err = (msg as any).error
-                if (!err || err.name === "MessageAbortedError") continue
-                const text = (err.data?.message ?? "").toLowerCase()
-                if (text.includes("thinking") && text.includes("cannot be modified")) return true
-                break
-              }
-              return false
-            })
 
             const compact = async () => {
               if (!params.id || compacting()) return
@@ -352,23 +304,6 @@ export function SessionContextTab() {
               }
             }
 
-            const stripAndCompact = async () => {
-              if (!params.id || stripping()) return
-              setStripping(true)
-              try {
-                await sdk.client.config.update({ config: { compaction: { thinking_strategy: "strip" } } as any })
-                const last = visibleUserMessages().at(-1)
-                await sdk.client.session.summarize({
-                  sessionID: params.id,
-                  directory: sdk.directory,
-                  providerID: last?.model?.providerID,
-                  modelID: last?.model?.modelID,
-                })
-              } finally {
-                setStripping(false)
-              }
-            }
-
             return (
               <div class="flex flex-col gap-3 p-4 rounded-lg bg-surface-raised-base border border-border-weak-base">
                 <div class="flex items-center justify-between">
@@ -383,16 +318,14 @@ export function SessionContextTab() {
                       </span>
                     </div>
                   </div>
-                  <div class="flex items-center gap-2">
-                    <Button
-                      size="small"
-                      variant={usage() > 70 ? "primary" : "secondary"}
-                      disabled={compacting() || stripping() || visibleUserMessages().length === 0}
-                      onClick={compact}
-                    >
-                      {compacting() ? language.t("command.session.compact") + "..." : language.t("command.session.compact")}
-                    </Button>
-                  </div>
+                  <Button
+                    size="small"
+                    variant={usage() > 70 ? "primary" : "secondary"}
+                    disabled={compacting() || visibleUserMessages().length === 0}
+                    onClick={compact}
+                  >
+                    {compacting() ? language.t("command.session.compact") + "..." : language.t("command.session.compact")}
+                  </Button>
                 </div>
                 <div class="h-2 w-full rounded-full overflow-hidden" style={{ "background-color": "var(--surface-base)" }}>
                   <div
@@ -403,49 +336,6 @@ export function SessionContextTab() {
                     }}
                   />
                 </div>
-                <div class="flex items-center justify-between pt-1">
-                  <div class="flex flex-col">
-                    <span class="text-12-medium text-text-strong">Thinking strategy</span>
-                    <span class="text-11-regular text-text-weak">How thinking blocks are handled</span>
-                  </div>
-                  <Select
-                    options={strategyOptions}
-                    current={strategyOptions.find((o) => o.value === strategy())}
-                    value={(o) => o.value}
-                    label={(o) => o.label}
-                    onSelect={(option) => option && updateStrategy(option.value)}
-                    variant="secondary"
-                    size="small"
-                  />
-                </div>
-                <Show when={thinkingError()}>
-                  <div class="flex flex-col gap-2 p-3 rounded-md border border-border-weak-base" style={{ "background-color": "color-mix(in srgb, var(--syntax-error) 8%, transparent)" }}>
-                    <span class="text-12-medium" style={{ color: "var(--syntax-error)" }}>
-                      Thinking block error detected
-                    </span>
-                    <span class="text-12-regular text-text-weak">
-                      The API rejected modified thinking blocks. Choose a recovery strategy:
-                    </span>
-                    <div class="flex gap-2 flex-wrap">
-                      <Button
-                        size="small"
-                        variant="secondary"
-                        disabled={stripping() || compacting()}
-                        onClick={stripAndCompact}
-                      >
-                        {stripping() ? "Stripping..." : "Strip thinking & compact"}
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="secondary"
-                        disabled={compacting() || stripping()}
-                        onClick={compact}
-                      >
-                        {compacting() ? "Compacting..." : "Compact only"}
-                      </Button>
-                    </div>
-                  </div>
-                </Show>
               </div>
             )
           }}

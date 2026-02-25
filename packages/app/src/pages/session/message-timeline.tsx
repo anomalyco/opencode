@@ -541,43 +541,6 @@ export function MessageTimeline(props: {
                     showReasoningSummaries={settings.general.showReasoningSummaries()}
                     shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
                     editToolDefaultOpen={settings.general.editToolPartsExpanded()}
-                    onErrorRetry={(action) => {
-                      const id = sessionID()
-                      if (!id) return
-
-                      if (action === "strip") {
-                        sdk.client.config
-                          .update({ config: { compaction: { thinking_strategy: "strip" } } as any })
-                          .then(() =>
-                            sdk.client.session.summarize({ sessionID: id }),
-                          )
-                          .then(() =>
-                            showToast({
-                              variant: "success",
-                              title: "Strategy updated",
-                              description: "Switched to strip thinking. Session compacting...",
-                            }),
-                          )
-                          .catch((err) =>
-                            showToast({ title: "Retry failed", description: errorMessage(err) }),
-                          )
-                      }
-
-                      if (action === "compact") {
-                        sdk.client.session
-                          .summarize({ sessionID: id })
-                          .then(() =>
-                            showToast({
-                              variant: "success",
-                              title: "Compacting session",
-                              description: "Session will be summarized to remove stale thinking blocks.",
-                            }),
-                          )
-                          .catch((err) =>
-                            showToast({ title: "Compact failed", description: errorMessage(err) }),
-                          )
-                      }
-                    }}
                     classes={{
                       root: "min-w-0 w-full relative",
                       content: "flex flex-col justify-between !overflow-visible",

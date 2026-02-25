@@ -488,7 +488,7 @@ export namespace MessageV2 {
   })
   export type WithParts = z.infer<typeof WithParts>
 
-  export function toModelMessages(input: WithParts[], model: Provider.Model, opts?: { stripLastReasoning?: boolean }): ModelMessage[] {
+  export function toModelMessages(input: WithParts[], model: Provider.Model): ModelMessage[] {
     const result: UIMessage[] = []
     const toolNames = new Set<string>()
     // Track media from tool results that need to be injected as user messages
@@ -645,7 +645,7 @@ export namespace MessageV2 {
                 toolCallId: part.callID,
                 input: part.state.input,
                 output,
-                callProviderMetadata: part.metadata,
+                ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
               })
             }
             if (part.state.status === "error")
@@ -655,7 +655,7 @@ export namespace MessageV2 {
                 toolCallId: part.callID,
                 input: part.state.input,
                 errorText: part.state.error,
-                callProviderMetadata: part.metadata,
+                ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
               })
             // Handle pending/running tool calls to prevent dangling tool_use blocks
             // Anthropic/Claude APIs require every tool_use to have a corresponding tool_result
@@ -666,14 +666,14 @@ export namespace MessageV2 {
                 toolCallId: part.callID,
                 input: part.state.input,
                 errorText: "[Tool execution was interrupted]",
-                callProviderMetadata: part.metadata,
+                ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
               })
           }
           if (part.type === "reasoning") {
             assistantMessage.parts.push({
               type: "reasoning",
               text: part.text,
-              providerMetadata: part.metadata,
+              ...(differentModel ? {} : { providerMetadata: part.metadata }),
             })
           }
         }
@@ -701,14 +701,13 @@ export namespace MessageV2 {
         }
       }
     }
-    // Strip reasoning/thinking parts from the last assistant message when requested.
+
+    // Always strip reasoning/thinking parts from the last assistant message.
     // Claude API enforces that thinking blocks in the latest assistant message
-    // must be byte-identical to the original response.
-    //
-    // Strategy "none" (default): No stripping — original behavior, signatures preserved via root fix.
-    // Strategy "strip": Always strip — removes thinking from last message proactively.
-    // Strategy "compact": Don't strip — let API error, then auto-compact to recover.
-    if (opts?.stripLastReasoning) {
+    // must be byte-identical to the original response. Since OpenCode reconstructs
+    // them from stored parts, they may not match exactly. Stripping is safe because
+    // Claude doesn't need its own thinking blocks to continue the conversation.
+    {
       const lastAssistantIdx = result.findLastIndex((msg) => msg.role === "assistant")
       if (lastAssistantIdx !== -1) {
         const filtered = result[lastAssistantIdx].parts.filter((part) => part.type !== "reasoning")
