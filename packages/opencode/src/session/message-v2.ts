@@ -702,6 +702,23 @@ export namespace MessageV2 {
       }
     }
 
+    // Always strip reasoning/thinking parts from the last assistant message.
+    // Claude API enforces that thinking blocks in the latest assistant message
+    // must be byte-identical to the original response. Since OpenCode reconstructs
+    // them from stored parts, they may not match exactly. Stripping is safe because
+    // Claude doesn't need its own thinking blocks to continue the conversation.
+    {
+      const lastAssistantIdx = result.findLastIndex((msg) => msg.role === "assistant")
+      if (lastAssistantIdx !== -1) {
+        const filtered = result[lastAssistantIdx].parts.filter((part) => part.type !== "reasoning")
+        if (filtered.length > 0 && !filtered.every((p) => p.type === "step-start")) {
+          result[lastAssistantIdx].parts = filtered
+        } else {
+          result.splice(lastAssistantIdx, 1)
+        }
+      }
+    }
+
     const tools = Object.fromEntries(Array.from(toolNames).map((toolName) => [toolName, { toModelOutput }]))
 
     return convertToModelMessages(
