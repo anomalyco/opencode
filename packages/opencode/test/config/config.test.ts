@@ -137,6 +137,35 @@ test("handles environment variable substitution", async () => {
   }
 })
 
+test("handles environment variable substitution with JSON-significant characters", async () => {
+  const originalEnv = process.env["TEST_VAR_SPECIAL"]
+  process.env["TEST_VAR_SPECIAL"] = 'value"with\\slashes\nand\tcontrols{json}'
+
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await writeConfig(dir, {
+          $schema: "https://opencode.ai/config.json",
+          theme: "{env:TEST_VAR_SPECIAL}",
+        })
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.theme).toBe('value"with\\slashes\nand\tcontrols{json}')
+      },
+    })
+  } finally {
+    if (originalEnv !== undefined) {
+      process.env["TEST_VAR_SPECIAL"] = originalEnv
+    } else {
+      delete process.env["TEST_VAR_SPECIAL"]
+    }
+  }
+})
+
 test("preserves env variables when adding $schema to config", async () => {
   const originalEnv = process.env["PRESERVE_VAR"]
   process.env["PRESERVE_VAR"] = "secret_value"
