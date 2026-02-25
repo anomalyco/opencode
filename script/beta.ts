@@ -30,6 +30,52 @@ Please resolve this issue to include this PR in the next beta release.`
   }
 }
 
+async function conflicts() {
+  const out = await $`git diff --name-only --diff-filter=U`.text().catch(() => "")
+  return out
+    .split("\n")
+    .map((x) => x.trim())
+    .filter(Boolean)
+}
+
+async function cleanup() {
+  try {
+    await $`git merge --abort`
+  } catch {}
+  try {
+    await $`git checkout -- .`
+  } catch {}
+  try {
+    await $`git clean -fd`
+  } catch {}
+}
+
+async function fix(pr: PR, files: string[]) {
+  console.log(`  Trying to auto-resolve ${files.length} conflict(s) with opencode...`)
+  const prompt = [
+    `Resolve the current git merge conflicts while merging PR #${pr.number} into the beta branch.`,
+    `Only touch these files: ${files.join(", ")}.`,
+    "Keep the merge in progress, do not abort the merge, and do not create a commit.",
+    "When done, leave the working tree with no unmerged files.",
+  ].join("\n")
+
+  try {
+    await $`opencode run ${prompt}`
+  } catch (err) {
+    console.log(`  opencode failed: ${err}`)
+    return false
+  }
+
+  const left = await conflicts()
+  if (left.length > 0) {
+    console.log(`  Conflicts remain: ${left.join(", ")}`)
+    return false
+  }
+
+  console.log("  Conflicts resolved with opencode")
+  return true
+}
+
 async function main() {
   console.log("Fetching open PRs with beta label...")
 
@@ -69,19 +115,22 @@ async function main() {
     try {
       await $`git merge --no-commit --no-ff pr/${pr.number}`
     } catch {
-      console.log("  Failed to merge (conflicts)")
-      try {
-        await $`git merge --abort`
-      } catch {}
-      try {
-        await $`git checkout -- .`
-      } catch {}
-      try {
-        await $`git clean -fd`
-      } catch {}
-      failed.push({ number: pr.number, title: pr.title, reason: "Merge conflicts" })
-      await commentOnPR(pr.number, "Merge conflicts with dev branch")
-      continue
+      const files = await conflicts()
+      if (files.length > 0) {
+        console.log("  Failed to merge (conflicts)")
+        if (!(await fix(pr, files))) {
+          await cleanup()
+          failed.push({ number: pr.number, title: pr.title, reason: "Merge conflicts" })
+          await commentOnPR(pr.number, "Merge conflicts with dev branch")
+          continue
+        }
+      } else {
+        console.log("  Failed to merge")
+        await cleanup()
+        failed.push({ number: pr.number, title: pr.title, reason: "Merge failed" })
+        await commentOnPR(pr.number, "Merge failed")
+        continue
+      }
     }
 
     try {
