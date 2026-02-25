@@ -6,9 +6,12 @@ use std::{
 };
 use windows_sys::Win32::{
     Foundation::ERROR_SUCCESS,
-    System::Registry::{
-        RegGetValueW, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, REG_EXPAND_SZ, REG_SZ,
-        RRF_RT_REG_EXPAND_SZ, RRF_RT_REG_SZ,
+    System::{
+        Registry::{
+            RegGetValueW, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, REG_EXPAND_SZ, REG_SZ,
+            RRF_RT_REG_EXPAND_SZ, RRF_RT_REG_SZ,
+        },
+        Threading::{CREATE_NEW_CONSOLE, CREATE_NO_WINDOW},
     },
 };
 
@@ -310,7 +313,7 @@ pub fn resolve_windows_app_path(app_name: &str) -> Option<String> {
 
     let resolve_where = |query: &str| -> Option<String> {
         let output = Command::new("where")
-            .creation_flags(0x08000000)
+            .creation_flags(CREATE_NO_WINDOW)
             .arg(query)
             .output()
             .ok()?;
@@ -447,7 +450,7 @@ pub fn open_in_powershell(path: String) -> Result<(), String> {
     };
 
     Command::new("powershell.exe")
-        .creation_flags(0x00000010)
+        .creation_flags(CREATE_NEW_CONSOLE)
         .current_dir(dir)
         .args(["-NoExit"])
         .spawn()
