@@ -7,8 +7,8 @@ use std::{
 use windows_sys::Win32::{
     Foundation::ERROR_SUCCESS,
     System::Registry::{
-        HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, REG_EXPAND_SZ, REG_SZ, RRF_RT_REG_EXPAND_SZ,
-        RRF_RT_REG_SZ, RegGetValueW,
+        RegGetValueW, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, REG_EXPAND_SZ, REG_SZ,
+        RRF_RT_REG_EXPAND_SZ, RRF_RT_REG_SZ,
     },
 };
 
@@ -436,4 +436,22 @@ pub fn resolve_windows_app_path(app_name: &str) -> Option<String> {
     }
 
     None
+}
+
+pub fn open_in_powershell(path: String) -> Result<(), String> {
+    let path = PathBuf::from(path);
+    let dir = if path.is_dir() {
+        path
+    } else {
+        path.parent().map(Path::to_path_buf).unwrap_or(path)
+    };
+
+    Command::new("powershell.exe")
+        .creation_flags(0x00000010)
+        .current_dir(dir)
+        .args(["-NoExit"])
+        .spawn()
+        .map_err(|e| format!("Failed to start PowerShell: {e}"))?;
+
+    Ok(())
 }
