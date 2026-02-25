@@ -1613,9 +1613,13 @@ export type McpLocalConfig = {
    */
   enabled?: boolean
   /**
-   * Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.
+   * Timeout in ms for MCP tool execution requests. Defaults to 30000 (30 seconds) if not specified.
    */
   timeout?: number
+  /**
+   * Timeout in ms specifically for the initial connection/handshake with the MCP server
+   */
+  timeout_connect?: number
 }
 
 export type McpOAuthConfig = {
@@ -1657,9 +1661,13 @@ export type McpRemoteConfig = {
    */
   oauth?: McpOAuthConfig | false
   /**
-   * Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.
+   * Timeout in ms for MCP tool execution requests. Defaults to 30000 (30 seconds) if not specified.
    */
   timeout?: number
+  /**
+   * Timeout in ms specifically for the initial connection/handshake with the MCP server
+   */
+  timeout_connect?: number
 }
 
 /**
@@ -1884,9 +1892,13 @@ export type Config = {
      */
     continue_loop_on_deny?: boolean
     /**
-     * Timeout in milliseconds for model context protocol (MCP) requests
+     * Timeout in milliseconds for model context protocol (MCP) tool execution requests
      */
     mcp_timeout?: number
+    /**
+     * Timeout in milliseconds for the initial MCP server connection
+     */
+    mcp_timeout_connect?: number
   }
 }
 

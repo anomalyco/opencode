@@ -548,7 +548,13 @@ export namespace Config {
         .int()
         .positive()
         .optional()
-        .describe("Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified."),
+        .describe("Timeout in ms for MCP tool execution requests. Defaults to 30000 (30 seconds) if not specified."),
+      timeout_connect: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("Timeout in ms specifically for the initial connection/handshake with the MCP server"),
     })
     .strict()
     .meta({
@@ -587,7 +593,13 @@ export namespace Config {
         .int()
         .positive()
         .optional()
-        .describe("Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified."),
+        .describe("Timeout in ms for MCP tool execution requests. Defaults to 30000 (30 seconds) if not specified."),
+      timeout_connect: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("Timeout in ms specifically for the initial connection/handshake with the MCP server"),
     })
     .strict()
     .meta({
@@ -1201,7 +1213,13 @@ export namespace Config {
             .int()
             .positive()
             .optional()
-            .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
+            .describe("Timeout in milliseconds for model context protocol (MCP) tool execution requests"),
+          mcp_timeout_connect: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Timeout in milliseconds for the initial MCP server connection"),
         })
         .optional(),
     })

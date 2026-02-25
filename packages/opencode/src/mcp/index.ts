@@ -289,6 +289,7 @@ export namespace MCP {
   }
 
   async function create(key: string, mcp: Config.Mcp) {
+    const cfg = await Config.get()
     if (mcp.enabled === false) {
       log.info("mcp server disabled", { key })
       return {
@@ -343,7 +344,7 @@ export namespace MCP {
       ]
 
       let lastError: Error | undefined
-      const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
+      const connectTimeout = mcp.timeout_connect ?? cfg.experimental?.mcp_timeout_connect ?? mcp.timeout ?? cfg.experimental?.mcp_timeout ?? DEFAULT_TIMEOUT
       for (const { name, transport } of transports) {
         try {
           const client = new Client({
@@ -423,7 +424,7 @@ export namespace MCP {
         log.info(`mcp stderr: ${chunk.toString()}`, { key })
       })
 
-      const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
+      const connectTimeout = mcp.timeout_connect ?? cfg.experimental?.mcp_timeout_connect ?? mcp.timeout ?? cfg.experimental?.mcp_timeout ?? DEFAULT_TIMEOUT
       try {
         const client = new Client({
           name: "opencode",
@@ -463,7 +464,7 @@ export namespace MCP {
       }
     }
 
-    const result = await withTimeout(mcpClient.listTools(), mcp.timeout ?? DEFAULT_TIMEOUT).catch((err) => {
+    const result = await withTimeout(mcpClient.listTools(), mcp.timeout ?? cfg.experimental?.mcp_timeout ?? DEFAULT_TIMEOUT).catch((err) => {
       log.error("failed to get tools from client", { key, error: err })
       return undefined
     })
