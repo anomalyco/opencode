@@ -505,6 +505,8 @@ export const dict = {
   "workspace.lite.subscription.monthlyUsage": "Uso Mensal",
   "workspace.lite.subscription.resetsIn": "Reinicia em",
   "workspace.lite.subscription.useBalance": "Use seu saldo disponível após atingir os limites de uso",
+  "workspace.lite.subscription.selectProvider":
+    'Selecione "OpenCode Go" como provedor na sua configuração do opencode para usar os modelos Go.',
   "workspace.lite.other.title": "Assinatura Go",
   "workspace.lite.other.message":
     "Outro membro neste workspace já assina o OpenCode Go. Apenas um membro por workspace pode assinar.",

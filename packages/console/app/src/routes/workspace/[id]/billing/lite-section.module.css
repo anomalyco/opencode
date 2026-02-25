@@ -140,6 +140,22 @@
     }
   }
 
+  [data-slot="beta-notice"] {
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    background-color: var(--color-bg-surface);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    line-height: 1.5;
+    margin-top: var(--space-3);
+
+    a {
+      color: var(--color-accent);
+      text-decoration: none;
+    }
+  }
+
   [data-slot="other-message"] {
     font-size: var(--font-size-sm);
     color: var(--color-text-muted);

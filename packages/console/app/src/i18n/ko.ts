@@ -498,6 +498,8 @@ export const dict = {
   "workspace.lite.subscription.monthlyUsage": "월간 사용량",
   "workspace.lite.subscription.resetsIn": "초기화까지 남은 시간:",
   "workspace.lite.subscription.useBalance": "사용 한도 도달 후에는 보유 잔액 사용",
+  "workspace.lite.subscription.selectProvider":
+    'Go 모델을 사용하려면 opencode 설정에서 "OpenCode Go"를 공급자로 선택하세요.',
   "workspace.lite.other.title": "Go 구독",
   "workspace.lite.other.message":
     "이 워크스페이스의 다른 멤버가 이미 OpenCode Go를 구독 중입니다. 워크스페이스당 한 명의 멤버만 구독할 수 있습니다.",

@@ -505,6 +505,8 @@ export const dict = {
   "workspace.lite.subscription.monthlyUsage": "Aylık Kullanım",
   "workspace.lite.subscription.resetsIn": "Sıfırlama süresi",
   "workspace.lite.subscription.useBalance": "Kullanım limitlerine ulaştıktan sonra mevcut bakiyenizi kullanın",
+  "workspace.lite.subscription.selectProvider":
+    'Go modellerini kullanmak için opencode yapılandırmanızda "OpenCode Go"\'yu sağlayıcı olarak seçin.',
   "workspace.lite.other.title": "Go Aboneliği",
   "workspace.lite.other.message":
     "Bu çalışma alanındaki başka bir üye zaten OpenCode Go abonesi. Çalışma alanı başına yalnızca bir üye abone olabilir.",
