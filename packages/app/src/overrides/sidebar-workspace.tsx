@@ -483,7 +483,7 @@ export const LocalWorkspace = (props: {
   const booted = createMemo((prev) => prev || workspace().store.status === "complete", false)
   const loading = createMemo(() => !booted() && sessions().length === 0)
   const hasMore = createMemo(() => workspace().store.sessionTotal > sessions().length)
-  const showNewSessionButton = createMemo(() => sessions().length === 0)
+  const showNewSessionButton = createMemo(() => booted() && sessions().length === 0)
   const loadMore = async () => {
     workspace().setStore("limit", (limit) => (limit ?? 0) + 5)
     await globalSync.project.loadSessions(props.project.worktree)
