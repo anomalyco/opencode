@@ -396,7 +396,8 @@ export function DialogSelectServer() {
             noInitialSelection
             emptyMessage={language.t("dialog.server.empty")}
             items={sortedItems}
-            key={(x) => x.http.url}
+            key={(x) => ServerConnection.key(x)}
+            filterKeys={["displayName", "http.url"]}
             onSelect={(x) => {
               if (x) select(x)
             }}
