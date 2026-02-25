@@ -5135,6 +5135,7 @@ export type EventSubscribeData = {
   path?: never
   query?: {
     directory?: string
+    session?: string
   }
   url: "/event"
 }

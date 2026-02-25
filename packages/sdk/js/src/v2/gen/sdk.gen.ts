@@ -3219,10 +3219,21 @@ export class Event extends HeyApiClient {
   public subscribe<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
+      session?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "session" },
+          ],
+        },
+      ],
+    )
     return (options?.client ?? this.client).sse.get<EventSubscribeResponses, unknown, ThrowOnError>({
       url: "/event",
       ...options,

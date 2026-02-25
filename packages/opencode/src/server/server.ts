@@ -499,6 +499,13 @@ export namespace Server {
               },
             },
           }),
+          validator(
+            "query",
+            z.object({
+              directory: z.string().optional(),
+              session: z.string().optional(),
+            }),
+          ),
           async (c) => {
             log.info("event connected")
             c.header("X-Accel-Buffering", "no")
