@@ -4,20 +4,21 @@ import { Log } from "../util/log"
 import path from "path"
 import { Filesystem } from "../util/filesystem"
 import { NamedError } from "@opencode-ai/util/error"
-import { readableStreamToText } from "bun"
+import { text } from "node:stream/consumers"
 import { Lock } from "../util/lock"
 import { PackageRegistry } from "./registry"
 import { proxied } from "@/util/proxied"
+import { Process } from "../util/process"
 
 export namespace BunProc {
   const log = Log.create({ service: "bun" })
 
-  export async function run(cmd: string[], options?: Bun.SpawnOptions.OptionsObject<any, any, any>) {
+  export async function run(cmd: string[], options?: Process.Options) {
     log.info("running", {
       cmd: [which(), ...cmd],
       ...options,
     })
-    const result = Bun.spawn([which(), ...cmd], {
+    const result = Process.spawn([which(), ...cmd], {
       ...options,
       stdout: "pipe",
       stderr: "pipe",
@@ -28,23 +29,15 @@ export namespace BunProc {
       },
     })
     const code = await result.exited
-    const stdout = result.stdout
-      ? typeof result.stdout === "number"
-        ? result.stdout
-        : await readableStreamToText(result.stdout)
-      : undefined
-    const stderr = result.stderr
-      ? typeof result.stderr === "number"
-        ? result.stderr
-        : await readableStreamToText(result.stderr)
-      : undefined
+    const stdout = result.stdout ? await text(result.stdout) : undefined
+    const stderr = result.stderr ? await text(result.stderr) : undefined
     log.info("done", {
       code,
       stdout,
       stderr,
     })
     if (code !== 0) {
-      throw new Error(`Command failed with exit code ${result.exitCode}`)
+      throw new Error(`Command failed with exit code ${code}`)
     }
     return result
   }
