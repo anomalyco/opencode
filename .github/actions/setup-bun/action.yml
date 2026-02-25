@@ -1,5 +1,10 @@
 name: "Setup Bun"
 description: "Setup Bun with caching and install dependencies"
+inputs:
+  cross-compile:
+    description: "Pre-cache canary cross-compile binaries for all targets"
+    required: false
+    default: "false"
 runs:
   using: "composite"
   steps:
@@ -11,10 +16,72 @@ runs:
         restore-keys: |
           ${{ runner.os }}-bun-
 
+    - name: Get baseline download URL
+      id: bun-url
+      shell: bash
+      run: |
+        if [ "$RUNNER_ARCH" = "X64" ]; then
+          case "$RUNNER_OS" in
+            macOS)   OS=darwin ;;
+            Linux)   OS=linux ;;
+            Windows) OS=windows ;;
+          esac
+          echo "url=https://github.com/oven-sh/bun/releases/download/canary/bun-${OS}-x64-baseline.zip" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Setup Bun
       uses: oven-sh/setup-bun@v2
       with:
-        bun-version-file: package.json
+        bun-version-file: ${{ !steps.bun-url.outputs.url && 'package.json' || '' }}
+        bun-download-url: ${{ steps.bun-url.outputs.url }}
+
+    - name: Pre-cache canary cross-compile binaries
+      if: inputs.cross-compile == 'true'
+      shell: bash
+      run: |
+        BUN_VERSION=$(bun --revision)
+        if echo "$BUN_VERSION" | grep -q "canary"; then
+          SEMVER=$(echo "$BUN_VERSION" | sed 's/^\([0-9]*\.[0-9]*\.[0-9]*\).*/\1/')
+          echo "Bun version: $BUN_VERSION (semver: $SEMVER)"
+          CACHE_DIR="$HOME/.bun/install/cache"
+          mkdir -p "$CACHE_DIR"
+          TMP_DIR=$(mktemp -d)
+          for TARGET in linux-aarch64 linux-x64 linux-x64-baseline linux-aarch64-musl linux-x64-musl linux-x64-musl-baseline darwin-aarch64 darwin-x64 windows-x64 windows-x64-baseline; do
+            DEST="$CACHE_DIR/bun-${TARGET}-v${SEMVER}"
+            if [ -f "$DEST" ]; then
+              echo "Already cached: $DEST"
+              continue
+            fi
+            URL="https://github.com/oven-sh/bun/releases/download/canary/bun-${TARGET}.zip"
+            echo "Downloading $TARGET from $URL"
+            if curl -sfL -o "$TMP_DIR/bun.zip" "$URL"; then
+              unzip -qo "$TMP_DIR/bun.zip" -d "$TMP_DIR"
+              if echo "$TARGET" | grep -q "windows"; then
+                BIN_NAME="bun.exe"
+              else
+                BIN_NAME="bun"
+              fi
+              mv "$TMP_DIR/bun-${TARGET}/$BIN_NAME" "$DEST"
+              chmod +x "$DEST"
+              rm -rf "$TMP_DIR/bun-${TARGET}" "$TMP_DIR/bun.zip"
+              echo "Cached: $DEST"
+              # baseline bun resolves "bun-darwin-x64" to the baseline cache key
+              # so copy the modern binary there too
+              if [ "$TARGET" = "darwin-x64" ]; then
+                BASELINE_DEST="$CACHE_DIR/bun-darwin-x64-baseline-v${SEMVER}"
+                if [ ! -f "$BASELINE_DEST" ]; then
+                  cp "$DEST" "$BASELINE_DEST"
+                  echo "Cached (baseline alias): $BASELINE_DEST"
+                fi
+              fi
+            else
+              echo "Skipped: $TARGET (not available)"
+            fi
+          done
+          rm -rf "$TMP_DIR"
+        else
+          echo "Not a canary build ($BUN_VERSION), skipping pre-cache"
+        fi
 
     - name: Install dependencies
       run: bun install
