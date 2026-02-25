@@ -11,8 +11,9 @@ import z from "zod"
 export namespace ProviderAuth {
   export const Method = z
     .object({
-      type: z.union([z.literal("oauth"), z.literal("api")]),
+      type: z.union([z.literal("oauth"), z.literal("api"), z.literal("env"), z.literal("aws")]),
       label: z.string(),
+      env: z.array(z.string()).optional(),
       prompts: z
         .array(
           z.union([
@@ -56,6 +57,20 @@ export namespace ProviderAuth {
       ref: "ProviderAuthMethod",
     })
   export type Method = z.infer<typeof Method>
+
+  const ENV_AUTH_PROVIDERS: Record<string, Method[]> = {
+    "amazon-bedrock": [
+      {
+        type: "aws",
+        label: "IAM credentials",
+      },
+      {
+        type: "env",
+        label: "Environment variables",
+        env: ["AWS_PROFILE", "AWS_ACCESS_KEY_ID", "AWS_BEARER_TOKEN_BEDROCK"],
+      },
+    ],
+  }
 
   export const Authorization = z
     .object({
@@ -134,7 +149,7 @@ export namespace ProviderAuth {
 
       const methods = Effect.fn("ProviderAuth.methods")(function* () {
         const hooks = (yield* InstanceState.get(state)).hooks
-        return Record.map(hooks, (item) =>
+        const result = Record.map(hooks, (item) =>
           item.methods.map(
             (method): Method => ({
               type: method.type,
@@ -159,7 +174,12 @@ export namespace ProviderAuth {
               }),
             }),
           ),
-        )
+        ) as Record<ProviderID, Method[]>
+        for (const [providerID, extra] of Object.entries(ENV_AUTH_PROVIDERS)) {
+          if (!result[providerID as ProviderID]) result[providerID as ProviderID] = []
+          result[providerID as ProviderID].push(...extra)
+        }
+        return result
       })
 
       const authorize = Effect.fn("ProviderAuth.authorize")(function* (input: {

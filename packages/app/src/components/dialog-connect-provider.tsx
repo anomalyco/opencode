@@ -123,6 +123,8 @@ export function DialogConnectProvider(props: { provider: string }) {
   const methodLabel = (value?: { type?: string; label?: string }) => {
     if (!value) return ""
     if (value.type === "api") return language.t("provider.connect.method.apiKey")
+    if (value.type === "env") return language.t("provider.connect.method.env")
+    if (value.type === "aws") return language.t("provider.connect.method.aws")
     return value.label ?? ""
   }
 
@@ -461,6 +463,108 @@ export function DialogConnectProvider(props: { provider: string }) {
     )
   }
 
+  function AwsAuthView() {
+    const [formStore, setFormStore] = createStore({
+      accessKeyId: "",
+      secretAccessKey: "",
+      region: "us-east-1",
+      error: undefined as string | undefined,
+    })
+
+    async function handleSubmit(e: SubmitEvent) {
+      e.preventDefault()
+      if (!formStore.accessKeyId.trim()) {
+        setFormStore("error", language.t("provider.connect.aws.accessKeyId.required"))
+        return
+      }
+      if (!formStore.secretAccessKey.trim()) {
+        setFormStore("error", language.t("provider.connect.aws.secretAccessKey.required"))
+        return
+      }
+      setFormStore("error", undefined)
+      await globalSDK.client.auth.set({
+        providerID: props.provider,
+        auth: {
+          type: "aws",
+          accessKeyId: formStore.accessKeyId.trim(),
+          secretAccessKey: formStore.secretAccessKey.trim(),
+          region: formStore.region.trim() || undefined,
+        },
+      })
+      await globalSDK.client.global.config.update({
+        config: {
+          provider: {
+            "amazon-bedrock": {
+              options: {
+                region: formStore.region.trim() || "us-east-1",
+              },
+            },
+          },
+        },
+      })
+      await complete()
+    }
+
+    return (
+      <div class="flex flex-col gap-6">
+        <div class="text-14-regular text-text-base">{language.t("provider.connect.aws.description")}</div>
+        <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
+          <TextField
+            autofocus
+            type="text"
+            label={language.t("provider.connect.aws.accessKeyId.label")}
+            placeholder="AKIA..."
+            name="accessKeyId"
+            value={formStore.accessKeyId}
+            onChange={(v) => setFormStore("accessKeyId", v)}
+            validationState={formStore.error ? "invalid" : undefined}
+            error={formStore.error}
+          />
+          <TextField
+            type="password"
+            label={language.t("provider.connect.aws.secretAccessKey.label")}
+            placeholder={language.t("provider.connect.aws.secretAccessKey.placeholder")}
+            name="secretAccessKey"
+            value={formStore.secretAccessKey}
+            onChange={(v) => setFormStore("secretAccessKey", v)}
+          />
+          <TextField
+            type="text"
+            label={language.t("provider.connect.aws.region.label")}
+            placeholder="us-east-1"
+            name="region"
+            value={formStore.region}
+            onChange={(v) => setFormStore("region", v)}
+          />
+          <Button class="w-auto" type="submit" size="large" variant="primary">
+            {language.t("common.connect")}
+          </Button>
+        </form>
+      </div>
+    )
+  }
+
+  function EnvAuthView() {
+    const envVars = createMemo(() => (method() as { env?: string[] })?.env ?? [])
+
+    return (
+      <div class="flex flex-col gap-6">
+        <div class="text-14-regular text-text-base">
+          {language.t("provider.connect.env.description", { provider: provider().name })}
+        </div>
+        <div class="flex flex-col gap-2">
+          {envVars().map((v: string) => (
+            <code class="text-13-regular text-text-strong bg-surface-inset px-2 py-1 rounded font-mono">{v}</code>
+          ))}
+        </div>
+        <div class="text-14-regular text-text-weak">{language.t("provider.connect.env.desktopNote")}</div>
+        <Button class="w-auto" size="large" variant="ghost" onClick={() => dialog.close()}>
+          {language.t("common.close")}
+        </Button>
+      </div>
+    )
+  }
+
   function OAuthCodeView() {
     const [formStore, setFormStore] = createStore({
       value: "",
@@ -634,6 +738,12 @@ export function DialogConnectProvider(props: { provider: string }) {
               </Match>
               <Match when={method()?.type === "api"}>
                 <ApiAuthView />
+              </Match>
+              <Match when={method()?.type === "aws"}>
+                <AwsAuthView />
+              </Match>
+              <Match when={method()?.type === "env"}>
+                <EnvAuthView />
               </Match>
               <Match when={method()?.type === "oauth"}>
                 <Switch>

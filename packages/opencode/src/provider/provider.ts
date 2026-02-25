@@ -274,10 +274,11 @@ export namespace Provider {
         const providerConfig = (yield* dep.config()).provider?.["amazon-bedrock"]
         const auth = yield* dep.auth("amazon-bedrock")
 
-        // Region precedence: 1) config file, 2) env var, 3) default
+        // Region precedence: 1) config file, 2) auth.json aws creds, 3) env var, 4) default
         const configRegion = providerConfig?.options?.region
+        const authRegion = auth?.type === "aws" ? auth.region : undefined
         const envRegion = Env.get("AWS_REGION")
-        const defaultRegion = configRegion ?? envRegion ?? "us-east-1"
+        const defaultRegion = configRegion ?? authRegion ?? envRegion ?? "us-east-1"
 
         // Profile: config file takes precedence over env var
         const configProfile = providerConfig?.options?.profile

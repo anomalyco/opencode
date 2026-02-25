@@ -134,6 +134,21 @@ export const dict = {
   "provider.connect.apiKey.label": "{{provider}} API key",
   "provider.connect.apiKey.placeholder": "API key",
   "provider.connect.apiKey.required": "API key is required",
+  "provider.connect.env.description":
+    "{{provider}} uses environment variables for authentication. Set one of the following in your shell profile (e.g. ~/.zshrc) or opencode.json config:",
+  "provider.connect.env.configHint": "Or configure in opencode.json:",
+  "provider.connect.env.desktopNote":
+    "If using the desktop app, you may need to restart it after changing your shell profile so the new environment is picked up.",
+  "provider.connect.method.env": "Environment variables",
+  "provider.connect.method.aws": "IAM credentials",
+  "provider.connect.aws.description":
+    "Enter your AWS IAM credentials to connect to Amazon Bedrock. You should use a properly scoped IAM user with Bedrock access.",
+  "provider.connect.aws.accessKeyId.label": "AWS access key ID",
+  "provider.connect.aws.accessKeyId.required": "Access key ID is required",
+  "provider.connect.aws.secretAccessKey.label": "AWS secret access key",
+  "provider.connect.aws.secretAccessKey.placeholder": "Secret access key",
+  "provider.connect.aws.secretAccessKey.required": "Secret access key is required",
+  "provider.connect.aws.region.label": "AWS region",
   "provider.connect.opencodeZen.line1":
     "OpenCode Zen gives you access to a curated set of reliable optimized models for coding agents.",
   "provider.connect.opencodeZen.line2":
