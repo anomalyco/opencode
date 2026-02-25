@@ -6,7 +6,7 @@ import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
 import { existsSync } from "fs"
 import * as prompts from "@clack/prompts"
-import { MDNS } from "../../../mdns"
+import { MDNS } from "@/mdns"
 
 export const AttachCommand = cmd({
   command: "attach [url]",

@@ -47,6 +47,13 @@ export async function find(abort: AbortSignal, idleTimeout: Duration = 200): Pro
 
   try {
     while (true) {
+      if (list.length === 0) {
+        const server = await nextUntilAbort(queue, abort)
+        if (!server) return list
+        list.push(server)
+        continue
+      }
+
       const timer = abortAfterAny(idleTimeout, abort)
       const server = await nextUntilAbort(queue, timer.signal).finally(() => timer.clearTimeout())
       if (!server) return list
