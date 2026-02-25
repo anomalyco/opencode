@@ -65,9 +65,9 @@ jobs:
                   "packages/web/src/content/docs/*/*.mdx": "allow",
                   ".opencode": "allow",
                   ".opencode/agent": "allow",
-                  ".opencode/agent/glossary": "allow",
+                  ".opencode/glossary": "allow",
                   ".opencode/agent/translator.md": "allow",
-                  ".opencode/agent/glossary/*.md": "allow"
+                  ".opencode/glossary/*.md": "allow"
                 },
                 "edit": {
                   "*": "deny",
@@ -76,7 +76,7 @@ jobs:
                 "glob": {
                   "*": "deny",
                   "packages/web/src/content/docs*": "allow",
-                  ".opencode/agent/glossary*": "allow"
+                  ".opencode/glossary*": "allow"
                 },
                 "task": {
                   "*": "deny",
@@ -90,7 +90,7 @@ jobs:
                     "read": {
                       "*": "deny",
                       ".opencode/agent/translator.md": "allow",
-                      ".opencode/agent/glossary/*.md": "allow"
+                      ".opencode/glossary/*.md": "allow"
                     }
                   }
                 }
