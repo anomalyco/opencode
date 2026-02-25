@@ -506,8 +506,8 @@ export const dict = {
   "workspace.lite.time.minute": "minute",
   "workspace.lite.time.minutes": "minutes",
   "workspace.lite.time.fewSeconds": "quelques secondes",
-  "workspace.lite.subscription.title": "Abonnement Lite",
-  "workspace.lite.subscription.message": "Vous êtes abonné à OpenCode Lite.",
+  "workspace.lite.subscription.title": "Abonnement Go",
+  "workspace.lite.subscription.message": "Vous êtes abonné à OpenCode Go.",
   "workspace.lite.subscription.manage": "Gérer l'abonnement",
   "workspace.lite.subscription.rollingUsage": "Utilisation glissante",
   "workspace.lite.subscription.weeklyUsage": "Utilisation hebdomadaire",
@@ -515,13 +515,16 @@ export const dict = {
   "workspace.lite.subscription.resetsIn": "Réinitialisation dans",
   "workspace.lite.subscription.useBalance":
     "Utilisez votre solde disponible après avoir atteint les limites d'utilisation",
-  "workspace.lite.other.title": "Abonnement Lite",
+  "workspace.lite.other.title": "Abonnement Go",
   "workspace.lite.other.message":
-    "Un autre membre de cet espace de travail est déjà abonné à OpenCode Lite. Un seul membre par espace de travail peut s'abonner.",
-  "workspace.lite.promo.title": "OpenCode Lite",
+    "Un autre membre de cet espace de travail est déjà abonné à OpenCode Go. Un seul membre par espace de travail peut s'abonner.",
+  "workspace.lite.promo.title": "OpenCode Go",
   "workspace.lite.promo.description":
-    "Accédez aux meilleurs modèles ouverts — Kimi K2.5, GLM-5 et MiniMax M2.5 — avec des limites d'utilisation généreuses pour 10 $ par mois.",
-  "workspace.lite.promo.subscribe": "S'abonner à Lite",
+    "OpenCode Go est un abonnement à 10 $ par mois qui offre un accès fiable aux modèles de codage ouverts populaires avec des limites d'utilisation généreuses.",
+  "workspace.lite.promo.modelsTitle": "Ce qui est inclus",
+  "workspace.lite.promo.footer":
+    "Le plan est conçu principalement pour les utilisateurs internationaux, avec des modèles hébergés aux États-Unis, dans l'UE et à Singapour pour un accès mondial stable. Les tarifs et les limites d'utilisation peuvent changer à mesure que nous apprenons des premières utilisations et des commentaires.",
+  "workspace.lite.promo.subscribe": "S'abonner à Go",
   "workspace.lite.promo.subscribing": "Redirection...",
 
   "download.title": "OpenCode | Téléchargement",
