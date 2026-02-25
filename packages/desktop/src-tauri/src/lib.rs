@@ -42,7 +42,7 @@ struct ServerReadyData {
     url: String,
     username: Option<String>,
     password: Option<String>,
-    is_sidecar: bool
+    is_sidecar: bool,
 }
 
 #[derive(Clone, Copy, serde::Serialize, specta::Type, Debug)]
@@ -301,59 +301,104 @@ fn resolve_windows_app_path(app_name: &str) -> Option<String> {
     }
 
     fn reg_app_path(exe: &str) -> Option<String> {
+        use std::ffi::c_void;
+        use windows::Win32::System::Registry::{
+            HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, REG_EXPAND_SZ, REG_ROUTINE_FLAGS, REG_SZ,
+            REG_VALUE_TYPE, RRF_RT_REG_EXPAND_SZ, RRF_RT_REG_SZ, RegGetValueW,
+        };
+        use windows::core::PCWSTR;
+
         let exe = exe.trim().trim_matches('"');
         if exe.is_empty() {
             return None;
         }
 
+        let query = |root: HKEY, subkey: &str| -> Option<String> {
+            let flags = REG_ROUTINE_FLAGS(RRF_RT_REG_SZ.0 | RRF_RT_REG_EXPAND_SZ.0);
+            let mut kind = REG_VALUE_TYPE(0);
+            let mut size = 0u32;
+
+            let mut key = subkey.encode_utf16().collect::<Vec<_>>();
+            key.push(0);
+
+            let status = unsafe {
+                RegGetValueW(
+                    root,
+                    PCWSTR(key.as_ptr()),
+                    PCWSTR::null(),
+                    flags,
+                    Some((&mut kind) as *mut _),
+                    None,
+                    Some((&mut size) as *mut _),
+                )
+            };
+
+            if status.0 != 0 || size == 0 {
+                return None;
+            }
+
+            if kind != REG_SZ && kind != REG_EXPAND_SZ {
+                return None;
+            }
+
+            let mut data = vec![0u8; size as usize];
+            let status = unsafe {
+                RegGetValueW(
+                    root,
+                    PCWSTR(key.as_ptr()),
+                    PCWSTR::null(),
+                    flags,
+                    Some((&mut kind) as *mut _),
+                    Some(data.as_mut_ptr() as *mut c_void),
+                    Some((&mut size) as *mut _),
+                )
+            };
+
+            if status.0 != 0 || size < 2 {
+                return None;
+            }
+
+            let words = unsafe {
+                std::slice::from_raw_parts(data.as_ptr().cast::<u16>(), (size as usize) / 2)
+            };
+            let len = words.iter().position(|v| *v == 0).unwrap_or(words.len());
+            let value = String::from_utf16_lossy(&words[..len]).trim().to_string();
+
+            if value.is_empty() {
+                return None;
+            }
+
+            Some(value)
+        };
+
         let keys = [
-            format!(
-                r"HKCU\Software\Microsoft\Windows\CurrentVersion\App Paths\{exe}"
+            (
+                HKEY_CURRENT_USER,
+                format!(r"Software\Microsoft\Windows\CurrentVersion\App Paths\{exe}"),
             ),
-            format!(
-                r"HKLM\Software\Microsoft\Windows\CurrentVersion\App Paths\{exe}"
+            (
+                HKEY_LOCAL_MACHINE,
+                format!(r"Software\Microsoft\Windows\CurrentVersion\App Paths\{exe}"),
             ),
-            format!(
-                r"HKLM\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\{exe}"
+            (
+                HKEY_LOCAL_MACHINE,
+                format!(r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\{exe}"),
             ),
         ];
 
-        for key in keys {
-            let Some(output) = Command::new("reg")
-                .creation_flags(windows::Win32::System::Threading::CREATE_NO_WINDOW)
-                .args(["query", &key, "/ve"])
-                .output()
-                .ok()
-            else {
+        for (root, key) in keys {
+            let Some(value) = query(root, &key) else {
                 continue;
             };
 
-            if !output.status.success() {
+            let Some(exe) = extract_exe(&value) else {
                 continue;
-            }
+            };
 
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            for line in stdout.lines() {
-                let tokens = line.split_whitespace().collect::<Vec<_>>();
-                let Some(index) = tokens.iter().position(|v| v.starts_with("REG_")) else {
-                    continue;
-                };
-
-                if index + 1 >= tokens.len() {
-                    // Malformed line: registry type appears at the end with no value.
-                    continue;
-                }
-
-                let value = tokens[index + 1..].join(" ");
-                let Some(exe) = extract_exe(&value) else {
-                    continue;
-                };
-
-                let exe = expand_env(&exe);
-                let path = Path::new(exe.trim().trim_matches('"'));
-                if path.exists() {
-                    return Some(path.to_string_lossy().to_string());
-                }
+            let exe = expand_env(&exe);
+            let path = Path::new(exe.trim().trim_matches('"'));
+            if path.exists() {
+                return Some(path.to_string_lossy().to_string());
             }
         }
 
@@ -883,7 +928,12 @@ async fn initialize(app: AppHandle) {
 
                             app.state::<ServerState>().set_child(Some(child));
 
-                            Ok(ServerReadyData { url, username,password, is_sidecar: true })
+                            Ok(ServerReadyData {
+                                url,
+                                username,
+                                password,
+                                is_sidecar: true,
+                            })
                         }
                         .map(move |res| {
                             let _ = server_ready_tx.send(res);
