@@ -349,7 +349,7 @@ export const dict = {
   "workspace.usage.breakdown.cacheWrite": "Önbellek Yazma",
   "workspace.usage.breakdown.output": "Çıkış",
   "workspace.usage.breakdown.reasoning": "Muhakeme",
-  "workspace.usage.subscription": "abonelik (${{amount}})",
+  "workspace.usage.subscription": "Black (${{amount}})",
   "workspace.usage.lite": "Go (${{amount}})",
   "workspace.usage.byok": "BYOK (${{amount}})",
 

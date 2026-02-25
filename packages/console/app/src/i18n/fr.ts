@@ -355,7 +355,7 @@ export const dict = {
   "workspace.usage.breakdown.cacheWrite": "Écriture cache",
   "workspace.usage.breakdown.output": "Sortie",
   "workspace.usage.breakdown.reasoning": "Raisonnement",
-  "workspace.usage.subscription": "abonnement ({{amount}} $)",
+  "workspace.usage.subscription": "Black ({{amount}} $)",
   "workspace.usage.lite": "Go ({{amount}} $)",
   "workspace.usage.byok": "BYOK ({{amount}} $)",
 

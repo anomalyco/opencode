@@ -346,7 +346,7 @@ export const dict = {
   "workspace.usage.breakdown.cacheWrite": "キャッシュ書き込み",
   "workspace.usage.breakdown.output": "出力",
   "workspace.usage.breakdown.reasoning": "推論",
-  "workspace.usage.subscription": "サブスクリプション (${{amount}})",
+  "workspace.usage.subscription": "Black (${{amount}})",
   "workspace.usage.lite": "Go (${{amount}})",
   "workspace.usage.byok": "BYOK (${{amount}})",
 
