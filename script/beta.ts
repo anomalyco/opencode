@@ -60,7 +60,7 @@ async function fix(pr: PR, files: string[]) {
   ].join("\n")
 
   try {
-    await $`opencode run ${prompt}`
+    await $`opencode run -m opencode/kimi-k2.5 ${prompt}`
   } catch (err) {
     console.log(`  opencode failed: ${err}`)
     return false
