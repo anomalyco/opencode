@@ -56,6 +56,28 @@ test("loads JSON config file", async () => {
   })
 })
 
+test("ignores legacy tui keys in opencode config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        model: "test/model",
+        theme: "legacy",
+        tui: { scroll_speed: 4 },
+      })
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.model).toBe("test/model")
+      expect((config as Record<string, unknown>).theme).toBeUndefined()
+      expect((config as Record<string, unknown>).tui).toBeUndefined()
+    },
+  })
+})
+
 test("loads JSONC config file", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
@@ -110,14 +132,14 @@ test("merges multiple config files with correct precedence", async () => {
 
 test("handles environment variable substitution", async () => {
   const originalEnv = process.env["TEST_VAR"]
-  process.env["TEST_VAR"] = "test_theme"
+  process.env["TEST_VAR"] = "test-user"
 
   try {
     await using tmp = await tmpdir({
       init: async (dir) => {
         await writeConfig(dir, {
           $schema: "https://opencode.ai/config.json",
-          theme: "{env:TEST_VAR}",
+          username: "{env:TEST_VAR}",
         })
       },
     })
@@ -125,7 +147,7 @@ test("handles environment variable substitution", async () => {
       directory: tmp.path,
       fn: async () => {
         const config = await Config.get()
-        expect(config.theme).toBe("test_theme")
+        expect(config.username).toBe("test-user")
       },
     })
   } finally {
@@ -148,7 +170,7 @@ test("preserves env variables when adding $schema to config", async () => {
         await Filesystem.write(
           path.join(dir, "opencode.json"),
           JSON.stringify({
-            theme: "{env:PRESERVE_VAR}",
+            username: "{env:PRESERVE_VAR}",
           }),
         )
       },
@@ -157,7 +179,7 @@ test("preserves env variables when adding $schema to config", async () => {
       directory: tmp.path,
       fn: async () => {
         const config = await Config.get()
-        expect(config.theme).toBe("secret_value")
+        expect(config.username).toBe("secret_value")
 
         // Read the file to verify the env variable was preserved
         const content = await Filesystem.readText(path.join(tmp.path, "opencode.json"))
@@ -178,10 +200,10 @@ test("preserves env variables when adding $schema to config", async () => {
 test("handles file inclusion substitution", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Filesystem.write(path.join(dir, "included.txt"), "test_theme")
+      await Filesystem.write(path.join(dir, "included.txt"), "test-user")
       await writeConfig(dir, {
         $schema: "https://opencode.ai/config.json",
-        theme: "{file:included.txt}",
+        username: "{file:included.txt}",
       })
     },
   })
@@ -189,7 +211,7 @@ test("handles file inclusion substitution", async () => {
     directory: tmp.path,
     fn: async () => {
       const config = await Config.get()
-      expect(config.theme).toBe("test_theme")
+      expect(config.username).toBe("test-user")
     },
   })
 })
@@ -200,7 +222,7 @@ test("handles file inclusion with replacement tokens", async () => {
       await Filesystem.write(path.join(dir, "included.md"), "const out = await Bun.$`echo hi`")
       await writeConfig(dir, {
         $schema: "https://opencode.ai/config.json",
-        theme: "{file:included.md}",
+        username: "{file:included.md}",
       })
     },
   })
@@ -208,7 +230,7 @@ test("handles file inclusion with replacement tokens", async () => {
     directory: tmp.path,
     fn: async () => {
       const config = await Config.get()
-      expect(config.theme).toBe("const out = await Bun.$`echo hi`")
+      expect(config.username).toBe("const out = await Bun.$`echo hi`")
     },
   })
 })
@@ -1043,7 +1065,6 @@ test("managed settings override project settings", async () => {
         $schema: "https://opencode.ai/config.json",
         autoupdate: true,
         disabled_providers: [],
-        theme: "dark",
       })
     },
   })
@@ -1060,7 +1081,6 @@ test("managed settings override project settings", async () => {
       const config = await Config.get()
       expect(config.autoupdate).toBe(false)
       expect(config.disabled_providers).toEqual(["openai"])
-      expect(config.theme).toBe("dark")
     },
   })
 })
@@ -1809,7 +1829,7 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
     process.env["TEST_CONFIG_VAR"] = "test_api_key_12345"
     process.env["OPENCODE_CONFIG_CONTENT"] = JSON.stringify({
       $schema: "https://opencode.ai/config.json",
-      theme: "{env:TEST_CONFIG_VAR}",
+      username: "{env:TEST_CONFIG_VAR}",
     })
 
     try {
@@ -1818,7 +1838,7 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
         directory: tmp.path,
         fn: async () => {
           const config = await Config.get()
-          expect(config.theme).toBe("test_api_key_12345")
+          expect(config.username).toBe("test_api_key_12345")
         },
       })
     } finally {
@@ -1841,10 +1861,10 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
     try {
       await using tmp = await tmpdir({
         init: async (dir) => {
-          await Bun.write(path.join(dir, "api_key.txt"), "secret_key_from_file")
+          await Filesystem.write(path.join(dir, "api_key.txt"), "secret_key_from_file")
           process.env["OPENCODE_CONFIG_CONTENT"] = JSON.stringify({
             $schema: "https://opencode.ai/config.json",
-            theme: "{file:./api_key.txt}",
+            username: "{file:./api_key.txt}",
           })
         },
       })
@@ -1852,7 +1872,7 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
         directory: tmp.path,
         fn: async () => {
           const config = await Config.get()
-          expect(config.theme).toBe("secret_key_from_file")
+          expect(config.username).toBe("secret_key_from_file")
         },
       })
     } finally {
