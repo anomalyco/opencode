@@ -11,6 +11,7 @@ import { base64Encode } from "@opencode-ai/util/encode"
 import { SettingsPopup } from "./settings-popup"
 import { DialogSelectDirectory } from "./dialog-select-directory"
 import { extractDirectory } from "./session-header-actions-helpers"
+import { previewOpen, setPreviewOpen } from "./preview-panel"
 
 function RunIcon() {
   return (
@@ -69,6 +70,14 @@ export function SessionHeaderActions() {
       </Button>
       <Button variant="secondary" class="rounded-sm h-[24px] w-[24px] p-0" onClick={publish} aria-label="Publish">
         <Icon name="cloud-upload" size="small" class="text-icon-base" />
+      </Button>
+      <Button
+        variant={previewOpen() ? "primary" : "secondary"}
+        class="rounded-sm h-[24px] w-[24px] p-0"
+        onClick={() => setPreviewOpen((prev) => !prev)}
+        aria-label="Preview"
+      >
+        <Icon name="eye" size="small" class={previewOpen() ? "text-on-primary" : "text-icon-base"} />
       </Button>
       <SettingsPopup />
       <Button

@@ -32,6 +32,7 @@ import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { useAutoSelectSession } from "@/overrides/use-auto-select-session"
+import { PreviewPanel, previewOpen, previewWidth } from "@/overrides/preview-panel"
 
 export default function Page() {
   const layout = useLayout()
@@ -105,13 +106,21 @@ export default function Page() {
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
+  const desktopPreviewOpen = createMemo(() => isDesktop() && previewOpen())
   const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
   const sessionPanelWidth = createMemo(() => {
-    if (!desktopSidePanelOpen()) return "100%"
+    const hasPanel = desktopSidePanelOpen()
+    const hasPreview = desktopPreviewOpen()
+    if (!hasPanel && !hasPreview) return "100%"
     if (desktopReviewOpen()) return `${layout.session.width()}px`
-    return `calc(100% - ${layout.fileTree.width()}px)`
+    // file tree only, preview only, or both
+    const parts: string[] = []
+    if (desktopFileTreeOpen()) parts.push(`${layout.fileTree.width()}px`)
+    if (hasPreview) parts.push(`${previewWidth()}px`)
+    if (parts.length === 0) return "100%"
+    return `calc(100% - ${parts.join(" - ")})`
   })
-  const centered = createMemo(() => isDesktop() && !desktopSidePanelOpen())
+  const centered = createMemo(() => isDesktop() && !desktopSidePanelOpen() && !desktopPreviewOpen())
 
   function normalizeTab(tab: string) {
     if (!tab.startsWith("file://")) return tab
@@ -1012,7 +1021,7 @@ export default function Page() {
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger": true,
             "flex-1": true,
-            "md:flex-none": desktopSidePanelOpen(),
+            "md:flex-none": desktopSidePanelOpen() || desktopPreviewOpen(),
           }}
           style={{
             width: sessionPanelWidth(),
@@ -1122,6 +1131,8 @@ export default function Page() {
         </div>
 
         <SessionSidePanel reviewPanel={reviewPanel} activeDiff={tree.activeDiff} focusReviewDiff={focusReviewDiff} />
+
+        <PreviewPanel open={desktopPreviewOpen()} />
       </div>
 
       <TerminalPanel />
