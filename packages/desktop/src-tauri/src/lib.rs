@@ -320,7 +320,7 @@ fn resolve_windows_app_path(app_name: &str) -> Option<String> {
 
         for key in keys {
             let Some(output) = Command::new("reg")
-                .creation_flags(0x08000000)
+                .creation_flags(windows::Win32::System::Threading::CREATE_NO_WINDOW)
                 .args(["query", &key, "/ve"])
                 .output()
                 .ok()
@@ -338,6 +338,11 @@ fn resolve_windows_app_path(app_name: &str) -> Option<String> {
                 let Some(index) = tokens.iter().position(|v| v.starts_with("REG_")) else {
                     continue;
                 };
+
+                if index + 1 >= tokens.len() {
+                    // Malformed line: registry type appears at the end with no value.
+                    continue;
+                }
 
                 let value = tokens[index + 1..].join(" ");
                 let Some(exe) = extract_exe(&value) else {
@@ -422,7 +427,7 @@ fn resolve_windows_app_path(app_name: &str) -> Option<String> {
 
     let resolve_where = |query: &str| -> Option<String> {
         let output = Command::new("where")
-            .creation_flags(0x08000000)
+            .creation_flags(windows::Win32::System::Threading::CREATE_NO_WINDOW)
             .arg(query)
             .output()
             .ok()?;
