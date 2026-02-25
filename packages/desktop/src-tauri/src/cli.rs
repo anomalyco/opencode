@@ -19,7 +19,7 @@ use tokio::{
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::Instrument;
 #[cfg(windows)]
-use windows::Win32::System::Threading::{CREATE_NO_WINDOW, CREATE_SUSPENDED};
+use windows_sys::Win32::System::Threading::{CREATE_NO_WINDOW, CREATE_SUSPENDED};
 
 use crate::server::get_wsl_config;
 
@@ -32,7 +32,7 @@ struct WinCreationFlags;
 #[cfg(windows)]
 impl CommandWrapper for WinCreationFlags {
     fn pre_spawn(&mut self, command: &mut Command, _core: &CommandWrap) -> std::io::Result<()> {
-        command.creation_flags((CREATE_NO_WINDOW | CREATE_SUSPENDED).0);
+        command.creation_flags(CREATE_NO_WINDOW | CREATE_SUSPENDED);
         Ok(())
     }
 }
@@ -320,7 +320,7 @@ pub fn spawn_command(
         };
 
         let mut cmd = Command::new(shell);
-        cmd.args(["-l", "-c", &line]);
+        cmd.args(["-il", "-c", &line]);
 
         for (key, value) in envs {
             cmd.env(key, value);
