@@ -105,7 +105,7 @@ Toggle tool execution details.
 
 ### editor
 
-Open external editor for composing messages. Uses the editor set in your `EDITOR` environment variable. [Learn more](#editor-setup).
+Open external editor for composing messages. Uses the editor set in your `VISUAL` or `EDITOR` environment variable, with `VISUAL` taking precedence. [Learn more](#editor-setup).
 
 ```bash frame="none"
 /editor
@@ -129,7 +129,7 @@ Exit OpenCode. _Aliases_: `/quit`, `/q`
 
 ### export
 
-Export current conversation to Markdown and open in your default editor. Uses the editor set in your `EDITOR` environment variable. [Learn more](#editor-setup).
+Export current conversation to Markdown and open in your default editor. Uses the editor set in your `VISUAL` or `EDITOR` environment variable, with `VISUAL` taking precedence. [Learn more](#editor-setup).
 
 ```bash frame="none"
 /export
@@ -287,18 +287,26 @@ Unshare current session. [Learn more](/docs/share#un-sharing).
 
 ## Editor setup
 
-Both the `/editor` and `/export` commands use the editor specified in your `EDITOR` environment variable.
+Both the `/editor` and `/export` commands use an external editor to compose or export messages. OpenCode checks for editors in this order:
+
+1. `VISUAL` environment variable (intended for GUI editors)
+2. `EDITOR` environment variable (intended for terminal editors)
+
+If you have both variables set, `VISUAL` takes precedence.
 
 <Tabs>
   <TabItem label="Linux/macOS">
     ```bash
-    # Example for nano or vim
+    # For terminal editors
     export EDITOR=nano
     export EDITOR=vim
 
-    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
-    # include --wait
-    export EDITOR="code --wait"
+    # For GUI editors, use VISUAL with --wait flag
+    export VISUAL="code --wait"
+    export VISUAL="cursor --wait"
+
+    # If you only want terminal editors, set EDITOR
+    export EDITOR=nvim
     ```
 
     To make it permanent, add this to your shell profile;
@@ -310,9 +318,8 @@ Both the `/editor` and `/export` commands use the editor specified in your `EDIT
     ```bash
     set EDITOR=notepad
 
-    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
-    # include --wait
-    set EDITOR=code --wait
+    # For GUI editors, use VISUAL with --wait flag
+    set VISUAL=code --wait
     ```
 
     To make it permanent, use **System Properties** > **Environment
@@ -324,9 +331,8 @@ Both the `/editor` and `/export` commands use the editor specified in your `EDIT
     ```powershell
     $env:EDITOR = "notepad"
 
-    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
-    # include --wait
-    $env:EDITOR = "code --wait"
+    # For GUI editors, use VISUAL with --wait flag
+    $env:VISUAL = "code --wait"
     ```
 
     To make it permanent, add this to your PowerShell profile.
@@ -346,10 +352,8 @@ Popular editor options include:
 - `subl` - Sublime Text
 
 :::note
-Some editors like VS Code need to be started with the `--wait` flag.
+GUI editors like VS Code, Cursor, and Windsurf need the `--wait` flag to block until the editor is closed. Use `VISUAL` for GUI editors and `EDITOR` for terminal-based editors.
 :::
-
-Some editors need command-line arguments to run in blocking mode. The `--wait` flag makes the editor process block until closed.
 
 ---
 
