@@ -209,3 +209,202 @@ describe("session.prompt agent variant", () => {
     }
   })
 })
+
+
+describe("session.prompt steer", () => {
+  test("falls back to a no-reply user message when session is idle", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const result = await SessionPrompt.steer({
+          sessionID: session.id,
+          text: "please focus on tests next",
+        })
+
+        expect(result.accepted).toBe(false)
+
+        const msgs = await Session.messages({ sessionID: session.id })
+        const user = msgs.find((msg) => msg.info.role === "user")
+        expect(user?.parts.some((part) => part.type === "text" && part.text === "please focus on tests next")).toBe(true)
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("drains queued steer messages in timestamp order when session is busy", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const seed = await SessionPrompt.prompt({
+          sessionID: session.id,
+          noReply: true,
+          parts: [{ type: "text", text: "seed" }],
+        })
+        if (seed.info.role !== "user") throw new Error("expected user message")
+
+        SessionPrompt.testing.startBusy(session.id)
+
+        const now = Date.now
+        let idx = 0
+        const times = [2001, 1001, 2002, 1003, 2003, 1002]
+        Date.now = () => {
+          const next = times[idx]
+          idx += 1
+          return next ?? times[times.length - 1]
+        }
+
+        try {
+          await SessionPrompt.steer({
+            sessionID: session.id,
+            text: "first",
+          })
+          await SessionPrompt.steer({
+            sessionID: session.id,
+            text: "third",
+          })
+          await SessionPrompt.steer({
+            sessionID: session.id,
+            text: "second",
+          })
+        } finally {
+          Date.now = now
+        }
+
+        const drained = await SessionPrompt.testing.drainSteer({
+          sessionID: session.id,
+          user: seed.info,
+        })
+        expect(drained).toBe(true)
+
+        const msgs = await Session.messages({ sessionID: session.id })
+        const parts = msgs
+          .filter((msg) => msg.info.role === "user")
+          .map((msg) =>
+            msg.parts.find(
+              (part): part is MessageV2.TextPart =>
+                part.type === "text" && part.synthetic === true && part.metadata?.steer === true,
+            ),
+          )
+          .filter((part): part is MessageV2.TextPart => !!part)
+
+        expect(parts.length).toBe(3)
+        const timestamps = parts.map((part) => part.metadata?.steer_timestamp)
+        expect(timestamps.every((x) => typeof x === "number")).toBe(true)
+        expect(parts.map((part) => part.text).toSorted()).toEqual(["first", "second", "third"])
+
+        for (const part of parts) {
+          expect(part.synthetic).toBe(true)
+          expect(part.metadata).toMatchObject({
+            steer: true,
+          })
+          const data = part.metadata
+          expect(typeof data?.steer_id).toBe("string")
+          expect(typeof data?.steer_timestamp).toBe("number")
+        }
+
+        const empty = await SessionPrompt.testing.drainSteer({
+          sessionID: session.id,
+          user: seed.info,
+        })
+        expect(empty).toBe(false)
+
+        SessionPrompt.cancel(session.id)
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("persists busy steer immediately and does not duplicate on drain", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const seed = await SessionPrompt.prompt({
+          sessionID: session.id,
+          noReply: true,
+          parts: [{ type: "text", text: "seed" }],
+        })
+        if (seed.info.role !== "user") throw new Error("expected user message")
+
+        SessionPrompt.testing.startBusy(session.id)
+
+        const first = await SessionPrompt.steer({
+          sessionID: session.id,
+          text: "focus on tests",
+        })
+        const second = await SessionPrompt.steer({
+          sessionID: session.id,
+          text: "only touch prompt code",
+        })
+
+        expect(first.accepted).toBe(true)
+        expect(second.accepted).toBe(true)
+
+        const steerParts = async () =>
+          (await Session.messages({ sessionID: session.id }))
+            .flatMap((msg) => msg.parts)
+            .filter(
+              (part): part is MessageV2.TextPart =>
+                part.type === "text" && part.synthetic === true && part.metadata?.steer === true,
+            )
+
+        const beforeDrain = await steerParts()
+        expect(beforeDrain.map((part) => part.text).toSorted()).toEqual(["focus on tests", "only touch prompt code"])
+
+        const drained = await SessionPrompt.testing.drainSteer({
+          sessionID: session.id,
+          user: seed.info,
+        })
+        expect(drained).toBe(true)
+
+        const afterDrain = await steerParts()
+        expect(afterDrain.length).toBe(beforeDrain.length)
+        expect(afterDrain.map((part) => part.text).toSorted()).toEqual(["focus on tests", "only touch prompt code"])
+
+        SessionPrompt.cancel(session.id)
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("draining steer queue is a no-op when no steer is queued", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const seed = await SessionPrompt.prompt({
+          sessionID: session.id,
+          noReply: true,
+          parts: [{ type: "text", text: "seed" }],
+        })
+        if (seed.info.role !== "user") throw new Error("expected user message")
+
+        SessionPrompt.testing.startBusy(session.id)
+        const before = (await Session.messages({ sessionID: session.id })).length
+
+        const drained = await SessionPrompt.testing.drainSteer({
+          sessionID: session.id,
+          user: seed.info,
+        })
+        expect(drained).toBe(false)
+
+        const after = (await Session.messages({ sessionID: session.id })).length
+        expect(after).toBe(before)
+
+        SessionPrompt.cancel(session.id)
+        await Session.remove(session.id)
+      },
+    })
+  })
+})

@@ -260,18 +260,18 @@ export function Session() {
     const messagesList = messages()
     const scrollTop = scroll.y
 
-    // Get visible messages sorted by position, filtering for valid non-synthetic, non-ignored content
+    // Get visible messages sorted by position, filtering for valid visible user text content
     const visibleMessages = children
       .filter((c) => {
         if (!c.id) return false
         const message = messagesList.find((m) => m.id === c.id)
         if (!message) return false
 
-        // Check if message has valid non-synthetic, non-ignored text parts
+        // Check if message has valid visible text parts (normal text or steer)
         const parts = sync.data.part[message.id]
         if (!parts || !Array.isArray(parts)) return false
 
-        return parts.some((part) => part && part.type === "text" && !part.synthetic && !part.ignored)
+        return parts.some((part) => text(part))
       })
       .sort((a, b) => a.y - b.y)
 
@@ -709,7 +709,7 @@ export function Session() {
         const messages = sync.data.message[route.sessionID]
         if (!messages || !messages.length) return
 
-        // Find the most recent user message with non-ignored, non-synthetic text parts
+        // Find the most recent user message with visible text parts (normal text or steer)
         for (let i = messages.length - 1; i >= 0; i--) {
           const message = messages[i]
           if (!message || message.role !== "user") continue
@@ -717,9 +717,7 @@ export function Session() {
           const parts = sync.data.part[message.id]
           if (!parts || !Array.isArray(parts)) continue
 
-          const hasValidTextPart = parts.some(
-            (part) => part && part.type === "text" && !part.synthetic && !part.ignored,
-          )
+          const hasValidTextPart = parts.some((part) => text(part))
 
           if (hasValidTextPart) {
             const child = scroll.getChildren().find((child) => {
@@ -1172,6 +1170,14 @@ const MIME_BADGE: Record<string, string> = {
   "application/x-directory": "dir",
 }
 
+function steer(part: Part | undefined): part is TextPart {
+  return !!(part && part.type === "text" && part.synthetic && !part.ignored && part.metadata?.steer)
+}
+
+function text(part: Part | undefined): part is TextPart {
+  return !!(part && part.type === "text" && !part.ignored && (!part.synthetic || steer(part)))
+}
+
 function UserMessage(props: {
   message: UserMessage
   parts: Part[]
@@ -1181,21 +1187,23 @@ function UserMessage(props: {
 }) {
   const ctx = use()
   const local = useLocal()
-  const text = createMemo(() => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0])
+  const body = createMemo(() => props.parts.flatMap((x) => (text(x) ? [x] : []))[0])
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const sync = useSync()
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
-  const queued = createMemo(() => props.pending && props.message.id > props.pending)
+  const steering = createMemo(() => !!body()?.metadata?.steer)
+  const queued = createMemo(() => !steering() && !!props.pending && props.message.id > props.pending)
   const color = createMemo(() => local.agent.color(props.message.agent))
   const queuedFg = createMemo(() => selectedForeground(theme, color()))
-  const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
+  const badge = createMemo(() => (steering() ? "STEER" : queued() ? "QUEUED" : undefined))
+  const metadataVisible = createMemo(() => !!badge() || ctx.showTimestamps())
 
   const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
 
   return (
     <>
-      <Show when={text()}>
+      <Show when={body()}>
         <box
           id={props.message.id}
           border={["left"]}
@@ -1217,7 +1225,7 @@ function UserMessage(props: {
             backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
             flexShrink={0}
           >
-            <text fg={theme.text}>{text()?.text}</text>
+            <text fg={theme.text}>{body()?.text}</text>
             <Show when={files().length}>
               <box flexDirection="row" paddingBottom={metadataVisible() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
                 <For each={files()}>
@@ -1238,7 +1246,7 @@ function UserMessage(props: {
               </box>
             </Show>
             <Show
-              when={queued()}
+              when={badge()}
               fallback={
                 <Show when={ctx.showTimestamps()}>
                   <text fg={theme.textMuted}>
@@ -1249,9 +1257,11 @@ function UserMessage(props: {
                 </Show>
               }
             >
-              <text fg={theme.textMuted}>
-                <span style={{ bg: color(), fg: queuedFg(), bold: true }}> QUEUED </span>
-              </text>
+              {(val) => (
+                <text fg={theme.textMuted}>
+                  <span style={{ bg: color(), fg: queuedFg(), bold: true }}> {val()} </span>
+                </text>
+              )}
             </Show>
           </box>
         </box>

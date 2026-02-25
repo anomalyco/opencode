@@ -50,6 +50,22 @@ describe("transcript", () => {
   describe("formatPart", () => {
     const options = { thinking: true, toolDetails: true, assistantMetadata: true }
 
+    test("formats synthetic steer text parts with markdown characters", () => {
+      const part: Part = {
+        id: "part_1",
+        sessionID: "ses_123",
+        messageID: "msg_123",
+        type: "text",
+        text: "change `const x = 1` to `let x = 2` and **bold** this section",
+        synthetic: true,
+        metadata: {
+          steer: true,
+        },
+      }
+      const result = formatPart(part, options)
+      expect(result).toBe("**Steer:** change `const x = 1` to `let x = 2` and **bold** this section\n\n")
+    })
+
     test("formats text part", () => {
       const part: Part = {
         id: "part_1",
@@ -73,6 +89,22 @@ describe("transcript", () => {
       }
       const result = formatPart(part, options)
       expect(result).toBe("")
+    })
+
+    test("formats synthetic steer text parts", () => {
+      const part: Part = {
+        id: "part_1",
+        sessionID: "ses_123",
+        messageID: "msg_123",
+        type: "text",
+        text: "make it about cats instead",
+        synthetic: true,
+        metadata: {
+          steer: true,
+        },
+      }
+      const result = formatPart(part, options)
+      expect(result).toBe("**Steer:** make it about cats instead\n\n")
     })
 
     test("formats reasoning when thinking enabled", () => {

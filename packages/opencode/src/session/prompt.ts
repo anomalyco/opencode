@@ -68,6 +68,11 @@ export namespace SessionPrompt {
         string,
         {
           abort: AbortController
+          steerQueue: {
+            id: string
+            text: string
+            timestamp: number
+          }[]
           callbacks: {
             resolve(input: MessageV2.WithParts): void
             reject(reason?: any): void
@@ -241,6 +246,7 @@ export namespace SessionPrompt {
     const controller = new AbortController()
     s[sessionID] = {
       abort: controller,
+      steerQueue: [],
       callbacks: [],
     }
     return controller.signal
@@ -265,6 +271,67 @@ export namespace SessionPrompt {
     delete s[sessionID]
     SessionStatus.set(sessionID, { type: "idle" })
     return
+  }
+
+  export function isBusy(sessionID: string) {
+    return !!state()[sessionID]
+  }
+
+  export const SteerInput = z.object({
+    sessionID: Identifier.schema("session"),
+    text: z.string().trim().min(1),
+  })
+
+  export const steer = fn(SteerInput, async (input) => {
+    const timestamp = Date.now()
+    const queued = {
+      id: ulid(timestamp),
+      text: input.text,
+      timestamp,
+    }
+    const match = state()[input.sessionID]
+    if (!match) {
+      await prompt({
+        sessionID: input.sessionID,
+        noReply: true,
+        parts: [{ type: "text", text: input.text }],
+      })
+      return {
+        accepted: false,
+        queued,
+      }
+    }
+    await writeSteer({
+      sessionID: input.sessionID,
+      queued,
+    })
+    match.steerQueue.push(queued)
+    return {
+      accepted: true,
+      queued,
+    }
+  })
+
+  async function drainSteerQueue(input: {
+    sessionID: string
+    user: MessageV2.User
+  }) {
+    const match = state()[input.sessionID]
+    if (!match || match.steerQueue.length === 0) return false
+    return match.steerQueue.splice(0).length > 0
+  }
+
+  /** @internal Test helpers for steer queue behavior */
+  export const testing = {
+    startBusy(sessionID: string) {
+      start(sessionID)
+    },
+    drainSteer(input: {
+      sessionID: string
+      user: MessageV2.User
+    }) {
+      return drainSteerQueue(input)
+    },
   }
 
   export const LoopInput = z.object({
@@ -315,6 +382,8 @@ export namespace SessionPrompt {
       }
 
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
+      const pendingTask = tasks[tasks.length - 1]
+      if (pendingTask?.type !== "compaction" && (await drainSteerQueue({ sessionID, user: lastUser }))) continue
       if (
         lastAssistant?.finish &&
         !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
@@ -708,7 +777,9 @@ export namespace SessionPrompt {
           model: lastUser.model,
           auto: true,
         })
+        continue
       }
+      if (await drainSteerQueue({ sessionID, user: lastUser })) continue
       continue
     }
     SessionCompaction.prune({ sessionID })
@@ -722,6 +793,45 @@ export namespace SessionPrompt {
     }
     throw new Error("Impossible")
   })
+
+  async function writeSteer(input: {
+    sessionID: string
+    queued: {
+      id: string
+      text: string
+      timestamp: number
+    }
+  }) {
+    const msgs = await MessageV2.filterCompacted(MessageV2.stream(input.sessionID))
+    const last = [...msgs].reverse().find((msg): msg is MessageV2.WithParts & { info: MessageV2.User } => msg.info.role === "user")
+    if (!last) throw new Error("No user message found to attach steer metadata")
+
+    const user = await Session.updateMessage({
+      id: Identifier.ascending("message"),
+      role: "user",
+      sessionID: input.sessionID,
+      time: {
+        created: input.queued.timestamp,
+      },
+      agent: last.info.agent,
+      model: last.info.model,
+      variant: last.info.variant,
+    })
+
+    await Session.updatePart({
+      id: Identifier.ascending("part"),
+      messageID: user.id,
+      sessionID: input.sessionID,
+      type: "text",
+      text: input.queued.text,
+      synthetic: true,
+      metadata: {
+        steer: true,
+        steer_id: input.queued.id,
+        steer_timestamp: input.queued.timestamp,
+      },
+    } satisfies MessageV2.TextPart)
+  }
 
   async function lastModel(sessionID: string) {
     for await (const item of MessageV2.stream(sessionID)) {

@@ -1200,6 +1200,10 @@ export type KeybindsConfig = {
    */
   input_submit?: string
   /**
+   * Submit steer guidance while session is busy
+   */
+  input_steer_submit?: string
+  /**
    * Insert newline in input
    */
   input_newline?: string
@@ -3339,6 +3343,48 @@ export type SessionAbortResponses = {
 }
 
 export type SessionAbortResponse = SessionAbortResponses[keyof SessionAbortResponses]
+
+export type SessionSteerData = {
+  body?: {
+    text: string
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/steer"
+}
+
+export type SessionSteerErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionSteerError = SessionSteerErrors[keyof SessionSteerErrors]
+
+export type SessionSteerResponses = {
+  /**
+   * Steer message queued
+   */
+  202: {
+    accepted: boolean
+    queued: {
+      id: string
+      text: string
+      timestamp: number
+    }
+  }
+}
+
+export type SessionSteerResponse = SessionSteerResponses[keyof SessionSteerResponses]
 
 export type SessionUnshareData = {
   body?: never
