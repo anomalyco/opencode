@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { resolveSession, extractErrorMessage } from "./prompt-input-submit-helpers"
+import { resolveSession, extractErrorMessage, findReusableSession } from "./prompt-input-submit-helpers"
 
 describe("resolveSession", () => {
   test("returns existing session when present", () => {
@@ -23,6 +23,28 @@ describe("resolveSession", () => {
 
   test("returns undefined when no session, not new, and no paramsId", () => {
     expect(resolveSession(undefined, false, undefined)).toBeUndefined()
+  })
+})
+
+describe("findReusableSession", () => {
+  test("returns undefined when no sessions exist", () => {
+    expect(findReusableSession([])).toBeUndefined()
+  })
+
+  test("returns the latest session when sessions exist", () => {
+    const sessions = [{ id: "sess-1" }, { id: "sess-2" }, { id: "sess-3" }]
+    expect(findReusableSession(sessions)).toEqual({ id: "sess-3" })
+  })
+
+  test("returns the only session when one exists", () => {
+    expect(findReusableSession([{ id: "only-one" }])).toEqual({ id: "only-one" })
+  })
+
+  test("returns a new object (not a reference to the original)", () => {
+    const sessions = [{ id: "sess-1" }]
+    const result = findReusableSession(sessions)
+    expect(result).toEqual({ id: "sess-1" })
+    expect(result).not.toBe(sessions[0])
   })
 })
 

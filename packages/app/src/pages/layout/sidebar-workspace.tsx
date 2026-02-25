@@ -18,6 +18,7 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { NewSessionItem, SessionItem, SessionSkeleton } from "./sidebar-items"
 import { childMapByParent, sortedRootSessions } from "./helpers"
+import { shouldShowNewSession, hasExistingSessions as hasExistingSessionsFn } from "./sidebar-workspace-helpers"
 
 type InlineEditorComponent = (props: {
   id: string
@@ -156,6 +157,7 @@ const WorkspaceActions = (props: {
   setHoverSession: WorkspaceSidebarContext["setHoverSession"]
   clearHoverProjectSoon: WorkspaceSidebarContext["clearHoverProjectSoon"]
   navigateToNewSession: () => void
+  hasExistingSessions: Accessor<boolean>
 }): JSX.Element => (
   <div
     class="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 transition-opacity"
@@ -215,7 +217,7 @@ const WorkspaceActions = (props: {
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu>
-    <Show when={!props.touch()}>
+    <Show when={!props.touch() && !props.hasExistingSessions()}>
       <Tooltip value={props.language.t("command.session.new")} placement="top">
         <IconButton
           icon="plus-small"
@@ -333,7 +335,7 @@ export const SortableWorkspace = (props: {
   const wasBusy = createMemo((prev) => prev || busy(), false)
   const loading = createMemo(() => open() && !booted() && sessions().length === 0 && !wasBusy())
   const touch = createMediaQuery("(hover: none)")
-  const showNew = createMemo(() => !loading() && (touch() || sessions().length === 0 || (active() && !params.id)))
+  const showNew = createMemo(() => shouldShowNewSession(loading(), sessions().length))
   const loadMore = async () => {
     setWorkspaceStore("limit", (limit) => (limit ?? 0) + 5)
     await globalSync.project.loadSessions(props.directory)
@@ -438,6 +440,7 @@ export const SortableWorkspace = (props: {
                 setHoverSession={props.ctx.setHoverSession}
                 clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
                 navigateToNewSession={() => navigate(`/${slug()}/session`)}
+                hasExistingSessions={() => hasExistingSessionsFn(sessions().length)}
               />
             </div>
           </div>
