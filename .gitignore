@@ -7,7 +7,10 @@ node_modules
 .vscode
 .codex
 *~
-playground
+/playground
+!packages/app/src/pages/playground
+!packages/app/src/pages/playground/
+!packages/app/src/context/playground.tsx
 tmp
 dist
 ts-dist

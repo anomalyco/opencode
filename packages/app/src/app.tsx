@@ -23,6 +23,7 @@ import { ModelsProvider } from "@/context/models"
 import { NotificationProvider } from "@/context/notification"
 import { PermissionProvider } from "@/context/permission"
 import { usePlatform } from "@/context/platform"
+import { PlaygroundProvider } from "@/context/playground"
 import { PromptProvider } from "@/context/prompt"
 import { type ServerConnection, ServerProvider, useServer } from "@/context/server"
 import { SettingsProvider } from "@/context/settings"
@@ -33,6 +34,7 @@ import { ErrorPage } from "./pages/error"
 
 const Home = lazy(() => import("@/pages/home"))
 const Session = lazy(() => import("@/pages/session"))
+const Playground = lazy(() => import("@/pages/playground"))
 const Loading = () => <div class="size-full" />
 
 const HomeRoute = () => (
@@ -47,6 +49,14 @@ const SessionRoute = () => (
       <Session />
     </Suspense>
   </SessionProviders>
+)
+
+const PlaygroundRoute = () => (
+  <PlaygroundProviders>
+    <Suspense fallback={<Loading />}>
+      <Playground />
+    </Suspense>
+  </PlaygroundProviders>
 )
 
 const SessionIndexRoute = () => <Navigate href="session" />
@@ -100,6 +110,14 @@ function SessionProviders(props: ParentProps) {
         </PromptProvider>
       </FileProvider>
     </TerminalProvider>
+  )
+}
+
+function PlaygroundProviders(props: ParentProps) {
+  return (
+    <PlaygroundProvider>
+      <PromptProvider>{props.children}</PromptProvider>
+    </PlaygroundProvider>
   )
 }
 
@@ -161,6 +179,7 @@ export function AppInterface(props: {
               <Route path="/:dir" component={DirectoryLayout}>
                 <Route path="/" component={SessionIndexRoute} />
                 <Route path="/session/:id?" component={SessionRoute} />
+                <Route path="/playground/:id?" component={PlaygroundRoute} />
               </Route>
             </Router>
           </GlobalSyncProvider>

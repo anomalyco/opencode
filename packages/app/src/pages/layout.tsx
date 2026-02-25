@@ -1001,6 +1001,16 @@ export default function Layout(props: ParentProps) {
         },
       },
       {
+        id: "playground.open",
+        title: language.t("command.playground.open"),
+        category: language.t("command.category.view"),
+        disabled: !params.dir,
+        onSelect: () => {
+          if (!params.dir) return
+          navigate(`/${params.dir}/playground`)
+        },
+      },
+      {
         id: "theme.cycle",
         title: language.t("command.theme.cycle"),
         category: language.t("command.category.theme"),
