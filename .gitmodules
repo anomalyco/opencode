@@ -1,0 +1,15 @@
+[submodule "references/codex"]
+	path = references/codex
+	url = https://github.com/openai/codex
+[submodule "references/cline"]
+	path = references/cline
+	url = https://github.com/cline/cline
+[submodule "references/awesome-opencode"]
+	path = references/awesome-opencode
+	url = https://github.com/awesome-opencode/awesome-opencode
+[submodule "references/OpenGUI"]
+	path = references/OpenGUI
+	url = https://github.com/akemmanuel/OpenGUI
+[submodule "references/AionUi"]
+	path = references/AionUi
+	url = https://github.com/iOfficeAI/AionUi
