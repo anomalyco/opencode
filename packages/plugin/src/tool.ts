@@ -29,6 +29,12 @@ type AskInput = {
 export function tool<Args extends z.ZodRawShape>(input: {
   description: string
   args: Args
+  /**
+   * Optional list of provider IDs this tool is scoped to.
+   * When set, the tool is only included in the tool list for matching providers.
+   * When omitted or empty, the tool is available for all providers.
+   */
+  providers?: string[]
   execute(args: z.infer<z.ZodObject<Args>>, context: ToolContext): Promise<string>
 }) {
   return input

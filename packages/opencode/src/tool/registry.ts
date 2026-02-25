@@ -64,6 +64,7 @@ export namespace ToolRegistry {
   function fromPlugin(id: string, def: ToolDefinition): Tool.Info {
     return {
       id,
+      providers: def.providers,
       init: async (initCtx) => ({
         parameters: z.object(def.args),
         description: def.description,
@@ -135,9 +136,25 @@ export namespace ToolRegistry {
     },
     agent?: Agent.Info,
   ) {
-    const tools = await all()
+    const allTools = await all()
+
+    // Filter out provider-scoped tools that don't match the active provider,
+    // then deduplicate by id (last wins). This ensures that when a plugin
+    // overrides a built-in tool (e.g. "bash") but scopes it to a specific
+    // provider, the built-in is preserved for other providers.
+    const filtered = allTools.filter((t) => {
+      if (t.providers?.length && !t.providers.includes(model.providerID)) {
+        return false
+      }
+      return true
+    })
+    const deduped = new Map<string, Tool.Info>()
+    for (const t of filtered) {
+      deduped.set(t.id, t)
+    }
+
     const result = await Promise.all(
-      tools
+      Array.from(deduped.values())
         .filter((t) => {
           // Enable websearch/codesearch for zen users OR via enable flag
           if (t.id === "codesearch" || t.id === "websearch") {
