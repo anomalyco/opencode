@@ -174,6 +174,8 @@ import type {
   SessionDiffResponses,
   SessionForkErrors,
   SessionForkResponses,
+  SessionGenerateTitleErrors,
+  SessionGenerateTitleResponses,
   SessionGetErrors,
   SessionGetResponses,
   SessionInitErrors,
@@ -3269,6 +3271,40 @@ export class Session extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Generate session title
+   *
+   * Manually trigger AI-powered title generation for a session based on its conversation content.
+   */
+  public generateTitle<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionGenerateTitleResponses,
+      SessionGenerateTitleErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/generate-title",
+      ...options,
+      ...params,
     })
   }
 

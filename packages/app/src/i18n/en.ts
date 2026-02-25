@@ -472,6 +472,9 @@ export const dict = {
   "toast.session.unshare.failed.title": "Failed to unshare session",
   "toast.session.unshare.failed.description": "An error occurred while unsharing the session",
 
+  "toast.session.generateTitle.success.title": "Title generated",
+  "toast.session.generateTitle.failed.title": "Failed to generate title",
+
   "toast.session.listFailed.title": "Failed to load sessions for {{project}}",
   "toast.project.reloadFailed.title": "Failed to reload {{project}}",
 
@@ -567,8 +570,7 @@ export const dict = {
   "session.review.noVcs.createGit.action": "Create Git repository",
   "session.review.noSnapshot": "Snapshot tracking is disabled in config, so session changes are unavailable",
   "session.review.noChanges": "No changes",
-  "session.review.noUncommittedChanges": "No uncommitted changes yet",
-  "session.review.noBranchChanges": "No branch changes yet",
+  "session.generateTitle": "Generate title",
 
   "session.files.selectToOpen": "Select a file to open",
   "session.files.all": "All files",

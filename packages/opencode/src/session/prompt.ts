@@ -1864,138 +1864,132 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = Layer.suspend(() =>
-  layer.pipe(
-    Layer.provide(SessionRunState.defaultLayer),
-    Layer.provide(SessionStatus.defaultLayer),
-    Layer.provide(SessionCompaction.defaultLayer),
-    Layer.provide(SessionProcessor.defaultLayer),
-    Layer.provide(Command.defaultLayer),
-    Layer.provide(Permission.defaultLayer),
-    Layer.provide(MCP.defaultLayer),
-    Layer.provide(LSP.defaultLayer),
-    Layer.provide(ToolRegistry.defaultLayer),
-    Layer.provide(Truncate.defaultLayer),
-    Layer.provide(Provider.defaultLayer),
-    Layer.provide(Config.defaultLayer),
-    Layer.provide(Instruction.defaultLayer),
-    Layer.provide(AppFileSystem.defaultLayer),
-    Layer.provide(Plugin.defaultLayer),
-    Layer.provide(Session.defaultLayer),
-    Layer.provide(SessionRevert.defaultLayer),
-    Layer.provide(SessionSummary.defaultLayer),
-    Layer.provide(Image.defaultLayer),
-    Layer.provide(
-      Layer.mergeAll(
-        EventV2Bridge.defaultLayer,
-        Agent.defaultLayer,
-        SystemPrompt.defaultLayer,
-        LLM.defaultLayer,
-        Reference.defaultLayer,
-        Bus.layer,
-        CrossSpawnSpawner.defaultLayer,
-        RuntimeFlags.defaultLayer,
-      ),
-    ),
-  ),
-)
-const ModelRef = Schema.Struct({
-  providerID: ProviderID,
-  modelID: ModelID,
-})
+      const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
+      return Session.setTitle({ sessionID: input.session.id, title })
+    }
+  }
 
-export const PromptInput = Schema.Struct({
-  sessionID: SessionID,
-  messageID: Schema.optional(MessageID),
-  model: Schema.optional(ModelRef),
-  agent: Schema.optional(Schema.String),
-  noReply: Schema.optional(Schema.Boolean),
-  tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)).annotate({
-    description:
-      "@deprecated tools and permissions have been merged, you can set permissions on the session itself now",
-  }),
-  format: Schema.optional(MessageV2.Format),
-  system: Schema.optional(Schema.String),
-  variant: Schema.optional(Schema.String),
-  parts: Schema.Array(
-    Schema.Union([
-      MessageV2.TextPartInput,
-      MessageV2.FilePartInput,
-      MessageV2.AgentPartInput,
-      MessageV2.SubtaskPartInput,
-    ]).annotate({ discriminator: "type" }),
-  ),
-})
-export type PromptInput = Schema.Schema.Type<typeof PromptInput>
+  export async function generateTitle(input: { sessionID: string }) {
+    const session = await Session.get(input.sessionID)
+    const history = await Session.messages({ sessionID: input.sessionID })
 
-export class LoopInput extends Schema.Class<LoopInput>("SessionPrompt.LoopInput")({
-  sessionID: SessionID,
-}) {}
+    // Find first non-synthetic user message
+    const firstRealUserIdx = history.findIndex(
+      (m: MessageV2.WithParts) =>
+        m.info.role === "user" && !m.parts.every((p: MessageV2.Part) => "synthetic" in p && p.synthetic),
+    )
+    if (firstRealUserIdx === -1) throw new Error("No user messages found in session")
 
-export const ShellInput = Schema.Struct({
-  sessionID: SessionID,
-  messageID: Schema.optional(MessageID),
-  agent: Schema.String,
-  model: Schema.optional(ModelRef),
-  command: Schema.String,
-})
-export type ShellInput = Schema.Schema.Type<typeof ShellInput>
+    const firstRealUser = history[firstRealUserIdx]
 
-export const CommandInput = Schema.Struct({
-  messageID: Schema.optional(MessageID),
-  sessionID: SessionID,
-  agent: Schema.optional(Schema.String),
-  model: Schema.optional(Schema.String),
-  arguments: Schema.String,
-  command: Schema.String,
-  variant: Schema.optional(Schema.String),
-  // Inlined (no identifier annotation) to keep the original SDK output — the
-  // PromptInput call site below references FilePartInput by ref via the
-  // Schema export in message-v2.ts.
-  parts: Schema.optional(
-    Schema.Array(
-      Schema.Union([
-        Schema.Struct({
-          id: Schema.optional(PartID),
-          type: Schema.Literal("file"),
-          mime: Schema.String,
-          filename: Schema.optional(Schema.String),
-          url: Schema.String,
-          source: Schema.optional(MessageV2.FilePartSource),
-        }),
-      ]).annotate({ discriminator: "type" }),
-    ),
-  ),
-})
-export type CommandInput = Schema.Schema.Type<typeof CommandInput>
+    // Extract text content from the user message
+    const subtaskParts = firstRealUser.parts.filter(
+      (p: MessageV2.Part) => p.type === "subtask",
+    ) as MessageV2.SubtaskPart[]
+    const hasOnlySubtaskParts =
+      subtaskParts.length > 0 && firstRealUser.parts.every((p: MessageV2.Part) => p.type === "subtask")
 
-/** @internal Exported for testing */
-export function createStructuredOutputTool(input: {
-  schema: Record<string, any>
-  onSuccess: (output: unknown) => void
-}): AITool {
-  // Remove $schema property if present (not needed for tool input)
-  const { $schema: _, ...toolSchema } = input.schema
+    const textParts = firstRealUser.parts
+      .filter((p: MessageV2.Part) => p.type === "text" && !("synthetic" in p && p.synthetic))
+      .map((p) => (p as MessageV2.TextPart).text)
+      .filter((t) => t.length > 0)
 
-  return tool({
-    description: STRUCTURED_OUTPUT_DESCRIPTION,
-    inputSchema: jsonSchema(toolSchema as JSONSchema7),
-    async execute(args) {
-      // AI SDK validates args against inputSchema before calling execute()
-      input.onSuccess(args)
-      return {
-        output: "Structured output captured successfully.",
-        title: "Structured Output",
-        metadata: { valid: true },
+    const content = hasOnlySubtaskParts ? subtaskParts.map((p) => p.prompt).join("\n") : textParts.join("\n")
+
+    if (!content) throw new Error("No text content found in user message")
+
+    const agent = await Agent.get("title")
+    if (!agent) throw new Error("Title agent not found")
+
+    // Build a list of models to try in order:
+    // 1. Title agent's configured model (if any)
+    // 2. The session's original model (proven to work for chat)
+    // 3. getSmallModel fallback from the session's provider
+    const providerID = firstRealUser.info.role === "user" ? firstRealUser.info.model.providerID : "anthropic"
+    const modelID = firstRealUser.info.role === "user" ? firstRealUser.info.model.modelID : "claude-3-5-sonnet-20241022"
+
+    const candidates: Provider.Model[] = []
+    if (agent.model) {
+      try {
+        candidates.push(await Provider.getModel(agent.model.providerID, agent.model.modelID))
+      } catch {}
+    }
+    try {
+      candidates.push(await Provider.getModel(providerID, modelID))
+    } catch {}
+    try {
+      const small = await Provider.getSmallModel(providerID)
+      if (small && !candidates.some((c) => c.providerID === small.providerID && c.id === small.id)) {
+        candidates.push(small)
       }
-    },
-    toModelOutput({ output }) {
-      return {
-        type: "text",
-        value: output.output,
+    } catch {}
+
+    if (candidates.length === 0) throw new Error("No available model for title generation")
+
+    const msg = "Generate a title for this conversation:\n" + content
+    let lastError: unknown
+
+    for (const model of candidates) {
+      log.info("generateTitle", {
+        sessionID: input.sessionID,
+        providerID: model.providerID,
+        modelID: model.id,
+        contentLength: content.length,
+        attempt: candidates.indexOf(model) + 1,
+        total: candidates.length,
+      })
+
+      try {
+        const result = await LLM.stream({
+          agent,
+          user: firstRealUser.info as MessageV2.User,
+          system: [],
+          small: false,
+          tools: {},
+          model,
+          abort: new AbortController().signal,
+          sessionID: input.sessionID,
+          retries: 1,
+          messages: [{ role: "user", content: msg }],
+        })
+
+        const text = await result.text
+
+        if (!text) {
+          lastError = new Error("Empty output from " + model.providerID + "/" + model.id)
+          log.warn("generateTitle empty output, trying next", {
+            providerID: model.providerID,
+            modelID: model.id,
+          })
+          continue
+        }
+
+        const cleaned = text
+          .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+          .split("\n")
+          .map((line) => line.trim())
+          .find((line) => line.length > 0)
+
+        if (!cleaned) {
+          lastError = new Error("Generated title is empty after cleaning from " + model.providerID + "/" + model.id)
+          continue
+        }
+
+        const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
+        return Session.setTitle({ sessionID: input.sessionID, title })
+      } catch (err) {
+        lastError = err
+        log.warn("generateTitle attempt failed, trying next", {
+          providerID: model.providerID,
+          modelID: model.id,
+          error: err instanceof Error ? err.message : String(err),
+        })
       }
-    },
-  })
+    }
+
+    log.error("generateTitle all attempts failed", { error: lastError })
+    throw lastError ?? new Error("Failed to generate title")
+  }
 }
 const bashRegex = /!`([^`]+)`/g
 // Match [Image N] as single token, quoted strings, or non-space sequences
