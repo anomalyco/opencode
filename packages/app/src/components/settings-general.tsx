@@ -1,4 +1,4 @@
-import { Component, Show, createMemo, createResource, type JSX } from "solid-js"
+import { Component, Show, createMemo, createResource, createSignal, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -10,6 +10,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSettings, monoFontFamily } from "@/context/settings"
+import { useSDK } from "@/context/sdk"
 import { playSound, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
 
@@ -313,6 +314,21 @@ export const SettingsGeneral: Component = () => {
     </div>
   )
 
+  const sdk = useSDK()
+  const [thinkingStrategy, setThinkingStrategy] = createSignal<"none" | "strip" | "compact">("none")
+
+  // Load current thinking strategy from backend config
+  sdk.client.config.get().then((res) => {
+    const strategy = (res.data as any)?.compaction?.thinking_strategy
+    if (strategy === "none" || strategy === "strip" || strategy === "compact") setThinkingStrategy(strategy)
+  }).catch(() => {})
+
+  const thinkingOptions = [
+    { value: "none" as const, label: "None (default)" },
+    { value: "strip" as const, label: "Strip thinking" },
+    { value: "compact" as const, label: "Compact on error" },
+  ]
+
   const FeedSection = () => (
     <div class="flex flex-col gap-1">
       <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.feed")}</h3>
@@ -328,6 +344,44 @@ export const SettingsGeneral: Component = () => {
               onChange={(checked) => settings.general.setShowReasoningSummaries(checked)}
             />
           </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title="Thinking Strategy"
+          description="How to handle thinking blocks that cause API errors in long sessions"
+        >
+          <Select
+            data-action="settings-thinking-strategy"
+            options={thinkingOptions}
+            current={thinkingOptions.find((o) => o.value === thinkingStrategy())}
+            value={(o) => o.value}
+            label={(o) => o.label}
+            onSelect={(option) => {
+              if (!option) return
+              setThinkingStrategy(option.value)
+              sdk.client.config
+                .update({ config: { compaction: { thinking_strategy: option.value } } as any })
+                .then(() =>
+                  showToast({
+                    variant: "success",
+                    title: "Thinking strategy updated",
+                    description: option.value === "strip"
+                      ? "Thinking blocks will be stripped before sending to API"
+                      : "Thinking blocks preserved; session auto-compacts on error",
+                  }),
+                )
+                .catch((err) => {
+                  setThinkingStrategy(thinkingStrategy() === "strip" ? "compact" : "strip")
+                  showToast({
+                    title: "Failed to update",
+                    description: err instanceof Error ? err.message : String(err),
+                  })
+                })
+            }}
+            variant="secondary"
+            size="small"
+            triggerVariant="settings"
+          />
         </SettingsRow>
 
         <SettingsRow

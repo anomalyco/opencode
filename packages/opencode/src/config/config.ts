@@ -1181,6 +1181,13 @@ export namespace Config {
             .min(0)
             .optional()
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
+          thinking_strategy: z
+            .enum(["none", "strip", "compact"])
+            .optional()
+            .default("none")
+            .describe(
+              "Strategy for handling thinking blocks that cause API errors. 'none' (default) sends thinking blocks as-is (original behavior). 'strip' removes thinking from last message before sending (prevents errors proactively). 'compact' preserves thinking but auto-compacts on error (retries with summarized context).",
+            ),
         })
         .optional(),
       experimental: z

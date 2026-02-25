@@ -32,6 +32,7 @@ import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
 import { $, fileURLToPath, pathToFileURL } from "bun"
+import { Config } from "../config/config"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/util/error"
@@ -655,6 +656,10 @@ export namespace SessionPrompt {
         system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
       }
 
+      const config = await Config.get()
+      const thinkingStrategy = config.compaction?.thinking_strategy ?? "none"
+      const stripLastReasoning = thinkingStrategy === "strip"
+
       const result = await processor.process({
         user: lastUser,
         agent,
@@ -662,7 +667,7 @@ export namespace SessionPrompt {
         sessionID,
         system,
         messages: [
-          ...MessageV2.toModelMessages(msgs, model),
+          ...MessageV2.toModelMessages(msgs, model, { stripLastReasoning }),
           ...(isLastStep
             ? [
                 {

@@ -81,6 +81,35 @@
     overflow-y: auto;
   }
 
+  [data-slot="session-turn-error-thinking"] {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+
+    > span {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+  }
+
+  [data-slot="session-turn-error-actions"] {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+
+    [data-component="button"] {
+      gap: 6px;
+      color: var(--text-on-critical-base);
+      border-color: color-mix(in srgb, var(--text-on-critical-base) 30%, transparent);
+      background: color-mix(in srgb, var(--text-on-critical-base) 10%, transparent);
+
+      &:hover {
+        background: color-mix(in srgb, var(--text-on-critical-base) 20%, transparent);
+      }
+    }
+  }
+
   [data-slot="session-turn-assistant-content"] {
     width: 100%;
     min-width: 0;
