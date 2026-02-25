@@ -244,6 +244,7 @@ export const dict = {
   "black.hero.title": "世界最高峰のコーディングモデルすべてにアクセス",
   "black.hero.subtitle": "Claude、GPT、Gemini などを含む",
   "black.title": "OpenCode Black | 料金",
+  "black.paused": "Blackプランの登録は一時的に停止しています。",
   "black.plan.icon20": "Black 20 プラン",
   "black.plan.icon100": "Black 100 プラン",
   "black.plan.icon200": "Black 200 プラン",
@@ -346,6 +347,8 @@ export const dict = {
   "workspace.usage.breakdown.output": "出力",
   "workspace.usage.breakdown.reasoning": "推論",
   "workspace.usage.subscription": "サブスクリプション (${{amount}})",
+  "workspace.usage.lite": "lite (${{amount}})",
+  "workspace.usage.byok": "BYOK (${{amount}})",
 
   "workspace.cost.title": "コスト",
   "workspace.cost.subtitle": "モデルごとの使用料金の内訳。",
@@ -354,6 +357,7 @@ export const dict = {
   "workspace.cost.deletedSuffix": "(削除済み)",
   "workspace.cost.empty": "選択した期間の使用状況データはありません。",
   "workspace.cost.subscriptionShort": "サブ",
+  "workspace.cost.liteShort": "lite",
 
   "workspace.keys.title": "APIキー",
   "workspace.keys.subtitle": "OpenCodeサービスにアクセスするためのAPIキーを管理します。",
@@ -482,6 +486,31 @@ export const dict = {
   "workspace.black.waitlist.enrolled": "登録済み",
   "workspace.black.waitlist.enrollNote":
     "「登録する」をクリックすると、サブスクリプションがすぐに開始され、カードに請求されます。",
+
+  "workspace.lite.loading": "読み込み中...",
+  "workspace.lite.time.day": "日",
+  "workspace.lite.time.days": "日",
+  "workspace.lite.time.hour": "時間",
+  "workspace.lite.time.hours": "時間",
+  "workspace.lite.time.minute": "分",
+  "workspace.lite.time.minutes": "分",
+  "workspace.lite.time.fewSeconds": "数秒",
+  "workspace.lite.subscription.title": "Liteサブスクリプション",
+  "workspace.lite.subscription.message": "あなたは OpenCode Lite を購読しています。",
+  "workspace.lite.subscription.manage": "サブスクリプションの管理",
+  "workspace.lite.subscription.rollingUsage": "ローリング利用量",
+  "workspace.lite.subscription.weeklyUsage": "週間利用量",
+  "workspace.lite.subscription.monthlyUsage": "月間利用量",
+  "workspace.lite.subscription.resetsIn": "リセットまで",
+  "workspace.lite.subscription.useBalance": "利用限度額に達したら利用可能な残高を使用する",
+  "workspace.lite.other.title": "Liteサブスクリプション",
+  "workspace.lite.other.message":
+    "このワークスペースの別のメンバーが既に OpenCode Lite を購読しています。ワークスペースにつき1人のメンバーのみが購読できます。",
+  "workspace.lite.promo.title": "OpenCode Lite",
+  "workspace.lite.promo.description":
+    "月額$10で、十分な利用枠が設けられた最高のオープンモデル — Kimi K2.5、GLM-5、および MiniMax M2.5 — にアクセスできます。",
+  "workspace.lite.promo.subscribe": "Liteを購読する",
+  "workspace.lite.promo.subscribing": "リダイレクト中...",
 
   "download.title": "OpenCode | ダウンロード",
   "download.meta.description": "OpenCode を macOS、Windows、Linux 向けにダウンロード",

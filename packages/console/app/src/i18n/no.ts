@@ -245,6 +245,7 @@ export const dict = {
   "black.hero.title": "Få tilgang til verdens beste kodemodeller",
   "black.hero.subtitle": "Inkludert Claude, GPT, Gemini og mer",
   "black.title": "OpenCode Black | Priser",
+  "black.paused": "Black-planregistrering er midlertidig satt på pause.",
   "black.plan.icon20": "Black 20-plan",
   "black.plan.icon100": "Black 100-plan",
   "black.plan.icon200": "Black 200-plan",
@@ -347,6 +348,8 @@ export const dict = {
   "workspace.usage.breakdown.output": "Output",
   "workspace.usage.breakdown.reasoning": "Resonnering",
   "workspace.usage.subscription": "abonnement (${{amount}})",
+  "workspace.usage.lite": "lite (${{amount}})",
+  "workspace.usage.byok": "BYOK (${{amount}})",
 
   "workspace.cost.title": "Kostnad",
   "workspace.cost.subtitle": "Brukskostnader fordelt på modell.",
@@ -355,6 +358,7 @@ export const dict = {
   "workspace.cost.deletedSuffix": "(slettet)",
   "workspace.cost.empty": "Ingen bruksdata tilgjengelig for den valgte perioden.",
   "workspace.cost.subscriptionShort": "sub",
+  "workspace.cost.liteShort": "lite",
 
   "workspace.keys.title": "API-nøkler",
   "workspace.keys.subtitle": "Administrer API-nøklene dine for å få tilgang til opencode-tjenester.",
@@ -482,6 +486,31 @@ export const dict = {
   "workspace.black.waitlist.enrolled": "Påmeldt",
   "workspace.black.waitlist.enrollNote":
     "Når du klikker på Meld på, starter abonnementet umiddelbart og kortet ditt belastes.",
+
+  "workspace.lite.loading": "Laster...",
+  "workspace.lite.time.day": "dag",
+  "workspace.lite.time.days": "dager",
+  "workspace.lite.time.hour": "time",
+  "workspace.lite.time.hours": "timer",
+  "workspace.lite.time.minute": "minutt",
+  "workspace.lite.time.minutes": "minutter",
+  "workspace.lite.time.fewSeconds": "noen få sekunder",
+  "workspace.lite.subscription.title": "Lite-abonnement",
+  "workspace.lite.subscription.message": "Du abonnerer på OpenCode Lite.",
+  "workspace.lite.subscription.manage": "Administrer abonnement",
+  "workspace.lite.subscription.rollingUsage": "Løpende bruk",
+  "workspace.lite.subscription.weeklyUsage": "Ukentlig bruk",
+  "workspace.lite.subscription.monthlyUsage": "Månedlig bruk",
+  "workspace.lite.subscription.resetsIn": "Nullstilles om",
+  "workspace.lite.subscription.useBalance": "Bruk din tilgjengelige saldo etter å ha nådd bruksgrensene",
+  "workspace.lite.other.title": "Lite-abonnement",
+  "workspace.lite.other.message":
+    "Et annet medlem i dette arbeidsområdet abonnerer allerede på OpenCode Lite. Kun ett medlem per arbeidsområde kan abonnere.",
+  "workspace.lite.promo.title": "OpenCode Lite",
+  "workspace.lite.promo.description":
+    "Få tilgang til de beste åpne modellene — Kimi K2.5, GLM-5 og MiniMax M2.5 — med generøse bruksgrenser for $10 per måned.",
+  "workspace.lite.promo.subscribe": "Abonner på Lite",
+  "workspace.lite.promo.subscribing": "Omdirigerer...",
 
   "download.title": "OpenCode | Last ned",
   "download.meta.description": "Last ned OpenCode for macOS, Windows og Linux",
