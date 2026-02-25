@@ -1853,16 +1853,106 @@ export const layer = Layer.effect(
       messageID: result.info.id,
     })
 
-    return Service.of({
-      cancel,
-      prompt,
-      loop,
-      shell,
-      command,
-      resolvePromptParts,
-    })
-  }),
-)
+    return result
+  }
+
+  async function ensureTitle(input: {
+    session: Session.Info
+    history: MessageV2.WithParts[]
+    providerID: string
+    modelID: string
+  }) {
+    const blocked = (model: Provider.Model) =>
+      model.providerID === "anthropic" && (model.id === "claude-haiku-4-5" || model.id === "claude-haiku-4.5")
+    const add = (list: Provider.Model[], model?: Provider.Model) => {
+      if (!model || blocked(model)) return
+      if (list.some((item) => item.providerID === model.providerID && item.id === model.id)) return
+      list.push(model)
+    }
+
+    if (input.session.parentID) return
+    if (!Session.isDefaultTitle(input.session.title)) return
+
+    // Find first non-synthetic user message
+    const firstRealUserIdx = input.history.findIndex(
+      (m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic),
+    )
+    if (firstRealUserIdx === -1) return
+
+    const isFirst =
+      input.history.filter((m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic))
+        .length === 1
+    if (!isFirst) return
+
+    // Gather all messages up to and including the first real user message for context
+    // This includes any shell/subtask executions that preceded the user's first prompt
+    const contextMessages = input.history.slice(0, firstRealUserIdx + 1)
+    const firstRealUser = contextMessages[firstRealUserIdx]
+
+    // For subtask-only messages (from command invocations), extract the prompt directly
+    // since toModelMessage converts subtask parts to generic "The following tool was executed by the user"
+    const subtaskParts = firstRealUser.parts.filter((p) => p.type === "subtask") as MessageV2.SubtaskPart[]
+    const hasOnlySubtaskParts = subtaskParts.length > 0 && firstRealUser.parts.every((p) => p.type === "subtask")
+
+    const agent = await Agent.get("title")
+    if (!agent) return
+    const candidates: Provider.Model[] = []
+    if (agent.model) {
+      const model = await Provider.getModel(agent.model.providerID, agent.model.modelID).catch(() => undefined)
+      add(candidates, model)
+    }
+    add(candidates, await Provider.getModel(input.providerID, input.modelID).catch(() => undefined))
+    add(candidates, await Provider.getModel("AxonHub-anthropic", "claude-haiku-4-5").catch(() => undefined))
+    add(candidates, await Provider.getModel("AxonHub", "gpt-5-nano").catch(() => undefined))
+    add(candidates, await Provider.getSmallModel(input.providerID).catch(() => undefined))
+    if (!candidates.length) return
+
+    for (const model of candidates) {
+      const result = await LLM.stream({
+        agent,
+        user: firstRealUser.info as MessageV2.User,
+        system: [],
+        small: false,
+        tools: {},
+        model,
+        abort: new AbortController().signal,
+        sessionID: input.session.id,
+        retries: 1,
+        messages: [
+          {
+            role: "user",
+            content: "Generate a title for this conversation:\n",
+          },
+          ...(hasOnlySubtaskParts
+            ? [{ role: "user" as const, content: subtaskParts.map((p) => p.prompt).join("\n") }]
+            : MessageV2.toModelMessages(contextMessages, model)),
+        ],
+      }).catch((error) => {
+        log.warn("ensureTitle attempt failed", {
+          providerID: model.providerID,
+          modelID: model.id,
+          error,
+        })
+        return undefined
+      })
+      if (!result) continue
+
+      const text = await result.text.catch((error) => {
+        log.warn("ensureTitle no text", {
+          providerID: model.providerID,
+          modelID: model.id,
+          error,
+        })
+        return undefined
+      })
+      if (!text) continue
+
+      const cleaned = text
+        .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+        .split("\n")
+        .map((line) => line.trim())
+        .find((line) => line.length > 0)
+      if (!cleaned) continue
 
       const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
       return Session.setTitle({ sessionID: input.session.id, title })
@@ -1872,6 +1962,13 @@ export const layer = Layer.effect(
   export async function generateTitle(input: { sessionID: string }) {
     const session = await Session.get(input.sessionID)
     const history = await Session.messages({ sessionID: input.sessionID })
+    const blocked = (model: Provider.Model) =>
+      model.providerID === "anthropic" && (model.id === "claude-haiku-4-5" || model.id === "claude-haiku-4.5")
+    const add = (list: Provider.Model[], model?: Provider.Model) => {
+      if (!model || blocked(model)) return
+      if (list.some((item) => item.providerID === model.providerID && item.id === model.id)) return
+      list.push(model)
+    }
 
     // Find first non-synthetic user message
     const firstRealUserIdx = history.findIndex(
@@ -1910,19 +2007,12 @@ export const layer = Layer.effect(
 
     const candidates: Provider.Model[] = []
     if (agent.model) {
-      try {
-        candidates.push(await Provider.getModel(agent.model.providerID, agent.model.modelID))
-      } catch {}
+      add(candidates, await Provider.getModel(agent.model.providerID, agent.model.modelID).catch(() => undefined))
     }
-    try {
-      candidates.push(await Provider.getModel(providerID, modelID))
-    } catch {}
-    try {
-      const small = await Provider.getSmallModel(providerID)
-      if (small && !candidates.some((c) => c.providerID === small.providerID && c.id === small.id)) {
-        candidates.push(small)
-      }
-    } catch {}
+    add(candidates, await Provider.getModel(providerID, modelID).catch(() => undefined))
+    add(candidates, await Provider.getModel("AxonHub-anthropic", "claude-haiku-4-5").catch(() => undefined))
+    add(candidates, await Provider.getModel("AxonHub", "gpt-5-nano").catch(() => undefined))
+    add(candidates, await Provider.getSmallModel(providerID).catch(() => undefined))
 
     if (candidates.length === 0) throw new Error("No available model for title generation")
 
