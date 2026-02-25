@@ -5,6 +5,8 @@ import { Identifier } from "../id/id"
 import { PermissionNext } from "../permission/next"
 import type { Agent } from "../agent/agent"
 import { Scheduler } from "../scheduler"
+import { Filesystem } from "../util/filesystem"
+import { Glob } from "../util/glob"
 
 export namespace Truncate {
   export const MAX_LINES = 2000
@@ -33,8 +35,7 @@ export namespace Truncate {
 
   export async function cleanup() {
     const cutoff = Identifier.timestamp(Identifier.create("tool", false, Date.now() - RETENTION_MS))
-    const glob = new Bun.Glob("tool_*")
-    const entries = await Array.fromAsync(glob.scan({ cwd: DIR, onlyFiles: true })).catch(() => [] as string[])
+    const entries = await Glob.scan("tool_*", { cwd: DIR, include: "file" }).catch(() => [] as string[])
     for (const entry of entries) {
       if (Identifier.timestamp(entry) >= cutoff) continue
       await fs.unlink(path.join(DIR, entry)).catch(() => {})
@@ -91,7 +92,7 @@ export namespace Truncate {
 
     const id = Identifier.ascending("tool")
     const filepath = path.join(DIR, id)
-    await Bun.write(Bun.file(filepath), text)
+    await Filesystem.write(filepath, text)
 
     const hint = hasTaskTool(agent)
       ? `The tool call succeeded but the output was truncated. Full output saved to: ${filepath}\nUse the Task tool to have explore agent process this file with Grep and Read (with offset/limit). Do NOT read the full file yourself - delegate to save context.`

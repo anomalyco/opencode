@@ -1,0 +1,391 @@
+---
+title: SDK
+description: Cliente JS seguro em tipos para o servidor opencode.
+---
+
+import config from "../../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+O SDK JS/TS do opencode fornece um cliente seguro em tipos para interagir com o servidor.
+Use-o para construir integrações e controlar o opencode programaticamente.
+
+[Saiba mais](/docs/server) sobre como o servidor funciona. Para exemplos, confira os [projetos](/docs/ecosystem#projects) construídos pela comunidade.
+
+---
+
+## Instalar
+
+Instale o SDK a partir do npm:
+
+```bash
+npm install @opencode-ai/sdk
+```
+
+---
+
+## Criar cliente
+
+Crie uma instância do opencode:
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const { client } = await createOpencode()
+```
+
+Isso inicia tanto um servidor quanto um cliente.
+
+#### Opções
+
+| Opção      | Tipo          | Descrição                                  | Padrão      |
+| ---------- | ------------- | ------------------------------------------ | ----------- |
+| `hostname` | `string`      | Nome do host do servidor                   | `127.0.0.1` |
+| `port`     | `number`      | Porta do servidor                          | `4096`      |
+| `signal`   | `AbortSignal` | Sinal de abortar para cancelamento         | `undefined` |
+| `timeout`  | `number`      | Tempo limite em ms para iniciar o servidor | `5000`      |
+| `config`   | `Config`      | Objeto de configuração                     | `{}`        |
+
+---
+
+## Configuração
+
+Você pode passar um objeto de configuração para personalizar o comportamento. A instância ainda pega seu `opencode.json`, mas você pode substituir ou adicionar configuração inline:
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const opencode = await createOpencode({
+  hostname: "127.0.0.1",
+  port: 4096,
+  config: {
+    model: "anthropic/claude-3-5-sonnet-20241022",
+  },
+})
+
+console.log(`Server running at ${opencode.server.url}`)
+
+opencode.server.close()
+```
+
+## Apenas cliente
+
+Se você já tem uma instância do opencode em execução, pode criar uma instância de cliente para se conectar a ela:
+
+```javascript
+import { createOpencodeClient } from "@opencode-ai/sdk"
+
+const client = createOpencodeClient({
+  baseUrl: "http://localhost:4096",
+})
+```
+
+#### Opções
+
+| Opção           | Tipo       | Descrição                             | Padrão                  |
+| --------------- | ---------- | ------------------------------------- | ----------------------- |
+| `baseUrl`       | `string`   | URL do servidor                       | `http://localhost:4096` |
+| `fetch`         | `function` | Implementação de fetch personalizada  | `globalThis.fetch`      |
+| `parseAs`       | `string`   | Método de análise da resposta         | `auto`                  |
+| `responseStyle` | `string`   | Estilo de retorno: `data` ou `fields` | `fields`                |
+| `throwOnError`  | `boolean`  | Lançar erros em vez de retornar       | `false`                 |
+
+---
+
+## Tipos
+
+O SDK inclui definições TypeScript para todos os tipos da API. Importe-os diretamente:
+
+```typescript
+import type { Session, Message, Part } from "@opencode-ai/sdk"
+```
+
+Todos os tipos são gerados a partir da especificação OpenAPI do servidor e estão disponíveis no <a href={typesUrl}>arquivo de tipos</a>.
+
+---
+
+## Erros
+
+O SDK pode lançar erros que você pode capturar e tratar:
+
+```typescript
+try {
+  await client.session.get({ path: { id: "invalid-id" } })
+} catch (error) {
+  console.error("Failed to get session:", (error as Error).message)
+}
+```
+
+---
+
+## APIs
+
+O SDK expõe todas as APIs do servidor através de um cliente seguro em tipos.
+
+---
+
+### Global
+
+| Método            | Descrição                              | Resposta                             |
+| ----------------- | -------------------------------------- | ------------------------------------ |
+| `global.health()` | Verificar a saúde e versão do servidor | `{ healthy: true, version: string }` |
+
+---
+
+#### Exemplos
+
+```javascript
+const health = await client.global.health()
+console.log(health.data.version)
+```
+
+---
+
+### App
+
+| Método         | Descrição                           | Resposta                                    |
+| -------------- | ----------------------------------- | ------------------------------------------- |
+| `app.log()`    | Escrever uma entrada de log         | `boolean`                                   |
+| `app.agents()` | Listar todos os agentes disponíveis | <a href={typesUrl}><code>Agent[]</code></a> |
+
+---
+
+#### Exemplos
+
+```javascript
+// Write a log entry
+await client.app.log({
+  body: {
+    service: "my-app",
+    level: "info",
+    message: "Operation completed",
+  },
+})
+
+// List available agents
+const agents = await client.app.agents()
+```
+
+---
+
+### Projeto
+
+| Método              | Descrição                | Resposta                                      |
+| ------------------- | ------------------------ | --------------------------------------------- |
+| `project.list()`    | Listar todos os projetos | <a href={typesUrl}><code>Project[]</code></a> |
+| `project.current()` | Obter projeto atual      | <a href={typesUrl}><code>Project</code></a>   |
+
+---
+
+#### Exemplos
+
+```javascript
+// List all projects
+const projects = await client.project.list()
+
+// Get current project
+const currentProject = await client.project.current()
+```
+
+---
+
+### Caminho
+
+| Método       | Descrição           | Resposta                                 |
+| ------------ | ------------------- | ---------------------------------------- |
+| `path.get()` | Obter caminho atual | <a href={typesUrl}><code>Path</code></a> |
+
+---
+
+#### Exemplos
+
+```javascript
+// Get current path information
+const pathInfo = await client.path.get()
+```
+
+---
+
+### Configuração
+
+| Método               | Descrição                          | Resposta                                                                                              |
+| -------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `config.get()`       | Obter informações de configuração  | <a href={typesUrl}><code>Config</code></a>                                                            |
+| `config.providers()` | Listar provedores e modelos padrão | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
+
+---
+
+#### Exemplos
+
+```javascript
+const config = await client.config.get()
+
+const { providers, default: defaults } = await client.config.providers()
+```
+
+---
+
+### Sessões
+
+| Método                                                     | Descrição                          | Notas                                                                                                                                                |
+| ---------------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session.list()`                                           | Listar sessões                     | Retorna <a href={typesUrl}><code>Session[]</code></a>                                                                                                |
+| `session.get({ path })`                                    | Obter sessão                       | Retorna <a href={typesUrl}><code>Session</code></a>                                                                                                  |
+| `session.children({ path })`                               | Listar sessões filhas              | Retorna <a href={typesUrl}><code>Session[]</code></a>                                                                                                |
+| `session.create({ body })`                                 | Criar sessão                       | Retorna <a href={typesUrl}><code>Session</code></a>                                                                                                  |
+| `session.delete({ path })`                                 | Deletar sessão                     | Retorna `boolean`                                                                                                                                    |
+| `session.update({ path, body })`                           | Atualizar propriedades da sessão   | Retorna <a href={typesUrl}><code>Session</code></a>                                                                                                  |
+| `session.init({ path, body })`                             | Analisar app e criar `AGENTS.md`   | Retorna `boolean`                                                                                                                                    |
+| `session.abort({ path })`                                  | Abortar uma sessão em execução     | Retorna `boolean`                                                                                                                                    |
+| `session.share({ path })`                                  | Compartilhar sessão                | Retorna <a href={typesUrl}><code>Session</code></a>                                                                                                  |
+| `session.unshare({ path })`                                | Descompartilhar sessão             | Retorna <a href={typesUrl}><code>Session</code></a>                                                                                                  |
+| `session.summarize({ path, body })`                        | Resumir sessão                     | Retorna `boolean`                                                                                                                                    |
+| `session.messages({ path })`                               | Listar mensagens em uma sessão     | Retorna `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                              |
+| `session.message({ path })`                                | Obter detalhes da mensagem         | Retorna `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                |
+| `session.prompt({ path, body })`                           | Enviar mensagem de prompt          | `body.noReply: true` retorna UserMessage (apenas contexto). O padrão retorna <a href={typesUrl}><code>AssistantMessage</code></a> com resposta da AI |
+| `session.command({ path, body })`                          | Enviar comando para a sessão       | Retorna `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                       |
+| `session.shell({ path, body })`                            | Executar um comando shell          | Retorna <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                         |
+| `session.revert({ path, body })`                           | Reverter uma mensagem              | Retorna <a href={typesUrl}><code>Session</code></a>                                                                                                  |
+| `session.unrevert({ path })`                               | Restaurar mensagens revertidas     | Retorna <a href={typesUrl}><code>Session</code></a>                                                                                                  |
+| `postSessionByIdPermissionsByPermissionId({ path, body })` | Responder a um pedido de permissão | Retorna `boolean`                                                                                                                                    |
+
+---
+
+#### Exemplos
+
+```javascript
+// Create and manage sessions
+const session = await client.session.create({
+  body: { title: "My session" },
+})
+
+const sessions = await client.session.list()
+
+// Send a prompt message
+const result = await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    model: { providerID: "anthropic", modelID: "claude-3-5-sonnet-20241022" },
+    parts: [{ type: "text", text: "Hello!" }],
+  },
+})
+
+// Inject context without triggering AI response (useful for plugins)
+await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    noReply: true,
+    parts: [{ type: "text", text: "You are a helpful assistant." }],
+  },
+})
+```
+
+---
+
+### Arquivos
+
+| Método                    | Descrição                                | Resposta                                                                                                |
+| ------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `find.text({ query })`    | Pesquisar texto em arquivos              | Array de objetos de correspondência com `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
+| `find.files({ query })`   | Encontrar arquivos e diretórios por nome | `string[]` (caminhos)                                                                                   |
+| `find.symbols({ query })` | Encontrar símbolos no workspace          | <a href={typesUrl}><code>Symbol[]</code></a>                                                            |
+| `file.read({ query })`    | Ler um arquivo                           | `{ type: "raw" \| "patch", content: string }`                                                           |
+| `file.status({ query? })` | Obter status para arquivos rastreados    | <a href={typesUrl}><code>File[]</code></a>                                                              |
+
+`find.files` suporta alguns campos de consulta opcionais:
+
+- `type`: `"file"` ou `"directory"`
+- `directory`: substituir a raiz do projeto para a pesquisa
+- `limit`: resultados máximos (1–200)
+
+---
+
+#### Exemplos
+
+```javascript
+// Search and read files
+const textResults = await client.find.text({
+  query: { pattern: "function.*opencode" },
+})
+
+const files = await client.find.files({
+  query: { query: "*.ts", type: "file" },
+})
+
+const directories = await client.find.files({
+  query: { query: "packages", type: "directory", limit: 20 },
+})
+
+const content = await client.file.read({
+  query: { path: "src/index.ts" },
+})
+```
+
+---
+
+### TUI
+
+| Método                         | Descrição                  | Resposta  |
+| ------------------------------ | -------------------------- | --------- |
+| `tui.appendPrompt({ body })`   | Adicionar texto ao prompt  | `boolean` |
+| `tui.openHelp()`               | Abrir o diálogo de ajuda   | `boolean` |
+| `tui.openSessions()`           | Abrir o seletor de sessões | `boolean` |
+| `tui.openThemes()`             | Abrir o seletor de temas   | `boolean` |
+| `tui.openModels()`             | Abrir o seletor de modelos | `boolean` |
+| `tui.submitPrompt()`           | Enviar o prompt atual      | `boolean` |
+| `tui.clearPrompt()`            | Limpar o prompt            | `boolean` |
+| `tui.executeCommand({ body })` | Executar um comando        | `boolean` |
+| `tui.showToast({ body })`      | Mostrar notificação toast  | `boolean` |
+
+---
+
+#### Exemplos
+
+```javascript
+// Control TUI interface
+await client.tui.appendPrompt({
+  body: { text: "Add this to prompt" },
+})
+
+await client.tui.showToast({
+  body: { message: "Task completed", variant: "success" },
+})
+```
+
+---
+
+### Autenticação
+
+| Método              | Descrição                           | Resposta  |
+| ------------------- | ----------------------------------- | --------- |
+| `auth.set({ ... })` | Definir credenciais de autenticação | `boolean` |
+
+---
+
+#### Exemplos
+
+```javascript
+await client.auth.set({
+  path: { id: "anthropic" },
+  body: { type: "api", key: "your-api-key" },
+})
+```
+
+---
+
+### Eventos
+
+| Método              | Descrição                               | Resposta                                |
+| ------------------- | --------------------------------------- | --------------------------------------- |
+| `event.subscribe()` | Fluxo de eventos enviados pelo servidor | Fluxo de eventos enviados pelo servidor |
+
+---
+
+#### Exemplos
+
+```javascript
+// Listen to real-time events
+const events = await client.event.subscribe()
+for await (const event of events.stream) {
+  console.log("Event:", event.type, event.properties)
+}
+```

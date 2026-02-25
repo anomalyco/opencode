@@ -1,0 +1,222 @@
+---
+title: エージェントスキル
+description: SKILL.md 定義による再利用可能な動作の定義
+---
+
+エージェントスキルにより、OpenCode はリポジトリまたはホームディレクトリから再利用可能な命令を検出できます。
+スキルはネイティブの `skill` ツールを介してオンデマンドでロードされます。エージェントは利用可能なスキルを確認し、必要に応じて完全なコンテンツをロードできます。
+
+---
+
+## ファイルの配置
+
+スキル名ごとにフォルダーを 1 つ作成し、その中に `SKILL.md` を置きます。
+OpenCode は次の場所を検索します。
+
+- プロジェクト設定: `.opencode/skills/<name>/SKILL.md`
+- グローバル設定: `~/.config/opencode/skills/<name>/SKILL.md`
+- プロジェクト Claude 互換: `.claude/skills/<name>/SKILL.md`
+- グローバル Claude 互換: `~/.claude/skills/<name>/SKILL.md`
+- プロジェクトエージェント互換: `.agents/skills/<name>/SKILL.md`
+- グローバルエージェント互換: `~/.agents/skills/<name>/SKILL.md`
+
+---
+
+## 検出の仕組み
+
+プロジェクトのローカルパスの場合、OpenCode は現在の作業ディレクトリから git ワークツリーに到達するまで進みます。
+途中で、一致する `skills/*/SKILL.md` を `.opencode/` に読み込み、一致する `.claude/skills/*/SKILL.md` または `.agents/skills/*/SKILL.md` を読み込みます。
+
+グローバル定義は、`~/.config/opencode/skills/*/SKILL.md`、`~/.claude/skills/*/SKILL.md`、および `~/.agents/skills/*/SKILL.md` からもロードされます。
+
+---
+
+## フロントマターの記述
+
+各 `SKILL.md` は YAML フロントマターで始まる必要があります。
+次のフィールドのみが認識されます。
+
+- `name` (必須)
+- `description` (必須)
+- `license` (オプション)
+- `compatibility` (オプション)
+- `metadata` (オプション、文字列間のマップ)
+
+不明なフロントマターフィールドは無視されます。
+
+---
+
+## 名前の検証
+
+`name` は次のことを行う必要があります。
+
+- 1 ～ 64 文字であること
+- 単一のハイフンで区切られた小文字の英数字であること
+- `-` で開始または終了しない
+- 連続した `--` を含まない
+- `SKILL.md` を含むディレクトリ名と一致する
+
+同等の正規表現:
+
+```text
+^[a-z0-9]+(-[a-z0-9]+)*$
+```
+
+---
+
+## 長さのルール
+
+`description` は 1 ～ 1024 文字である必要があります。
+エージェントが正しく選択できるように、十分具体的な内容にしてください。
+
+---
+
+## 使用例
+
+次のように `.opencode/skills/git-release/SKILL.md` を作成します。
+
+```markdown
+---
+name: git-release
+description: Create consistent releases and changelogs
+license: MIT
+compatibility: opencode
+metadata:
+  audience: maintainers
+  workflow: github
+---
+
+## What I do
+
+- Draft release notes from merged PRs
+- Propose a version bump
+- Provide a copy-pasteable `gh release create` command
+
+## When to use me
+
+Use this when you are preparing a tagged release.
+Ask clarifying questions if the target versioning scheme is unclear.
+```
+
+---
+
+## ツールの説明認識
+
+OpenCode では、`skill` ツールの説明に利用可能なスキルがリストされています。
+各エントリにはスキル名と説明が含まれます。
+
+```xml
+<available_skills>
+  <skill>
+    <name>git-release</name>
+    <description>Create consistent releases and changelogs</description>
+  </skill>
+</available_skills>
+```
+
+エージェントはツールを呼び出してスキルをロードします。
+
+```
+skill({ name: "git-release" })
+```
+
+---
+
+## 権限の設定
+
+`opencode.json` のパターンベースの権限を使用して、エージェントがアクセスできるスキルを制御します。
+
+```json
+{
+  "permission": {
+    "skill": {
+      "*": "allow",
+      "pr-review": "allow",
+      "internal-*": "deny",
+      "experimental-*": "ask"
+    }
+  }
+}
+```
+
+| 許可    | アクション                                                 |
+| ------- | ---------------------------------------------------------- |
+| `allow` | スキルはすぐにロードされます                               |
+| `deny`  | スキルはエージェントから隠蔽され、アクセスは拒否されました |
+| `ask`   | ロードする前にユーザーに承認を求めるメッセージが表示される |
+
+パターンはワイルドカードをサポートしています: `internal-*` は `internal-docs`、`internal-tools` などに一致します。
+
+---
+
+## エージェントごとの上書き
+
+特定のエージェントにグローバルのデフォルトとは異なる権限を与えます。
+
+**カスタムエージェントの場合** (エージェントフロントマター内):
+
+```yaml
+---
+permission:
+  skill:
+    "documents-*": "allow"
+---
+```
+
+**組み込みエージェントの場合** (`opencode.json` 内):
+
+```json
+{
+  "agent": {
+    "plan": {
+      "permission": {
+        "skill": {
+          "internal-*": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+## スキルツールの無効化
+
+スキルを使用すべきではないエージェントのスキルを完全に無効にします。
+
+**カスタムエージェントの場合**:
+
+```yaml
+---
+tools:
+  skill: false
+---
+```
+
+**組み込みエージェントの場合**:
+
+```json
+{
+  "agent": {
+    "plan": {
+      "tools": {
+        "skill": false
+      }
+    }
+  }
+}
+```
+
+無効にすると、`<available_skills>` セクションが完全に省略されます。
+
+---
+
+## 読み込みのトラブルシューティング
+
+スキルが表示されない場合:
+
+1. `SKILL.md` のスペルがすべて大文字であることを確認してください
+2. フロントマターに `name` と `description` が含まれていることを確認します
+3. スキル名がすべての場所で一意であることを確認する
+4. 権限を確認してください - `deny` のスキルはエージェントから非表示になります

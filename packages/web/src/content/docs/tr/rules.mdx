@@ -1,0 +1,180 @@
+---
+title: Kurallar
+description: opencode için özel talimatları ayarlayın.
+---
+
+Bir `AGENTS.md` dosyası oluşturarak opencode için özel talimatlar verebilirsiniz. Bu, Cursor rules yaklaşımına benzer. Özel projeniz için davranışını özelleştirmek amacıyla LLM'in içeriğine dahil edilecek talimatları içerir.
+
+---
+
+## Başlat
+
+Yeni bir `AGENTS.md` dosyası oluşturmak için `/init` komutunu opencode'da çalıştırabilirsiniz.
+
+:::tip
+Projenizin `AGENTS.md` dosyasını Git'e göndermelisiniz.
+:::
+
+Bu, projenin neyle ilgili olduğunu anlamak için projenizi ve tüm içeriğini tarayacak ve onunla bir `AGENTS.md` dosyası oluşturacaktır. Bu, opencode'un projede daha iyi gezinmesine yardımcı olur.
+
+Mevcut bir `AGENTS.md` dosyanız varsa, bu dosyaya eklemeye çalışacaktır.
+
+---
+
+## Örnek
+
+Bu dosyayı manuel olarak da oluşturabilirsiniz. İşte bir `AGENTS.md` dosyasına koyabileceğiniz bazı şeylere bir örnek.
+
+```markdown title="AGENTS.md"
+# SST v3 Monorepo Project
+
+This is an SST v3 monorepo with TypeScript. The project uses bun workspaces for package management.
+
+## Project Structure
+
+- `packages/` - Contains all workspace packages (functions, core, web, etc.)
+- `infra/` - Infrastructure definitions split by service (storage.ts, api.ts, web.ts)
+- `sst.config.ts` - Main SST configuration with dynamic imports
+
+## Code Standards
+
+- Use TypeScript with strict mode enabled
+- Shared code goes in `packages/core/` with proper exports configuration
+- Functions go in `packages/functions/`
+- Infrastructure should be split into logical files in `infra/`
+
+## Monorepo Conventions
+
+- Import shared modules using workspace names: `@my-app/core/example`
+```
+
+Buraya projeye özel talimatlar ekliyoruz ve bu, ekibiniz arasında paylaşılacaktır.
+
+---
+
+## Türler
+
+opencode ayrıca `AGENTS.md` dosyasının birden fazla konumdan okunmasını da destekler. Ve bu farklı amaçlara hizmet ediyor.
+
+### Proje
+
+Projeye özel kurallar için proje kökünüze bir `AGENTS.md` yerleştirin. Bunlar yalnızca bu dizinde veya alt dizinlerinde çalışırken geçerlidir.
+
+### Global
+
+Ayrıca `~/.config/opencode/AGENTS.md` dosyasında genel kurallara sahip olabilirsiniz. Bu, tüm opencode oturumlarına uygulanır.
+
+Bu Git'e kaydedilmediği veya ekibinizle paylaşılmadığı için, LLM'ın uyması gereken kişisel kuralları belirtmek için bunu kullanmanızı öneririz.
+
+### Claude Code uyumluluğu
+
+opencode, Claude Code'dan geçiş yapan kullanıcılar için yedek olarak Claude Code'un dosya kurallarını destekler:
+
+- **Proje kuralları**: Proje dizininizdeki `CLAUDE.md` (`AGENTS.md` yoksa kullanılır)
+- **Global kurallar**: `~/.claude/CLAUDE.md` (`~/.config/opencode/AGENTS.md` yoksa kullanılır)
+- **Beceriler**: `~/.claude/skills/` — ayrıntılar için [Agent Skills](/docs/skills/)'e bakın
+
+Claude Code uyumluluğunu kapatmak için aşağıdaki ortam değişkenlerinden birini ayarlayın:
+
+```bash
+export OPENCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
+export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
+export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
+```
+
+---
+
+## Öncelik
+
+Opencode başlatıldığında kural dosyalarını şu sırayla arar:
+
+1. **Yerel dosyalar** geçerli dizinden yukarıya doğru giderek (`AGENTS.md`, `CLAUDE.md`)
+2. **Global dosya** `~/.config/opencode/AGENTS.md` adresinde
+3. `~/.claude/CLAUDE.md` adresindeki **Claude Kod dosyası** (devre dışı bırakılmadığı sürece)
+
+Her kategoride ilk eşleşen dosya kazanır. Örneğin, hem `AGENTS.md` hem de `CLAUDE.md` varsa yalnızca `AGENTS.md` kullanılır. Benzer şekilde, `~/.config/opencode/AGENTS.md`, `~/.claude/CLAUDE.md`'ye göre önceliklidir.
+
+---
+
+## Özel talimatlar
+
+Özel talimat dosyalarını `opencode.json` veya global `~/.config/opencode/opencode.json`'de belirtebilirsiniz. Bu, sizin ve ekibinizin, mevcut kuralları AGENTS.md'ye kopyalamak yerine yeniden kullanmasına olanak tanır.
+
+Örnek:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
+}
+```
+
+Web'den talimatlar yüklemek için uzak URL'leri de kullanabilirsiniz.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["https://raw.githubusercontent.com/my-org/shared-rules/main/style.md"]
+}
+```
+
+Uzaktan talimatlar 5 saniyelik bir zaman aşımı ile getirilir.
+
+Tüm talimat dosyaları `AGENTS.md` dosyalarınızla birleştirilir.
+
+---
+
+## Harici Dosyalara Referans Verme
+
+Opencode, `AGENTS.md`'daki dosya referanslarını otomatik olarak ayrıştırmasa da, benzer işlevleri iki şekilde elde edebilirsiniz:
+
+### opencode.json'u kullanma
+
+Önerilen yaklaşım, `instructions`'deki `opencode.json` alanını kullanmaktır:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["docs/development-standards.md", "test/testing-guidelines.md", "packages/*/AGENTS.md"]
+}
+```
+
+### AGENTS.md içinde manuel talimatlar
+
+`AGENTS.md`'nizde açık talimatlar sağlayarak opencode'u harici dosyaları okumayı öğretebilirsiniz. İşte pratik bir örnek:
+
+```markdown title="AGENTS.md"
+# TypeScript Project Rules
+
+## External File Loading
+
+CRITICAL: When you encounter a file reference (e.g., @rules/general.md), use your Read tool to load it on a need-to-know basis. They're relevant to the SPECIFIC task at hand.
+
+Instructions:
+
+- Do NOT preemptively load all references - use lazy loading based on actual need
+- When loaded, treat content as mandatory instructions that override defaults
+- Follow references recursively when needed
+
+## Development Guidelines
+
+For TypeScript code style and best practices: @docs/typescript-guidelines.md
+For React component architecture and hooks patterns: @docs/react-patterns.md
+For REST API design and error handling: @docs/api-standards.md
+For testing strategies and coverage requirements: @test/testing-guidelines.md
+
+## General Guidelines
+
+Read the following file immediately as it's relevant to all workflows: @rules/general-guidelines.md.
+```
+
+Bu yaklaşım şunları yapmanızı sağlar:
+
+- Modüler, yeniden kullanılabilir kural dosyaları oluşturun
+- Sembolik bağlantılar veya git alt modülleri aracılığıyla kuralları projeler arasında paylaşın
+- AGENTS.md dosyasını kısa tutarken ayrıntılı kılavuzlara referans verin
+- opencode'un dosyaları yalnızca belirli bir görev için gerektiğinde yüklediğinden emin olun
+
+:::tip
+Monorepo'lar veya ortak standartlara sahip projeler için, `opencode.json`'yi glob desenleriyle (`packages/*/AGENTS.md` gibi) kullanmak, manuel talimatlara göre daha sürdürülebilirdir.
+:::

@@ -1,0 +1,746 @@
+---
+title: 代理
+description: 設定和使用專門的代理。
+---
+
+代理是專門的 AI 助手，可以針對特定任務和工作流程進行設定。它們允許您建立具有自訂提示詞、模型和工具存取權限的專用工具。
+
+:::tip
+使用 Plan 代理來分析程式碼和審查建議，而不會進行任何程式碼變更。
+:::
+
+您可以在工作階段期間切換代理，或使用 `@` 提及來呼叫它們。
+
+---
+
+## 類型
+
+OpenCode 中有兩種類型的代理：主代理和子代理。
+
+---
+
+### 主代理
+
+主代理是您直接互動的主要助手。您可以使用 **Tab** 鍵或設定的 `switch_agent` 快速鍵來循環切換它們。這些代理處理您的主要對話。工具存取透過權限進行設定——例如，Build 啟用了所有工具，而 Plan 則受到限制。
+
+:::tip
+您可以在工作階段期間使用 **Tab** 鍵在主代理之間切換。
+:::
+
+OpenCode 內建了兩個主代理：**Build** 和 **Plan**。我們將在下面介紹它們。
+
+---
+
+### 子代理
+
+子代理是主代理可以呼叫來執行特定任務的專業助手。您也可以透過在訊息中 **@ 提及**它們來手動呼叫。
+
+OpenCode 內建了兩個子代理：**General** 和 **Explore**。我們將在下面介紹它們。
+
+---
+
+## 內建代理
+
+OpenCode 內建了兩個主代理和兩個子代理。
+
+---
+
+### 使用 Build
+
+_模式_：`primary`
+
+Build 是啟用了所有工具的**預設**主代理。這是用於需要完全存取檔案操作和系統命令的開發工作的標準代理。
+
+---
+
+### 使用 Plan
+
+_模式_：`primary`
+
+一個專為規劃和分析設計的受限代理。我們使用權限系統來為您提供更多控制權，並防止意外變更。
+預設情況下，以下所有項均設為 `ask`：
+
+- `file edits`：所有寫入、補丁和編輯
+- `bash`：所有 bash 命令
+
+當您希望 LLM 分析程式碼、建議變更或建立計畫，而不對程式碼庫進行任何實際修改時，此代理非常有用。
+
+---
+
+### 使用 General
+
+_模式_：`subagent`
+
+一個用於研究複雜問題和執行多步驟任務的通用代理。擁有完整的工具存取權限（todo 除外），因此可以在需要時修改檔案。可用於並行執行多個工作單元。
+
+---
+
+### 使用 Explore
+
+_模式_：`subagent`
+
+一個用於探索程式碼庫的快速唯讀代理。無法修改檔案。當您需要按模式快速查找檔案、搜尋程式碼中的關鍵字或回答有關程式碼庫的問題時，請使用此代理。
+
+---
+
+### 使用 Compaction
+
+_模式_：`primary`
+
+隱藏的系統代理，將長上下文壓縮為較小的摘要。它會在需要時自動執行，且無法在 UI 中選擇。
+
+---
+
+### 使用 Title
+
+_模式_：`primary`
+
+隱藏的系統代理，用於產生簡短的工作階段標題。它會自動執行，且無法在 UI 中選擇。
+
+---
+
+### 使用 Summary
+
+_模式_：`primary`
+
+隱藏的系統代理，用於建立工作階段摘要。它會自動執行，且無法在 UI 中選擇。
+
+---
+
+## 用法
+
+1. 對於主代理，在工作階段期間使用 **Tab** 鍵循環切換。您也可以使用設定的 `switch_agent` 快速鍵。
+
+2. 子代理可以透過以下方式呼叫：
+   - 由主代理根據其描述**自動**呼叫以執行專門任務。
+   - 透過在訊息中 **@ 提及**子代理來手動呼叫。例如：
+
+     ```txt frame="none"
+     @general help me search for this function
+     ```
+
+3. **工作階段間導覽**：當子代理建立自己的子工作階段時，您可以使用以下方式在父工作階段和所有子工作階段之間導覽：
+   - **\<Leader>+Right**（或設定的 `session_child_cycle` 快速鍵）向前循環：父工作階段 → 子工作階段1 → 子工作階段2 → ... → 父工作階段
+   - **\<Leader>+Left**（或設定的 `session_child_cycle_reverse` 快速鍵）向後循環：父工作階段 ← 子工作階段1 ← 子工作階段2 ← ... ← 父工作階段
+
+   這使您可以在主對話和專門的子代理工作之間無縫切換。
+
+---
+
+## 設定
+
+您可以自訂內建代理或透過設定建立自己的代理。代理可以透過兩種方式進行設定：
+
+---
+
+### JSON
+
+在 `opencode.json` 設定檔中設定代理：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "mode": "primary",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "prompt": "{file:./prompts/build.txt}",
+      "tools": {
+        "write": true,
+        "edit": true,
+        "bash": true
+      }
+    },
+    "plan": {
+      "mode": "primary",
+      "model": "anthropic/claude-haiku-4-20250514",
+      "tools": {
+        "write": false,
+        "edit": false,
+        "bash": false
+      }
+    },
+    "code-reviewer": {
+      "description": "Reviews code for best practices and potential issues",
+      "mode": "subagent",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
+      "tools": {
+        "write": false,
+        "edit": false
+      }
+    }
+  }
+}
+```
+
+---
+
+### Markdown
+
+您還可以使用 Markdown 檔案定義代理。將它們放在：
+
+- 全域：`~/.config/opencode/agents/`
+- 專案級：`.opencode/agents/`
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Reviews code for quality and best practices
+mode: subagent
+model: anthropic/claude-sonnet-4-20250514
+temperature: 0.1
+tools:
+  write: false
+  edit: false
+  bash: false
+---
+
+You are in code review mode. Focus on:
+
+- Code quality and best practices
+- Potential bugs and edge cases
+- Performance implications
+- Security considerations
+
+Provide constructive feedback without making direct changes.
+```
+
+Markdown 檔案名稱即為代理名稱。例如，`review.md` 會建立一個名為 `review` 的代理。
+
+---
+
+## 選項
+
+讓我們詳細了解這些設定選項。
+
+---
+
+### 描述
+
+使用 `description` 選項提供代理的功能及使用場景的簡要描述。
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "description": "Reviews code for best practices and potential issues"
+    }
+  }
+}
+```
+
+這是一個**必需的**設定選項。
+
+---
+
+### 溫度
+
+使用 `temperature` 設定控制 LLM 回應的隨機性和創造力。
+
+較低的值使回應更加集中和確定，而較高的值則增加創造力和多樣性。
+
+```json title="opencode.json"
+{
+  "agent": {
+    "plan": {
+      "temperature": 0.1
+    },
+    "creative": {
+      "temperature": 0.8
+    }
+  }
+}
+```
+
+溫度值通常範圍為 0.0 到 1.0：
+
+- **0.0-0.2**：非常集中和確定性的回應，適合程式碼分析和規劃
+- **0.3-0.5**：平衡的回應，兼顧一定創造力，適合一般開發任務
+- **0.6-1.0**：更有創造力和多樣性的回應，適合腦力激盪和探索
+
+```json title="opencode.json"
+{
+  "agent": {
+    "analyze": {
+      "temperature": 0.1,
+      "prompt": "{file:./prompts/analysis.txt}"
+    },
+    "build": {
+      "temperature": 0.3
+    },
+    "brainstorm": {
+      "temperature": 0.7,
+      "prompt": "{file:./prompts/creative.txt}"
+    }
+  }
+}
+```
+
+如果未指定溫度，OpenCode 將使用模型特定的預設值；大多數模型通常為 0，Qwen 模型為 0.55。
+
+---
+
+### 最大步數
+
+控制代理在被強制以純文字回應之前可以執行的最大代理迭代次數。這允許希望控制成本的使用者對代理操作設定限制。
+
+如果未設定此選項，代理將持續迭代，直到模型選擇停止或使用者中斷工作階段。
+
+```json title="opencode.json"
+{
+  "agent": {
+    "quick-thinker": {
+      "description": "Fast reasoning with limited iterations",
+      "prompt": "You are a quick thinker. Solve problems with minimal steps.",
+      "steps": 5
+    }
+  }
+}
+```
+
+當達到限制時，代理會收到一個特殊的系統提示詞，指示其回覆工作摘要和建議的剩餘任務。
+
+:::caution
+舊版 `maxSteps` 欄位已棄用。請改用 `steps`。
+:::
+
+---
+
+### 停用
+
+設為 `true` 以停用代理。
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "disable": true
+    }
+  }
+}
+```
+
+---
+
+### 提示詞
+
+使用 `prompt` 設定為代理指定自訂系統提示詞檔案。提示詞檔案應包含針對代理用途的具體指令。
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "prompt": "{file:./prompts/code-review.txt}"
+    }
+  }
+}
+```
+
+此路徑相對於設定檔所在位置。因此它同時適用於全域 OpenCode 設定和專案級設定。
+
+---
+
+### 模型
+
+使用 `model` 設定為代理覆寫模型。適用於針對不同任務使用不同的最佳化模型。例如，用更快的模型進行規劃，用更強大的模型進行實作。
+
+:::tip
+如果您不指定模型，主代理將使用[全域設定的模型](/docs/config#models)，而子代理將使用呼叫它的主代理所使用的模型。
+:::
+
+```json title="opencode.json"
+{
+  "agent": {
+    "plan": {
+      "model": "anthropic/claude-haiku-4-20250514"
+    }
+  }
+}
+```
+
+OpenCode 設定中的模型 ID 使用 `provider/model-id` 格式。例如，如果您使用 [OpenCode Zen](/docs/zen)，則可以使用 `opencode/gpt-5.1-codex` 來表示 GPT 5.1 Codex。
+
+---
+
+### 工具
+
+使用 `tools` 設定控制代理中可用的工具。您可以透過將特定工具設為 `true` 或 `false` 來啟用或停用它們。
+
+```json title="opencode.json" {3-6,9-12}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "write": true,
+    "bash": true
+  },
+  "agent": {
+    "plan": {
+      "tools": {
+        "write": false,
+        "bash": false
+      }
+    }
+  }
+}
+```
+
+:::note
+代理級設定會覆寫全域設定。
+:::
+
+您還可以使用萬用字元同時控制多個工具。例如，要停用 MCP 伺服器中的所有工具：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "readonly": {
+      "tools": {
+        "mymcp_*": false,
+        "write": false,
+        "edit": false
+      }
+    }
+  }
+}
+```
+
+[了解更多關於工具的資訊](/docs/tools)。
+
+---
+
+### 權限
+
+您可以設定權限來管理代理可以執行的操作。目前，`edit`、`bash` 和 `webfetch` 工具的權限可以設定為：
+
+- `"ask"` — 執行工具前提示審批
+- `"allow"` — 允許所有操作，無需審批
+- `"deny"` — 停用該工具
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny"
+  }
+}
+```
+
+您可以按代理覆寫這些權限。
+
+```json title="opencode.json" {3-5,8-10}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny"
+  },
+  "agent": {
+    "build": {
+      "permission": {
+        "edit": "ask"
+      }
+    }
+  }
+}
+```
+
+您還可以在 Markdown 代理中設定權限。
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Code review without edits
+mode: subagent
+permission:
+  edit: deny
+  bash:
+    "*": ask
+    "git diff": allow
+    "git log*": allow
+    "grep *": allow
+  webfetch: deny
+---
+
+Only analyze code and suggest changes.
+```
+
+您可以為特定的 bash 命令設定權限。
+
+```json title="opencode.json" {7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "git push": "ask",
+          "grep *": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+這可以使用 glob 模式。
+
+```json title="opencode.json" {7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "git *": "ask"
+        }
+      }
+    }
+  }
+}
+```
+
+您還可以使用 `*` 萬用字元來管理所有命令的權限。
+由於最後匹配的規則優先，請將 `*` 萬用字元放在前面，將具體規則放在後面。
+
+```json title="opencode.json" {8}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "*": "ask",
+          "git status *": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+[了解更多關於權限的資訊](/docs/permissions)。
+
+---
+
+### 模式
+
+使用 `mode` 設定控制代理的模式。`mode` 選項用於確定代理的使用方式。
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "mode": "subagent"
+    }
+  }
+}
+```
+
+`mode` 選項可以設為 `primary`、`subagent` 或 `all`。如果未指定 `mode`，則預設為 `all`。
+
+---
+
+### 隱藏
+
+使用 `hidden: true` 將子代理從 `@` 自動補全選單中隱藏。適用於只應由其他代理透過 Task 工具以程式化方式呼叫的內部子代理。
+
+```json title="opencode.json"
+{
+  "agent": {
+    "internal-helper": {
+      "mode": "subagent",
+      "hidden": true
+    }
+  }
+}
+```
+
+這僅影響自動補全選單中的使用者可見性。如果權限允許，模型仍然可以透過 Task 工具呼叫隱藏的代理。
+
+:::note
+僅適用於 `mode: subagent` 的代理。
+:::
+
+---
+
+### 任務權限
+
+使用 `permission.task` 控制代理可以透過 Task 工具呼叫哪些子代理。使用 glob 模式進行靈活匹配。
+
+```json title="opencode.json"
+{
+  "agent": {
+    "orchestrator": {
+      "mode": "primary",
+      "permission": {
+        "task": {
+          "*": "deny",
+          "orchestrator-*": "allow",
+          "code-reviewer": "ask"
+        }
+      }
+    }
+  }
+}
+```
+
+當設為 `deny` 時，子代理將從 Task 工具描述中完全移除，因此模型不會嘗試呼叫它。
+
+:::tip
+規則按順序評估，**最後匹配的規則優先**。在上面的範例中，`orchestrator-planner` 同時匹配 `*`（deny）和 `orchestrator-*`（allow），但由於 `orchestrator-*` 在 `*` 之後，所以結果為 `allow`。
+:::
+
+:::tip
+使用者始終可以透過 `@` 自動補全選單直接呼叫任何子代理，即使代理的任務權限會拒絕它。
+:::
+
+---
+
+### 顏色
+
+使用 `color` 選項自訂代理在 UI 中的視覺外觀。這會影響代理在介面中的顯示方式。
+
+使用有效的十六進位顏色（例如 `#FF5733`）或主題顏色：`primary`、`secondary`、`accent`、`success`、`warning`、`error`、`info`。
+
+```json title="opencode.json"
+{
+  "agent": {
+    "creative": {
+      "color": "#ff6b6b"
+    },
+    "code-reviewer": {
+      "color": "accent"
+    }
+  }
+}
+```
+
+---
+
+### Top P
+
+使用 `top_p` 選項控制回應多樣性。這是控制隨機性的溫度替代方案。
+
+```json title="opencode.json"
+{
+  "agent": {
+    "brainstorm": {
+      "top_p": 0.9
+    }
+  }
+}
+```
+
+值範圍從 0.0 到 1.0。較低的值更加集中，較高的值更加多樣化。
+
+---
+
+### 其他選項
+
+您在代理設定中指定的任何其他選項都將作為模型選項**直接傳遞**給提供商。這允許您使用提供商特定的功能和參數。
+
+例如，使用 OpenAI 的推理模型時，您可以控制推理力度：
+
+```json title="opencode.json" {6,7}
+{
+  "agent": {
+    "deep-thinker": {
+      "description": "Agent that uses high reasoning effort for complex problems",
+      "model": "openai/gpt-5",
+      "reasoningEffort": "high",
+      "textVerbosity": "low"
+    }
+  }
+}
+```
+
+這些附加選項是模型和提供商特定的。請查閱您的提供商文件以取得可用參數。
+
+:::tip
+執行 `opencode models` 查看可用模型列表。
+:::
+
+---
+
+## 建立代理
+
+您可以使用以下命令建立新代理：
+
+```bash
+opencode agent create
+```
+
+此互動式命令將：
+
+1. 詢問代理的儲存位置——全域或專案級。
+2. 描述代理應該做什麼。
+3. 產生合適的系統提示詞和識別碼。
+4. 讓您選擇代理可以存取哪些工具。
+5. 最後，建立一個包含代理設定的 Markdown 檔案。
+
+---
+
+## 使用場景
+
+以下是不同代理的一些常見使用場景。
+
+- **Build 代理**：啟用所有工具的完整開發工作
+- **Plan 代理**：分析和規劃，不進行任何變更
+- **Review 代理**：具有唯讀存取權限和文件工具的程式碼審查
+- **Debug 代理**：專注於問題排查，啟用 bash 和讀取工具
+- **Docs 代理**：文件編寫，具有檔案操作但不使用系統命令
+
+---
+
+## 範例
+
+以下是一些您可能會覺得有用的範例代理。
+
+:::tip
+您有想要分享的代理嗎？[提交 PR](https://github.com/anomalyco/opencode)。
+:::
+
+---
+
+### 文件代理
+
+```markdown title="~/.config/opencode/agents/docs-writer.md"
+---
+description: Writes and maintains project documentation
+mode: subagent
+tools:
+  bash: false
+---
+
+You are a technical writer. Create clear, comprehensive documentation.
+
+Focus on:
+
+- Clear explanations
+- Proper structure
+- Code examples
+- User-friendly language
+```
+
+---
+
+### 安全稽核代理
+
+```markdown title="~/.config/opencode/agents/security-auditor.md"
+---
+description: Performs security audits and identifies vulnerabilities
+mode: subagent
+tools:
+  write: false
+  edit: false
+---
+
+You are a security expert. Focus on identifying potential security issues.
+
+Look for:
+
+- Input validation vulnerabilities
+- Authentication and authorization flaws
+- Data exposure risks
+- Dependency vulnerabilities
+- Configuration security issues
+```

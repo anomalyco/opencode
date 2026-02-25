@@ -1,13 +1,7 @@
 import { Database, and, eq, sql } from "../src/drizzle/index.js"
 import { AuthTable } from "../src/schema/auth.sql.js"
 import { UserTable } from "../src/schema/user.sql.js"
-import {
-  BillingTable,
-  PaymentTable,
-  SubscriptionTable,
-  SubscriptionPlan,
-  UsageTable,
-} from "../src/schema/billing.sql.js"
+import { BillingTable, PaymentTable, SubscriptionTable, BlackPlans, UsageTable } from "../src/schema/billing.sql.js"
 import { WorkspaceTable } from "../src/schema/workspace.sql.js"
 import { BlackData } from "../src/black.js"
 import { centsToMicroCents } from "../src/util/price.js"
@@ -129,14 +123,17 @@ async function printWorkspace(workspaceID: string) {
           booked: BillingTable.timeSubscriptionBooked,
           enrichment: BillingTable.subscription,
         },
+        timeSubscriptionSelected: BillingTable.timeSubscriptionSelected,
       })
       .from(BillingTable)
       .where(eq(BillingTable.workspaceID, workspace.id))
       .then(
         (rows) =>
           rows.map((row) => ({
-            ...row,
             balance: `$${(row.balance / 100000000).toFixed(2)}`,
+            reload: row.reload ? "yes" : "no",
+            customerID: row.customerID,
+            subscriptionID: row.subscriptionID,
             subscription: row.subscriptionID
               ? [
                   `Black ${row.subscription.enrichment!.plan}`,
@@ -145,7 +142,7 @@ async function printWorkspace(workspaceID: string) {
                   `(ref: ${row.subscriptionID})`,
                 ].join(" ")
               : row.subscription.booked
-                ? `Waitlist ${row.subscription.plan} plan`
+                ? `Waitlist ${row.subscription.plan} plan${row.timeSubscriptionSelected ? " (selected)" : ""}`
                 : undefined,
           }))[0],
       ),
@@ -232,7 +229,7 @@ function formatRetryTime(seconds: number) {
 
 function getSubscriptionStatus(row: {
   subscription: {
-    plan: (typeof SubscriptionPlan)[number]
+    plan: (typeof BlackPlans)[number]
   } | null
   timeSubscriptionCreated: Date | null
   fixedUsage: number | null

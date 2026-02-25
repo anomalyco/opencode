@@ -1,66 +1,23 @@
 import "./index.css"
-import { Title, Meta, Link } from "@solidjs/meta"
-import { createAsync, query } from "@solidjs/router"
+import { Title, Meta } from "@solidjs/meta"
+import { createAsync } from "@solidjs/router"
 import { Header } from "~/component/header"
 import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
-import { config } from "~/config"
-import { For, Show } from "solid-js"
+import { changelog } from "~/lib/changelog"
+import type { HighlightGroup } from "~/lib/changelog"
+import { For, Show, createSignal } from "solid-js"
+import { useI18n } from "~/context/i18n"
+import { useLanguage } from "~/context/language"
+import { LocaleLinks } from "~/component/locale-links"
 
-type Release = {
-  tag_name: string
-  name: string
-  body: string
-  published_at: string
-  html_url: string
-}
-
-const getReleases = query(async () => {
-  "use server"
-  const response = await fetch("https://api.github.com/repos/anomalyco/opencode/releases?per_page=20", {
-    headers: {
-      Accept: "application/vnd.github.v3+json",
-      "User-Agent": "OpenCode-Console",
-    },
-    cf: {
-      cacheTtl: 60 * 5,
-      cacheEverything: true,
-    },
-  } as any)
-  if (!response.ok) return []
-  return response.json() as Promise<Release[]>
-}, "releases.get")
-
-function formatDate(dateString: string) {
+function formatDate(dateString: string, locale: string) {
   const date = new Date(dateString)
-  return date.toLocaleDateString("en-US", {
+  return date.toLocaleDateString(locale, {
     year: "numeric",
     month: "short",
     day: "numeric",
   })
-}
-
-function parseMarkdown(body: string) {
-  const lines = body.split("\n")
-  const sections: { title: string; items: string[] }[] = []
-  let current: { title: string; items: string[] } | null = null
-  let skip = false
-
-  for (const line of lines) {
-    if (line.startsWith("## ")) {
-      if (current) sections.push(current)
-      const title = line.slice(3).trim()
-      current = { title, items: [] }
-      skip = false
-    } else if (line.startsWith("**Thank you")) {
-      skip = true
-    } else if (line.startsWith("- ") && !skip) {
-      current?.items.push(line.slice(2).trim())
-    }
-  }
-  if (current) sections.push(current)
-
-  return { sections }
 }
 
 function ReleaseItem(props: { item: string }) {
@@ -87,58 +44,130 @@ function ReleaseItem(props: { item: string }) {
   )
 }
 
+function HighlightSection(props: { group: HighlightGroup }) {
+  return (
+    <div data-component="highlight">
+      <h4>{props.group.source}</h4>
+      <hr />
+      <For each={props.group.items}>
+        {(item) => (
+          <div data-slot="highlight-item">
+            <p data-slot="title">{item.title}</p>
+            <p>{item.description}</p>
+            <Show when={item.media.type === "video"}>
+              <video src={item.media.src} controls autoplay loop muted playsinline />
+            </Show>
+            <Show when={item.media.type === "image"}>
+              <img
+                src={item.media.src}
+                alt={item.title}
+                width={(item.media as { width: string }).width}
+                height={(item.media as { height: string }).height}
+              />
+            </Show>
+          </div>
+        )}
+      </For>
+    </div>
+  )
+}
+
+function CollapsibleSection(props: { section: { title: string; items: string[] } }) {
+  const [open, setOpen] = createSignal(false)
+
+  return (
+    <div data-component="collapsible-section">
+      <button data-slot="toggle" onClick={() => setOpen(!open())}>
+        <span data-slot="icon">{open() ? "▾" : "▸"}</span>
+        <span>{props.section.title}</span>
+      </button>
+      <Show when={open()}>
+        <ul>
+          <For each={props.section.items}>{(item) => <ReleaseItem item={item} />}</For>
+        </ul>
+      </Show>
+    </div>
+  )
+}
+
+function CollapsibleSections(props: { sections: { title: string; items: string[] }[] }) {
+  return (
+    <div data-component="collapsible-sections">
+      <For each={props.sections}>{(section) => <CollapsibleSection section={section} />}</For>
+    </div>
+  )
+}
+
 export default function Changelog() {
-  const releases = createAsync(() => getReleases())
+  const i18n = useI18n()
+  const language = useLanguage()
+  const data = createAsync(() => changelog())
+  const releases = () => data() ?? []
 
   return (
     <main data-page="changelog">
-      <Title>OpenCode | Changelog</Title>
-      <Link rel="canonical" href={`${config.baseUrl}/changelog`} />
-      <Meta name="description" content="OpenCode release notes and changelog" />
+      <Title>{i18n.t("changelog.title")}</Title>
+      <LocaleLinks path="/changelog" />
+      <Meta name="description" content={i18n.t("changelog.meta.description")} />
 
       <div data-component="container">
-        <Header hideGetStarted />
+        <Header />
 
         <div data-component="content">
           <section data-component="changelog-hero">
-            <h1>Changelog</h1>
-            <p>New updates and improvements to OpenCode</p>
+            <h1>{i18n.t("changelog.hero.title")}</h1>
+            <p>{i18n.t("changelog.hero.subtitle")}</p>
           </section>
 
           <section data-component="releases">
+            <Show when={releases().length === 0}>
+              <p>
+                {i18n.t("changelog.empty")}{" "}
+                <a href={language.route("/changelog.json")}>{i18n.t("changelog.viewJson")}</a>
+              </p>
+            </Show>
             <For each={releases()}>
               {(release) => {
-                const parsed = () => parseMarkdown(release.body || "")
                 return (
                   <article data-component="release">
                     <header>
                       <div data-slot="version">
-                        <a href={release.html_url} target="_blank" rel="noopener noreferrer">
-                          {release.tag_name}
+                        <a href={release.url} target="_blank" rel="noopener noreferrer">
+                          {release.tag}
                         </a>
                       </div>
-                      <time dateTime={release.published_at}>{formatDate(release.published_at)}</time>
+                      <time dateTime={release.date}>{formatDate(release.date, language.tag(language.locale()))}</time>
                     </header>
                     <div data-slot="content">
-                      <For each={parsed().sections}>
-                        {(section) => (
-                          <div data-component="section">
-                            <h3>{section.title}</h3>
-                            <ul>
-                              <For each={section.items}>{(item) => <ReleaseItem item={item} />}</For>
-                            </ul>
-                          </div>
-                        )}
-                      </For>
+                      <Show when={release.highlights.length > 0}>
+                        <div data-component="highlights">
+                          <For each={release.highlights}>{(group) => <HighlightSection group={group} />}</For>
+                        </div>
+                      </Show>
+                      <Show when={release.highlights.length > 0 && release.sections.length > 0}>
+                        <CollapsibleSections sections={release.sections} />
+                      </Show>
+                      <Show when={release.highlights.length === 0}>
+                        <For each={release.sections}>
+                          {(section) => (
+                            <div data-component="section">
+                              <h3>{section.title}</h3>
+                              <ul>
+                                <For each={section.items}>{(item) => <ReleaseItem item={item} />}</For>
+                              </ul>
+                            </div>
+                          )}
+                        </For>
+                      </Show>
                     </div>
                   </article>
                 )
               }}
             </For>
           </section>
-
-          <Footer />
         </div>
+
+        <Footer />
       </div>
 
       <Legal />

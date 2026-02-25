@@ -14,6 +14,10 @@ interface Context {
 const context = Context.create<Context>("instance")
 const cache = new Map<string, Promise<Context>>()
 
+const disposal = {
+  all: undefined as Promise<void> | undefined,
+}
+
 export const Instance = {
   async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
     let existing = cache.get(input.directory)
@@ -77,15 +81,34 @@ export const Instance = {
     })
   },
   async disposeAll() {
-    Log.Default.info("disposing all instances")
-    for (const [_key, value] of cache) {
-      const awaited = await value.catch(() => {})
-      if (awaited) {
-        await context.provide(await value, async () => {
+    if (disposal.all) return disposal.all
+
+    disposal.all = iife(async () => {
+      Log.Default.info("disposing all instances")
+      const entries = [...cache.entries()]
+      for (const [key, value] of entries) {
+        if (cache.get(key) !== value) continue
+
+        const ctx = await value.catch((error) => {
+          Log.Default.warn("instance dispose failed", { key, error })
+          return undefined
+        })
+
+        if (!ctx) {
+          if (cache.get(key) === value) cache.delete(key)
+          continue
+        }
+
+        if (cache.get(key) !== value) continue
+
+        await context.provide(ctx, async () => {
           await Instance.dispose()
         })
       }
-    }
-    cache.clear()
+    }).finally(() => {
+      disposal.all = undefined
+    })
+
+    return disposal.all
   },
 }

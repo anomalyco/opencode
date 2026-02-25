@@ -1,5 +1,6 @@
 import type { JSX } from "solid-js"
-import { createSignal, Show } from "solid-js"
+import { Show, createEffect, onCleanup } from "solid-js"
+import { createStore } from "solid-js/store"
 import { createSortable } from "@thisbeyond/solid-dnd"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tabs } from "@opencode-ai/ui/tabs"
@@ -12,11 +13,15 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
   const terminal = useTerminal()
   const language = useLanguage()
   const sortable = createSortable(props.terminal.id)
-  const [editing, setEditing] = createSignal(false)
-  const [title, setTitle] = createSignal(props.terminal.title)
-  const [menuOpen, setMenuOpen] = createSignal(false)
-  const [menuPosition, setMenuPosition] = createSignal({ x: 0, y: 0 })
-  const [blurEnabled, setBlurEnabled] = createSignal(false)
+  const [store, setStore] = createStore({
+    editing: false,
+    title: props.terminal.title,
+    menuOpen: false,
+    menuPosition: { x: 0, y: 0 },
+    blurEnabled: false,
+  })
+  let input: HTMLInputElement | undefined
+  let blurFrame: number | undefined
 
   const isDefaultTitle = () => {
     const number = props.terminal.titleNumber
@@ -47,7 +52,7 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
   }
 
   const focus = () => {
-    if (editing()) return
+    if (store.editing) return
 
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur()
@@ -71,26 +76,19 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
       e.preventDefault()
     }
 
-    setBlurEnabled(false)
-    setTitle(props.terminal.title)
-    setEditing(true)
-    setTimeout(() => {
-      const input = document.getElementById(`terminal-title-input-${props.terminal.id}`) as HTMLInputElement
-      if (!input) return
-      input.focus()
-      input.select()
-      setTimeout(() => setBlurEnabled(true), 100)
-    }, 10)
+    setStore("blurEnabled", false)
+    setStore("title", props.terminal.title)
+    setStore("editing", true)
   }
 
   const save = () => {
-    if (!blurEnabled()) return
+    if (!store.blurEnabled) return
 
-    const value = title().trim()
+    const value = store.title.trim()
     if (value && value !== props.terminal.title) {
       terminal.update({ id: props.terminal.id, title: value })
     }
-    setEditing(false)
+    setStore("editing", false)
   }
 
   const keydown = (e: KeyboardEvent) => {
@@ -101,19 +99,35 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
     }
     if (e.key === "Escape") {
       e.preventDefault()
-      setEditing(false)
+      setStore("editing", false)
     }
   }
 
   const menu = (e: MouseEvent) => {
     e.preventDefault()
-    setMenuPosition({ x: e.clientX, y: e.clientY })
-    setMenuOpen(true)
+    setStore("menuPosition", { x: e.clientX, y: e.clientY })
+    setStore("menuOpen", true)
   }
+
+  createEffect(() => {
+    if (!store.editing) return
+    if (!input) return
+    input.focus()
+    input.select()
+    if (blurFrame !== undefined) cancelAnimationFrame(blurFrame)
+    blurFrame = requestAnimationFrame(() => {
+      blurFrame = undefined
+      setStore("blurEnabled", true)
+    })
+  })
+
+  onCleanup(() => {
+    if (blurFrame === undefined) return
+    cancelAnimationFrame(blurFrame)
+  })
 
   return (
     <div
-      // @ts-ignore
       use:sortable
       class="outline-none focus:outline-none focus-visible:outline-none"
       classList={{
@@ -143,17 +157,17 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
             />
           }
         >
-          <span onDblClick={edit} style={{ visibility: editing() ? "hidden" : "visible" }}>
+          <span onDblClick={edit} classList={{ invisible: store.editing }}>
             {label()}
           </span>
         </Tabs.Trigger>
-        <Show when={editing()}>
+        <Show when={store.editing}>
           <div class="absolute inset-0 flex items-center px-3 bg-muted z-10 pointer-events-auto">
             <input
-              id={`terminal-title-input-${props.terminal.id}`}
+              ref={input}
               type="text"
-              value={title()}
-              onInput={(e) => setTitle(e.currentTarget.value)}
+              value={store.title}
+              onInput={(e) => setStore("title", e.currentTarget.value)}
               onBlur={save}
               onKeyDown={keydown}
               onMouseDown={(e) => e.stopPropagation()}
@@ -161,13 +175,13 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
             />
           </div>
         </Show>
-        <DropdownMenu open={menuOpen()} onOpenChange={setMenuOpen}>
+        <DropdownMenu open={store.menuOpen} onOpenChange={(open) => setStore("menuOpen", open)}>
           <DropdownMenu.Portal>
             <DropdownMenu.Content
+              class="fixed"
               style={{
-                position: "fixed",
-                left: `${menuPosition().x}px`,
-                top: `${menuPosition().y}px`,
+                left: `${store.menuPosition.x}px`,
+                top: `${store.menuPosition.y}px`,
               }}
             >
               <DropdownMenu.Item onSelect={edit}>

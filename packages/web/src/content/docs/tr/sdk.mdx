@@ -1,0 +1,391 @@
+---
+title: SDK
+description: opencode sunucusu için type-safe JS istemcisi.
+---
+
+import config from "../../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+opencode JS/TS SDK, sunucu ile etkileşmek için type-safe bir istemci sağlar.
+opencode'u programatik olarak kontrol etmek ve entegrasyonlar oluşturmak için kullanabilirsiniz.
+
+[Sunucu](/docs/server) sayfasında nasıl çalıştığını görebilir, örnekler için topluluğun oluşturduğu [projeler](/docs/ecosystem#projects) bölümüne bakabilirsiniz.
+
+---
+
+## Kurulum
+
+SDK'yı npm'den yükleyin:
+
+```bash
+npm install @opencode-ai/sdk
+```
+
+---
+
+## İstemci Oluşturma
+
+Bir opencode örneği oluşturun:
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const { client } = await createOpencode()
+```
+
+Bu, hem bir sunucu hem de bir istemci başlatır
+
+#### Seçenekler
+
+| Seçenek    | Tip           | Açıklama                                      | Varsayılan  |
+| ---------- | ------------- | --------------------------------------------- | ----------- |
+| `hostname` | `string`      | Sunucu ana bilgisayar adı                     | `127.0.0.1` |
+| `port`     | `number`      | Sunucu bağlantı noktası                       | `4096`      |
+| `signal`   | `AbortSignal` | İptal için durdurma sinyali                   | `undefined` |
+| `timeout`  | `number`      | Sunucu başlatma için ms cinsinden zaman aşımı | `5000`      |
+| `config`   | `Config`      | Yapılandırma nesnesi                          | `{}`        |
+
+---
+
+## Yapılandırma
+
+Davranışı özelleştirmek için bir yapılandırma nesnesi iletebilirsiniz. Örnek yine de `opencode.json` dosyanızı alır, ancak yapılandırmayı satır içi olarak geçersiz kılabilir veya ekleyebilirsiniz:
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const opencode = await createOpencode({
+  hostname: "127.0.0.1",
+  port: 4096,
+  config: {
+    model: "anthropic/claude-3-5-sonnet-20241022",
+  },
+})
+
+console.log(`Server running at ${opencode.server.url}`)
+
+opencode.server.close()
+```
+
+## Yalnızca istemci
+
+Halihazırda çalışan bir opencode örneğiniz varsa, ona bağlanmak için bir istemci örneği oluşturabilirsiniz:
+
+```javascript
+import { createOpencodeClient } from "@opencode-ai/sdk"
+
+const client = createOpencodeClient({
+  baseUrl: "http://localhost:4096",
+})
+```
+
+#### Seçenekler
+
+| Seçenek         | Tip        | Açıklama                          | Varsayılan              |
+| --------------- | ---------- | --------------------------------- | ----------------------- |
+| `baseUrl`       | `string`   | Sunucunun URL'si                  | `http://localhost:4096` |
+| `fetch`         | `function` | Özel fetch uygulaması             | `globalThis.fetch`      |
+| `parseAs`       | `string`   | Yanıt ayrıştırma yöntemi          | `auto`                  |
+| `responseStyle` | `string`   | Dönüş stili: `data` veya `fields` | `fields`                |
+| `throwOnError`  | `boolean`  | Dönüş yerine hata fırlat          | `false`                 |
+
+---
+
+## Türler
+
+SDK, tüm API türleri için TypeScript tanımlarını içerir. Bunları doğrudan içe aktarın:
+
+```typescript
+import type { Session, Message, Part } from "@opencode-ai/sdk"
+```
+
+Tüm tipler, sunucunun OpenAPI spesifikasyonundan oluşturulur ve <a href={typesUrl}>tipler dosyasında</a> mevcuttur.
+
+---
+
+## Hatalar
+
+SDK, yakalayabileceğiniz ve işleyebileceğiniz hatalar fırlatabilir:
+
+```typescript
+try {
+  await client.session.get({ path: { id: "invalid-id" } })
+} catch (error) {
+  console.error("Failed to get session:", (error as Error).message)
+}
+```
+
+---
+
+## API'ler
+
+SDK, tüm sunucu API'lerini type-safe bir istemci aracılığıyla sunar.
+
+---
+
+### Global
+
+| Yöntem            | Açıklama                                | Yanıt                                |
+| ----------------- | --------------------------------------- | ------------------------------------ |
+| `global.health()` | Sunucu sağlığını ve sürümünü kontrol et | `{ healthy: true, version: string }` |
+
+---
+
+#### Örnekler
+
+```javascript
+const health = await client.global.health()
+console.log(health.data.version)
+```
+
+---
+
+### App
+
+| Yöntem         | Açıklama                      | Yanıt                                       |
+| -------------- | ----------------------------- | ------------------------------------------- |
+| `app.log()`    | Bir günlük girdisi yaz        | `boolean`                                   |
+| `app.agents()` | Tüm mevcut agent'ları listele | <a href={typesUrl}><code>Agent[]</code></a> |
+
+---
+
+#### Örnekler
+
+```javascript
+// Write a log entry
+await client.app.log({
+  body: {
+    service: "my-app",
+    level: "info",
+    message: "Operation completed",
+  },
+})
+
+// List available agents
+const agents = await client.app.agents()
+```
+
+---
+
+### Project
+
+| Yöntem              | Açıklama              | Yanıt                                         |
+| ------------------- | --------------------- | --------------------------------------------- |
+| `project.list()`    | Tüm projeleri listele | <a href={typesUrl}><code>Project[]</code></a> |
+| `project.current()` | Mevcut projeyi al     | <a href={typesUrl}><code>Project</code></a>   |
+
+---
+
+#### Örnekler
+
+```javascript
+// List all projects
+const projects = await client.project.list()
+
+// Get current project
+const currentProject = await client.project.current()
+```
+
+---
+
+### Path
+
+| Yöntem       | Açıklama       | Yanıt                                    |
+| ------------ | -------------- | ---------------------------------------- |
+| `path.get()` | Mevcut yolu al | <a href={typesUrl}><code>Path</code></a> |
+
+---
+
+#### Örnekler
+
+```javascript
+// Get current path information
+const pathInfo = await client.path.get()
+```
+
+---
+
+### Config
+
+| Yöntem               | Açıklama                                      | Yanıt                                                                                                 |
+| -------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `config.get()`       | Yapılandırma bilgisini al                     | <a href={typesUrl}><code>Config</code></a>                                                            |
+| `config.providers()` | Sağlayıcıları ve varsayılan modelleri listele | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
+
+---
+
+#### Örnekler
+
+```javascript
+const config = await client.config.get()
+
+const { providers, default: defaults } = await client.config.providers()
+```
+
+---
+
+### Oturumlar
+
+| Yöntem                                                     | Açıklama                                    | Notlar                                                                                                                                                    |
+| ---------------------------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session.list()`                                           | Oturumları listele                          | <a href={typesUrl}><code>Session[]</code></a> döndürür                                                                                                    |
+| `session.get({ path })`                                    | Oturum al                                   | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                      |
+| `session.children({ path })`                               | Alt oturumları listele                      | <a href={typesUrl}><code>Session[]</code></a> döndürür                                                                                                    |
+| `session.create({ body })`                                 | Oturum oluştur                              | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                      |
+| `session.delete({ path })`                                 | Oturum sil                                  | `boolean` döndürür                                                                                                                                        |
+| `session.update({ path, body })`                           | Oturum özelliklerini güncelle               | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                      |
+| `session.init({ path, body })`                             | Uygulamayı analiz et ve `AGENTS.md` oluştur | `boolean` döndürür                                                                                                                                        |
+| `session.abort({ path })`                                  | Çalışan bir oturumu iptal et                | `boolean` döndürür                                                                                                                                        |
+| `session.share({ path })`                                  | Oturum paylaş                               | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                      |
+| `session.unshare({ path })`                                | Oturum paylaşımını kaldır                   | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                      |
+| `session.summarize({ path, body })`                        | Oturumu özetle                              | `boolean` döndürür                                                                                                                                        |
+| `session.messages({ path })`                               | Oturumdaki mesajları listele                | `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]` döndürür                                  |
+| `session.message({ path })`                                | Mesaj ayrıntılarını al                      | `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}` döndürür                                    |
+| `session.prompt({ path, body })`                           | İstem mesajı gönder                         | `body.noReply: true` UserMessage (yalnızca bağlam) döndürür. Varsayılan olarak AI yanıtıyla <a href={typesUrl}><code>AssistantMessage</code></a> döndürür |
+| `session.command({ path, body })`                          | Oturuma komut gönder                        | `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}` döndürür                           |
+| `session.shell({ path, body })`                            | Bir kabuk komutu çalıştır                   | <a href={typesUrl}><code>AssistantMessage</code></a> döndürür                                                                                             |
+| `session.revert({ path, body })`                           | Bir mesajı geri al                          | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                      |
+| `session.unrevert({ path })`                               | Geri alınan mesajları geri yükle            | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                      |
+| `postSessionByIdPermissionsByPermissionId({ path, body })` | Bir izin isteğine yanıt ver                 | `boolean` döndürür                                                                                                                                        |
+
+---
+
+#### Örnekler
+
+```javascript
+// Create and manage sessions
+const session = await client.session.create({
+  body: { title: "My session" },
+})
+
+const sessions = await client.session.list()
+
+// Send a prompt message
+const result = await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    model: { providerID: "anthropic", modelID: "claude-3-5-sonnet-20241022" },
+    parts: [{ type: "text", text: "Hello!" }],
+  },
+})
+
+// Inject context without triggering AI response (useful for plugins)
+await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    noReply: true,
+    parts: [{ type: "text", text: "You are a helpful assistant." }],
+  },
+})
+```
+
+---
+
+### Dosyalar
+
+| Yöntem                    | Açıklama                         | Yanıt                                                                                           |
+| ------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `find.text({ query })`    | Dosyalarda metin ara             | `path`, `lines`, `line_number`, `absolute_offset`, `submatches` içeren eşleşme nesneleri dizisi |
+| `find.files({ query })`   | Dosya ve dizinleri isme göre bul | `string[]` (yollar)                                                                             |
+| `find.symbols({ query })` | Çalışma alanı sembollerini bul   | <a href={typesUrl}><code>Symbol[]</code></a>                                                    |
+| `file.read({ query })`    | Bir dosyayı oku                  | `{ type: "raw" \| "patch", content: string }`                                                   |
+| `file.status({ query? })` | İzlenen dosyalar için durumu al  | <a href={typesUrl}><code>File[]</code></a>                                                      |
+
+`find.files` birkaç isteğe bağlı sorgu alanını destekler:
+
+- `type`: `"file"` veya `"directory"`
+- `directory`: arama için proje kökünü geçersiz kılma
+- `limit`: maksimum sonuç (1-200)
+
+---
+
+#### Örnekler
+
+```javascript
+// Search and read files
+const textResults = await client.find.text({
+  query: { pattern: "function.*opencode" },
+})
+
+const files = await client.find.files({
+  query: { query: "*.ts", type: "file" },
+})
+
+const directories = await client.find.files({
+  query: { query: "packages", type: "directory", limit: 20 },
+})
+
+const content = await client.file.read({
+  query: { path: "src/index.ts" },
+})
+```
+
+---
+
+### TUI
+
+| Yöntem                         | Açıklama                    | Yanıt     |
+| ------------------------------ | --------------------------- | --------- |
+| `tui.appendPrompt({ body })`   | İsteme metin ekle           | `boolean` |
+| `tui.openHelp()`               | Yardım iletişim kutusunu aç | `boolean` |
+| `tui.openSessions()`           | Oturum seçiciyi aç          | `boolean` |
+| `tui.openThemes()`             | Tema seçiciyi aç            | `boolean` |
+| `tui.openModels()`             | Model seçiciyi aç           | `boolean` |
+| `tui.submitPrompt()`           | Mevcut istemi gönder        | `boolean` |
+| `tui.clearPrompt()`            | İstemi temizle              | `boolean` |
+| `tui.executeCommand({ body })` | Bir komut çalıştır          | `boolean` |
+| `tui.showToast({ body })`      | Toast bildirimi göster      | `boolean` |
+
+---
+
+#### Örnekler
+
+```javascript
+// Control TUI interface
+await client.tui.appendPrompt({
+  body: { text: "Add this to prompt" },
+})
+
+await client.tui.showToast({
+  body: { message: "Task completed", variant: "success" },
+})
+```
+
+---
+
+### Auth
+
+| Yöntem              | Açıklama                  | Yanıt     |
+| ------------------- | ------------------------- | --------- |
+| `auth.set({ ... })` | Kimlik bilgilerini ayarla | `boolean` |
+
+---
+
+#### Örnekler
+
+```javascript
+await client.auth.set({
+  path: { id: "anthropic" },
+  body: { type: "api", key: "your-api-key" },
+})
+```
+
+---
+
+### Olaylar
+
+| Yöntem              | Açıklama                                | Yanıt                                   |
+| ------------------- | --------------------------------------- | --------------------------------------- |
+| `event.subscribe()` | Sunucu tarafından gönderilen olay akışı | Sunucu tarafından gönderilen olay akışı |
+
+---
+
+#### Örnekler
+
+```javascript
+// Listen to real-time events
+const events = await client.event.subscribe()
+for await (const event of events.stream) {
+  console.log("Event:", event.type, event.properties)
+}
+```
