@@ -122,10 +122,10 @@ export namespace Project {
   async function commonDir(worktree: string) {
     if (!Bun.which("git")) return
     const common = await git(["rev-parse", "--git-common-dir"], { cwd: worktree })
-      .then(async (result) => (await result.text()).trim())
+      .then((result) => result.text().trim())
       .catch(() => undefined)
     if (!common) return
-    return path.isAbsolute(common) ? common : path.resolve(worktree, common)
+    return gitpath(worktree, common)
   }
 
   function writeCache(commonDir: string, id: string) {
@@ -262,7 +262,7 @@ export namespace Project {
         const top = await git(["rev-parse", "--show-toplevel"], {
           cwd: sandbox,
         })
-          .then(async (result) => path.resolve(sandbox, (await result.text()).trim()))
+          .then((result) => gitpath(sandbox, result.text()))
           .catch(() => undefined)
 
         if (!top) {
@@ -280,7 +280,7 @@ export namespace Project {
         const common = await git(["rev-parse", "--git-common-dir"], {
           cwd: sandbox,
         })
-          .then(async (result) => (await result.text()).trim())
+          .then((result) => result.text().trim())
           .catch(() => undefined)
 
         if (!common) {
@@ -292,7 +292,7 @@ export namespace Project {
           }
         }
 
-        const commonDir = path.isAbsolute(common) ? common : path.resolve(sandbox, common)
+        const commonDir = gitpath(sandbox, common)
         const worktree = path.dirname(commonDir)
         const cacheFile = cachePath(commonDir)
 
@@ -317,13 +317,7 @@ export namespace Project {
               GIT_WORK_TREE: sandbox,
             },
           })
-            .then(async (result) =>
-              (await result.text())
-                .split("\n")
-                .filter(Boolean)
-                .map((x) => x.trim())
-                .toSorted(),
-            )
+            .then((result) => result.text().split("\n").filter(Boolean).map((x) => x.trim()).toSorted())
             .catch(() => undefined)
 
           id = roots?.[0]

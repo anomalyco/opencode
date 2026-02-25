@@ -13,10 +13,6 @@ import fs from "fs/promises"
 
 Log.init({ print: false })
 
-function norm(p: string) {
-  return p.replaceAll("\\", "/").replace(/\/+$/, "")
-}
-
 const gitModule = await import("../../src/util/git")
 const originalGit = gitModule.git
 
@@ -34,7 +30,7 @@ mock.module("../../src/util/git", () => ({
     ) {
       return Promise.resolve({
         exitCode: 128,
-        text: () => Promise.resolve(""),
+        text: () => "",
         stdout: Buffer.from(""),
         stderr: Buffer.from("fatal"),
       })
@@ -42,7 +38,7 @@ mock.module("../../src/util/git", () => ({
     if (mode === "top-fail" && cmd.includes("git rev-parse") && cmd.includes("--show-toplevel")) {
       return Promise.resolve({
         exitCode: 128,
-        text: () => Promise.resolve(""),
+        text: () => "",
         stdout: Buffer.from(""),
         stderr: Buffer.from("fatal"),
       })
@@ -50,7 +46,7 @@ mock.module("../../src/util/git", () => ({
     if (mode === "common-dir-fail" && cmd.includes("git rev-parse") && cmd.includes("--git-common-dir")) {
       return Promise.resolve({
         exitCode: 128,
-        text: () => Promise.resolve(""),
+        text: () => "",
         stdout: Buffer.from(""),
         stderr: Buffer.from("fatal"),
       })
@@ -152,9 +148,9 @@ describe("Project.fromDirectory with worktrees", () => {
 
     const { project, sandbox } = await p.fromDirectory(tmp.path)
 
-    expect(norm(project.worktree)).toBe(norm(tmp.path))
-    expect(norm(sandbox)).toBe(norm(tmp.path))
-    expect(project.sandboxes.map(norm)).not.toContain(norm(tmp.path))
+    expect(project.worktree).toBe(tmp.path)
+    expect(sandbox).toBe(tmp.path)
+    expect(project.sandboxes).not.toContain(tmp.path)
   })
 
   test("should set worktree to root when called from a worktree", async () => {
@@ -167,10 +163,10 @@ describe("Project.fromDirectory with worktrees", () => {
 
       const { project, sandbox } = await p.fromDirectory(worktreePath)
 
-      expect(norm(project.worktree)).toBe(norm(tmp.path))
-      expect(norm(sandbox)).toBe(norm(worktreePath))
-      expect(project.sandboxes.map(norm)).toContain(norm(worktreePath))
-      expect(project.sandboxes.map(norm)).not.toContain(norm(tmp.path))
+      expect(project.worktree).toBe(tmp.path)
+      expect(sandbox).toBe(worktreePath)
+      expect(project.sandboxes).toContain(worktreePath)
+      expect(project.sandboxes).not.toContain(tmp.path)
     } finally {
       await $`git worktree remove ${worktreePath}`
         .cwd(tmp.path)
@@ -192,10 +188,10 @@ describe("Project.fromDirectory with worktrees", () => {
       await p.fromDirectory(worktree1)
       const { project } = await p.fromDirectory(worktree2)
 
-      expect(norm(project.worktree)).toBe(norm(tmp.path))
-      expect(project.sandboxes.map(norm)).toContain(norm(worktree1))
-      expect(project.sandboxes.map(norm)).toContain(norm(worktree2))
-      expect(project.sandboxes.map(norm)).not.toContain(norm(tmp.path))
+      expect(project.worktree).toBe(tmp.path)
+      expect(project.sandboxes).toContain(worktree1)
+      expect(project.sandboxes).toContain(worktree2)
+      expect(project.sandboxes).not.toContain(tmp.path)
     } finally {
       await $`git worktree remove ${worktree1}`
         .cwd(tmp.path)
@@ -222,14 +218,14 @@ describe("Project.fromDirectory with worktrees", () => {
       expect(root.project.id).not.toBe("global")
       expect(wt.project.id).toBe(root.project.id)
 
-      expect(norm(root.project.worktree)).toBe(norm(tmp.path))
-      expect(norm(wt.project.worktree)).toBe(norm(tmp.path))
+      expect(root.project.worktree).toBe(tmp.path)
+      expect(wt.project.worktree).toBe(tmp.path)
 
-      expect(norm(root.sandbox)).toBe(norm(tmp.path))
-      expect(norm(wt.sandbox)).toBe(norm(worktreePath))
+      expect(root.sandbox).toBe(tmp.path)
+      expect(wt.sandbox).toBe(worktreePath)
 
-      expect(wt.project.sandboxes.map(norm)).toContain(norm(worktreePath))
-      expect(wt.project.sandboxes.map(norm)).not.toContain(norm(tmp.path))
+      expect(wt.project.sandboxes).toContain(worktreePath)
+      expect(wt.project.sandboxes).not.toContain(tmp.path)
     } finally {
       await $`git worktree remove ${worktreePath}`
         .cwd(tmp.path)
@@ -262,7 +258,7 @@ describe("Project.fromDirectory with worktrees", () => {
 
       const again = await p.fromDirectory(worktreePath)
       expect(again.project.id).toBe(canonicalId)
-      expect(again.project.sandboxes.map(norm)).toContain(norm(worktreePath))
+      expect(again.project.sandboxes).toContain(worktreePath)
       expect(await Bun.file(cacheFile).text()).toBe(canonicalId)
     } finally {
       await $`git worktree remove ${worktreePath}`
@@ -281,7 +277,7 @@ describe("Project.fromDirectory with worktrees", () => {
       await $`git worktree add ${worktreePath} -b test-branch-${Date.now()}`.cwd(tmp.path).quiet()
 
       const first = await p.fromDirectory(tmp.path).then((x) => x.project)
-      await Database.transaction((db) => {
+      Database.transaction((db) => {
         db.insert(SessionTable)
           .values({
             id: "ses_first",
@@ -354,7 +350,7 @@ describe("Project.fromDirectory with worktrees", () => {
       expect(repaired.id).toBe(first.id)
       expect(repaired.icon?.url).toBe("data:image/png;base64,AA==")
 
-      const projects = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.worktree, repaired.worktree)).all())
+      const projects = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.worktree, tmp.path)).all())
       expect(projects.length).toBe(1)
 
       const session = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, "ses_dupe")).get())
@@ -378,7 +374,7 @@ describe("Project.fromDirectory with worktrees", () => {
 
     const stamp = `${Date.now()}-${Math.random()}`
 
-    await Database.transaction((db) => {
+    Database.transaction((db) => {
       db.insert(ProjectTable)
         .values({
           id: `ng-1-${stamp}`,
@@ -420,7 +416,7 @@ describe("Project.fromDirectory with worktrees", () => {
 
     const stamp = `${Date.now()}-${Math.random()}`
 
-    await Database.transaction((db) => {
+    Database.transaction((db) => {
       db.insert(ProjectTable)
         .values({
           id: `git-1-${stamp}`,
@@ -554,6 +550,7 @@ describe("Project.update", () => {
 
   test("should throw error when project not found", async () => {
     await using tmp = await tmpdir({ git: true })
+    void tmp.path
 
     await expect(
       Project.update({
