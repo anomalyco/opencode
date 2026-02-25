@@ -1275,23 +1275,15 @@ export namespace Config {
           filePath = path.join(os.homedir(), filePath.slice(2))
         }
         const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath)
-        const fileContent = (
-          await Bun.file(resolvedPath)
-            .text()
-            .catch((error) => {
-              const errMsg = `bad file reference: "${match}"`
-              if (error.code === "ENOENT") {
-                throw new InvalidError(
-                  {
-                    path: source,
-                    message: errMsg + ` ${resolvedPath} does not exist`,
-                  },
-                  { cause: error },
-                )
-              }
-              throw new InvalidError({ path: source, message: errMsg }, { cause: error })
-            })
-        ).trim()
+        const fileContent = await Bun.file(resolvedPath).text().trim().catch((error) => {
+          const errMsg = `bad file reference: "${match}"`
+          if (error.code === "ENOENT") {
+            // Log warning and skip missing file instead of throwing
+            log.warn(`${errMsg}: ${resolvedPath} does not exist, skipping`)
+            return ""
+          }
+          throw new InvalidError({ path: source, message: errMsg }, { cause: error })
+        })
         text = text.replace(match, () => JSON.stringify(fileContent).slice(1, -1))
       }
     }
