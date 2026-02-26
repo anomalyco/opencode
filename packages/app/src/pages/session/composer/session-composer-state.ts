@@ -7,14 +7,20 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { sessionPermissionRequest, sessionQuestionRequest } from "./session-request-tree"
 
 export function createSessionComposerBlocked() {
   const params = useParams()
   const sync = useSync()
+  const permissionRequest = createMemo(() =>
+    sessionPermissionRequest(sync.data.session, sync.data.permission, params.id),
+  )
+  const questionRequest = createMemo(() => sessionQuestionRequest(sync.data.session, sync.data.question, params.id))
+
   return createMemo(() => {
     const id = params.id
     if (!id) return false
-    return !!sync.data.permission[id]?.[0] || !!sync.data.question[id]?.[0]
+    return !!permissionRequest() || !!questionRequest()
   })
 }
 
@@ -26,18 +32,18 @@ export function createSessionComposerState() {
   const language = useLanguage()
 
   const questionRequest = createMemo((): QuestionRequest | undefined => {
-    const id = params.id
-    if (!id) return
-    return sync.data.question[id]?.[0]
+    return sessionQuestionRequest(sync.data.session, sync.data.question, params.id)
   })
 
   const permissionRequest = createMemo((): PermissionRequest | undefined => {
-    const id = params.id
-    if (!id) return
-    return sync.data.permission[id]?.[0]
+    return sessionPermissionRequest(sync.data.session, sync.data.permission, params.id)
   })
 
-  const blocked = createSessionComposerBlocked()
+  const blocked = createMemo(() => {
+    const id = params.id
+    if (!id) return false
+    return !!permissionRequest() || !!questionRequest()
+  })
 
   const todos = createMemo((): Todo[] => {
     const id = params.id

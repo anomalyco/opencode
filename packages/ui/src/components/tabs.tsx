@@ -65,6 +65,11 @@ function TabsTrigger(props: ParentProps<TabsTriggerProps>) {
         ...(split.classList ?? {}),
         [split.class ?? ""]: !!split.class,
       }}
+      onMouseDown={(e) => {
+        if (e.button === 1 && split.onMiddleClick) {
+          e.preventDefault()
+        }
+      }}
       onAuxClick={(e) => {
         if (e.button === 1 && split.onMiddleClick) {
           e.preventDefault()
