@@ -25,6 +25,7 @@ export async function GET(input: APIEvent) {
       object: "list",
       data: Object.entries(zenData.models)
         .filter(([id]) => !disabledModels.includes(id))
+        .filter(([id]) => !id.startsWith("alpha-"))
         .map(([id, _model]) => ({
           id,
           object: "model",
