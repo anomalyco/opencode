@@ -365,27 +365,35 @@ export function createLineCommentController<T extends LineCommentShape>(
 
       return {
         id: comment.id,
-        open: note.isOpen(comment.id) || note.isEditing(comment.id),
+        get open() {
+          return note.isOpen(comment.id) || note.isEditing(comment.id)
+        },
         comment: comment.comment,
         selection: formatSelectedLineLabel(comment.selection),
-        actions: props.renderCommentActions?.(comment, { edit, remove }),
-        editor: note.isEditing(comment.id)
-          ? {
-              value: note.draft(),
-              selection: formatSelectedLineLabel(comment.selection),
-              onInput: note.setDraft,
-              onCancel: note.cancelDraft,
-              onSubmit: (value) => {
-                props.onUpdate?.({
-                  id: comment.id,
-                  comment: value,
-                  selection: cloneSelectedLineRange(comment.selection),
-                })
-                note.cancelDraft()
-              },
-              submitLabel: props.editSubmitLabel,
-            }
-          : undefined,
+        get actions() {
+          return props.renderCommentActions?.(comment, { edit, remove })
+        },
+        get editor() {
+          return note.isEditing(comment.id)
+            ? {
+                get value() {
+                  return note.draft()
+                },
+                selection: formatSelectedLineLabel(comment.selection),
+                onInput: note.setDraft,
+                onCancel: note.cancelDraft,
+                onSubmit: (value: string) => {
+                  props.onUpdate?.({
+                    id: comment.id,
+                    comment: value,
+                    selection: cloneSelectedLineRange(comment.selection),
+                  })
+                  note.cancelDraft()
+                },
+                submitLabel: props.editSubmitLabel,
+              }
+            : undefined
+        },
         onMouseEnter: () => note.hoverComment(comment.selection),
         onClick: () => {
           if (note.isEditing(comment.id)) return
