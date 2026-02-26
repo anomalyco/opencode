@@ -20,6 +20,84 @@ They can be defined:
 - Locally by placing them in the `.opencode/tools/` directory of your project.
 - Or globally, by placing them in `~/.config/opencode/tools/`.
 
+Tools can be organized in subdirectories for better structure.
+
+---
+
+### Folder structure
+
+Tools can be nested in folders. The folder name becomes part of the tool name.
+
+```
+.opencode/tools/
+├── database.ts           # Tool name: database
+├── math.ts               # Tool name: math
+└── github/
+    ├── index.ts          # Tool name: github
+    ├── pr.ts             # Tool name: github_pr
+    └── issue.ts          # Tool name: github_issue
+```
+
+- Files at the root use the filename as the tool name
+- Files in subdirectories use `folder_filename`
+- `index.ts` in a folder uses the folder name
+
+---
+
+#### Multiple tools per file in subdirectories
+
+When exporting multiple tools from files in subdirectories, the folder and file name are both prefixed:
+
+```ts title=".opencode/tools/github/index.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export const list = tool({
+  description: "List repositories",
+  args: {},
+  async execute() {
+    return "repos"
+  },
+})
+
+export default tool({
+  description: "GitHub main tool",
+  args: {},
+  async execute() {
+    return "github"
+  },
+})
+```
+
+This creates:
+
+- `github` (from default export)
+- `github_list` (from list export)
+
+```ts title=".opencode/tools/github/pr.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export const create = tool({
+  description: "Create a PR",
+  args: {},
+  async execute() {
+    return "created"
+  },
+})
+
+export default tool({
+  description: "GitHub PR tool",
+  args: {},
+  async execute() {
+    return "pr"
+  },
+})
+```
+
+This creates:
+
+- `github_pr` (from default export)
+- `github_pr_create` (from create export)
+
 ---
 
 ### Structure
