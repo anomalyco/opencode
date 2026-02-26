@@ -28,6 +28,11 @@ export const isRootVisibleSession = (session: Session, directory: string) =>
 export const sortedRootSessions = (store: { session: Session[]; path: { directory: string } }, now: number) =>
   store.session.filter((session) => isRootVisibleSession(session, store.path.directory)).sort(sortSessions(now))
 
+export const latestRootSession = (stores: { session: Session[]; path: { directory: string } }[], now: number) =>
+  stores
+    .flatMap((store) => store.session.filter((session) => isRootVisibleSession(session, store.path.directory)))
+    .sort(sortSessions(now))[0]
+
 export const childMapByParent = (sessions: Session[]) => {
   const map = new Map<string, string[]>()
   for (const session of sessions) {
