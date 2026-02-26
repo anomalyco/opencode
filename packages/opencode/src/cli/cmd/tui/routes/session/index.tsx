@@ -325,6 +325,28 @@ export function Session() {
     }
   }
 
+  const teamMembers = createMemo(() => {
+    const tid = session()?.teamID
+    if (!tid) return []
+    return sync.data.session
+      .filter((x) => x.teamID === tid)
+      .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  })
+
+  function moveTeam(direction: number) {
+    const members = teamMembers()
+    if (members.length <= 1) return
+    let next = members.findIndex((x) => x.id === session()?.id) + direction
+    if (next >= members.length) next = 0
+    if (next < 0) next = members.length - 1
+    if (members[next]) {
+      navigate({
+        type: "session",
+        sessionID: members[next].id,
+      })
+    }
+  }
+
   const command = useCommandDialog()
   command.register(() => [
     {
@@ -919,6 +941,30 @@ export function Session() {
             sessionID: parentID,
           })
         }
+        dialog.clear()
+      },
+    },
+    {
+      title: "Next team member",
+      value: "team.next",
+      keybind: "team_cycle",
+      category: "Team",
+      hidden: true,
+      enabled: !!session()?.teamID,
+      onSelect: (dialog) => {
+        moveTeam(1)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Previous team member",
+      value: "team.prev",
+      keybind: "team_cycle_reverse",
+      category: "Team",
+      hidden: true,
+      enabled: !!session()?.teamID,
+      onSelect: (dialog) => {
+        moveTeam(-1)
         dialog.clear()
       },
     },

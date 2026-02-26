@@ -553,6 +553,36 @@ export namespace SessionPrompt {
         continue
       }
 
+      // inject pending team messages
+      if (session.teamID) {
+        const { TeamMessage } = await import("@/team/message")
+        const pendingTeamMsgs = TeamMessage.pending(sessionID, session.teamID)
+        if (pendingTeamMsgs.length > 0) {
+          const teamText = pendingTeamMsgs
+            .map((m) => `[Team message from ${m.from_session_id}]: ${m.content}`)
+            .join("\n")
+          const teamUserMsg: MessageV2.User = {
+            id: Identifier.ascending("message"),
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: lastUser.agent,
+            model: lastUser.model,
+          }
+          await Session.updateMessage(teamUserMsg)
+          await Session.updatePart({
+            id: Identifier.ascending("part"),
+            messageID: teamUserMsg.id,
+            sessionID,
+            type: "text",
+            text: teamText,
+            synthetic: true,
+          } satisfies MessageV2.TextPart)
+          TeamMessage.markRead(pendingTeamMsgs.map((m) => m.id))
+          continue
+        }
+      }
+
       // normal processing
       const agent = await Agent.get(lastUser.agent)
       const maxSteps = agent.steps ?? Infinity

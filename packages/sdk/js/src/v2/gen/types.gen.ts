@@ -715,6 +715,83 @@ export type EventTodoUpdated = {
   }
 }
 
+export type EventTeamCreated = {
+  type: "team.created"
+  properties: {
+    info: {
+      id: string
+      name: string
+      leadSessionID: string
+      status: "active" | "archived"
+      time: {
+        created: number
+        updated: number
+      }
+    }
+  }
+}
+
+export type EventTeamArchived = {
+  type: "team.archived"
+  properties: {
+    info: {
+      id: string
+      name: string
+      leadSessionID: string
+      status: "active" | "archived"
+      time: {
+        created: number
+        updated: number
+      }
+    }
+  }
+}
+
+export type EventTeamMemberJoined = {
+  type: "team.member.joined"
+  properties: {
+    teamID: string
+    sessionID: string
+    role: "lead" | "member"
+  }
+}
+
+export type EventTeamMemberLeft = {
+  type: "team.member.left"
+  properties: {
+    teamID: string
+    sessionID: string
+  }
+}
+
+export type EventTeamTeammateIdle = {
+  type: "team.teammate.idle"
+  properties: {
+    teamID: string
+    sessionID: string
+  }
+}
+
+export type EventTeamMessage = {
+  type: "team.message"
+  properties: {
+    teamID: string
+    messageID: string
+    fromSessionID: string
+    toSessionID: string | null
+    content: string
+  }
+}
+
+export type EventTeamTaskCompleted = {
+  type: "team.task.completed"
+  properties: {
+    teamID: string
+    taskID: string
+    sessionID: string
+  }
+}
+
 export type EventTuiPromptAppend = {
   type: "tui.prompt.append"
   properties: {
@@ -828,6 +905,8 @@ export type Session = {
     archived?: number
   }
   permission?: PermissionRuleset
+  teamID?: string
+  teamRole?: "lead" | "member"
   revert?: {
     messageID: string
     partID?: string
@@ -966,6 +1045,13 @@ export type Event =
   | EventSessionCompacted
   | EventFileWatcherUpdated
   | EventTodoUpdated
+  | EventTeamCreated
+  | EventTeamArchived
+  | EventTeamMemberJoined
+  | EventTeamMemberLeft
+  | EventTeamTeammateIdle
+  | EventTeamMessage
+  | EventTeamTaskCompleted
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
@@ -1665,6 +1751,8 @@ export type GlobalSession = {
     archived?: number
   }
   permission?: PermissionRuleset
+  teamID?: string
+  teamRole?: "lead" | "member"
   revert?: {
     messageID: string
     partID?: string
@@ -2608,6 +2696,8 @@ export type SessionCreateData = {
     parentID?: string
     title?: string
     permission?: PermissionRuleset
+    teamID?: string
+    teamRole?: "lead" | "member"
   }
   path?: never
   query?: {

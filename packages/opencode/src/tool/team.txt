@@ -1,0 +1,25 @@
+Manage agent teams for parallel collaborative work. Teams let multiple AI sessions work together on complex tasks.
+
+IMPORTANT: Agent teams use significantly more tokens than a single session. Each teammate runs its own context window. Use teams for tasks that genuinely benefit from parallel exploration (3-5 teammates recommended).
+
+Actions:
+- create: Create a new team (current session becomes lead)
+- spawn: Add a teammate - starts working immediately in parallel (non-blocking). Spawn multiple teammates before calling wait.
+- wait: Block until ALL teammates finish and collect their results. Call this after spawning all teammates.
+- message: Send a point-to-point message to a specific teammate. If teammate is idle, wakes them up and waits for reply.
+- broadcast: Send a message to all teammates. Wakes up idle teammates and collects their replies.
+- tasks: Manage the shared task list (sub-actions: create, claim, complete, list)
+- status: View team status, members (active/idle), and task summary
+- shutdown: Request a teammate to shut down gracefully
+- cleanup: Archive the team, delete teammate sessions, and clean up (lead only, all teammates must be idle)
+
+Typical workflow:
+1. create a team
+2. spawn teammate A with task X
+3. spawn teammate B with task Y (both now running in parallel)
+4. spawn teammate C with task Z
+5. wait → collects results from A, B, C when they all finish
+6. Teammates can communicate with each other via message/broadcast during execution
+7. cleanup when done
+
+Teammates have their own tools and can read/write files, run commands, and communicate with each other via the team tool.

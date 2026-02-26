@@ -27,11 +27,17 @@ export const SessionTable = sqliteTable(
     summary_diffs: text({ mode: "json" }).$type<Snapshot.FileDiff[]>(),
     revert: text({ mode: "json" }).$type<{ messageID: string; partID?: string; snapshot?: string; diff?: string }>(),
     permission: text({ mode: "json" }).$type<PermissionNext.Ruleset>(),
+    team_id: text(),
+    team_role: text().$type<"lead" | "member">(),
     ...Timestamps,
     time_compacting: integer(),
     time_archived: integer(),
   },
-  (table) => [index("session_project_idx").on(table.project_id), index("session_parent_idx").on(table.parent_id)],
+  (table) => [
+    index("session_project_idx").on(table.project_id),
+    index("session_parent_idx").on(table.parent_id),
+    index("session_team_idx").on(table.team_id),
+  ],
 )
 
 export const MessageTable = sqliteTable(

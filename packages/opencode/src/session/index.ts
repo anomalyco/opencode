@@ -71,6 +71,8 @@ export namespace Session {
       share,
       revert,
       permission: row.permission ?? undefined,
+      teamID: row.team_id ?? undefined,
+      teamRole: row.team_role ?? undefined,
       time: {
         created: row.time_created,
         updated: row.time_updated,
@@ -96,6 +98,8 @@ export namespace Session {
       summary_diffs: info.summary?.diffs,
       revert: info.revert ?? null,
       permission: info.permission,
+      team_id: info.teamID,
+      team_role: info.teamRole,
       time_created: info.time.created,
       time_updated: info.time.updated,
       time_compacting: info.time.compacting,
@@ -142,6 +146,8 @@ export namespace Session {
         archived: z.number().optional(),
       }),
       permission: PermissionNext.Ruleset.optional(),
+      teamID: z.string().optional(),
+      teamRole: z.enum(["lead", "member"]).optional(),
       revert: z
         .object({
           messageID: z.string(),
@@ -215,6 +221,8 @@ export namespace Session {
         parentID: Identifier.schema("session").optional(),
         title: z.string().optional(),
         permission: Info.shape.permission,
+        teamID: z.string().optional(),
+        teamRole: z.enum(["lead", "member"]).optional(),
       })
       .optional(),
     async (input) => {
@@ -223,6 +231,8 @@ export namespace Session {
         directory: Instance.directory,
         title: input?.title,
         permission: input?.permission,
+        teamID: input?.teamID,
+        teamRole: input?.teamRole,
       })
     },
   )
@@ -290,6 +300,8 @@ export namespace Session {
     parentID?: string
     directory: string
     permission?: PermissionNext.Ruleset
+    teamID?: string
+    teamRole?: "lead" | "member"
   }) {
     const result: Info = {
       id: Identifier.descending("session", input.id),
@@ -300,6 +312,8 @@ export namespace Session {
       parentID: input.parentID,
       title: input.title ?? createDefaultTitle(!!input.parentID),
       permission: input.permission,
+      teamID: input.teamID,
+      teamRole: input.teamRole,
       time: {
         created: Date.now(),
         updated: Date.now(),

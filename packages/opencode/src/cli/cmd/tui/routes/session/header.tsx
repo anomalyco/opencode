@@ -122,6 +122,39 @@ export function Header() {
               </box>
             </box>
           </Match>
+          <Match when={session()?.teamID}>
+            <box flexDirection="column" gap={1}>
+              <box flexDirection={narrow() ? "column" : "row"} justifyContent="space-between" gap={narrow() ? 1 : 0}>
+                <text fg={theme.text}>
+                  <b>Team session</b>{" "}
+                  <span style={{ fg: theme.textMuted }}>({session()?.teamRole})</span>
+                </text>
+                <ContextInfo context={context} cost={cost} />
+              </box>
+              <box flexDirection="row" gap={2}>
+                <box
+                  onMouseOver={() => setHover("prev")}
+                  onMouseOut={() => setHover(null)}
+                  onMouseUp={() => command.trigger("team.prev")}
+                  backgroundColor={hover() === "prev" ? theme.backgroundElement : theme.backgroundPanel}
+                >
+                  <text fg={theme.text}>
+                    Prev <span style={{ fg: theme.textMuted }}>{keybind.print("team_cycle_reverse")}</span>
+                  </text>
+                </box>
+                <box
+                  onMouseOver={() => setHover("next")}
+                  onMouseOut={() => setHover(null)}
+                  onMouseUp={() => command.trigger("team.next")}
+                  backgroundColor={hover() === "next" ? theme.backgroundElement : theme.backgroundPanel}
+                >
+                  <text fg={theme.text}>
+                    Next <span style={{ fg: theme.textMuted }}>{keybind.print("team_cycle")}</span>
+                  </text>
+                </box>
+              </box>
+            </box>
+          </Match>
           <Match when={true}>
             <box flexDirection={narrow() ? "column" : "row"} justifyContent="space-between" gap={1}>
               <Title session={session} />
