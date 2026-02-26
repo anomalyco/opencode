@@ -56,7 +56,7 @@ const migrations = await Promise.all(
 )
 console.log(`Loaded ${migrations.length} migrations`)
 
-const singleFlag = process.argv.includes("--single")
+const singleFlag = process.argv.includes("--single") || (!!process.env.CI && !process.argv.includes("--all"))
 const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
 
@@ -102,11 +102,6 @@ const allTargets: {
   {
     os: "darwin",
     arch: "x64",
-  },
-  {
-    os: "darwin",
-    arch: "x64",
-    avx2: false,
   },
   {
     os: "win32",

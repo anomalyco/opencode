@@ -6,6 +6,7 @@ pub mod linux_display;
 pub mod linux_windowing;
 mod logging;
 mod markdown;
+mod os;
 mod server;
 mod window_customizer;
 mod windows;
@@ -42,7 +43,7 @@ struct ServerReadyData {
     url: String,
     username: Option<String>,
     password: Option<String>,
-    is_sidecar: bool
+    is_sidecar: bool,
 }
 
 #[derive(Clone, Copy, serde::Serialize, specta::Type, Debug)]
@@ -148,7 +149,7 @@ async fn await_initialization(
 fn check_app_exists(app_name: &str) -> bool {
     #[cfg(target_os = "windows")]
     {
-        check_windows_app(app_name)
+        os::windows::check_windows_app(app_name)
     }
 
     #[cfg(target_os = "macos")]
@@ -162,156 +163,12 @@ fn check_app_exists(app_name: &str) -> bool {
     }
 }
 
-#[cfg(target_os = "windows")]
-fn check_windows_app(_app_name: &str) -> bool {
-    // Check if command exists in PATH, including .exe
-    return true;
-}
-
-#[cfg(target_os = "windows")]
-fn resolve_windows_app_path(app_name: &str) -> Option<String> {
-    use std::path::{Path, PathBuf};
-
-    // Try to find the command using 'where'
-    let output = Command::new("where").arg(app_name).output().ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
-
-    let paths = String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(PathBuf::from)
-        .collect::<Vec<_>>();
-
-    let has_ext = |path: &Path, ext: &str| {
-        path.extension()
-            .and_then(|v| v.to_str())
-            .map(|v| v.eq_ignore_ascii_case(ext))
-            .unwrap_or(false)
-    };
-
-    if let Some(path) = paths.iter().find(|path| has_ext(path, "exe")) {
-        return Some(path.to_string_lossy().to_string());
-    }
-
-    let resolve_cmd = |path: &Path| -> Option<String> {
-        let content = std::fs::read_to_string(path).ok()?;
-
-        for token in content.split('"') {
-            let lower = token.to_ascii_lowercase();
-            if !lower.contains(".exe") {
-                continue;
-            }
-
-            if let Some(index) = lower.find("%~dp0") {
-                let base = path.parent()?;
-                let suffix = &token[index + 5..];
-                let mut resolved = PathBuf::from(base);
-
-                for part in suffix.replace('/', "\\").split('\\') {
-                    if part.is_empty() || part == "." {
-                        continue;
-                    }
-                    if part == ".." {
-                        let _ = resolved.pop();
-                        continue;
-                    }
-                    resolved.push(part);
-                }
-
-                if resolved.exists() {
-                    return Some(resolved.to_string_lossy().to_string());
-                }
-            }
-
-            let resolved = PathBuf::from(token);
-            if resolved.exists() {
-                return Some(resolved.to_string_lossy().to_string());
-            }
-        }
-
-        None
-    };
-
-    for path in &paths {
-        if has_ext(path, "cmd") || has_ext(path, "bat") {
-            if let Some(resolved) = resolve_cmd(path) {
-                return Some(resolved);
-            }
-        }
-
-        if path.extension().is_none() {
-            let cmd = path.with_extension("cmd");
-            if cmd.exists() {
-                if let Some(resolved) = resolve_cmd(&cmd) {
-                    return Some(resolved);
-                }
-            }
-
-            let bat = path.with_extension("bat");
-            if bat.exists() {
-                if let Some(resolved) = resolve_cmd(&bat) {
-                    return Some(resolved);
-                }
-            }
-        }
-    }
-
-    let key = app_name
-        .chars()
-        .filter(|v| v.is_ascii_alphanumeric())
-        .flat_map(|v| v.to_lowercase())
-        .collect::<String>();
-
-    if !key.is_empty() {
-        for path in &paths {
-            let dirs = [
-                path.parent(),
-                path.parent().and_then(|dir| dir.parent()),
-                path.parent()
-                    .and_then(|dir| dir.parent())
-                    .and_then(|dir| dir.parent()),
-            ];
-
-            for dir in dirs.into_iter().flatten() {
-                if let Ok(entries) = std::fs::read_dir(dir) {
-                    for entry in entries.flatten() {
-                        let candidate = entry.path();
-                        if !has_ext(&candidate, "exe") {
-                            continue;
-                        }
-
-                        let Some(stem) = candidate.file_stem().and_then(|v| v.to_str()) else {
-                            continue;
-                        };
-
-                        let name = stem
-                            .chars()
-                            .filter(|v| v.is_ascii_alphanumeric())
-                            .flat_map(|v| v.to_lowercase())
-                            .collect::<String>();
-
-                        if name.contains(&key) || key.contains(&name) {
-                            return Some(candidate.to_string_lossy().to_string());
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    paths.first().map(|path| path.to_string_lossy().to_string())
-}
-
 #[tauri::command]
 #[specta::specta]
 fn resolve_app_path(app_name: &str) -> Option<String> {
     #[cfg(target_os = "windows")]
     {
-        resolve_windows_app_path(app_name)
+        os::windows::resolve_windows_app_path(app_name)
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -634,7 +491,12 @@ async fn initialize(app: AppHandle) {
 
                             app.state::<ServerState>().set_child(Some(child));
 
-                            Ok(ServerReadyData { url, username,password, is_sidecar: true })
+                            Ok(ServerReadyData {
+                                url,
+                                username,
+                                password,
+                                is_sidecar: true,
+                            })
                         }
                         .map(move |res| {
                             let _ = server_ready_tx.send(res);
