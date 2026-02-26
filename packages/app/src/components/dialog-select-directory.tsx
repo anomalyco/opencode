@@ -279,14 +279,17 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   })
 
   const recentProjects = createMemo(() => {
-    return layout.projects.list().map((project) => {
-      const row = toRow(project.worktree, home(), "recent")
-      const name = project.name || getFilename(project.worktree)
-      return {
-        ...row,
-        search: `${row.search}\n${name}`,
-      }
-    })
+    return layout.projects
+      .list()
+      .slice(0, 5)
+      .map((project) => {
+        const row = toRow(project.worktree, home(), "recent")
+        const name = project.name || getFilename(project.worktree)
+        return {
+          ...row,
+          search: `${row.search}\n${name}`,
+        }
+      })
   })
 
   const items = async (value: string) => {
