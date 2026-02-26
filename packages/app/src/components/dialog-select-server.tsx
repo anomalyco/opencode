@@ -2,6 +2,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
+import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { List } from "@opencode-ai/ui/list"
 import { TextField } from "@opencode-ai/ui/text-field"
@@ -9,7 +10,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { useNavigate } from "@solidjs/router"
 import { createEffect, createMemo, createResource, onCleanup, Show } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import { ServerRow } from "@/components/server/server-row"
+import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
@@ -17,6 +18,7 @@ import { checkServerHealth, type ServerHealth } from "@/utils/server-health"
 
 interface ServerFormProps {
   value: string
+  name: string
   username: string
   password: string
   placeholder: string
@@ -24,6 +26,7 @@ interface ServerFormProps {
   error: string
   status: boolean | undefined
   onChange: (value: string) => void
+  onNameChange: (value: string) => void
   onUsernameChange: (value: string) => void
   onPasswordChange: (value: string) => void
   onSubmit: () => void
@@ -114,22 +117,6 @@ function ServerForm(props: ServerFormProps) {
     <div class="px-5">
       <div class="bg-surface-raised-base rounded-md p-5 flex flex-col gap-3">
         <div class="flex-1 min-w-0 [&_[data-slot=input-wrapper]]:relative">
-          <div
-            classList={{
-              "size-1.5 rounded-full absolute left-3 top-1/2 -translate-y-1/2 z-10 pointer-events-none": true,
-              "bg-icon-success-base": props.status === true,
-              "bg-icon-critical-base": props.status === false,
-              "bg-border-weak-base": props.status === undefined,
-            }}
-            ref={(el) => {
-              requestAnimationFrame(() => {
-                const wrapper = el.parentElement?.querySelector('[data-slot="input-wrapper"]')
-                if (wrapper instanceof HTMLElement) {
-                  wrapper.appendChild(el)
-                }
-              })
-            }}
-          />
           <TextField
             type="text"
             label={language.t("dialog.server.add.url")}
@@ -141,9 +128,17 @@ function ServerForm(props: ServerFormProps) {
             disabled={props.busy}
             onChange={props.onChange}
             onKeyDown={keyDown}
-            class="pl-7"
           />
         </div>
+        <TextField
+          type="text"
+          label={language.t("dialog.server.add.name")}
+          placeholder={language.t("dialog.server.add.namePlaceholder")}
+          value={props.name}
+          disabled={props.busy}
+          onChange={props.onNameChange}
+          onKeyDown={keyDown}
+        />
         <div class="grid grid-cols-2 gap-2 min-w-0">
           <TextField
             type="text"
@@ -182,6 +177,7 @@ export function DialogSelectServer() {
     status: {} as Record<ServerConnection.Key, ServerHealth | undefined>,
     addServer: {
       url: "",
+      name: "",
       username: "",
       password: "",
       adding: false,
@@ -192,6 +188,7 @@ export function DialogSelectServer() {
     editServer: {
       id: undefined as string | undefined,
       value: "",
+      name: "",
       username: "",
       password: "",
       error: "",
@@ -203,6 +200,7 @@ export function DialogSelectServer() {
   const resetAdd = () => {
     setStore("addServer", {
       url: "",
+      name: "",
       username: "",
       password: "",
       adding: false,
@@ -215,6 +213,7 @@ export function DialogSelectServer() {
     setStore("editServer", {
       id: undefined,
       value: "",
+      name: "",
       username: "",
       password: "",
       error: "",
@@ -223,7 +222,7 @@ export function DialogSelectServer() {
     })
   }
 
-  const replaceServer = (original: ServerConnection.Http, next: ServerConnection.HttpBase) => {
+  const replaceServer = (original: ServerConnection.Http, next: ServerConnection.Http) => {
     const active = server.key
     const newConn = server.add(next)
     if (!newConn) return
@@ -281,8 +280,8 @@ export function DialogSelectServer() {
   async function select(conn: ServerConnection.Any, persist?: boolean) {
     if (!persist && store.status[ServerConnection.key(conn)]?.healthy === false) return
     dialog.close()
-    if (persist) {
-      server.add(conn.http)
+    if (persist && conn.type === "http") {
+      server.add(conn)
       navigate("/")
       return
     }
@@ -296,6 +295,11 @@ export function DialogSelectServer() {
     void previewStatus(value, store.addServer.username, store.addServer.password, (next) =>
       setStore("addServer", { status: next }),
     )
+  }
+
+  const handleAddNameChange = (value: string) => {
+    if (store.addServer.adding) return
+    setStore("addServer", { name: value, error: "" })
   }
 
   const handleAddUsernameChange = (value: string) => {
@@ -320,6 +324,11 @@ export function DialogSelectServer() {
     void previewStatus(value, store.editServer.username, store.editServer.password, (next) =>
       setStore("editServer", { status: next }),
     )
+  }
+
+  const handleEditNameChange = (value: string) => {
+    if (store.editServer.busy) return
+    setStore("editServer", { name: value, error: "" })
   }
 
   const handleEditUsernameChange = (value: string) => {
@@ -348,10 +357,14 @@ export function DialogSelectServer() {
 
     setStore("addServer", { adding: true, error: "" })
 
-    const http: ServerConnection.HttpBase = { url: normalized }
-    if (store.addServer.username) http.username = store.addServer.username
-    if (store.addServer.password) http.password = store.addServer.password
-    const result = await checkServerHealth(http, fetcher)
+    const conn: ServerConnection.Http = {
+      type: "http",
+      http: { url: normalized },
+    }
+    if (store.addServer.name.trim()) conn.displayName = store.addServer.name.trim()
+    if (store.addServer.username) conn.http.username = store.addServer.username
+    if (store.addServer.password) conn.http.password = store.addServer.password
+    const result = await checkServerHealth(conn.http, fetcher)
     setStore("addServer", { adding: false })
     if (!result.healthy) {
       setStore("addServer", { error: language.t("dialog.server.add.error") })
@@ -359,7 +372,7 @@ export function DialogSelectServer() {
     }
 
     resetAdd()
-    await select({ type: "http", http }, true)
+    await select(conn, true)
   }
 
   async function handleEdit(original: ServerConnection.Any, value: string) {
@@ -370,10 +383,13 @@ export function DialogSelectServer() {
       return
     }
 
+    const name = store.editServer.name.trim() || undefined
     const username = store.editServer.username || undefined
     const password = store.editServer.password || undefined
+    const existingName = original.displayName
     if (
       normalized === original.http.url &&
+      name === existingName &&
       username === original.http.username &&
       password === original.http.password
     ) {
@@ -383,19 +399,21 @@ export function DialogSelectServer() {
 
     setStore("editServer", { busy: true, error: "" })
 
-    const http: ServerConnection.HttpBase = { url: normalized }
-    http.username = username
-    http.password = password
-    const result = await checkServerHealth(http, fetcher)
+    const conn: ServerConnection.Http = {
+      type: "http",
+      displayName: name,
+      http: { url: normalized, username, password },
+    }
+    const result = await checkServerHealth(conn.http, fetcher)
     setStore("editServer", { busy: false })
     if (!result.healthy) {
       setStore("editServer", { error: language.t("dialog.server.add.error") })
       return
     }
     if (normalized === original.http.url) {
-      server.add(http)
+      server.add(conn)
     } else {
-      replaceServer(original, http)
+      replaceServer(original, conn)
     }
 
     resetEdit()
@@ -422,6 +440,7 @@ export function DialogSelectServer() {
     setStore("addServer", {
       showForm: true,
       url: "",
+      name: "",
       username: "",
       password: "",
       error: "",
@@ -434,6 +453,7 @@ export function DialogSelectServer() {
     setStore("editServer", {
       id: conn.http.url,
       value: conn.http.url,
+      name: conn.displayName ?? "",
       username: conn.http.username ?? "",
       password: conn.http.password ?? "",
       error: "",
@@ -487,6 +507,7 @@ export function DialogSelectServer() {
           fallback={
             <ServerForm
               value={isAddMode() ? store.addServer.url : store.editServer.value}
+              name={isAddMode() ? store.addServer.name : store.editServer.name}
               username={isAddMode() ? store.addServer.username : store.editServer.username}
               password={isAddMode() ? store.addServer.password : store.editServer.password}
               placeholder={language.t("dialog.server.add.placeholder")}
@@ -494,6 +515,7 @@ export function DialogSelectServer() {
               error={isAddMode() ? store.addServer.error : store.editServer.error}
               status={isAddMode() ? store.addServer.status : store.editServer.status}
               onChange={isAddMode() ? handleAddChange : handleEditChange}
+              onNameChange={isAddMode() ? handleAddNameChange : handleEditNameChange}
               onUsernameChange={isAddMode() ? handleAddUsernameChange : handleEditUsernameChange}
               onPasswordChange={isAddMode() ? handleAddPasswordChange : handleEditPasswordChange}
               onSubmit={submitForm}
@@ -519,23 +541,27 @@ export function DialogSelectServer() {
             {(i) => {
               const key = ServerConnection.key(i)
               return (
-                <div class="flex items-center gap-3 min-w-0 flex-1 group/item">
+                <div class="flex items-center gap-3 min-w-0 flex-1 w-full group/item">
+                  <div class="flex flex-col h-full items-start w-5">
+                    <ServerHealthIndicator health={store.status[key]} />
+                  </div>
                   <ServerRow
                     conn={i}
-                    status={store.status[key]}
                     dimmed={store.status[key]?.healthy === false}
-                    class="flex items-center gap-3 px-4 min-w-0 flex-1"
+                    status={store.status[key]}
+                    class="flex items-center gap-3 min-w-0 flex-1"
                     badge={
                       <Show when={defaultUrl() === i.http.url}>
-                        <span class="text-text-weak bg-surface-base text-14-regular px-1.5 rounded-xs">
+                        <span class="text-text-base bg-surface-base text-14-regular px-1.5 rounded-xs">
                           {language.t("dialog.server.status.default")}
                         </span>
                       </Show>
                     }
+                    showCredentials
                   />
-                  <div class="flex items-center justify-center gap-5 pl-4">
+                  <div class="flex items-center justify-center gap-4 pl-4">
                     <Show when={ServerConnection.key(current()) === key}>
-                      <p class="text-text-weak text-12-regular">{language.t("dialog.server.current")}</p>
+                      <Icon name="check" class="h-6" />
                     </Show>
 
                     <Show when={i.type === "http"}>

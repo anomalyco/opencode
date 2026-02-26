@@ -313,6 +313,8 @@ export const dict = {
   "dialog.server.add.error": "Could not connect to server",
   "dialog.server.add.checking": "Checking...",
   "dialog.server.add.button": "Add server",
+  "dialog.server.add.name": "Server name (optional)",
+  "dialog.server.add.namePlaceholder": "Localhost",
   "dialog.server.add.username": "Username (optional)",
   "dialog.server.add.password": "Password (optional)",
   "dialog.server.edit.title": "Edit server",
