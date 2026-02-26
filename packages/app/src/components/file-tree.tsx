@@ -529,23 +529,25 @@ export default function FileTree(props: {
                 >
                   <ContextMenu>
                     <ContextMenu.Trigger asChild>
-                      <Collapsible.Trigger>
-                        <FileTreeNodeTooltip enabled={tooltip()} node={node} kind={kind()}>
-                          <FileTreeNode
-                            node={node}
-                            level={level}
-                            active={props.active}
-                            nodeClass={props.nodeClass}
-                            draggable={draggable()}
-                            kinds={kinds()}
-                            marks={marks()}
-                          >
-                            <div class="size-4 flex items-center justify-center text-icon-weak">
-                              <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" />
-                            </div>
-                          </FileTreeNode>
-                        </FileTreeNodeTooltip>
-                      </Collapsible.Trigger>
+                      <div>
+                        <Collapsible.Trigger>
+                          <FileTreeNodeTooltip enabled={tooltip()} node={node} kind={kind()}>
+                            <FileTreeNode
+                              node={node}
+                              level={level}
+                              active={props.active}
+                              nodeClass={props.nodeClass}
+                              draggable={draggable()}
+                              kinds={kinds()}
+                              marks={marks()}
+                            >
+                              <div class="size-4 flex items-center justify-center text-icon-weak">
+                                <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" />
+                              </div>
+                            </FileTreeNode>
+                          </FileTreeNodeTooltip>
+                        </Collapsible.Trigger>
+                      </div>
                     </ContextMenu.Trigger>
                     <ContextMenu.Portal>
                       <ContextMenu.Content>
@@ -613,53 +615,55 @@ export default function FileTree(props: {
               <Match when={node.type === "file"}>
                 <ContextMenu>
                   <ContextMenu.Trigger asChild>
-                    <FileTreeNodeTooltip enabled={tooltip()} node={node} kind={kind()}>
-                      <FileTreeNode
-                        node={node}
-                        level={level}
-                        active={props.active}
-                        nodeClass={props.nodeClass}
-                        draggable={draggable()}
-                        kinds={kinds()}
-                        marks={marks()}
-                        as="button"
-                        type="button"
-                        onClick={() => props.onFileClick?.(node)}
-                      >
-                        <div class="w-4 shrink-0" />
-                        <Switch>
-                          <Match when={node.ignored}>
-                            <FileIcon
-                              node={node}
-                              class="size-4 filetree-icon filetree-icon--mono"
-                              style="color: var(--icon-weak-base)"
-                              mono
-                            />
-                          </Match>
-                          <Match when={active()}>
-                            <FileIcon
-                              node={node}
-                              class="size-4 filetree-icon filetree-icon--mono"
-                              style={kindTextColor(kind()!)}
-                              mono
-                            />
-                          </Match>
-                          <Match when={!node.ignored}>
-                            <span class="filetree-iconpair size-4">
+                    <div>
+                      <FileTreeNodeTooltip enabled={tooltip()} node={node} kind={kind()}>
+                        <FileTreeNode
+                          node={node}
+                          level={level}
+                          active={props.active}
+                          nodeClass={props.nodeClass}
+                          draggable={draggable()}
+                          kinds={kinds()}
+                          marks={marks()}
+                          as="button"
+                          type="button"
+                          onClick={() => props.onFileClick?.(node)}
+                        >
+                          <div class="w-4 shrink-0" />
+                          <Switch>
+                            <Match when={node.ignored}>
                               <FileIcon
                                 node={node}
-                                class="size-4 filetree-icon filetree-icon--color opacity-0 group-hover/filetree:opacity-100"
-                              />
-                              <FileIcon
-                                node={node}
-                                class="size-4 filetree-icon filetree-icon--mono group-hover/filetree:opacity-0"
+                                class="size-4 filetree-icon filetree-icon--mono"
+                                style="color: var(--icon-weak-base)"
                                 mono
                               />
-                            </span>
-                          </Match>
-                        </Switch>
-                      </FileTreeNode>
-                    </FileTreeNodeTooltip>
+                            </Match>
+                            <Match when={active()}>
+                              <FileIcon
+                                node={node}
+                                class="size-4 filetree-icon filetree-icon--mono"
+                                style={kindTextColor(kind()!)}
+                                mono
+                              />
+                            </Match>
+                            <Match when={!node.ignored}>
+                              <span class="filetree-iconpair size-4">
+                                <FileIcon
+                                  node={node}
+                                  class="size-4 filetree-icon filetree-icon--color opacity-0 group-hover/filetree:opacity-100"
+                                />
+                                <FileIcon
+                                  node={node}
+                                  class="size-4 filetree-icon filetree-icon--mono group-hover/filetree:opacity-0"
+                                  mono
+                                />
+                              </span>
+                            </Match>
+                          </Switch>
+                        </FileTreeNode>
+                      </FileTreeNodeTooltip>
+                    </div>
                   </ContextMenu.Trigger>
                   <ContextMenu.Portal>
                     <ContextMenu.Content>
