@@ -23,6 +23,11 @@ export namespace Pty {
     close: (code?: number, reason?: string) => void
   }
 
+  type Subscriber = {
+    ws: Socket
+    send: (data: string | Uint8Array | ArrayBuffer) => void
+  }
+
   // WebSocket control frame: 0x00 + UTF-8 JSON.
   const meta = (cursor: number) => {
     const json = JSON.stringify({ cursor })
@@ -87,7 +92,7 @@ export namespace Pty {
     buffer: string
     bufferCursor: number
     cursor: number
-    subscribers: Map<unknown, Socket>
+    subscribers: Map<unknown, Subscriber>
   }
 
   const state = Instance.state(
@@ -97,7 +102,8 @@ export namespace Pty {
         try {
           session.process.kill()
         } catch {}
-        for (const [key, ws] of session.subscribers.entries()) {
+        for (const [key, sub] of session.subscribers.entries()) {
+          const ws = sub.ws
           try {
             if (ws.data === key) ws.close()
           } catch {
@@ -170,7 +176,8 @@ export namespace Pty {
     ptyProcess.onData((chunk) => {
       session.cursor += chunk.length
 
-      for (const [key, ws] of session.subscribers.entries()) {
+      for (const [key, sub] of session.subscribers.entries()) {
+        const ws = sub.ws
         if (ws.readyState !== 1) {
           session.subscribers.delete(key)
           continue
@@ -182,7 +189,7 @@ export namespace Pty {
         }
 
         try {
-          ws.send(chunk)
+          sub.send(chunk)
         } catch {
           session.subscribers.delete(key)
         }
@@ -197,7 +204,8 @@ export namespace Pty {
     ptyProcess.onExit(({ exitCode }) => {
       log.info("session exited", { id, exitCode })
       session.info.status = "exited"
-      for (const [key, ws] of session.subscribers.entries()) {
+      for (const [key, sub] of session.subscribers.entries()) {
+        const ws = sub.ws
         try {
           if (ws.data === key) ws.close()
         } catch {
@@ -232,7 +240,8 @@ export namespace Pty {
     try {
       session.process.kill()
     } catch {}
-    for (const [key, ws] of session.subscribers.entries()) {
+    for (const [key, sub] of session.subscribers.entries()) {
+      const ws = sub.ws
       try {
         if (ws.data === key) ws.close()
       } catch {
@@ -272,7 +281,7 @@ export namespace Pty {
 
     // Optionally cleanup if the key somehow exists
     session.subscribers.delete(connectionKey)
-    session.subscribers.set(connectionKey, ws)
+    session.subscribers.set(connectionKey, { ws, send: ws.send.bind(ws) })
 
     const cleanup = () => {
       session.subscribers.delete(connectionKey)
