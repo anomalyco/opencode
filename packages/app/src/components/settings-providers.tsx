@@ -194,6 +194,9 @@ export const SettingsProviders: Component = () => {
                     <Show when={note(item.id)}>
                       {(key) => <span class="text-12-regular text-text-weak pl-8">{language.t(key())}</span>}
                     </Show>
+                    <Show when={item.id === "opencode-go"}>
+                      <span class="text-12-regular text-text-weak pl-8">Low cost subscription for everyone</span>
+                    </Show>
                   </div>
                   <Button
                     size="large"
