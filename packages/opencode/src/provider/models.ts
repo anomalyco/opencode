@@ -20,6 +20,7 @@ export namespace ModelsDev {
     name: z.string(),
     family: z.string().optional(),
     release_date: z.string(),
+    last_updated: z.string().optional(),
     attachment: z.boolean(),
     reasoning: z.boolean(),
     temperature: z.boolean(),
