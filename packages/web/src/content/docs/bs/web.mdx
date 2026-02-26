@@ -17,16 +17,6 @@ opencode web
 
 Ovo pokreće lokalni server na `127.0.0.1` sa nasumičnim dostupnim portom i automatski otvara OpenCode u vašem podrazumevanom pretraživaču.
 
-:::tip[Bez automatskog otvaranja]
-Da biste pokrenuli web server bez automatskog otvaranja pregledača, koristite umjesto toga `opencode serve`:
-
-```bash
-opencode serve --hostname 0.0.0.0 --port 4096
-```
-
-Zatim ručno pristupite `http://localhost:4096` (ili vašoj mrežnoj adresi) u pregledaču. Kada se vezujete za `0.0.0.0`, postavite `OPENCODE_SERVER_PASSWORD` da zaštitite pristup.
-:::
-
 :::caution
 Ako `OPENCODE_SERVER_PASSWORD` nije postavljen, server će biti nezaštićen. Ovo je u redu za lokalnu upotrebu, ali bi trebalo biti postavljeno za pristup mreži.
 :::
@@ -150,3 +140,13 @@ Također možete konfigurirati postavke servera u svom `opencode.json` konfigura
 ```
 
 Oznake komandne linije imaju prednost nad postavkama konfiguracione datoteke.
+
+## Bez automatskog otvaranja
+
+Da biste pokrenuli web server bez automatskog otvaranja pregledača, koristite umjesto toga `opencode serve`:
+
+```bash
+opencode serve --hostname 0.0.0.0 --port 4096
+```
+
+Zatim ručno pristupite `http://localhost:4096` (ili vašoj mrežnoj adresi) u pregledaču. Kada se vezujete za `0.0.0.0`, postavite `OPENCODE_SERVER_PASSWORD` da zaštitite pristup.

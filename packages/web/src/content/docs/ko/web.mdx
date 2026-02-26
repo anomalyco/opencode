@@ -17,16 +17,6 @@ opencode web
 
 `127.0.0.1`의 로컬 서버를 랜덤 사용 가능한 포트로 시작하고 기본 브라우저에서 opencode를 자동으로 엽니다.
 
-:::tip[자동 열기 없이 시작]
-브라우저를 자동으로 열지 않고 웹 서버를 시작하려면 `opencode serve`를 대신 사용하세요:
-
-```bash
-opencode serve --hostname 0.0.0.0 --port 4096
-```
-
-그런 다음 브라우저에서 `http://localhost:4096`(또는 네트워크 주소)로 수동으로 이동하세요. `0.0.0.0`에 바인딩할 때는 액세스를 보호하기 위해 `OPENCODE_SERVER_PASSWORD`를 설정하세요.
-:::
-
 :::caution
 `OPENCODE_SERVER_PASSWORD`가 설정되지 않은 경우 서버가 중단되지 않습니다. 이것은 로컬 사용을위한 괜찮지만 네트워크 액세스를 설정해야합니다.
 :::
@@ -150,3 +140,13 @@ opencode attach http://localhost:4096
 ```
 
 Command line flags는 config 파일 설정에 대한 precedence를 가져옵니다.
+
+## 자동 열기 없이 시작
+
+브라우저를 자동으로 열지 않고 웹 서버를 시작하려면 `opencode serve`를 대신 사용하세요:
+
+```bash
+opencode serve --hostname 0.0.0.0 --port 4096
+```
+
+그런 다음 브라우저에서 `http://localhost:4096`(또는 네트워크 주소)로 수동으로 이동하세요. `0.0.0.0`에 바인딩할 때는 액세스를 보호하기 위해 `OPENCODE_SERVER_PASSWORD`를 설정하세요.

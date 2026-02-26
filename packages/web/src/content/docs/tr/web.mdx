@@ -17,16 +17,6 @@ opencode web
 
 Bu, `127.0.0.1` üzerinde rastgele kullanılabilir bir bağlantı noktasına sahip yerel bir sunucuyu başlatır ve opencode'u varsayılan tarayıcınızda otomatik olarak açar.
 
-:::tip[Otomatik açma olmadan]
-Web sunucusunu tarayıcıyı otomatik olarak açmadan başlatmak için bunun yerine `opencode serve` kullanın:
-
-```bash
-opencode serve --hostname 0.0.0.0 --port 4096
-```
-
-Ardından tarayıcınızda `http://localhost:4096` adresine (veya ağ adresinize) manuel olarak gidin. `0.0.0.0`'a bağlanırken erişimi korumak için `OPENCODE_SERVER_PASSWORD` ayarlayın.
-:::
-
 :::caution
 `OPENCODE_SERVER_PASSWORD` ayarlanmadıysa sunucunun güvenliği kaldırılacaktır. Bu, yerel kullanım için iyidir ancak ağ erişimi için ayarlanmalıdır.
 :::
@@ -150,3 +140,13 @@ Sunucu ayarlarını `opencode.json` yapılandırma dosyanızda da yapılandırab
 ```
 
 Komut satırı bayrakları yapılandırma dosyası ayarlarından önceliklidir.
+
+## Otomatik açma olmadan
+
+Web sunucusunu tarayıcıyı otomatik olarak açmadan başlatmak için bunun yerine `opencode serve` kullanın:
+
+```bash
+opencode serve --hostname 0.0.0.0 --port 4096
+```
+
+Ardından tarayıcınızda `http://localhost:4096` adresine (veya ağ adresinize) manuel olarak gidin. `0.0.0.0`'a bağlanırken erişimi korumak için `OPENCODE_SERVER_PASSWORD` ayarlayın.

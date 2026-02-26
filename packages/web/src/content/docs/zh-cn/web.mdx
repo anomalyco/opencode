@@ -17,16 +17,6 @@ opencode web
 
 这会在 `127.0.0.1` 上启动一个本地服务器，使用随机可用端口，并自动在默认浏览器中打开 OpenCode。
 
-:::tip[不自动打开浏览器]
-若要在不自动打开浏览器的情况下启动 Web 服务器，请改用 `opencode serve`：
-
-```bash
-opencode serve --hostname 0.0.0.0 --port 4096
-```
-
-然后在浏览器中手动导航至 `http://localhost:4096`（或您的网络地址）。绑定到 `0.0.0.0` 时，请设置 `OPENCODE_SERVER_PASSWORD` 以保护访问安全。
-:::
-
 :::caution
 如果未设置 `OPENCODE_SERVER_PASSWORD`，服务器将没有安全保护。本地使用没有问题，但在网络访问时应当设置密码。
 :::
@@ -150,3 +140,13 @@ opencode attach http://localhost:4096
 ```
 
 命令行标志的优先级高于配置文件中的设置。
+
+## 不自动打开浏览器
+
+若要在不自动打开浏览器的情况下启动 Web 服务器，请改用 `opencode serve`：
+
+```bash
+opencode serve --hostname 0.0.0.0 --port 4096
+```
+
+然后在浏览器中手动导航至 `http://localhost:4096`（或您的网络地址）。绑定到 `0.0.0.0` 时，请设置 `OPENCODE_SERVER_PASSWORD` 以保护访问安全。
