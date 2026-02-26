@@ -20,12 +20,10 @@ jobs:
           fetch-tags: true
 
       - uses: ./.github/actions/setup-bun
-        with:
-          cross-compile: "true"
 
       - name: Build
         run: |
-          ./packages/opencode/script/build.ts --all
+          ./packages/opencode/script/build.ts
 
       - name: Upload unsigned Windows CLI
         id: upload_unsigned_windows_cli
