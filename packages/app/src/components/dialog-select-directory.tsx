@@ -20,7 +20,7 @@ interface DialogSelectDirectoryProps {
 type Row = {
   absolute: string
   search: string
-  category: string
+  group: "recent" | "folders"
 }
 
 function cleanInput(value: string) {
@@ -103,7 +103,7 @@ function displayPath(path: string, input: string, home: string) {
   return tildeOf(full, home) || full
 }
 
-function toRow(absolute: string, home: string, category: string): Row {
+function toRow(absolute: string, home: string, group: Row["group"]): Row {
   const full = trimTrailing(absolute)
   const tilde = tildeOf(full, home)
   const withSlash = (value: string) => {
@@ -115,7 +115,7 @@ function toRow(absolute: string, home: string, category: string): Row {
   const search = Array.from(
     new Set([full, withSlash(full), tilde, withSlash(tilde), getFilename(full)].filter(Boolean)),
   ).join("\n")
-  return { absolute: full, search, category }
+  return { absolute: full, search, group }
 }
 
 function uniqueRows(rows: Row[]) {
@@ -279,9 +279,8 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   })
 
   const recentProjects = createMemo(() => {
-    const category = language.t("home.recentProjects")
     return layout.projects.list().map((project) => {
-      const row = toRow(project.worktree, home(), category)
+      const row = toRow(project.worktree, home(), "recent")
       const name = project.name || getFilename(project.worktree)
       return {
         ...row,
@@ -290,11 +289,9 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     })
   })
 
-  const foldersCategory = createMemo(() => language.t("command.project.open"))
-
   const items = async (value: string) => {
     const results = await directories(value)
-    const directoryRows = results.map((absolute) => toRow(absolute, home(), foldersCategory()))
+    const directoryRows = results.map((absolute) => toRow(absolute, home(), "folders"))
     return uniqueRows([...recentProjects(), ...directoryRows])
   }
 
@@ -312,7 +309,14 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
         items={items}
         key={(x) => x.absolute}
         filterKeys={["search"]}
-        groupBy={(item) => item.category}
+        groupBy={(item) => item.group}
+        sortGroupsBy={(a, b) => {
+          if (a.category === b.category) return 0
+          return a.category === "recent" ? -1 : 1
+        }}
+        groupHeader={(group) =>
+          group.category === "recent" ? language.t("home.recentProjects") : language.t("command.project.open")
+        }
         ref={(r) => (list = r)}
         onFilter={(value) => setFilter(cleanInput(value))}
         onKeyEvent={(e, item) => {

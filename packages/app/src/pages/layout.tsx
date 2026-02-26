@@ -905,7 +905,7 @@ export default function Layout(props: ParentProps) {
         id: "project.open",
         title: language.t("command.project.open"),
         category: language.t("command.category.project"),
-        keybind: "mod+o,mod+shift+o",
+        keybind: "mod+o",
         onSelect: () => chooseProject(),
       },
       {
