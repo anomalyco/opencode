@@ -1,4 +1,4 @@
-import { createMemo } from "solid-js"
+import { createMemo, createSignal, onMount } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -30,6 +30,29 @@ export function SessionHeaderActions() {
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const view = createMemo(() => layout.view(sessionKey))
 
+  const [bigqueryToken, setBigqueryToken] = createSignal("")
+
+  const fetchBigQueryToken = async () => {
+    try {
+      const res = await fetch("/auth/bigquery-token", { credentials: "include" })
+      if (!res.ok) {
+        console.warn("[laterapi] Failed to fetch BigQuery token:", res.status, res.statusText)
+        return
+      }
+      const { token } = await res.json()
+      if (token) {
+        setBigqueryToken(token)
+        console.log("[laterapi] BigQuery token provisioned")
+      }
+    } catch (err) {
+      console.error("[laterapi] Error fetching BigQuery token:", err)
+    }
+  }
+
+  onMount(() => {
+    fetchBigQueryToken()
+  })
+
   const runCommand = (input: { command: string; args?: string[]; label: string; env?: Record<string, string> }) => {
     if (!params.dir) {
       showToast({
@@ -41,8 +64,13 @@ export function SessionHeaderActions() {
     }
 
     const cwd = decode64(params.dir) ?? params.dir
+    const bqToken = bigqueryToken()
+    const env = {
+      ...(bqToken ? { LATERAPI_KEY: bqToken } : {}),
+      ...input.env,
+    }
     view().terminal.open()
-    terminal.run({ command: input.command, args: input.args, title: input.label, cwd, env: input.env })
+    terminal.run({ command: input.command, args: input.args, title: input.label, cwd, env })
   }
 
   const run = () => {
