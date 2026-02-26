@@ -23,6 +23,7 @@ import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { defer } from "../util/defer"
 import { ToolRegistry } from "../tool/registry"
+import { Cache } from "@/cache"
 import { MCP } from "../mcp"
 import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
@@ -742,6 +743,8 @@ export namespace SessionPrompt {
   }) {
     using _ = log.time("resolveTools")
     const tools: Record<string, AITool> = {}
+    const cacheEnabled = await Cache.isEnabled()
+    const l2 = cacheEnabled ? await Cache.l2Tools() : new Set<string>()
 
     const context = (args: any, options: ToolCallOptions): Tool.Context => ({
       sessionID: input.session.id,
@@ -820,12 +823,14 @@ export namespace SessionPrompt {
             },
             output,
           )
+          if (cacheEnabled) await Cache.touchTool(item.id)
           return output
         },
       })
     }
 
     for (const [key, item] of Object.entries(await MCP.tools())) {
+      if (cacheEnabled && l2.has(key)) continue
       const execute = item.execute
       if (!execute) continue
 
@@ -866,6 +871,7 @@ export namespace SessionPrompt {
           },
           result,
         )
+        if (cacheEnabled) await Cache.touchTool(key)
 
         const textParts: string[] = []
         const attachments: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[] = []

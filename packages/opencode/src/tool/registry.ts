@@ -30,6 +30,8 @@ import { Truncate } from "./truncation"
 import { ApplyPatchTool } from "./apply_patch"
 import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
+import { Cache } from "@/cache"
+import { SkillDiscoveryTool, ToolDiscoveryTool, ToolEnableTool } from "@/cache"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -100,7 +102,7 @@ export namespace ToolRegistry {
     const config = await Config.get()
     const question = ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
 
-    return [
+    const tools = [
       InvalidTool,
       ...(question ? [QuestionTool] : []),
       BashTool,
@@ -122,6 +124,13 @@ export namespace ToolRegistry {
       ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),
       ...custom,
     ]
+
+    if (!(await Cache.isEnabled())) {
+      return tools
+    }
+
+    const l2 = await Cache.l2Tools()
+    return [...tools.filter((item) => !l2.has(item.id)), ToolDiscoveryTool, ToolEnableTool, SkillDiscoveryTool]
   }
 
   export async function ids() {

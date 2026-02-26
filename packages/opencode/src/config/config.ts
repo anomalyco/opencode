@@ -1149,6 +1149,14 @@ export namespace Config {
         .object({
           disable_paste_summary: z.boolean().optional(),
           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
+          cache: z
+            .object({
+              enabled: z.boolean().optional().describe("Enable L1/L2 cache for tools and skills"),
+              maxTools: z.number().int().positive().optional().describe("Maximum number of active L1 tools"),
+              maxSkills: z.number().int().positive().optional().describe("Maximum number of active L1 skills"),
+              embedModel: z.string().optional().describe("Provider-qualified embedding model ID"),
+            })
+            .optional(),
           openTelemetry: z
             .boolean()
             .optional()

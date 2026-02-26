@@ -1462,6 +1462,24 @@ export type Config = {
      * Enable the batch tool
      */
     batch_tool?: boolean
+    cache?: {
+      /**
+       * Enable L1/L2 cache for tools and skills
+       */
+      enabled?: boolean
+      /**
+       * Maximum number of active L1 tools
+       */
+      maxTools?: number
+      /**
+       * Maximum number of active L1 skills
+       */
+      maxSkills?: number
+      /**
+       * Provider-qualified embedding model ID
+       */
+      embedModel?: string
+    }
     /**
      * Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)
      */

@@ -31,6 +31,10 @@ export const Instance = {
           project,
         }
         await context.provide(ctx, async () => {
+          const { Cache } = await import("@/cache")
+          if (await Cache.isEnabled()) {
+            await Cache.init()
+          }
           await input.init?.()
         })
         return ctx

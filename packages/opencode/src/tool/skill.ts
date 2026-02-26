@@ -6,9 +6,12 @@ import { Skill } from "../skill"
 import { PermissionNext } from "../permission/next"
 import { Ripgrep } from "../file/ripgrep"
 import { iife } from "@/util/iife"
+import { Cache } from "@/cache"
 
 export const SkillTool = Tool.define("skill", async (ctx) => {
   const skills = await Skill.all()
+  const cacheEnabled = await Cache.isEnabled()
+  const l1Skills = cacheEnabled ? await Cache.l1Skills() : undefined
 
   // Filter skills by agent permissions if agent provided
   const agent = ctx?.agent
@@ -19,8 +22,10 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
       })
     : skills
 
+  const listedSkills = cacheEnabled ? accessibleSkills.filter((skill) => l1Skills?.has(skill.name)) : accessibleSkills
+
   const description =
-    accessibleSkills.length === 0
+    listedSkills.length === 0
       ? "Load a specialized skill that provides domain-specific instructions and workflows. No skills are currently available."
       : [
           "Load a specialized skill that provides domain-specific instructions and workflows.",
@@ -35,7 +40,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
           "Invoke this tool to load a skill when a task matches one of the available skills listed below:",
           "",
           "<available_skills>",
-          ...accessibleSkills.flatMap((skill) => [
+          ...listedSkills.flatMap((skill) => [
             `  <skill>`,
             `    <name>${skill.name}</name>`,
             `    <description>${skill.description}</description>`,
@@ -45,7 +50,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
           "</available_skills>",
         ].join("\n")
 
-  const examples = accessibleSkills
+  const examples = listedSkills
     .map((skill) => `'${skill.name}'`)
     .slice(0, 3)
     .join(", ")
@@ -96,7 +101,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
         return arr
       }).then((f) => f.map((file) => `<file>${file}</file>`).join("\n"))
 
-      return {
+      const result = {
         title: `Loaded skill: ${skill.name}`,
         output: [
           `<skill_content name="${skill.name}">`,
@@ -118,6 +123,11 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
           dir,
         },
       }
+      if (cacheEnabled) {
+        await Cache.touchSkill(params.name)
+        await Cache.promoteSkill(params.name)
+      }
+      return result
     },
   }
 })
