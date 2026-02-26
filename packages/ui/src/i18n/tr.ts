@@ -1,0 +1,123 @@
+import { dict as en } from "./en"
+
+type Keys = keyof typeof en
+
+export const dict = {
+  "ui.sessionReview.title": "Oturum degisiklikleri",
+  "ui.sessionReview.title.lastTurn": "Son tur degisiklikleri",
+  "ui.sessionReview.diffStyle.unified": "Birlesik",
+  "ui.sessionReview.diffStyle.split": "Bolunmus",
+  "ui.sessionReview.expandAll": "Tumunu genislet",
+  "ui.sessionReview.collapseAll": "Tumunu daralt",
+
+  "ui.sessionReview.change.added": "Eklendi",
+  "ui.sessionReview.change.removed": "Kaldirildi",
+  "ui.sessionReview.change.modified": "Degistirildi",
+  "ui.sessionReview.image.loading": "Yukleniyor...",
+  "ui.sessionReview.image.placeholder": "Gorsel",
+  "ui.sessionReview.largeDiff.title": "Fark gosterimi icin cok buyuk",
+  "ui.sessionReview.largeDiff.meta": "Limit: {{limit}} degisen satir. Mevcut: {{current}} degisen satir.",
+  "ui.sessionReview.largeDiff.renderAnyway": "Yine de goster",
+
+  "ui.lineComment.label.prefix": "Yorum: ",
+  "ui.lineComment.label.suffix": "",
+  "ui.lineComment.editorLabel.prefix": "Yorum yapiliyor: ",
+  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.placeholder": "Yorum ekle",
+  "ui.lineComment.submit": "Yorum yap",
+
+  "ui.sessionTurn.steps.show": "Adimlari goster",
+  "ui.sessionTurn.steps.hide": "Adimlari gizle",
+  "ui.sessionTurn.summary.response": "Yanit",
+  "ui.sessionTurn.diff.showMore": "Daha fazla degisiklik goster ({{count}})",
+
+  "ui.sessionTurn.retry.retrying": "yeniden deneniyor",
+  "ui.sessionTurn.retry.inSeconds": "{{seconds}}sn icinde",
+  "ui.sessionTurn.error.freeUsageExceeded": "Ucretsiz kullanim asildi",
+  "ui.sessionTurn.error.addCredits": "Kredi ekle",
+
+  "ui.sessionTurn.status.delegating": "Gorev devrediliyor",
+  "ui.sessionTurn.status.planning": "Sonraki adimlar planlanyor",
+  "ui.sessionTurn.status.gatheringContext": "Kesfediliyor",
+  "ui.sessionTurn.status.gatheredContext": "Kesfedildi",
+  "ui.sessionTurn.status.searchingCodebase": "Kod tabani araniyor",
+  "ui.sessionTurn.status.searchingWeb": "Web araniyor",
+  "ui.sessionTurn.status.makingEdits": "Duzenlemeler yapiliyor",
+  "ui.sessionTurn.status.runningCommands": "Komutlar calistiriliyor",
+  "ui.sessionTurn.status.thinking": "Dusunuyor",
+  "ui.sessionTurn.status.thinkingWithTopic": "Dusunuyor - {{topic}}",
+  "ui.sessionTurn.status.gatheringThoughts": "Dusunceler toplaniyor",
+  "ui.sessionTurn.status.consideringNextSteps": "Sonraki adimlar degerlendiriliyor",
+
+  "ui.messagePart.diagnostic.error": "Hata",
+  "ui.messagePart.title.edit": "Duzenle",
+  "ui.messagePart.title.write": "Yaz",
+  "ui.messagePart.option.typeOwnAnswer": "Kendi cevabinizi yazin",
+  "ui.messagePart.review.title": "Cevaplari inceleyin",
+
+  "ui.list.loading": "Yukleniyor",
+  "ui.list.empty": "Sonuc bulunamadi",
+  "ui.list.clearFilter": "Filtreyi temizle",
+  "ui.list.emptyWithFilter.prefix": "Sonuc bulunamadi:",
+  "ui.list.emptyWithFilter.suffix": "",
+
+  "ui.messageNav.newMessage": "Yeni mesaj",
+
+  "ui.textField.copyToClipboard": "Panoya kopyala",
+  "ui.textField.copyLink": "Baglanti kopyala",
+  "ui.textField.copied": "Kopyalandi",
+
+  "ui.imagePreview.alt": "Gorsel onizleme",
+
+  "ui.tool.read": "Oku",
+  "ui.tool.loaded": "Yuklendi",
+  "ui.tool.list": "Listele",
+  "ui.tool.glob": "Glob",
+  "ui.tool.grep": "Grep",
+  "ui.tool.webfetch": "Web getir",
+  "ui.tool.shell": "Kabuk",
+  "ui.tool.patch": "Yama",
+  "ui.tool.todos": "Gorevler",
+  "ui.tool.todos.read": "Gorevleri oku",
+  "ui.tool.questions": "Sorular",
+  "ui.tool.agent": "{{type}} Ajan",
+
+  "ui.common.file.one": "dosya",
+  "ui.common.file.other": "dosya",
+  "ui.common.question.one": "soru",
+  "ui.common.question.other": "soru",
+
+  "ui.common.add": "Ekle",
+  "ui.common.back": "Geri",
+  "ui.common.cancel": "Iptal",
+  "ui.common.confirm": "Onayla",
+  "ui.common.dismiss": "Kapat",
+  "ui.common.close": "Kapat",
+  "ui.common.next": "Ileri",
+  "ui.common.submit": "Gonder",
+
+  "ui.permission.deny": "Reddet",
+  "ui.permission.allowAlways": "Her zaman izin ver",
+  "ui.permission.allowOnce": "Bir kez izin ver",
+
+  "ui.message.expand": "Mesaji genislet",
+  "ui.message.collapse": "Mesaji daralt",
+  "ui.message.copy": "Kopyala",
+  "ui.message.copyMessage": "Mesaji kopyala",
+  "ui.message.copyResponse": "Yaniti kopyala",
+  "ui.message.copied": "Kopyalandi",
+  "ui.message.interrupted": "Kesildi",
+  "ui.message.attachment.alt": "ek",
+
+  "ui.patch.action.deleted": "Silindi",
+  "ui.patch.action.created": "Olusturuldu",
+  "ui.patch.action.moved": "Tasindi",
+  "ui.patch.action.patched": "Yamalandi",
+
+  "ui.question.subtitle.answered": "{{count}} cevaplandi",
+  "ui.question.answer.none": "(cevap yok)",
+  "ui.question.review.notAnswered": "(cevaplanmadi)",
+  "ui.question.multiHint": "Gecerli tum cevaplari secin",
+  "ui.question.singleHint": "Bir cevap secin",
+  "ui.question.custom.placeholder": "Cevabnizi yazin...",
+} satisfies Partial<Record<Keys, string>>
