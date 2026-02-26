@@ -1,0 +1,78 @@
+name: Sync Fork with Upstream
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Ensure all git operations use SYNC_TOKEN
+          git remote set-url origin "https://x-access-token:${SYNC_TOKEN}@github.com/${{ github.repository }}.git"
+        env:
+          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+
+      - name: Rebase on upstream
+        id: rebase
+        continue-on-error: true
+        run: |
+          git remote add upstream https://github.com/anomalyco/opencode.git || true
+          git fetch upstream
+          git rebase upstream/dev
+
+          # Replace third-party runners with GitHub standard runners
+          sed -i -E 's/(runs-on|host|runner): [a-zA-Z]+-[a-zA-Z0-9_-]*(ubuntu|linux)[a-zA-Z0-9_-]*/\1: ubuntu-24.04/g' .github/workflows/*.yml
+          sed -i -E 's/(runs-on|host|runner): [a-zA-Z]+-[a-zA-Z0-9_-]*(windows)[a-zA-Z0-9_-]*/\1: windows-latest/g' .github/workflows/*.yml
+
+          git add .github/workflows/*.yml
+          git diff --cached --quiet || git commit -m "ci: replace third-party runners with GitHub standard runners"
+
+          git push origin dev --force-with-lease
+
+      - name: Create PR on conflict
+        if: steps.rebase.outcome == 'failure'
+        run: |
+          git rebase --abort
+
+          # Push upstream/dev as a branch in our repo, then open a PR
+          BRANCH="sync/upstream-$(date +%Y%m%d-%H%M%S)"
+          git checkout -b "$BRANCH" upstream/dev
+          git push origin "$BRANCH"
+          gh pr create --base dev --head "$BRANCH" \
+            --title "Sync upstream $(date +%Y-%m-%d)" \
+            --body "Automatic rebase failed due to conflicts. Please merge manually and resolve conflicts."
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
+
+      - name: Disable upstream workflows
+        if: always()
+        run: |
+          # Disable all active workflows except ours
+          # Target our fork, not upstream (github.repository = concrete-security/private-opencode)
+          REPO="${{ github.repository }}"
+          KEEP="private-publish.yml sync-upstream.yml test.yml typecheck.yml nix-eval.yml"
+          gh workflow list --all -q '.[] | select(.state=="active") | .path' --json state,path --repo "$REPO" | while read -r path; do
+            name=$(basename "$path")
+            if ! echo "$KEEP" | grep -qw "$name"; then
+              echo "Disabling $name"
+              gh workflow disable "$name" --repo "$REPO"
+            fi
+          done
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
