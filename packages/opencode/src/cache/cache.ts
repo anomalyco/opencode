@@ -216,8 +216,12 @@ export namespace Cache {
 
   export async function isEnabled() {
     if (Flag.OPENCODE_EXPERIMENTAL_CACHE) return true
-    const config = await Config.get()
-    return config.experimental?.cache?.enabled === true
+    try {
+      const config = await Config.get()
+      return config.experimental?.cache?.enabled === true
+    } catch {
+      return false
+    }
   }
 
   export async function init() {

@@ -31,6 +31,10 @@ describe("cache.core", () => {
 
         await Cache.promoteTool("t1")
         await Cache.promoteTool("t2")
+        // If two tools are promoted within the same tick, this test may fail.
+        // Realistically, if two tools are touched within the same tick (which rarely happens), demoting either one would be acceptable.
+        // So we sleep for 2 milliseconds to ensure the promotions happen in different ticks.
+        await Bun.sleep(2)
         await Cache.touchTool("t1")
         await Cache.promoteTool("t3")
 
