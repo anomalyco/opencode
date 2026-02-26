@@ -15,9 +15,13 @@ import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
+import { Moderation } from "./moderation"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
+  const MAX_RETRY_ATTEMPT = 2
+// The maximum retry mechanism is added to avoid an infinite retry cycle for multiple session messages
+
   const log = Log.create({ service: "session.processor" })
 
   export type Info = Awaited<ReturnType<typeof create>>
@@ -130,7 +134,7 @@ export namespace SessionProcessor {
 
                 case "tool-input-end":
                   break
-
+                // toolName 是LLM 输出的工具名称。当 value.toolName 为 "bash"。然后设置工具状态为 "running"。
                 case "tool-call": {
                   const match = toolcalls[value.toolCallId]
                   if (match) {
@@ -184,7 +188,7 @@ export namespace SessionProcessor {
                       ...match,
                       state: {
                         status: "completed",
-                        input: value.input ?? match.state.input,
+                        input: value.input,
                         output: value.output.output,
                         metadata: value.output.metadata,
                         title: value.output.title,
@@ -208,7 +212,7 @@ export namespace SessionProcessor {
                       ...match,
                       state: {
                         status: "error",
-                        input: value.input ?? match.state.input,
+                        input: value.input,
                         error: (value.error as any).toString(),
                         time: {
                           start: match.state.time.start,
@@ -255,7 +259,7 @@ export namespace SessionProcessor {
                     reason: value.finishReason,
                     snapshot: await Snapshot.track(),
                     messageID: input.assistantMessage.id,
-                    sessionID: input.assistantMessage.sessionID,
+                    sessionID: input.sessionID,
                     type: "step-finish",
                     tokens: usage.tokens,
                     cost: usage.cost,
@@ -313,7 +317,7 @@ export namespace SessionProcessor {
                   }
                   break
 
-                case "text-end":
+                case "text-end": // ✅ 修复缩进
                   if (currentText) {
                     currentText.text = currentText.text.trimEnd()
                     const textOutput = await Plugin.trigger(
@@ -326,6 +330,12 @@ export namespace SessionProcessor {
                       { text: currentText.text },
                     )
                     currentText.text = textOutput.text
+
+                    const moderationResult = await Moderation.checkOutput(currentText.text)
+                    if (!moderationResult.passed) {
+                      currentText.text = moderationResult.reason ?? "[内容已被安全网关拦截]"
+                    }
+
                     currentText.time = {
                       start: Date.now(),
                       end: Date.now(),
@@ -358,7 +368,19 @@ export namespace SessionProcessor {
             }
             const retry = SessionRetry.retryable(error)
             if (retry !== undefined) {
+
               attempt++
+
+              if (attempt > MAX_RETRY_ATTEMPT) {
+                log.error("max retry exceeded", { attempt, MAX_RETRY_ATTEMPT })
+                input.assistantMessage.error = error
+                Bus.publish(Session.Event.Error, {
+                  sessionID: input.sessionID,
+                  error: input.assistantMessage.error,
+                })
+                break
+              }
+
               const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
               SessionStatus.set(input.sessionID, {
                 type: "retry",
@@ -374,7 +396,6 @@ export namespace SessionProcessor {
               sessionID: input.assistantMessage.sessionID,
               error: input.assistantMessage.error,
             })
-            SessionStatus.set(input.sessionID, { type: "idle" })
           }
           if (snapshot) {
             const patch = await Snapshot.patch(snapshot)
