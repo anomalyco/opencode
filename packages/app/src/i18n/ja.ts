@@ -91,6 +91,8 @@ export const dict = {
   "dialog.provider.group.other": "その他",
   "dialog.provider.tag.recommended": "推奨",
   "dialog.provider.opencode.note": "Claude, GPT, Geminiなどを含む厳選されたモデル",
+  "dialog.provider.opencode.tagline": "信頼性の高い最適化モデル",
+  "dialog.provider.opencodeGo.tagline": "すべての人に低価格のサブスクリプション",
   "dialog.provider.anthropic.note": "Claude Pro/MaxまたはAPIキーで接続",
   "dialog.provider.copilot.note": "CopilotまたはAPIキーで接続",
   "dialog.provider.openai.note": "ChatGPT Pro/PlusまたはAPIキーで接続",
