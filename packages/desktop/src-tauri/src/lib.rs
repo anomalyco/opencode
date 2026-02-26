@@ -179,6 +179,18 @@ fn resolve_app_path(app_name: &str) -> Option<String> {
     }
 }
 
+#[tauri::command]
+#[specta::specta]
+fn open_in_powershell(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        return os::windows::open_in_powershell(path);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    Err("PowerShell is only supported on Windows".to_string())
+}
+
 #[cfg(target_os = "macos")]
 fn check_macos_app(app_name: &str) -> bool {
     // Check common installation locations
@@ -373,7 +385,8 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             markdown::parse_markdown_command,
             check_app_exists,
             wsl_path,
-            resolve_app_path
+            resolve_app_path,
+            open_in_powershell
         ])
         .events(tauri_specta::collect_events![
             LoadingWindowComplete,
