@@ -48,7 +48,7 @@ describe("transcript", () => {
   })
 
   describe("formatPart", () => {
-    const options = { thinking: true, toolDetails: true, assistantMetadata: true }
+    const options = { includeMetadata: true, thinking: true, toolDetails: true, assistantMetadata: true }
 
     test("formats text part", () => {
       const part: Part = {
@@ -196,7 +196,7 @@ describe("transcript", () => {
   })
 
   describe("formatMessage", () => {
-    const options = { thinking: true, toolDetails: true, assistantMetadata: true }
+    const options = { includeMetadata: true, thinking: true, toolDetails: true, assistantMetadata: true }
 
     test("formats user message", () => {
       const msg: UserMessage = {
@@ -272,7 +272,7 @@ describe("transcript", () => {
           parts: [{ id: "p2", sessionID: "ses_abc123", messageID: "msg_2", type: "text" as const, text: "Hi!" }],
         },
       ]
-      const options = { thinking: false, toolDetails: false, assistantMetadata: true }
+      const options = { includeMetadata: true, thinking: false, toolDetails: false, assistantMetadata: true }
 
       const result = formatTranscript(session, messages, options)
 
@@ -310,7 +310,7 @@ describe("transcript", () => {
           parts: [{ id: "p1", sessionID: "ses_abc123", messageID: "msg_1", type: "text" as const, text: "Response" }],
         },
       ]
-      const options = { thinking: false, toolDetails: false, assistantMetadata: false }
+      const options = { includeMetadata: true, thinking: false, toolDetails: false, assistantMetadata: false }
 
       const result = formatTranscript(session, messages, options)
 
