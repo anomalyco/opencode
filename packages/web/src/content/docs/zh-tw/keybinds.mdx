@@ -1,9 +1,9 @@
 ---
-title: 按鍵綁定
-description: 自定義您的按鍵綁定。
+title: 快捷鍵
+description: 自訂您的快捷鍵。
 ---
 
-opencode 有一個按鍵綁定列表，您可以透過 opencode 設定進行自定義。
+OpenCode 提供了一系列快捷鍵，您可以透過 OpenCode 設定進行自訂。
 
 ```json title="opencode.json"
 {
@@ -105,19 +105,19 @@ opencode 有一個按鍵綁定列表，您可以透過 opencode 設定進行自�
 
 ---
 
-## Leader 鍵
+## 前導鍵
 
-opencode 對大多數按鍵綁定使用 `leader` 鍵。這可以避免終端機中的衝突。
+OpenCode 的大多數快捷鍵使用 `leader`（前導鍵）。這可以避免與終端機中的其他快捷鍵衝突。
 
-預設情況下，`ctrl+x` 是 Leader 鍵，大多數操作要求您先按 Leader 鍵，然後再按快速鍵。例如，要開始新工作階段，請先按 `ctrl+x`，然後按 `n`。
+預設情況下，`ctrl+x` 是前導鍵，大多數操作需要您先按下前導鍵，然後再按對應的快捷鍵。例如，要新建一個工作階段，請先按 `ctrl+x`，然後按 `n`。
 
-您不需要為鍵綁定使用 Leader 鍵，但我們建議您這樣做。
+您不一定需要使用前導鍵來設定快捷鍵，但我們建議您這樣做。
 
 ---
 
-## 禁用按鍵綁定
+## 停用快捷鍵
 
-您可以透過將鍵添加到您的設定中並使用值「none」來禁用鍵綁定。
+您可以透過在設定中將對應的鍵值設定為 "none" 來停用某個快捷鍵。
 
 ```json title="opencode.json"
 {
@@ -130,41 +130,41 @@ opencode 對大多數按鍵綁定使用 `leader` 鍵。這可以避免終端機�
 
 ---
 
-## 桌面提示快速鍵
+## 桌面版提示詞輸入快捷鍵
 
-opencode 桌面應用程式提示輸入支援常見的 Readline/Emacs 風格的文字編輯快速鍵。這些是內建的，目前無法透過 `opencode.json` 進行設定。
+OpenCode 桌面應用程式的提示詞輸入框支援常見的 Readline/Emacs 風格文字編輯快捷鍵。這些快捷鍵為內建功能，目前無法透過 `opencode.json` 進行設定。
 
-| 快速鍵   | 動作                      |
-| -------- | ------------------------- |
-| `ctrl+a` | 移至當前行開頭            |
-| `ctrl+e` | 移至當前行尾              |
-| `ctrl+b` | 將游標向後移動一個字元    |
-| `ctrl+f` | 將游標向前移動一個字元    |
-| `alt+b`  | 將游標向後移動一個字      |
-| `alt+f`  | 將游標向前移動一個字      |
-| `ctrl+d` | 刪除游標下的字元          |
-| `ctrl+k` | 刪除至行尾                |
-| `ctrl+u` | 刪除至行首                |
-| `ctrl+w` | 刪除前一個單字            |
-| `alt+d`  | 刪除下一個單字            |
-| `ctrl+t` | 調換字元                  |
-| `ctrl+g` | 取消彈出視窗/中止執行回應 |
+| 快捷鍵   | 操作                              |
+| -------- | --------------------------------- |
+| `ctrl+a` | 移動到當前行的開頭                |
+| `ctrl+e` | 移動到當前行的末尾                |
+| `ctrl+b` | 游標向後移動一個字元              |
+| `ctrl+f` | 游標向前移動一個字元              |
+| `alt+b`  | 游標向後移動一個單詞              |
+| `alt+f`  | 游標向前移動一個單詞              |
+| `ctrl+d` | 刪除游標所在位置的字元            |
+| `ctrl+k` | 刪除從游標到行尾的內容            |
+| `ctrl+u` | 刪除從游標到行首的內容            |
+| `ctrl+w` | 刪除前一個單詞                    |
+| `alt+d`  | 刪除後一個單詞                    |
+| `ctrl+t` | 交換游標前後的字元                |
+| `ctrl+g` | 取消彈出視窗 / 中止正在執行的回應 |
 
 ---
 
 ## Shift+Enter
 
-預設情況下，某些終端機不發送帶有 Enter 的輔助鍵。您可能需要將終端機設定為發送 `Shift+Enter` 作為跳脫序列。
+某些終端機預設不會發送帶修飾鍵的 Enter 鍵。您可能需要設定終端機將 `Shift+Enter` 作為跳脫序列發送。
 
 ### Windows Terminal
 
-打開您的 `settings.json`：
+開啟您的 `settings.json` 檔案，路徑為：
 
 ```
 %LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
 ```
 
-將其添加到根級 `actions` 陣列：
+將以下內容新增到根級 `actions` 陣列中：
 
 ```json
 "actions": [
@@ -178,7 +178,7 @@ opencode 桌面應用程式提示輸入支援常見的 Readline/Emacs 風格的�
 ]
 ```
 
-將其添加到根級 `keybindings` 陣列：
+將以下內容新增到根級 `keybindings` 陣列中：
 
 ```json
 "keybindings": [
@@ -189,4 +189,4 @@ opencode 桌面應用程式提示輸入支援常見的 Readline/Emacs 風格的�
 ]
 ```
 
-儲存檔案並重新啟動 Windows Terminal 或打開新分頁。
+儲存檔案並重新啟動 Windows Terminal，或開啟一個新分頁。
