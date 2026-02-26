@@ -1,5 +1,4 @@
 import { createEffect, on, onCleanup, type JSX } from "solid-js"
-import { createStore } from "solid-js/store"
 import type { FileDiff } from "@opencode-ai/sdk/v2"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import type { SelectedLineRange } from "@/context/file"
@@ -31,38 +30,8 @@ export interface SessionReviewTabProps {
 }
 
 export function StickyAddButton(props: { children: JSX.Element }) {
-  const [state, setState] = createStore({ stuck: false })
-  let button: HTMLDivElement | undefined
-
-  createEffect(() => {
-    const node = button
-    if (!node) return
-
-    const scroll = node.parentElement
-    if (!scroll) return
-
-    const handler = () => {
-      const rect = node.getBoundingClientRect()
-      const scrollRect = scroll.getBoundingClientRect()
-      setState("stuck", rect.right >= scrollRect.right && scroll.scrollWidth > scroll.clientWidth)
-    }
-
-    scroll.addEventListener("scroll", handler, { passive: true })
-    const observer = new ResizeObserver(handler)
-    observer.observe(scroll)
-    handler()
-    onCleanup(() => {
-      scroll.removeEventListener("scroll", handler)
-      observer.disconnect()
-    })
-  })
-
   return (
-    <div
-      ref={button}
-      class="bg-background-base h-full shrink-0 sticky right-0 z-10 flex items-center justify-center border-b border-border-weak-base px-3"
-      classList={{ "border-l": state.stuck }}
-    >
+    <div class="bg-background-stronger h-full shrink-0 sticky right-0 z-10 flex items-center justify-center pr-3">
       {props.children}
     </div>
   )
