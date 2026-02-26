@@ -391,6 +391,8 @@
       height: var(--tabs-compact-pill-height);
       border-radius: var(--tabs-compact-pill-radius);
       color: var(--text-weak);
+      box-sizing: border-box;
+      border: 1px solid transparent;
 
       &:not(:has([data-selected])):hover:not(:disabled) {
         color: var(--text-base);
@@ -398,6 +400,7 @@
 
       &:has([data-selected]) {
         color: var(--text-strong);
+        border-color: var(--border-weak-base);
       }
     }
   }
