@@ -63,12 +63,17 @@ describe("BunProc.install - version=latest", () => {
     const { BunProc } = await import("../src/bun")
 
     await BunProc.install("zod", "latest", "anthropic")
+
+    const pkgAfterFirst = await Bun.file(path.join(tmp.path, "package.json")).json()
+    const versionAfterFirst = pkgAfterFirst.dependencies?.zod
+
     await BunProc.install("zod", "latest", "anthropic")
     await BunProc.install("zod", "latest", "openai")
 
     expect(await Bun.file(path.join(tmp.path, "node_modules", "zod", "package.json")).exists()).toBe(true)
 
     const pkg = await Bun.file(path.join(tmp.path, "package.json")).json()
+    expect(pkg.dependencies?.zod).toBe(versionAfterFirst)
     expect(pkg.opencode?.providers?.anthropic).toBe("zod")
     expect(pkg.opencode?.providers?.openai).toBe("zod")
 
@@ -81,11 +86,18 @@ describe("BunProc.install - version=latest", () => {
     const { BunProc } = await import("../src/bun")
 
     await BunProc.install("zod", "latest", "anthropic")
+
+    const pkgAfterFirst = await Bun.file(path.join(tmp.path, "package.json")).json()
+    const versionAfterFirst = pkgAfterFirst.dependencies?.zod
+
     await fs.rm(path.join(tmp.path, "node_modules"), { recursive: true, force: true })
 
     await BunProc.install("zod", "latest", "anthropic")
 
     expect(await Bun.file(path.join(tmp.path, "node_modules", "zod", "package.json")).exists()).toBe(true)
+
+    const pkg = await Bun.file(path.join(tmp.path, "package.json")).json()
+    expect(pkg.dependencies?.zod).toBe(versionAfterFirst)
 
     delete process.env.OPENCODE_TEST_CACHE
   })
@@ -119,8 +131,11 @@ describe("BunProc.install - version=latest", () => {
 
     await BunProc.install("zod", "latest", "anthropic")
 
+    expect(await Bun.file(path.join(tmp.path, "node_modules", "zod", "package.json")).exists()).toBe(true)
+
     const pkg = await Bun.file(path.join(tmp.path, "package.json")).json()
     expect(SEMVER_REGEX.test(pkg.dependencies?.zod)).toBe(true)
+    expect(pkg.opencode?.providers?.anthropic).toBe("zod")
 
     delete process.env.OPENCODE_TEST_CACHE
   })
@@ -134,8 +149,11 @@ describe("BunProc.install - version=exact", () => {
 
     await BunProc.install("zod", "3.23.0", "anthropic")
 
+    expect(await Bun.file(path.join(tmp.path, "node_modules", "zod", "package.json")).exists()).toBe(true)
+
     const pkg = await Bun.file(path.join(tmp.path, "package.json")).json()
     expect(pkg.dependencies?.zod).toBe("3.23.0")
+    expect(pkg.opencode?.providers?.anthropic).toBe("zod")
 
     delete process.env.OPENCODE_TEST_CACHE
   })
@@ -148,6 +166,8 @@ describe("BunProc.install - version=exact", () => {
     await BunProc.install("zod", "3.23.0", "anthropic")
     await BunProc.install("zod", "3.23.0", "anthropic")
     await BunProc.install("zod", "3.23.0", "openai")
+
+    expect(await Bun.file(path.join(tmp.path, "node_modules", "zod", "package.json")).exists()).toBe(true)
 
     const pkg = await Bun.file(path.join(tmp.path, "package.json")).json()
     expect(pkg.dependencies?.zod).toBe("3.23.0")
@@ -165,8 +185,11 @@ describe("BunProc.install - version=exact", () => {
     await BunProc.install("zod", "3.23.0", "anthropic")
     await BunProc.install("zod", "3.24.0", "anthropic")
 
+    expect(await Bun.file(path.join(tmp.path, "node_modules", "zod", "package.json")).exists()).toBe(true)
+
     const pkg = await Bun.file(path.join(tmp.path, "package.json")).json()
     expect(pkg.dependencies?.zod).toBe("3.24.0")
+    expect(pkg.opencode?.providers?.anthropic).toBe("zod")
 
     delete process.env.OPENCODE_TEST_CACHE
   })
@@ -197,8 +220,11 @@ describe("BunProc.install - version=exact", () => {
 
     await BunProc.install("zod", "3.23.0", "anthropic")
 
+    expect(await Bun.file(path.join(tmp.path, "node_modules", "zod", "package.json")).exists()).toBe(true)
+
     const pkg = await Bun.file(path.join(tmp.path, "package.json")).json()
     expect(pkg.dependencies?.zod).toBe("3.23.0")
+    expect(pkg.opencode?.providers?.anthropic).toBe("zod")
 
     delete process.env.OPENCODE_TEST_CACHE
   })
