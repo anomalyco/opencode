@@ -376,6 +376,7 @@ export function MessageTimeline(props: {
         >
           <Show when={showHeader()}>
             <div
+              data-session-title
               classList={{
                 "sticky top-0 z-30 bg-[linear-gradient(to_bottom,var(--background-stronger)_48px,transparent)]": true,
                 "w-full": true,
