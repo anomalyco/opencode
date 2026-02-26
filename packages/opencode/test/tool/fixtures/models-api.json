@@ -16667,6 +16667,22 @@
         "cost": { "input": 1.75, "output": 14, "cache_read": 0.175 },
         "limit": { "context": 400000, "output": 128000 }
       },
+      "gpt-5.3-codex": {
+        "id": "gpt-5.3-codex",
+        "name": "GPT-5.3 Codex",
+        "family": "gpt-codex",
+        "attachment": false,
+        "reasoning": true,
+        "tool_call": true,
+        "temperature": false,
+        "knowledge": "2025-08-31",
+        "release_date": "2026-01-14",
+        "last_updated": "2026-01-14",
+        "modalities": { "input": ["text", "image"], "output": ["text"] },
+        "open_weights": false,
+        "cost": { "input": 1.75, "output": 14, "cache_read": 0.175 },
+        "limit": { "context": 400000, "output": 128000 }
+      },
       "meta-llama-3.1-405b-instruct": {
         "id": "meta-llama-3.1-405b-instruct",
         "name": "Meta-Llama-3.1-405B-Instruct",
@@ -34955,6 +34971,22 @@
       "gpt-5.2-codex": {
         "id": "gpt-5.2-codex",
         "name": "GPT-5.2 Codex",
+        "family": "gpt-codex",
+        "attachment": false,
+        "reasoning": true,
+        "tool_call": true,
+        "temperature": false,
+        "knowledge": "2025-08-31",
+        "release_date": "2026-01-14",
+        "last_updated": "2026-01-14",
+        "modalities": { "input": ["text", "image"], "output": ["text"] },
+        "open_weights": false,
+        "cost": { "input": 1.75, "output": 14, "cache_read": 0.175 },
+        "limit": { "context": 400000, "output": 128000 }
+      },
+      "gpt-5.3-codex": {
+        "id": "gpt-5.3-codex",
+        "name": "GPT-5.3 Codex",
         "family": "gpt-codex",
         "attachment": false,
         "reasoning": true,

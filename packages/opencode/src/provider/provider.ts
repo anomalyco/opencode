@@ -754,10 +754,24 @@ export namespace Provider {
     }
   }
 
+  function addCodex53(provider?: ModelsDev.Provider) {
+    if (!provider) return
+    if (provider.models["gpt-5.3-codex"]) return
+    const base = provider.models["gpt-5.2-codex"]
+    if (!base) return
+    provider.models["gpt-5.3-codex"] = {
+      ...base,
+      id: "gpt-5.3-codex",
+      name: "GPT-5.3 Codex",
+    }
+  }
+
   const state = Instance.state(async () => {
     using _ = log.time("state")
     const config = await Config.get()
     const modelsDev = await ModelsDev.get()
+    addCodex53(modelsDev["azure"])
+    addCodex53(modelsDev["azure-cognitive-services"])
     const database = mapValues(modelsDev, fromModelsDevProvider)
 
     const disabled = new Set(config.disabled_providers ?? [])
