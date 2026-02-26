@@ -606,6 +606,28 @@ export type EventSessionIdle = {
   }
 }
 
+export type EventWorkflowModelSelectAsked = {
+  type: "workflow_model_select.asked"
+  properties: {
+    id: string
+    sessionID: string
+    models: Array<{
+      name: string
+      ref: string
+      isDefault?: boolean
+    }>
+  }
+}
+
+export type EventWorkflowModelSelectReplied = {
+  type: "workflow_model_select.replied"
+  properties: {
+    sessionID: string
+    requestID: string
+    modelRef: string | null
+  }
+}
+
 export type QuestionOption = {
   /**
    * Display text (1-5 words, concise)
@@ -960,6 +982,8 @@ export type Event =
   | EventPermissionReplied
   | EventSessionStatus
   | EventSessionIdle
+  | EventWorkflowModelSelectAsked
+  | EventWorkflowModelSelectReplied
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
@@ -3724,6 +3748,113 @@ export type QuestionRejectResponses = {
 }
 
 export type QuestionRejectResponse = QuestionRejectResponses[keyof QuestionRejectResponses]
+
+export type WorkflowModelSelectListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/workflow-model-select"
+}
+
+export type WorkflowModelSelectListResponses = {
+  /**
+   * List of pending workflow model selection requests
+   */
+  200: Array<{
+    id: string
+    sessionID: string
+    models: Array<{
+      name: string
+      ref: string
+      isDefault?: boolean
+    }>
+  }>
+}
+
+export type WorkflowModelSelectListResponse = WorkflowModelSelectListResponses[keyof WorkflowModelSelectListResponses]
+
+export type WorkflowModelSelectDiscoverData = {
+  body?: {
+    sessionID?: string
+    force?: boolean
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/workflow-model-select/discover"
+}
+
+export type WorkflowModelSelectDiscoverResponses = {
+  /**
+   * Discovery result
+   */
+  200: {
+    status: "asked" | "pinned" | "default" | "no_models" | "no_provider"
+    modelRef?: string | null
+    modelName?: string | null
+  }
+}
+
+export type WorkflowModelSelectDiscoverResponse =
+  WorkflowModelSelectDiscoverResponses[keyof WorkflowModelSelectDiscoverResponses]
+
+export type WorkflowModelSelectClearData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/workflow-model-select/clear"
+}
+
+export type WorkflowModelSelectClearResponses = {
+  /**
+   * Cache cleared
+   */
+  200: boolean
+}
+
+export type WorkflowModelSelectClearResponse =
+  WorkflowModelSelectClearResponses[keyof WorkflowModelSelectClearResponses]
+
+export type WorkflowModelSelectReplyData = {
+  body?: {
+    modelRef: string | null
+  }
+  path: {
+    requestID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/workflow-model-select/{requestID}/reply"
+}
+
+export type WorkflowModelSelectReplyErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type WorkflowModelSelectReplyError = WorkflowModelSelectReplyErrors[keyof WorkflowModelSelectReplyErrors]
+
+export type WorkflowModelSelectReplyResponses = {
+  /**
+   * Selection processed
+   */
+  200: boolean
+}
+
+export type WorkflowModelSelectReplyResponse =
+  WorkflowModelSelectReplyResponses[keyof WorkflowModelSelectReplyResponses]
 
 export type ProviderListData = {
   body?: never

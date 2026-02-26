@@ -39,7 +39,7 @@ import { createGateway } from "@ai-sdk/gateway"
 import { createTogetherAI } from "@ai-sdk/togetherai"
 import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
-import { createGitLab, VERSION as GITLAB_PROVIDER_VERSION } from "@gitlab/gitlab-ai-provider"
+import { createGitLab, VERSION as GITLAB_PROVIDER_VERSION, isWorkflowModel } from "@gitlab/gitlab-ai-provider"
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
@@ -495,6 +495,16 @@ export namespace Provider {
           },
         },
         async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string) {
+          if (isWorkflowModel(modelID)) {
+            return sdk.workflowChat(modelID, {
+              workingDirectory: Instance.directory,
+              featureFlags: {
+                duo_agent_platform_agentic_chat: true,
+                duo_agent_platform: true,
+                ...(providerConfig?.options?.featureFlags || {}),
+              },
+            })
+          }
           return sdk.agenticChat(modelID, {
             aiGatewayHeaders,
             featureFlags: {

@@ -337,6 +337,29 @@ export namespace SessionProcessor {
                   break
 
                 case "finish":
+                  // Update usage for workflow models that emit finish instead of finish-step
+                  log.debug("finish event", {
+                    totalUsage: value.totalUsage,
+                    messageID: input.assistantMessage.id,
+                  })
+                  const finishUsage = Session.getUsage({
+                    model: input.model,
+                    usage: value.totalUsage,
+                    metadata: undefined, // finish event doesn't have providerMetadata
+                  })
+                  log.debug("calculated usage", {
+                    cost: finishUsage.cost,
+                    tokens: finishUsage.tokens,
+                  })
+                  input.assistantMessage.finish = value.finishReason
+                  input.assistantMessage.cost += finishUsage.cost
+                  input.assistantMessage.tokens = finishUsage.tokens
+                  await Session.updateMessage(input.assistantMessage)
+                  log.debug("updated message", {
+                    messageID: input.assistantMessage.id,
+                    cost: input.assistantMessage.cost,
+                    tokens: input.assistantMessage.tokens,
+                  })
                   break
 
                 default:

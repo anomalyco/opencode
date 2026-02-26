@@ -167,6 +167,11 @@ import type {
   TuiShowToastResponses,
   TuiSubmitPromptResponses,
   VcsGetResponses,
+  WorkflowModelSelectClearResponses,
+  WorkflowModelSelectDiscoverResponses,
+  WorkflowModelSelectListResponses,
+  WorkflowModelSelectReplyErrors,
+  WorkflowModelSelectReplyResponses,
   WorktreeCreateErrors,
   WorktreeCreateInput,
   WorktreeCreateResponses,
@@ -2121,6 +2126,116 @@ export class Question extends HeyApiClient {
   }
 }
 
+export class WorkflowModelSelect extends HeyApiClient {
+  /**
+   * List pending workflow model selections
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<WorkflowModelSelectListResponses, unknown, ThrowOnError>({
+      url: "/workflow-model-select",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Discover available workflow models and publish selection event
+   */
+  public discover<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+      force?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "force" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<WorkflowModelSelectDiscoverResponses, unknown, ThrowOnError>({
+      url: "/workflow-model-select/discover",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Clear cached workflow model selection
+   */
+  public clear<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).post<WorkflowModelSelectClearResponses, unknown, ThrowOnError>({
+      url: "/workflow-model-select/clear",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Reply to workflow model selection
+   */
+  public reply<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: string
+      directory?: string
+      modelRef?: string | null
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "modelRef" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      WorkflowModelSelectReplyResponses,
+      WorkflowModelSelectReplyErrors,
+      ThrowOnError
+    >({
+      url: "/workflow-model-select/{requestID}/reply",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Oauth extends HeyApiClient {
   /**
    * OAuth authorize
@@ -3335,6 +3450,11 @@ export class OpencodeClient extends HeyApiClient {
   private _question?: Question
   get question(): Question {
     return (this._question ??= new Question({ client: this.client }))
+  }
+
+  private _workflowModelSelect?: WorkflowModelSelect
+  get workflowModelSelect(): WorkflowModelSelect {
+    return (this._workflowModelSelect ??= new WorkflowModelSelect({ client: this.client }))
   }
 
   private _provider?: Provider

@@ -1,5 +1,5 @@
 import { createStore } from "solid-js/store"
-import { batch, createEffect, createMemo } from "solid-js"
+import { batch, createEffect, createMemo, createSignal } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
 import { uniqueBy } from "remeda"
@@ -13,6 +13,7 @@ import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
 import { Filesystem } from "@/util/filesystem"
+import { isWorkflowModel } from "@gitlab/gitlab-ai-provider"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -201,6 +202,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         )
       })
 
+      const [workflowSubModelName, setWorkflowSubModelName] = createSignal<string | null>(null)
+      const [workflowDiscoverTrigger, setWorkflowDiscoverTrigger] = createSignal(0)
+      const doWorkflowRediscover = () => {
+        setWorkflowSubModelName(null)
+        sdk
+          .fetch(`${sdk.url}/workflow-model-select/clear`, { method: "POST" })
+          .catch(() => {})
+          .then(() => setWorkflowDiscoverTrigger((n) => n + 1))
+      }
+
       return {
         current: currentModel,
         get ready() {
@@ -212,6 +223,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         favorite() {
           return modelStore.favorite
         },
+        workflowSubModelName,
+        setWorkflowSubModelName,
+        workflowDiscoverTrigger,
+        triggerWorkflowDiscover: doWorkflowRediscover,
         parsed: createMemo(() => {
           const value = currentModel()
           if (!value) {
@@ -223,9 +238,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
           const provider = sync.data.provider.find((x) => x.id === value.providerID)
           const info = provider?.models[value.modelID]
+          const baseName = info?.name ?? value.modelID
+          const sub = workflowSubModelName()
           return {
             provider: provider?.name ?? value.providerID,
-            model: info?.name ?? value.modelID,
+            model: sub ? `${baseName} (${sub})` : baseName,
             reasoning: info?.capabilities?.reasoning ?? false,
           }
         }),
@@ -276,6 +293,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           save()
         },
         set(model: { providerID: string; modelID: string }, options?: { recent?: boolean }) {
+          const current = currentModel()
+          const isReselect =
+            options?.recent &&
+            current &&
+            current.providerID === model.providerID &&
+            current.modelID === model.modelID &&
+            isWorkflowModel(model.modelID)
           batch(() => {
             if (!isModelValid(model)) {
               toast.show({
@@ -294,6 +318,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
                 uniq.map((x) => ({ providerID: x.providerID, modelID: x.modelID })),
               )
               save()
+            }
+            if (isReselect) {
+              doWorkflowRediscover()
             }
           })
         },

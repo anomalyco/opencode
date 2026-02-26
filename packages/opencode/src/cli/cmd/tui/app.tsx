@@ -19,6 +19,8 @@ import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
+import { DialogWorkflowModel } from "@tui/component/dialog-workflow-model"
+import { isWorkflowModel } from "@gitlab/gitlab-ai-provider"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
@@ -673,6 +675,57 @@ function App() {
     }
   })
 
+  let discoveredForModel: string | null = null
+  let lastDiscoverTrigger = 0
+  createEffect(() => {
+    const currentModel = local.model.current()
+    const trigger = local.model.workflowDiscoverTrigger()
+    if (!currentModel) return
+    if (currentModel.providerID !== "gitlab" || !isWorkflowModel(currentModel.modelID)) {
+      discoveredForModel = null
+      local.model.setWorkflowSubModelName(null)
+      return
+    }
+    const modelKey = `${currentModel.providerID}/${currentModel.modelID}`
+    const isRetrigger = trigger > lastDiscoverTrigger
+    lastDiscoverTrigger = trigger
+    if (discoveredForModel === modelKey && !isRetrigger) return
+    discoveredForModel = modelKey
+    untrack(() => {
+      toast.show({ variant: "info", message: "Discovering workflow models...", duration: 60000 })
+      sdk
+        .fetch(`${sdk.url}/workflow-model-select/discover`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        })
+        .then((r) => r.json())
+        .then((data: any) => {
+          if (data.status === "no_provider") {
+            toast.show({ variant: "error", message: "GitLab provider not configured", duration: 3000 })
+          } else if (data.status === "no_models") {
+            toast.show({ variant: "warning", message: "No workflow models found", duration: 3000 })
+          } else if (data.status === "cached") {
+            toast.dismiss()
+            if (data.modelName) local.model.setWorkflowSubModelName(data.modelName)
+          } else if (data.status === "pinned" || data.status === "default") {
+            if (data.status === "pinned") {
+              toast.show({ variant: "info", message: `Using pinned model: ${data.modelRef}`, duration: 3000 })
+            } else {
+              toast.dismiss()
+            }
+            if (data.modelName) local.model.setWorkflowSubModelName(data.modelName)
+          } else if (data.status === "asked" && data.modelName) {
+            toast.dismiss()
+            local.model.setWorkflowSubModelName(data.modelName)
+          }
+        })
+        .catch((err) => {
+          toast.show({ variant: "error", message: `Discovery failed: ${err}`, duration: 3000 })
+        })
+    })
+  })
+
   sdk.event.on(TuiEvent.CommandExecute.type, (evt) => {
     command.trigger(evt.properties.command)
   })
@@ -732,6 +785,45 @@ function App() {
       message: `OpenCode v${evt.properties.version} is available. Run 'opencode upgrade' to update manually.`,
       duration: 10000,
     })
+  })
+
+  sdk.event.listen((e) => {
+    if ((e.name as string) !== "workflow_model_select.asked") return
+    const evt = e.details as unknown as {
+      type: string
+      properties: { id: string; models: { name: string; ref: string; isDefault?: boolean }[] }
+    }
+    const { id, models } = evt.properties
+    let replied = false
+    const reply = (modelRef: string | null) => {
+      if (replied) return
+      replied = true
+      sdk
+        .fetch(`${sdk.url}/workflow-model-select/${id}/reply`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ modelRef }),
+        })
+        .catch(() => {})
+    }
+    toast.dismiss()
+    dialog.replace(
+      () => (
+        <DialogWorkflowModel
+          requestID={id}
+          models={models}
+          onReply={(modelRef) => {
+            reply(modelRef)
+            dialog.clear()
+            if (modelRef) {
+              const selected = models.find((m) => m.ref === modelRef)
+              if (selected) local.model.setWorkflowSubModelName(selected.name)
+            }
+          }}
+        />
+      ),
+      () => reply(null),
+    )
   })
 
   return (
