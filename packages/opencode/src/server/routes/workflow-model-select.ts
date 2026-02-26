@@ -110,6 +110,26 @@ export const WorkflowModelSelectRoutes = lazy(() =>
             namespaceId = `gid://gitlab/Group/${project.namespaceId}`
           }
 
+          if (!namespaceId) {
+            try {
+              const groupsRes = await fetch(
+                `${instanceUrl}/api/v4/groups?top_level_only=true&min_access_level=10&per_page=1`,
+                {
+                  headers: getHeaders(),
+                },
+              )
+              if (groupsRes.ok) {
+                const groups = (await groupsRes.json()) as Array<{ id: number }>
+                if (groups.length > 0) {
+                  namespaceId = `gid://gitlab/Group/${groups[0].id}`
+                  log.info("using first top-level group as fallback namespace", { namespaceId })
+                }
+              }
+            } catch (_) {
+              // best-effort
+            }
+          }
+
           if (namespaceId) {
             try {
               const discovery = new GitLabModelDiscovery({ instanceUrl, getHeaders })
@@ -182,7 +202,7 @@ export const WorkflowModelSelectRoutes = lazy(() =>
           return c.json({
             status: "default" as const,
             modelRef: "default",
-            modelName: "Default",
+            modelName: "Namespace Default",
           })
         } catch (err) {
           log.warn("workflow model discovery failed", {

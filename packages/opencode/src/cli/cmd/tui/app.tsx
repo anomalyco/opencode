@@ -701,13 +701,17 @@ function App() {
           } else if (data.status === "no_models") {
             toast.show({ variant: "warning", message: "No workflow models found", duration: 3000 })
           } else if (data.status === "cached") {
+            toast.dismiss()
             if (data.modelName) local.model.setWorkflowSubModelName(data.modelName)
           } else if (data.status === "pinned" || data.status === "default") {
             if (data.status === "pinned") {
               toast.show({ variant: "info", message: `Using pinned model: ${data.modelRef}`, duration: 3000 })
+            } else {
+              toast.dismiss()
             }
             if (data.modelName) local.model.setWorkflowSubModelName(data.modelName)
           } else if (data.status === "asked" && data.modelName) {
+            toast.dismiss()
             local.model.setWorkflowSubModelName(data.modelName)
           }
         })
