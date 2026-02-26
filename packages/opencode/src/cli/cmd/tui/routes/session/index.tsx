@@ -77,6 +77,7 @@ import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
+import { getAtlsStatus, getSecurityIndicator } from "../../util/provider"
 import { UI } from "@/cli/ui.ts"
 
 addDefaultParsers(parsers.parsers)
@@ -1333,7 +1334,28 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
                 ▣{" "}
               </span>{" "}
               <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
-              <span style={{ fg: theme.textMuted }}> · {props.message.modelID}</span>
+              {(() => {
+                const sync = useSync()
+                const provider = sync.data.provider.find(p => p.id === props.message.providerID)
+                const atlsStatus = getAtlsStatus(provider?.options, !!props.message.error)
+                const indicator = getSecurityIndicator(atlsStatus, !!props.message.error)
+                return (
+                  <>
+                    {indicator.label && (
+                      <span style={{
+                        fg: indicator.status === "error" ? theme.error : theme.success,
+                      }}>
+                        {" · "}
+                        {indicator.label}
+                      </span>
+                    )}
+                    <span style={{ fg: indicator.status === "none" ? theme.textMuted : theme.text }}>
+                      {indicator.label ? "" : " · "}
+                      {props.message.modelID}
+                    </span>
+                  </>
+                )
+              })()}
               <Show when={duration()}>
                 <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
               </Show>

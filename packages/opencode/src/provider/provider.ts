@@ -17,7 +17,6 @@ import { iife } from "@/util/iife"
 import { Global } from "../global"
 import path from "path"
 import { Filesystem } from "../util/filesystem"
-
 // Direct imports for bundled providers
 import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
 import { createAnthropic } from "@ai-sdk/anthropic"
@@ -1132,6 +1131,14 @@ export namespace Provider {
       const mod = await import(installedPath)
 
       const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
+      if (typeof options.sdk === "string") {
+        const b = BUNDLED_PROVIDERS[options.sdk]
+        if (b) options.sdk = b
+        else {
+          const m = await import(await BunProc.install(options.sdk, "latest"))
+          options.sdk = m[Object.keys(m).find((k: string) => k.startsWith("create"))!]
+        }
+      }
       const loaded = fn({
         name: model.providerID,
         ...options,
