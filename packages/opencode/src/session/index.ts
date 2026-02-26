@@ -798,7 +798,8 @@ export namespace Session {
     }
     if (input?.archived) {
       conditions.push(isNotNull(SessionTable.time_archived))
-    } else {
+    }
+    if (!input?.archived) {
       conditions.push(isNull(SessionTable.time_archived))
     }
 
