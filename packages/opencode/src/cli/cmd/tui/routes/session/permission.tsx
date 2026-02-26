@@ -15,6 +15,7 @@ import { Keybind } from "@/util/keybind"
 import { Locale } from "@/util/locale"
 import { Global } from "@/global"
 import { useDialog } from "../../ui/dialog"
+import { useTuiConfig } from "../../context/tui-config"
 
 type PermissionStage = "permission" | "always" | "reject"
 
@@ -48,14 +49,14 @@ function EditBody(props: { request: PermissionRequest }) {
   const themeState = useTheme()
   const theme = themeState.theme
   const syntax = themeState.syntax
-  const sync = useSync()
+  const config = useTuiConfig()
   const dimensions = useTerminalDimensions()
 
   const filepath = createMemo(() => (props.request.metadata?.filepath as string) ?? "")
   const diff = createMemo(() => (props.request.metadata?.diff as string) ?? "")
 
   const view = createMemo(() => {
-    const diffStyle = sync.data.config.tui?.diff_style
+    const diffStyle = config.diff_style
     if (diffStyle === "stacked") return "unified"
     return dimensions().width > 120 ? "split" : "unified"
   })

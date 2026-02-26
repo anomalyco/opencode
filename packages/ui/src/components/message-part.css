@@ -660,105 +660,6 @@
 
 [data-component="tool-part-wrapper"] {
   width: 100%;
-
-  &[data-permission="true"],
-  &[data-question="true"] {
-    position: sticky;
-    top: calc(2px + var(--sticky-header-height, 40px));
-    bottom: 0px;
-    z-index: 20;
-    border-radius: 6px;
-    border: none;
-    box-shadow: var(--shadow-xs-border-base);
-    background-color: var(--surface-raised-base);
-    overflow: visible;
-    overflow-anchor: none;
-
-    & > *:first-child {
-      border-top-left-radius: 6px;
-      border-top-right-radius: 6px;
-      overflow: hidden;
-    }
-
-    & > *:last-child {
-      border-bottom-left-radius: 6px;
-      border-bottom-right-radius: 6px;
-      overflow: hidden;
-    }
-
-    [data-component="collapsible"] {
-      border: none;
-    }
-
-    [data-component="card"] {
-      border: none;
-    }
-  }
-
-  &[data-permission="true"] {
-    &::before {
-      content: "";
-      position: absolute;
-      inset: -1.5px;
-      top: -5px;
-      border-radius: 7.5px;
-      border: 1.5px solid transparent;
-      background:
-        linear-gradient(var(--background-base) 0 0) padding-box,
-        conic-gradient(
-            from var(--border-angle),
-            transparent 0deg,
-            transparent 0deg,
-            var(--border-warning-strong, var(--border-warning-selected)) 300deg,
-            var(--border-warning-base) 360deg
-          )
-          border-box;
-      animation: chase-border 2.5s linear infinite;
-      pointer-events: none;
-      z-index: -1;
-    }
-  }
-
-  &[data-question="true"] {
-    background: var(--background-base);
-    border: 1px solid var(--border-weak-base);
-  }
-}
-
-@property --border-angle {
-  syntax: "<angle>";
-  initial-value: 0deg;
-  inherits: false;
-}
-
-@keyframes chase-border {
-  from {
-    --border-angle: 0deg;
-  }
-
-  to {
-    --border-angle: 360deg;
-  }
-}
-
-[data-component="permission-prompt"] {
-  display: flex;
-  flex-direction: column;
-  padding: 8px 12px;
-  background-color: var(--surface-raised-strong);
-  border-radius: 0 0 6px 6px;
-
-  [data-slot="permission-actions"] {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    justify-content: flex-end;
-
-    [data-component="button"] {
-      padding-left: 12px;
-      padding-right: 12px;
-    }
-  }
 }
 
 [data-component="dock-prompt"][data-kind="permission"] {
@@ -873,7 +774,7 @@
   }
 }
 
-:is([data-component="question-prompt"], [data-component="dock-prompt"][data-kind="question"]) {
+[data-component="dock-prompt"][data-kind="question"] {
   position: relative;
   display: flex;
   flex-direction: column;
