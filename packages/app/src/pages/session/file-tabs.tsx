@@ -371,6 +371,12 @@ export function FileTabContent(props: { tab: string }) {
     })
   }
 
+  const cancelCommenting = () => {
+    const p = path()
+    if (p) file.setSelectedLines(p, null)
+    setNote("commenting", null)
+  }
+
   createEffect(
     on(
       () => state()?.loaded,
@@ -484,7 +490,7 @@ export function FileTabContent(props: { tab: string }) {
               value={note.draft}
               selection={formatCommentLabel(range())}
               onInput={(value) => setNote("draft", value)}
-              onCancel={() => setCommenting(null)}
+              onCancel={cancelCommenting}
               onSubmit={(value) => {
                 const p = path()
                 if (!p) return
@@ -498,7 +504,7 @@ export function FileTabContent(props: { tab: string }) {
 
                 setTimeout(() => {
                   if (!document.activeElement || !current.contains(document.activeElement)) {
-                    setCommenting(null)
+                    cancelCommenting()
                   }
                 }, 0)
               }}
