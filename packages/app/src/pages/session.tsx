@@ -416,7 +416,7 @@ export default function Page() {
   )
 
   const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
-  const reviewTab = createMemo(() => isDesktop() && !layout.fileTree.opened())
+  const reviewTab = createMemo(() => isDesktop())
 
   const fileTreeTab = () => layout.fileTree.tab()
   const setFileTreeTab = (value: "changes" | "all") => layout.fileTree.setTab(value)
@@ -700,32 +700,11 @@ export default function Page() {
           const active = tabs().active()
           const tab = active === "review" || (!active && hasReview()) ? "changes" : "all"
           layout.fileTree.setTab(tab)
-          return
         }
-
-        if (fileTreeTab() !== "changes") return
-        tabs().setActive("review")
       },
       { defer: true },
     ),
   )
-
-  createEffect(() => {
-    if (!isDesktop()) return
-    if (!layout.fileTree.opened()) return
-    if (fileTreeTab() !== "all") return
-
-    const active = tabs().active()
-    if (active && active !== "review") return
-
-    const first = openedTabs()[0]
-    if (first) {
-      tabs().setActive(first)
-      return
-    }
-
-    if (contextOpen()) tabs().setActive("context")
-  })
 
   createEffect(() => {
     const id = params.id
