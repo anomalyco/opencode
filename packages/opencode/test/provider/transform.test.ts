@@ -2378,6 +2378,32 @@ describe("ProviderTransform.variants", () => {
       })
     })
 
+    test("anthropic 4.6 models return adaptive thinking variants", () => {
+      const model = createMockModel({
+        id: "sap-ai-core/anthropic--claude-sonnet-4-6",
+        providerID: "sap-ai-core",
+        api: {
+          id: "anthropic--claude-sonnet-4-6",
+          url: "https://api.ai.sap",
+          npm: "@jerome-benoit/sap-ai-provider-v2",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "max"])
+      expect(result.low).toEqual({
+        thinking: {
+          type: "adaptive",
+        },
+        effort: "low",
+      })
+      expect(result.max).toEqual({
+        thinking: {
+          type: "adaptive",
+        },
+        effort: "max",
+      })
+    })
+
     test("gemini 2.5 models return thinkingConfig variants", () => {
       const model = createMockModel({
         id: "sap-ai-core/gcp--gemini-2.5-pro",
