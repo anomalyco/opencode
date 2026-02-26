@@ -71,6 +71,9 @@ export const DialogSelectProvider: Component = () => {
           <div class="px-1.25 w-full flex items-center gap-x-3">
             <ProviderIcon data-slot="list-item-extra-icon" id={icon(i.id)} />
             <span>{i.name}</span>
+            <Show when={i.id === "opencode"}>
+              <div class="text-14-regular text-text-weak">Reliable optimized models</div>
+            </Show>
             <Show when={i.id === CUSTOM_ID}>
               <Tag>{language.t("settings.providers.tag.custom")}</Tag>
             </Show>

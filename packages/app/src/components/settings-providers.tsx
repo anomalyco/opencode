@@ -188,6 +188,9 @@ export const SettingsProviders: Component = () => {
                       <ProviderIcon id={icon(item.id)} class="size-5 shrink-0 icon-strong-base" />
                       <span class="text-14-medium text-text-strong">{item.name}</span>
                       <Show when={item.id === "opencode"}>
+                        <span class="text-14-regular text-text-weak">Reliable optimized models</span>
+                      </Show>
+                      <Show when={item.id === "opencode"}>
                         <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
                       </Show>
                     </div>
