@@ -85,7 +85,7 @@ function invalidImageDataError(
 ) {
   const entry =
     part.type === "image"
-      ? parseDataURL(part.image.toString())
+      ? parseDataURL(String(part.image))
       : typeof part.data === "string"
         ? parseDataURL(part.data) ?? { mime: part.mediaType, data: part.data }
         : typeof part.url === "string"
