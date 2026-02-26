@@ -151,7 +151,7 @@ const unsafeCSS = `
   }
   [data-code] {
     overflow-x: auto !important;
-    overflow-y: hidden !important;
+    overflow-y: clip !important;
   }
 }
 
