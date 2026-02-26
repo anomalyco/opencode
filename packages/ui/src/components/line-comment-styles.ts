@@ -152,6 +152,7 @@ export const lineCommentStyles = `
   display: flex;
   align-items: center;
   gap: 8px;
+  padding-left: 8px;
 }
 
 [data-component="line-comment"] [data-slot="line-comment-editor-label"] {
