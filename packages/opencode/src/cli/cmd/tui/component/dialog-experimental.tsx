@@ -1,6 +1,5 @@
 import path from "path"
 import { rename } from "node:fs/promises"
-import { parse } from "dotenv"
 import { createEffect, createMemo, createResource } from "solid-js"
 import { DialogSelect } from "../ui/dialog-select"
 import { useSync } from "../context/sync"
@@ -9,6 +8,20 @@ import { DialogPrompt } from "../ui/dialog-prompt"
 import { useToast } from "../ui/toast"
 import { Flag } from "@/flag/flag"
 import { ENV_EXPORT, ENV_KEY, ENV_LABEL, ENV_LINE, ENV_NUMBER } from "./dialog-experimental.const"
+
+function parse(text: string) {
+  return Object.fromEntries(
+    text.split(ENV_LINE).flatMap((item) => {
+      const match = item.match(ENV_KEY)
+      if (!match?.[1]) return []
+      const key = match[1].replace(ENV_EXPORT, "")
+      const value = item.slice(match[0].length).trim()
+      if (value.startsWith('"') && value.endsWith('"')) return [[key, value.slice(1, -1).replaceAll('\\"', '"')]]
+      if (value.startsWith("'") && value.endsWith("'")) return [[key, value.slice(1, -1)]]
+      return [[key, value.replace(/\s+#.*$/, "").trimEnd()]]
+    }),
+  )
+}
 
 function edit(text: string, key: string, value: string) {
   const line = `${key}=${value}`
