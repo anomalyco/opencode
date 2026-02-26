@@ -1,16 +1,18 @@
 import "../../brand/index.css"
 import "./index.css"
-import { Title, Meta, Link } from "@solidjs/meta"
+import { Title, Meta } from "@solidjs/meta"
 import { Header } from "~/component/header"
-import { config } from "~/config"
 import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
+import { LocaleLinks } from "~/component/locale-links"
+import { useLanguage } from "~/context/language"
 
 export default function PrivacyPolicy() {
+  const language = useLanguage()
   return (
     <main data-page="legal">
       <Title>OpenCode | Privacy Policy</Title>
-      <Link rel="canonical" href={`${config.baseUrl}/legal/privacy-policy`} />
+      <LocaleLinks path="/legal/privacy-policy" />
       <Meta name="description" content="OpenCode privacy policy" />
       <div data-component="container">
         <Header />
@@ -33,9 +35,9 @@ export default function PrivacyPolicy() {
 
               <p>
                 Remember that your use of OpenCode is at all times subject to our Terms of Use,{" "}
-                <a href="/legal/terms-of-service">https://opencode.ai/legal/terms-of-service</a>, which incorporates
-                this Privacy Policy. Any terms we use in this Policy without defining them have the definitions given to
-                them in the Terms of Use.
+                <a href={language.route("/legal/terms-of-service")}>https://opencode.ai/legal/terms-of-service</a>,
+                which incorporates this Privacy Policy. Any terms we use in this Policy without defining them have the
+                definitions given to them in the Terms of Use.
               </p>
 
               <p>You may print a copy of this Privacy Policy by clicking the print button in your browser.</p>

@@ -1,0 +1,180 @@
+---
+title: LSP serveri
+description: OpenCode se integriše sa vašim LSP serverima.
+---
+
+OpenCode se integriše sa vašim Language Server Protocol (LSP) serverima kako bi pomogao LLM-u u interakciji s kodnom bazom. Koristi dijagnostiku za slanje povratnih informacija modelu.
+
+## Ugrađeni
+
+OpenCode dolazi sa nekoliko ugrađenih LSP servera za popularne jezike:
+| LSP server | Ekstenzije | Zahtjevi
+|------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------ |
+| astro | .astro | Automatske instalacije za Astro projekte |
+| bash | .sh, .bash, .zsh, .ksh | Automatski instalira bash-language-server |
+| clangd | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++ | Automatske instalacije za C/C++ projekte |
+| csharp | .cs | `.NET SDK` instaliran |
+| clojure-lsp | .clj, .cljs, .cljc, .edn | `clojure-lsp` komanda dostupna |
+| dart | .dart | `dart` komanda dostupna |
+| deno | .ts, .tsx, .js, .jsx, .mjs | `deno` komanda dostupna (automatski detektuje deno.json/deno.jsonc) |
+| elixir-ls | .ex, .exs | `elixir` komanda dostupna |
+| eslint | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue | `eslint` ovisnost u projektu |
+| fsharp | .fs, .fsi, .fsx, .fsscript | `.NET SDK` instaliran |
+| gleam | .bleam | `gleam` komanda dostupna |
+| gopls | .go | `go` komanda dostupna |
+| hls | .hs, .lhs | `haskell-language-server-wrapper` komanda dostupna |
+| jdtls | .java | `Java SDK (version 21+)` instaliran |
+| kotlin-ls | .kt, .kts | Automatske instalacije za Kotlin projekte |
+| lua-ls | .lua | Automatske instalacije za Lua projekte |
+| nixd | .nix | `nixd` komanda dostupna |
+| ocaml-lsp | .ml, .mli | `ocamllsp` komanda dostupna |
+| oxlint | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | `oxlint` zavisnost u projektu |
+| php intelephense | .php | Automatske instalacije za PHP projekte |
+| prisma | .prisma | `prisma` komanda dostupna |
+| pyright | .py, .pyi | `pyright` ovisnost instalirana |
+| ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru | `ruby` i `gem` komande dostupne |
+| rust | .rs | `rust-analyzer` komanda dostupna |
+| sourcekit-lsp | .swift, .objc, .objcpp | `swift` instaliran (`xcode` na macOS-u) |
+| svelte | .svelte | Automatske instalacije za Svelte projekte |
+| terraform | .tf, .tfvars | Automatske instalacije iz GitHub izdanja |
+| tinymist | .typ, .typc | Automatske instalacije iz GitHub izdanja |
+| typescript | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts | `typescript` zavisnost u projektu |
+| vue | .vue | Automatske instalacije za Vue projekte |
+| yaml-ls | .yaml, .yml | Automatski instalira Red Hat yaml-language-server |
+| zls | .zig, .zon | `zig` komanda dostupna |
+LSP serveri su automatski omogućeni kada se otkrije jedna od gore navedenih ekstenzija datoteke i zahtjevi su ispunjeni.
+:::note
+Možete onemogućiti automatska preuzimanja LSP servera tako što ćete postaviti varijablu okruženja `OPENCODE_DISABLE_LSP_DOWNLOAD` na `true`.
+:::
+
+---
+
+## Kako radi
+
+Kada opencode otvori fajl, on:
+
+1. Provjerava ekstenziju datoteke u odnosu na sve omogućene LSP servere.
+2. Pokreće odgovarajući LSP server ako već nije pokrenut.
+
+---
+
+## Konfiguracija
+
+Možete prilagoditi LSP servere kroz `lsp` odjeljak u vašoj opencode konfiguraciji.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {}
+}
+```
+
+Svaki LSP server podržava sljedeće:
+| Svojstvo | Vrsta | Opis
+|---------------- | -------- | ------------------------------------------------- |
+| `disabled` | boolean | Postavite ovo na `true` da onemogućite LSP server |
+| `command` | string[] | Naredba za pokretanje LSP servera |
+| `extensions` | string[] | Ekstenzije datoteka koje ovaj LSP server treba da rukuje |
+| `env` | objekt | Varijable okruženja koje treba postaviti prilikom pokretanja servera |
+| `initialization` | objekt | Opcije inicijalizacije za slanje na LSP server |
+Pogledajmo neke primjere.
+
+---
+
+### Varijable okruženja
+
+Koristite svojstvo `env` za postavljanje varijabli okruženja prilikom pokretanja LSP servera:
+
+```json title="opencode.json" {5-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "rust": {
+      "env": {
+        "RUST_LOG": "debug"
+      }
+    }
+  }
+}
+```
+
+---
+
+### Opcije inicijalizacije
+
+Koristite svojstvo `initialization` da prosledite opcije inicijalizacije na LSP server. Ovo su postavke specifične za server poslane tokom LSP `initialize` zahtjeva:
+
+```json title="opencode.json" {5-9}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "typescript": {
+      "initialization": {
+        "preferences": {
+          "importModuleSpecifierPreference": "relative"
+        }
+      }
+    }
+  }
+}
+```
+
+:::note
+Opcije inicijalizacije razlikuju se od LSP servera. Provjerite dokumentaciju vašeg LSP servera za dostupne opcije.
+:::
+
+---
+
+### Onemogućavanje LSP servera
+
+Da biste onemogućili **sve** LSP servere globalno, postavite `lsp` na `false`:
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": false
+}
+```
+
+Da onemogućite **specifičan** LSP server, postavite `disabled` na `true`:
+
+```json title="opencode.json" {5}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "typescript": {
+      "disabled": true
+    }
+  }
+}
+```
+
+---
+
+### Prilagođeni LSP serveri
+
+Možete dodati prilagođene LSP servere navodeći ekstenzije naredbe i datoteke:
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "custom-lsp": {
+      "command": ["custom-lsp-server", "--stdio"],
+      "extensions": [".custom"]
+    }
+  }
+}
+```
+
+---
+
+## Dodatne informacije
+
+### PHP Intelephense
+
+PHP Intelephense nudi vrhunske funkcije putem licencnog ključa. Možete dati licencni ključ postavljanjem (samo) ključa u tekstualnu datoteku na:
+
+- Na macOS/Linuxu: `$HOME/intelephense/license.txt`
+- Na Windowsima: `%USERPROFILE%/intelephense/license.txt`
+  Datoteka treba da sadrži samo licencni ključ bez dodatnog sadržaja.

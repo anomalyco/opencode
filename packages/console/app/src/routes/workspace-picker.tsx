@@ -9,6 +9,7 @@ import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 import { Workspace } from "@opencode-ai/console-core/workspace.js"
 import { Dropdown, DropdownItem } from "~/component/dropdown"
 import { Modal } from "~/component/modal"
+import { useI18n } from "~/context/i18n"
 import "./workspace-picker.css"
 
 const getWorkspaces = query(async () => {
@@ -47,6 +48,7 @@ const createWorkspace = action(async (form: FormData) => {
 
 export function WorkspacePicker() {
   const params = useParams()
+  const i18n = useI18n()
   const workspaces = createAsync(() => getWorkspaces())
   const submission = useSubmission(createWorkspace)
   const [store, setStore] = createStore({
@@ -56,7 +58,7 @@ export function WorkspacePicker() {
 
   const currentWorkspace = () => {
     const ws = workspaces()?.find((w) => w.id === params.id)
-    return ws ? ws.name : "Select workspace"
+    return ws ? ws.name : i18n.t("workspace.select")
   }
 
   const handleWorkspaceNew = () => {
@@ -91,11 +93,11 @@ export function WorkspacePicker() {
           )}
         </For>
         <button data-slot="create-item" type="button" onClick={() => handleWorkspaceNew()}>
-          + Create New Workspace
+          {i18n.t("workspace.createNew")}
         </button>
       </Dropdown>
 
-      <Modal open={store.showForm} onClose={() => setStore("showForm", false)} title="Create New Workspace">
+      <Modal open={store.showForm} onClose={() => setStore("showForm", false)} title={i18n.t("workspace.modal.title")}>
         <form data-slot="create-form" action={createWorkspace} method="post">
           <div data-slot="create-input-group">
             <input
@@ -103,15 +105,15 @@ export function WorkspacePicker() {
               data-slot="create-input"
               type="text"
               name="workspaceName"
-              placeholder="Enter workspace name"
+              placeholder={i18n.t("workspace.modal.placeholder")}
               required
             />
             <div data-slot="button-group">
               <button type="button" data-color="ghost" onClick={() => setStore("showForm", false)}>
-                Cancel
+                {i18n.t("common.cancel")}
               </button>
               <button type="submit" data-color="primary" disabled={submission.pending}>
-                {submission.pending ? "Creating..." : "Create"}
+                {submission.pending ? i18n.t("common.creating") : i18n.t("common.create")}
               </button>
             </div>
           </div>

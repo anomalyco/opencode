@@ -1,0 +1,603 @@
+---
+title: CLI
+description: opencode CLI seçenekleri ve komutları.
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
+opencode CLI herhangi bir argüman olmadan çalıştırıldığında varsayılan olarak [TUI](/docs/tui)'yi başlatır.
+
+```bash
+opencode
+```
+
+Ancak bu sayfada belgelendiği gibi komutları da kabul eder. Bu, opencode ile programlı olarak etkileşim kurmanıza olanak tanır.
+
+```bash
+opencode run "Explain how closures work in JavaScript"
+```
+
+---
+
+### tui
+
+opencode terminal kullanıcı arayüzünü başlatır.
+
+```bash
+opencode [project]
+```
+
+#### Bayraklar
+
+| Bayrak       | Kısa | Açıklama                                                                    |
+| ------------ | ---- | --------------------------------------------------------------------------- |
+| `--continue` | `-c` | Son oturuma devam et                                                        |
+| `--session`  | `-s` | Devam edecek oturum kimliği                                                 |
+| `--fork`     |      | Devam ederken oturumu fork'lar (`--continue` veya `--session` ile kullanın) |
+| `--prompt`   |      | Kullanılacak prompt                                                         |
+| `--model`    | `-m` | provider/model biçiminde kullanılacak model                                 |
+| `--agent`    |      | Kullanılacak agent                                                          |
+| `--port`     |      | Dinlenecek port                                                             |
+| `--hostname` |      | Dinlenecek host adı                                                         |
+
+---
+
+## Komutlar
+
+opencode CLI ayrıca aşağıdaki komutlara da sahiptir.
+
+---
+
+### agent
+
+opencode için agent'ları yönetin.
+
+```bash
+opencode agent [command]
+```
+
+---
+
+### attach
+
+`serve` veya `web` komutlarıyla başlatılan, halihazırda çalışan bir opencode arka uç sunucusuna bir terminal ekleyin.
+
+```bash
+opencode attach [url]
+```
+
+Bu, TUI öğesinin uzak bir opencode arka ucuyla kullanılmasına olanak tanır. Örneğin:
+
+```bash
+# Start the backend server for web/mobile access
+opencode web --port 4096 --hostname 0.0.0.0
+
+# In another terminal, attach the TUI to the running backend
+opencode attach http://10.20.30.40:4096
+```
+
+#### Bayraklar
+
+| Bayrak      | Kısa | Tanım                                |
+| ----------- | ---- | ------------------------------------ |
+| `--dir`     |      | TUI'yi başlatmak için çalışma dizini |
+| `--session` | `-s` | Devam edecek oturum açma bilgileri   |
+
+---
+
+#### create
+
+Özel yapılandırmaya sahip yeni bir agent oluşturun.
+
+```bash
+opencode agent create
+```
+
+Bu komut, özel sistem istemi ve araç yapılandırmasıyla yeni bir agent oluşturma konusunda size yol gösterecektir.
+
+---
+
+#### list
+
+Mevcut tüm agent'ları listeleyin.
+
+```bash
+opencode agent list
+```
+
+---
+
+### auth
+
+Sağlayıcılar için kimlik bilgilerini ve oturum açmayı yönetme komutu.
+
+```bash
+opencode auth [command]
+```
+
+---
+
+#### login
+
+opencode, [Models.dev](https://models.dev) adresindeki sağlayıcı listesi tarafından desteklenmektedir, dolayısıyla kullanmak istediğiniz herhangi bir sağlayıcı için API anahtarlarını ayarlamak üzere `opencode auth login` kullanabilirsiniz. Bu `~/.local/share/opencode/auth.json`'de saklanıyor.
+
+```bash
+opencode auth login
+```
+
+opencode başlatıldığında sağlayıcıları kimlik bilgileri dosyasından yükler. Ayrıca ortam değişkenlerindeki veya projenizdeki `.env` dosyasındaki anahtarları da kullanır.
+
+---
+
+#### list
+
+Kimlik bilgileri dosyasında depolanan tüm kimliği doğrulanmış sağlayıcıları listeler.
+
+```bash
+opencode auth list
+```
+
+Veya kısa versiyonu.
+
+```bash
+opencode auth ls
+```
+
+---
+
+#### logout
+
+Bir sağlayıcıyı kimlik bilgileri dosyasından temizleyerek oturumunuzu kapatır.
+
+```bash
+opencode auth logout
+```
+
+---
+
+### github
+
+Depo otomasyonu için GitHub aracısını yönetin.
+
+```bash
+opencode github [command]
+```
+
+---
+
+#### install
+
+GitHub aracısını deponuza yükleyin.
+
+```bash
+opencode github install
+```
+
+Bu komut gerekli GitHub Actions workflow'unu kurar ve yapılandırma adımlarında size rehberlik eder. [Daha fazla bilgi](/docs/github).
+
+---
+
+#### run
+
+GitHub aracısını çalıştırın. Bu genellikle GitHub Eylemlerinde kullanılır.
+
+```bash
+opencode github run
+```
+
+##### Bayraklar
+
+| Bayrak    | Açıklama                                    |
+| --------- | ------------------------------------------- |
+| `--event` | Aracıyı çalıştırmak için GitHub sahte olayı |
+| `--token` | GitHub personal access token                |
+
+---
+
+### mcp
+
+Model Bağlam Protokolü sunucularını yönetin.
+
+```bash
+opencode mcp [command]
+```
+
+---
+
+#### add
+
+Yapılandırmanıza bir MCP sunucusu ekleyin.
+
+```bash
+opencode mcp add
+```
+
+Bu komut, yerel veya uzak bir MCP sunucusu ekleme konusunda size yol gösterecektir.
+
+---
+
+#### list
+
+Yapılandırılmış tüm MCP sunucularını ve bağlantı durumlarını listeleyin.
+
+```bash
+opencode mcp list
+```
+
+Veya kısa versiyonunu kullanın.
+
+```bash
+opencode mcp ls
+```
+
+---
+
+#### auth
+
+OAuth'un etkin olduğu bir MCP sunucusuyla kimlik doğrulaması yapın.
+
+```bash
+opencode mcp auth [name]
+```
+
+Sunucu adı belirtmezseniz mevcut OAuth özellikli sunucular arasından seçim yapmanız istenir.
+
+Ayrıca OAuth özellikli sunucuları ve bunların kimlik doğrulama durumlarını da listeleyebilirsiniz.
+
+```bash
+opencode mcp auth list
+```
+
+Veya kısa versiyonunu kullanın.
+
+```bash
+opencode mcp auth ls
+```
+
+---
+
+#### logout
+
+MCP sunucusu için OAuth kimlik bilgilerini kaldırın.
+
+```bash
+opencode mcp logout [name]
+```
+
+---
+
+#### debug
+
+MCP sunucusu için OAuth bağlantı sorunlarının hatalarını ayıklayın.
+
+```bash
+opencode mcp debug <name>
+```
+
+---
+
+### models
+
+Yapılandırılmış sağlayıcıların tüm mevcut modellerini listeleyin.
+
+```bash
+opencode models [provider]
+```
+
+Bu komut, yapılandırdığınız sağlayıcılardaki modelleri `provider/model` formatında listeler.
+
+Bu, [config dosyanızda](/docs/config/) kullanmanız gereken tam model adını bulmak için kullanışlıdır.
+
+Modelleri bu sağlayıcıya göre filtrelemek için isteğe bağlı olarak bir sağlayıcı kimliğini iletebilirsiniz.
+
+```bash
+opencode models anthropic
+```
+
+#### Bayraklar
+
+| Bayrak      | Tanım                                                                       |
+| ----------- | --------------------------------------------------------------------------- |
+| `--refresh` | Modeller.dev'den model önbelleğini yenileyin                                |
+| `--verbose` | Daha ayrıntılı model çıktısı kullanın (maliyetler gibi meta veriler içerir) |
+
+Önbelleğe alınan model listesini güncellemek için `--refresh` bayrağını kullanın. Bu, bir sağlayıcıya yeni modeller eklendiğinde ve bunları opencode'da görmek istediğinizde kullanışlıdır.
+
+```bash
+opencode models --refresh
+```
+
+---
+
+### run
+
+Doğrudan bir istem ileterek opencode'u etkileşimli olmayan modda çalıştırın.
+
+```bash
+opencode run [message..]
+```
+
+Bu, komut dosyası oluşturma, otomasyon veya TUI'un tamamını başlatmadan hızlı bir yanıt istediğinizde kullanışlıdır. Örneğin.
+
+```bash "opencode run"
+opencode run Explain the use of context in Go
+```
+
+Ayrıca, her çalıştırmada MCP sunucusunun soğuk önyükleme sürelerini önlemek için çalışan bir `opencode serve` örneğine de ekleyebilirsiniz:
+
+```bash
+# Start a headless server in one terminal
+opencode serve
+
+# In another terminal, run commands that attach to it
+opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+```
+
+#### Bayraklar
+
+| Bayrak       | Kısa | Açıklama                                                                          |
+| ------------ | ---- | --------------------------------------------------------------------------------- |
+| `--command`  |      | Çalıştırılacak komut, args için mesajı kullanın                                   |
+| `--continue` | `-c` | Son oturuma devam et                                                              |
+| `--session`  | `-s` | Devam edecek oturum kimliği                                                       |
+| `--fork`     |      | Devam ederken oturumu fork'lar (`--continue` veya `--session` ile kullanın)       |
+| `--share`    |      | Oturumu paylaşın                                                                  |
+| `--model`    | `-m` | provider/model biçiminde kullanılacak model                                       |
+| `--agent`    |      | Kullanılacak temsilci                                                             |
+| `--file`     | `-f` | Mesaja eklenecek dosya(lar)                                                       |
+| `--format`   |      | Biçim: varsayılan (biçimlendirilmiş) veya json (ham JSON olayları)                |
+| `--title`    |      | Oturumun başlığı (değer sağlanmazsa kısaltılmış bilgi istemi kullanılır)          |
+| `--attach`   |      | Çalışan bir opencode sunucusuna ekleyin (ör. http://localhost:4096)               |
+| `--port`     |      | Yerel sunucunun bağlantı noktası (varsayılan olarak rastgele bağlantı noktasıdır) |
+
+---
+
+### serve
+
+API erişimi için headless bir opencode sunucusu başlatır. Tam HTTP arayüzü için [server docs](/docs/server) sayfasına bakın.
+
+```bash
+opencode serve
+```
+
+Bu, TUI arayüzü olmadan opencode işlevselliğine API erişimi sağlayan bir HTTP sunucusunu başlatır. HTTP temel kimlik doğrulamasını etkinleştirmek için `OPENCODE_SERVER_PASSWORD` öğesini ayarlayın (kullanıcı adı varsayılan olarak `opencode` şeklindedir).
+
+#### Bayraklar
+
+| Bayrak       | Tanım                                      |
+| ------------ | ------------------------------------------ |
+| `--port`     | Dinlenecek bağlantı noktası                |
+| `--hostname` | Dinlenecek ana bilgisayar adı              |
+| `--mdns`     | mDNS bulmayı etkinleştir                   |
+| `--cors`     | CORS'a izin verecek ek tarayıcı kaynakları |
+
+---
+
+### session
+
+opencode oturumlarını yönetin.
+
+```bash
+opencode session [command]
+```
+
+---
+
+#### list
+
+Tüm opencode oturumlarını listeleyin.
+
+```bash
+opencode session list
+```
+
+##### Bayraklar
+
+| Bayrak        | Kısa | Tanım                                  |
+| ------------- | ---- | -------------------------------------- |
+| `--max-count` | `-n` | En son N oturumla sınırla              |
+| `--format`    |      | Çıkış formatı: tablo veya json (tablo) |
+
+---
+
+### stats
+
+opencode oturumlarınız için belirteç kullanımı ve maliyet istatistiklerini gösterin.
+
+```bash
+opencode stats
+```
+
+#### Bayraklar
+
+| Bayrak      | Açıklama                                                                                                    |
+| ----------- | ----------------------------------------------------------------------------------------------------------- |
+| `--days`    | Son N güne ait istatistikleri göster (tüm zamanlar)                                                         |
+| `--tools`   | Gösterilecek araç sayısı (tümü)                                                                             |
+| `--models`  | Model kullanım dökümünü göster (varsayılan olarak gizlidir). En üstteki N'yi göstermek için bir sayı iletin |
+| `--project` | Projeye göre filtrele (tüm projeler, boş değer: mevcut proje)                                               |
+
+---
+
+### export
+
+Oturum verilerini JSON olarak dışa aktarın.
+
+```bash
+opencode export [sessionID]
+```
+
+Bir oturum kimliği sağlamazsanız mevcut oturumlar arasından seçim yapmanız istenir.
+
+---
+
+### import
+
+Bir JSON dosyasından veya opencode paylaşımından URL oturum verilerini içe aktarın.
+
+```bash
+opencode import <file>
+```
+
+Yerel bir dosyadan veya opencode paylaşımından (URL) içe aktarabilirsiniz.
+
+```bash
+opencode import session.json
+opencode import https://opncd.ai/s/abc123
+```
+
+---
+
+### web
+
+Web arayüzüyle başsız bir opencode sunucusu başlatın.
+
+```bash
+opencode web
+```
+
+Bu, bir HTTP sunucusunu başlatır ve bir web arayüzü aracılığıyla opencode'a erişmek için bir web tarayıcısı açar. HTTP temel kimlik doğrulamasını etkinleştirmek için `OPENCODE_SERVER_PASSWORD` öğesini ayarlayın (kullanıcı adı varsayılan olarak `opencode` şeklindedir).
+
+#### Bayraklar
+
+| Bayrak       | Tanım                                      |
+| ------------ | ------------------------------------------ |
+| `--port`     | Dinlenecek bağlantı noktası                |
+| `--hostname` | Dinlenecek ana bilgisayar adı              |
+| `--mdns`     | mDNS bulmayı etkinleştir                   |
+| `--cors`     | CORS'a izin verecek ek tarayıcı kaynakları |
+
+---
+
+### acp
+
+Bir ACP (Ajan İstemci Protokolü) sunucusu başlatın.
+
+```bash
+opencode acp
+```
+
+Bu komut, nd-JSON kullanarak stdin/stdout aracılığıyla iletişim kuran bir ACP sunucusunu başlatır.
+
+#### Bayraklar
+
+| Bayrak       | Açıklama            |
+| ------------ | ------------------- |
+| `--cwd`      | Çalışma dizini      |
+| `--port`     | Dinlenecek port     |
+| `--hostname` | Dinlenecek host adı |
+
+---
+
+### uninstall
+
+opencode'u kaldırın ve ilgili tüm dosyaları kaldırın.
+
+```bash
+opencode uninstall
+```
+
+#### Bayraklar
+
+| Bayrak          | Kısa | Tanım                                           |
+| --------------- | ---- | ----------------------------------------------- |
+| `--keep-config` | `-c` | Yapılandırma dosyalarını sakla                  |
+| `--keep-data`   | `-d` | Oturum verilerini ve anlık görüntüleri saklayın |
+| `--dry-run`     |      | Nelerin kaldırılmadan kaldırılacağı göster      |
+| `--force`       | `-f` | Onay istemlerini atla                           |
+
+---
+
+### upgrade
+
+opencode'u en son sürüme veya belirli bir sürüme günceller.
+
+```bash
+opencode upgrade [target]
+```
+
+En son sürüme yükseltmek için.
+
+```bash
+opencode upgrade
+```
+
+Belirli bir sürüme yükseltmek için:
+
+```bash
+opencode upgrade v0.1.48
+```
+
+#### Bayraklar
+
+| Bayrak     | Kısa | Açıklama                                               |
+| ---------- | ---- | ------------------------------------------------------ |
+| `--method` | `-m` | Kullanılan kurulum yöntemi: curl, npm, pnpm, bun, brew |
+
+---
+
+## Global bayraklar
+
+opencode CLI aşağıdaki global bayrakları destekler.
+
+| Bayrak         | Kısa | Tanım                                    |
+| -------------- | ---- | ---------------------------------------- |
+| `--help`       | `-h` | Yardımı görüntüle                        |
+| `--version`    | `-v` | Sürüm numarasını yazdır                  |
+| `--print-logs` |      | Günlükleri stderr'e yazdır               |
+| `--log-level`  |      | Günlük düzeyi (DEBUG, INFO, WARN, ERROR) |
+
+---
+
+## Ortam değişkenleri
+
+opencode ortam değişkenleri kullanılarak yapılandırılabilir.
+
+| Değişken                              | Tip     | Açıklama                                                                    |
+| ------------------------------------- | ------- | --------------------------------------------------------------------------- |
+| `OPENCODE_AUTO_SHARE`                 | boolean | Oturumları otomatik olarak paylaş                                           |
+| `OPENCODE_GIT_BASH_PATH`              | string  | Windows'ta yürütülebilir Git Bash'in Yolu                                   |
+| `OPENCODE_CONFIG`                     | string  | Yapılandırma dosyasının yolu                                                |
+| `OPENCODE_CONFIG_DIR`                 | string  | Yapılandırma dizinine giden yol                                             |
+| `OPENCODE_CONFIG_CONTENT`             | string  | Satır içi JSON config içeriği                                               |
+| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | Otomatik güncelleme kontrollerini devre dışı bırak                          |
+| `OPENCODE_DISABLE_PRUNE`              | boolean | Eski verilerin temizlenmesini devre dışı bırak                              |
+| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | Otomatik terminal başlığı güncellemelerini devre dışı bırakın               |
+| `OPENCODE_PERMISSION`                 | string  | Satır içi JSON izin config'i                                                |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | Varsayılan eklentileri devre dışı bırakın                                   |
+| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | Otomatik LSP sunucu indirmelerini devre dışı bırakın                        |
+| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Deneysel modelleri etkinleştir                                              |
+| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | Otomatik context sıkıştırmayı devre dışı bırak                              |
+| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | `.claude`'den okumayı devre dışı bırak (istem + beceriler)                  |
+| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | `~/.claude/CLAUDE.md` dosyasını okumayı devre dışı bırak                    |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | `.claude/skills` yüklemesini devre dışı bırak                               |
+| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | Uzak kaynaklardan model getirmeyi devre dışı bırakın                        |
+| `OPENCODE_FAKE_VCS`                   | string  | Test amaçlı sahte VCS sağlayıcısı                                           |
+| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolean | Optimizasyon için dosya süresi kontrolünü devre dışı bırakın                |
+| `OPENCODE_CLIENT`                     | string  | Client kimliği (varsayılan: `cli`)                                          |
+| `OPENCODE_ENABLE_EXA`                 | boolean | Exa web arama araçlarını etkinleştir                                        |
+| `OPENCODE_SERVER_PASSWORD`            | string  | `serve`/`web` için temel kimlik doğrulamayı etkinleştirin                   |
+| `OPENCODE_SERVER_USERNAME`            | string  | Temel kimlik doğrulama kullanıcı adını geçersiz kıl (varsayılan `opencode`) |
+| `OPENCODE_MODELS_URL`                 | string  | Model yapılandırmasını almak için özel URL                                  |
+
+---
+
+### Deneysel
+
+Bu ortam değişkenleri değişebilecek veya kaldırılabilecek deneysel özellikleri etkinleştirir.
+
+| Değişken                                        | Tip     | Tanım                                                   |
+| ----------------------------------------------- | ------- | ------------------------------------------------------- |
+| `OPENCODE_EXPERIMENTAL`                         | boolean | Tüm deneysel özellikleri etkinleştir                    |
+| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Simge bulmayı etkinleştir                               |
+| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | TUI'da seçim yapıldığında kopyalamayı devre dışı bırak  |
+| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | MS cinsinden bash komutları için varsayılan zaman aşımı |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | LLM yanıtları için maksimum çıktı belirteçleri          |
+| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | Tüm dizin için dosya izleyiciyi etkinleştir             |
+| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | Oxfmt biçimlendiriciyi etkinleştir                      |
+| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | Deneysel LSP aracını etkinleştir                        |
+| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Dosya izleyiciyi devre dışı bırak                       |
+| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | Deneysel Exa özelliklerini etkinleştirin                |
+| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Deneysel LSP tür denetimini etkinleştir                 |
+| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | Deneysel işaretleme özelliklerini etkinleştir           |
+| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Plan modunu etkinleştir                                 |
