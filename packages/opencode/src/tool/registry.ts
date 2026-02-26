@@ -37,14 +37,37 @@ export namespace ToolRegistry {
   export const state = Instance.state(async () => {
     const custom = [] as Tool.Info[]
 
-    const matches = await Config.directories().then((dirs) =>
-      dirs.flatMap((dir) =>
-        Glob.scanSync("{tool,tools}/*.{js,ts}", { cwd: dir, absolute: true, dot: true, symlink: true }),
+    const dirs = await Config.directories()
+    const matches = dirs.flatMap((dir) =>
+      Glob.scanSync("{tool,tools}/**/*.{js,ts}", { cwd: dir, absolute: true, dot: true, symlink: true }).map(
+        (match) => ({
+          dir,
+          match,
+        }),
       ),
     )
     if (matches.length) await Config.waitForDependencies()
-    for (const match of matches) {
-      const namespace = path.basename(match, path.extname(match))
+    for (const { dir, match } of matches) {
+      const relativePath = path.relative(dir, match)
+      const pathWithoutExt = relativePath.replace(/\.(js|ts)$/, "")
+      const pathParts = pathWithoutExt.split(path.sep)
+
+      if (pathParts[0] === "tool" || pathParts[0] === "tools") {
+        pathParts.shift()
+      }
+
+      const fileName = pathParts[pathParts.length - 1]
+      const folderParts = pathParts.slice(0, -1)
+
+      let namespace: string
+      if (fileName === "index" && folderParts.length > 0) {
+        namespace = folderParts.join("_")
+      } else if (folderParts.length > 0) {
+        namespace = [...folderParts, fileName].join("_")
+      } else {
+        namespace = fileName
+      }
+
       const mod = await import(pathToFileURL(match).href)
       for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
         custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
