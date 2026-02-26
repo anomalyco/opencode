@@ -2218,3 +2218,201 @@ test("Google Vertex: supports OpenAI compatible models", async () => {
     },
   })
 })
+
+test("google-vertex-anthropic registers 1M context variants", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ $schema: "https://opencode.ai/config.json" }))
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("GOOGLE_CLOUD_PROJECT", "test-project")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const vertex = providers["google-vertex-anthropic"]
+      expect(vertex).toBeDefined()
+
+      // Verify 1M variants are registered for each source model that exists in models.dev.
+      // The source model may not be present in all environments (e.g. models-snapshot may lag).
+      const VARIANTS = [
+        {
+          sourceID: "claude-sonnet-4-6@default",
+          variantID: "claude-sonnet-4-6-1m@default",
+          name: "Claude Sonnet 4.6 (1M)",
+        },
+        {
+          sourceID: "claude-sonnet-4-5@20250929",
+          variantID: "claude-sonnet-4-5-1m@20250929",
+          name: "Claude Sonnet 4.5 (1M)",
+        },
+      ]
+      let testedAtLeastOne = false
+      for (const { sourceID, variantID, name } of VARIANTS) {
+        if (!vertex.models[sourceID]) continue
+        testedAtLeastOne = true
+        const variant = vertex.models[variantID]
+        expect(variant).toBeDefined()
+        expect(variant.name).toBe(name)
+        expect(variant.api.id).toBe(sourceID)
+        expect(variant.limit.context).toBe(1000000)
+        expect(variant.headers?.["anthropic-beta"]).toBe("context-1m-2025-08-07")
+        // Source model context limit must be unchanged
+        expect(vertex.models[sourceID].limit.context).not.toBe(1000000)
+      }
+      expect(testedAtLeastOne).toBe(true)
+    },
+  })
+})
+
+test("google-vertex-anthropic accepts custom headers from config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "google-vertex-anthropic": {
+              options: {
+                headers: {
+                  "anthropic-beta": "context-1m-2025-08-07",
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("GOOGLE_CLOUD_PROJECT", "test-project")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["google-vertex-anthropic"]).toBeDefined()
+      expect(providers["google-vertex-anthropic"].options.headers).toBeDefined()
+      expect(providers["google-vertex-anthropic"].options.headers["anthropic-beta"]).toBe("context-1m-2025-08-07")
+    },
+  })
+})
+
+test("google-vertex-anthropic accepts betas array from config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "google-vertex-anthropic": {
+              options: {
+                betas: ["context-1m-2025-08-07"],
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("GOOGLE_CLOUD_PROJECT", "test-project")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["google-vertex-anthropic"]).toBeDefined()
+      expect(providers["google-vertex-anthropic"].options.betas).toEqual(["context-1m-2025-08-07"])
+    },
+  })
+})
+
+// Regression: 1M model was returning "prompt is too long: N > 200000 maximum" because
+// an earlier implementation stripped the anthropic-beta header and substituted a body
+// param (anthropic_beta). Vertex AI honors the HTTP header but ignores the body param.
+// The correct fix is to let the header pass through unmodified; the SDK sets it
+// automatically from model.headers via createVertexAnthropic's config.headers.
+test("Vertex 1M model: anthropic-beta header passes through to Vertex unstripped", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ $schema: "https://opencode.ai/config.json" }))
+    },
+  })
+
+  const capturedRequests: Array<{ headers: Record<string, string>; body: any }> = []
+  const origFetch = globalThis.fetch as typeof fetch
+
+  ;(globalThis as any).fetch = async (_input: any, init?: RequestInit) => {
+    if (init?.method === "POST") {
+      const headers: Record<string, string> = {}
+      if (init.headers && typeof init.headers === "object" && !Array.isArray(init.headers)) {
+        Object.assign(headers, init.headers)
+      }
+      let body: any = undefined
+      if (typeof init.body === "string") {
+        try {
+          body = JSON.parse(init.body)
+        } catch {}
+      }
+      capturedRequests.push({ headers, body })
+    }
+    return new Response(
+      JSON.stringify({
+        id: "msg_test",
+        type: "message",
+        role: "assistant",
+        content: [{ type: "text", text: "hi" }],
+        model: "claude-sonnet-4-6",
+        stop_reason: "end_turn",
+        usage: { input_tokens: 5, output_tokens: 2 },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )
+  }
+
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        Env.set("GOOGLE_CLOUD_PROJECT", "test-project")
+      },
+      fn: async () => {
+        const providers = await Provider.list()
+        const vertex = providers["google-vertex-anthropic"]
+        if (!vertex) return
+
+        const model = vertex.models["claude-sonnet-4-6-1m@default"]
+        if (!model) return // Not in models-snapshot; skip rather than fail
+
+        const language = await Provider.getLanguage(model)
+
+        try {
+          await (language as any).doGenerate({
+            prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+            maxOutputTokens: 10,
+          })
+        } catch {
+          // Response-parsing errors are expected with a stub response.
+        }
+
+        const req = capturedRequests.find((r) => r.body !== undefined)
+        expect(req).toBeDefined()
+
+        // Vertex AI reads the anthropic-beta HTTP header (forwarded to the Anthropic
+        // backend) and ignores the anthropic_beta body param. The header must be present
+        // and the body must NOT contain anthropic_beta (no injection happening).
+        const betaHeader =
+          req!.headers["anthropic-beta"] ?? req!.headers["Anthropic-Beta"] ?? ""
+        expect(betaHeader).toContain("context-1m-2025-08-07")
+        expect(req!.body?.anthropic_beta).toBeUndefined()
+      },
+    })
+  } finally {
+    ;(globalThis as any).fetch = origFetch
+  }
+})

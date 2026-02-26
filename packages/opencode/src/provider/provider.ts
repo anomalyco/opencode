@@ -759,6 +759,41 @@ export namespace Provider {
     const modelsDev = await ModelsDev.get()
     const database = mapValues(modelsDev, fromModelsDevProvider)
 
+    // Vertex AI 1M context window support via the context-1m-2025-08-07 beta flag.
+    // Vertex reads and forwards the anthropic-beta HTTP header to the Anthropic backend;
+    // the header is set in model.headers and flows through the SDK automatically.
+    {
+      const VERTEX_1M_BETA = "context-1m-2025-08-07"
+      const VERTEX_1M_MODELS: Array<{ sourceID: string; variantID: string; name: string }> = [
+        {
+          sourceID: "claude-sonnet-4-6@default",
+          variantID: "claude-sonnet-4-6-1m@default",
+          name: "Claude Sonnet 4.6 (1M)",
+        },
+        {
+          sourceID: "claude-sonnet-4-5@20250929",
+          variantID: "claude-sonnet-4-5-1m@20250929",
+          name: "Claude Sonnet 4.5 (1M)",
+        },
+      ]
+      const vertexProvider = database["google-vertex-anthropic"]
+      if (vertexProvider) {
+        for (const { sourceID, variantID, name } of VERTEX_1M_MODELS) {
+          const source = vertexProvider.models[sourceID]
+          if (source) {
+            vertexProvider.models[variantID] = {
+              ...source,
+              id: variantID,
+              name,
+              api: { ...source.api, id: sourceID },
+              limit: { ...source.limit, context: 1000000, input: 0 },
+              headers: { ...source.headers, "anthropic-beta": VERTEX_1M_BETA },
+            }
+          }
+        }
+      }
+    }
+
     const disabled = new Set(config.disabled_providers ?? [])
     const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
 
@@ -1083,6 +1118,12 @@ export namespace Provider {
 
           opts.signal = combined
         }
+
+        // For google-vertex-anthropic, the anthropic-beta header must be sent as an HTTP
+        // header (not a body param). Vertex AI reads and forwards the anthropic-beta header
+        // to the Anthropic backend — confirmed by direct API testing. The header is already
+        // set in model.headers and flows through the SDK's getHeaders() into opts.headers.
+        // No interception or body injection needed; the header passes through correctly.
 
         // Strip openai itemId metadata following what codex does
         // Codex uses #[serde(skip_serializing)] on id fields for all item types:
