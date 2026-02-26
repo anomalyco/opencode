@@ -104,7 +104,10 @@ export const DialogSelectModelUnpaid: Component = () => {
                       <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
                     </Show>
                     <Show when={i.id === "opencode-go"}>
-                      <div class="text-14-regular text-text-weak">Low cost subscription for everyone</div>
+                      <>
+                        <div class="text-14-regular text-text-weak">Low cost subscription for everyone</div>
+                        <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
+                      </>
                     </Show>
                     <Show when={i.id === "anthropic"}>
                       <div class="text-14-regular text-text-weak">{language.t("dialog.provider.anthropic.note")}</div>
