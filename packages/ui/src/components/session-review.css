@@ -10,6 +10,11 @@
     display: none;
   }
 
+  .scroll-view__viewport {
+    display: flex;
+    flex-direction: column;
+  }
+
   [data-slot="session-review-container"] {
     flex: 1 1 auto;
     padding-right: 4px;
