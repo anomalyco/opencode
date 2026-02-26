@@ -86,4 +86,29 @@ describe("Session.listGlobal", () => {
     expect(ids).toContain(first.id)
     expect(ids).not.toContain(second.id)
   })
+
+  test("filters root sessions across projects", async () => {
+    await using first = await tmpdir({ git: true })
+    await using second = await tmpdir({ git: true })
+
+    const root = await Instance.provide({
+      directory: first.path,
+      fn: async () => Session.create({ title: "root-session" }),
+    })
+    const child = await Instance.provide({
+      directory: first.path,
+      fn: async () => Session.create({ title: "child-session", parentID: root.id }),
+    })
+    const otherRoot = await Instance.provide({
+      directory: second.path,
+      fn: async () => Session.create({ title: "other-root-session" }),
+    })
+
+    const sessions = [...Session.listGlobal({ roots: true, limit: 200 })]
+    const ids = sessions.map((session) => session.id)
+
+    expect(ids).toContain(root.id)
+    expect(ids).toContain(otherRoot.id)
+    expect(ids).not.toContain(child.id)
+  })
 })

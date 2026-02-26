@@ -73,6 +73,11 @@ export const SessionListCommand = cmd({
   describe: "list sessions",
   builder: (yargs: Argv) => {
     return yargs
+      .option("all", {
+        alias: "a",
+        describe: "list sessions across all projects",
+        type: "boolean",
+      })
       .option("max-count", {
         alias: "n",
         describe: "limit to N most recent sessions",
@@ -87,7 +92,9 @@ export const SessionListCommand = cmd({
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
-      const sessions = [...Session.list({ roots: true, limit: args.maxCount })]
+      const sessions = args.all
+        ? [...Session.listGlobal({ roots: true, limit: args.maxCount })]
+        : [...Session.list({ roots: true, limit: args.maxCount })]
 
       if (sessions.length === 0) {
         return
@@ -97,7 +104,7 @@ export const SessionListCommand = cmd({
       if (args.format === "json") {
         output = formatSessionJSON(sessions)
       } else {
-        output = formatSessionTable(sessions)
+        output = formatSessionTable(sessions, args.all)
       }
 
       const shouldPaginate = process.stdout.isTTY && !args.maxCount && args.format === "table"
@@ -124,26 +131,31 @@ export const SessionListCommand = cmd({
   },
 })
 
-function formatSessionTable(sessions: Session.Info[]): string {
+export function formatSessionTable(sessions: Session.Info[], all?: boolean): string {
   const lines: string[] = []
 
   const maxIdWidth = Math.max(20, ...sessions.map((s) => s.id.length))
+  const maxProjectWidth = Math.max(10, ...sessions.map((s) => s.projectID.length))
   const maxTitleWidth = Math.max(25, ...sessions.map((s) => s.title.length))
 
-  const header = `Session ID${" ".repeat(maxIdWidth - 10)}  Title${" ".repeat(maxTitleWidth - 5)}  Updated`
+  const header = all
+    ? `Session ID${" ".repeat(maxIdWidth - 10)}  Project ID${" ".repeat(maxProjectWidth - 10)}  Title${" ".repeat(maxTitleWidth - 5)}  Updated`
+    : `Session ID${" ".repeat(maxIdWidth - 10)}  Title${" ".repeat(maxTitleWidth - 5)}  Updated`
   lines.push(header)
   lines.push("─".repeat(header.length))
   for (const session of sessions) {
     const truncatedTitle = Locale.truncate(session.title, maxTitleWidth)
     const timeStr = Locale.todayTimeOrDateTime(session.time.updated)
-    const line = `${session.id.padEnd(maxIdWidth)}  ${truncatedTitle.padEnd(maxTitleWidth)}  ${timeStr}`
+    const line = all
+      ? `${session.id.padEnd(maxIdWidth)}  ${session.projectID.padEnd(maxProjectWidth)}  ${truncatedTitle.padEnd(maxTitleWidth)}  ${timeStr}`
+      : `${session.id.padEnd(maxIdWidth)}  ${truncatedTitle.padEnd(maxTitleWidth)}  ${timeStr}`
     lines.push(line)
   }
 
   return lines.join(EOL)
 }
 
-function formatSessionJSON(sessions: Session.Info[]): string {
+export function formatSessionJSON(sessions: Session.Info[]): string {
   const jsonData = sessions.map((session) => ({
     id: session.id,
     title: session.title,
