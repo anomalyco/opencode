@@ -1450,6 +1450,40 @@ ToolRegistry.register({
 })
 
 ToolRegistry.register({
+  name: "skill",
+  render(props) {
+    const i18n = useI18n()
+    const pending = createMemo(() => props.status === "pending" || props.status === "running")
+    const name = createMemo(() => {
+      const fromMeta = props.metadata?.name
+      if (typeof fromMeta === "string" && fromMeta.trim()) return fromMeta.trim()
+      const fromInput = props.input?.name
+      if (typeof fromInput === "string" && fromInput.trim()) return fromInput.trim()
+      return ""
+    })
+
+    return (
+      <BasicTool
+        {...props}
+        icon="console"
+        trigger={{
+          title: pending() ? "Skill" : `Skill: /${name()}`,
+          subtitle: pending() ? undefined : i18n.t("ui.tool.loaded"),
+        }}
+      >
+        <Show when={props.output && !pending()}>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={String(output())} />
+            </div>
+          )}
+        </Show>
+      </BasicTool>
+    )
+  },
+})
+
+ToolRegistry.register({
   name: "bash",
   render(props) {
     const i18n = useI18n()
