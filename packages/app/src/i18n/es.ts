@@ -23,7 +23,6 @@ export const dict = {
 
   "command.sidebar.toggle": "Alternar barra lateral",
   "command.project.open": "Abrir proyecto",
-  "command.project.switch": "Cambiar a proyecto",
   "command.provider.connect": "Conectar proveedor",
   "command.server.switch": "Cambiar servidor",
   "command.settings.open": "Abrir ajustes",
@@ -90,11 +89,9 @@ export const dict = {
   "command.session.unshare.description": "Dejar de compartir esta sesión",
 
   "palette.search.placeholder": "Buscar archivos, comandos y sesiones",
-  "palette.search.projects.placeholder": "Buscar proyectos",
   "palette.empty": "No se encontraron resultados",
   "palette.group.commands": "Comandos",
   "palette.group.files": "Archivos",
-  "palette.group.projects": "Proyectos",
 
   "dialog.provider.search.placeholder": "Buscar proveedores",
   "dialog.provider.empty": "No se encontraron proveedores",

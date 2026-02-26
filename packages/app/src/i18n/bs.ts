@@ -23,7 +23,6 @@ export const dict = {
 
   "command.sidebar.toggle": "Prikaži/sakrij bočnu traku",
   "command.project.open": "Otvori projekat",
-  "command.project.switch": "Prebaci na projekat",
   "command.provider.connect": "Poveži provajdera",
   "command.server.switch": "Promijeni server",
   "command.settings.open": "Otvori postavke",
@@ -90,11 +89,9 @@ export const dict = {
   "command.session.unshare.description": "Zaustavi dijeljenje ove sesije",
 
   "palette.search.placeholder": "Pretraži datoteke, komande i sesije",
-  "palette.search.projects.placeholder": "Pretraži projekte",
   "palette.empty": "Nema rezultata",
   "palette.group.commands": "Komande",
   "palette.group.files": "Datoteke",
-  "palette.group.projects": "Projekti",
 
   "dialog.provider.search.placeholder": "Pretraži provajdere",
   "dialog.provider.empty": "Nema pronađenih provajdera",
