@@ -1,4 +1,4 @@
-import { createEffect, createMemo, For, on, Show, type Accessor, type JSX } from "solid-js"
+import { createEffect, createMemo, For, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { Button } from "@opencode-ai/ui/button"
@@ -115,8 +115,8 @@ const ProjectTile = (props: {
           props.onProjectMouseEnter(props.project.worktree, event)
         }}
         onMouseLeave={() => {
-          if (!props.overlay()) return
           if (props.suppressHover()) props.setSuppressHover(false)
+          if (!props.overlay()) return
           props.onProjectMouseLeave(props.project.worktree)
         }}
         onFocus={() => {
@@ -126,9 +126,7 @@ const ProjectTile = (props: {
         }}
         onClick={() => {
           if (props.selected()) {
-            const closing = layout.sidebar.opened()
-            // If the click is to togle to close we suppress the hover to prevent a flitch of closing then immediate opening based on the hover
-            if (closing) props.setSuppressHover(true) 
+            props.setSuppressHover(true)
             layout.sidebar.toggle()
             return
           }
@@ -314,20 +312,14 @@ export const SortableProject = (props: {
     }),
   )
 
-  createEffect(
-    on(
-      () => props.ctx.sidebarOpened(),
-      (opened, prev) => {
-        if (!opened) return
-        if (prev === undefined) return
-        if (!state.suppressHover) return
-        setState("suppressHover", false)
-      },
-    ),
-  )
-
   createEffect(() => {
     if (preview()) return
+    if (!state.open) return
+    setState("open", false)
+  })
+
+  createEffect(() => {
+    if (!selected()) return
     if (!state.open) return
     setState("open", false)
   })
@@ -380,9 +372,9 @@ export const SortableProject = (props: {
   return (
     // @ts-ignore
     <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
-      <Show when={preview()} fallback={tile()}>
+      <Show when={preview() && !selected()} fallback={tile()}>
         <HoverCard
-          open={state.open && !state.menu}
+          open={!state.suppressHover && state.open && !state.menu}
           openDelay={0}
           closeDelay={0}
           placement="right-start"
@@ -390,6 +382,7 @@ export const SortableProject = (props: {
           trigger={tile()}
           onOpenChange={(value) => {
             if (state.menu) return
+            if (value && state.suppressHover) return
             setState("open", value)
             if (value) props.ctx.setHoverSession(undefined)
           }}
