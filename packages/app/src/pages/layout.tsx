@@ -52,7 +52,6 @@ import { DialogSettings } from "@/components/dialog-settings"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
-import { DialogSelectProject } from "@/components/dialog-select-project"
 import { DialogEditProject } from "@/components/dialog-edit-project"
 import { Titlebar } from "@/components/titlebar"
 import { useServer } from "@/context/server"
@@ -906,16 +905,8 @@ export default function Layout(props: ParentProps) {
         id: "project.open",
         title: language.t("command.project.open"),
         category: language.t("command.category.project"),
-        keybind: "mod+o",
+        keybind: "mod+o,mod+shift+o",
         onSelect: () => chooseProject(),
-      },
-      {
-        id: "project.switch",
-        title: language.t("command.project.switch"),
-        category: language.t("command.category.project"),
-        keybind: "mod+shift+o",
-        disabled: layout.projects.list().length === 0,
-        onSelect: () => dialog.show(() => <DialogSelectProject onSelect={navigateToProject} />),
       },
       {
         id: "provider.connect",

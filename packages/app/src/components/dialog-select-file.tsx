@@ -38,7 +38,6 @@ type DialogSelectFileMode = "all" | "files"
 
 const ENTRY_LIMIT = 5
 const COMMON_COMMAND_IDS = [
-  "project.switch",
   "session.new",
   "workspace.new",
   "session.previous",
