@@ -53,7 +53,7 @@ export const WebFetchTool = Tool.define("webfetch", {
         break
       default:
         acceptHeader =
-          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
+          "text/markdown,text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
     }
     const headers = {
       "User-Agent":
