@@ -1,6 +1,6 @@
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import { createAsync, query, useParams } from "@solidjs/router"
-import { createMemo, For, Show, createEffect, createSignal } from "solid-js"
+import { createMemo, For, Show, Switch, Match, createEffect, createSignal } from "solid-js"
 import { formatDateUTC, formatDateForTable } from "../common"
 import { withActor } from "~/context/auth.withActor"
 import { IconChevronLeft, IconChevronRight, IconBreakdown } from "~/component/icon"
@@ -94,6 +94,7 @@ export function UsageSection() {
                 <th>{i18n.t("workspace.usage.table.input")}</th>
                 <th>{i18n.t("workspace.usage.table.output")}</th>
                 <th>{i18n.t("workspace.usage.table.cost")}</th>
+                <th>{i18n.t("workspace.usage.table.session")}</th>
               </tr>
             </thead>
             <tbody>
@@ -174,15 +175,25 @@ export function UsageSection() {
                         </div>
                       </td>
                       <td data-slot="usage-cost">
-                        <Show
-                          when={usage.enrichment?.plan === "sub"}
-                          fallback={<>${((usage.cost ?? 0) / 100000000).toFixed(4)}</>}
-                        >
-                          {i18n.t("workspace.usage.subscription", {
-                            amount: ((usage.cost ?? 0) / 100000000).toFixed(4),
-                          })}
-                        </Show>
+                        <Switch fallback={<>${((usage.cost ?? 0) / 100000000).toFixed(4)}</>}>
+                          <Match when={usage.enrichment?.plan === "sub"}>
+                            {i18n.t("workspace.usage.subscription", {
+                              amount: ((usage.cost ?? 0) / 100000000).toFixed(4),
+                            })}
+                          </Match>
+                          <Match when={usage.enrichment?.plan === "lite"}>
+                            {i18n.t("workspace.usage.lite", {
+                              amount: ((usage.cost ?? 0) / 100000000).toFixed(4),
+                            })}
+                          </Match>
+                          <Match when={usage.enrichment?.plan === "byok"}>
+                            {i18n.t("workspace.usage.byok", {
+                              amount: ((usage.cost ?? 0) / 100000000).toFixed(4),
+                            })}
+                          </Match>
+                        </Switch>
                       </td>
+                      <td data-slot="usage-session">{usage.sessionID?.slice(-8) ?? "-"}</td>
                     </tr>
                   )
                 }}
