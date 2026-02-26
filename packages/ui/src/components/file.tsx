@@ -20,7 +20,7 @@ import { ComponentProps, createEffect, createMemo, createSignal, onCleanup, onMo
 import { createDefaultOptions, styleVariables } from "../pierre"
 import { markCommentedDiffLines, markCommentedFileLines } from "../pierre/commented-lines"
 import { fixDiffSelection, findDiffSide, type DiffSelectionSide } from "../pierre/diff-selection"
-import { createFileFind } from "../pierre/file-find"
+import { createFileFind, type FileFindReveal } from "../pierre/file-find"
 import {
   applyViewerScheme,
   clearReadyWatcher,
@@ -60,6 +60,23 @@ type SharedProps<T> = {
   class?: string
   classList?: ComponentProps<"div">["classList"]
   media?: FileMediaOptions
+  search?: FileSearchControl
+}
+
+export type FileSearchReveal = FileFindReveal
+
+export type FileSearchHandle = {
+  setQuery: (value: string) => void
+  clear: () => void
+  reveal: (hit: FileSearchReveal) => boolean
+  refresh: () => void
+}
+
+export type FileSearchControl = {
+  shortcuts?: "global" | "disabled"
+  showBar?: boolean
+  disableVirtualization?: boolean
+  register: (handle: FileSearchHandle | null) => void
 }
 
 export type TextFileProps<T = {}> = FileOptions<T> &
@@ -108,6 +125,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
     "annotations",
     "selectedLines",
     "commentedLines",
+    "search",
     "onLineSelected",
     "onLineSelectionEnd",
     "onLineNumberSelectionEnd",
@@ -124,6 +142,33 @@ function TextViewer<T>(props: TextFileProps<T>) {
     wrapper: () => wrapper,
     overlay: () => overlay,
     getRoot,
+    shortcuts: local.search?.shortcuts,
+  })
+
+  createEffect(() => {
+    const search = local.search
+    if (!search) return
+
+    const handle = {
+      setQuery: (value: string) => {
+        find.activate()
+        find.setQuery(value, { scroll: false })
+      },
+      clear: () => {
+        find.clear()
+      },
+      reveal: (hit: FileSearchReveal) => {
+        find.activate()
+        return find.reveal(hit)
+      },
+      refresh: () => {
+        find.activate()
+        find.refresh()
+      },
+    } satisfies FileSearchHandle
+
+    search.register(handle)
+    onCleanup(() => search.register(null))
   })
 
   const bytes = createMemo(() => {
@@ -502,7 +547,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
       onPointerDown={find.onPointerDown}
       onFocus={find.onFocus}
     >
-      <Show when={find.open()}>
+      <Show when={(local.search?.showBar ?? true) && find.open()}>
         <FileSearchBar
           pos={find.pos}
           query={find.query}
@@ -551,6 +596,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     "annotations",
     "selectedLines",
     "commentedLines",
+    "search",
     "onLineSelected",
     "onLineSelectionEnd",
     "onLineNumberSelectionEnd",
@@ -569,6 +615,33 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     wrapper: () => wrapper,
     overlay: () => overlay,
     getRoot,
+    shortcuts: local.search?.shortcuts,
+  })
+
+  createEffect(() => {
+    const search = local.search
+    if (!search) return
+
+    const handle = {
+      setQuery: (value: string) => {
+        find.activate()
+        find.setQuery(value, { scroll: false })
+      },
+      clear: () => {
+        find.clear()
+      },
+      reveal: (hit: FileSearchReveal) => {
+        find.activate()
+        return find.reveal(hit)
+      },
+      refresh: () => {
+        find.activate()
+        find.refresh()
+      },
+    } satisfies FileSearchHandle
+
+    search.register(handle)
+    onCleanup(() => search.register(null))
   })
 
   const large = createMemo(() => {
@@ -820,9 +893,14 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
   createEffect(() => {
     const opts = options()
     const workerPool = large() ? getWorkerPool("unified") : getWorkerPool(props.diffStyle)
-    const virtualizer = getVirtualizer()
+    const virtualizer = local.search?.disableVirtualization ? undefined : getVirtualizer()
     const beforeContents = typeof local.before?.contents === "string" ? local.before.contents : ""
     const afterContents = typeof local.after?.contents === "string" ? local.after.contents : ""
+
+    if (!virtualizer && sharedVirtualizer) {
+      sharedVirtualizer.release()
+      sharedVirtualizer = undefined
+    }
 
     const cacheKey = (contents: string) => {
       if (!large()) return sampledChecksum(contents, contents.length)
@@ -926,7 +1004,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
       onPointerDown={find.onPointerDown}
       onFocus={find.onFocus}
     >
-      <Show when={find.open()}>
+      <Show when={(local.search?.showBar ?? true) && find.open()}>
         <FileSearchBar
           pos={find.pos}
           query={find.query}

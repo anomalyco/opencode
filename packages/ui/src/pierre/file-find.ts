@@ -8,6 +8,20 @@ export type FindHost = {
   isOpen: () => boolean
 }
 
+type FileFindSide = "additions" | "deletions"
+
+export type FileFindReveal = {
+  side: FileFindSide
+  line: number
+  col: number
+  len: number
+}
+
+type FileFindHit = FileFindReveal & {
+  range: Range
+  alt?: number
+}
+
 const hosts = new Set<FindHost>()
 let target: FindHost | undefined
 let current: FindHost | undefined
@@ -98,6 +112,7 @@ type CreateFileFindOptions = {
   wrapper: () => HTMLElement | undefined
   overlay: () => HTMLDivElement | undefined
   getRoot: () => ShadowRoot | undefined
+  shortcuts?: "global" | "disabled"
 }
 
 export function createFileFind(opts: CreateFileFindOptions) {
@@ -105,7 +120,7 @@ export function createFileFind(opts: CreateFileFindOptions) {
   let overlayFrame: number | undefined
   let overlayScroll: HTMLElement[] = []
   let mode: "highlights" | "overlay" = "overlay"
-  let hits: Range[] = []
+  let hits: FileFindHit[] = []
 
   const [open, setOpen] = createSignal(false)
   const [query, setQuery] = createSignal("")
@@ -146,7 +161,7 @@ export function createFileFind(opts: CreateFileFindOptions) {
     const frag = document.createDocumentFragment()
 
     for (let i = 0; i < hits.length; i++) {
-      const range = hits[i]
+      const range = hits[i].range
       const active = i === currentIndex
       for (const rect of Array.from(range.getClientRects())) {
         if (!rect.width || !rect.height) continue
@@ -222,7 +237,7 @@ export function createFileFind(opts: CreateFileFindOptions) {
 
   const scan = (root: ShadowRoot, value: string) => {
     const needle = value.toLowerCase()
-    const ranges: Range[] = []
+    const ranges: FileFindHit[] = []
     const cols = Array.from(root.querySelectorAll("[data-content] [data-line], [data-column-content]")).filter(
       (node): node is HTMLElement => node instanceof HTMLElement,
     )
@@ -234,6 +249,28 @@ export function createFileFind(opts: CreateFileFindOptions) {
       const hay = text.toLowerCase()
       let at = hay.indexOf(needle)
       if (at === -1) continue
+
+      const row = col.closest("[data-line], [data-alt-line]")
+      if (!(row instanceof HTMLElement)) continue
+
+      const primary = parseInt(row.dataset.line ?? "", 10)
+      const alt = parseInt(row.dataset.altLine ?? "", 10)
+      const line = (() => {
+        if (!Number.isNaN(primary)) return primary
+        if (!Number.isNaN(alt)) return alt
+      })()
+      if (line === undefined) continue
+
+      const side = (() => {
+        const code = col.closest("[data-code]")
+        if (code instanceof HTMLElement) return code.hasAttribute("data-deletions") ? "deletions" : "additions"
+
+        const row = col.closest("[data-line-type]")
+        if (!(row instanceof HTMLElement)) return "additions"
+        const type = row.dataset.lineType
+        if (type === "change-deletion") return "deletions"
+        return "additions"
+      })() as FileFindSide
 
       const nodes: Text[] = []
       const ends: number[] = []
@@ -268,7 +305,14 @@ export function createFileFind(opts: CreateFileFindOptions) {
         const range = document.createRange()
         range.setStart(start.node, start.offset)
         range.setEnd(end.node, end.offset)
-        ranges.push(range)
+        ranges.push({
+          range,
+          side,
+          line,
+          alt: Number.isNaN(alt) ? undefined : alt,
+          col: at + 1,
+          len: value.length,
+        })
         at = hay.indexOf(needle, at + value.length)
       }
     }
@@ -277,12 +321,17 @@ export function createFileFind(opts: CreateFileFindOptions) {
   }
 
   const scrollToRange = (range: Range) => {
-    const start = range.startContainer
-    const el = start instanceof Element ? start : start.parentElement
-    el?.scrollIntoView({ block: "center", inline: "center" })
+    const scroll = () => {
+      const start = range.startContainer
+      const el = start instanceof Element ? start : start.parentElement
+      el?.scrollIntoView({ block: "center", inline: "center" })
+    }
+
+    scroll()
+    requestAnimationFrame(scroll)
   }
 
-  const setHighlights = (ranges: Range[], currentIndex: number) => {
+  const setHighlights = (ranges: FileFindHit[], currentIndex: number) => {
     const api = (globalThis as unknown as { CSS?: { highlights?: any }; Highlight?: any }).CSS?.highlights
     const Highlight = (globalThis as unknown as { Highlight?: any }).Highlight
     if (!api || typeof Highlight !== "function") return false
@@ -290,11 +339,34 @@ export function createFileFind(opts: CreateFileFindOptions) {
     api.delete("opencode-find")
     api.delete("opencode-find-current")
 
-    const active = ranges[currentIndex]
+    const active = ranges[currentIndex]?.range
     if (active) api.set("opencode-find-current", new Highlight(active))
 
-    const rest = ranges.filter((_, i) => i !== currentIndex)
+    const rest = ranges.flatMap((hit, i) => (i === currentIndex ? [] : [hit.range]))
     if (rest.length > 0) api.set("opencode-find", new Highlight(...rest))
+    return true
+  }
+
+  const select = (currentIndex: number, scroll: boolean) => {
+    const active = hits[currentIndex]?.range
+    if (!active) return false
+
+    setIndex(currentIndex)
+
+    if (mode === "highlights") {
+      if (!setHighlights(hits, currentIndex)) {
+        mode = "overlay"
+        apply({ reset: true, scroll })
+        return false
+      }
+      if (scroll) scrollToRange(active)
+      return true
+    }
+
+    clearHighlightFind()
+    syncOverlayScroll()
+    if (scroll) scrollToRange(active)
+    scheduleOverlay()
     return true
   }
 
@@ -321,7 +393,7 @@ export function createFileFind(opts: CreateFileFindOptions) {
     setCount(total)
     setIndex(currentIndex)
 
-    const active = ranges[currentIndex]
+    const active = ranges[currentIndex]?.range
     if (mode === "highlights") {
       clearOverlay()
       clearOverlayScroll()
@@ -343,8 +415,24 @@ export function createFileFind(opts: CreateFileFindOptions) {
 
   const close = () => {
     setOpen(false)
+    setQuery("")
     clearFind()
     if (current === host) current = undefined
+  }
+
+  const clear = () => {
+    setQuery("")
+    clearFind()
+  }
+
+  const activate = () => {
+    if (opts.shortcuts !== "disabled") {
+      if (current && current !== host) current.close()
+      current = host
+      target = host
+    }
+
+    if (!open()) setOpen(true)
   }
 
   const next = (dir: 1 | -1) => {
@@ -353,25 +441,30 @@ export function createFileFind(opts: CreateFileFindOptions) {
     if (total <= 0) return
 
     const currentIndex = (index() + dir + total) % total
-    setIndex(currentIndex)
+    select(currentIndex, true)
+  }
 
-    const active = hits[currentIndex]
-    if (!active) return
+  const reveal = (targetHit: FileFindReveal) => {
+    if (!open()) return false
+    if (hits.length === 0) return false
 
-    if (mode === "highlights") {
-      if (!setHighlights(hits, currentIndex)) {
-        mode = "overlay"
-        apply({ reset: true, scroll: true })
-        return
-      }
-      scrollToRange(active)
-      return
-    }
+    const exact = hits.findIndex(
+      (hit) =>
+        hit.side === targetHit.side &&
+        hit.line === targetHit.line &&
+        hit.col === targetHit.col &&
+        hit.len === targetHit.len,
+    )
+    const fallback = hits.findIndex(
+      (hit) =>
+        (hit.line === targetHit.line || hit.alt === targetHit.line) &&
+        hit.col === targetHit.col &&
+        hit.len === targetHit.len,
+    )
 
-    clearHighlightFind()
-    syncOverlayScroll()
-    scrollToRange(active)
-    scheduleOverlay()
+    const nextIndex = exact >= 0 ? exact : fallback
+    if (nextIndex < 0) return false
+    return select(nextIndex, true)
   }
 
   const host: FindHost = {
@@ -379,10 +472,7 @@ export function createFileFind(opts: CreateFileFindOptions) {
     isOpen: () => open(),
     next,
     open: () => {
-      if (current && current !== host) current.close()
-      current = host
-      target = host
-      if (!open()) setOpen(true)
+      activate()
       requestAnimationFrame(() => {
         apply({ scroll: true })
         input?.focus()
@@ -394,17 +484,21 @@ export function createFileFind(opts: CreateFileFindOptions) {
 
   onMount(() => {
     mode = supportsHighlights() ? "highlights" : "overlay"
-    installShortcuts()
-    hosts.add(host)
-    if (!target) target = host
+    if (opts.shortcuts !== "disabled") {
+      installShortcuts()
+      hosts.add(host)
+      if (!target) target = host
+    }
 
     onCleanup(() => {
-      hosts.delete(host)
-      if (current === host) {
-        current = undefined
-        clearHighlightFind()
+      if (opts.shortcuts !== "disabled") {
+        hosts.delete(host)
+        if (current === host) {
+          current = undefined
+          clearHighlightFind()
+        }
+        if (target === host) target = undefined
       }
-      if (target === host) target = undefined
     })
   })
 
@@ -445,19 +539,24 @@ export function createFileFind(opts: CreateFileFindOptions) {
     setInput: (el: HTMLInputElement) => {
       input = el
     },
-    setQuery: (value: string) => {
+    setQuery: (value: string, args?: { scroll?: boolean }) => {
       setQuery(value)
       setIndex(0)
-      apply({ reset: true, scroll: true })
+      apply({ reset: true, scroll: args?.scroll ?? true })
     },
+    clear,
+    activate,
     close,
     next,
+    reveal,
     refresh: (args?: { reset?: boolean; scroll?: boolean }) => apply(args),
     onPointerDown: () => {
+      if (opts.shortcuts === "disabled") return
       target = host
       opts.wrapper()?.focus({ preventScroll: true })
     },
     onFocus: () => {
+      if (opts.shortcuts === "disabled") return
       target = host
     },
     onInputKeyDown: (event: KeyboardEvent) => {
