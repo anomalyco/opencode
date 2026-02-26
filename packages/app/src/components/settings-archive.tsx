@@ -7,6 +7,7 @@ import { useParams } from "@solidjs/router"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
+import { useLayout } from "@/context/layout"
 import { getRelativeTime } from "@/utils/time"
 import { decode64 } from "@/utils/base64"
 import type { Session } from "@opencode-ai/sdk/v2/client"
@@ -25,10 +26,12 @@ export const SettingsArchive: Component = () => {
   const language = useLanguage()
   const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
+  const layout = useLayout()
   const params = useParams()
   const [removedIds, setRemovedIds] = createSignal<Set<string>>(new Set())
 
   const projects = createMemo(() => globalSync.data.project)
+  const layoutProjects = createMemo(() => layout.projects.list())
   const hasMultipleProjects = createMemo(() => projects().length > 1)
   const homedir = createMemo(() => globalSync.data.path.home)
 
@@ -40,14 +43,14 @@ export const SettingsArchive: Component = () => {
   const currentProject = createMemo(() => {
     const dir = currentDirectory()
     if (!dir) return null
-    return projects().find((p) => p.worktree === dir || p.sandboxes?.includes(dir)) ?? null
+    return layoutProjects().find((p) => p.worktree === dir || p.sandboxes?.includes(dir)) ?? null
   })
 
   const filteredProjects = createMemo(() => {
     if (filterScope() === "current" && currentProject()) {
       return [currentProject()!]
     }
-    return projects()
+    return layoutProjects()
   })
 
   const getSessionLabel = (session: Session) => {
@@ -147,7 +150,7 @@ export const SettingsArchive: Component = () => {
               </div>
             }
           >
-            <div class="min-h-[200px] flex flex-col gap-2">
+            <div class="min-h-[700px] flex flex-col gap-2">
               <For each={displayedSessions()}>
                 {(session) => (
                   <div class="flex items-center justify-between gap-4 px-3 py-1 rounded-md hover:bg-surface-raised-base-hover">
