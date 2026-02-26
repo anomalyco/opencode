@@ -99,6 +99,7 @@
     align-items: center;
     justify-content: space-between;
     width: 100%;
+    min-width: 0;
     gap: 20px;
   }
 
@@ -115,9 +116,12 @@
     align-items: center;
     flex-grow: 1;
     min-width: 0;
+    overflow: hidden;
   }
 
   [data-slot="session-review-directory"] {
+    flex: 1 1 auto;
+    min-width: 0;
     color: var(--text-base);
     text-overflow: ellipsis;
     overflow: hidden;
@@ -129,6 +133,11 @@
   [data-slot="session-review-filename"] {
     color: var(--text-strong);
     flex-shrink: 0;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   [data-slot="session-review-view-button"] {
@@ -163,6 +172,7 @@
     gap: 16px;
     align-items: center;
     justify-content: flex-end;
+    margin-left: auto;
   }
 
   [data-slot="session-review-diff-chevron"] {

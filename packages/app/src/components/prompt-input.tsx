@@ -1048,6 +1048,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const variants = createMemo(() => ["default", ...local.model.variant.list()])
+  const accepting = createMemo(() => {
+    const id = params.id
+    if (!id) return false
+    return permission.isAutoAccepting(id, sdk.directory)
+  })
 
   return (
     <div class="relative size-full _max-h-[320px] flex flex-col gap-0">
@@ -1233,7 +1238,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <TooltipKeybind
                   placement="top"
                   gutter={8}
-                  title={language.t("command.permissions.autoaccept.enable")}
+                  title={language.t(
+                    accepting() ? "command.permissions.autoaccept.disable" : "command.permissions.autoaccept.enable",
+                  )}
                   keybind={command.keybind("permissions.autoaccept")}
                 >
                   <Button
@@ -1242,20 +1249,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     onClick={() => permission.toggleAutoAccept(params.id!, sdk.directory)}
                     classList={{
                       "_hidden group-hover/prompt-input:flex size-6 items-center justify-center": true,
-                      "text-text-base": !permission.isAutoAccepting(params.id!, sdk.directory),
-                      "hover:bg-surface-success-base": permission.isAutoAccepting(params.id!, sdk.directory),
+                      "text-text-base": !accepting(),
+                      "hover:bg-surface-success-base": accepting(),
                     }}
                     aria-label={
-                      permission.isAutoAccepting(params.id!, sdk.directory)
+                      accepting()
                         ? language.t("command.permissions.autoaccept.disable")
                         : language.t("command.permissions.autoaccept.enable")
                     }
-                    aria-pressed={permission.isAutoAccepting(params.id!, sdk.directory)}
+                    aria-pressed={accepting()}
                   >
                     <Icon
                       name="chevron-double-right"
                       size="small"
-                      classList={{ "text-icon-success-base": permission.isAutoAccepting(params.id!, sdk.directory) }}
+                      classList={{ "text-icon-success-base": accepting() }}
                     />
                   </Button>
                 </TooltipKeybind>
