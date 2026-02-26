@@ -384,9 +384,10 @@ export namespace File {
         result.files.push(file)
         let current = file
         while (true) {
-          const dir = path.dirname(current)
+          let dir = path.dirname(current)
           if (dir === ".") break
           if (dir === current) break
+          if (process.platform === "win32") dir = dir.replaceAll("\\", "/")
           current = dir
           if (set.has(dir)) continue
           set.add(dir)
