@@ -391,38 +391,52 @@ function stripEquationNumbers(math: string): string {
     .replace(/\\end\{(align|equation|gather|eqnarray)\}/g, "\\end{$1*}")
 }
 
+function stripMathHtml(text: string): string {
+  return text
+    .replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .trim()
+}
+
 function renderMathInText(text: string): string {
+  const render = (math: string, displayMode: boolean, fallback: string) => {
+    try {
+      return katex.renderToString(
+        displayMode ? stripEquationNumbers(unescapeHtmlEntities(math)) : unescapeHtmlEntities(math),
+        {
+          displayMode,
+          throwOnError: false,
+        },
+      )
+    } catch {
+      return fallback
+    }
+  }
+
   let result = text
 
   // Display math: <span data-math-style="display">...</span> (from comrak math_dollars)
-  result = result.replace(
-    /<span data-math-style="display">([\s\S]*?)<\/span>/g,
-    (_, math) => {
-      try {
-        return katex.renderToString(stripEquationNumbers(unescapeHtmlEntities(math)), {
-          displayMode: true,
-          throwOnError: false,
-        })
-      } catch {
-        return `$$${math}$$`
-      }
-    },
+  result = result.replace(/<span data-math-style="display">([\s\S]*?)<\/span>/g, (_, math) =>
+    render(math, true, `$$${math}$$`),
   )
 
   // Inline math: <span data-math-style="inline">...</span> (from comrak math_dollars)
-  result = result.replace(
-    /<span data-math-style="inline">([\s\S]*?)<\/span>/g,
-    (_, math) => {
-      try {
-        return katex.renderToString(unescapeHtmlEntities(math), {
-          displayMode: false,
-          throwOnError: false,
-        })
-      } catch {
-        return `$${math}$`
-      }
-    },
+  result = result.replace(/<span data-math-style="inline">([\s\S]*?)<\/span>/g, (_, math) =>
+    render(math, false, `$${math}$`),
   )
+
+  // Fallback for native parsers that keep raw display delimiters.
+  // Allow matches across parser-inserted tags, then strip tags from math payload.
+  result = result.replace(/\$\$([\s\S]*?)\$\$/g, (_, math) => {
+    const clean = stripMathHtml(math)
+    if (!clean) return `$$${math}$$`
+    return render(clean, true, `$$${math}$$`)
+  })
+  result = result.replace(/\\\[([\s\S]*?)\\\]/g, (_, math) => {
+    const clean = stripMathHtml(math)
+    if (!clean) return `\\[${math}\\]`
+    return render(clean, true, `\\[${math}\\]`)
+  })
 
   return result
 }
