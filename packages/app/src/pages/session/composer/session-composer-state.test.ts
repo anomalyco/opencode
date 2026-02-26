@@ -1,83 +1,54 @@
 import { describe, expect, test } from "bun:test"
-import type { PermissionRequest, QuestionRequest, Session } from "@opencode-ai/sdk/v2/client"
-import { sessionPermissionRequest, sessionQuestionRequest } from "./session-request-tree"
+import type { Message, Part, QuestionRequest } from "@opencode-ai/sdk/v2"
+import { resolveQuestionKind, resolveSessionMode } from "./session-mode"
 
-const session = (input: { id: string; parentID?: string }) =>
-  ({
-    id: input.id,
-    parentID: input.parentID,
-  }) as Session
-
-const permission = (id: string, sessionID: string) =>
-  ({
-    id,
-    sessionID,
-  }) as PermissionRequest
-
-const question = (id: string, sessionID: string) =>
-  ({
-    id,
-    sessionID,
-    questions: [],
-  }) as QuestionRequest
-
-describe("sessionPermissionRequest", () => {
-  test("prefers the current session permission", () => {
-    const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" })]
-    const permissions = {
-      root: [permission("perm-root", "root")],
-      child: [permission("perm-child", "child")],
-    }
-
-    expect(sessionPermissionRequest(sessions, permissions, "root")?.id).toBe("perm-root")
+describe("resolveSessionMode", () => {
+  test("defaults to build without messages", () => {
+    expect(resolveSessionMode(undefined)).toBe("build")
   })
 
-  test("returns a nested child permission", () => {
-    const sessions = [
-      session({ id: "root" }),
-      session({ id: "child", parentID: "root" }),
-      session({ id: "grand", parentID: "child" }),
-      session({ id: "other" }),
-    ]
-    const permissions = {
-      grand: [permission("perm-grand", "grand")],
-      other: [permission("perm-other", "other")],
-    }
-
-    expect(sessionPermissionRequest(sessions, permissions, "root")?.id).toBe("perm-grand")
+  test("uses latest user agent mode", () => {
+    const messages = [
+      { role: "user", agent: "build" },
+      { role: "assistant" },
+      { role: "user", agent: "plan" },
+    ] as Message[]
+    expect(resolveSessionMode(messages)).toBe("plan")
   })
 
-  test("returns undefined without a matching tree permission", () => {
-    const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" })]
-    const permissions = {
-      other: [permission("perm-other", "other")],
-    }
-
-    expect(sessionPermissionRequest(sessions, permissions, "root")).toBeUndefined()
+  test("ignores non-build non-plan user agents", () => {
+    const messages = [{ role: "user", agent: "custom" }, { role: "assistant" }] as Message[]
+    expect(resolveSessionMode(messages)).toBe("build")
   })
 })
 
-describe("sessionQuestionRequest", () => {
-  test("prefers the current session question", () => {
-    const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" })]
-    const questions = {
-      root: [question("q-root", "root")],
-      child: [question("q-child", "child")],
-    }
+describe("resolveQuestionKind", () => {
+  const request = {
+    id: "req_1",
+    sessionID: "ses_1",
+    questions: [],
+    tool: {
+      messageID: "msg_1",
+      callID: "call_1",
+    },
+  } as QuestionRequest
 
-    expect(sessionQuestionRequest(sessions, questions, "root")?.id).toBe("q-root")
+  test("returns generic when question has no tool ref", () => {
+    expect(resolveQuestionKind({ request: { ...request, tool: undefined }, parts: [] })).toBe("generic")
   })
 
-  test("returns a nested child question", () => {
-    const sessions = [
-      session({ id: "root" }),
-      session({ id: "child", parentID: "root" }),
-      session({ id: "grand", parentID: "child" }),
-    ]
-    const questions = {
-      grand: [question("q-grand", "grand")],
-    }
+  test("detects plan_enter from matching tool part", () => {
+    const parts = [{ type: "tool", callID: "call_1", tool: "plan_enter" }] as Part[]
+    expect(resolveQuestionKind({ request, parts })).toBe("plan_enter")
+  })
 
-    expect(sessionQuestionRequest(sessions, questions, "root")?.id).toBe("q-grand")
+  test("detects plan_exit from matching tool part", () => {
+    const parts = [{ type: "tool", callID: "call_1", tool: "plan_exit" }] as Part[]
+    expect(resolveQuestionKind({ request, parts })).toBe("plan_exit")
+  })
+
+  test("returns generic on missing or mismatched part", () => {
+    const parts = [{ type: "tool", callID: "call_2", tool: "plan_exit" }] as Part[]
+    expect(resolveQuestionKind({ request, parts })).toBe("generic")
   })
 })

@@ -76,6 +76,8 @@ export const dict = {
   "ui.tool.todos": "รายการงาน",
   "ui.tool.todos.read": "อ่านรายการงาน",
   "ui.tool.questions": "คำถาม",
+  "ui.tool.planEnter": "เข้าสู่โหมดวางแผน",
+  "ui.tool.planExit": "ออกจากโหมดวางแผน",
   "ui.tool.agent": "เอเจนต์ {{type}}",
 
   "ui.common.file.one": "ไฟล์",

@@ -79,6 +79,8 @@ export const dict = {
   "ui.tool.todos": "Lista zadataka",
   "ui.tool.todos.read": "Čitanje liste zadataka",
   "ui.tool.questions": "Pitanja",
+  "ui.tool.planEnter": "Uđi u način planiranja",
+  "ui.tool.planExit": "Izađi iz načina planiranja",
   "ui.tool.agent": "{{type}} agent",
 
   "ui.common.file.one": "datoteka",

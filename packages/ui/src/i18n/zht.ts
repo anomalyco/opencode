@@ -79,6 +79,8 @@ export const dict = {
   "ui.tool.todos": "待辦",
   "ui.tool.todos.read": "讀取待辦",
   "ui.tool.questions": "問題",
+  "ui.tool.planEnter": "進入計畫模式",
+  "ui.tool.planExit": "離開計畫模式",
   "ui.tool.agent": "{{type}} 代理程式",
 
   "ui.common.file.one": "個檔案",

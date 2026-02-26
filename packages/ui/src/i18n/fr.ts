@@ -75,6 +75,8 @@ export const dict = {
   "ui.tool.todos": "Tâches",
   "ui.tool.todos.read": "Lire les tâches",
   "ui.tool.questions": "Questions",
+  "ui.tool.planEnter": "Entrer en mode plan",
+  "ui.tool.planExit": "Quitter le mode plan",
   "ui.tool.agent": "Agent {{type}}",
 
   "ui.common.file.one": "fichier",

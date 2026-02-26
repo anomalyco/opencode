@@ -7,20 +7,15 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import { sessionPermissionRequest, sessionQuestionRequest } from "./session-request-tree"
+import { type SessionMode, type SessionQuestionKind, resolveQuestionKind, resolveSessionMode } from "./session-mode"
 
 export function createSessionComposerBlocked() {
   const params = useParams()
   const sync = useSync()
-  const permissionRequest = createMemo(() =>
-    sessionPermissionRequest(sync.data.session, sync.data.permission, params.id),
-  )
-  const questionRequest = createMemo(() => sessionQuestionRequest(sync.data.session, sync.data.question, params.id))
-
   return createMemo(() => {
     const id = params.id
     if (!id) return false
-    return !!permissionRequest() || !!questionRequest()
+    return !!sync.data.permission[id]?.[0] || !!sync.data.question[id]?.[0]
   })
 }
 
@@ -32,23 +27,38 @@ export function createSessionComposerState() {
   const language = useLanguage()
 
   const questionRequest = createMemo((): QuestionRequest | undefined => {
-    return sessionQuestionRequest(sync.data.session, sync.data.question, params.id)
+    const id = params.id
+    if (!id) return
+    return sync.data.question[id]?.[0]
   })
 
   const permissionRequest = createMemo((): PermissionRequest | undefined => {
-    return sessionPermissionRequest(sync.data.session, sync.data.permission, params.id)
+    const id = params.id
+    if (!id) return
+    return sync.data.permission[id]?.[0]
   })
 
-  const blocked = createMemo(() => {
-    const id = params.id
-    if (!id) return false
-    return !!permissionRequest() || !!questionRequest()
-  })
+  const blocked = createSessionComposerBlocked()
 
   const todos = createMemo((): Todo[] => {
     const id = params.id
     if (!id) return []
     return globalSync.data.session_todo[id] ?? []
+  })
+
+  const activeMode = createMemo((): SessionMode => {
+    const id = params.id
+    if (!id) return "build"
+    return resolveSessionMode(sync.data.message[id])
+  })
+
+  const questionKind = createMemo((): SessionQuestionKind => {
+    const request = questionRequest()
+    if (!request?.tool) return "generic"
+    return resolveQuestionKind({
+      request,
+      parts: sync.data.part[request.tool.messageID],
+    })
   })
 
   const [store, setStore] = createStore({
@@ -155,6 +165,8 @@ export function createSessionComposerState() {
     permissionResponding,
     decide,
     todos,
+    activeMode,
+    questionKind,
     dock: () => store.dock,
     closing: () => store.closing,
     opening: () => store.opening,

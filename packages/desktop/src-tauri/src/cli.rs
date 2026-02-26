@@ -382,6 +382,10 @@ pub fn spawn_command(
             "OPENCODE_EXPERIMENTAL_FILEWATCHER".to_string(),
             "true".to_string(),
         ),
+        (
+            "OPENCODE_EXPERIMENTAL_PLAN_MODE".to_string(),
+            "true".to_string(),
+        ),
         ("OPENCODE_CLIENT".to_string(), "desktop".to_string()),
         (
             "XDG_STATE_HOME".to_string(),
@@ -412,6 +416,7 @@ pub fn spawn_command(
             let mut env_prefix = vec![
                 "OPENCODE_EXPERIMENTAL_ICON_DISCOVERY=true".to_string(),
                 "OPENCODE_EXPERIMENTAL_FILEWATCHER=true".to_string(),
+                "OPENCODE_EXPERIMENTAL_PLAN_MODE=true".to_string(),
                 "OPENCODE_CLIENT=desktop".to_string(),
                 "XDG_STATE_HOME=\"$HOME/.local/state\"".to_string(),
             ];
@@ -419,6 +424,7 @@ pub fn spawn_command(
                 envs.iter()
                     .filter(|(key, _)| key != "OPENCODE_EXPERIMENTAL_ICON_DISCOVERY")
                     .filter(|(key, _)| key != "OPENCODE_EXPERIMENTAL_FILEWATCHER")
+                    .filter(|(key, _)| key != "OPENCODE_EXPERIMENTAL_PLAN_MODE")
                     .filter(|(key, _)| key != "OPENCODE_CLIENT")
                     .filter(|(key, _)| key != "XDG_STATE_HOME")
                     .map(|(key, value)| format!("{}={}", key, shell_escape(value))),

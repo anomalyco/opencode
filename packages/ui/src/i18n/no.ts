@@ -78,6 +78,8 @@ export const dict: Record<Keys, string> = {
   "ui.tool.todos": "Gjøremål",
   "ui.tool.todos.read": "Les gjøremål",
   "ui.tool.questions": "Spørsmål",
+  "ui.tool.planEnter": "Gå til planmodus",
+  "ui.tool.planExit": "Avslutt planmodus",
   "ui.tool.agent": "{{type}}-agent",
 
   "ui.common.file.one": "fil",

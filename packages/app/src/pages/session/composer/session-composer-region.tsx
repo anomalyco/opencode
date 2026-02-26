@@ -25,6 +25,11 @@ export function SessionComposerRegion(props: {
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const handoffPrompt = createMemo(() => getSessionHandoff(sessionKey())?.prompt)
+  const activeDock = createMemo(() => {
+    if (props.state.questionRequest()) return "question"
+    if (props.state.permissionRequest()) return "permission"
+    return "none"
+  })
 
   const previewPrompt = () =>
     prompt
@@ -55,15 +60,19 @@ export function SessionComposerRegion(props: {
           "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
         }}
       >
-        <Show when={props.state.questionRequest()} keyed>
+        <Show when={activeDock() === "question" && props.state.questionRequest()} keyed>
           {(request) => (
             <div>
-              <SessionQuestionDock request={request} onSubmit={props.onResponseSubmit} />
+              <SessionQuestionDock
+                request={request}
+                kind={props.state.questionKind()}
+                onSubmit={props.onResponseSubmit}
+              />
             </div>
           )}
         </Show>
 
-        <Show when={props.state.permissionRequest()} keyed>
+        <Show when={activeDock() === "permission" && props.state.permissionRequest()} keyed>
           {(request) => (
             <div>
               <SessionPermissionDock
@@ -78,7 +87,7 @@ export function SessionComposerRegion(props: {
           )}
         </Show>
 
-        <Show when={!props.state.blocked()}>
+        <Show when={activeDock() === "none"}>
           <Show
             when={prompt.ready()}
             fallback={

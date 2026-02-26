@@ -74,6 +74,8 @@ export const dict = {
   "ui.tool.todos": "Todo",
   "ui.tool.todos.read": "Todo読み込み",
   "ui.tool.questions": "質問",
+  "ui.tool.planEnter": "計画モードに入る",
+  "ui.tool.planExit": "計画モードを終了",
   "ui.tool.agent": "{{type}}エージェント",
 
   "ui.common.file.one": "ファイル",

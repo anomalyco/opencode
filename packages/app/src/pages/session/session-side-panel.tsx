@@ -26,6 +26,7 @@ import { FileTabContent } from "@/pages/session/file-tabs"
 import { createOpenSessionFileTab, getTabReorderIndex } from "@/pages/session/helpers"
 import { StickyAddButton } from "@/pages/session/review-tab"
 import { setSessionHandoff } from "@/pages/session/handoff"
+import { resolveSessionMode } from "@/pages/session/composer/session-mode"
 
 export function SessionSidePanel(props: {
   reviewPanel: () => JSX.Element
@@ -51,16 +52,41 @@ export function SessionSidePanel(props: {
 
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
-  const reviewCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
+  const activeMode = createMemo(() => {
+    if (!params.id) return "build"
+    return resolveSessionMode(sync.data.message[params.id])
+  })
+  const planFile = createMemo(() => {
+    if (activeMode() !== "plan") return
+    if (!sync.project?.vcs) return
+    const session = info()
+    const created = session?.time?.created
+    const slug = session?.slug
+    if (!created || !slug) return
+    return `.opencode/plans/${created}-${slug}.md`
+  })
+  const reviewCount = createMemo(() => {
+    const count = Math.max(info()?.summary?.files ?? 0, diffs().length)
+    const currentPlan = planFile()
+    if (!currentPlan) return count
+    if (diffs().some((diff) => diff.file === currentPlan)) return count
+    return count + 1
+  })
   const hasReview = createMemo(() => reviewCount() > 0)
   const diffsReady = createMemo(() => {
     const id = params.id
     if (!id) return true
     if (!hasReview()) return true
+    if (planFile()) return true
     return sync.data.session_diff[id] !== undefined
   })
 
-  const diffFiles = createMemo(() => diffs().map((d) => d.file))
+  const diffFiles = createMemo(() => {
+    const files = diffs().map((d) => d.file)
+    const currentPlan = planFile()
+    if (!currentPlan || files.includes(currentPlan)) return files
+    return [currentPlan, ...files]
+  })
   const kinds = createMemo(() => {
     const merge = (a: "add" | "del" | "mix" | undefined, b: "add" | "del" | "mix") => {
       if (!a) return b
@@ -362,7 +388,13 @@ export function SessionSidePanel(props: {
                           kinds={kinds()}
                           draggable={false}
                           active={props.activeDiff}
-                          onFileClick={(node) => props.focusReviewDiff(node.path)}
+                          onFileClick={(node) => {
+                            if (node.path === planFile()) {
+                              openTab(file.tab(node.path))
+                              return
+                            }
+                            props.focusReviewDiff(node.path)
+                          }}
                         />
                       </Show>
                     </Match>
