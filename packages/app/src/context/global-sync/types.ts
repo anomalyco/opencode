@@ -46,6 +46,9 @@ export type State = {
   session_status: {
     [sessionID: string]: SessionStatus
   }
+  steer_queue: {
+    [sessionID: string]: { id: string; text: string; time: number; mode: "queue" | "steer" }[]
+  }
   session_diff: {
     [sessionID: string]: FileDiff[]
   }

@@ -52,7 +52,8 @@ function cleanupSessionCaches(
     store.todo[sessionID] !== undefined ||
     store.permission[sessionID] !== undefined ||
     store.question[sessionID] !== undefined ||
-    store.session_status[sessionID] !== undefined
+    store.session_status[sessionID] !== undefined ||
+    store.steer_queue[sessionID] !== undefined
   setSessionTodo?.(sessionID, undefined)
   if (!hasAny) return
   setStore(
@@ -71,6 +72,7 @@ function cleanupSessionCaches(
       delete draft.permission[sessionID]
       delete draft.question[sessionID]
       delete draft.session_status[sessionID]
+      delete draft.steer_queue[sessionID]
     }),
   )
 }
@@ -162,6 +164,11 @@ export function applyDirectoryEvent(input: {
     case "session.status": {
       const props = event.properties as { sessionID: string; status: SessionStatus }
       input.setStore("session_status", props.sessionID, reconcile(props.status))
+      break
+    }
+    case "session.queue.changed": {
+      const props = event.properties as { sessionID: string; queue: { id: string; text: string; time: number; mode: "queue" | "steer" }[] }
+      input.setStore("steer_queue", props.sessionID, reconcile(props.queue, { key: "id" }))
       break
     }
     case "message.updated": {

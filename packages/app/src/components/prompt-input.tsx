@@ -1,6 +1,6 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { showToast } from "@opencode-ai/ui/toast"
-import { createEffect, on, Component, Show, onCleanup, Switch, Match, createMemo, createSignal } from "solid-js"
+import { createEffect, on, Component, Show, For, onCleanup, Switch, Match, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
@@ -215,6 +215,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       },
   )
   const working = createMemo(() => status()?.type !== "idle")
+  const steerQueue = createMemo(() => sync.data.steer_queue[params.id ?? ""] ?? [])
   const imageAttachments = createMemo(() =>
     prompt.current().filter((part): part is ImageAttachmentPart => part.type === "image"),
   )
@@ -987,9 +988,37 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
     }
 
-    // Handle Shift+Enter BEFORE IME check - Shift+Enter is never used for IME input
-    // and should always insert a newline regardless of composition state
+    // Handle Shift+Enter: when working with text, send as "steer" (inject mid-turn)
     if (event.key === "Enter" && event.shiftKey) {
+      if (working() && params.id && store.mode === "normal") {
+        const text = prompt
+          .current()
+          .map((p) => ("content" in p ? p.content : ""))
+          .join("")
+          .trim()
+        if (text.length > 0) {
+          event.preventDefault()
+          const sessionID = params.id
+          fetch(`${sdk.url}/session/${sessionID}/steer`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text, mode: "steer" }),
+          }).catch(() => {
+            showToast({
+              title: "Failed to steer",
+              description: "Could not inject message into current turn",
+            })
+          })
+          prompt.reset()
+          clearEditor()
+          showToast({
+            title: "Steering",
+            description: "Will be injected at the next step of the current turn",
+          })
+          return
+        }
+      }
+      // Default: insert newline when not working
       addPart({ type: "text", content: "\n", start: 0, end: 0 })
       event.preventDefault()
       return
@@ -1056,6 +1085,38 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     // Note: Shift+Enter is handled earlier, before IME check
     if (event.key === "Enter" && !event.shiftKey) {
+      // When busy: Enter queues a steer message instead of normal submit
+      if (working() && params.id && store.mode === "normal") {
+        const text = prompt
+          .current()
+          .map((p) => ("content" in p ? p.content : ""))
+          .join("")
+          .trim()
+        if (text.length > 0) {
+          event.preventDefault()
+          const sessionID = params.id
+          fetch(`${sdk.url}/session/${sessionID}/steer`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text }),
+          }).catch(() => {
+            showToast({
+              title: "Failed to queue message",
+              description: "Could not steer the session",
+            })
+          })
+          prompt.reset()
+          clearEditor()
+          showToast({
+            title: "Message queued",
+            description: "Will be injected when the model finishes its current step",
+          })
+          return
+        }
+        // Empty text while working → abort
+        abort()
+        return
+      }
       handleSubmit(event)
     }
   }
@@ -1113,6 +1174,35 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           onRemove={removeImageAttachment}
           removeLabel={language.t("prompt.attachment.remove")}
         />
+        <Show when={steerQueue().length > 0}>
+          <div class="flex flex-col gap-1 px-3 pt-2 pb-1">
+            <div class="flex items-center gap-1.5 text-11-medium text-text-weak uppercase tracking-wide">
+              <Icon name="bullet-list" size="small" class="size-3" />
+              <span>Queued ({steerQueue().length})</span>
+            </div>
+            <For each={steerQueue()}>
+              {(item) => (
+                <div class="flex items-center gap-1.5 group/steer">
+                  <span class="text-13-regular text-text-base truncate flex-1">{item.text}</span>
+                  <button
+                    type="button"
+                    class="size-4 shrink-0 flex items-center justify-center opacity-0 group-hover/steer:opacity-100 transition-opacity text-icon-weak hover:text-icon-strong-base"
+                    onClick={() => {
+                      const sessionID = params.id
+                      if (!sessionID) return
+                      fetch(`${sdk.url}/session/${sessionID}/steer/${item.id}`, {
+                        method: "DELETE",
+                      }).catch(() => {})
+                    }}
+                    aria-label="Remove queued message"
+                  >
+                    <Icon name="close" size="small" class="size-3" />
+                  </button>
+                </div>
+              )}
+            </For>
+          </div>
+        </Show>
         <div
           class="relative"
           onMouseDown={(e) => {
@@ -1206,37 +1296,135 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 </Button>
               </TooltipKeybind>
 
-              <Tooltip
-                placement="top"
-                inactive={!prompt.dirty() && !working()}
-                value={
-                  <Switch>
-                    <Match when={working()}>
-                      <div class="flex items-center gap-2">
-                        <span>{language.t("prompt.action.stop")}</span>
-                        <span class="text-icon-base text-12-medium text-[10px]!">{language.t("common.key.esc")}</span>
-                      </div>
-                    </Match>
-                    <Match when={true}>
-                      <div class="flex items-center gap-2">
-                        <span>{language.t("prompt.action.send")}</span>
-                        <Icon name="enter" size="small" class="text-icon-base" />
-                      </div>
-                    </Match>
-                  </Switch>
-                }
-              >
-                <IconButton
-                  data-action="prompt-submit"
-                  type="submit"
-                  disabled={store.mode !== "normal" || (!prompt.dirty() && !working() && commentCount() === 0)}
-                  tabIndex={store.mode === "normal" ? undefined : -1}
-                  icon={working() ? "stop" : "arrow-up"}
-                  variant="primary"
-                  class="size-8"
-                  aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
-                />
-              </Tooltip>
+              <Switch>
+                <Match when={working() && prompt.dirty()}>
+                  <div class="flex items-center gap-1">
+                    <Tooltip
+                      placement="top"
+                      value={
+                        <div class="flex flex-col gap-1">
+                          <div class="flex items-center gap-2">
+                            <span class="font-medium">Queue</span>
+                            <Icon name="enter" size="small" class="text-icon-base" />
+                          </div>
+                          <span class="text-text-weak text-11-regular">Send after current response finishes</span>
+                        </div>
+                      }
+                    >
+                      <IconButton
+                        data-action="prompt-submit"
+                        type="button"
+                        icon="arrow-down-to-line"
+                        variant="primary"
+                        class="size-8"
+                        aria-label="Queue — Send after current response finishes"
+                        onClick={() => {
+                          const text = prompt
+                            .current()
+                            .map((p) => ("content" in p ? p.content : ""))
+                            .join("")
+                            .trim()
+                          if (!text || !params.id) return
+                          fetch(`${sdk.url}/session/${params.id}/steer`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ text, mode: "queue" }),
+                          }).catch(() => {
+                            showToast({
+                              title: "Failed to queue message",
+                              description: "Could not queue the message",
+                            })
+                          })
+                          prompt.reset()
+                          clearEditor()
+                          showToast({
+                            title: "Message queued",
+                            description: "Will be sent when the model finishes its current response",
+                          })
+                        }}
+                      />
+                    </Tooltip>
+                    <Tooltip
+                      placement="top"
+                      value={
+                        <div class="flex flex-col gap-1">
+                          <div class="flex items-center gap-2">
+                            <span class="font-medium">Steer</span>
+                            <span class="text-icon-base text-11-medium">⇧⏎</span>
+                          </div>
+                          <span class="text-text-weak text-11-regular">Inject into current turn at next step</span>
+                        </div>
+                      }
+                    >
+                      <IconButton
+                        data-action="prompt-steer"
+                        type="button"
+                        icon="chevron-double-right"
+                        variant="ghost"
+                        class="size-8"
+                        aria-label="Steer — Inject into current turn at next step"
+                        onClick={() => {
+                          const text = prompt
+                            .current()
+                            .map((p) => ("content" in p ? p.content : ""))
+                            .join("")
+                            .trim()
+                          if (!text || !params.id) return
+                          fetch(`${sdk.url}/session/${params.id}/steer`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ text, mode: "steer" }),
+                          }).catch(() => {
+                            showToast({
+                              title: "Failed to steer",
+                              description: "Could not inject message into current turn",
+                            })
+                          })
+                          prompt.reset()
+                          clearEditor()
+                          showToast({
+                            title: "Steering",
+                            description: "Will be injected at the next step of the current turn",
+                          })
+                        }}
+                      />
+                    </Tooltip>
+                  </div>
+                </Match>
+                <Match when={true}>
+                  <Tooltip
+                    placement="top"
+                    inactive={!prompt.dirty() && !working()}
+                    value={
+                      <Switch>
+                        <Match when={working()}>
+                          <div class="flex items-center gap-2">
+                            <span>{language.t("prompt.action.stop")}</span>
+                            <span class="text-icon-base text-12-medium text-[10px]!">{language.t("common.key.esc")}</span>
+                          </div>
+                        </Match>
+                        <Match when={true}>
+                          <div class="flex items-center gap-2">
+                            <span>{language.t("prompt.action.send")}</span>
+                            <Icon name="enter" size="small" class="text-icon-base" />
+                          </div>
+                        </Match>
+                      </Switch>
+                    }
+                  >
+                    <IconButton
+                      data-action="prompt-submit"
+                      type="submit"
+                      disabled={store.mode !== "normal" || (!prompt.dirty() && !working() && commentCount() === 0)}
+                      tabIndex={store.mode === "normal" ? undefined : -1}
+                      icon={working() ? "stop" : "arrow-up"}
+                      variant="primary"
+                      class="size-8"
+                      aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
+                    />
+                  </Tooltip>
+                </Match>
+              </Switch>
             </div>
           </div>
 

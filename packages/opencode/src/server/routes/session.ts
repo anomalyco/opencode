@@ -14,6 +14,7 @@ import { Agent } from "../../agent/agent"
 import { Snapshot } from "@/snapshot"
 import { Log } from "../../util/log"
 import { PermissionNext } from "@/permission/next"
+import { SessionSteer } from "@/session/steer"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 
@@ -931,6 +932,122 @@ export const SessionRoutes = lazy(() =>
         const sessionID = c.req.valid("param").sessionID
         const session = await SessionRevert.unrevert({ sessionID })
         return c.json(session)
+      },
+    )
+    .post(
+      "/:sessionID/steer",
+      describeRoute({
+        summary: "Steer session",
+        description:
+          "Push a message into the session's pending input buffer. If the session is busy, the message will be injected at the next agentic loop boundary. If idle, it is queued for the next turn.",
+        operationId: "session.steer",
+        responses: {
+          200: {
+            description: "Queued message",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    id: z.string(),
+                    text: z.string(),
+                    time: z.number(),
+                    mode: z.enum(["queue", "steer"]),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: z.string().meta({ description: "Session ID" }),
+        }),
+      ),
+      validator(
+        "json",
+        z.object({
+          text: z.string().min(1).meta({ description: "The message text to inject" }),
+          mode: z.enum(["queue", "steer"]).optional().default("queue").meta({ description: "queue waits for turn end, steer injects mid-turn" }),
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const body = c.req.valid("json")
+        const entry = SessionSteer.push(sessionID, body.text, body.mode)
+        return c.json(entry)
+      },
+    )
+    .get(
+      "/:sessionID/steer",
+      describeRoute({
+        summary: "Get steer queue",
+        description: "List all pending steered messages for a session without draining the queue.",
+        operationId: "session.steer.list",
+        responses: {
+          200: {
+            description: "Pending steered messages",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.array(
+                    z.object({
+                      id: z.string(),
+                      text: z.string(),
+                      time: z.number(),
+                      mode: z.enum(["queue", "steer"]),
+                    }),
+                  ),
+                ),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: z.string().meta({ description: "Session ID" }),
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const queue = SessionSteer.list(sessionID)
+        return c.json(queue)
+      },
+    )
+    .delete(
+      "/:sessionID/steer/:steerID",
+      describeRoute({
+        summary: "Remove steered message",
+        description: "Remove a specific queued steered message by its ID before it gets injected.",
+        operationId: "session.steer.remove",
+        responses: {
+          200: {
+            description: "Whether the message was found and removed",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: z.string().meta({ description: "Session ID" }),
+          steerID: z.string().meta({ description: "Steer message ID" }),
+        }),
+      ),
+      async (c) => {
+        const params = c.req.valid("param")
+        const removed = SessionSteer.remove(params.sessionID, params.steerID)
+        return c.json(removed)
       },
     )
     .post(
