@@ -241,6 +241,8 @@ export class KiroLanguageModel implements LanguageModelV2 {
 
     if (!response.ok) {
       const errorText = await response.text()
+      const fs = await import("fs")
+      fs.writeFileSync("/tmp/kiro-payload-error.json", JSON.stringify({ status: response.status, statusText: response.statusText, errorText, payload }, null, 2))
       throw new Error(`Kiro API error: ${response.status} ${response.statusText} - ${errorText}`)
     }
 

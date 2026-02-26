@@ -95,7 +95,7 @@ function extractTextContent(
  * - additionalProperties is present in schema
  */
 function sanitizeJsonSchema(schema: Record<string, unknown> | undefined): Record<string, unknown> {
-  if (!schema) return {}
+  if (!schema || Object.keys(schema).length === 0) return { type: "object", properties: {} }
 
   const result: Record<string, unknown> = {}
 
@@ -107,6 +107,11 @@ function sanitizeJsonSchema(schema: Record<string, unknown> | undefined): Record
 
     // Skip additionalProperties - Kiro API doesn't support it
     if (key === "additionalProperties") {
+      continue
+    }
+
+    // Skip $schema - Kiro API doesn't support JSON Schema meta fields
+    if (key === "$schema" || key === "$defs" || key === "definitions" || key === "examples" || key === "default") {
       continue
     }
 
@@ -141,7 +146,7 @@ function convertTools(tools?: LanguageModelV2FunctionTool[]): KiroTool[] | undef
   return tools.map((tool) => ({
     toolSpecification: {
       name: tool.name,
-      description: tool.description || `Tool: ${tool.name}`,
+      description: (tool.description || `Tool: ${tool.name}`).slice(0, 10000),
       inputSchema: { json: sanitizeJsonSchema(tool.inputSchema as Record<string, unknown>) },
     },
   }))
@@ -668,5 +673,112 @@ export function convertToKiroPayload(
     history,
   }
 
-  return { conversationState }
+  const payload: KiroPayload = { conversationState }
+  return truncateKiroPayload(payload)
+}
+
+// Kiro API has ~200K token input limit.
+// Token/byte ratio varies; use 800KB as safe limit.
+const MAX_PAYLOAD_BYTES = 500_000
+const TRUNCATION_SUFFIX = "\n\n[content truncated]"
+function payloadBytes(payload: KiroPayload): number {
+  return new TextEncoder().encode(JSON.stringify(payload)).byteLength
+}
+function truncateKiroPayload(payload: KiroPayload): KiroPayload {
+  // Clean history items: remove fields only needed in currentMessage
+  for (const item of payload.conversationState.history) {
+    if (item.userInputMessage) {
+      delete (item.userInputMessage as any).modelId
+      delete (item.userInputMessage as any).origin
+      const ctx = item.userInputMessage.userInputMessageContext
+      if (ctx) delete (ctx as any).tools
+    }
+    if (item.assistantResponseMessage) {
+      delete (item.assistantResponseMessage as any).messageId
+      delete (item.assistantResponseMessage as any).modelId
+    }
+  }
+  fixOrphanedToolResults(payload)
+  let size = payloadBytes(payload)
+  if (size <= MAX_PAYLOAD_BYTES) return payload
+  // Collect ALL tool results (history + current), sort biggest first, truncate
+  const entries: Array<{ text: string }> = []
+  for (const item of payload.conversationState.history) {
+    for (const tr of item.userInputMessage?.userInputMessageContext?.toolResults ?? []) {
+      for (const c of tr.content) entries.push(c as { text: string })
+    }
+  }
+  for (const tr of payload.conversationState.currentMessage.userInputMessage.userInputMessageContext?.toolResults ?? []) {
+    for (const c of tr.content) entries.push(c as { text: string })
+  }
+  entries.sort((a, b) => b.text.length - a.text.length)
+  for (const entry of entries) {
+    if (size <= MAX_PAYLOAD_BYTES) break
+    const half = Math.floor(entry.text.length / 2)
+    const target = Math.max(200, half)
+    if (target < entry.text.length) {
+      entry.text = entry.text.slice(0, target) + TRUNCATION_SUFFIX
+      size = payloadBytes(payload)
+    }
+  }
+  if (size <= MAX_PAYLOAD_BYTES) return payload
+  // Still over: aggressively truncate all entries to minimum
+  for (const entry of entries) {
+    if (size <= MAX_PAYLOAD_BYTES) break
+    entry.text = entry.text.slice(0, 200) + TRUNCATION_SUFFIX
+    size = payloadBytes(payload)
+  }
+  if (size <= MAX_PAYLOAD_BYTES) return payload
+  // Still over: remove oldest history pairs, but preserve last assistant+user pair for currentMessage pairing
+  const history = payload.conversationState.history
+  // Find the last assistant with toolUses that match currentMessage toolResults
+  const cmTrIds = new Set(
+    (payload.conversationState.currentMessage.userInputMessage.userInputMessageContext?.toolResults ?? []).map((tr) => tr.toolUseId)
+  )
+  let preserveFrom = -1
+  for (let i = history.length - 1; i >= 0; i--) {
+    const tus = history[i].assistantResponseMessage?.toolUses ?? []
+    if (tus.some((tu) => cmTrIds.has(tu.toolUseId))) {
+      preserveFrom = i
+      break
+    }
+  }
+  // Remove from index 2 up to preserveFrom (keep first 2 + preserved tail)
+  if (preserveFrom > 2) {
+    history.splice(2, preserveFrom - 2)
+    size = payloadBytes(payload)
+  }
+  fixOrphanedToolResults(payload)
+  ensureAlternation(payload)
+  return payload
+}
+function fixOrphanedToolResults(payload: KiroPayload) {
+  const history = payload.conversationState.history
+  const ids = new Set<string>()
+  for (const item of history) {
+    for (const tu of item.assistantResponseMessage?.toolUses ?? []) ids.add(tu.toolUseId)
+  }
+  for (const item of history) {
+    const ctx = item.userInputMessage?.userInputMessageContext
+    if (ctx?.toolResults) ctx.toolResults = ctx.toolResults.filter((tr) => ids.has(tr.toolUseId))
+  }
+  // Also fix currentMessage toolResults
+  const cmCtx = payload.conversationState.currentMessage.userInputMessage.userInputMessageContext
+  if (cmCtx?.toolResults) cmCtx.toolResults = cmCtx.toolResults.filter((tr) => ids.has(tr.toolUseId))
+}
+function ensureAlternation(payload: KiroPayload) {
+  const history = payload.conversationState.history
+  let i = 1
+  while (i < history.length) {
+    const prevIsUser = "userInputMessage" in history[i - 1]
+    const currIsUser = "userInputMessage" in history[i]
+    if (prevIsUser === currIsUser) {
+      if (currIsUser) {
+        history.splice(i, 0, { assistantResponseMessage: { content: "" } } as any)
+      } else {
+        history.splice(i, 0, { userInputMessage: { content: "", userInputMessageContext: {} } } as any)
+      }
+    }
+    i++
+  }
 }
