@@ -386,6 +386,12 @@
       gap: 8px;
       align-items: center;
       background-color: var(--background-stronger);
+      box-sizing: border-box;
+      border-bottom: 1px solid transparent;
+
+      &[data-scrolled] {
+        border-bottom-color: var(--border-weak-base);
+      }
     }
 
     [data-slot="tabs-trigger-wrapper"] {

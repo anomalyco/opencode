@@ -145,7 +145,11 @@ export function SessionSidePanel(props: {
 
   const [store, setStore] = createStore({
     activeDraggable: undefined as string | undefined,
+    fileTreeScrolled: false,
   })
+
+  let changesEl: HTMLDivElement | undefined
+  let allEl: HTMLDivElement | undefined
 
   const handleDragStart = (event: unknown) => {
     const id = getDraggableId(event)
@@ -166,6 +170,14 @@ export function SessionSidePanel(props: {
   const handleDragEnd = () => {
     setStore("activeDraggable", undefined)
   }
+
+  createEffect(() => {
+    if (!layout.fileTree.opened()) return
+    const tab = fileTreeTab()
+    const el = tab === "changes" ? changesEl : allEl
+    const next = (el?.scrollTop ?? 0) > 0
+    setStore("fileTreeScrolled", (current) => (current === next ? current : next))
+  })
 
   createEffect(() => {
     if (!file.ready()) return
@@ -335,7 +347,7 @@ export function SessionSidePanel(props: {
                 class="h-full"
                 data-scope="filetree"
               >
-                <Tabs.List>
+                <Tabs.List data-scrolled={store.fileTreeScrolled ? "" : undefined}>
                   <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
                     {reviewCount()}{" "}
                     {language.t(reviewCount() === 1 ? "session.review.change.one" : "session.review.change.other")}
@@ -344,7 +356,16 @@ export function SessionSidePanel(props: {
                     {language.t("session.files.all")}
                   </Tabs.Trigger>
                 </Tabs.List>
-                <Tabs.Content value="changes" class="bg-background-stronger px-3 py-0">
+                <Tabs.Content
+                  value="changes"
+                  ref={(el: HTMLDivElement) => (changesEl = el)}
+                  onScroll={(e: UIEvent & { currentTarget: HTMLDivElement }) => {
+                    if (fileTreeTab() !== "changes") return
+                    const next = e.currentTarget.scrollTop > 0
+                    setStore("fileTreeScrolled", (current) => (current === next ? current : next))
+                  }}
+                  class="bg-background-stronger px-3 py-0"
+                >
                   <Switch>
                     <Match when={hasReview()}>
                       <Show
@@ -373,7 +394,16 @@ export function SessionSidePanel(props: {
                     </Match>
                   </Switch>
                 </Tabs.Content>
-                <Tabs.Content value="all" class="bg-background-stronger px-3 py-0">
+                <Tabs.Content
+                  value="all"
+                  ref={(el: HTMLDivElement) => (allEl = el)}
+                  onScroll={(e: UIEvent & { currentTarget: HTMLDivElement }) => {
+                    if (fileTreeTab() !== "all") return
+                    const next = e.currentTarget.scrollTop > 0
+                    setStore("fileTreeScrolled", (current) => (current === next ? current : next))
+                  }}
+                  class="bg-background-stronger px-3 py-0"
+                >
                   <FileTree
                     path=""
                     modified={diffFiles()}
