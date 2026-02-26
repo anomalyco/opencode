@@ -268,18 +268,17 @@ export const AuthLoginCommand = cmd({
           const proc = Process.spawn(wellknown.auth.command, {
             stdout: "pipe",
           })
-          const exit = await proc.exited
-          if (exit !== 0) {
-            prompts.log.error("Failed")
-            prompts.outro("Done")
-            return
-          }
           if (!proc.stdout) {
             prompts.log.error("Failed")
             prompts.outro("Done")
             return
           }
-          const token = await text(proc.stdout)
+          const [exit, token] = await Promise.all([proc.exited, text(proc.stdout)])
+          if (exit !== 0) {
+            prompts.log.error("Failed")
+            prompts.outro("Done")
+            return
+          }
           await Auth.set(args.url, {
             type: "wellknown",
             key: wellknown.auth.env,
