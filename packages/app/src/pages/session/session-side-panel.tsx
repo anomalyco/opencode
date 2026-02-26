@@ -219,13 +219,11 @@ export function SessionSidePanel(props: {
                     }}
                   >
                     <Show when={reviewTab()}>
-                      <Tabs.Trigger value="review" classes={{ button: "!pl-6" }}>
+                      <Tabs.Trigger value="review">
                         <div class="flex items-center gap-1.5">
                           <div>{language.t("session.tab.review")}</div>
                           <Show when={hasReview()}>
-                            <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
-                              {reviewCount()}
-                            </div>
+                            <div>{reviewCount()}</div>
                           </Show>
                         </div>
                       </Tabs.Trigger>
@@ -234,7 +232,7 @@ export function SessionSidePanel(props: {
                       <Tabs.Trigger
                         value="context"
                         closeButton={
-                          <Tooltip value={language.t("common.closeTab")} placement="bottom">
+                          <Tooltip value={language.t("common.closeTab")} placement="bottom" gutter={10}>
                             <IconButton
                               icon="close-small"
                               variant="ghost"
@@ -266,6 +264,7 @@ export function SessionSidePanel(props: {
                           icon="plus-small"
                           variant="ghost"
                           iconSize="large"
+                          class="!rounded-md"
                           onClick={() => dialog.show(() => <DialogSelectFile mode="files" onOpenFile={showAllFiles} />)}
                           aria-label={language.t("command.file.open")}
                         />
@@ -312,7 +311,7 @@ export function SessionSidePanel(props: {
                   {(tab) => {
                     const path = createMemo(() => file.pathFromTab(tab))
                     return (
-                      <div class="relative px-6 h-12 flex items-center bg-background-stronger border-x border-border-weak-base border-b border-b-transparent">
+                      <div data-component="tabs-drag-preview">
                         <Show when={path()}>{(p) => <FileVisual active path={p()} />}</Show>
                       </div>
                     )
