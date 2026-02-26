@@ -509,6 +509,8 @@ export const dict = {
   "workspace.lite.subscription.monthlyUsage": "Ежемесячное использование",
   "workspace.lite.subscription.resetsIn": "Сброс через",
   "workspace.lite.subscription.useBalance": "Использовать доступный баланс после достижения лимитов",
+  "workspace.lite.subscription.selectProvider":
+    'Выберите "OpenCode Go" в качестве провайдера в настройках opencode для использования моделей Go.',
   "workspace.lite.other.title": "Подписка Go",
   "workspace.lite.other.message":
     "Другой участник в этом рабочем пространстве уже подписан на OpenCode Go. Только один участник в рабочем пространстве может оформить подписку.",

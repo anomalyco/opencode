@@ -502,6 +502,8 @@ export const dict = {
   "workspace.lite.subscription.monthlyUsage": "การใช้งานรายเดือน",
   "workspace.lite.subscription.resetsIn": "รีเซ็ตใน",
   "workspace.lite.subscription.useBalance": "ใช้ยอดคงเหลือของคุณหลังจากถึงขีดจำกัดการใช้งาน",
+  "workspace.lite.subscription.selectProvider":
+    'เลือก "OpenCode Go" เป็นผู้ให้บริการในการตั้งค่า opencode ของคุณเพื่อใช้โมเดล Go',
   "workspace.lite.other.title": "การสมัครสมาชิก Go",
   "workspace.lite.other.message":
     "สมาชิกคนอื่นใน Workspace นี้ได้สมัคร OpenCode Go แล้ว สามารถสมัครได้เพียงหนึ่งคนต่อหนึ่ง Workspace เท่านั้น",

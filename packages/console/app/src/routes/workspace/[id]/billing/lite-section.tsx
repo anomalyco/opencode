@@ -11,6 +11,7 @@ import { withActor } from "~/context/auth.withActor"
 import { queryBillingInfo } from "../../common"
 import styles from "./lite-section.module.css"
 import { useI18n } from "~/context/i18n"
+import { useLanguage } from "~/context/language"
 
 const queryLiteSubscription = query(async (workspaceID: string) => {
   "use server"
@@ -135,6 +136,7 @@ const setLiteUseBalance = action(async (form: FormData) => {
 export function LiteSection() {
   const params = useParams()
   const i18n = useI18n()
+  const language = useLanguage()
   const lite = createAsync(() => queryLiteSubscription(params.id!))
   const sessionAction = useAction(createSessionUrl)
   const sessionSubmission = useSubmission(createSessionUrl)
@@ -180,6 +182,13 @@ export function LiteSection() {
                     : i18n.t("workspace.lite.subscription.manage")}
                 </button>
               </div>
+            </div>
+            <div data-slot="beta-notice">
+              {i18n.t("workspace.lite.subscription.selectProvider")}{" "}
+              <a href={language.route("/docs/providers/#opencode-go")} target="_blank" rel="noopener noreferrer">
+                {i18n.t("common.learnMore")}
+              </a>
+              .
             </div>
             <div data-slot="usage">
               <div data-slot="usage-item">
