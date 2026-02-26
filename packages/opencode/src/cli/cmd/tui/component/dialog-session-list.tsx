@@ -13,6 +13,8 @@ import { createDebouncedSignal } from "../util/signal"
 import { Spinner } from "./spinner"
 import { Keybind } from "@/util/keybind"
 
+const EMPTY_FAVORITE = "__session_favorite_empty__"
+
 export function DialogSessionList() {
   const dialog = useDialog()
   const route = useRoute()
@@ -40,7 +42,7 @@ export function DialogSessionList() {
 
   const options = createMemo(() => {
     const today = new Date().toDateString()
-    return sessions()
+    const result = sessions()
       .filter((x) => x.parentID === undefined)
       .toSorted((a, b) => b.time.updated - a.time.updated)
       .filter((x) => !favoriteOnly() || favorites().has(x.id))
@@ -65,6 +67,15 @@ export function DialogSessionList() {
           gutter: isWorking ? <Spinner /> : undefined,
         }
       })
+
+    if (!favoriteOnly() || result.length > 0) return result
+    return [
+      {
+        title: "No favorite sessions",
+        value: EMPTY_FAVORITE,
+        footer: "Shift+Tab: Show all",
+      },
+    ]
   })
 
   onMount(() => {
@@ -82,6 +93,7 @@ export function DialogSessionList() {
         setToDelete(undefined)
       }}
       onSelect={(option) => {
+        if (option.value === EMPTY_FAVORITE) return
         route.navigate({
           type: "session",
           sessionID: option.value,
@@ -93,12 +105,16 @@ export function DialogSessionList() {
           keybind: Keybind.parse("ctrl+f")[0],
           title: "favorite",
           onTrigger: (option) => {
+            if (option.value === EMPTY_FAVORITE) return
             setFavorite((old) => {
               const next: string[] = Array.isArray(old) ? old : []
-              if (next.includes(option.value)) {
-                return next.filter((x) => x !== option.value)
+              const result = next.includes(option.value)
+                ? next.filter((x) => x !== option.value)
+                : [option.value, ...next]
+              if (favoriteOnly() && result.length === 0) {
+                setFavoriteOnly(false)
               }
-              return [option.value, ...next]
+              return result
             })
             setToDelete(undefined)
           },
@@ -107,6 +123,7 @@ export function DialogSessionList() {
           keybind: Keybind.parse("shift+tab")[0],
           title: favoriteOnly() ? "show all" : "show favorites",
           onTrigger: () => {
+            if (!favoriteOnly() && favorites().size === 0) return
             setFavoriteOnly((x) => !x)
             setToDelete(undefined)
           },
@@ -115,6 +132,7 @@ export function DialogSessionList() {
           keybind: keybind.all.session_delete?.[0],
           title: "delete",
           onTrigger: async (option) => {
+            if (option.value === EMPTY_FAVORITE) return
             if (toDelete() === option.value) {
               sdk.client.session.delete({
                 sessionID: option.value,
@@ -129,6 +147,7 @@ export function DialogSessionList() {
           keybind: keybind.all.session_rename?.[0],
           title: "rename",
           onTrigger: async (option) => {
+            if (option.value === EMPTY_FAVORITE) return
             dialog.replace(() => <DialogSessionRename session={option.value} />)
           },
         },
