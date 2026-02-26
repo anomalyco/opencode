@@ -1,6 +1,6 @@
 import { SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
 import path from "path"
-import { createEffect, createMemo, onMount } from "solid-js"
+import { createMemo, onCleanup, onMount } from "solid-js"
 import { createSimpleContext } from "./helper"
 import { Glob } from "../../../../util/glob"
 import aura from "./theme/aura.json" with { type: "json" }
@@ -42,6 +42,8 @@ import { createStore, produce } from "solid-js/store"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
 import { useTuiConfig } from "./tui-config"
+
+type ThemeConfig = string | { light?: string; dark?: string }
 
 type ThemeColors = {
   primary: RGBA
@@ -174,6 +176,21 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   carbonfox,
 }
 
+function variants(theme: ThemeJson) {
+  return Object.values(theme.theme).some(
+    (v) => typeof v === "object" && v !== null && !(v instanceof RGBA) && "dark" in v && "light" in v,
+  )
+}
+
+function parse(config: ThemeConfig | undefined, fallback: string) {
+  if (!config) return { light: fallback, dark: fallback }
+  if (typeof config === "string") return { light: config, dark: config }
+  return {
+    light: config.light ?? config.dark ?? fallback,
+    dark: config.dark ?? config.light ?? fallback,
+  }
+}
+
 function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
   const defs = theme.defs ?? {}
   function resolveColor(c: ColorValue): RGBA {
@@ -282,17 +299,33 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   init: (props: { mode: "dark" | "light" }) => {
     const config = useTuiConfig()
     const kv = useKV()
+    const renderer = useRenderer()
+
+    const initial = parse((config.theme ?? kv.get("theme", "opencode")) as ThemeConfig, "opencode")
+
     const [store, setStore] = createStore({
-      themes: DEFAULT_THEMES,
-      mode: kv.get("theme_mode", props.mode),
-      active: (config.theme ?? kv.get("theme", "opencode")) as string,
+      themes: DEFAULT_THEMES as Record<string, ThemeJson>,
+      mode: kv.get("theme_mode", "auto") as "auto" | "dark" | "light",
+      detectedMode: props.mode as "dark" | "light",
+      light: initial.light,
+      dark: initial.dark,
       ready: false,
     })
 
-    createEffect(() => {
-      const theme = config.theme
-      if (theme) setStore("active", theme)
-    })
+    function resolved(): "dark" | "light" {
+      if (store.mode !== "auto") return store.mode
+      return store.detectedMode
+    }
+
+    function active() {
+      return resolved() === "light" ? store.light : store.dark
+    }
+
+    function resolvedMode(): "dark" | "light" {
+      const json = store.themes[active()]
+      if (json && variants(json)) return resolved()
+      return "dark"
+    }
 
     function init() {
       resolveSystemTheme()
@@ -305,10 +338,15 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
           )
         })
         .catch(() => {
-          setStore("active", "opencode")
+          setStore(
+            produce((draft) => {
+              draft.light = "opencode"
+              draft.dark = "opencode"
+            }),
+          )
         })
         .finally(() => {
-          if (store.active !== "system") {
+          if (active() !== "system") {
             setStore("ready", true)
           }
         })
@@ -317,18 +355,17 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     onMount(init)
 
     function resolveSystemTheme() {
-      console.log("resolveSystemTheme")
       renderer
         .getPalette({
           size: 16,
         })
         .then((colors) => {
-          console.log(colors.palette)
           if (!colors.palette[0]) {
-            if (store.active === "system") {
+            if (active() === "system") {
               setStore(
                 produce((draft) => {
-                  draft.active = "opencode"
+                  draft.light = "opencode"
+                  draft.dark = "opencode"
                   draft.ready = true
                 }),
               )
@@ -337,8 +374,8 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
           }
           setStore(
             produce((draft) => {
-              draft.themes.system = generateSystem(colors, store.mode)
-              if (store.active === "system") {
+              draft.themes.system = generateSystem(colors, resolved())
+              if (active() === "system") {
                 draft.ready = true
               }
             }),
@@ -346,15 +383,30 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         })
     }
 
-    const renderer = useRenderer()
-    process.on("SIGUSR2", async () => {
+    // React to OS appearance changes via Mode 2031
+    const handler = (mode: "dark" | "light") => {
+      setStore("detectedMode", mode)
+      if (active() === "system") {
+        renderer.clearPaletteCache()
+        resolveSystemTheme()
+      }
+    }
+    renderer.on("theme_mode", handler)
+    onCleanup(() => renderer.off("theme_mode", handler))
+
+    // Sync initial mode if terminal already responded to Mode 2031 query
+    if (renderer.themeMode) {
+      setStore("detectedMode", renderer.themeMode)
+    }
+
+    const sigusr2 = () => {
       renderer.clearPaletteCache()
       init()
-    })
+    }
+    process.on("SIGUSR2", sigusr2)
+    onCleanup(() => process.off("SIGUSR2", sigusr2))
 
-    const values = createMemo(() => {
-      return resolveTheme(store.themes[store.active] ?? store.themes.opencode, store.mode)
-    })
+    const values = createMemo(() => resolveTheme(store.themes[active()] ?? store.themes.opencode, resolvedMode()))
 
     const syntax = createMemo(() => generateSyntax(values()))
     const subtleSyntax = createMemo(() => generateSubtleSyntax(values()))
@@ -367,7 +419,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         },
       }),
       get selected() {
-        return store.active
+        return active()
       },
       all() {
         return store.themes
@@ -377,12 +429,20 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       mode() {
         return store.mode
       },
-      setMode(mode: "dark" | "light") {
+      setMode(mode: "auto" | "dark" | "light") {
         setStore("mode", mode)
         kv.set("theme_mode", mode)
+        if (mode === "auto" && renderer.themeMode) {
+          setStore("detectedMode", renderer.themeMode)
+        }
       },
       set(theme: string) {
-        setStore("active", theme)
+        setStore(
+          produce((draft) => {
+            draft.light = theme
+            draft.dark = theme
+          }),
+        )
         kv.set("theme", theme)
       },
       get ready() {

@@ -1,4 +1,4 @@
-import { InputRenderable, RGBA, ScrollBoxRenderable, TextAttributes } from "@opentui/core"
+import { InputRenderable, RGBA, ScrollBoxRenderable, TextAttributes, type KeyEvent } from "@opentui/core"
 import { useTheme, selectedForeground } from "@tui/context/theme"
 import { entries, filter, flatMap, groupBy, pipe, take } from "remeda"
 import { batch, createEffect, createMemo, For, Show, type JSX, on } from "solid-js"
@@ -28,6 +28,8 @@ export interface DialogSelectProps<T> {
     onTrigger: (option: DialogSelectOption<T>) => void
   }[]
   current?: T
+  header?: JSX.Element
+  onKeyboard?: (evt: KeyEvent) => boolean | void
 }
 
 export interface DialogSelectOption<T = any> {
@@ -187,6 +189,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   useKeyboard((evt) => {
     setStore("input", "keyboard")
 
+    if (props.onKeyboard?.(evt)) return
+
     if (evt.name === "up" || (evt.ctrl && evt.name === "p")) move(-1)
     if (evt.name === "down" || (evt.ctrl && evt.name === "n")) move(1)
     if (evt.name === "pageup") move(-10)
@@ -263,6 +267,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           />
         </box>
       </box>
+      {props.header}
       <Show
         when={grouped().length > 0}
         fallback={

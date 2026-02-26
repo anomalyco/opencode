@@ -27,7 +27,16 @@ export const TuiOptions = z.object({
 export const TuiInfo = z
   .object({
     $schema: z.string().optional(),
-    theme: z.string().optional(),
+    theme: z
+      .union([
+        z.string(),
+        z.object({
+          light: z.string().optional().describe("Theme to use in light mode"),
+          dark: z.string().optional().describe("Theme to use in dark mode"),
+        }),
+      ])
+      .optional()
+      .describe("Theme name or per-mode theme configuration"),
     keybinds: KeybindOverride.optional(),
   })
   .extend(TuiOptions.shape)
