@@ -2,6 +2,7 @@ import type { AssistantMessage, Part, UserMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "@/util/locale"
 
 export type TranscriptOptions = {
+  includeMetadata: boolean
   thinking: boolean
   toolDetails: boolean
   assistantMetadata: boolean
@@ -26,11 +27,15 @@ export function formatTranscript(
   messages: MessageWithParts[],
   options: TranscriptOptions,
 ): string {
-  let transcript = `# ${session.title}\n\n`
-  transcript += `**Session ID:** ${session.id}\n`
-  transcript += `**Created:** ${new Date(session.time.created).toLocaleString()}\n`
-  transcript += `**Updated:** ${new Date(session.time.updated).toLocaleString()}\n\n`
-  transcript += `---\n\n`
+  let transcript = ``
+
+  if (options.includeMetadata) {
+    transcript += `# ${session.title}\n\n`
+    transcript += `**Session ID:** ${session.id}\n`
+    transcript += `**Created:** ${new Date(session.time.created).toLocaleString()}\n`
+    transcript += `**Updated:** ${new Date(session.time.updated).toLocaleString()}\n\n`
+    transcript += `---\n\n`
+  }
 
   for (const msg of messages) {
     transcript += formatMessage(msg.info, msg.parts, options)
