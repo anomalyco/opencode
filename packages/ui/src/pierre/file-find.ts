@@ -435,6 +435,15 @@ export function createFileFind(opts: CreateFileFindOptions) {
     if (!open()) setOpen(true)
   }
 
+  const focus = () => {
+    activate()
+    requestAnimationFrame(() => {
+      apply({ scroll: true })
+      input?.focus()
+      input?.select()
+    })
+  }
+
   const next = (dir: 1 | -1) => {
     if (!open()) return
     const total = count()
@@ -471,14 +480,7 @@ export function createFileFind(opts: CreateFileFindOptions) {
     element: opts.wrapper,
     isOpen: () => open(),
     next,
-    open: () => {
-      activate()
-      requestAnimationFrame(() => {
-        apply({ scroll: true })
-        input?.focus()
-        input?.select()
-      })
-    },
+    open: focus,
     close,
   }
 
@@ -546,6 +548,7 @@ export function createFileFind(opts: CreateFileFindOptions) {
     },
     clear,
     activate,
+    focus,
     close,
     next,
     reveal,

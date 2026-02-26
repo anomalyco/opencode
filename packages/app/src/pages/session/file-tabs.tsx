@@ -2,6 +2,7 @@ import { createEffect, createMemo, Match, on, onCleanup, Show, Switch } from "so
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { useParams } from "@solidjs/router"
+import type { FileSearchHandle } from "@opencode-ai/ui/file"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { cloneSelectedLineRange, previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { createLineCommentController } from "@opencode-ai/ui/line-comment-annotations"
@@ -69,6 +70,13 @@ export function FileTabContent(props: { tab: string }) {
   let scrollFrame: number | undefined
   let pending: { x: number; y: number } | undefined
   let codeScroll: HTMLElement[] = []
+  let find: FileSearchHandle | null = null
+
+  const search = {
+    register: (handle: FileSearchHandle | null) => {
+      find = handle
+    },
+  }
 
   const path = createMemo(() => file.pathFromTab(props.tab))
   const state = createMemo(() => {
@@ -226,6 +234,24 @@ export function FileTabContent(props: { tab: string }) {
         }
       }, 0)
     },
+  })
+
+  createEffect(() => {
+    if (typeof window === "undefined") return
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return
+      if (tabs().active() !== props.tab) return
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return
+      if (event.key.toLowerCase() !== "f") return
+
+      event.preventDefault()
+      event.stopPropagation()
+      find?.focus()
+    }
+
+    window.addEventListener("keydown", onKeyDown, { capture: true })
+    onCleanup(() => window.removeEventListener("keydown", onKeyDown, { capture: true }))
   })
 
   createEffect(
@@ -414,6 +440,7 @@ export function FileTabContent(props: { tab: string }) {
         onLineSelectionEnd={(range: SelectedLineRange | null) => {
           commentsUi.onLineSelectionEnd(range)
         }}
+        search={search}
         overflow="scroll"
         class="select-text"
         media={{ mode: "off" }}
@@ -448,6 +475,7 @@ export function FileTabContent(props: { tab: string }) {
         onLineSelectionEnd={(range: SelectedLineRange | null) => {
           commentsUi.onLineSelectionEnd(range)
         }}
+        search={search}
         overflow="scroll"
         class="select-text"
         media={{

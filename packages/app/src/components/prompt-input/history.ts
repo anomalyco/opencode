@@ -166,8 +166,7 @@ type HistoryNavResult =
       handled: true
       historyIndex: number
       savedPrompt: PromptHistoryEntry | null
-      prompt: Prompt
-      comments: PromptHistoryComment[]
+      entry: PromptHistoryEntry
       cursor: "start" | "end"
     }
 
@@ -182,6 +181,7 @@ export function navigatePromptHistory(input: HistoryNavInput): HistoryNavResult 
     }
 
     if (input.historyIndex === -1) {
+      const entry = normalizePromptHistoryEntry(input.entries[0])
       return {
         handled: true,
         historyIndex: 0,
@@ -189,8 +189,7 @@ export function navigatePromptHistory(input: HistoryNavInput): HistoryNavResult 
           prompt: clonePromptParts(input.currentPrompt),
           comments: clonePromptHistoryComments(input.currentComments),
         },
-        prompt: normalizePromptHistoryEntry(input.entries[0]).prompt,
-        comments: normalizePromptHistoryEntry(input.entries[0]).comments,
+        entry,
         cursor: "start",
       }
     }
@@ -202,8 +201,7 @@ export function navigatePromptHistory(input: HistoryNavInput): HistoryNavResult 
         handled: true,
         historyIndex: next,
         savedPrompt: input.savedPrompt,
-        prompt: entry.prompt,
-        comments: entry.comments,
+        entry,
         cursor: "start",
       }
     }
@@ -222,8 +220,7 @@ export function navigatePromptHistory(input: HistoryNavInput): HistoryNavResult 
       handled: true,
       historyIndex: next,
       savedPrompt: input.savedPrompt,
-      prompt: entry.prompt,
-      comments: entry.comments,
+      entry,
       cursor: "end",
     }
   }
@@ -234,8 +231,7 @@ export function navigatePromptHistory(input: HistoryNavInput): HistoryNavResult 
         handled: true,
         historyIndex: -1,
         savedPrompt: null,
-        prompt: input.savedPrompt.prompt,
-        comments: input.savedPrompt.comments,
+        entry: input.savedPrompt,
         cursor: "end",
       }
     }
@@ -244,8 +240,10 @@ export function navigatePromptHistory(input: HistoryNavInput): HistoryNavResult 
       handled: true,
       historyIndex: -1,
       savedPrompt: null,
-      prompt: DEFAULT_PROMPT,
-      comments: [],
+      entry: {
+        prompt: DEFAULT_PROMPT,
+        comments: [],
+      },
       cursor: "end",
     }
   }

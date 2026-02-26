@@ -55,7 +55,7 @@ describe("prompt-input history", () => {
     if (!up.handled) throw new Error("expected handled")
     expect(up.historyIndex).toBe(0)
     expect(up.cursor).toBe("start")
-    expect(up.comments).toEqual([])
+    expect(up.entry.comments).toEqual([])
 
     const down = navigatePromptHistory({
       direction: "down",
@@ -68,8 +68,31 @@ describe("prompt-input history", () => {
     expect(down.handled).toBe(true)
     if (!down.handled) throw new Error("expected handled")
     expect(down.historyIndex).toBe(-1)
-    expect(down.prompt[0]?.type === "text" ? down.prompt[0].content : "").toBe("draft")
-    expect(down.comments).toEqual([comment("draft")])
+    expect(down.entry.prompt[0]?.type === "text" ? down.entry.prompt[0].content : "").toBe("draft")
+    expect(down.entry.comments).toEqual([comment("draft")])
+  })
+
+  test("navigatePromptHistory keeps entry comments when moving through history", () => {
+    const entries = [
+      {
+        prompt: text("with comment"),
+        comments: [comment("c1")],
+      },
+    ]
+
+    const up = navigatePromptHistory({
+      direction: "up",
+      entries,
+      historyIndex: -1,
+      currentPrompt: text("draft"),
+      currentComments: [],
+      savedPrompt: null,
+    })
+
+    expect(up.handled).toBe(true)
+    if (!up.handled) throw new Error("expected handled")
+    expect(up.entry.prompt[0]?.type === "text" ? up.entry.prompt[0].content : "").toBe("with comment")
+    expect(up.entry.comments).toEqual([comment("c1")])
   })
 
   test("normalizePromptHistoryEntry supports legacy prompt arrays", () => {

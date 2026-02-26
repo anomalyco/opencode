@@ -42,7 +42,6 @@ import { createPromptAttachments, ACCEPTED_FILE_TYPES } from "./prompt-input/att
 import {
   canNavigateHistoryAtCursor,
   navigatePromptHistory,
-  normalizePromptHistoryEntry,
   prependHistoryEntry,
   type PromptHistoryComment,
   type PromptHistoryEntry,
@@ -358,12 +357,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     )
   }
 
-  const applyHistoryPrompt = (entry: PromptHistoryStoredEntry, position: "start" | "end") => {
-    const value = normalizePromptHistoryEntry(entry)
-    const p = value.prompt
+  const applyHistoryPrompt = (entry: PromptHistoryEntry, position: "start" | "end") => {
+    const p = entry.prompt
     const length = position === "start" ? 0 : promptLength(p)
     setStore("applyingHistory", true)
-    applyHistoryComments(value.comments)
+    applyHistoryComments(entry.comments)
     prompt.set(p, length)
     requestAnimationFrame(() => {
       editorRef.focus()
@@ -942,7 +940,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!result.handled) return false
     setStore("historyIndex", result.historyIndex)
     setStore("savedPrompt", result.savedPrompt)
-    applyHistoryPrompt(result.prompt, result.cursor)
+    applyHistoryPrompt(result.entry, result.cursor)
     return true
   }
 

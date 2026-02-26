@@ -68,6 +68,7 @@ type SharedProps<T> = {
 export type FileSearchReveal = FileFindReveal
 
 export type FileSearchHandle = {
+  focus: () => void
   setQuery: (value: string) => void
   clear: () => void
   reveal: (hit: FileSearchReveal) => boolean
@@ -454,6 +455,9 @@ function useSearchHandle(opts: {
     if (!search) return
 
     const handle = {
+      focus: () => {
+        opts.find.focus()
+      },
       setQuery: (value: string) => {
         opts.find.activate()
         opts.find.setQuery(value, { scroll: false })
