@@ -254,12 +254,13 @@ export default function Page() {
     const msgs = visibleUserMessages()
     if (msgs.length === 0) return
 
-    const current = activeMessage()
-    const currentIndex = current ? msgs.findIndex((m) => m.id === current.id) : -1
-    const targetIndex = currentIndex === -1 ? (offset > 0 ? 0 : msgs.length - 1) : currentIndex + offset
-    if (targetIndex < 0 || targetIndex >= msgs.length) return
+    const current = store.messageId
+    const base = current ? msgs.findIndex((m) => m.id === current) : msgs.length
+    const currentIndex = base === -1 ? msgs.length : base
+    const targetIndex = currentIndex + offset
+    if (targetIndex < 0 || targetIndex > msgs.length) return
 
-    if (targetIndex === msgs.length - 1) {
+    if (targetIndex === msgs.length) {
       resumeScroll()
       return
     }
@@ -273,6 +274,11 @@ export default function Page() {
     if (!id) return true
     if (!hasReview()) return true
     return sync.data.session_diff[id] !== undefined
+  })
+  const reviewEmptyKey = createMemo(() => {
+    const project = sync.project
+    if (!project || project.vcs) return "session.review.empty"
+    return "session.review.noVcs"
   })
 
   let inputRef!: HTMLDivElement
@@ -531,7 +537,7 @@ export default function Page() {
             ) : (
               <div class={input.emptyClass}>
                 <Mark class="w-14 opacity-10" />
-                <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.empty")}</div>
+                <div class="text-14-regular text-text-weak max-w-56">{language.t(reviewEmptyKey())}</div>
               </div>
             )
           }
