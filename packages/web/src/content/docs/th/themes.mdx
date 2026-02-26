@@ -1,0 +1,369 @@
+---
+title: ธีมส์
+description: เลือกธีมในตัวหรือกำหนดธีมของคุณเอง
+---
+
+ด้วย OpenCode คุณสามารถเลือกจากหนึ่งในธีมที่มีอยู่แล้วภายใน ใช้ธีมที่ปรับให้เข้ากับธีม terminal ของคุณ หรือกำหนดธีมที่คุณกำหนดเองได้
+
+ตามค่าเริ่มต้น OpenCode จะใช้ธีม `opencode` ของเราเอง
+
+---
+
+## ข้อกำหนดของ terminal
+
+เพื่อให้ธีมแสดงได้อย่างถูกต้องด้วยชุดสีทั้งหมด terminal ของคุณต้องรองรับ **truecolor** (สี 24 บิต) terminal สมัยใหม่ส่วนใหญ่จะรองรับสิ่งนี้ตามค่าเริ่มต้น แต่คุณอาจต้องเปิดใช้งาน:
+
+- **ตรวจสอบการสนับสนุน**: เรียกใช้ `echo $COLORTERM` - ​​ควรส่งออก `truecolor` หรือ `24bit`
+- **เปิดใช้งานสีจริง**: ตั้งค่าตัวแปรสภาพแวดล้อม `COLORTERM=truecolor` ในโปรไฟล์ shell ของคุณ
+- **ความเข้ากันได้ของ terminal**: ตรวจสอบให้แน่ใจว่าโปรแกรมจำลอง terminal ของคุณรองรับสี 24 บิต (terminal ที่ทันสมัยที่สุด เช่น iTerm2, Alacritty, Kitty, Windows Terminal และ GNOME Terminal do เวอร์ชันล่าสุด)
+
+หากไม่รองรับสีจริง ธีมอาจปรากฏขึ้นโดยมีความแม่นยำของสีลดลงหรือกลับไปใช้การประมาณสี 256 สีที่ใกล้ที่สุด
+
+---
+
+## ธีมในตัว
+
+OpenCode มาพร้อมกับธีมในตัวหลายธีม
+
+| ชื่อ                   | คำอธิบาย                                                            |
+| ---------------------- | ------------------------------------------------------------------- |
+| `system`               | ปรับให้เข้ากับสีพื้นหลังของ terminal ของคุณ                         |
+| `tokyonight`           | อิงตามธีมของ [Tokyonight](https://github.com/folke/tokyonight.nvim) |
+| `everforest`           | อิงตามธีม [Everforest](https://github.com/sainnhe/everforest)       |
+| `ayu`                  | อิงตามธีมสีเข้มของ [Ayu](https://github.com/ayu-theme)              |
+| `catppuccin`           | อิงตามธีม [Catppuccin](https://github.com/catppuccin)               |
+| `catppuccin-macchiato` | อิงตามธีม [Catppuccin](https://github.com/catppuccin)               |
+| `gruvbox`              | อิงตามธีม [Gruvbox](https://github.com/morhetz/gruvbox)             |
+| `kanagawa`             | อิงตามธีมของ [Kanagawa](https://github.com/rebelot/kanagawa.nvim)   |
+| `nord`                 | อิงตามธีม [Nord](https://github.com/nordtheme/nord)                 |
+| `matrix`               | ธีมสีเขียวสไตล์แฮ็กเกอร์บนสีดำ                                      |
+| `one-dark`             | อิงตามธีม [Atom One](https://github.com/Th3Whit3Wolf/one-nvim) Dark |
+
+และยิ่งไปกว่านั้น เรายังเพิ่มธีมใหม่ๆ อย่างต่อเนื่อง
+
+---
+
+## ธีมของระบบ
+
+ธีม `system` ได้รับการออกแบบให้ปรับให้เข้ากับโทนสีของเครื่อง terminal ของคุณโดยอัตโนมัติ ไม่เหมือนกับธีมดั้งเดิมที่ใช้สีคงที่ ธีม _system_:
+
+- **สร้างระดับสีเทา**: สร้างระดับสีเทาแบบกำหนดเองตามสีพื้นหลังของ terminal ของคุณ เพื่อให้มั่นใจว่ามีคอนทราสต์ที่เหมาะสมที่สุด
+- **ใช้สี ANSI**: ใช้ประโยชน์จากสี ANSI มาตรฐาน (0-15) สำหรับการเน้นไวยากรณ์และองค์ประกอบ UI ซึ่งเคารพชุดสีของ terminal ของคุณ
+- **รักษาค่าเริ่มต้นของ terminal**: ใช้ `none` สำหรับสีข้อความและพื้นหลัง เพื่อรักษารูปลักษณ์ดั้งเดิมของ terminal ของคุณ
+
+ธีมของระบบมีไว้สำหรับผู้ใช้ที่:
+
+- ต้องการให้ OpenCode ตรงกับรูปลักษณ์ของ terminal
+- ใช้โครงร่างสี terminal แบบกำหนดเอง
+- ต้องการรูปลักษณ์ที่สอดคล้องกันในแอปพลิเคชัน terminal ทั้งหมด
+
+---
+
+## การใช้ธีม
+
+คุณสามารถเลือกธีมได้โดยเปิดการเลือกธีมขึ้นมาด้วยคำสั่ง `/theme` หรือคุณสามารถระบุได้ใน [config](/docs/config)
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "theme": "tokyonight"
+}
+```
+
+---
+
+## ธีมที่กำหนดเอง
+
+OpenCode รองรับระบบธีมที่ใช้ JSON ที่ยืดหยุ่น ซึ่งช่วยให้ผู้ใช้สามารถสร้างและปรับแต่งธีมได้อย่างง่ายดาย
+
+---
+
+### ลำดับชั้น
+
+ธีมจะถูกโหลดจากหลายไดเร็กทอรีตามลำดับต่อไปนี้ โดยไดเร็กทอรีรุ่นหลังจะแทนที่ไดเร็กทอรีก่อนหน้า:
+
+1. **ธีมในตัว** - ธีมเหล่านี้ฝังอยู่ในไบนารี
+2. **ไดเรกทอรีกำหนดค่าผู้ใช้** - กำหนดใน `~/.config/opencode/themes/*.json` หรือ `$XDG_CONFIG_HOME/opencode/themes/*.json`
+3. **ไดเรกทอรีรากของโครงการ** - กำหนดไว้ใน `<project-root>/.opencode/themes/*.json`
+4. **ไดเร็กทอรีการทำงานปัจจุบัน** - กำหนดใน `./.opencode/themes/*.json`
+
+หากหลายไดเร็กทอรีมีธีมที่มีชื่อเดียวกัน ธีมจากไดเร็กทอรีที่มีลำดับความสำคัญสูงกว่าจะถูกนำมาใช้
+
+---
+
+### การสร้างธีม
+
+หากต้องการสร้างธีมที่กำหนดเอง ให้สร้างไฟล์ JSON ในไดเร็กทอรีธีมรายการใดรายการหนึ่ง
+
+สำหรับธีมทั้งผู้ใช้:
+
+```bash no-frame
+mkdir -p ~/.config/opencode/themes
+vim ~/.config/opencode/themes/my-theme.json
+```
+
+และสำหรับธีมเฉพาะโครงการ
+
+```bash no-frame
+mkdir -p .opencode/themes
+vim .opencode/themes/my-theme.json
+```
+
+---
+
+### JSON รูปแบบ
+
+ธีมใช้รูปแบบ JSON ที่ยืดหยุ่นพร้อมรองรับ:
+
+- **สีฐานสิบหก**: `"#ffffff"`
+- **ANSI สี**: `3` (0-255)
+- **การอ้างอิงสี**: `"primary"` หรือคำจำกัดความที่กำหนดเอง
+- **Dark/light ตัวแปร**: `{"dark": "#000", "light": "#fff"}`
+- **ไม่มีสี**: `"none"` - ​​ใช้สีเริ่มต้นของ terminal หรือโปร่งใส
+
+---
+
+### คำจำกัดความของสี
+
+ส่วน `defs` เป็นทางเลือก และอนุญาตให้คุณกำหนดสีที่ใช้ซ้ำได้ซึ่งสามารถอ้างอิงในธีมได้
+
+---
+
+### ค่าเริ่มต้นของ terminal
+
+ค่าพิเศษ `"none"` สามารถใช้กับสีใดก็ได้เพื่อสืบทอดสีเริ่มต้นของ terminal สิ่งนี้มีประโยชน์อย่างยิ่งสำหรับการสร้างธีมที่ผสมผสานอย่างลงตัวกับโทนสีของ terminal ของคุณ:
+
+- `"text": "none"` - ​​ใช้สีพื้นหน้าเริ่มต้นของ terminal
+- `"background": "none"` - ​​ใช้สีพื้นหลังเริ่มต้นของ terminal
+
+---
+
+### ตัวอย่าง
+
+นี่คือตัวอย่างของธีมที่กำหนดเอง:
+
+```json title="my-theme.json"
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "defs": {
+    "nord0": "#2E3440",
+    "nord1": "#3B4252",
+    "nord2": "#434C5E",
+    "nord3": "#4C566A",
+    "nord4": "#D8DEE9",
+    "nord5": "#E5E9F0",
+    "nord6": "#ECEFF4",
+    "nord7": "#8FBCBB",
+    "nord8": "#88C0D0",
+    "nord9": "#81A1C1",
+    "nord10": "#5E81AC",
+    "nord11": "#BF616A",
+    "nord12": "#D08770",
+    "nord13": "#EBCB8B",
+    "nord14": "#A3BE8C",
+    "nord15": "#B48EAD"
+  },
+  "theme": {
+    "primary": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "secondary": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "accent": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "error": {
+      "dark": "nord11",
+      "light": "nord11"
+    },
+    "warning": {
+      "dark": "nord12",
+      "light": "nord12"
+    },
+    "success": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "info": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "text": {
+      "dark": "nord4",
+      "light": "nord0"
+    },
+    "textMuted": {
+      "dark": "nord3",
+      "light": "nord1"
+    },
+    "background": {
+      "dark": "nord0",
+      "light": "nord6"
+    },
+    "backgroundPanel": {
+      "dark": "nord1",
+      "light": "nord5"
+    },
+    "backgroundElement": {
+      "dark": "nord1",
+      "light": "nord4"
+    },
+    "border": {
+      "dark": "nord2",
+      "light": "nord3"
+    },
+    "borderActive": {
+      "dark": "nord3",
+      "light": "nord2"
+    },
+    "borderSubtle": {
+      "dark": "nord2",
+      "light": "nord3"
+    },
+    "diffAdded": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "diffRemoved": {
+      "dark": "nord11",
+      "light": "nord11"
+    },
+    "diffContext": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "diffHunkHeader": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "diffHighlightAdded": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "diffHighlightRemoved": {
+      "dark": "nord11",
+      "light": "nord11"
+    },
+    "diffAddedBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "diffRemovedBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "diffContextBg": {
+      "dark": "nord1",
+      "light": "nord5"
+    },
+    "diffLineNumber": {
+      "dark": "nord2",
+      "light": "nord4"
+    },
+    "diffAddedLineNumberBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "diffRemovedLineNumberBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "markdownText": {
+      "dark": "nord4",
+      "light": "nord0"
+    },
+    "markdownHeading": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "markdownLink": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "markdownLinkText": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "markdownCode": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "markdownBlockQuote": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "markdownEmph": {
+      "dark": "nord12",
+      "light": "nord12"
+    },
+    "markdownStrong": {
+      "dark": "nord13",
+      "light": "nord13"
+    },
+    "markdownHorizontalRule": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "markdownListItem": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "markdownListEnumeration": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "markdownImage": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "markdownImageText": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "markdownCodeBlock": {
+      "dark": "nord4",
+      "light": "nord0"
+    },
+    "syntaxComment": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "syntaxKeyword": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "syntaxFunction": {
+      "dark": "nord8",
+      "light": "nord8"
+    },
+    "syntaxVariable": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "syntaxString": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "syntaxNumber": {
+      "dark": "nord15",
+      "light": "nord15"
+    },
+    "syntaxType": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "syntaxOperator": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "syntaxPunctuation": {
+      "dark": "nord4",
+      "light": "nord0"
+    }
+  }
+}
+```

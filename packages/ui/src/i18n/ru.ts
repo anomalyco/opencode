@@ -1,5 +1,6 @@
 export const dict = {
   "ui.sessionReview.title": "Изменения сессии",
+  "ui.sessionReview.title.lastTurn": "Изменения последнего хода",
   "ui.sessionReview.diffStyle.unified": "Объединённый",
   "ui.sessionReview.diffStyle.split": "Разделённый",
   "ui.sessionReview.expandAll": "Развернуть всё",
@@ -7,6 +8,12 @@ export const dict = {
 
   "ui.sessionReview.change.added": "Добавлено",
   "ui.sessionReview.change.removed": "Удалено",
+  "ui.sessionReview.change.modified": "Изменено",
+  "ui.sessionReview.image.loading": "Загрузка...",
+  "ui.sessionReview.image.placeholder": "Изображение",
+  "ui.sessionReview.largeDiff.title": "Diff слишком большой для отображения",
+  "ui.sessionReview.largeDiff.meta": "Лимит: {{limit}} изменённых строк. Текущий: {{current}} изменённых строк.",
+  "ui.sessionReview.largeDiff.renderAnyway": "Отобразить всё равно",
   "ui.lineComment.label.prefix": "Комментарий к ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Комментирование: ",
@@ -20,10 +27,13 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "повтор",
   "ui.sessionTurn.retry.inSeconds": "через {{seconds}}с",
+  "ui.sessionTurn.error.freeUsageExceeded": "Лимит бесплатного использования превышен",
+  "ui.sessionTurn.error.addCredits": "Добавить кредиты",
 
   "ui.sessionTurn.status.delegating": "Делегирование работы",
   "ui.sessionTurn.status.planning": "Планирование следующих шагов",
-  "ui.sessionTurn.status.gatheringContext": "Сбор контекста",
+  "ui.sessionTurn.status.gatheringContext": "Исследование",
+  "ui.sessionTurn.status.gatheredContext": "Исследовано",
   "ui.sessionTurn.status.searchingCodebase": "Поиск в кодовой базе",
   "ui.sessionTurn.status.searchingWeb": "Поиск в интернете",
   "ui.sessionTurn.status.makingEdits": "Внесение изменений",
@@ -72,6 +82,7 @@ export const dict = {
   "ui.common.question.other": "вопросов",
 
   "ui.common.add": "Добавить",
+  "ui.common.back": "Назад",
   "ui.common.cancel": "Отмена",
   "ui.common.confirm": "Подтвердить",
   "ui.common.dismiss": "Закрыть",
@@ -86,7 +97,10 @@ export const dict = {
   "ui.message.expand": "Развернуть сообщение",
   "ui.message.collapse": "Свернуть сообщение",
   "ui.message.copy": "Копировать",
+  "ui.message.copyMessage": "Копировать сообщение",
+  "ui.message.copyResponse": "Копировать ответ",
   "ui.message.copied": "Скопировано!",
+  "ui.message.interrupted": "Прервано",
   "ui.message.attachment.alt": "вложение",
 
   "ui.patch.action.deleted": "Удалено",
@@ -97,6 +111,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} отвечено",
   "ui.question.answer.none": "(нет ответа)",
   "ui.question.review.notAnswered": "(не отвечено)",
-  "ui.question.multiHint": "(выберите все подходящие)",
+  "ui.question.multiHint": "Выберите все подходящие",
+  "ui.question.singleHint": "Выберите один ответ",
   "ui.question.custom.placeholder": "Введите ваш ответ...",
 }

@@ -99,7 +99,7 @@ describe("session.retry.retryable", () => {
 
   test("handles json messages without code", () => {
     const error = wrap(JSON.stringify({ error: { message: "no_kv_space" } }))
-    expect(SessionRetry.retryable(error)).toBe("Provider Server Error")
+    expect(SessionRetry.retryable(error)).toBe(`{"error":{"message":"no_kv_space"}}`)
   })
 
   test("does not throw on numeric error codes", () => {
@@ -110,6 +110,15 @@ describe("session.retry.retryable", () => {
 
   test("returns undefined for non-json message", () => {
     const error = wrap("not-json")
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
+
+  test("does not retry context overflow errors", () => {
+    const error = new MessageV2.ContextOverflowError({
+      message: "Input exceeds context window of this model",
+      responseBody: '{"error":{"code":"context_length_exceeded"}}',
+    }).toObject() as ReturnType<NamedError["toObject"]>
+
     expect(SessionRetry.retryable(error)).toBeUndefined()
   })
 })

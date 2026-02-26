@@ -1,0 +1,1370 @@
+---
+title: Agent'lar
+description: Özel agent'ları yapılandırın ve kullanın.
+---
+
+Agent'lar, belirli görevler ve iş akışları için yapılandırılabilen uzmanlaşmış AI asistanlarıdır. Özel istemler, modeller ve araç erişimiyle odaklanmış araçlar oluşturmanıza olanak tanır.
+
+:::tip
+Herhangi bir kod değişikliği yapmadan kodu analiz etmek ve önerileri gözden geçirmek için Plan agent'ını kullanın.
+:::
+
+Bir oturum sırasında agent'lar arasında geçiş yapabilir veya onları `@` ifadesi ile çağırabilirsiniz.
+
+---
+
+## Türler
+
+opencode'da iki tür agent vardır; birincil agent'lar ve alt agent'lar.
+
+---
+
+### Birincil agent'lar
+
+Birincil agent'lar, doğrudan etkileşim kurduğunuz ana yardımcılardır. **Sekme** tuşunu veya yapılandırılmış `switch_agent` tuş atamanızı kullanarak bunlar arasında geçiş yapabilirsiniz. Bu agent'lar ana görüşmenizi yönetir. Araç erişimi, izinler aracılığıyla yapılandırılır; örneğin, Plan kısıtlıyken Build'de tüm araçlar etkindir.
+
+:::tip
+Bir oturum sırasında birincil agent'lar arasında geçiş yapmak için **Sekme** tuşunu kullanabilirsiniz.
+:::
+
+opencode, **Build** ve **Plan** olmak üzere iki yerleşik birincil agent ile birlikte gelir. Bunlara aşağıda bakacağız.
+
+---
+
+### Alt agent'lar
+
+Alt agent'lar, birincil agent'ların belirli görevler için çağırabileceği uzman yardımcılardır. Ayrıca mesajlarınızda **@ bahsederek** bunları manuel olarak da çağırabilirsiniz.
+
+opencode, **General** ve **Explore** olmak üzere iki yerleşik alt agent ile birlikte gelir. Buna aşağıda bakacağız.
+
+---
+
+## Yerleşik
+
+opencode iki yerleşik birincil agent ve iki yerleşik alt agent ile birlikte gelir.
+
+---
+
+### Build Kullanımı
+
+_Mod_: `primary`
+
+Build, tüm araçların etkin olduğu **varsayılan** birincil agent'tır. Bu, dosya işlemlerine ve sistem komutlarına tam erişime ihtiyaç duyduğunuz geliştirme çalışmaları için standart agent'tır.
+
+---
+
+### Plan Kullanımı
+
+_Mod_: `primary`
+
+Planlama ve analiz için tasarlanmış kısıtlı bir agent. Size daha fazla kontrol sağlamak ve istenmeyen değişiklikleri önlemek için bir izin sistemi kullanıyoruz.
+Varsayılan olarak aşağıdakilerin tümü `ask` olarak ayarlanmıştır:
+
+- `file edits`: Tüm yazmalar, yamalar ve düzenler
+- `bash`: Tüm bash komutları
+
+Bu agent, LLM'in kodu analiz etmesini, değişiklik önermesini veya kod tabanınızda herhangi bir gerçek değişiklik yapmadan plan oluşturmasını istediğinizde kullanışlıdır.
+
+---
+
+### General Kullanımı
+
+_Mod_: `subagent`
+
+Karmaşık soruları araştırmak ve çok adımlı görevleri yürütmek için genel amaçlı bir agent. Tam araç erişimine sahiptir (yapılacaklar hariç), böylece gerektiğinde dosya değişiklikleri yapabilir. Birden fazla iş birimini paralel olarak çalıştırmak için bunu kullanın.
+
+---
+
+### Explore Kullanımı
+
+_Mod_: `subagent`
+
+Kod tabanlarını keşfetmeye yönelik hızlı, salt okunur bir agent. Dosyalar değiştirilemiyor. Dosyaları kalıplara göre hızla bulmanız, anahtar sözcükler için kod aramanız veya kod tabanıyla ilgili soruları yanıtlamanız gerektiğinde bunu kullanın.
+
+---
+
+### Compact Kullanımı
+
+_Mod_: `primary`
+
+Uzun bağlamı daha küçük bir özete sıkıştıran gizli sistem agent'ı. Gerektiğinde otomatik olarak çalışır ve kullanıcı arayüzünde seçilemez.
+
+---
+
+### Title Kullanımı
+
+_Mod_: `primary`
+
+Kısa oturum başlıkları oluşturan gizli sistem agent'ı. Otomatik olarak çalışır ve kullanıcı arayüzünde seçilemez.
+
+---
+
+### Summary Kullanımı
+
+_Mod_: `primary`
+
+Oturum özetleri oluşturan gizli sistem agent'ı. Otomatik olarak çalışır ve kullanıcı arayüzünde seçilemez.
+
+---
+
+## Kullanım
+
+1. Birincil agent'lar için, oturum sırasında bunlar arasında geçiş yapmak için **Sekme** tuşunu kullanın. Yapılandırılmış `switch_agent` tuş bağınızı da kullanabilirsiniz.
+
+2. Alt agent'lar çağrılabilir:
+   - Açıklamalarına göre özel görevler için birincil agent'lar tarafından **otomatik olarak**.
+   - Mesajınızda bir alt agent'tan **@ bahsederek** manuel olarak. Örneğin.
+
+     ```txt frame="none"
+     @general help me search for this function
+     ```
+
+3. **Oturumlar arasında gezinme**: Alt agent'lar kendi alt oturumlarını oluşturduğunda, aşağıdakileri kullanarak ana oturum ile tüm alt oturumlar arasında gezinebilirsiniz:
+   - **\<Leader>+Right** (veya yapılandırılmış `session_child_cycle` tuş atamanız) ebeveyn → çocuk1 → çocuk2 → ... → ebeveyn arasında ileri doğru geçiş yapmak için
+   - **\<Leader>+Left** (veya yapılandırılmış `session_child_cycle_reverse` tuş atamanız) ebeveyn ← çocuk1 ← çocuk2 ← ... ← ebeveyn arasında geriye doğru geçiş yapmak için
+
+   Bu, ana görüşme ile özel alt agent çalışması arasında sorunsuz bir şekilde geçiş yapmanıza olanak tanır.
+
+---
+
+## Yapılandırma
+
+Yerleşik agent'ları özelleştirebilir veya yapılandırma yoluyla kendinizinkini oluşturabilirsiniz. Agent'lar iki şekilde yapılandırılabilir:
+
+---
+
+### JSON
+
+Agent'ları `opencode.json` yapılandırma dosyanızda yapılandırın:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "mode": "primary",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "prompt": "{file:./prompts/build.txt}",
+      "tools": {
+        "write": true,
+        "edit": true,
+        "bash": true
+      }
+    },
+    "plan": {
+      "mode": "primary",
+      "model": "anthropic/claude-haiku-4-20250514",
+      "tools": {
+        "write": false,
+        "edit": false,
+        "bash": false
+      }
+    },
+    "code-reviewer": {
+      "description": "Reviews code for best practices and potential issues",
+      "mode": "subagent",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
+      "tools": {
+        "write": false,
+        "edit": false
+      }
+    }
+  }
+}
+```
+
+---
+
+### Markdown
+
+Ayrıca agent'ları Markdown dosyalarını kullanarak da tanımlayabilirsiniz. Bunları şuraya yerleştirin:
+
+- Global: `~/.config/opencode/agents/`
+- Per-project: `.opencode/agents/`
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Reviews code for quality and best practices
+mode: subagent
+model: anthropic/claude-sonnet-4-20250514
+temperature: 0.1
+tools:
+  write: false
+  edit: false
+  bash: false
+---
+
+You are in code review mode. Focus on:
+
+- Code quality and best practices
+- Potential bugs and edge cases
+- Performance implications
+- Security considerations
+
+Provide constructive feedback without making direct changes.
+```
+
+Markdown dosyasının adı agent'ın adı olur. Örneğin, `review.md` bir `review` agent'ı oluşturur.
+
+---
+
+## Seçenekler
+
+Bu yapılandırma seçeneklerine ayrıntılı olarak bakalım.
+
+---
+
+### Açıklama
+
+Agent'ın ne yaptığına ve ne zaman kullanılacağına ilişkin kısa bir açıklama sağlamak için `description` seçeneğini kullanın.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "description": "Reviews code for best practices and potential issues"
+    }
+  }
+}
+```
+
+Bu **gerekli** bir yapılandırma seçeneğidir.
+
+---
+
+### Sıcaklık
+
+LLM'in yanıtlarının rastgeleliğini ve yaratıcılığını `temperature` yapılandırmasıyla kontrol edin.
+
+Düşük değerler yanıtları daha odaklı ve belirleyici hale getirirken, yüksek değerler yaratıcılığı ve değişkenliği artırır.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "plan": {
+      "temperature": 0.1
+    },
+    "creative": {
+      "temperature": 0.8
+    }
+  }
+}
+```
+
+Sıcaklık değerleri tipik olarak 0,0 ila 1,0 arasındadır:
+
+- **0,0-0,2**: Çok odaklı ve belirleyici yanıtlar, kod analizi ve planlama için idealdir
+- **0,3-0,5**: Biraz yaratıcılık içeren dengeli yanıtlar, genel gelişim görevleri için iyi
+- **0,6-1,0**: Daha yaratıcı ve çeşitli yanıtlar, beyin fırtınası ve keşif için yararlı
+
+```json title="opencode.json"
+{
+  "agent": {
+    "analyze": {
+      "temperature": 0.1,
+      "prompt": "{file:./prompts/analysis.txt}"
+    },
+    "build": {
+      "temperature": 0.3
+    },
+    "brainstorm": {
+      "temperature": 0.7,
+      "prompt": "{file:./prompts/creative.txt}"
+    }
+  }
+}
+```
+
+Sıcaklık belirtilmezse opencode modeline özgü varsayılanları kullanır; çoğu model için genellikle 0, Qwen modelleri için 0,55.
+
+---
+
+### Maksimum adım
+
+Bir agent'ın yalnızca metinle yanıt vermeye zorlanmadan önce gerçekleştirebileceği maksimum agent yineleme sayısını kontrol edin. Bu, maliyetleri kontrol etmek isteyen kullanıcıların agent eylemlerine bir sınır koymasına olanak tanır.
+
+Bu ayarlanmazsa, model durmayı seçene veya kullanıcı oturumu kesene kadar agent yinelemeye devam edecektir.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "quick-thinker": {
+      "description": "Fast reasoning with limited iterations",
+      "prompt": "You are a quick thinker. Solve problems with minimal steps.",
+      "steps": 5
+    }
+  }
+}
+```
+
+Sınıra ulaşıldığında, agent, işinin özeti ve önerilen kalan görevlerin bir özetiyle yanıt vermesi talimatını veren özel bir sistem prompt'u alır.
+
+:::caution
+Eski `maxSteps` alanı kullanımdan kaldırıldı. Bunun yerine `steps` kullanın.
+:::
+
+---
+
+### Devre dışı bırakma
+
+Agent'ı devre dışı bırakmak için `true` olarak ayarlayın.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "disable": true
+    }
+  }
+}
+```
+
+---
+
+### İstem
+
+Bu agent için `prompt` yapılandırmasıyla özel bir sistem prompt dosyası belirtin. Prompt dosyası, agent'ın amacına özel talimatlar içermelidir.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "prompt": "{file:./prompts/code-review.txt}"
+    }
+  }
+}
+```
+
+Bu yol, yapılandırma dosyasının bulunduğu yere göredir. Yani bu hem global opencode yapılandırması hem de projeye özel yapılandırma için işe yarar.
+
+---
+
+### Model
+
+Bu agent'ın kodu geçersiz için `model` ayarını kullanın. Farklı bölümler için optimize edilmiş farklı modelleri kullanmak için kullanışlıdır. Örneğin planlama için daha hızlı bir model, uygulama için daha yetenekli bir model.
+
+:::tip
+Bir model belirtmezseniz, birincil agent'lar [model globally configured](/docs/config#models)'yi kullanırken alt agent'lar, alt agent'ı çağıran birincil agent'ın modelini kullanır.
+:::
+
+```json title="opencode.json"
+{
+  "agent": {
+    "plan": {
+      "model": "anthropic/claude-haiku-4-20250514"
+    }
+  }
+}
+```
+
+opencode hesabınızdaki model kimliğini `provider/model-id` biçimini kullanır. Örneğin, [OpenCode Zen](/docs/zen) kullanıyorsanız, GPT 5.1 Codex için `opencode/gpt-5.1-codex` kullanırsınız.
+
+---
+
+### Araçlar
+
+`tools` yapılandırmasıyla bu agent'ta hangi araçların mevcut olduğunu kontrol edin. Belirli araçları `true` veya `false` olarak ayarlayarak etkinleştirebilir veya devre dışı bırakabilirsiniz.
+
+```json title="opencode.json" {3-6,9-12}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "write": true,
+    "bash": true
+  },
+  "agent": {
+    "plan": {
+      "tools": {
+        "write": false,
+        "bash": false
+      }
+    }
+  }
+}
+```
+
+:::note
+Agent'a özgü yapılandırma, genel yapılandırmayı geçersiz kılar.
+:::
+
+Aynı anda birden fazla aracı kontrol etmek için joker karakterleri de kullanabilirsiniz. Örneğin, bir MCP sunucusundaki tüm araçları devre dışı bırakmak için:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "readonly": {
+      "tools": {
+        "mymcp_*": false,
+        "write": false,
+        "edit": false
+      }
+    }
+  }
+}
+```
+
+[Araçlar hakkında daha fazla bilgi](/docs/tools).
+
+---
+
+### İzinler
+
+Bir agent'ın gerçekleştirebileceği eylemleri yönetmek için izinleri yapılandırabilirsiniz. Şu anda `edit`, `bash` ve `webfetch` araçlarının izinleri şu şekilde yapılandırılabilir:
+
+- `"ask"` — Agent çalıştırmadan önce onay iste
+- `"allow"` — Onay olmadan tüm işlemlere izin ver
+- `"deny"` — Agent'ı devre dışı bırakır
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny"
+  }
+}
+```
+
+Bu izinleri agent başına geçersiz kılabilirsiniz.
+
+```json title="opencode.json" {3-5,8-10}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny"
+  },
+  "agent": {
+    "build": {
+      "permission": {
+        "edit": "ask"
+      }
+    }
+  }
+}
+```
+
+İzinleri Markdown agent'larında da ayarlayabilirsiniz.
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Code review without edits
+mode: subagent
+permission:
+  edit: deny
+  bash:
+    "*": ask
+    "git diff": allow
+    "git log*": allow
+    "grep *": allow
+  webfetch: deny
+---
+
+Only analyze code and suggest changes.
+```
+
+Belirli bash komutları için izinleri ayarlayabilirsiniz.
+
+```json title="opencode.json" {7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "git push": "ask",
+          "grep *": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+Bu küresel bir desen alabilir.
+
+```json title="opencode.json" {7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "git *": "ask"
+        }
+      }
+    }
+  }
+}
+```
+
+Ayrıca tüm komutların izinlerini yönetmek için `*` joker karakterini de kullanabilirsiniz.
+Son eşleşen kural öncelikli olduğundan, `*` joker karakterini ilk sıraya ve belirli kuralları sonraya koyun.
+
+```json title="opencode.json" {8}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "*": "ask",
+          "git status *": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+[İzinler hakkında daha fazla bilgi](/docs/permissions).
+
+---
+
+### Mod
+
+Agent'ın modunu `mode` yapılandırmasıyla kontrol edin. `mode` seçeneği agent'ın nasıl kullanılabileceğini belirlemek için kullanılır.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "mode": "subagent"
+    }
+  }
+}
+```
+
+`mode` seçeneği `primary`, `subagent` veya `all` olarak ayarlanabilir. `mode` belirtilmezse varsayılan olarak `all` olur.
+
+---
+
+### Gizli
+
+`@` otomatik tamamlama menüsünden bir alt agent'ı `hidden: true` ile gizleyin. Yalnızca diğer agent'lar tarafından Task aracı aracılığıyla programlı olarak çağrılması gereken dahili alt agent'lar için kullanışlıdır.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "internal-helper": {
+      "mode": "subagent",
+      "hidden": true
+    }
+  }
+}
+```
+
+Bu yalnızca otomatik menüdeki görünürlüğü etkiler. İzinler izin verirse, gizli agent'lar model tarafından Task aracı aracılığıyla çağrılmaya devam edilebilir.
+
+:::note
+Yalnızca `mode: subagent` agent'ları için geçerlidir.
+:::
+
+---
+
+### Görev izinleri
+
+`permission.task` ile bir agent'ın Task aracı aracılığıyla hangi alt agent'ları çağırabileceğini kontrol edin. Esnek eşleştirme için küresel desenleri kullanır.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "orchestrator": {
+      "mode": "primary",
+      "permission": {
+        "task": {
+          "*": "deny",
+          "orchestrator-*": "allow",
+          "code-reviewer": "ask"
+        }
+      }
+    }
+  }
+}
+```
+
+`deny` olarak ayarlandığında, alt agent Task aracı açıklamasından tamamen kaldırılır, böylece model onu çağırmaya çalışmaz.
+
+:::tip
+Kurallar sırayla değerlendirilir ve **son eşleşen kural kazanır**. Yukarıdaki örnekte `orchestrator-planner`, hem `*` (reddet) hem de `orchestrator-*` (izin ver) ile eşleşir, ancak `orchestrator-*`, `*`'den sonra geldiğinden sonuç `allow` olur.
+:::
+
+:::tip
+Kullanıcılar, agent'ın görev izinleri bunu reddetse bile, her zaman herhangi bir alt agent'ı `@` otomatik tamamlama menüsü aracılığıyla doğrudan çağırabilir.
+:::
+
+---
+
+### Renk
+
+Agent'ın kullanıcı arayüzündeki görsel görünümünü `color` seçeneğiyle özelleştirin. Bu, agent'ın arayüzde nasıl göründüğünü etkiler.
+
+geçerli bir onaltılık renk (ör. `#FF5733`) veya tema rengini kullanın: `primary`, `secondary`, `accent`, `success`, `warning`, `error`, `info`.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "creative": {
+      "color": "#ff6b6b"
+    },
+    "code-reviewer": {
+      "color": "accent"
+    }
+  }
+}
+```
+
+---
+
+### Top P
+
+`top_p` seçeneğiyle yanıt çeşitliliğini kontrol edin. Rastgeleliği kontrol etmek için sıcaklığa alternatif.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "brainstorm": {
+      "top_p": 0.9
+    }
+  }
+}
+```
+
+Değerler 0,0 ile 1,0 arasında değişir. Düşük değerler daha odaklıdır, yüksek değerler ise daha çeşitlidir.
+
+---
+
+### Ek
+
+Agent yapılandırmanızdaki diğer seçenekler, model seçenekleri olarak **doğrudan sağlayıcıya** iletilecektir. Bu, sağlayıcıya özgü özelliklerin ve parametrelerin kullanılmasını sağlar.
+
+Örneğin OpenAI'nin akıl yürütme modelleriyle akıl yürütme çabasını kontrol edebilirsiniz:
+
+```json title="opencode.json" {6,7}
+{
+  "agent": {
+    "deep-thinker": {
+      "description": "Agent that uses high reasoning effort for complex problems",
+      "model": "openai/gpt-5",
+      "reasoningEffort": "high",
+      "textVerbosity": "low"
+    }
+  }
+}
+```
+
+Bu ek seçenekler modele ve sağlayıcıya özeldir. Kullanılabilir parametreler için sağlayıcınızın belgelerine bakın.
+
+:::tip
+Mevcut modellerin listesini görmek için `opencode models` komutunu çalıştırın.
+:::
+
+---
+
+## Agent Oluşturma
+
+Aşağıdaki komutu kullanarak yeni agent'lar oluşturabilirsiniz:
+
+```bash
+opencode agent create
+```
+
+Bu etkileşimli komut şunları sağlayacaktır:
+
+1. Agent'ı nereye kaydedeceğinizi sorar; küresel veya projeye özel.
+2. Agent'ın ne yapması gerektiğinin açıklamasını ister.
+3. Uygun bir sistem prompt'u ve tanımlayıcı oluşturur.
+4. Agent'ın hangi araçlara erişebileceğini seçmenize izin verir.
+5. Son olarak agent yapılandırmasıyla bir Markdown dosyası oluşturur.
+
+---
+
+## Kullanım Senaryoları
+
+Farklı agent'lara yönelik bazı yaygın kullanım senaryoları aşağıda verilmiştir.
+
+- **Build agent**: Tüm araçların etkinleştirildiği tam geliştirme çalışması
+- **Plan agent**: Değişiklik yapmadan analiz ve planlama
+- **Review agent**: Salt okunur erişim ve belgeleme araçlarıyla kod incelemesi
+- **Debug agent**: Bash ve okuma araçları etkinken araştırmaya odaklanmıştır
+- **Docs agent**: Dosya işlemleriyle ancak sistem komutları olmadan belge yazma
+
+---
+
+## Örnekler
+
+Yararlı bulabileceğiniz bazı örnek agent'ları burada bulabilirsiniz.
+
+:::tip
+Paylaşmak istediğiniz bir agent'ınız var mı? [Submit a PR](https://github.com/anomalyco/opencode).
+:::
+
+---
+
+### Dokümantasyon agent'ı
+
+```markdown title="~/.config/opencode/agents/docs-writer.md"
+---
+description: Writes and maintains project documentation
+mode: subagent
+tools:
+  bash: false
+---
+
+You are a technical writer. Create clear, comprehensive documentation.
+
+Focus on:
+
+- Clear explanations
+- Proper structure
+- Code examples
+- User-friendly language
+```
+
+---
+
+### Güvenlik denetçisi
+
+```markdown title="~/.config/opencode/agents/security-auditor.md"
+---
+description: Performs security audits and identifies vulnerabilities
+mode: subagent
+tools:
+  write: false
+  edit: false
+---
+
+You are a security expert. Focus on identifying potential security issues.
+
+Look for:
+
+- Input validation vulnerabilities
+- Authentication and authorization flaws
+- Data exposure risks
+- Dependency vulnerabilities
+- Configuration security issues
+```
+
+3. **Oturumlar arasında gezinme**: Subagent'lar kendi alt oturumlarını oluşturduğunda, aşağıdakileri kullanarak ana oturum ile tüm alt oturumlar arasında gezinebilirsiniz:
+   - **\<Leader>+Right** (veya yapılandırılmış `session_child_cycle` tuş atamanız) ebeveyn → çocuk1 → çocuk2 → ... → ebeveyn arasında ileri doğru geçiş yapmak için
+   - **\<Leader>+Left** (veya yapılandırılmış `session_child_cycle_reverse` tuş atamanız) ebeveyn ← çocuk1 ← çocuk2 ← ... ← ebeveyn arasında geriye doğru geçiş yapmak için
+
+   Bu, ana görüşme ile özel subagent çalışması arasında sorunsuz bir şekilde geçiş yapmanıza olanak tanır.
+
+---
+
+## Yapılandırma veya yapılandırma yoluyla kendinizinkini oluşturabilirsiniz. Agent'lar iki şekilde yapılandırılabilir:
+
+---
+
+### JSON
+
+Agent'ları `opencode.json` yapılandırma dosyanızda yapılandırın:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "mode": "primary",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "prompt": "{file:./prompts/build.txt}",
+      "tools": {
+        "write": true,
+        "edit": true,
+        "bash": true
+      }
+    },
+    "plan": {
+      "mode": "primary",
+      "model": "anthropic/claude-haiku-4-20250514",
+      "tools": {
+        "write": false,
+        "edit": false,
+        "bash": false
+      }
+    },
+    "code-reviewer": {
+      "description": "Reviews code for best practices and potential issues",
+      "mode": "subagent",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
+      "tools": {
+        "write": false,
+        "edit": false
+      }
+    }
+  }
+}
+```
+
+---
+
+### Markdown
+
+Ayrıca agent'ları Markdown dosyalarını kullanarak da tanımlayabilirsiniz. Bunları şuraya yerleştirin:
+
+- Global: `~/.config/opencode/agents/`
+- Per-project: `.opencode/agents/`
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Reviews code for quality and best practices
+mode: subagent
+model: anthropic/claude-sonnet-4-20250514
+temperature: 0.1
+tools:
+  write: false
+  edit: false
+  bash: false
+---
+
+You are in code review mode. Focus on:
+
+- Code quality and best practices
+- Potential bugs and edge cases
+- Performance implications
+- Security considerations
+
+Provide constructive feedback without making direct changes.
+```
+
+Markdown dosyasının adı agent'ın adı olur. Örneğin, `review.md` bir `review` agent'ı oluşturur.
+
+---
+
+## Seçenekler
+
+Bu yapılandırma seçeneklerine ayrıntılı olarak bakalım.
+
+---
+
+### Açıklama
+
+Agent'ın ne yaptığına ve ne zaman kullanılacağına ilişkin kısa bir açıklama sağlamak için `description` seçeneğini kullanın.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "description": "Reviews code for best practices and potential issues"
+    }
+  }
+}
+```
+
+Bu **gerekli** bir yapılandırma seçeneğidir.
+
+---
+
+### Sıcaklık
+
+LLM'nin yanıtlarının rastgeleliğini ve yaratıcılığını `temperature` yapılandırmasıyla kontrol edin.
+
+Düşük değerler yanıtları daha odaklı ve belirleyici hale getirirken, yüksek değerler yaratıcılığı ve değişkenliği artırır.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "plan": {
+      "temperature": 0.1
+    },
+    "creative": {
+      "temperature": 0.8
+    }
+  }
+}
+```
+
+Sıcaklık değerleri tipik olarak 0,0 ila 1,0 arasındadır:
+
+- **0,0-0,2**: Çok odaklı ve belirleyici yanıtlar, kod analizi ve planlama için idealdir
+- **0,3-0,5**: Biraz yaratıcılık içeren dengeli yanıtlar, genel gelişim görevleri için iyi
+- **0,6-1,0**: Daha yaratıcı ve çeşitli yanıtlar, beyin fırtınası ve keşif için yararlı
+
+```json title="opencode.json"
+{
+  "agent": {
+    "analyze": {
+      "temperature": 0.1,
+      "prompt": "{file:./prompts/analysis.txt}"
+    },
+    "build": {
+      "temperature": 0.3
+    },
+    "brainstorm": {
+      "temperature": 0.7,
+      "prompt": "{file:./prompts/creative.txt}"
+    }
+  }
+}
+```
+
+Sıcaklık belirtilmezse opencode modeline özgü varsayılanları kullanır; çoğu model için genellikle 0, Qwen modelleri için 0,55.
+
+---
+
+### Maksimum adım
+
+Bir agent'ın yalnızca metinle yanıt vermeye zorlanmadan önce gerçekleştirebileceği maksimum agent yineleme sayısını kontrol edin. Bu, maliyetleri kontrol etmek isteyen kullanıcıların agent eylemlerine bir sınır koymasına olanak tanır.
+
+Bu ayarlanmazsa, model durmayı seçene veya kullanıcı oturumu kesene kadar agent yinelemeye devam edecektir.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "quick-thinker": {
+      "description": "Fast reasoning with limited iterations",
+      "prompt": "You are a quick thinker. Solve problems with minimal steps.",
+      "steps": 5
+    }
+  }
+}
+```
+
+Sınıra ulaşıldığında, agent, işinin özeti ve önerilen kalan görevlerin bir özetiyle yanıt vermesi talimatını veren özel bir sistem prompt'u alır.
+
+:::caution
+Eski `maxSteps` alanı kullanımdan kaldırıldı. Bunun yerine `steps` kullanın.
+:::
+
+---
+
+### Devre dışı bırakma
+
+Agent'ı devre dışı bırakmak için `true` olarak ayarlayın.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "disable": true
+    }
+  }
+}
+```
+
+---
+
+### İstem
+
+Bu agent için `prompt` yapılandırmasıyla özel bir sistem prompt dosyası belirtin. Prompt dosyası, agent'ın amacına özel talimatlar içermelidir.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "prompt": "{file:./prompts/code-review.txt}"
+    }
+  }
+}
+```
+
+Bu yol, yapılandırma dosyasının bulunduğu yere göredir. Yani bu hem global opencode yapılandırması hem de projeye özel yapılandırma için işe yarar.
+
+---
+
+### Model
+
+Bu agent'ın varsayılan modelini geçersiz kılmak için `model` ayarını kullanın. Farklı bölümler için optimize edilmiş farklı modelleri kullanmak için kullanışlıdır. Örneğin planlama için daha hızlı bir model, uygulama için daha yetenekli bir model.
+
+:::tip
+Bir model belirtmezseniz, primary agent'lar [model globally configured](/docs/config#models)'yi kullanırken subagent'lar, subagent'ı çağıran primary agent'ın modelini kullanır.
+:::
+
+```json title="opencode.json"
+{
+  "agent": {
+    "plan": {
+      "model": "anthropic/claude-haiku-4-20250514"
+    }
+  }
+}
+```
+
+opencode hesabınızdaki model kimliğini `provider/model-id` biçimini kullanır. Örneğin, [OpenCode Zen](/docs/zen) kullanıyorsanız, GPT 5.1 Codex için `opencode/gpt-5.1-codex` kullanırsınız.
+
+---
+
+### Araçlar
+
+`tools` yapılandırmasıyla bu agent'ta hangi araçların mevcut olduğunu kontrol edin. Belirli araçları `true` veya `false` olarak ayarlayarak etkinleştirebilir veya devre dışı bırakabilirsiniz.
+
+```json title="opencode.json" {3-6,9-12}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "write": true,
+    "bash": true
+  },
+  "agent": {
+    "plan": {
+      "tools": {
+        "write": false,
+        "bash": false
+      }
+    }
+  }
+}
+```
+
+:::note
+Agent'a özgü yapılandırma, genel yapılandırmayı geçersiz kılar.
+:::
+
+Aynı anda birden fazla aracı kontrol etmek için joker karakterleri de kullanabilirsiniz. Örneğin, bir MCP sunucusundaki tüm araçları devre dışı bırakmak için:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "readonly": {
+      "tools": {
+        "mymcp_*": false,
+        "write": false,
+        "edit": false
+      }
+    }
+  }
+}
+```
+
+[Araçlar hakkında daha fazla bilgi](/docs/tools).
+
+---
+
+### İzinler
+
+Bir agent'ın gerçekleştirebileceği eylemleri yönetmek için izinleri yapılandırabilirsiniz. Şu anda `edit`, `bash` ve `webfetch` araçlarının izinleri şu şekilde yapılandırılabilir:
+
+- `"ask"` — Agent çalıştırmadan önce onay iste
+- `"allow"` — Onay olmadan tüm işlemlere izin ver
+- `"deny"` — Agent'ı devre dışı bırakır
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny"
+  }
+}
+```
+
+Bu izinleri agent başına geçersiz kılabilirsiniz.
+
+```json title="opencode.json" {3-5,8-10}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny"
+  },
+  "agent": {
+    "build": {
+      "permission": {
+        "edit": "ask"
+      }
+    }
+  }
+}
+```
+
+İzinleri Markdown agent'larında da ayarlayabilirsiniz.
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Code review without edits
+mode: subagent
+permission:
+  edit: deny
+  bash:
+    "*": ask
+    "git diff": allow
+    "git log*": allow
+    "grep *": allow
+  webfetch: deny
+---
+
+Only analyze code and suggest changes.
+```
+
+Belirli bash komutları için izinleri ayarlayabilirsiniz.
+
+```json title="opencode.json" {7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "git push": "ask",
+          "grep *": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+Bu küresel bir desen alabilir.
+
+```json title="opencode.json" {7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "git *": "ask"
+        }
+      }
+    }
+  }
+}
+```
+
+Ayrıca tüm komutların izinlerini yönetmek için `*` joker karakterini de kullanabilirsiniz.
+Son eşleşen kural öncelikli olduğundan, `*` joker karakterini ilk sıraya ve belirli kuralları sonraya koyun.
+
+```json title="opencode.json" {8}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "*": "ask",
+          "git status *": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+[İzinler hakkında daha fazla bilgi](/docs/permissions).
+
+---
+
+### Mod
+
+Agent'ın modunu `mode` yapılandırmasıyla kontrol edin. `mode` seçeneği agent'ın nasıl kullanılabileceğini belirlemek için kullanılır.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "mode": "subagent"
+    }
+  }
+}
+```
+
+`mode` seçeneği `primary`, `subagent` veya `all` olarak ayarlanabilir. `mode` belirtilmezse varsayılan olarak `all` olur.
+
+---
+
+### Gizli
+
+`@` otomatik tamamlama menüsünden bir subagent'ı `hidden: true` ile gizleyin. Yalnızca diğer agent'lar tarafından Task aracı aracılığıyla programlı olarak çağrılması gereken dahili subagent'lar için kullanışlıdır.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "internal-helper": {
+      "mode": "subagent",
+      "hidden": true
+    }
+  }
+}
+```
+
+Bu yalnızca otomatik menüdeki kullanıcının görünümlerinin etkileri. İzinler izin vermesine, gizli agent'lar modeli tarafından Task aracı aracılığıyla çağrılmaya devam edilebilir.
+
+:::note
+Yalnızca `mode: subagent` agent'ları için geçerlidir.
+:::
+
+---
+
+### Görev izinleri
+
+`permission.task` ile bir agent'ın Task aracı aracılığıyla hangi subagent'ları çağırabileceğini kontrol edin. Esnek eşleştirme için küresel desenleri kullanır.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "orchestrator": {
+      "mode": "primary",
+      "permission": {
+        "task": {
+          "*": "deny",
+          "orchestrator-*": "allow",
+          "code-reviewer": "ask"
+        }
+      }
+    }
+  }
+}
+```
+
+`deny` olarak ayarlandığında, subagent Task aracı açıklamasından tamamen kaldırılır, böylece model onu çağırmaya çalışmaz.
+
+:::tip
+Kurallar sırayla değerlendirilir ve **son eşleşen kural kazanır**. Yukarıdaki örnekte `orchestrator-planner`, hem `*` (reddet) hem de `orchestrator-*` (izin ver) ile eşleşir, ancak `orchestrator-*`, `*`'den sonra geldiğinden sonuç `allow` olur.
+:::
+
+:::tip
+Kullanıcılar, agent'ın görev izinleri bunu reddetse bile, her zaman herhangi bir subagent'ı `@` otomatik tamamlama menüsü aracılığıyla doğrudan çağırabilir.
+:::
+
+---
+
+### Renk
+
+Agent'ın kullanıcı arayüzündeki görsel görünümünü `color` seçeneğiyle özelleştirin. Bu, agent'ın arayüzde nasıl göründüğünü etkiler.
+
+geçerli bir onaltılık renk (ör. `#FF5733`) veya tema rengini kullanın: `primary`, `secondary`, `accent`, `success`, `warning`, `error`, `info`.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "creative": {
+      "color": "#ff6b6b"
+    },
+    "code-reviewer": {
+      "color": "accent"
+    }
+  }
+}
+```
+
+---
+
+### Top P
+
+`top_p` seçeneğiyle yanıt çeşitliliğini kontrol edin. Rastgeleliği kontrol etmek için sıcaklığa alternatif.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "brainstorm": {
+      "top_p": 0.9
+    }
+  }
+}
+```
+
+Değerler 0,0 ile 1,0 arasında değişir. Düşük değerler daha odaklıdır, yüksek değerler ise daha çeşitlidir.
+
+---
+
+### Ek
+
+Agent yapılandırmanızdaki diğer seçenekler, model seçenekleri olarak **doğrudan sağlayıcıya** iletilecektir. Bu, sağlayıcıya özgü özelliklerin kullanılmasını sağlar.
+
+Örneğin OpenAI'nin akıl yürütme modelleriyle akıl yürütme çabasını kontrol edebilirsiniz:
+
+```json title="opencode.json" {6,7}
+{
+  "agent": {
+    "deep-thinker": {
+      "description": "Agent that uses high reasoning effort for complex problems",
+      "model": "openai/gpt-5",
+      "reasoningEffort": "high",
+      "textVerbosity": "low"
+    }
+  }
+}
+```
+
+Bu ek seçenekler modele ve sağlayıcıya özeldir. Kullanılabilir parametreler için sağlayıcınızın belgelerine bakın.
+
+:::tip
+Mevcut modellerin listesini görmek için `opencode models` komutunu çalıştırın.
+:::
+
+---
+
+## Agent Oluşturma
+
+Aşağıdaki komutu kullanarak yeni agent'lar oluşturabilirsiniz:
+
+```bash
+opencode agent create
+```
+
+Bu etkileşimli komut şunları sağlayacaktır:
+
+1. Agent'ı nereye kaydedeceğinizi sorun; küresel veya projeye özel.
+2. Agent'ın ne yapması gerektiğinin açıklaması.
+3. Uygun bir sistem istemi ve tanımlayıcı oluşturun.
+4. Agent'ın hangi araçlara erişebileceğini seçmenize izin verin.
+5. Son olarak agent yapılandırmasıyla bir Markdown dosyası oluşturun.
+
+---
+
+## Kullanım Senaryoları
+
+Farklı agent'lara yönelik bazı yaygın kullanım senaryoları aşağıda verilmiştir.
+
+- **Build agent**: Tüm araçların etkinleştirildiği tam geliştirme çalışması
+- **Plan agent**: Değişiklik yapmadan analiz ve planlama
+- **Review agent**: Salt okunur erişim ve belgeleme araçlarıyla kod incelemesi
+- **Debug agent**: Bash ve okuma araçları etkinken araştırmaya odaklanmıştır
+- **Docs agent**: Dosya işlemleriyle ancak sistem komutları olmadan belge yazma
+
+---
+
+## Örnekler
+
+Yararlı bulabileceğiniz bazı örnek agent'ları burada bulabilirsiniz.
+
+:::tip
+Paylaşmak istediğiniz bir agent'ınız var mı? [Submit a PR](https://github.com/anomalyco/opencode).
+:::
+
+---
+
+### Dokümantasyon agent'ı
+
+```markdown title="~/.config/opencode/agents/docs-writer.md"
+---
+description: Writes and maintains project documentation
+mode: subagent
+tools:
+  bash: false
+---
+
+You are a technical writer. Create clear, comprehensive documentation.
+
+Focus on:
+
+- Clear explanations
+- Proper structure
+- Code examples
+- User-friendly language
+```
+
+---
+
+### Güvenlik denetçisi
+
+```markdown title="~/.config/opencode/agents/security-auditor.md"
+---
+description: Performs security audits and identifies vulnerabilities
+mode: subagent
+tools:
+  write: false
+  edit: false
+---
+
+You are a security expert. Focus on identifying potential security issues.
+
+Look for:
+
+- Input validation vulnerabilities
+- Authentication and authorization flaws
+- Data exposure risks
+- Dependency vulnerabilities
+- Configuration security issues
+```
