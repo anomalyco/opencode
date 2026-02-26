@@ -867,43 +867,6 @@ export const SessionReview = (props: SessionReviewProps) => {
                                   before: item().before,
                                   after: item().after,
                                   readFile: props.readFile,
-                                  renderImage: (args: { src: string }) => (
-                                    <div data-slot="session-review-image-container">
-                                      <img data-slot="session-review-image" src={args.src} alt={file} />
-                                    </div>
-                                  ),
-                                  renderRemoved: (args: { kind: "image" | "audio" }) =>
-                                    args.kind === "image" ? (
-                                      <div data-slot="session-review-image-container" data-removed>
-                                        <span data-slot="session-review-image-placeholder">
-                                          {i18n.t("ui.sessionReview.change.removed")}
-                                        </span>
-                                      </div>
-                                    ) : undefined,
-                                  renderPlaceholder: (args: { kind: "image" | "audio" }) =>
-                                    args.kind === "image" ? (
-                                      <div data-slot="session-review-image-container">
-                                        <span data-slot="session-review-image-placeholder">
-                                          {i18n.t("ui.sessionReview.image.placeholder")}
-                                        </span>
-                                      </div>
-                                    ) : undefined,
-                                  renderLoading: (args: { kind: "image" | "audio" }) =>
-                                    args.kind === "image" ? (
-                                      <div data-slot="session-review-image-container">
-                                        <span data-slot="session-review-image-placeholder">
-                                          {i18n.t("ui.sessionReview.image.loading")}
-                                        </span>
-                                      </div>
-                                    ) : undefined,
-                                  renderError: (args: { kind: "image" | "audio" | "svg" }) =>
-                                    args.kind === "image" ? (
-                                      <div data-slot="session-review-image-container">
-                                        <span data-slot="session-review-image-placeholder">
-                                          {i18n.t("ui.sessionReview.image.placeholder")}
-                                        </span>
-                                      </div>
-                                    ) : undefined,
                                 }}
                               />
                             </Match>

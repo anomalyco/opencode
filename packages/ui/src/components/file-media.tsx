@@ -1,5 +1,6 @@
 import type { FileContent } from "@opencode-ai/sdk/v2"
-import { createEffect, createMemo, createSignal, Match, Show, Switch, type JSX } from "solid-js"
+import { createEffect, createMemo, createResource, Match, on, Show, Switch, type JSX } from "solid-js"
+import { useI18n } from "../context/i18n"
 import {
   dataUrlFromMediaValue,
   hasMediaValue,
@@ -16,55 +17,8 @@ export type FileMediaOptions = {
   before?: unknown
   after?: unknown
   readFile?: (path: string) => Promise<FileContent | undefined>
-  renderImage?: (ctx: { src: string; path?: string; onLoad: () => void }) => JSX.Element
-  renderAudio?: (ctx: { src: string; path?: string; mime?: string; onLoad: () => void }) => JSX.Element
-  renderSvg?: (ctx: { src?: string; source: string; path?: string; onLoad: () => void }) => JSX.Element
-  renderRemoved?: (ctx: { kind: "image" | "audio" }) => JSX.Element
-  renderPlaceholder?: (ctx: { kind: "image" | "audio" }) => JSX.Element
-  renderLoading?: (ctx: { kind: "image" | "audio" }) => JSX.Element
-  renderError?: (ctx: { kind: "image" | "audio" | "svg" }) => JSX.Element
-  renderBinaryPlaceholder?: (ctx: { path?: string }) => JSX.Element
   onLoad?: () => void
   onError?: (ctx: { kind: "image" | "audio" | "svg" }) => void
-}
-
-function defaultImage(ctx: { src: string; path?: string; onLoad: () => void }) {
-  return (
-    <div class="px-6 py-4">
-      <img src={ctx.src} alt={ctx.path} class="max-w-full" onLoad={ctx.onLoad} />
-    </div>
-  )
-}
-
-function defaultAudio(ctx: { src: string; mime?: string; onLoad: () => void }) {
-  return (
-    <div class="px-6 py-4">
-      <audio controls preload="metadata" onLoadedMetadata={ctx.onLoad}>
-        <source src={ctx.src} type={ctx.mime} />
-      </audio>
-    </div>
-  )
-}
-
-function defaultSvg(ctx: { src?: string; source: string; path?: string; onLoad: () => void }) {
-  return (
-    <div class="flex flex-col gap-4 px-6 py-4">
-      <pre class="overflow-auto rounded border border-border-weak-base bg-background-base p-3 text-12-mono">
-        {ctx.source}
-      </pre>
-      <Show when={ctx.src}>
-        {(src) => (
-          <div class="flex justify-center">
-            <img src={src()} alt={ctx.path} class="max-w-full max-h-96" onLoad={ctx.onLoad} />
-          </div>
-        )}
-      </Show>
-    </div>
-  )
-}
-
-function defaultBinary(path: string | undefined) {
-  return <div class="px-6 py-4 text-text-weak">{path ? `${path} is binary.` : "Binary content"}</div>
 }
 
 function mediaValue(cfg: FileMediaOptions, mode: "image" | "audio") {
@@ -74,6 +28,7 @@ function mediaValue(cfg: FileMediaOptions, mode: "image" | "audio") {
 }
 
 export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX.Element }) {
+  const i18n = useI18n()
   const cfg = () => props.media
   const kind = createMemo(() => {
     const media = cfg()
@@ -88,11 +43,6 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
     return isBinaryContent(media.current as any)
   })
 
-  const [src, setSrc] = createSignal<string | undefined>(undefined)
-  const [status, setStatus] = createSignal<"idle" | "loading" | "error">("idle")
-  const [audioMime, setAudioMime] = createSignal<string | undefined>(undefined)
-  let svgError = false
-
   const onLoad = () => props.media?.onLoad?.()
 
   const deleted = createMemo(() => {
@@ -104,86 +54,108 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
     return !hasMediaValue(media.after as any) && hasMediaValue(media.before as any)
   })
 
-  createEffect(() => {
-    cfg()?.path
-    cfg()?.current
-    svgError = false
-  })
-
-  createEffect(() => {
+  const direct = createMemo(() => {
     const media = cfg()
     const k = kind()
-    if (!media || !k) {
-      setSrc(undefined)
-      setStatus("idle")
-      setAudioMime(undefined)
-      return
-    }
-    if (k === "svg") {
-      setSrc(undefined)
-      setStatus("idle")
-      setAudioMime(undefined)
-      return
-    }
-
-    setSrc(dataUrlFromMediaValue(mediaValue(media, k), k))
-    setStatus("idle")
-    setAudioMime(undefined)
+    if (!media || (k !== "image" && k !== "audio")) return
+    return dataUrlFromMediaValue(mediaValue(media, k), k)
   })
 
-  createEffect(() => {
+  const request = createMemo(() => {
     const media = cfg()
     const k = kind()
-    if (!media || !k || k === "svg") return
+    if (!media || (k !== "image" && k !== "audio")) return
     if (media.current !== undefined) return
-    if (src()) return
-    if (status() !== "idle") return
     if (deleted()) return
-    if (!media.path) return
-    if (!media.readFile) return
+    if (direct()) return
+    if (!media.path || !media.readFile) return
 
-    setStatus("loading")
-    media
-      .readFile(media.path)
-      .then((result) => {
-        const next = dataUrlFromMediaValue(result as any, k)
-        if (!next) {
-          setStatus("error")
-          media.onError?.({ kind: k })
-          return
+    return {
+      key: `${k}:${media.path}`,
+      kind: k,
+      path: media.path,
+      readFile: media.readFile,
+      onError: media.onError,
+    }
+  })
+
+  const [loaded] = createResource(request, async (input) => {
+    return input.readFile(input.path).then(
+      (result) => {
+        const src = dataUrlFromMediaValue(result as any, input.kind)
+        if (!src) {
+          input.onError?.({ kind: input.kind })
+          return { key: input.key, error: true as const }
         }
 
-        setSrc(next)
-        setStatus("idle")
-        if (k === "audio") setAudioMime(normalizeMimeType(result?.mimeType))
-      })
-      .catch(() => {
-        setStatus("error")
-        media.onError?.({ kind: k })
-      })
+        return {
+          key: input.key,
+          src,
+          mime: input.kind === "audio" ? normalizeMimeType(result?.mimeType) : undefined,
+        }
+      },
+      () => {
+        input.onError?.({ kind: input.kind })
+        return { key: input.key, error: true as const }
+      },
+    )
+  })
+
+  const remote = createMemo(() => {
+    const input = request()
+    const value = loaded()
+    if (!input || !value || value.key !== input.key) return
+    return value
+  })
+
+  const src = createMemo(() => {
+    const value = remote()
+    return direct() ?? (value && "src" in value ? value.src : undefined)
+  })
+  const status = createMemo(() => {
+    if (direct()) return "ready" as const
+    if (!request()) return "idle" as const
+    if (loaded.loading) return "loading" as const
+    if (remote()?.error) return "error" as const
+    if (src()) return "ready" as const
+    return "idle" as const
+  })
+  const audioMime = createMemo(() => {
+    const value = remote()
+    return value && "mime" in value ? value.mime : undefined
   })
 
   const svgSource = createMemo(() => {
     const media = cfg()
-    if (!media) return
+    if (!media || kind() !== "svg") return
     return svgTextFromValue(media.current as any)
   })
   const svgSrc = createMemo(() => {
     const media = cfg()
-    if (!media) return
+    if (!media || kind() !== "svg") return
     return dataUrlFromMediaValue(media.current as any, "svg")
   })
-
-  createEffect(() => {
-    if (kind() !== "svg") return
+  const svgInvalid = createMemo(() => {
     const media = cfg()
-    if (!media) return
+    if (!media || kind() !== "svg") return
     if (svgSource() !== undefined) return
-    if (svgError) return
     if (!hasMediaValue(media.current as any)) return
-    svgError = true
-    media.onError?.({ kind: "svg" })
+    return [media.path, media.current] as const
   })
+
+  createEffect(
+    on(
+      svgInvalid,
+      (value) => {
+        if (!value) return
+        cfg()?.onError?.({ kind: "svg" })
+      },
+      { defer: true },
+    ),
+  )
+
+  const kindLabel = (value: "image" | "audio") =>
+    i18n.t(value === "image" ? "ui.fileMedia.kind.image" : "ui.fileMedia.kind.audio")
 
   return (
     <Switch>
@@ -194,48 +166,98 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
             const media = cfg()
             const k = kind()
             if (!media || (k !== "image" && k !== "audio")) return props.fallback()
+            const label = kindLabel(k)
+
             if (deleted()) {
-              return media.renderRemoved?.({ kind: k }) ?? <div class="px-6 py-4 text-text-weak">Removed {k} file.</div>
+              return (
+                <div class="flex min-h-40 items-center justify-center px-6 py-4 text-center text-text-weak">
+                  {i18n.t("ui.fileMedia.state.removed", { kind: label })}
+                </div>
+              )
             }
             if (status() === "loading") {
-              return media.renderLoading?.({ kind: k }) ?? <div class="px-6 py-4 text-text-weak">Loading {k}...</div>
+              return (
+                <div class="flex min-h-40 items-center justify-center px-6 py-4 text-center text-text-weak">
+                  {i18n.t("ui.fileMedia.state.loading", { kind: label })}
+                </div>
+              )
             }
             if (status() === "error") {
-              return media.renderError?.({ kind: k }) ?? <div class="px-6 py-4 text-text-weak">Unable to load {k}.</div>
+              return (
+                <div class="flex min-h-40 items-center justify-center px-6 py-4 text-center text-text-weak">
+                  {i18n.t("ui.fileMedia.state.error", { kind: label })}
+                </div>
+              )
             }
             return (
-              media.renderPlaceholder?.({ kind: k }) ?? (
-                <div class="px-6 py-4 text-text-weak">{k} preview unavailable.</div>
-              )
+              <div class="flex min-h-40 items-center justify-center px-6 py-4 text-center text-text-weak">
+                {i18n.t("ui.fileMedia.state.unavailable", { kind: label })}
+              </div>
             )
           })()}
         >
           {(value) => {
-            const media = cfg()
             const k = kind()
-            if (!media || (k !== "image" && k !== "audio")) return props.fallback()
+            if (k !== "image" && k !== "audio") return props.fallback()
             if (k === "image") {
-              return (media.renderImage ?? defaultImage)({ src: value(), path: media.path, onLoad })
+              return (
+                <div class="flex justify-center bg-background-stronger px-6 py-4">
+                  <img
+                    src={value()}
+                    alt={cfg()?.path}
+                    class="max-h-[60vh] max-w-full rounded border border-border-weak-base bg-background-base object-contain"
+                    onLoad={onLoad}
+                  />
+                </div>
+              )
             }
-            return (media.renderAudio ?? defaultAudio)({ src: value(), path: media.path, mime: audioMime(), onLoad })
+
+            return (
+              <div class="flex justify-center bg-background-stronger px-6 py-4">
+                <audio class="w-full max-w-xl" controls preload="metadata" onLoadedMetadata={onLoad}>
+                  <source src={value()} type={audioMime()} />
+                </audio>
+              </div>
+            )
           }}
         </Show>
       </Match>
       <Match when={kind() === "svg"}>
         {(() => {
-          const media = cfg()
-          if (!media) return props.fallback()
-          if (!media.renderSvg && svgSource() === undefined && svgSrc() == null) return props.fallback()
-          return (media.renderSvg ?? defaultSvg)({
-            src: svgSrc(),
-            source: svgSource() ?? "",
-            path: media.path,
-            onLoad,
-          })
+          if (svgSource() === undefined && svgSrc() == null) return props.fallback()
+
+          return (
+            <div class="flex flex-col gap-4 px-6 py-4">
+              <Show when={svgSource() !== undefined}>{props.fallback()}</Show>
+              <Show when={svgSrc()}>
+                {(value) => (
+                  <div class="flex justify-center">
+                    <img
+                      src={value()}
+                      alt={cfg()?.path}
+                      class="max-h-[60vh] max-w-full rounded border border-border-weak-base bg-background-base object-contain"
+                      onLoad={onLoad}
+                    />
+                  </div>
+                )}
+              </Show>
+            </div>
+          )
         })()}
       </Match>
       <Match when={isBinary()}>
-        {cfg()?.renderBinaryPlaceholder?.({ path: cfg()?.path }) ?? defaultBinary(cfg()?.path)}
+        <div class="flex min-h-56 flex-col items-center justify-center gap-2 px-6 py-10 text-center">
+          <div class="text-14-semibold text-text-strong">
+            {cfg()?.path?.split("/").pop() ?? i18n.t("ui.fileMedia.binary.title")}
+          </div>
+          <div class="text-14-regular text-text-weak">
+            {(() => {
+              const path = cfg()?.path
+              if (!path) return i18n.t("ui.fileMedia.binary.description.default")
+              return i18n.t("ui.fileMedia.binary.description.path", { path })
+            })()}
+          </div>
+        </div>
       </Match>
       <Match when={true}>{props.fallback()}</Match>
     </Switch>
