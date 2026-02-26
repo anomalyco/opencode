@@ -313,14 +313,26 @@ pub fn spawn_command(
         let sidecar = get_sidecar_path(app);
         let shell = get_user_shell();
 
-        let line = if shell.ends_with("/nu") {
+        let mut line = if shell.ends_with("/nu") {
             format!("^\"{}\" {}", sidecar.display(), args)
         } else {
             format!("\"{}\" {}", sidecar.display(), args)
         };
 
+        if shell.ends_with("/zsh") {
+            line = format!(
+                "[[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true; [[ -f \"${{ZDOTDIR:-$HOME}}/.zshrc\" ]] && source \"${{ZDOTDIR:-$HOME}}/.zshrc\" >/dev/null 2>&1 || true; {line}"
+            );
+        }
+
+        if shell.ends_with("/bash") {
+            line = format!(
+                "shopt -s expand_aliases; [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true; {line}"
+            );
+        }
+
         let mut cmd = Command::new(shell);
-        cmd.args(["-il", "-c", &line]);
+        cmd.args(["-l", "-c", &line]);
 
         for (key, value) in envs {
             cmd.env(key, value);
