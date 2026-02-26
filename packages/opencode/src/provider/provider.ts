@@ -763,6 +763,8 @@ export namespace Provider {
       ...base,
       id: "gpt-5.3-codex",
       name: "GPT-5.3 Codex",
+      release_date: "2026-02-24",
+      last_updated: "2026-02-24",
     }
   }
 
