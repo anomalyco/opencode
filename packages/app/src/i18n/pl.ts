@@ -91,6 +91,8 @@ export const dict = {
   "dialog.provider.group.other": "Inne",
   "dialog.provider.tag.recommended": "Zalecane",
   "dialog.provider.opencode.note": "Wyselekcjonowane modele, w tym Claude, GPT, Gemini i inne",
+  "dialog.provider.opencode.tagline": "Niezawodne, zoptymalizowane modele",
+  "dialog.provider.opencodeGo.tagline": "Tania subskrypcja dla każdego",
   "dialog.provider.anthropic.note": "Bezpośredni dostęp do modeli Claude, w tym Pro i Max",
   "dialog.provider.copilot.note": "Modele AI do pomocy w kodowaniu przez GitHub Copilot",
   "dialog.provider.openai.note": "Modele GPT do szybkich i wszechstronnych zadań AI",

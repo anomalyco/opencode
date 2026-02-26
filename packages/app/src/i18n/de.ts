@@ -95,6 +95,8 @@ export const dict = {
   "dialog.provider.group.other": "Andere",
   "dialog.provider.tag.recommended": "Empfohlen",
   "dialog.provider.opencode.note": "Kuratierte Modelle inklusive Claude, GPT, Gemini und mehr",
+  "dialog.provider.opencode.tagline": "Zuverlässige, optimierte Modelle",
+  "dialog.provider.opencodeGo.tagline": "Kostengünstiges Abo für alle",
   "dialog.provider.anthropic.note": "Mit Claude Pro/Max oder API-Schlüssel verbinden",
   "dialog.provider.copilot.note": "Mit Copilot oder API-Schlüssel verbinden",
   "dialog.provider.openai.note": "Mit ChatGPT Pro/Plus oder API-Schlüssel verbinden",
