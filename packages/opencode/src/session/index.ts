@@ -23,7 +23,7 @@ import { fn } from "@/util/fn"
 import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
 
-import type { Provider } from "@/provider/provider"
+import { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
 import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
@@ -874,4 +874,144 @@ export namespace Session {
       })
     },
   )
+
+  const HydrateModel = z.object({
+    providerID: z.string(),
+    modelID: z.string(),
+  })
+
+  const HydratePartInput = z.discriminatedUnion("type", [
+    z.object({
+      type: z.literal("text"),
+      text: z.string(),
+    }),
+    z.object({
+      type: z.literal("file"),
+      mime: z.string(),
+      url: z.string(),
+      filename: z.string().optional(),
+    }),
+  ])
+
+  const HydrateMessageInput = z.discriminatedUnion("role", [
+    z.object({
+      role: z.literal("user"),
+      parts: z.array(HydratePartInput).min(1),
+      model: HydrateModel.optional(),
+      agent: z.string().optional(),
+    }),
+    z.object({
+      role: z.literal("assistant"),
+      parts: z.array(HydratePartInput).min(1),
+      finish: z.string().optional(),
+    }),
+  ])
+
+  const HydrateInput = z.object({
+    title: z.string().optional().meta({ description: "Title for the new session" }),
+    model: HydrateModel.optional().meta({
+      description: "Global model for all messages; per-message model overrides this",
+    }),
+    agent: z.string().optional().meta({ description: "Global agent name (default: 'build')" }),
+    messages: z.array(HydrateMessageInput),
+  })
+
+  function buildParts(
+    rawParts: z.infer<typeof HydratePartInput>[],
+    sessionID: string,
+    messageID: string,
+  ): MessageV2.Part[] {
+    return rawParts.map((raw) => {
+      const base = {
+        id: Identifier.ascending("part"),
+        sessionID,
+        messageID,
+      }
+      if (raw.type === "text") {
+        return { ...base, type: "text" as const, text: raw.text } satisfies MessageV2.TextPart
+      }
+      return {
+        ...base,
+        type: "file" as const,
+        mime: raw.mime,
+        url: raw.url,
+        filename: raw.filename,
+      } satisfies MessageV2.FilePart
+    })
+  }
+
+  export const hydrate = fn(HydrateInput, async (input) => {
+    const session = await create({ title: input.title })
+    const sessionID = session.id
+
+    const globalModel = input.model ?? (await Provider.defaultModel())
+    const globalAgent = input.agent ?? "build"
+
+    const hydrated: MessageV2.WithParts[] = []
+    let lastUserID: string | undefined
+
+    for (let i = 0; i < input.messages.length; i++) {
+      const msg = input.messages[i]
+      const now = Date.now()
+
+      if (msg.role === "user") {
+        const effectiveModel = msg.model ?? globalModel
+        const effectiveAgent = msg.agent ?? globalAgent
+
+        const userID = Identifier.ascending("message")
+        const userInfo: MessageV2.User = {
+          id: userID,
+          sessionID,
+          role: "user",
+          time: { created: now },
+          agent: effectiveAgent,
+          model: effectiveModel,
+        }
+
+        const parts = buildParts(msg.parts, sessionID, userID)
+        await updateMessage(userInfo)
+        for (const part of parts) await updatePart(part)
+
+        lastUserID = userID
+        hydrated.push({ info: userInfo, parts })
+      } else {
+        if (!lastUserID) {
+          throw new Error(`Assistant message at index ${i} has no preceding user message in the batch`)
+        }
+
+        const assistantID = Identifier.ascending("message")
+        const assistantInfo: MessageV2.Assistant = {
+          id: assistantID,
+          sessionID,
+          role: "assistant",
+          parentID: lastUserID,
+          modelID: globalModel.modelID,
+          providerID: globalModel.providerID,
+          mode: globalAgent,
+          agent: globalAgent,
+          path: {
+            cwd: Instance.directory,
+            root: Instance.worktree,
+          },
+          cost: 0,
+          tokens: {
+            input: 0,
+            output: 0,
+            reasoning: 0,
+            cache: { read: 0, write: 0 },
+          },
+          time: { created: now, completed: now },
+          finish: msg.finish ?? "end-turn",
+        }
+
+        const parts = buildParts(msg.parts, sessionID, assistantID)
+        await updateMessage(assistantInfo)
+        for (const part of parts) await updatePart(part)
+
+        hydrated.push({ info: assistantInfo, parts })
+      }
+    }
+
+    return { sessionID, messages: hydrated }
+  })
 }

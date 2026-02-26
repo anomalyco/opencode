@@ -207,6 +207,41 @@ export const SessionRoutes = lazy(() =>
         return c.json(session)
       },
     )
+    .post(
+      "/hydrate",
+      describeRoute({
+        summary: "Hydrate a new session with messages",
+        description:
+          "Create a new session and populate it with an array of user and assistant messages " +
+          "without triggering an AI response. Returns the new session ID ready for follow-up prompts. " +
+          "Enables session portability — restoring conversations from backups or migrating between containers.",
+        operationId: "session.hydrate",
+        responses: {
+          200: {
+            description: "Session created and messages hydrated successfully",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z
+                    .object({
+                      sessionID: z.string().meta({ description: "The auto-created session ID" }),
+                      messages: MessageV2.WithParts.array(),
+                    })
+                    .meta({ ref: "HydrateResult" }),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", Session.hydrate.schema),
+      async (c) => {
+        const body = c.req.valid("json")
+        const result = await Session.hydrate(body)
+        return c.json(result)
+      },
+    )
     .delete(
       "/:sessionID",
       describeRoute({
