@@ -78,6 +78,7 @@ export function Home() {
   const args = useArgs()
   onMount(() => {
     if (once) return
+    if (!prompt) return
     if (route.initialPrompt) {
       prompt.set(route.initialPrompt)
       once = true
