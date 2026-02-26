@@ -335,6 +335,19 @@
         }
       }
 
+      [data-slot="paused"] {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: rgba(255, 255, 255, 0.59);
+        font-size: 18px;
+        font-style: normal;
+        font-weight: 400;
+        line-height: 160%;
+        padding: 120px 20px;
+      }
+
       [data-slot="pricing-card"] {
         display: flex;
         flex-direction: column;
