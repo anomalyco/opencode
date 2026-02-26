@@ -72,11 +72,10 @@ export namespace SessionSummary {
       messageID: z.string(),
     }),
     async (input) => {
-      const all = await Session.messages({ sessionID: input.sessionID }).catch(() => [] as MessageV2.WithParts[])
-      if (!all.length) return
+      const all = await Session.messages({ sessionID: input.sessionID })
       await Promise.all([
-        summarizeSession({ sessionID: input.sessionID, messages: all }).catch(() => {}),
-        summarizeMessage({ messageID: input.messageID, messages: all }).catch(() => {}),
+        summarizeSession({ sessionID: input.sessionID, messages: all }),
+        summarizeMessage({ messageID: input.messageID, messages: all }),
       ])
     },
   )
@@ -102,8 +101,7 @@ export namespace SessionSummary {
     const messages = input.messages.filter(
       (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
     )
-    const msgWithParts = messages.find((m) => m.info.id === input.messageID)
-    if (!msgWithParts) return
+    const msgWithParts = messages.find((m) => m.info.id === input.messageID)!
     const userMsg = msgWithParts.info as MessageV2.User
     const diffs = await computeDiff({ messages })
     userMsg.summary = {

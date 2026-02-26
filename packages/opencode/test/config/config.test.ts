@@ -668,7 +668,7 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
     if (prev === undefined) delete process.env.OPENCODE_CONFIG_DIR
     else process.env.OPENCODE_CONFIG_DIR = prev
   }
-}, 30_000)
+})
 
 test("resolves scoped npm plugins in config", async () => {
   await using tmp = await tmpdir({
@@ -711,16 +711,7 @@ test("resolves scoped npm plugins in config", async () => {
       const pluginEntries = config.plugin ?? []
 
       const baseUrl = pathToFileURL(path.join(tmp.path, "opencode.json")).href
-      let expected: string
-      try {
-        expected = import.meta.resolve("@scope/plugin", baseUrl)
-      } catch (e) {
-        // Fallback for Windows where dynamically created node_modules aren't immediately available to import.meta.resolve
-        const { createRequire } = await import("module")
-        const require = createRequire(tmp.path + "/")
-        const resolvedPath = require.resolve("@scope/plugin")
-        expected = pathToFileURL(resolvedPath).href
-      }
+      const expected = pathToFileURL(path.join(tmp.path, "node_modules", "@scope", "plugin", "index.js")).href
 
       expect(pluginEntries.includes(expected)).toBe(true)
 

@@ -191,54 +191,17 @@ export async function seedProjects(page: Page, input: { directory: string; extra
   )
 }
 
-let gitTemplatePromise: Promise<string> | undefined
-async function getGitTemplate() {
-  if (gitTemplatePromise) return gitTemplatePromise
-  gitTemplatePromise = (async () => {
-    const templatePath = path.join(
-      os.tmpdir(),
-      "opencode-e2e-git-template-" + process.pid + "-" + Math.random().toString(36).slice(2),
-    )
-    await fs.mkdir(templatePath, { recursive: true })
-
-    for (let attempt = 1; attempt <= 5; attempt++) {
-      try {
-        await fs.writeFile(path.join(templatePath, "README.md"), "# e2e\n")
-
-        // Add a nested file to explicitly test nested path matching and slash normalization in E2E tests
-        await fs.mkdir(path.join(templatePath, "packages", "app"), { recursive: true })
-        await fs.writeFile(path.join(templatePath, "packages", "app", "package.json"), "{}")
-
-        execSync("git init", { cwd: templatePath, stdio: "ignore" })
-        execSync("git config core.longpaths true", { cwd: templatePath, stdio: "ignore" })
-        execSync("git add -A", { cwd: templatePath, stdio: "ignore" })
-        execSync('git -c user.name="e2e" -c user.email="e2e@example.com" commit -m "init" --allow-empty', {
-          cwd: templatePath,
-          stdio: "ignore",
-        })
-        break
-      } catch (err) {
-        if (attempt === 5) throw err
-        await new Promise((r) => setTimeout(r, 1000 + Math.random() * 2000))
-      }
-    }
-
-    return templatePath
-  })()
-  return gitTemplatePromise
-}
-
 export async function createTestProject() {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-e2e-project-"))
 
-  const templatePath = await getGitTemplate()
-  await fs.cp(templatePath, root, { recursive: true })
+  await fs.writeFile(path.join(root, "README.md"), "# e2e\n")
 
-  const gitIdPath = path.join(root, ".git", "opencode")
-  if (await fs.stat(path.join(root, ".git")).catch(() => false)) {
-    // Generate a uniquely identifiable string for this specific test project instance
-    await fs.writeFile(gitIdPath, Math.random().toString(36).slice(2) + "-" + Date.now().toString())
-  }
+  execSync("git init", { cwd: root, stdio: "ignore" })
+  execSync("git add -A", { cwd: root, stdio: "ignore" })
+  execSync('git -c user.name="e2e" -c user.email="e2e@example.com" commit -m "init" --allow-empty', {
+    cwd: root,
+    stdio: "ignore",
+  })
 
   return root
 }

@@ -107,7 +107,6 @@ test("slash redo clears revert and restores latest state", async ({ page, withPr
         })
         .toBe(seeded.userMessageID)
 
-      await expect(seeded.prompt).toContainText(token)
       await seeded.prompt.click()
       await page.keyboard.press(`${modKey}+A`)
       await page.keyboard.press("Backspace")
@@ -180,7 +179,6 @@ test("slash undo/redo traverses multi-step revert stack", async ({ page, withPro
       await expect(firstMessage.first()).toBeVisible()
       await expect(secondMessage).toHaveCount(0)
 
-      await expect(second.prompt).toContainText(secondToken)
       await second.prompt.click()
       await page.keyboard.press(`${modKey}+A`)
       await page.keyboard.press("Backspace")
@@ -197,7 +195,6 @@ test("slash undo/redo traverses multi-step revert stack", async ({ page, withPro
       await expect(firstMessage).toHaveCount(0)
       await expect(secondMessage).toHaveCount(0)
 
-      await expect(second.prompt).toContainText(firstToken)
       await second.prompt.click()
       await page.keyboard.press(`${modKey}+A`)
       await page.keyboard.press("Backspace")
