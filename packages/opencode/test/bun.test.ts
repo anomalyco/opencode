@@ -47,7 +47,7 @@ describe("BunProc.install - version=latest", () => {
 
     const mod = await BunProc.install("zod", "latest", "anthropic")
 
-    expect(mod).toContain("node_modules/zod")
+    expect(mod).toContain(path.join("node_modules", "zod"))
     expect(await Bun.file(path.join(tmp.path, "node_modules", "zod", "package.json")).exists()).toBe(true)
 
     const pkg = await Bun.file(path.join(tmp.path, "package.json")).json()
