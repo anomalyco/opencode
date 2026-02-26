@@ -65,10 +65,10 @@ export function SessionHeaderActions() {
 
   return (
     <div class="flex items-center gap-2">
-      <Button variant="secondary" class="rounded-sm h-[24px] w-[24px] p-0" onClick={run} aria-label="Run">
+      <Button variant="secondary" class="rounded-sm h-[24px] w-[24px] p-0" onClick={run} aria-label="Run" title="Run">
         <RunIcon />
       </Button>
-      <Button variant="secondary" class="rounded-sm h-[24px] w-[24px] p-0" onClick={publish} aria-label="Publish">
+      <Button variant="secondary" class="rounded-sm h-[24px] w-[24px] p-0" onClick={publish} aria-label="Publish" title="Publish">
         <Icon name="cloud-upload" size="small" class="text-icon-base" />
       </Button>
       <Button
@@ -76,6 +76,7 @@ export function SessionHeaderActions() {
         class="rounded-sm h-[24px] w-[24px] p-0"
         onClick={() => setPreviewOpen((prev) => !prev)}
         aria-label="Preview"
+        title="Preview (press Run first)"
       >
         <Icon name="eye" size="small" class={previewOpen() ? "text-on-primary" : "text-icon-base"} />
       </Button>
@@ -99,6 +100,7 @@ export function SessionHeaderActions() {
           )
         }
         aria-label="Create"
+        title="Open / create project"
       >
         <Icon name="plus-small" size="small" class="text-icon-base" />
       </Button>
