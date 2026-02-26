@@ -376,6 +376,7 @@ export function MessageTimeline(props: {
         >
           <Show when={showHeader()}>
             <div
+              data-session-title
               classList={{
                 "sticky top-0 z-30 bg-[linear-gradient(to_bottom,var(--background-stronger)_48px,transparent)]": true,
                 "w-full": true,
@@ -539,6 +540,8 @@ export function MessageTimeline(props: {
                     messageID={message.id}
                     lastUserMessageID={props.lastUserMessageID}
                     showReasoningSummaries={settings.general.showReasoningSummaries()}
+                    shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
+                    editToolDefaultOpen={settings.general.editToolPartsExpanded()}
                     classes={{
                       root: "min-w-0 w-full relative",
                       content: "flex flex-col justify-between !overflow-visible",
