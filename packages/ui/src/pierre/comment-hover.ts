@@ -28,7 +28,8 @@ export function createHoverCommentUtility(props: {
   button.style.lineHeight = "1"
   button.style.cursor = "pointer"
   button.style.position = "relative"
-  button.style.left = "22px"
+  button.style.left = "30px"
+  button.style.top = "calc((var(--diffs-line-height, 24px) - 20px) / 2)"
 
   let line: HoverCommentLine | undefined
 

@@ -1,4 +1,9 @@
 export const lineCommentStyles = `
+[data-annotation-slot] {
+  padding: 12px;
+  box-sizing: border-box;
+}
+
 [data-component="line-comment"] {
   position: absolute;
   right: 24px;
@@ -8,7 +13,8 @@ export const lineCommentStyles = `
 [data-component="line-comment"][data-inline] {
   position: relative;
   right: auto;
-  display: inline-flex;
+  display: flex;
+  width: 100%;
   align-items: flex-start;
 }
 
@@ -57,10 +63,10 @@ export const lineCommentStyles = `
   right: -8px;
   z-index: var(--line-comment-popover-z, 40);
   min-width: 200px;
-  max-width: min(320px, calc(100vw - 48px));
+  max-width: none;
   border-radius: 8px;
   background: var(--surface-raised-stronger-non-alpha);
-  box-shadow: var(--shadow-lg-border-base);
+  box-shadow: var(--shadow-xxs-border);
   padding: 12px;
 }
 
@@ -69,6 +75,7 @@ export const lineCommentStyles = `
   top: auto;
   right: auto;
   margin-left: 8px;
+  flex: 1;
 }
 
 [data-component="line-comment"][data-inline] [data-slot="line-comment-popover"][data-inline-body] {
@@ -81,9 +88,13 @@ export const lineCommentStyles = `
 
 [data-component="line-comment"][data-variant="editor"] [data-slot="line-comment-popover"] {
   width: 380px;
-  max-width: min(380px, calc(100vw - 48px));
+  max-width: none;
   padding: 8px;
   border-radius: 14px;
+}
+
+[data-component="line-comment"][data-inline][data-variant="editor"] [data-slot="line-comment-popover"] {
+  width: 100%;
 }
 
 [data-component="line-comment"] [data-slot="line-comment-content"] {
