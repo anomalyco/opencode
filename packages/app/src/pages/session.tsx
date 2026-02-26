@@ -379,6 +379,32 @@ export default function Page() {
     })
   }
 
+  const updateCommentInContext = (input: {
+    id: string
+    file: string
+    selection: SelectedLineRange
+    comment: string
+    preview?: string
+  }) => {
+    comments.update(input.file, input.id, input.comment)
+    prompt.context.updateComment(input.file, input.id, {
+      comment: input.comment,
+      ...(input.preview ? { preview: input.preview } : {}),
+    })
+  }
+
+  const removeCommentFromContext = (input: { id: string; file: string }) => {
+    comments.remove(input.file, input.id)
+    prompt.context.removeComment(input.file, input.id)
+  }
+
+  const reviewCommentActions = createMemo(() => ({
+    moreLabel: language.t("common.moreOptions"),
+    editLabel: language.t("common.edit"),
+    deleteLabel: language.t("common.delete"),
+    saveLabel: language.t("common.save"),
+  }))
+
   const isEditableTarget = (target: EventTarget | null | undefined) => {
     if (!(target instanceof HTMLElement)) return false
     return /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName) || target.isContentEditable
@@ -520,6 +546,9 @@ export default function Page() {
           onScrollRef={(el) => setTree("reviewScroll", el)}
           focusedFile={tree.activeDiff}
           onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+          onLineCommentUpdate={updateCommentInContext}
+          onLineCommentDelete={removeCommentFromContext}
+          lineCommentActions={reviewCommentActions()}
           comments={comments.all()}
           focusedComment={comments.focus()}
           onFocusedCommentChange={comments.setFocus}
@@ -541,6 +570,9 @@ export default function Page() {
             onScrollRef={(el) => setTree("reviewScroll", el)}
             focusedFile={tree.activeDiff}
             onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+            onLineCommentUpdate={updateCommentInContext}
+            onLineCommentDelete={removeCommentFromContext}
+            lineCommentActions={reviewCommentActions()}
             comments={comments.all()}
             focusedComment={comments.focus()}
             onFocusedCommentChange={comments.setFocus}
@@ -569,6 +601,9 @@ export default function Page() {
           onScrollRef={(el) => setTree("reviewScroll", el)}
           focusedFile={tree.activeDiff}
           onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+          onLineCommentUpdate={updateCommentInContext}
+          onLineCommentDelete={removeCommentFromContext}
+          lineCommentActions={reviewCommentActions()}
           comments={comments.all()}
           focusedComment={comments.focus()}
           onFocusedCommentChange={comments.setFocus}

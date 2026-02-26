@@ -75,7 +75,9 @@ export const lineCommentStyles = `
   top: auto;
   right: auto;
   margin-left: 8px;
-  flex: 1;
+  flex: 0 1 600px;
+  width: min(100%, 600px);
+  max-width: min(100%, 600px);
 }
 
 [data-component="line-comment"][data-inline] [data-slot="line-comment-popover"][data-inline-body] {
@@ -94,7 +96,7 @@ export const lineCommentStyles = `
 }
 
 [data-component="line-comment"][data-inline][data-variant="editor"] [data-slot="line-comment-popover"] {
-  width: 100%;
+  flex-basis: 600px;
 }
 
 [data-component="line-comment"] [data-slot="line-comment-content"] {
@@ -103,7 +105,14 @@ export const lineCommentStyles = `
   gap: 6px;
 }
 
+[data-component="line-comment"] [data-slot="line-comment-head"] {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
 [data-component="line-comment"] [data-slot="line-comment-text"] {
+  flex: 1;
   font-family: var(--font-family-sans);
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-regular);
@@ -111,6 +120,13 @@ export const lineCommentStyles = `
   letter-spacing: var(--letter-spacing-normal);
   color: var(--text-strong);
   white-space: pre-wrap;
+}
+
+[data-component="line-comment"] [data-slot="line-comment-tools"] {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 [data-component="line-comment"] [data-slot="line-comment-label"],

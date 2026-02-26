@@ -1,6 +1,11 @@
 import { createEffect, on, onCleanup, type JSX } from "solid-js"
 import type { FileDiff } from "@opencode-ai/sdk/v2"
 import { SessionReview } from "@opencode-ai/ui/session-review"
+import type {
+  SessionReviewCommentActions,
+  SessionReviewCommentDelete,
+  SessionReviewCommentUpdate,
+} from "@opencode-ai/ui/session-review"
 import type { SelectedLineRange } from "@/context/file"
 import { useSDK } from "@/context/sdk"
 import { useLayout } from "@/context/layout"
@@ -17,6 +22,9 @@ export interface SessionReviewTabProps {
   onDiffStyleChange?: (style: DiffStyle) => void
   onViewFile?: (file: string) => void
   onLineComment?: (comment: { file: string; selection: SelectedLineRange; comment: string; preview?: string }) => void
+  onLineCommentUpdate?: (comment: SessionReviewCommentUpdate) => void
+  onLineCommentDelete?: (comment: SessionReviewCommentDelete) => void
+  lineCommentActions?: SessionReviewCommentActions
   comments?: LineComment[]
   focusedComment?: { file: string; id: string } | null
   onFocusedCommentChange?: (focus: { file: string; id: string } | null) => void
@@ -161,6 +169,9 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
       focusedFile={props.focusedFile}
       readFile={readFile}
       onLineComment={props.onLineComment}
+      onLineCommentUpdate={props.onLineCommentUpdate}
+      onLineCommentDelete={props.onLineCommentDelete}
+      lineCommentActions={props.lineCommentActions}
       comments={props.comments}
       focusedComment={props.focusedComment}
       onFocusedCommentChange={props.onFocusedCommentChange}

@@ -1,9 +1,11 @@
 import { Accordion } from "./accordion"
 import { Button } from "./button"
+import { DropdownMenu } from "./dropdown-menu"
 import { RadioGroup } from "./radio-group"
 import { DiffChanges } from "./diff-changes"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
+import { IconButton } from "./icon-button"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { Tooltip } from "./tooltip"
 import { ScrollView } from "./scroll-view"
@@ -42,6 +44,22 @@ export type SessionReviewLineComment = {
   preview?: string
 }
 
+export type SessionReviewCommentUpdate = SessionReviewLineComment & {
+  id: string
+}
+
+export type SessionReviewCommentDelete = {
+  id: string
+  file: string
+}
+
+export type SessionReviewCommentActions = {
+  moreLabel: string
+  editLabel: string
+  deleteLabel: string
+  saveLabel: string
+}
+
 export type SessionReviewFocus = { file: string; id: string }
 
 export interface SessionReviewProps {
@@ -52,6 +70,9 @@ export interface SessionReviewProps {
   onDiffStyleChange?: (diffStyle: SessionReviewDiffStyle) => void
   onDiffRendered?: () => void
   onLineComment?: (comment: SessionReviewLineComment) => void
+  onLineCommentUpdate?: (comment: SessionReviewCommentUpdate) => void
+  onLineCommentDelete?: (comment: SessionReviewCommentDelete) => void
+  lineCommentActions?: SessionReviewCommentActions
   comments?: SessionReviewComment[]
   focusedComment?: SessionReviewFocus | null
   onFocusedCommentChange?: (focus: SessionReviewFocus | null) => void
@@ -67,6 +88,37 @@ export interface SessionReviewProps {
   diffs: (FileDiff & { preloaded?: PreloadMultiFileDiffResult<any> })[]
   onViewFile?: (file: string) => void
   readFile?: (path: string) => Promise<FileContent | undefined>
+}
+
+function ReviewCommentMenu(props: {
+  labels: SessionReviewCommentActions
+  onEdit: VoidFunction
+  onDelete: VoidFunction
+}) {
+  return (
+    <div onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+      <DropdownMenu gutter={4} placement="bottom-end">
+        <DropdownMenu.Trigger
+          as={IconButton}
+          icon="dot-grid"
+          variant="ghost"
+          size="small"
+          class="size-6 rounded-md"
+          aria-label={props.labels.moreLabel}
+        />
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content>
+            <DropdownMenu.Item onSelect={props.onEdit}>
+              <DropdownMenu.ItemLabel>{props.labels.editLabel}</DropdownMenu.ItemLabel>
+            </DropdownMenu.Item>
+            <DropdownMenu.Item onSelect={props.onDelete}>
+              <DropdownMenu.ItemLabel>{props.labels.deleteLabel}</DropdownMenu.ItemLabel>
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu>
+    </div>
+  )
 }
 
 function diffId(file: string): string | undefined {
@@ -623,6 +675,31 @@ export const SessionReview = (props: SessionReviewProps) => {
                       preview: selectionPreview(item(), selection),
                     })
                   },
+                  onUpdate: ({ id, comment, selection }) => {
+                    props.onLineCommentUpdate?.({
+                      id,
+                      file,
+                      selection,
+                      comment,
+                      preview: selectionPreview(item(), selection),
+                    })
+                  },
+                  onDelete: (comment) => {
+                    props.onLineCommentDelete?.({
+                      id: comment.id,
+                      file,
+                    })
+                  },
+                  editSubmitLabel: props.lineCommentActions?.saveLabel,
+                  renderCommentActions: props.lineCommentActions
+                    ? (comment, controls) => (
+                        <ReviewCommentMenu
+                          labels={props.lineCommentActions!}
+                          onEdit={controls.edit}
+                          onDelete={controls.remove}
+                        />
+                      )
+                    : undefined,
                 })
 
                 onCleanup(() => {

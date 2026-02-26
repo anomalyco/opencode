@@ -127,16 +127,22 @@ export const LineCommentAnchor = (props: LineCommentAnchorProps) => {
 export type LineCommentProps = Omit<LineCommentAnchorProps, "children" | "variant"> & {
   comment: JSX.Element
   selection: JSX.Element
+  actions?: JSX.Element
 }
 
 export const LineComment = (props: LineCommentProps) => {
   const i18n = useI18n()
-  const [split, rest] = splitProps(props, ["comment", "selection"])
+  const [split, rest] = splitProps(props, ["comment", "selection", "actions"])
 
   return (
     <LineCommentAnchor {...rest} variant="default" hideButton={props.inline}>
       <div data-slot="line-comment-content">
-        <div data-slot="line-comment-text">{split.comment}</div>
+        <div data-slot="line-comment-head">
+          <div data-slot="line-comment-text">{split.comment}</div>
+          <Show when={split.actions}>
+            <div data-slot="line-comment-tools">{split.actions}</div>
+          </Show>
+        </div>
         <div data-slot="line-comment-label">
           {i18n.t("ui.lineComment.label.prefix")}
           {split.selection}

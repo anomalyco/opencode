@@ -8,6 +8,8 @@ import { createLineCommentController } from "@opencode-ai/ui/line-comment-annota
 import { sampledChecksum } from "@opencode-ai/util/encode"
 import { showToast } from "@opencode-ai/ui/toast"
 import { Mark } from "@opencode-ai/ui/logo"
+import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
+import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { useLayout } from "@/context/layout"
@@ -16,6 +18,39 @@ import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
 import { getSessionHandoff } from "@/pages/session/handoff"
+
+function FileCommentMenu(props: {
+  moreLabel: string
+  editLabel: string
+  deleteLabel: string
+  onEdit: VoidFunction
+  onDelete: VoidFunction
+}) {
+  return (
+    <div onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+      <DropdownMenu gutter={4} placement="bottom-end">
+        <DropdownMenu.Trigger
+          as={IconButton}
+          icon="dot-grid"
+          variant="ghost"
+          size="small"
+          class="size-6 rounded-md"
+          aria-label={props.moreLabel}
+        />
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content>
+            <DropdownMenu.Item onSelect={props.onEdit}>
+              <DropdownMenu.ItemLabel>{props.editLabel}</DropdownMenu.ItemLabel>
+            </DropdownMenu.Item>
+            <DropdownMenu.Item onSelect={props.onDelete}>
+              <DropdownMenu.ItemLabel>{props.deleteLabel}</DropdownMenu.ItemLabel>
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu>
+    </div>
+  )
+}
 
 export function FileTabContent(props: { tab: string }) {
   const params = useParams()
@@ -96,6 +131,26 @@ export function FileTabContent(props: { tab: string }) {
     })
   }
 
+  const updateCommentInContext = (input: {
+    id: string
+    file: string
+    selection: SelectedLineRange
+    comment: string
+  }) => {
+    comments.update(input.file, input.id, input.comment)
+    const preview =
+      input.file === path() ? selectionPreview(contents(), selectionFromLines(input.selection)) : undefined
+    prompt.context.updateComment(input.file, input.id, {
+      comment: input.comment,
+      ...(preview ? { preview } : {}),
+    })
+  }
+
+  const removeCommentFromContext = (input: { id: string; file: string }) => {
+    comments.remove(input.file, input.id)
+    prompt.context.removeComment(input.file, input.id)
+  }
+
   const fileComments = createMemo(() => {
     const p = path()
     if (!p) return []
@@ -140,6 +195,26 @@ export function FileTabContent(props: { tab: string }) {
       if (!p) return
       addCommentToContext({ file: p, selection, comment, origin: "file" })
     },
+    onUpdate: ({ id, comment, selection }) => {
+      const p = path()
+      if (!p) return
+      updateCommentInContext({ id, file: p, selection, comment })
+    },
+    onDelete: (comment) => {
+      const p = path()
+      if (!p) return
+      removeCommentFromContext({ id: comment.id, file: p })
+    },
+    editSubmitLabel: language.t("common.save"),
+    renderCommentActions: (_, controls) => (
+      <FileCommentMenu
+        moreLabel={language.t("common.moreOptions")}
+        editLabel={language.t("common.edit")}
+        deleteLabel={language.t("common.delete")}
+        onEdit={controls.edit}
+        onDelete={controls.remove}
+      />
+    ),
     onDraftPopoverFocusOut: (e: FocusEvent) => {
       const current = e.currentTarget as HTMLDivElement
       const target = e.relatedTarget
