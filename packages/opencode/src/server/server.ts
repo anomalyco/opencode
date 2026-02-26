@@ -504,30 +504,48 @@ export namespace Server {
             c.header("X-Accel-Buffering", "no")
             c.header("X-Content-Type-Options", "nosniff")
             return streamSSE(c, async (stream) => {
-              stream.writeSSE({
-                data: JSON.stringify({
-                  type: "server.connected",
-                  properties: {},
-                }),
-              })
-              const unsub = Bus.subscribeAll(async (event) => {
-                await stream.writeSSE({
-                  data: JSON.stringify(event),
-                })
-                if (event.type === Bus.InstanceDisposed.type) {
-                  stream.close()
-                }
-              })
-
-              // Send heartbeat every 10s to prevent stalled proxy streams.
-              const heartbeat = setInterval(() => {
+              try {
                 stream.writeSSE({
                   data: JSON.stringify({
-                    type: "server.heartbeat",
+                    type: "server.connected",
                     properties: {},
                   }),
                 })
+              } catch {
+                log.info("event disconnected (initial write failed)")
+                return
+              }
+
+              // Heartbeat must be declared before subscription to avoid confusion
+              const heartbeat = setInterval(() => {
+                try {
+                  stream.writeSSE({
+                    data: JSON.stringify({
+                      type: "server.heartbeat",
+                      properties: {},
+                    }),
+                  })
+                } catch {
+                  clearInterval(heartbeat)
+                  unsub()
+                  log.info("event disconnected (heartbeat failed)")
+                }
               }, 10_000)
+
+              const unsub = Bus.subscribeAll(async (event) => {
+                try {
+                  await stream.writeSSE({
+                    data: JSON.stringify(event),
+                  })
+                  if (event.type === Bus.InstanceDisposed.type) {
+                    stream.close()
+                  }
+                } catch {
+                  clearInterval(heartbeat)
+                  unsub()
+                  log.info("event disconnected (write failed)")
+                }
+              })
 
               await new Promise<void>((resolve) => {
                 stream.onAbort(() => {

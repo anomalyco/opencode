@@ -69,32 +69,50 @@ export const GlobalRoutes = lazy(() =>
         c.header("X-Accel-Buffering", "no")
         c.header("X-Content-Type-Options", "nosniff")
         return streamSSE(c, async (stream) => {
-          stream.writeSSE({
-            data: JSON.stringify({
-              payload: {
-                type: "server.connected",
-                properties: {},
-              },
-            }),
-          })
-          async function handler(event: any) {
-            await stream.writeSSE({
-              data: JSON.stringify(event),
-            })
-          }
-          GlobalBus.on("event", handler)
-
-          // Send heartbeat every 10s to prevent stalled proxy streams.
-          const heartbeat = setInterval(() => {
+          try {
             stream.writeSSE({
               data: JSON.stringify({
                 payload: {
-                  type: "server.heartbeat",
+                  type: "server.connected",
                   properties: {},
                 },
               }),
             })
+          } catch {
+            log.info("global event disconnected (initial write failed)")
+            return
+          }
+
+          // Heartbeat must be declared before handler to avoid confusion
+          const heartbeat = setInterval(() => {
+            try {
+              stream.writeSSE({
+                data: JSON.stringify({
+                  payload: {
+                    type: "server.heartbeat",
+                    properties: {},
+                  },
+                }),
+              })
+            } catch {
+              clearInterval(heartbeat)
+              GlobalBus.off("event", handler)
+              log.info("global event disconnected (heartbeat failed)")
+            }
           }, 10_000)
+
+          async function handler(event: any) {
+            try {
+              await stream.writeSSE({
+                data: JSON.stringify(event),
+              })
+            } catch {
+              clearInterval(heartbeat)
+              GlobalBus.off("event", handler)
+              log.info("global event disconnected (write failed)")
+            }
+          }
+          GlobalBus.on("event", handler)
 
           await new Promise<void>((resolve) => {
             stream.onAbort(() => {
