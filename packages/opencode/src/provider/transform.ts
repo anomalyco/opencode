@@ -9,12 +9,94 @@ import { Flag } from "@/flag/flag"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
+const IMAGE_DATA_ERROR = "ERROR: Image file is empty or corrupted. Please provide a valid image."
+
 function mimeToModality(mime: string): Modality | undefined {
   if (mime.startsWith("image/")) return "image"
   if (mime.startsWith("audio/")) return "audio"
   if (mime.startsWith("video/")) return "video"
   if (mime === "application/pdf") return "pdf"
   return undefined
+}
+
+function parseDataURL(value: string) {
+  const match = value.match(/^data:([^;]+);base64,(.*)$/)
+  if (!match) return
+  return {
+    mime: match[1],
+    data: match[2],
+  }
+}
+
+function isBase64(value: string) {
+  if (value.length === 0 || value.length % 4 !== 0) return false
+  return /^[A-Za-z0-9+/]*={0,2}$/.test(value)
+}
+
+function isImageBytesValid(mime: string, bytes: Uint8Array) {
+  if (bytes.length === 0) return false
+
+  if (mime === "image/png") {
+    if (bytes.length < 8) return false
+    return (
+      bytes[0] === 0x89 &&
+      bytes[1] === 0x50 &&
+      bytes[2] === 0x4e &&
+      bytes[3] === 0x47 &&
+      bytes[4] === 0x0d &&
+      bytes[5] === 0x0a &&
+      bytes[6] === 0x1a &&
+      bytes[7] === 0x0a
+    )
+  }
+
+  if (mime === "image/jpeg") {
+    if (bytes.length < 2) return false
+    return bytes[0] === 0xff && bytes[1] === 0xd8
+  }
+
+  if (mime === "image/gif") {
+    if (bytes.length < 6) return false
+    const head = String.fromCharCode(...bytes.slice(0, 6))
+    return head === "GIF87a" || head === "GIF89a"
+  }
+
+  if (mime === "image/webp") {
+    if (bytes.length < 12) return false
+    return (
+      bytes[0] === 0x52 &&
+      bytes[1] === 0x49 &&
+      bytes[2] === 0x46 &&
+      bytes[3] === 0x46 &&
+      bytes[8] === 0x57 &&
+      bytes[9] === 0x45 &&
+      bytes[10] === 0x42 &&
+      bytes[11] === 0x50
+    )
+  }
+
+  return true
+}
+
+function invalidImageDataError(
+  part:
+    | { type: "image"; image: unknown }
+    | { type: "file"; mediaType: string; data?: unknown; url?: unknown },
+) {
+  const entry =
+    part.type === "image"
+      ? parseDataURL(part.image.toString())
+      : typeof part.data === "string"
+        ? parseDataURL(part.data) ?? { mime: part.mediaType, data: part.data }
+        : typeof part.url === "string"
+          ? parseDataURL(part.url)
+        : undefined
+
+  if (!entry || !entry.mime.startsWith("image/")) return
+  if (entry.data.length === 0 || !isBase64(entry.data)) return IMAGE_DATA_ERROR
+
+  const bytes = Buffer.from(entry.data, "base64")
+  if (!isImageBytesValid(entry.mime, bytes)) return IMAGE_DATA_ERROR
 }
 
 export namespace ProviderTransform {
@@ -218,19 +300,20 @@ export namespace ProviderTransform {
       const filtered = msg.content.map((part) => {
         if (part.type !== "file" && part.type !== "image") return part
 
-        // Check for empty base64 image data
-        if (part.type === "image") {
-          const imageStr = part.image.toString()
-          if (imageStr.startsWith("data:")) {
-            const match = imageStr.match(/^data:([^;]+);base64,(.*)$/)
-            if (match && (!match[2] || match[2].length === 0)) {
-              return {
-                type: "text" as const,
-                text: "ERROR: Image file is empty or corrupted. Please provide a valid image.",
-              }
-            }
+        const imageError =
+          part.type === "image"
+            ? invalidImageDataError(part)
+            : invalidImageDataError({
+                type: "file",
+                mediaType: part.mediaType,
+                data: "data" in part ? part.data : undefined,
+                url: "url" in part ? part.url : undefined,
+              })
+        if (imageError)
+          return {
+            type: "text" as const,
+            text: imageError,
           }
-        }
 
         const mime = part.type === "image" ? part.image.toString().split(";")[0].replace("data:", "") : part.mediaType
         const filename = part.type === "file" ? part.filename : undefined
