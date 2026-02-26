@@ -46,6 +46,7 @@ export function SortableTab(props: { tab: string; onTabClose: (tab: string) => v
               title={language.t("common.closeTab")}
               keybind={command.keybind("tab.close")}
               placement="bottom"
+              gutter={10}
             >
               <IconButton
                 icon="close-small"
