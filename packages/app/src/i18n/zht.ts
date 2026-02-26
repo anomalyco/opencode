@@ -27,6 +27,7 @@ export const dict = {
 
   "command.sidebar.toggle": "切換側邊欄",
   "command.project.open": "開啟專案",
+  "command.project.switch": "切換到專案",
   "command.provider.connect": "連接提供者",
   "command.server.switch": "切換伺服器",
   "command.settings.open": "開啟設定",
@@ -93,9 +94,11 @@ export const dict = {
   "command.session.unshare.description": "停止分享此工作階段",
 
   "palette.search.placeholder": "搜尋檔案、命令和工作階段",
+  "palette.search.projects.placeholder": "搜尋專案",
   "palette.empty": "找不到結果",
   "palette.group.commands": "命令",
   "palette.group.files": "檔案",
+  "palette.group.projects": "專案",
 
   "dialog.provider.search.placeholder": "搜尋提供者",
   "dialog.provider.empty": "找不到提供者",

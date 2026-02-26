@@ -23,6 +23,7 @@ export const dict = {
 
   "command.sidebar.toggle": "Toggle sidebar",
   "command.project.open": "Open project",
+  "command.project.switch": "Switch to project",
   "command.provider.connect": "Connect provider",
   "command.server.switch": "Switch server",
   "command.settings.open": "Open settings",
@@ -89,9 +90,11 @@ export const dict = {
   "command.session.unshare.description": "Stop sharing this session",
 
   "palette.search.placeholder": "Search files, commands, and sessions",
+  "palette.search.projects.placeholder": "Search projects",
   "palette.empty": "No results found",
   "palette.group.commands": "Commands",
   "palette.group.files": "Files",
+  "palette.group.projects": "Projects",
 
   "dialog.provider.search.placeholder": "Search providers",
   "dialog.provider.empty": "No providers found",

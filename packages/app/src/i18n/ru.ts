@@ -23,6 +23,7 @@ export const dict = {
 
   "command.sidebar.toggle": "Переключить боковую панель",
   "command.project.open": "Открыть проект",
+  "command.project.switch": "Переключиться на проект",
   "command.provider.connect": "Подключить провайдера",
   "command.server.switch": "Переключить сервер",
   "command.settings.open": "Открыть настройки",
@@ -89,9 +90,11 @@ export const dict = {
   "command.session.unshare.description": "Прекратить публикацию сессии",
 
   "palette.search.placeholder": "Поиск файлов, команд и сессий",
+  "palette.search.projects.placeholder": "Поиск проектов",
   "palette.empty": "Ничего не найдено",
   "palette.group.commands": "Команды",
   "palette.group.files": "Файлы",
+  "palette.group.projects": "Проекты",
 
   "dialog.provider.search.placeholder": "Поиск провайдеров",
   "dialog.provider.empty": "Провайдеры не найдены",

@@ -29,6 +29,8 @@ export const dict = {
 
   "command.project.open": "打开项目",
 
+  "command.project.switch": "切换到项目",
+
   "command.provider.connect": "连接提供商",
 
   "command.server.switch": "切换服务器",
@@ -116,9 +118,11 @@ export const dict = {
   "command.session.unshare.description": "停止分享此会话",
 
   "palette.search.placeholder": "搜索文件、命令和会话",
+  "palette.search.projects.placeholder": "搜索项目",
   "palette.empty": "未找到结果",
   "palette.group.commands": "命令",
   "palette.group.files": "文件",
+  "palette.group.projects": "项目",
 
   "dialog.provider.search.placeholder": "搜索提供商",
   "dialog.provider.empty": "未找到提供商",

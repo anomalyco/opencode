@@ -23,6 +23,7 @@ export const dict = {
 
   "command.sidebar.toggle": "สลับแถบข้าง",
   "command.project.open": "เปิดโปรเจกต์",
+  "command.project.switch": "สลับไปยังโปรเจกต์",
   "command.provider.connect": "เชื่อมต่อผู้ให้บริการ",
   "command.server.switch": "สลับเซิร์ฟเวอร์",
   "command.settings.open": "เปิดการตั้งค่า",
@@ -89,9 +90,11 @@ export const dict = {
   "command.session.unshare.description": "หยุดการแชร์เซสชันนี้",
 
   "palette.search.placeholder": "ค้นหาไฟล์ คำสั่ง และเซสชัน",
+  "palette.search.projects.placeholder": "ค้นหาโปรเจกต์",
   "palette.empty": "ไม่พบผลลัพธ์",
   "palette.group.commands": "คำสั่ง",
   "palette.group.files": "ไฟล์",
+  "palette.group.projects": "โปรเจกต์",
 
   "dialog.provider.search.placeholder": "ค้นหาผู้ให้บริการ",
   "dialog.provider.empty": "ไม่พบผู้ให้บริการ",

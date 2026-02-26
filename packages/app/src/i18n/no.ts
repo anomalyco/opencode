@@ -26,6 +26,7 @@ export const dict = {
 
   "command.sidebar.toggle": "Veksle sidepanel",
   "command.project.open": "Åpne prosjekt",
+  "command.project.switch": "Bytt til prosjekt",
   "command.provider.connect": "Koble til leverandør",
   "command.server.switch": "Bytt server",
   "command.settings.open": "Åpne innstillinger",
@@ -92,9 +93,11 @@ export const dict = {
   "command.session.unshare.description": "Slutt å dele denne sesjonen",
 
   "palette.search.placeholder": "Søk i filer, kommandoer og sesjoner",
+  "palette.search.projects.placeholder": "Søk i prosjekter",
   "palette.empty": "Ingen resultater funnet",
   "palette.group.commands": "Kommandoer",
   "palette.group.files": "Filer",
+  "palette.group.projects": "Prosjekter",
 
   "dialog.provider.search.placeholder": "Søk etter leverandører",
   "dialog.provider.empty": "Ingen leverandører funnet",
