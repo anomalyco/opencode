@@ -135,7 +135,7 @@ export function formatSessionTable(sessions: Session.Info[], all?: boolean): str
   const lines: string[] = []
 
   const maxIdWidth = Math.max(20, ...sessions.map((s) => s.id.length))
-  const maxProjectWidth = Math.max(10, ...sessions.map((s) => s.projectID.length))
+  const maxProjectWidth = all ? Math.max(10, ...sessions.map((s) => s.projectID.length)) : 10
   const maxTitleWidth = Math.max(25, ...sessions.map((s) => s.title.length))
 
   const header = all
