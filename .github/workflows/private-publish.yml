@@ -1,0 +1,118 @@
+name: private-publish
+
+# =============================================================================
+# Release procedure
+# =============================================================================
+#
+# This workflow builds and publishes private-opencode binaries.
+# It is triggered when a tag matching "v*" is pushed.
+#
+# IMPORTANT: The tag MUST match the version in packages/opencode/package.json.
+# This version comes from upstream (anomalyco/opencode). If they don't match,
+# the binary version will be inconsistent with the tag.
+#
+# Steps to release:
+#
+#   1. Check the upstream version in package.json
+#      node -p 'require("./packages/opencode/package.json").version'
+#      # e.g. 1.2.13
+#
+#   2. Clean up old release artifacts on my fork remote
+#      git push origin :refs/heads/release         # delete release branch
+#      git tag -d v1.2.13                          # delete local tag
+#      git push origin :refs/tags/v1.2.13          # delete remote tag
+#      gh release delete v1.2.13 --yes             # delete GitHub release (repeat if multiple drafts)
+#
+#   3. Create and push the tag (must match the version from step 1)
+#      git tag v1.2.13
+#      git push origin v1.2.13
+#
+#   4. This workflow triggers automatically and:
+#      - Builds cross-platform binaries
+#      - Renames opencode → private-opencode
+#      - Creates a GitHub Release with archives
+#
+# =============================================================================
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-bun
+        with:
+          cross-compile: "true"
+
+      - name: Extract upstream version from package.json
+        id: version
+        run: echo "value=$(node -p 'require("./packages/opencode/package.json").version')" >> "$GITHUB_OUTPUT"
+
+      - name: Build all targets
+        run: ./packages/opencode/script/build.ts --all
+        env:
+          OPENCODE_VERSION: ${{ steps.version.outputs.value }}
+
+      - name: Rename binaries and create archives
+        run: |
+          DIST_DIR="$GITHUB_WORKSPACE/packages/opencode/dist"
+          OUT_DIR="$GITHUB_WORKSPACE/release-archives"
+          mkdir -p "$OUT_DIR"
+
+          for dir in "$DIST_DIR"/opencode-*; do
+            [ -d "$dir" ] || continue
+            target="$(basename "$dir")"
+            target="${target#opencode-}"
+
+            # Rename binary: opencode → private-opencode
+            if [[ "$target" == windows-* ]]; then
+              mv "$dir/bin/opencode.exe" "$dir/bin/private-opencode.exe"
+            else
+              mv "$dir/bin/opencode" "$dir/bin/private-opencode"
+            fi
+
+            # Create archive: tar.gz for linux, zip for others
+            if [[ "$target" == linux-* ]]; then
+              tar -czf "$OUT_DIR/private-opencode-${target}.tar.gz" -C "$dir/bin" .
+            else
+              (cd "$dir/bin" && zip -r "$OUT_DIR/private-opencode-${target}.zip" .)
+            fi
+          done
+
+          echo "Archives created:"
+          ls -lh "$OUT_DIR/"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-archives
+          path: release-archives/
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-archives
+          path: release-archives/
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --generate-notes \
+            release-archives/*
