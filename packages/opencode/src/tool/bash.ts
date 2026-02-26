@@ -207,6 +207,7 @@ export const BashTool = Tool.define("bash", async () => {
       let timedOut = false
       let aborted = false
       let exited = false
+      let exit: number | null = null
 
       const kill = () => Shell.killTree(proc, { exited: () => exited })
 
@@ -233,8 +234,9 @@ export const BashTool = Tool.define("bash", async () => {
           ctx.abort.removeEventListener("abort", abortHandler)
         }
 
-        proc.once("exit", () => {
+        proc.once("exit", (code) => {
           exited = true
+          exit = code
           cleanup()
           resolve()
         })
@@ -264,7 +266,7 @@ export const BashTool = Tool.define("bash", async () => {
         title: params.description,
         metadata: {
           output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
-          exit: proc.exitCode,
+          exit: exit ?? proc.exitCode,
           description: params.description,
         },
         output,
