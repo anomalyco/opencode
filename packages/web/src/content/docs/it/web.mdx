@@ -17,6 +17,16 @@ opencode web
 
 Questo avvia un server locale su `127.0.0.1` con una porta disponibile scelta a caso e apre automaticamente OpenCode nel browser predefinito.
 
+:::tip[Senza apertura automatica]
+Per avviare il server web senza aprire automaticamente il browser, usa `opencode serve` al suo posto:
+
+```bash
+opencode serve --hostname 0.0.0.0 --port 4096
+```
+
+Poi naviga manualmente su `http://localhost:4096` (o il tuo indirizzo di rete). Quando usi `0.0.0.0`, imposta `OPENCODE_SERVER_PASSWORD` per proteggere l'accesso.
+:::
+
 :::caution
 Se `OPENCODE_SERVER_PASSWORD` non e impostata, il server non sara protetto. Va bene per l'uso locale, ma va impostata per l'accesso in rete.
 :::
