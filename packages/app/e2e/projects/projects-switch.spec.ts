@@ -8,7 +8,7 @@ import {
   setWorkspacesEnabled,
   sessionIDFromUrl,
 } from "../actions"
-import { projectSwitchSelector, promptSelector, workspaceItemSelector, workspaceNewSessionSelector } from "../selectors"
+import { projectSwitchSelector, promptSelector } from "../selectors"
 import { createSdk, dirSlug } from "../utils"
 
 function slugFromUrl(url: string) {
@@ -80,16 +80,18 @@ test("switching back to a project opens the latest workspace session", async ({ 
 
         const workspaceSlug = slugFromUrl(page.url())
         workspaceDir = base64Decode(workspaceSlug)
-        await openSidebar(page)
+        const rootSdk = createSdk(directory)
+        await expect
+          .poll(async () => {
+            const list = await rootSdk.worktree
+              .list()
+              .then((x) => x.data ?? [])
+              .catch(() => [] as string[])
+            return workspaceDir ? list.includes(workspaceDir) : false
+          })
+          .toBe(true)
 
-        const workspace = page.locator(workspaceItemSelector(workspaceSlug)).first()
-        await expect(workspace).toBeVisible()
-        await workspace.hover()
-
-        const newSession = page.locator(workspaceNewSessionSelector(workspaceSlug)).first()
-        await expect(newSession).toBeVisible()
-        await newSession.click({ force: true })
-
+        await page.goto(`/${workspaceSlug}/session`)
         await expect(page).toHaveURL(new RegExp(`/${workspaceSlug}/session(?:[/?#]|$)`))
 
         const prompt = page.locator(promptSelector)

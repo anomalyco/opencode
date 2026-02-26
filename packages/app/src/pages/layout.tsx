@@ -30,7 +30,14 @@ import { Session, type Message } from "@opencode-ai/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { createStore, produce, reconcile } from "solid-js/store"
-import type { DragEvent } from "@thisbeyond/solid-dnd"
+import {
+  DragDropProvider,
+  DragDropSensors,
+  DragOverlay,
+  SortableProvider,
+  closestCenter,
+  type DragEvent,
+} from "@thisbeyond/solid-dnd"
 import { useProviders } from "@/hooks/use-providers"
 import { showToast, Toast, toaster } from "@opencode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
@@ -49,6 +56,7 @@ import { DialogSelectProvider } from "@/components/dialog-select-provider"
 import { DialogSelectServer } from "@/components/dialog-select-server"
 import { DialogSettings } from "@/components/dialog-settings"
 import { useCommand, type CommandOption } from "@/context/command"
+import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogEditProject } from "@/components/dialog-edit-project"
 import { Titlebar } from "@/components/titlebar"
@@ -65,7 +73,12 @@ import {
 } from "./layout/helpers"
 import { collectOpenProjectDeepLinks, deepLinkEvent, drainPendingDeepLinks } from "./layout/deep-links"
 import { createInlineEditorController } from "./layout/inline-editor"
-import { LocalWorkspace, type WorkspaceSidebarContext } from "./layout/sidebar-workspace"
+import {
+  LocalWorkspace,
+  SortableWorkspace,
+  WorkspaceDragOverlay,
+  type WorkspaceSidebarContext,
+} from "./layout/sidebar-workspace"
 import { workspaceOpenState } from "./layout/sidebar-workspace-helpers"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
@@ -77,6 +90,7 @@ export default function Layout(props: ParentProps) {
       lastProjectSession: {} as { [directory: string]: { directory: string; id: string; at: number } },
       activeWorkspaceByProject: {} as Record<string, string>,
       activeProject: undefined as string | undefined,
+      activeWorkspace: undefined as string | undefined,
       workspaceOrder: {} as Record<string, string[]>,
       workspaceName: {} as Record<string, string>,
       workspaceBranchName: {} as Record<string, Record<string, string>>,
@@ -462,7 +476,13 @@ export default function Layout(props: ParentProps) {
     const direct = projects.find((p) => p.worktree === directory)
     if (direct) return direct
 
-    const [child] = globalSync.child(directory, { bootstrap: false })
+    const remembered = Object.entries(store.activeWorkspaceByProject).find(([, active]) => active === directory)?.[0]
+    if (remembered) {
+      const project = projects.find((p) => p.worktree === remembered)
+      if (project) return project
+    }
+
+    const [child] = globalSync.child(directory, { bootstrap: true })
     const id = child.project
     if (!id) return
 
@@ -601,7 +621,7 @@ export default function Layout(props: ParentProps) {
     if (project.vcs !== "git") return project.worktree
     const dirs = workspaceIds(project)
     const saved = store.activeWorkspaceByProject[project.worktree]
-    if (saved && dirs.includes(saved)) return saved
+    if (saved && (dirs.includes(saved) || WorktreeState.get(saved)?.status === "pending")) return saved
     const current = currentDir()
     if (dirs.includes(current)) return current
     return project.worktree
@@ -1116,7 +1136,8 @@ export default function Layout(props: ParentProps) {
     server.projects.touch(root)
 
     const project = layout.projects.list().find((item) => item.worktree === root)
-    const target = activeWorkspace(project) ?? root
+    const saved = store.activeWorkspaceByProject[root]
+    const target = saved ?? activeWorkspace(project) ?? root
 
     const projectSession = store.lastProjectSession[root]
     if (projectSession?.id && projectSession.directory === target) {
@@ -1241,6 +1262,9 @@ export default function Layout(props: ParentProps) {
       }),
     )
     setStore("workspaceOrder", root, (order) => (order ?? []).filter((workspace) => workspace !== directory))
+    if (store.activeWorkspaceByProject[root] === directory) {
+      setStore("activeWorkspaceByProject", root, root)
+    }
 
     layout.projects.close(directory)
     layout.projects.open(root)
@@ -1561,6 +1585,43 @@ export default function Layout(props: ParentProps) {
     return [...merged, extra]
   }
 
+  const sidebarProject = createMemo(() => {
+    if (layout.sidebar.opened()) return currentProject()
+    const hovered = hoverProjectData()
+    if (hovered) return hovered
+    return currentProject()
+  })
+
+  function handleWorkspaceDragStart(event: unknown) {
+    const id = getDraggableId(event)
+    if (!id) return
+    setStore("activeWorkspace", id)
+  }
+
+  function handleWorkspaceDragOver(event: DragEvent) {
+    const { draggable, droppable } = event
+    if (!draggable || !droppable) return
+
+    const project = sidebarProject()
+    if (!project) return
+
+    const ids = workspaceIds(project)
+    const fromIndex = ids.findIndex((dir) => dir === draggable.id.toString())
+    const toIndex = ids.findIndex((dir) => dir === droppable.id.toString())
+    if (fromIndex === -1 || toIndex === -1) return
+    if (fromIndex === toIndex) return
+
+    const result = ids.slice()
+    const [item] = result.splice(fromIndex, 1)
+    if (!item) return
+    result.splice(toIndex, 0, item)
+    setStore("workspaceOrder", project.worktree, result)
+  }
+
+  function handleWorkspaceDragEnd() {
+    setStore("activeWorkspace", undefined)
+  }
+
   const createWorkspace = async (project: LocalProject) => {
     clearSidebarHoverState()
     const created = await globalSDK.client.worktree
@@ -1597,6 +1658,7 @@ export default function Layout(props: ParentProps) {
       })
       return [local, created.directory, ...next]
     })
+    setStore("activeWorkspaceByProject", project.worktree, created.directory)
 
     globalSync.child(created.directory)
     navigateWithSidebarReset(`/${base64Encode(created.directory)}/session`)
@@ -1885,14 +1947,43 @@ export default function Layout(props: ParentProps) {
                         </Button>
                       </TooltipKeybind>
                     </div>
-                    <div class="flex-1 min-h-0">
-                      <LocalWorkspace
-                        ctx={workspaceSidebarCtx}
-                        project={p()}
-                        directory={activeDir()}
-                        sortNow={sortNow}
-                        mobile={panelProps.mobile}
-                      />
+                    <div class="relative flex-1 min-h-0">
+                      <DragDropProvider
+                        onDragStart={handleWorkspaceDragStart}
+                        onDragEnd={handleWorkspaceDragEnd}
+                        onDragOver={handleWorkspaceDragOver}
+                        collisionDetector={closestCenter}
+                      >
+                        <DragDropSensors />
+                        <ConstrainDragXAxis />
+                        <div
+                          ref={(el) => {
+                            if (!panelProps.mobile) scrollContainerRef = el
+                          }}
+                          class="size-full flex flex-col py-2 gap-4 overflow-y-auto no-scrollbar [overflow-anchor:none]"
+                        >
+                          <SortableProvider ids={workspaces()}>
+                            <For each={workspaces()}>
+                              {(directory) => (
+                                <SortableWorkspace
+                                  ctx={workspaceSidebarCtx}
+                                  directory={directory}
+                                  project={p()}
+                                  sortNow={sortNow}
+                                  mobile={panelProps.mobile}
+                                />
+                              )}
+                            </For>
+                          </SortableProvider>
+                        </div>
+                        <DragOverlay>
+                          <WorkspaceDragOverlay
+                            sidebarProject={sidebarProject}
+                            activeWorkspace={() => store.activeWorkspace}
+                            workspaceLabel={workspaceLabel}
+                          />
+                        </DragOverlay>
+                      </DragDropProvider>
                     </div>
                   </>
                 </Show>

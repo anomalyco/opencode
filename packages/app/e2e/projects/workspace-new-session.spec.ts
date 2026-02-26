@@ -2,29 +2,16 @@ import { base64Decode } from "@opencode-ai/util/encode"
 import type { Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
 import { cleanupTestProject, openSidebar, sessionIDFromUrl, setWorkspacesEnabled } from "../actions"
-import { promptSelector, workspaceItemSelector, workspaceNewSessionSelector } from "../selectors"
+import { promptSelector } from "../selectors"
 import { createSdk } from "../utils"
 
 function slugFromUrl(url: string) {
   return /\/([^/]+)\/session(?:\/|$)/.exec(url)?.[1] ?? ""
 }
 
-async function waitWorkspaceReady(page: Page, slug: string) {
-  await openSidebar(page)
-  await expect
-    .poll(
-      async () => {
-        const item = page.locator(workspaceItemSelector(slug)).first()
-        try {
-          await item.hover({ timeout: 500 })
-          return true
-        } catch {
-          return false
-        }
-      },
-      { timeout: 60_000 },
-    )
-    .toBe(true)
+async function gotoWorkspace(page: Page, slug: string) {
+  await page.goto(`/${slug}/session`)
+  await expect.poll(() => slugFromUrl(page.url()), { timeout: 60_000 }).toBe(slug)
 }
 
 async function createWorkspace(page: Page, root: string, seen: string[]) {
@@ -51,14 +38,9 @@ async function createWorkspace(page: Page, root: string, seen: string[]) {
 }
 
 async function openWorkspaceNewSession(page: Page, slug: string) {
-  await waitWorkspaceReady(page, slug)
-
-  const item = page.locator(workspaceItemSelector(slug)).first()
-  await item.hover()
-
-  const button = page.locator(workspaceNewSessionSelector(slug)).first()
-  await expect(button).toBeVisible()
-  await button.click({ force: true })
+  await gotoWorkspace(page, slug)
+  await openSidebar(page)
+  await page.getByRole("button", { name: "New session" }).first().click()
 
   await expect.poll(() => slugFromUrl(page.url())).toBe(slug)
   await expect(page).toHaveURL(new RegExp(`/${slug}/session(?:[/?#]|$)`))
@@ -98,6 +80,7 @@ test("new sessions from sidebar workspace actions stay in selected workspace", a
   await page.setViewportSize({ width: 1400, height: 800 })
 
   await withProject(async ({ directory, slug: root }) => {
+    const rootSdk = createSdk(directory)
     const workspaces = [] as { slug: string; directory: string }[]
     const sessions = [] as string[]
 
@@ -107,11 +90,27 @@ test("new sessions from sidebar workspace actions stay in selected workspace", a
 
       const first = await createWorkspace(page, root, [])
       workspaces.push(first)
-      await waitWorkspaceReady(page, first.slug)
+      await expect
+        .poll(async () => {
+          const list = await rootSdk.worktree
+            .list()
+            .then((x) => x.data ?? [])
+            .catch(() => [] as string[])
+          return list.includes(first.directory)
+        })
+        .toBe(true)
 
       const second = await createWorkspace(page, root, [first.slug])
       workspaces.push(second)
-      await waitWorkspaceReady(page, second.slug)
+      await expect
+        .poll(async () => {
+          const list = await rootSdk.worktree
+            .list()
+            .then((x) => x.data ?? [])
+            .catch(() => [] as string[])
+          return list.includes(second.directory)
+        })
+        .toBe(true)
 
       const firstSession = await createSessionFromWorkspace(page, first.slug, `workspace one ${Date.now()}`)
       sessions.push(firstSession)

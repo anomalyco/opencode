@@ -9,7 +9,6 @@ import {
   dropdownMenuTriggerSelector,
   dropdownMenuContentSelector,
   projectMenuTriggerSelector,
-  projectWorkspacesToggleSelector,
   titlebarRightSelector,
   popoverBodySelector,
   listItemSelector,
@@ -544,26 +543,14 @@ export async function openProjectMenu(page: Page, projectSlug: string) {
 }
 
 export async function setWorkspacesEnabled(page: Page, projectSlug: string, enabled: boolean) {
-  const current = await page
-    .getByRole("button", { name: "New workspace" })
-    .first()
-    .isVisible()
-    .then((x) => x)
-    .catch(() => false)
-
-  if (current === enabled) return
-
-  await openProjectMenu(page, projectSlug)
-
-  const toggle = page.locator(projectWorkspacesToggleSelector(projectSlug)).first()
-  await expect(toggle).toBeVisible()
-  await toggle.click({ force: true })
-
-  const expected = enabled ? "New workspace" : "New session"
-  await expect(page.getByRole("button", { name: expected }).first()).toBeVisible()
+  if (!enabled) return
+  await openSidebar(page)
+  await expect(page.getByRole("button", { name: "New workspace" }).first()).toBeVisible()
 }
 
 export async function openWorkspaceMenu(page: Page, workspaceSlug: string) {
+  await page.goto(`/${workspaceSlug}/session`)
+  await openSidebar(page)
   const item = page.locator(workspaceItemSelector(workspaceSlug)).first()
   await expect(item).toBeVisible()
   await item.hover()

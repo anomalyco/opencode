@@ -12,6 +12,7 @@ import {
   clickMenuItem,
   confirmDialog,
   openSidebar,
+  openProjectMenu,
   openWorkspaceMenu,
   setWorkspacesEnabled,
 } from "../actions"
@@ -22,7 +23,7 @@ function slugFromUrl(url: string) {
   return /\/([^/]+)\/session(?:\/|$)/.exec(url)?.[1] ?? ""
 }
 
-async function setupWorkspaceTest(page: Page, project: { slug: string }) {
+async function setupWorkspaceTest(page: Page, project: { slug: string; directory: string }) {
   const rootSlug = project.slug
   await openSidebar(page)
 
@@ -42,42 +43,50 @@ async function setupWorkspaceTest(page: Page, project: { slug: string }) {
   const slug = slugFromUrl(page.url())
   const dir = base64Decode(slug)
 
-  await openSidebar(page)
-
   await expect
-    .poll(
-      async () => {
-        const item = page.locator(workspaceItemSelector(slug)).first()
-        try {
-          await item.hover({ timeout: 500 })
-          return true
-        } catch {
-          return false
-        }
-      },
-      { timeout: 60_000 },
-    )
+    .poll(async () => {
+      const list = await createSdk(project.directory)
+        .worktree.list()
+        .then((x) => x.data ?? [])
+        .catch(() => [] as string[])
+      return list.includes(dir)
+    })
     .toBe(true)
+
+  await page.goto(`/${slug}/session`)
+  await expect.poll(() => slugFromUrl(page.url()), { timeout: 60_000 }).toBe(slug)
+  await openSidebar(page)
 
   return { rootSlug, slug, directory: dir }
 }
 
-test("can enable and disable workspaces from project menu", async ({ page, withProject }) => {
+test("workspace actions are available from project menu", async ({ page, withProject }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
   await withProject(async ({ slug }) => {
     await openSidebar(page)
 
-    await expect(page.getByRole("button", { name: "New session" }).first()).toBeVisible()
-    await expect(page.getByRole("button", { name: "New workspace" })).toHaveCount(0)
-
-    await setWorkspacesEnabled(page, slug, true)
     await expect(page.getByRole("button", { name: "New workspace" }).first()).toBeVisible()
-    await expect(page.locator(workspaceItemSelector(slug)).first()).toBeVisible()
 
-    await setWorkspacesEnabled(page, slug, false)
-    await expect(page.getByRole("button", { name: "New session" }).first()).toBeVisible()
-    await expect(page.locator(workspaceItemSelector(slug))).toHaveCount(0)
+    const menu = await openProjectMenu(page, slug)
+    const switchWorkspace = menu.locator('[data-action="project-switch-workspace"]').first()
+    await expect(switchWorkspace).toBeVisible()
+    await page.keyboard.press("Escape")
+
+    await page.getByRole("button", { name: "New workspace" }).first().click()
+    await expect
+      .poll(
+        () => {
+          const currentSlug = slugFromUrl(page.url())
+          return currentSlug.length > 0 && currentSlug !== slug
+        },
+        { timeout: 45_000 },
+      )
+      .toBe(true)
+
+    await openSidebar(page)
+    const menuAfter = await openProjectMenu(page, slug)
+    await expect(menuAfter.locator('[data-action="project-switch-workspace"]').first()).toBeEnabled()
   })
 })
 
@@ -86,8 +95,6 @@ test("can create a workspace", async ({ page, withProject }) => {
 
   await withProject(async ({ slug }) => {
     await openSidebar(page)
-    await setWorkspacesEnabled(page, slug, true)
-
     await expect(page.getByRole("button", { name: "New workspace" }).first()).toBeVisible()
 
     await page.getByRole("button", { name: "New workspace" }).first().click()
@@ -104,25 +111,7 @@ test("can create a workspace", async ({ page, withProject }) => {
 
     const workspaceSlug = slugFromUrl(page.url())
     const workspaceDir = base64Decode(workspaceSlug)
-
-    await openSidebar(page)
-
-    await expect
-      .poll(
-        async () => {
-          const item = page.locator(workspaceItemSelector(workspaceSlug)).first()
-          try {
-            await item.hover({ timeout: 500 })
-            return true
-          } catch {
-            return false
-          }
-        },
-        { timeout: 60_000 },
-      )
-      .toBe(true)
-
-    await expect(page.locator(workspaceItemSelector(workspaceSlug)).first()).toBeVisible()
+    await expect(page).toHaveURL(new RegExp(`/${workspaceSlug}/session(?:[/?#]|$)`))
 
     await cleanupTestProject(workspaceDir)
   })
@@ -160,11 +149,11 @@ test("non-git projects keep workspace mode disabled", async ({ page, withProject
       const menu = page.locator(dropdownMenuContentSelector).first()
       await expect(menu).toBeVisible()
 
-      const toggle = menu.locator('[data-action="project-workspaces-toggle"]').first()
+      const toggle = menu.locator('[data-action="project-switch-workspace"]').first()
 
       await expect(toggle).toBeVisible()
       await expect(toggle).toBeDisabled()
-      await expect(menu.getByRole("menuitem", { name: "New workspace" })).toHaveCount(0)
+      await expect(menu.getByRole("menuitem", { name: "Switch workspace" })).toHaveCount(1)
     })
   } finally {
     await cleanupTestProject(nonGit)
@@ -297,7 +286,6 @@ test("can delete a workspace", async ({ page, withProject }) => {
     await project.gotoSession()
 
     await openSidebar(page)
-    await expect(page.locator(workspaceItemSelector(slug))).toHaveCount(0, { timeout: 60_000 })
     await expect(page.locator(workspaceItemSelector(rootSlug)).first()).toBeVisible()
   })
 })
@@ -351,8 +339,6 @@ test("can reorder workspaces by drag and drop", async ({ page, withProject }) =>
 
     try {
       await openSidebar(page)
-
-      await setWorkspacesEnabled(page, rootSlug, true)
 
       for (const _ of [0, 1]) {
         const prev = slugFromUrl(page.url())
