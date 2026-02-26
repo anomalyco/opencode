@@ -45,6 +45,7 @@ import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncation"
+import { normalizeNul } from "@/util/redirection"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1471,6 +1472,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   })
   export type ShellInput = z.infer<typeof ShellInput>
   export async function shell(input: ShellInput) {
+    const command = normalizeNul(input.command, process.platform)
     const abort = start(input.sessionID)
     if (!abort) {
       throw new Session.BusyError(input.sessionID)
@@ -1557,7 +1559,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           start: Date.now(),
         },
         input: {
-          command: input.command,
+          command,
         },
       },
     }
@@ -1569,10 +1571,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
     const invocations: Record<string, { args: string[] }> = {
       nu: {
-        args: ["-c", input.command],
+        args: ["-c", command],
       },
       fish: {
-        args: ["-c", input.command],
+        args: ["-c", command],
       },
       zsh: {
         args: [
@@ -1581,7 +1583,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           `
             [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
             [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
-            eval ${JSON.stringify(input.command)}
+            eval ${JSON.stringify(command)}
           `,
         ],
       },
@@ -1592,25 +1594,25 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           `
             shopt -s expand_aliases
             [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
-            eval ${JSON.stringify(input.command)}
+            eval ${JSON.stringify(command)}
           `,
         ],
       },
       // Windows cmd
       cmd: {
-        args: ["/c", input.command],
+        args: ["/c", command],
       },
       // Windows PowerShell
       powershell: {
-        args: ["-NoProfile", "-Command", input.command],
+        args: ["-NoProfile", "-Command", command],
       },
       pwsh: {
-        args: ["-NoProfile", "-Command", input.command],
+        args: ["-NoProfile", "-Command", command],
       },
       // Fallback: any shell that doesn't match those above
       //  - No -l, for max compatibility
       "": {
-        args: ["-c", `${input.command}`],
+        args: ["-c", `${command}`],
       },
     }
 
@@ -1626,13 +1628,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const proc = spawn(shell, args, {
       cwd,
       detached: process.platform !== "win32",
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
       env: {
         ...process.env,
         ...shellEnv.env,
         TERM: "dumb",
       },
     })
+    proc.stdin?.end()
 
     let output = ""
 
