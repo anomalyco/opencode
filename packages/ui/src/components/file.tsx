@@ -1,8 +1,10 @@
 import { sampledChecksum } from "@opencode-ai/util/encode"
 import {
   DEFAULT_VIRTUAL_FILE_METRICS,
+  type ExpansionDirections,
   type DiffLineAnnotation,
   type FileContents,
+  type FileDiffMetadata,
   File as PierreFile,
   type FileDiffOptions,
   FileDiff,
@@ -69,6 +71,7 @@ export type FileSearchHandle = {
   setQuery: (value: string) => void
   clear: () => void
   reveal: (hit: FileSearchReveal) => boolean
+  expand: (hit: FileSearchReveal) => boolean
   refresh: () => void
 }
 
@@ -97,6 +100,40 @@ export type DiffFileProps<T = {}> = FileDiffOptions<T> &
   }
 
 export type FileProps<T = {}> = TextFileProps<T> | DiffFileProps<T>
+
+function expansionForHit(diff: FileDiffMetadata, hit: FileSearchReveal) {
+  if (diff.isPartial || diff.hunks.length === 0) return
+
+  const side =
+    hit.side === "deletions"
+      ? {
+          start: (hunk: FileDiffMetadata["hunks"][number]) => hunk.deletionStart,
+          count: (hunk: FileDiffMetadata["hunks"][number]) => hunk.deletionCount,
+        }
+      : {
+          start: (hunk: FileDiffMetadata["hunks"][number]) => hunk.additionStart,
+          count: (hunk: FileDiffMetadata["hunks"][number]) => hunk.additionCount,
+        }
+
+  for (let i = 0; i < diff.hunks.length; i++) {
+    const hunk = diff.hunks[i]
+    const start = side.start(hunk)
+    if (hit.line < start) {
+      return {
+        index: i,
+        direction: i === 0 ? "down" : "both",
+      } satisfies { index: number; direction: ExpansionDirections }
+    }
+
+    const end = start + Math.max(side.count(hunk) - 1, -1)
+    if (hit.line <= end) return
+  }
+
+  return {
+    index: diff.hunks.length,
+    direction: "up",
+  } satisfies { index: number; direction: ExpansionDirections }
+}
 
 function TextViewer<T>(props: TextFileProps<T>) {
   let wrapper!: HTMLDivElement
@@ -161,6 +198,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
         find.activate()
         return find.reveal(hit)
       },
+      expand: () => false,
       refresh: () => {
         find.activate()
         find.refresh()
@@ -622,6 +660,21 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     const search = local.search
     if (!search) return
 
+    const expand = (hit: FileSearchReveal) => {
+      const active = current() as
+        | ((FileDiff<T> | VirtualizedFileDiff<T>) & {
+            fileDiff?: FileDiffMetadata
+          })
+        | undefined
+      if (!active?.fileDiff) return false
+
+      const next = expansionForHit(active.fileDiff, hit)
+      if (!next) return false
+
+      active.expandHunk(next.index, next.direction)
+      return true
+    }
+
     const handle = {
       setQuery: (value: string) => {
         find.activate()
@@ -634,6 +687,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
         find.activate()
         return find.reveal(hit)
       },
+      expand,
       refresh: () => {
         find.activate()
         find.refresh()

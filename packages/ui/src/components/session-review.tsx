@@ -257,8 +257,9 @@ export const SessionReview = (props: SessionReviewProps) => {
         break
       }
 
+      const expanded = handle.expand(hit)
       handle.refresh()
-      if (!(await waitForFrames(1, token))) return
+      if (!(await waitForFrames(expanded ? 2 : 1, token))) return
     }
 
     if (!done) return
@@ -745,7 +746,6 @@ export const SessionReview = (props: SessionReviewProps) => {
                                 mode="diff"
                                 preloadedDiff={item().preloaded}
                                 diffStyle={diffStyle()}
-                                expandUnchanged={searchExpanded()}
                                 expansionLineCount={searchExpanded() ? Number.MAX_SAFE_INTEGER : 20}
                                 onRendered={() => {
                                   readyFiles.add(file)
