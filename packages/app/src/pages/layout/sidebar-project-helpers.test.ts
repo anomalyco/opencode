@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { projectSelected, projectTileActive } from "./sidebar-project-helpers"
+import { projectIconStatus, projectSelected, projectTileActive } from "./sidebar-project-helpers"
 
 describe("projectSelected", () => {
   test("matches direct worktree", () => {
@@ -59,5 +59,27 @@ describe("projectTileActive", () => {
         worktree: "/tmp/root",
       }),
     ).toBe(false)
+  })
+})
+
+describe("projectIconStatus", () => {
+  test("defaults to idle", () => {
+    expect(projectIconStatus({ pending: false, errored: false, completed: false, running: false })).toBe("idle")
+  })
+
+  test("returns running when only running exists", () => {
+    expect(projectIconStatus({ pending: false, errored: false, completed: false, running: true })).toBe("running")
+  })
+
+  test("returns completed over running", () => {
+    expect(projectIconStatus({ pending: false, errored: false, completed: true, running: true })).toBe("completed")
+  })
+
+  test("returns errored over completed and running", () => {
+    expect(projectIconStatus({ pending: false, errored: true, completed: true, running: true })).toBe("errored")
+  })
+
+  test("returns pending above all other states", () => {
+    expect(projectIconStatus({ pending: true, errored: true, completed: true, running: true })).toBe("pending")
   })
 })

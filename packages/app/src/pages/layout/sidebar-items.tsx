@@ -16,17 +16,64 @@ import { getFilename } from "@opencode-ai/util/path"
 import { type Message, type Session, type TextPart, type UserMessage } from "@opencode-ai/sdk/v2/client"
 import { For, Match, Show, Switch, createMemo, onCleanup, type Accessor, type JSX } from "solid-js"
 import { agentColor } from "@/utils/agent"
+import { projectIconStatus, type ProjectIconStatus } from "./sidebar-project-helpers"
 
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
+const statusClassName = (status: ProjectIconStatus) => {
+  switch (status) {
+    case "pending":
+      return "bg-surface-warning-strong"
+    case "errored":
+      return "bg-icon-critical-base"
+    case "completed":
+      return "bg-icon-success-base"
+    case "running":
+      return "bg-icon-info-base"
+    case "idle":
+    default:
+      return undefined
+  }
+}
+
 export const ProjectIcon = (props: { project: LocalProject; class?: string; notify?: boolean }): JSX.Element => {
   const notification = useNotification()
+  const globalSync = useGlobalSync()
   const dirs = createMemo(() => [props.project.worktree, ...(props.project.sandboxes ?? [])])
-  const unseenCount = createMemo(() =>
-    dirs().reduce((total, directory) => total + notification.project.unseenCount(directory), 0),
-  )
-  const hasError = createMemo(() => dirs().some((directory) => notification.project.unseenHasError(directory)))
+
   const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
+
+  const status = createMemo(() => {
+    let pending = false
+    let errored = false
+    let completed = false
+    let running = false
+
+    for (const directory of dirs()) {
+      const [store] = globalSync.child(directory, { bootstrap: false })
+
+      const hasPendingPermissions = Object.values(store.permission).some((list) => list.length > 0)
+      const hasPendingQuestions = Object.values(store.question).some((list) => list.length > 0)
+      if (hasPendingPermissions || hasPendingQuestions) pending = true
+
+      const hasErrors = notification.project.unseenHasError(directory)
+      if (hasErrors) errored = true
+
+      const hasCompleted = notification.project.unseen(directory).some((n) => n.type === "turn-complete")
+      if (hasCompleted) completed = true
+
+      const sessionStatuses = Object.values(store.session_status)
+      const hasRunning = sessionStatuses.some((s) => s?.type === "busy" || s?.type === "retry")
+      if (hasRunning) running = true
+
+      if (pending && errored && completed && running) break
+    }
+
+    return projectIconStatus({ pending, errored, completed, running })
+  })
+
+  const statusClass = createMemo(() => statusClassName(status()))
+
   return (
     <div class={`relative size-8 shrink-0 rounded ${props.class ?? ""}`}>
       <div class="size-full rounded overflow-clip">
@@ -37,15 +84,14 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
           }
           {...getAvatarColors(props.project.icon?.color)}
           class="size-full rounded"
-          classList={{ "badge-mask": unseenCount() > 0 && props.notify }}
+          classList={{ "badge-mask": statusClass() !== undefined && props.notify }}
         />
       </div>
-      <Show when={unseenCount() > 0 && props.notify}>
+      <Show when={statusClass() !== undefined && props.notify}>
         <div
           classList={{
             "absolute top-px right-px size-1.5 rounded-full z-10": true,
-            "bg-icon-critical-base": hasError(),
-            "bg-text-interactive-base": !hasError(),
+            [statusClass()!]: true,
           }}
         />
       </Show>
