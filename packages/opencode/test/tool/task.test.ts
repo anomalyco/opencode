@@ -125,7 +125,16 @@ describe("tool.task", () => {
   })
 
   test("task tool filters models list based on agent permissions", async () => {
-    await using tmp = await tmpdir({ git: true })
+    await using tmp = await tmpdir({
+      git: true,
+      config: {
+        provider: {
+          anthropic: {
+            id: "anthropic",
+          },
+        },
+      },
+    })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
