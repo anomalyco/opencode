@@ -1,16 +1,14 @@
 import { semver } from "bun"
 import { Log } from "../util/log"
 import { Process } from "../util/process"
+import { BunProc } from "."
 
 export namespace PackageRegistry {
   const log = Log.create({ service: "bun" })
 
-  function which() {
-    return process.execPath
-  }
 
   export async function info(pkg: string, field: string, cwd?: string): Promise<string | null> {
-    const result = await Process.run([which(), "info", pkg, field], {
+    const result = await Process.run([BunProc.which(), "info", pkg, field], {
       cwd,
       env: { ...process.env, BUN_BE_BUN: "1" },
       nothrow: true,

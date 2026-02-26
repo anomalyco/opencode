@@ -359,4 +359,18 @@ describe("PackageRegistry.isOutdated", () => {
     const result = await PackageRegistry.isOutdated("zod", latest!)
     expect(result).toBe(false)
   })
+
+  test("returns false when range satisfied by latest", async () => {
+    const { PackageRegistry } = await import("../src/bun/registry")
+
+    const result = await PackageRegistry.isOutdated("zod", ">=3.0.0")
+    expect(result).toBe(false)
+  })
+
+  test("returns true when range not satisfied by latest", async () => {
+    const { PackageRegistry } = await import("../src/bun/registry")
+
+    const result = await PackageRegistry.isOutdated("zod", "^0.0.1")
+    expect(result).toBe(true)
+  })
 })
