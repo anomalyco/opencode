@@ -434,7 +434,10 @@ export namespace ProviderTransform {
         }
         if (model.id.includes("claude")) {
           return {
-            thinking: { thinking_budget: 4000 },
+            low: { thinking_budget: 1024 },
+            medium: { thinking_budget: 4000 },
+            high: { thinking_budget: Math.min(16_000, Math.floor(model.limit.output / 2 - 1)) },
+            max: { thinking_budget: Math.min(31_999, model.limit.output - 1) },
           }
         }
         const copilotEfforts = iife(() => {
