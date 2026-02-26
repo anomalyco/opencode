@@ -251,6 +251,7 @@ export const dict = {
   "black.hero.title": "Accédez aux meilleurs modèles de code au monde",
   "black.hero.subtitle": "Y compris Claude, GPT, Gemini et plus",
   "black.title": "OpenCode Black | Tarification",
+  "black.paused": "L'inscription au plan Black est temporairement suspendue.",
   "black.plan.icon20": "Forfait Black 20",
   "black.plan.icon100": "Forfait Black 100",
   "black.plan.icon200": "Forfait Black 200",
@@ -348,12 +349,15 @@ export const dict = {
   "workspace.usage.table.input": "Entrée",
   "workspace.usage.table.output": "Sortie",
   "workspace.usage.table.cost": "Coût",
+  "workspace.usage.table.session": "Session",
   "workspace.usage.breakdown.input": "Entrée",
   "workspace.usage.breakdown.cacheRead": "Lecture cache",
   "workspace.usage.breakdown.cacheWrite": "Écriture cache",
   "workspace.usage.breakdown.output": "Sortie",
   "workspace.usage.breakdown.reasoning": "Raisonnement",
-  "workspace.usage.subscription": "abonnement ({{amount}} $)",
+  "workspace.usage.subscription": "Black ({{amount}} $)",
+  "workspace.usage.lite": "Go ({{amount}} $)",
+  "workspace.usage.byok": "BYOK ({{amount}} $)",
 
   "workspace.cost.title": "Coût",
   "workspace.cost.subtitle": "Coûts d'utilisation répartis par modèle.",
@@ -362,6 +366,7 @@ export const dict = {
   "workspace.cost.deletedSuffix": "(supprimé)",
   "workspace.cost.empty": "Aucune donnée d'utilisation disponible pour la période sélectionnée.",
   "workspace.cost.subscriptionShort": "abo",
+  "workspace.cost.liteShort": "lite",
 
   "workspace.keys.title": "Clés API",
   "workspace.keys.subtitle": "Gérez vos clés API pour accéder aux services OpenCode.",
@@ -492,6 +497,37 @@ export const dict = {
   "workspace.black.waitlist.enrolled": "Inscrit",
   "workspace.black.waitlist.enrollNote":
     "Lorsque vous cliquez sur S'inscrire, votre abonnement démarre immédiatement et votre carte sera débitée.",
+
+  "workspace.lite.loading": "Chargement...",
+  "workspace.lite.time.day": "jour",
+  "workspace.lite.time.days": "jours",
+  "workspace.lite.time.hour": "heure",
+  "workspace.lite.time.hours": "heures",
+  "workspace.lite.time.minute": "minute",
+  "workspace.lite.time.minutes": "minutes",
+  "workspace.lite.time.fewSeconds": "quelques secondes",
+  "workspace.lite.subscription.title": "Abonnement Go",
+  "workspace.lite.subscription.message": "Vous êtes abonné à OpenCode Go.",
+  "workspace.lite.subscription.manage": "Gérer l'abonnement",
+  "workspace.lite.subscription.rollingUsage": "Utilisation glissante",
+  "workspace.lite.subscription.weeklyUsage": "Utilisation hebdomadaire",
+  "workspace.lite.subscription.monthlyUsage": "Utilisation mensuelle",
+  "workspace.lite.subscription.resetsIn": "Réinitialisation dans",
+  "workspace.lite.subscription.useBalance":
+    "Utilisez votre solde disponible après avoir atteint les limites d'utilisation",
+  "workspace.lite.subscription.selectProvider":
+    'Sélectionnez "OpenCode Go" comme fournisseur dans votre configuration opencode pour utiliser les modèles Go.',
+  "workspace.lite.other.title": "Abonnement Go",
+  "workspace.lite.other.message":
+    "Un autre membre de cet espace de travail est déjà abonné à OpenCode Go. Un seul membre par espace de travail peut s'abonner.",
+  "workspace.lite.promo.title": "OpenCode Go",
+  "workspace.lite.promo.description":
+    "OpenCode Go est un abonnement à 10 $ par mois qui offre un accès fiable aux modèles de codage ouverts populaires avec des limites d'utilisation généreuses.",
+  "workspace.lite.promo.modelsTitle": "Ce qui est inclus",
+  "workspace.lite.promo.footer":
+    "Le plan est conçu principalement pour les utilisateurs internationaux, avec des modèles hébergés aux États-Unis, dans l'UE et à Singapour pour un accès mondial stable. Les tarifs et les limites d'utilisation peuvent changer à mesure que nous apprenons des premières utilisations et des commentaires.",
+  "workspace.lite.promo.subscribe": "S'abonner à Go",
+  "workspace.lite.promo.subscribing": "Redirection...",
 
   "download.title": "OpenCode | Téléchargement",
   "download.meta.description": "Téléchargez OpenCode pour macOS, Windows et Linux",
