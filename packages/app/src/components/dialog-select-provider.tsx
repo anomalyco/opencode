@@ -29,7 +29,7 @@ export const DialogSelectProvider: Component = () => {
     if (id === "anthropic") return language.t("dialog.provider.anthropic.note")
     if (id === "openai") return language.t("dialog.provider.openai.note")
     if (id.startsWith("github-copilot")) return language.t("dialog.provider.copilot.note")
-    if (id === "opencode-go") return "Low cost subscription for everyone"
+    if (id === "opencode-go") return language.t("dialog.provider.opencodeGo.tagline")
   }
 
   return (
@@ -72,7 +72,7 @@ export const DialogSelectProvider: Component = () => {
             <ProviderIcon data-slot="list-item-extra-icon" id={icon(i.id)} />
             <span>{i.name}</span>
             <Show when={i.id === "opencode"}>
-              <div class="text-14-regular text-text-weak">Reliable optimized models</div>
+              <div class="text-14-regular text-text-weak">{language.t("dialog.provider.opencode.tagline")}</div>
             </Show>
             <Show when={i.id === CUSTOM_ID}>
               <Tag>{language.t("settings.providers.tag.custom")}</Tag>

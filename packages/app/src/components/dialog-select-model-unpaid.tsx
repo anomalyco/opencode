@@ -98,14 +98,16 @@ export const DialogSelectModelUnpaid: Component = () => {
                     <ProviderIcon data-slot="list-item-extra-icon" id={i.id as IconName} />
                     <span>{i.name}</span>
                     <Show when={i.id === "opencode"}>
-                      <div class="text-14-regular text-text-weak">Reliable optimized models</div>
+                      <div class="text-14-regular text-text-weak">{language.t("dialog.provider.opencode.tagline")}</div>
                     </Show>
                     <Show when={i.id === "opencode"}>
                       <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
                     </Show>
                     <Show when={i.id === "opencode-go"}>
                       <>
-                        <div class="text-14-regular text-text-weak">Low cost subscription for everyone</div>
+                        <div class="text-14-regular text-text-weak">
+                          {language.t("dialog.provider.opencodeGo.tagline")}
+                        </div>
                         <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
                       </>
                     </Show>
