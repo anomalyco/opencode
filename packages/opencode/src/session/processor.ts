@@ -358,6 +358,32 @@ export namespace SessionProcessor {
             }
             const retry = SessionRetry.retryable(error)
             if (retry !== undefined) {
+              // Clean up orphaned tool calls before retrying - any pending/running tools
+              // from the failed stream must be marked as errors, otherwise the retry will
+              // send orphaned tool_use blocks without matching tool_result blocks, causing
+              // Anthropic API errors ("tool_use ids were found without tool_result blocks")
+              const orphanedParts = await MessageV2.parts(input.assistantMessage.id)
+              for (const part of orphanedParts) {
+                if (part.type === "tool" && part.state.status !== "completed" && part.state.status !== "error") {
+                  await Session.updatePart({
+                    ...part,
+                    state: {
+                      ...part.state,
+                      status: "error",
+                      error: "Tool execution aborted",
+                      time: {
+                        start: Date.now(),
+                        end: Date.now(),
+                      },
+                    },
+                  })
+                }
+              }
+              // Rebuild messages from DB to reflect the cleaned-up orphaned tool calls.
+              // Without this, the retry would send stale messages with orphaned tool_use blocks.
+              if (streamInput.rebuildMessages) {
+                streamInput.messages = await streamInput.rebuildMessages()
+              }
               attempt++
               const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
               SessionStatus.set(input.sessionID, {

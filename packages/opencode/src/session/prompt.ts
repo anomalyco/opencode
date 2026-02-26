@@ -674,6 +674,21 @@ export namespace SessionPrompt {
         tools,
         model,
         toolChoice: format.type === "json_schema" ? "required" : undefined,
+        // Rebuild messages from DB on retry to pick up orphaned tool_use cleanup
+        rebuildMessages: async () => {
+          const fresh = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
+          return [
+            ...MessageV2.toModelMessages(fresh, model),
+            ...(isLastStep
+              ? [
+                  {
+                    role: "assistant" as const,
+                    content: MAX_STEPS,
+                  },
+                ]
+              : []),
+          ]
+        },
       })
 
       // If structured output was captured, save it and exit immediately

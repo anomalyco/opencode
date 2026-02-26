@@ -249,9 +249,79 @@ export namespace ProviderTransform {
     })
   }
 
+  /**
+   * Defensive validation: ensures every tool_use (tool-call) in an assistant message
+   * has a corresponding tool_result in the immediately following tool message.
+   * If orphaned tool_use blocks are found, injects synthetic error tool_results.
+   * This prevents Anthropic API errors:
+   *   "tool_use ids were found without tool_result blocks immediately after"
+   */
+  function repairOrphanedToolUse(msgs: ModelMessage[]): ModelMessage[] {
+    const result: ModelMessage[] = []
+
+    for (let i = 0; i < msgs.length; i++) {
+      const msg = msgs[i]
+      result.push(msg)
+
+      // Only check assistant messages with tool-call parts
+      if (msg.role !== "assistant" || !Array.isArray(msg.content)) continue
+      const toolCallIds = msg.content
+        .filter((p): p is Extract<typeof p, { type: "tool-call" }> => p.type === "tool-call")
+        .map((p) => p.toolCallId)
+      if (toolCallIds.length === 0) continue
+
+      // Collect tool-result IDs from the next tool message
+      const next = msgs[i + 1]
+      const existingResultIds = new Set<string>()
+      if (next && next.role === "tool" && Array.isArray(next.content)) {
+        for (const part of next.content) {
+          if (part.type === "tool-result") {
+            existingResultIds.add(part.toolCallId)
+          }
+        }
+      }
+
+      // Find orphaned tool calls (no matching tool result)
+      const orphaned = toolCallIds.filter((id) => !existingResultIds.has(id))
+      if (orphaned.length === 0) continue
+
+      // If there's already a tool message, inject missing results into it
+      if (next && next.role === "tool" && Array.isArray(next.content)) {
+        const syntheticResults = orphaned.map((id) => ({
+          type: "tool-result" as const,
+          toolCallId: id,
+          content: "[Tool execution was interrupted]",
+          isError: true as const,
+        }))
+        const patched = {
+          ...next,
+          content: [...next.content, ...syntheticResults],
+        }
+        // Replace the next message with the patched version
+        i++ // skip the original next message
+        result.push(patched as typeof next)
+      } else {
+        // No tool message follows - insert a synthetic one
+        const syntheticResults = orphaned.map((id) => ({
+          type: "tool-result" as const,
+          toolCallId: id,
+          content: "[Tool execution was interrupted]",
+          isError: true as const,
+        }))
+        result.push({
+          role: "tool" as const,
+          content: syntheticResults,
+        } as ModelMessage)
+      }
+    }
+
+    return result
+  }
+
   export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
     msgs = unsupportedParts(msgs, model)
     msgs = normalizeMessages(msgs, model, options)
+    msgs = repairOrphanedToolUse(msgs)
     if (
       (model.providerID === "anthropic" ||
         model.api.id.includes("anthropic") ||

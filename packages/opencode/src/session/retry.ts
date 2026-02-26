@@ -84,6 +84,13 @@ export namespace SessionRetry {
       if (!json || typeof json !== "object") return undefined
       const code = typeof json.code === "string" ? json.code : ""
 
+      // invalid_request_error should never be retried - these are structural issues
+      // with the request (e.g., orphaned tool_use blocks without tool_result) that
+      // will fail identically on every retry attempt, causing an infinite loop
+      if (json.type === "error" && json.error?.type === "invalid_request_error") {
+        return undefined
+      }
+
       if (json.type === "error" && json.error?.type === "too_many_requests") {
         return "Too Many Requests"
       }
@@ -93,7 +100,10 @@ export namespace SessionRetry {
       if (json.type === "error" && json.error?.code?.includes("rate_limit")) {
         return "Rate Limited"
       }
-      return JSON.stringify(json)
+      // Only retry errors that are explicitly recognized as transient.
+      // The previous catch-all `return JSON.stringify(json)` caused infinite retry
+      // loops for non-transient errors like invalid_request_error.
+      return undefined
     } catch {
       return undefined
     }

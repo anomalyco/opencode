@@ -39,6 +39,8 @@ export namespace LLM {
     tools: Record<string, Tool>
     retries?: number
     toolChoice?: "auto" | "required" | "none"
+    /** Optional callback to rebuild messages from DB on retry, ensuring orphaned tool_use blocks are cleaned up */
+ rebuildMessages?: () => Promise<ModelMessage[]>
   }
 
   export type StreamOutput = StreamTextResult<ToolSet, unknown>
