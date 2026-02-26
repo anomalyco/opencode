@@ -145,17 +145,22 @@ function createThrottledValue(getValue: () => string) {
   return value
 }
 
-function relativizeProjectPaths(text: string, directory?: string) {
-  if (!text) return ""
-  if (!directory) return text
-  if (directory === "/") return text
-  if (directory === "\\") return text
-  return text.split(directory).join("")
+function relativizeProjectPath(path: string, directory?: string) {
+  if (!path) return ""
+  if (!directory) return path
+  if (directory === "/") return path
+  if (directory === "\\") return path
+  if (path === directory) return ""
+
+  const separator = directory.includes("\\") ? "\\" : "/"
+  const prefix = directory.endsWith(separator) ? directory : directory + separator
+  if (!path.startsWith(prefix)) return path
+  return path.slice(directory.length)
 }
 
 function getDirectory(path: string | undefined) {
   const data = useData()
-  return relativizeProjectPaths(_getDirectory(path), data.directory)
+  return relativizeProjectPath(_getDirectory(path), data.directory)
 }
 
 import type { IconProps } from "./icon"
@@ -1066,7 +1071,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     return items.filter((x) => !!x).join(" \u00B7 ")
   })
 
-  const displayText = () => relativizeProjectPaths((part.text ?? "").trim(), data.directory)
+  const displayText = () => (part.text ?? "").trim()
   const throttledText = createThrottledValue(displayText)
   const isLastTextPart = createMemo(() => {
     const last = (data.store.part?.[props.message.id] ?? [])
@@ -1168,7 +1173,7 @@ ToolRegistry.register({
             <div data-component="tool-loaded-file">
               <Icon name="enter" size="small" />
               <span>
-                {i18n.t("ui.tool.loaded")} {relativizeProjectPaths(filepath, data.directory)}
+                {i18n.t("ui.tool.loaded")} {relativizeProjectPath(filepath, data.directory)}
               </span>
             </div>
           )}

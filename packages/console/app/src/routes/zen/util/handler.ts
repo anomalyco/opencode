@@ -92,6 +92,7 @@ export async function handler(
     const stickyProvider = await stickyTracker?.get()
     const authInfo = await authenticate(modelInfo)
     const billingSource = validateBilling(authInfo, modelInfo)
+    logger.metric({ source: billingSource })
 
     const retriableRequest = async (retry: RetryOptions = { excludeProviders: [], retryCount: 0 }) => {
       const providerInfo = selectProvider(
