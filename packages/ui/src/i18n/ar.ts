@@ -43,6 +43,8 @@ export const dict = {
   "ui.sessionTurn.status.thinkingWithTopic": "تفكير - {{topic}}",
   "ui.sessionTurn.status.gatheringThoughts": "جمع الأفكار",
   "ui.sessionTurn.status.consideringNextSteps": "النظر في الخطوات التالية",
+  "ui.sessionTurn.status.reasoning": "التفكير",
+  "ui.sessionTurn.status.reasoningSummary": "ملخّص التفكير",
 
   "ui.messagePart.diagnostic.error": "خطأ",
   "ui.messagePart.title.edit": "تحرير",

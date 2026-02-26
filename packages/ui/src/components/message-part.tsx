@@ -103,6 +103,7 @@ export interface MessagePartProps {
   defaultOpen?: boolean
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number
+  working?: boolean
 }
 
 export type PartComponent = Component<MessagePartProps>
@@ -382,6 +383,7 @@ export function AssistantParts(props: {
                   showAssistantCopyPartID={props.showAssistantCopyPartID}
                   turnDurationMs={props.turnDurationMs}
                   defaultOpen={partDefaultOpen(entry().part, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
+                  working={props.working && tail()}
                 />
               )}
             </Show>
@@ -869,6 +871,7 @@ export function Part(props: MessagePartProps) {
         defaultOpen={props.defaultOpen}
         showAssistantCopyPartID={props.showAssistantCopyPartID}
         turnDurationMs={props.turnDurationMs}
+        working={props.working}
       />
     </Show>
   )
@@ -1125,15 +1128,31 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 }
 
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
+  const i18n = useI18n()
   const part = props.part as ReasoningPart
   const text = () => part.text.trim()
   const throttledText = createThrottledValue(text)
+  const [open, setOpen] = createSignal(true)
 
   return (
     <Show when={throttledText()}>
-      <div data-component="reasoning-part">
-        <Markdown text={throttledText()} cacheKey={part.id} />
-      </div>
+      <Collapsible open={open()} onOpenChange={setOpen} variant="ghost">
+        <Collapsible.Trigger>
+          <div data-component="reasoning-part-trigger">
+            <span data-slot="reasoning-part-label">
+              <Show when={props.working} fallback={i18n.t("ui.sessionTurn.status.reasoningSummary")}>
+                <TextShimmer text={i18n.t("ui.sessionTurn.status.reasoning")} />
+              </Show>
+            </span>
+            <Collapsible.Arrow />
+          </div>
+        </Collapsible.Trigger>
+        <Collapsible.Content>
+          <div data-component="reasoning-part">
+            <Markdown text={throttledText()} cacheKey={part.id} />
+          </div>
+        </Collapsible.Content>
+      </Collapsible>
     </Show>
   )
 }
