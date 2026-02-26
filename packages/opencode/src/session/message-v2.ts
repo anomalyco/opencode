@@ -17,6 +17,10 @@ import { type SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 
 export namespace MessageV2 {
+  export function isMedia(mime: string) {
+    return mime.startsWith("image/") || mime === "application/pdf"
+  }
+
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
   export const AbortedError = NamedError.create("MessageAbortedError", z.object({ message: z.string() }))
   export const StructuredOutputError = NamedError.create(
@@ -568,8 +572,7 @@ export namespace MessageV2 {
             })
           // text/plain and directory files are converted into text parts, ignore them
           if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory") {
-            const isMedia = part.mime.startsWith("image/") || part.mime === "application/pdf"
-            if (options?.stripMedia && isMedia) {
+            if (options?.stripMedia && isMedia(part.mime)) {
               userMessage.parts.push({
                 type: "text",
                 text: `[Attached ${part.mime}: ${part.filename ?? "file"}]`,
@@ -636,10 +639,8 @@ export namespace MessageV2 {
 
               // For providers that don't support media in tool results, extract media files
               // (images, PDFs) to be sent as a separate user message
-              const isMediaAttachment = (a: { mime: string }) =>
-                a.mime.startsWith("image/") || a.mime === "application/pdf"
-              const mediaAttachments = attachments.filter(isMediaAttachment)
-              const nonMediaAttachments = attachments.filter((a) => !isMediaAttachment(a))
+              const mediaAttachments = attachments.filter((a) => isMedia(a.mime))
+              const nonMediaAttachments = attachments.filter((a) => !isMedia(a.mime))
               if (!supportsMediaInToolResults && mediaAttachments.length > 0) {
                 media.push(...mediaAttachments)
               }

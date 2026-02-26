@@ -225,7 +225,7 @@ When constructing the summary, try to stick to this template:
     if (result === "compact") {
       processor.message.error = new MessageV2.ContextOverflowError({
         message: replay
-          ? "Conversation history too large to compact — exceeds model context limit"
+          ? "Conversation history too large to compact - exceeds model context limit"
           : "Session too large to compact - context exceeds model limit even after stripping media",
       }).toObject()
       processor.message.finish = "error"
@@ -249,13 +249,17 @@ When constructing the summary, try to stick to this template:
           variant: original.variant,
         })
         for (const part of replay.parts) {
-          if (part.type !== "compaction")
-            await Session.updatePart({
-              ...part,
-              id: Identifier.ascending("part"),
-              messageID: replayMsg.id,
-              sessionID: input.sessionID,
-            })
+          if (part.type === "compaction") continue
+          const replayPart =
+            part.type === "file" && MessageV2.isMedia(part.mime)
+              ? { type: "text" as const, text: `[Attached ${part.mime}: ${part.filename ?? "file"}]` }
+              : part
+          await Session.updatePart({
+            ...replayPart,
+            id: Identifier.ascending("part"),
+            messageID: replayMsg.id,
+            sessionID: input.sessionID,
+          })
         }
       } else {
         const continueMsg = await Session.updateMessage({
