@@ -153,6 +153,19 @@ export interface Hooks {
   }
   auth?: AuthHook
   /**
+   * Called when a new session starts, before the first message is processed.
+   * Plugins can inject context into the system prompt using this hook.
+   * The context strings are appended to the system prompt.
+   */
+  "session.start"?: (
+    input: {
+      sessionID: string
+      directory: string
+      projectID: string
+    },
+    output: { context: string[] },
+  ) => Promise<void>
+  /**
    * Called when a new message is received
    */
   "chat.message"?: (
