@@ -37,8 +37,8 @@ export function SortableTab(props: { tab: string; onTabClose: (tab: string) => v
     return <FileVisual path={value} />
   })
   return (
-    <div use:sortable classList={{ "h-full": true, "opacity-0": sortable.isActiveDraggable }}>
-      <div class="relative h-full">
+    <div use:sortable class="h-full flex items-center" classList={{ "opacity-0": sortable.isActiveDraggable }}>
+      <div class="relative">
         <Tabs.Trigger
           value={props.tab}
           closeButton={

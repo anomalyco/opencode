@@ -171,7 +171,7 @@
 
     [data-slot="tabs-trigger-wrapper"] {
       height: var(--tabs-compact-pill-height);
-      margin-block: calc((var(--tabs-bar-height) - var(--tabs-compact-pill-height)) / 2);
+      margin-block: 0;
       max-width: 320px;
       padding-inline: var(--tabs-compact-pill-padding-x);
       box-sizing: border-box;
