@@ -29,7 +29,6 @@ export const dict = {
 
   "command.project.open": "打开项目",
 
-
   "command.provider.connect": "连接提供商",
 
   "command.server.switch": "切换服务器",
