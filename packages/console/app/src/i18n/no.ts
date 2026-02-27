@@ -15,6 +15,7 @@ export const dict = {
   "nav.home": "Hjem",
   "nav.openMenu": "Åpne meny",
   "nav.getStartedFree": "Kom i gang gratis",
+  "nav.logoAlt": "OpenCode",
 
   "nav.context.copyLogo": "Kopier logo som SVG",
   "nav.context.copyWordmark": "Kopier wordmark som SVG",
@@ -42,8 +43,12 @@ export const dict = {
   "notFound.docs": "Dokumentasjon",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
+  "notFound.logoLightAlt": "opencode logo lys",
+  "notFound.logoDarkAlt": "opencode logo mørk",
 
   "user.logout": "Logg ut",
+
+  "auth.callback.error.codeMissing": "Ingen autorisasjonskode funnet.",
 
   "workspace.select": "Velg arbeidsområde",
   "workspace.createNew": "+ Opprett nytt arbeidsområde",
@@ -76,6 +81,8 @@ export const dict = {
   "error.reloadAmountMin": "Påfyllingsbeløp må være minst ${{amount}}",
   "error.reloadTriggerMin": "Saldo-trigger må være minst ${{amount}}",
 
+  "app.meta.description": "OpenCode - Den åpne kildekode kodingsagenten.",
+
   "home.title": "OpenCode | Den åpne kildekode AI-kodingsagenten",
 
   "temp.title": "opencode | AI-kodingsagent bygget for terminalen",
@@ -91,6 +98,8 @@ export const dict = {
   "temp.feature.models.afterLink": ", inkludert lokale modeller",
   "temp.screenshot.caption": "opencode TUI med tokyonight-tema",
   "temp.screenshot.alt": "opencode TUI med tokyonight-tema",
+  "temp.logoLightAlt": "opencode logo lys",
+  "temp.logoDarkAlt": "opencode logo mørk",
 
   "home.banner.badge": "Ny",
   "home.banner.text": "Desktop-app tilgjengelig i beta",
@@ -239,6 +248,24 @@ export const dict = {
   "zen.privacy.beforeExceptions":
     "Alle Zen-modeller hostes i USA. Leverandører følger en policy om null oppbevaring og bruker ikke dataene dine til modelltrening, med",
   "zen.privacy.exceptionsLink": "følgende unntak",
+
+  "zen.api.error.rateLimitExceeded": "Rate limit overskredet. Vennligst prøv igjen senere.",
+  "zen.api.error.modelNotSupported": "Modell {{model}} støttes ikke",
+  "zen.api.error.modelFormatNotSupported": "Modell {{model}} støttes ikke for format {{format}}",
+  "zen.api.error.noProviderAvailable": "Ingen leverandør tilgjengelig",
+  "zen.api.error.providerNotSupported": "Leverandør {{provider}} støttes ikke",
+  "zen.api.error.missingApiKey": "Mangler API-nøkkel.",
+  "zen.api.error.invalidApiKey": "Ugyldig API-nøkkel.",
+  "zen.api.error.subscriptionQuotaExceeded": "Abonnementskvote overskredet. Prøv igjen om {{retryIn}}.",
+  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
+    "Abonnementskvote overskredet. Du kan fortsette å bruke gratis modeller.",
+  "zen.api.error.noPaymentMethod": "Ingen betalingsmetode. Legg til en betalingsmetode her: {{billingUrl}}",
+  "zen.api.error.insufficientBalance": "Utilstrekkelig saldo. Administrer faktureringen din her: {{billingUrl}}",
+  "zen.api.error.workspaceMonthlyLimitReached":
+    "Arbeidsområdet ditt har nådd sin månedlige utgiftsgrense på ${{amount}}. Administrer grensene dine her: {{billingUrl}}",
+  "zen.api.error.userMonthlyLimitReached":
+    "Du har nådd din månedlige utgiftsgrense på ${{amount}}. Administrer grensene dine her: {{membersUrl}}",
+  "zen.api.error.modelDisabled": "Modellen er deaktivert",
 
   "black.meta.title": "OpenCode Black | Få tilgang til verdens beste kodemodeller",
   "black.meta.description": "Få tilgang til Claude, GPT, Gemini og mer med OpenCode Black-abonnementer.",
@@ -449,6 +476,7 @@ export const dict = {
   "workspace.reload.updatePaymentMethod": "Vennligst oppdater betalingsmetoden din og prøv på nytt.",
   "workspace.reload.retrying": "Prøver på nytt...",
   "workspace.reload.retry": "Prøv på nytt",
+  "workspace.reload.error.paymentFailed": "Betaling mislyktes.",
 
   "workspace.payments.title": "Betalingshistorikk",
   "workspace.payments.subtitle": "Nylige betalingstransaksjoner.",
@@ -567,6 +595,10 @@ export const dict = {
   "enterprise.form.send": "Send",
   "enterprise.form.sending": "Sender...",
   "enterprise.form.success": "Melding sendt, vi tar kontakt snart.",
+  "enterprise.form.success.submitted": "Skjemaet ble sendt inn.",
+  "enterprise.form.error.allFieldsRequired": "Alle felt er obligatoriske.",
+  "enterprise.form.error.invalidEmailFormat": "Ugyldig e-postformat.",
+  "enterprise.form.error.internalServer": "Intern serverfeil.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "Hva er OpenCode Enterprise?",
   "enterprise.faq.a1":
@@ -599,6 +631,7 @@ export const dict = {
   "bench.list.table.agent": "Agent",
   "bench.list.table.model": "Modell",
   "bench.list.table.score": "Poengsum",
+  "bench.submission.error.allFieldsRequired": "Alle felt er obligatoriske.",
 
   "bench.detail.title": "Benchmark - {{task}}",
   "bench.detail.notFound": "Oppgave ikke funnet",
