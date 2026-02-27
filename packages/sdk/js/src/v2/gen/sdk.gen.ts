@@ -1478,7 +1478,7 @@ export class Session2 extends HeyApiClient {
    *
    * Retrieve all messages in a session, including user prompts and AI responses.
    */
-  public messages<ThrowOnError extends boolean = false>(
+   public messages<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
       directory?: string
