@@ -32,6 +32,7 @@ import { Markdown } from "./markdown"
 import { ImagePreview } from "./image-preview"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
+import { splitThinkBlocks } from "@opencode-ai/util/think"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
 import { TextShimmer } from "./text-shimmer"
@@ -1047,7 +1048,9 @@ PART_MAPPING["compaction"] = function CompactionPartDisplay() {
 PART_MAPPING["text"] = function TextPartDisplay(props) {
   const part = () => props.part as TextPart
 
-  const displayText = () => (part().text ?? "").trim()
+  const parsed = createMemo(() => splitThinkBlocks(part().text ?? ""))
+  const displayText = () => parsed().text.trim()
+  const thinkReasoning = () => parsed().reasoning.trim()
   const throttledText = createThrottledValue(displayText)
   const summary = createMemo(() => {
     if (props.message.role !== "assistant") return
@@ -1059,6 +1062,11 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   return (
     <Show when={throttledText()}>
       <div data-component="text-part">
+        <Show when={thinkReasoning()}>
+          <div data-component="reasoning-part">
+            <Markdown text={thinkReasoning()} cacheKey={part().id + "-reasoning"} />
+          </div>
+        </Show>
         <div data-slot="text-part-body">
           <Markdown text={throttledText()} cacheKey={part().id} />
         </div>
