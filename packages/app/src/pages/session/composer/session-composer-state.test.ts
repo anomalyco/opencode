@@ -1,6 +1,19 @@
 import { describe, expect, test } from "bun:test"
-import type { Message, Part, QuestionRequest } from "@opencode-ai/sdk/v2"
+import type { Message, Part, PermissionRequest, QuestionRequest, Session } from "@opencode-ai/sdk/v2"
 import { resolveQuestionKind, resolveSessionMode } from "./session-mode"
+import { sessionPermissionRequest } from "./session-request-tree"
+
+const session = (input: { id: string; parentID?: string }) =>
+  ({
+    id: input.id,
+    parentID: input.parentID,
+  }) as Session
+
+const permission = (id: string, sessionID: string) =>
+  ({
+    id,
+    sessionID,
+  }) as PermissionRequest
 
 describe("resolveSessionMode", () => {
   test("defaults to build without messages", () => {
