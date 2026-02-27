@@ -7,8 +7,8 @@ import { GitLabModelCache } from "@gitlab/gitlab-ai-provider"
 import { randomBytes } from "crypto"
 import z from "zod"
 
-export namespace WorkflowModelSelect {
-  const log = Log.create({ service: "workflow-model-select" })
+export namespace GitLabWorkflowModelSelect {
+  const log = Log.create({ service: "gitlab-workflow-model-select" })
 
   export const Model = z.object({
     name: z.string(),
@@ -25,9 +25,9 @@ export namespace WorkflowModelSelect {
   export type Request = z.infer<typeof Request>
 
   export const Event = {
-    Asked: BusEvent.define("workflow_model_select.asked", Request),
+    Asked: BusEvent.define("gitlab_workflow_model_select.asked", Request),
     Replied: BusEvent.define(
-      "workflow_model_select.replied",
+      "gitlab_workflow_model_select.replied",
       z.object({
         sessionID: z.string(),
         requestID: z.string(),
@@ -36,7 +36,7 @@ export namespace WorkflowModelSelect {
     ),
   }
 
-  function getModelCache(): GitLabModelCache {
+  function modelCache(): GitLabModelCache {
     const instanceUrl = Env.get("GITLAB_INSTANCE_URL") || "https://gitlab.com"
     return new GitLabModelCache(Instance.directory, instanceUrl)
   }
@@ -50,13 +50,12 @@ export namespace WorkflowModelSelect {
       }
     > = {}
 
-    const cache = getModelCache()
-    const cached = cache.load()
+    const cached = modelCache().load()
     let lastSelectedRef: string | null = cached?.selectedModelRef ?? null
     let lastSelectedName: string | null = cached?.selectedModelName ?? null
 
     if (lastSelectedRef) {
-      log.info("loaded cached model selection", { ref: lastSelectedRef, name: lastSelectedName })
+      log.debug("loaded cached model selection", { ref: lastSelectedRef, name: lastSelectedName })
     }
 
     return {
@@ -80,7 +79,7 @@ export namespace WorkflowModelSelect {
     const s = await state()
     const id = `wfm_${randomBytes(12).toString("hex")}`
 
-    log.info("asking", { id, models: input.models.length })
+    log.debug("asking", { id, models: input.models.length })
 
     return new Promise<string | null>((resolve) => {
       const timeout = setTimeout(() => {
@@ -120,7 +119,7 @@ export namespace WorkflowModelSelect {
     }
     delete s.pending[input.requestID]
 
-    log.info("replied", { requestID: input.requestID, modelRef: input.modelRef })
+    log.debug("replied", { requestID: input.requestID, modelRef: input.modelRef })
 
     Bus.publish(Event.Replied, {
       sessionID: existing.info.sessionID,
@@ -131,9 +130,7 @@ export namespace WorkflowModelSelect {
     if (input.modelRef) {
       s.lastSelectedRef = input.modelRef
       s.lastSelectedName = input.modelName ?? null
-      const cache = getModelCache()
-      cache.saveSelection(input.modelRef, input.modelName ?? null)
-      log.info("set lastSelectedRef", { ref: input.modelRef, verify: s.lastSelectedRef })
+      modelCache().saveSelection(input.modelRef, input.modelName ?? null)
     }
 
     existing.resolve(input.modelRef)
@@ -141,7 +138,6 @@ export namespace WorkflowModelSelect {
 
   export async function getLastSelection(): Promise<string | null> {
     const s = await state()
-    log.info("getLastSelection", { ref: s.lastSelectedRef })
     return s.lastSelectedRef
   }
 
@@ -154,11 +150,10 @@ export namespace WorkflowModelSelect {
     const s = await state()
     s.lastSelectedRef = ref
     s.lastSelectedName = name ?? null
-    const cache = getModelCache()
-    cache.saveSelection(ref, name ?? null)
+    modelCache().saveSelection(ref, name ?? null)
   }
 
   export async function list() {
-    return state().then((x) => Object.values(x.pending).map((x) => x.info))
+    return state().then((s) => Object.values(s.pending).map((p) => p.info))
   }
 }

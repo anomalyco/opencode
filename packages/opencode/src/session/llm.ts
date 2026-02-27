@@ -23,7 +23,7 @@ import { Flag } from "@/flag/flag"
 import { PermissionNext } from "@/permission/next"
 import { Auth } from "@/auth"
 import { GitLabWorkflowLanguageModel, type AiModel } from "@gitlab/gitlab-ai-provider"
-import { WorkflowModelSelect } from "@/session/workflow-model-select"
+import { GitLabWorkflowModelSelect } from "@/session/gitlab-workflow-model-select"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -155,42 +155,35 @@ export namespace LLM {
     // DWS drives the agentic loop server-side and requests tool execution via WebSocket.
     // We bridge those requests through OpenCode's resolved tools (which include permission gating).
     if (language instanceof GitLabWorkflowLanguageModel) {
-      const workflowModel = language as GitLabWorkflowLanguageModel
-
-      const cachedRef = await WorkflowModelSelect.getLastSelection()
-      const cachedName = await WorkflowModelSelect.getLastSelectionName()
-      l.debug("workflow model seed", { cachedRef, cachedName, existingSelected: workflowModel.selectedModelRef })
+      const cachedRef = await GitLabWorkflowModelSelect.getLastSelection()
+      const cachedName = await GitLabWorkflowModelSelect.getLastSelectionName()
+      l.debug("gitlab workflow model seed", { cachedRef, cachedName, existingSelected: language.selectedModelRef })
       if (cachedRef) {
-        workflowModel.selectedModelRef = cachedRef
+        language.selectedModelRef = cachedRef
       }
       if (cachedName) {
-        workflowModel.selectedModelName = cachedName
+        language.selectedModelName = cachedName
       }
 
-      workflowModel.onSelectModel = async (models: AiModel[]) => {
-        const cached = await WorkflowModelSelect.getLastSelection()
-        if (cached && models.some((m) => m.ref === cached)) {
-          return cached
-        }
+      language.onSelectModel = async (models: AiModel[]) => {
+        const cached = await GitLabWorkflowModelSelect.getLastSelection()
+        if (cached && models.some((m) => m.ref === cached)) return cached
         return null
       }
 
-      workflowModel.toolExecutor = async (toolName: string, argsJson: string, requestID: string) => {
-        const t = tools[toolName]
-        if (!t || !t.execute) {
-          return { result: "", error: `Unknown tool: ${toolName}` }
-        }
+      language.toolExecutor = async (name: string, argsJson: string, id: string) => {
+        const t = tools[name]
+        if (!t?.execute) return { result: "", error: `Unknown tool: ${name}` }
         try {
           const args = JSON.parse(argsJson)
           const result = await t.execute(args, {
-            toolCallId: requestID,
+            toolCallId: id,
             messages: input.messages,
             abortSignal: input.abort,
           })
           return { result: typeof result === "string" ? result : JSON.stringify(result) }
-        } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : String(error)
-          return { result: "", error: errorMsg }
+        } catch (err) {
+          return { result: "", error: err instanceof Error ? err.message : String(err) }
         }
       }
     }

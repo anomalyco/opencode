@@ -19,7 +19,7 @@ import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
-import { DialogWorkflowModel } from "@tui/component/dialog-workflow-model"
+import { DialogGitLabWorkflowModel } from "@tui/component/dialog-gitlab-workflow-model"
 import { isWorkflowModel, GitLabModelCache } from "@gitlab/gitlab-ai-provider"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { KeybindProvider } from "@tui/context/keybind"
@@ -675,36 +675,36 @@ function App() {
     }
   })
 
-  let discoveredForModel: string | null = null
-  let lastDiscoverTrigger = 0
+  let gitlabDiscoveredFor: string | null = null
+  let gitlabLastDiscoverTrigger = 0
   createEffect(() => {
     const currentModel = local.model.current()
-    const trigger = local.model.workflowDiscoverTrigger()
+    const trigger = local.model.gitlabWorkflowDiscoverTrigger()
     if (!currentModel) return
     if (currentModel.providerID !== "gitlab" || !isWorkflowModel(currentModel.modelID)) {
-      discoveredForModel = null
-      local.model.setWorkflowSubModelName(null)
+      gitlabDiscoveredFor = null
+      local.model.setGitLabWorkflowSubModelName(null)
       return
     }
     const modelKey = `${currentModel.providerID}/${currentModel.modelID}`
-    const isRetrigger = trigger > lastDiscoverTrigger
-    lastDiscoverTrigger = trigger
-    if (discoveredForModel === modelKey && !isRetrigger) return
-    discoveredForModel = modelKey
+    const isRetrigger = trigger > gitlabLastDiscoverTrigger
+    gitlabLastDiscoverTrigger = trigger
+    if (gitlabDiscoveredFor === modelKey && !isRetrigger) return
+    gitlabDiscoveredFor = modelKey
     untrack(() => {
       const instanceUrl = process.env.GITLAB_INSTANCE_URL || "https://gitlab.com"
       const fileCache = new GitLabModelCache(process.cwd(), instanceUrl)
       const cached = fileCache.load()
       const hasCachedSelection = !!(cached?.selectedModelName && cached?.selectedModelRef)
       if (cached?.selectedModelName) {
-        local.model.setWorkflowSubModelName(cached.selectedModelName)
+        local.model.setGitLabWorkflowSubModelName(cached.selectedModelName)
       }
 
       if (!hasCachedSelection) {
-        toast.show({ variant: "info", message: "Discovering workflow models...", duration: 60000 })
+        toast.show({ variant: "info", message: "Discovering GitLab workflow models...", duration: 60000 })
       }
       sdk
-        .fetch(`${sdk.url}/workflow-model-select/discover`, {
+        .fetch(`${sdk.url}/gitlab-workflow-model-select/discover`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({}),
@@ -714,24 +714,24 @@ function App() {
           if (data.status === "no_provider") {
             toast.show({ variant: "error", message: "GitLab provider not configured", duration: 3000 })
           } else if (data.status === "no_models") {
-            toast.show({ variant: "warning", message: "No workflow models found", duration: 3000 })
+            toast.show({ variant: "warning", message: "No GitLab workflow models found", duration: 3000 })
           } else if (data.status === "cached") {
             toast.dismiss()
-            if (data.modelName) local.model.setWorkflowSubModelName(data.modelName)
+            if (data.modelName) local.model.setGitLabWorkflowSubModelName(data.modelName)
           } else if (data.status === "pinned" || data.status === "default") {
             if (data.status === "pinned") {
               toast.show({ variant: "info", message: `Using pinned model: ${data.modelRef}`, duration: 3000 })
             } else {
               toast.dismiss()
             }
-            if (data.modelName) local.model.setWorkflowSubModelName(data.modelName)
+            if (data.modelName) local.model.setGitLabWorkflowSubModelName(data.modelName)
           } else if (data.status === "asked" && data.modelName) {
             toast.dismiss()
-            local.model.setWorkflowSubModelName(data.modelName)
+            local.model.setGitLabWorkflowSubModelName(data.modelName)
           }
         })
         .catch((err) => {
-          toast.show({ variant: "error", message: `Discovery failed: ${err}`, duration: 3000 })
+          toast.show({ variant: "error", message: `GitLab workflow discovery failed: ${err}`, duration: 3000 })
         })
     })
   })
@@ -798,7 +798,7 @@ function App() {
   })
 
   sdk.event.listen((e) => {
-    if ((e.name as string) !== "workflow_model_select.asked") return
+    if ((e.name as string) !== "gitlab_workflow_model_select.asked") return
     const evt = e.details as unknown as {
       type: string
       properties: { id: string; models: { name: string; ref: string; isDefault?: boolean }[] }
@@ -809,7 +809,7 @@ function App() {
       if (replied) return
       replied = true
       sdk
-        .fetch(`${sdk.url}/workflow-model-select/${id}/reply`, {
+        .fetch(`${sdk.url}/gitlab-workflow-model-select/${id}/reply`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ modelRef, modelName }),
@@ -819,15 +819,15 @@ function App() {
     toast.dismiss()
     dialog.replace(
       () => (
-        <DialogWorkflowModel
+        <DialogGitLabWorkflowModel
           requestID={id}
           models={models}
-          onReply={(modelRef) => {
+          onReply={(modelRef: string | null) => {
             const selected = models.find((m) => m.ref === modelRef)
             reply(modelRef, selected?.name ?? null)
             dialog.clear()
             if (modelRef && selected) {
-              local.model.setWorkflowSubModelName(selected.name)
+              local.model.setGitLabWorkflowSubModelName(selected.name)
             }
           }}
         />

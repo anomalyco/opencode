@@ -37,7 +37,7 @@ import { websocket } from "hono/bun"
 import { HTTPException } from "hono/http-exception"
 import { errors } from "./error"
 import { QuestionRoutes } from "./routes/question"
-import { WorkflowModelSelectRoutes } from "./routes/workflow-model-select"
+import { GitLabWorkflowModelSelectRoutes } from "./routes/gitlab-workflow-model-select"
 import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
 import { MDNS } from "./mdns"
@@ -232,7 +232,7 @@ export namespace Server {
         .route("/session", SessionRoutes())
         .route("/permission", PermissionRoutes())
         .route("/question", QuestionRoutes())
-        .route("/workflow-model-select", WorkflowModelSelectRoutes())
+        .route("/gitlab-workflow-model-select", GitLabWorkflowModelSelectRoutes())
         .route("/provider", ProviderRoutes())
         .route("/", FileRoutes())
         .route("/mcp", McpRoutes())

@@ -202,14 +202,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         )
       })
 
-      const [workflowSubModelName, setWorkflowSubModelName] = createSignal<string | null>(null)
-      const [workflowDiscoverTrigger, setWorkflowDiscoverTrigger] = createSignal(0)
-      const doWorkflowRediscover = () => {
-        setWorkflowSubModelName(null)
+      const [gitlabWorkflowSubModelName, setGitLabWorkflowSubModelName] = createSignal<string | null>(null)
+      const [gitlabWorkflowDiscoverTrigger, setGitLabWorkflowDiscoverTrigger] = createSignal(0)
+      const doGitLabWorkflowRediscover = () => {
+        setGitLabWorkflowSubModelName(null)
         sdk
-          .fetch(`${sdk.url}/workflow-model-select/clear`, { method: "POST" })
+          .fetch(`${sdk.url}/gitlab-workflow-model-select/clear`, { method: "POST" })
           .catch(() => {})
-          .then(() => setWorkflowDiscoverTrigger((n) => n + 1))
+          .then(() => setGitLabWorkflowDiscoverTrigger((n) => n + 1))
       }
 
       return {
@@ -223,10 +223,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         favorite() {
           return modelStore.favorite
         },
-        workflowSubModelName,
-        setWorkflowSubModelName,
-        workflowDiscoverTrigger,
-        triggerWorkflowDiscover: doWorkflowRediscover,
+        gitlabWorkflowSubModelName,
+        setGitLabWorkflowSubModelName,
+        gitlabWorkflowDiscoverTrigger,
+        triggerGitLabWorkflowDiscover: doGitLabWorkflowRediscover,
         parsed: createMemo(() => {
           const value = currentModel()
           if (!value) {
@@ -239,7 +239,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const provider = sync.data.provider.find((x) => x.id === value.providerID)
           const info = provider?.models[value.modelID]
           const baseName = info?.name ?? value.modelID
-          const sub = workflowSubModelName()
+          const sub = isWorkflowModel(value.modelID) ? gitlabWorkflowSubModelName() : null
           return {
             provider: provider?.name ?? value.providerID,
             model: sub ? `${baseName} (${sub})` : baseName,
@@ -320,7 +320,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               save()
             }
             if (isReselect) {
-              doWorkflowRediscover()
+              doGitLabWorkflowRediscover()
             }
           })
         },

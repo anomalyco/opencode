@@ -35,6 +35,11 @@ import type {
   FindSymbolsResponses,
   FindTextResponses,
   FormatterStatusResponses,
+  GitlabWorkflowModelSelectClearResponses,
+  GitlabWorkflowModelSelectDiscoverResponses,
+  GitlabWorkflowModelSelectListResponses,
+  GitlabWorkflowModelSelectReplyErrors,
+  GitlabWorkflowModelSelectReplyResponses,
   GlobalConfigGetResponses,
   GlobalConfigUpdateErrors,
   GlobalConfigUpdateResponses,
@@ -167,11 +172,6 @@ import type {
   TuiShowToastResponses,
   TuiSubmitPromptResponses,
   VcsGetResponses,
-  WorkflowModelSelectClearResponses,
-  WorkflowModelSelectDiscoverResponses,
-  WorkflowModelSelectListResponses,
-  WorkflowModelSelectReplyErrors,
-  WorkflowModelSelectReplyResponses,
   WorktreeCreateErrors,
   WorktreeCreateInput,
   WorktreeCreateResponses,
@@ -2126,9 +2126,9 @@ export class Question extends HeyApiClient {
   }
 }
 
-export class WorkflowModelSelect extends HeyApiClient {
+export class GitlabWorkflowModelSelect extends HeyApiClient {
   /**
-   * List pending workflow model selections
+   * List pending GitLab workflow model selections
    */
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -2137,15 +2137,15 @@ export class WorkflowModelSelect extends HeyApiClient {
     options?: Options<never, ThrowOnError>,
   ) {
     const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
-    return (options?.client ?? this.client).get<WorkflowModelSelectListResponses, unknown, ThrowOnError>({
-      url: "/workflow-model-select",
+    return (options?.client ?? this.client).get<GitlabWorkflowModelSelectListResponses, unknown, ThrowOnError>({
+      url: "/gitlab-workflow-model-select",
       ...options,
       ...params,
     })
   }
 
   /**
-   * Discover available workflow models and publish selection event
+   * Discover available GitLab workflow models and publish selection event
    */
   public discover<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -2167,8 +2167,8 @@ export class WorkflowModelSelect extends HeyApiClient {
         },
       ],
     )
-    return (options?.client ?? this.client).post<WorkflowModelSelectDiscoverResponses, unknown, ThrowOnError>({
-      url: "/workflow-model-select/discover",
+    return (options?.client ?? this.client).post<GitlabWorkflowModelSelectDiscoverResponses, unknown, ThrowOnError>({
+      url: "/gitlab-workflow-model-select/discover",
       ...options,
       ...params,
       headers: {
@@ -2180,7 +2180,7 @@ export class WorkflowModelSelect extends HeyApiClient {
   }
 
   /**
-   * Clear cached workflow model selection
+   * Clear cached GitLab workflow model selection
    */
   public clear<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -2189,15 +2189,15 @@ export class WorkflowModelSelect extends HeyApiClient {
     options?: Options<never, ThrowOnError>,
   ) {
     const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
-    return (options?.client ?? this.client).post<WorkflowModelSelectClearResponses, unknown, ThrowOnError>({
-      url: "/workflow-model-select/clear",
+    return (options?.client ?? this.client).post<GitlabWorkflowModelSelectClearResponses, unknown, ThrowOnError>({
+      url: "/gitlab-workflow-model-select/clear",
       ...options,
       ...params,
     })
   }
 
   /**
-   * Reply to workflow model selection
+   * Reply to GitLab workflow model selection
    */
   public reply<ThrowOnError extends boolean = false>(
     parameters: {
@@ -2222,11 +2222,11 @@ export class WorkflowModelSelect extends HeyApiClient {
       ],
     )
     return (options?.client ?? this.client).post<
-      WorkflowModelSelectReplyResponses,
-      WorkflowModelSelectReplyErrors,
+      GitlabWorkflowModelSelectReplyResponses,
+      GitlabWorkflowModelSelectReplyErrors,
       ThrowOnError
     >({
-      url: "/workflow-model-select/{requestID}/reply",
+      url: "/gitlab-workflow-model-select/{requestID}/reply",
       ...options,
       ...params,
       headers: {
@@ -3454,9 +3454,9 @@ export class OpencodeClient extends HeyApiClient {
     return (this._question ??= new Question({ client: this.client }))
   }
 
-  private _workflowModelSelect?: WorkflowModelSelect
-  get workflowModelSelect(): WorkflowModelSelect {
-    return (this._workflowModelSelect ??= new WorkflowModelSelect({ client: this.client }))
+  private _gitlabWorkflowModelSelect?: GitlabWorkflowModelSelect
+  get gitlabWorkflowModelSelect(): GitlabWorkflowModelSelect {
+    return (this._gitlabWorkflowModelSelect ??= new GitlabWorkflowModelSelect({ client: this.client }))
   }
 
   private _provider?: Provider

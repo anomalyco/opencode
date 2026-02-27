@@ -1,7 +1,7 @@
 import { Hono } from "hono"
 import { describeRoute, validator } from "hono-openapi"
 import { resolver } from "hono-openapi"
-import { WorkflowModelSelect } from "../../session/workflow-model-select"
+import { GitLabWorkflowModelSelect } from "../../session/gitlab-workflow-model-select"
 import { Provider } from "../../provider/provider"
 import { Instance } from "../../project/instance"
 import { GitLabModelDiscovery, GitLabProjectDetector, GitLabModelCache } from "@gitlab/gitlab-ai-provider"
@@ -10,36 +10,36 @@ import z from "zod"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 
-const log = Log.create({ service: "workflow-model-select" })
+const log = Log.create({ service: "gitlab-workflow-model-select" })
 
-export const WorkflowModelSelectRoutes = lazy(() =>
+export const GitLabWorkflowModelSelectRoutes = lazy(() =>
   new Hono()
     .get(
       "/",
       describeRoute({
-        summary: "List pending workflow model selections",
-        operationId: "workflow_model_select.list",
+        summary: "List pending GitLab workflow model selections",
+        operationId: "gitlab_workflow_model_select.list",
         responses: {
           200: {
-            description: "List of pending workflow model selection requests",
+            description: "List of pending GitLab workflow model selection requests",
             content: {
               "application/json": {
-                schema: resolver(WorkflowModelSelect.Request.array()),
+                schema: resolver(GitLabWorkflowModelSelect.Request.array()),
               },
             },
           },
         },
       }),
       async (c) => {
-        const requests = await WorkflowModelSelect.list()
+        const requests = await GitLabWorkflowModelSelect.list()
         return c.json(requests)
       },
     )
     .post(
       "/discover",
       describeRoute({
-        summary: "Discover available workflow models and publish selection event",
-        operationId: "workflow_model_select.discover",
+        summary: "Discover available GitLab workflow models and publish selection event",
+        operationId: "gitlab_workflow_model_select.discover",
         responses: {
           200: {
             description: "Discovery result",
@@ -47,7 +47,7 @@ export const WorkflowModelSelectRoutes = lazy(() =>
               "application/json": {
                 schema: resolver(
                   z.object({
-                    status: z.enum(["asked", "pinned", "default", "no_models", "no_provider"]),
+                    status: z.enum(["asked", "cached", "pinned", "default", "no_models", "no_provider"]),
                     modelRef: z.string().nullable().optional(),
                     modelName: z.string().nullable().optional(),
                   }),
@@ -68,8 +68,8 @@ export const WorkflowModelSelectRoutes = lazy(() =>
         const json = c.req.valid("json")
         const sessionID = json.sessionID ?? ""
 
-        const existingSelection = await WorkflowModelSelect.getLastSelection()
-        log.info("discover check", { existingSelection })
+        const existingSelection = await GitLabWorkflowModelSelect.getLastSelection()
+        log.debug("discover check", { existingSelection })
 
         const provider = await Provider.getProvider("gitlab")
         if (!provider) {
@@ -82,27 +82,27 @@ export const WorkflowModelSelectRoutes = lazy(() =>
           return c.json({ status: "no_provider" as const, modelRef: null })
         }
 
-        const getHeaders = () => ({
+        const headers = () => ({
           Authorization: `Bearer ${apiKey}`,
           ...(provider.options.aiGatewayHeaders as Record<string, string> | undefined),
         })
 
         try {
-          const detector = new GitLabProjectDetector({ instanceUrl, getHeaders })
+          const detector = new GitLabProjectDetector({ instanceUrl, getHeaders: headers })
           const project = await detector.detectProject(Instance.directory)
 
           let namespaceId: string | null = null
           if (project?.pathWithNamespace) {
             const rootGroupPath = project.pathWithNamespace.split("/")[0]
             try {
-              const groupRes = await fetch(`${instanceUrl}/api/v4/groups/${encodeURIComponent(rootGroupPath)}`, {
-                headers: getHeaders(),
+              const res = await fetch(`${instanceUrl}/api/v4/groups/${encodeURIComponent(rootGroupPath)}`, {
+                headers: headers(),
               })
-              if (groupRes.ok) {
-                const groupData = (await groupRes.json()) as { id: number }
-                namespaceId = `gid://gitlab/Group/${groupData.id}`
+              if (res.ok) {
+                const data = (await res.json()) as { id: number }
+                namespaceId = `gid://gitlab/Group/${data.id}`
               }
-            } catch (_) {
+            } catch {
               // fallback to direct namespace
             }
           }
@@ -112,31 +112,29 @@ export const WorkflowModelSelectRoutes = lazy(() =>
 
           if (!namespaceId) {
             try {
-              const groupsRes = await fetch(
+              const res = await fetch(
                 `${instanceUrl}/api/v4/groups?top_level_only=true&min_access_level=10&per_page=1`,
-                {
-                  headers: getHeaders(),
-                },
+                { headers: headers() },
               )
-              if (groupsRes.ok) {
-                const groups = (await groupsRes.json()) as Array<{ id: number }>
+              if (res.ok) {
+                const groups = (await res.json()) as Array<{ id: number }>
                 if (groups.length > 0) {
                   namespaceId = `gid://gitlab/Group/${groups[0].id}`
-                  log.info("using first top-level group as fallback namespace", { namespaceId })
+                  log.debug("using first top-level group as fallback namespace", { namespaceId })
                 }
               }
-            } catch (_) {
+            } catch {
               // best-effort
             }
           }
 
-          const modelCache = new GitLabModelCache(Instance.directory, instanceUrl)
+          const cache = new GitLabModelCache(Instance.directory, instanceUrl)
 
           if (namespaceId) {
             try {
-              const discovery = new GitLabModelDiscovery({ instanceUrl, getHeaders })
+              const discovery = new GitLabModelDiscovery({ instanceUrl, getHeaders: headers })
               const discovered = await discovery.discover(namespaceId)
-              modelCache.saveDiscovery(discovered)
+              cache.saveDiscovery(discovered)
 
               log.debug("discovery result", {
                 namespaceId,
@@ -147,7 +145,10 @@ export const WorkflowModelSelectRoutes = lazy(() =>
               })
 
               if (discovered.pinnedModel) {
-                await WorkflowModelSelect.setLastSelection(discovered.pinnedModel.ref, discovered.pinnedModel.name)
+                await GitLabWorkflowModelSelect.setLastSelection(
+                  discovered.pinnedModel.ref,
+                  discovered.pinnedModel.name,
+                )
                 return c.json({
                   status: "pinned" as const,
                   modelRef: discovered.pinnedModel.ref,
@@ -168,7 +169,7 @@ export const WorkflowModelSelectRoutes = lazy(() =>
                   if (b.ref === defaultRef) return 1
                   return 0
                 })
-                const result = await WorkflowModelSelect.ask({
+                const result = await GitLabWorkflowModelSelect.ask({
                   sessionID,
                   models: sorted.map((m) => ({
                     name: m.name,
@@ -179,7 +180,7 @@ export const WorkflowModelSelectRoutes = lazy(() =>
                 if (result) {
                   const match = discovered.selectableModels.find((m) => m.ref === result)
                   if (match) {
-                    await WorkflowModelSelect.setLastSelection(match.ref, match.name)
+                    await GitLabWorkflowModelSelect.setLastSelection(match.ref, match.name)
                     return c.json({ status: "asked" as const, modelRef: match.ref, modelName: match.name })
                   }
                 }
@@ -187,7 +188,10 @@ export const WorkflowModelSelectRoutes = lazy(() =>
               }
 
               if (discovered.defaultModel) {
-                await WorkflowModelSelect.setLastSelection(discovered.defaultModel.ref, discovered.defaultModel.name)
+                await GitLabWorkflowModelSelect.setLastSelection(
+                  discovered.defaultModel.ref,
+                  discovered.defaultModel.name,
+                )
                 return c.json({
                   status: "default" as const,
                   modelRef: discovered.defaultModel.ref,
@@ -195,21 +199,21 @@ export const WorkflowModelSelectRoutes = lazy(() =>
                 })
               }
             } catch (err) {
-              log.info("namespace discovery failed, trying user namespace", {
+              log.debug("namespace discovery failed, trying user namespace", {
                 namespaceId,
                 error: err instanceof Error ? err.message : String(err),
               })
             }
           }
 
-          await WorkflowModelSelect.setLastSelection("default", "Namespace Default")
+          await GitLabWorkflowModelSelect.setLastSelection("default", "Namespace Default")
           return c.json({
             status: "default" as const,
             modelRef: "default",
             modelName: "Namespace Default",
           })
         } catch (err) {
-          log.warn("workflow model discovery failed", {
+          log.warn("gitlab workflow model discovery failed", {
             error: err instanceof Error ? err.message : String(err),
           })
           return c.json({ status: "no_models" as const, modelRef: null })
@@ -219,8 +223,8 @@ export const WorkflowModelSelectRoutes = lazy(() =>
     .post(
       "/clear",
       describeRoute({
-        summary: "Clear cached workflow model selection",
-        operationId: "workflow_model_select.clear",
+        summary: "Clear cached GitLab workflow model selection",
+        operationId: "gitlab_workflow_model_select.clear",
         responses: {
           200: {
             description: "Cache cleared",
@@ -233,15 +237,15 @@ export const WorkflowModelSelectRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        await WorkflowModelSelect.setLastSelection(null)
+        await GitLabWorkflowModelSelect.setLastSelection(null)
         return c.json(true)
       },
     )
     .post(
       "/:requestID/reply",
       describeRoute({
-        summary: "Reply to workflow model selection",
-        operationId: "workflow_model_select.reply",
+        summary: "Reply to GitLab workflow model selection",
+        operationId: "gitlab_workflow_model_select.reply",
         responses: {
           200: {
             description: "Selection processed",
@@ -270,7 +274,7 @@ export const WorkflowModelSelectRoutes = lazy(() =>
       async (c) => {
         const params = c.req.valid("param")
         const json = c.req.valid("json")
-        await WorkflowModelSelect.reply({
+        await GitLabWorkflowModelSelect.reply({
           requestID: params.requestID,
           modelRef: json.modelRef,
           modelName: json.modelName,

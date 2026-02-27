@@ -606,8 +606,8 @@ export type EventSessionIdle = {
   }
 }
 
-export type EventWorkflowModelSelectAsked = {
-  type: "workflow_model_select.asked"
+export type EventGitlabWorkflowModelSelectAsked = {
+  type: "gitlab_workflow_model_select.asked"
   properties: {
     id: string
     sessionID: string
@@ -619,8 +619,8 @@ export type EventWorkflowModelSelectAsked = {
   }
 }
 
-export type EventWorkflowModelSelectReplied = {
-  type: "workflow_model_select.replied"
+export type EventGitlabWorkflowModelSelectReplied = {
+  type: "gitlab_workflow_model_select.replied"
   properties: {
     sessionID: string
     requestID: string
@@ -982,8 +982,8 @@ export type Event =
   | EventPermissionReplied
   | EventSessionStatus
   | EventSessionIdle
-  | EventWorkflowModelSelectAsked
-  | EventWorkflowModelSelectReplied
+  | EventGitlabWorkflowModelSelectAsked
+  | EventGitlabWorkflowModelSelectReplied
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
@@ -3749,18 +3749,18 @@ export type QuestionRejectResponses = {
 
 export type QuestionRejectResponse = QuestionRejectResponses[keyof QuestionRejectResponses]
 
-export type WorkflowModelSelectListData = {
+export type GitlabWorkflowModelSelectListData = {
   body?: never
   path?: never
   query?: {
     directory?: string
   }
-  url: "/workflow-model-select"
+  url: "/gitlab-workflow-model-select"
 }
 
-export type WorkflowModelSelectListResponses = {
+export type GitlabWorkflowModelSelectListResponses = {
   /**
-   * List of pending workflow model selection requests
+   * List of pending GitLab workflow model selection requests
    */
   200: Array<{
     id: string
@@ -3773,9 +3773,10 @@ export type WorkflowModelSelectListResponses = {
   }>
 }
 
-export type WorkflowModelSelectListResponse = WorkflowModelSelectListResponses[keyof WorkflowModelSelectListResponses]
+export type GitlabWorkflowModelSelectListResponse =
+  GitlabWorkflowModelSelectListResponses[keyof GitlabWorkflowModelSelectListResponses]
 
-export type WorkflowModelSelectDiscoverData = {
+export type GitlabWorkflowModelSelectDiscoverData = {
   body?: {
     sessionID?: string
     force?: boolean
@@ -3784,43 +3785,43 @@ export type WorkflowModelSelectDiscoverData = {
   query?: {
     directory?: string
   }
-  url: "/workflow-model-select/discover"
+  url: "/gitlab-workflow-model-select/discover"
 }
 
-export type WorkflowModelSelectDiscoverResponses = {
+export type GitlabWorkflowModelSelectDiscoverResponses = {
   /**
    * Discovery result
    */
   200: {
-    status: "asked" | "pinned" | "default" | "no_models" | "no_provider"
+    status: "asked" | "cached" | "pinned" | "default" | "no_models" | "no_provider"
     modelRef?: string | null
     modelName?: string | null
   }
 }
 
-export type WorkflowModelSelectDiscoverResponse =
-  WorkflowModelSelectDiscoverResponses[keyof WorkflowModelSelectDiscoverResponses]
+export type GitlabWorkflowModelSelectDiscoverResponse =
+  GitlabWorkflowModelSelectDiscoverResponses[keyof GitlabWorkflowModelSelectDiscoverResponses]
 
-export type WorkflowModelSelectClearData = {
+export type GitlabWorkflowModelSelectClearData = {
   body?: never
   path?: never
   query?: {
     directory?: string
   }
-  url: "/workflow-model-select/clear"
+  url: "/gitlab-workflow-model-select/clear"
 }
 
-export type WorkflowModelSelectClearResponses = {
+export type GitlabWorkflowModelSelectClearResponses = {
   /**
    * Cache cleared
    */
   200: boolean
 }
 
-export type WorkflowModelSelectClearResponse =
-  WorkflowModelSelectClearResponses[keyof WorkflowModelSelectClearResponses]
+export type GitlabWorkflowModelSelectClearResponse =
+  GitlabWorkflowModelSelectClearResponses[keyof GitlabWorkflowModelSelectClearResponses]
 
-export type WorkflowModelSelectReplyData = {
+export type GitlabWorkflowModelSelectReplyData = {
   body?: {
     modelRef: string | null
     modelName?: string | null
@@ -3831,10 +3832,10 @@ export type WorkflowModelSelectReplyData = {
   query?: {
     directory?: string
   }
-  url: "/workflow-model-select/{requestID}/reply"
+  url: "/gitlab-workflow-model-select/{requestID}/reply"
 }
 
-export type WorkflowModelSelectReplyErrors = {
+export type GitlabWorkflowModelSelectReplyErrors = {
   /**
    * Bad request
    */
@@ -3845,17 +3846,18 @@ export type WorkflowModelSelectReplyErrors = {
   404: NotFoundError
 }
 
-export type WorkflowModelSelectReplyError = WorkflowModelSelectReplyErrors[keyof WorkflowModelSelectReplyErrors]
+export type GitlabWorkflowModelSelectReplyError =
+  GitlabWorkflowModelSelectReplyErrors[keyof GitlabWorkflowModelSelectReplyErrors]
 
-export type WorkflowModelSelectReplyResponses = {
+export type GitlabWorkflowModelSelectReplyResponses = {
   /**
    * Selection processed
    */
   200: boolean
 }
 
-export type WorkflowModelSelectReplyResponse =
-  WorkflowModelSelectReplyResponses[keyof WorkflowModelSelectReplyResponses]
+export type GitlabWorkflowModelSelectReplyResponse =
+  GitlabWorkflowModelSelectReplyResponses[keyof GitlabWorkflowModelSelectReplyResponses]
 
 export type ProviderListData = {
   body?: never
