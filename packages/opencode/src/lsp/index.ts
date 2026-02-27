@@ -174,7 +174,7 @@ export namespace LSP {
     })
   }
 
-  async function getClients(file: string) {
+  async function getClients(file: string, opts?: { allServers?: boolean }) {
     const s = await state()
     const extension = path.parse(file).ext || file
     const result: LSPClient.Info[] = []
@@ -222,7 +222,7 @@ export namespace LSP {
     }
 
     for (const server of Object.values(s.servers)) {
-      if (server.extensions.length && !server.extensions.includes(extension)) continue
+      if (!opts?.allServers && server.extensions.length && !server.extensions.includes(extension)) continue
 
       const root = await server.root(file)
       if (!root) continue
@@ -275,6 +275,7 @@ export namespace LSP {
   }
 
   export async function touchFile(input: string, waitForDiagnostics?: boolean) {
+    if (input.startsWith("file://")) input = fileURLToPath(input)
     log.info("touching file", { file: input })
     const clients = await getClients(input)
     await Promise.all(
@@ -357,24 +358,32 @@ export namespace LSP {
   ]
 
   export async function workspaceSymbol(query: string) {
-    return runAll((client) =>
-      client.connection
-        .sendRequest("workspace/symbol", {
-          query,
-        })
-        .then((result: any) => result.filter((x: LSP.Symbol) => kinds.includes(x.kind)))
-        .then((result: any) => result.slice(0, 10))
-        .catch(() => []),
+    const clients = await getClients(Instance.directory, { allServers: true })
+    return Promise.all(
+      clients.map((client) =>
+        client.connection
+          .sendRequest("workspace/symbol", {
+            query,
+          })
+          .then((result: any) => result.filter((x: LSP.Symbol) => kinds.includes(x.kind)))
+          .then((result: any) => result.slice(0, 10))
+          .catch(() => []),
+      ),
     ).then((result) => result.flat() as LSP.Symbol[])
   }
 
   export async function documentSymbol(uri: string) {
-    const file = fileURLToPath(uri)
+    const file = uri.startsWith("file://")
+      ? fileURLToPath(uri)
+      : path.isAbsolute(uri)
+        ? uri
+        : path.resolve(Instance.directory, uri)
+    const normalized = pathToFileURL(file).href
     return run(file, (client) =>
       client.connection
         .sendRequest("textDocument/documentSymbol", {
           textDocument: {
-            uri,
+            uri: normalized,
           },
         })
         .catch(() => []),
