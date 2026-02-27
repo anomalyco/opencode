@@ -1,11 +1,9 @@
 import "@/index.css"
-import { Code } from "@opencode-ai/ui/code"
+import { File } from "@opencode-ai/ui/file"
 import { I18nProvider } from "@opencode-ai/ui/context"
-import { CodeComponentProvider } from "@opencode-ai/ui/context/code"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
-import { DiffComponentProvider } from "@opencode-ai/ui/context/diff"
+import { FileComponentProvider } from "@opencode-ai/ui/context/file"
 import { MarkedProvider } from "@opencode-ai/ui/context/marked"
-import { Diff } from "@opencode-ai/ui/diff"
 import { Font } from "@opencode-ai/ui/font"
 import { ThemeProvider } from "@opencode-ai/ui/theme"
 import { MetaProvider } from "@solidjs/meta"
@@ -122,9 +120,7 @@ export function AppBaseProviders(props: ParentProps) {
             <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
               <DialogProvider>
                 <MarkedProviderWithNativeParser>
-                  <DiffComponentProvider component={Diff}>
-                    <CodeComponentProvider component={Code}>{props.children}</CodeComponentProvider>
-                  </DiffComponentProvider>
+                  <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
                 </MarkedProviderWithNativeParser>
               </DialogProvider>
             </ErrorBoundary>

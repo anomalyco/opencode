@@ -4,6 +4,7 @@
   "type": "module",
   "license": "MIT",
   "exports": {
+    "./package.json": "./package.json",
     "./*": "./src/components/*.tsx",
     "./i18n/*": "./src/i18n/*.ts",
     "./pierre": "./src/pierre/index.ts",

@@ -4,7 +4,7 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { useParams } from "@solidjs/router"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
+import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Mark } from "@opencode-ai/ui/logo"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
@@ -145,7 +145,16 @@ export function SessionSidePanel(props: {
 
   const [store, setStore] = createStore({
     activeDraggable: undefined as string | undefined,
+    fileTreeScrolled: false,
   })
+
+  let changesEl: HTMLDivElement | undefined
+  let allEl: HTMLDivElement | undefined
+
+  const syncFileTreeScrolled = (el?: HTMLDivElement) => {
+    const next = (el?.scrollTop ?? 0) > 0
+    setStore("fileTreeScrolled", (current) => (current === next ? current : next))
+  }
 
   const handleDragStart = (event: unknown) => {
     const id = getDraggableId(event)
@@ -166,6 +175,11 @@ export function SessionSidePanel(props: {
   const handleDragEnd = () => {
     setStore("activeDraggable", undefined)
   }
+
+  createEffect(() => {
+    if (!layout.fileTree.opened()) return
+    syncFileTreeScrolled(fileTreeTab() === "changes" ? changesEl : allEl)
+  })
 
   createEffect(() => {
     if (!file.ready()) return
@@ -219,13 +233,11 @@ export function SessionSidePanel(props: {
                     }}
                   >
                     <Show when={reviewTab()}>
-                      <Tabs.Trigger value="review" classes={{ button: "!pl-6" }}>
+                      <Tabs.Trigger value="review">
                         <div class="flex items-center gap-1.5">
                           <div>{language.t("session.tab.review")}</div>
                           <Show when={hasReview()}>
-                            <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
-                              {reviewCount()}
-                            </div>
+                            <div>{reviewCount()}</div>
                           </Show>
                         </div>
                       </Tabs.Trigger>
@@ -234,7 +246,12 @@ export function SessionSidePanel(props: {
                       <Tabs.Trigger
                         value="context"
                         closeButton={
-                          <Tooltip value={language.t("common.closeTab")} placement="bottom">
+                          <TooltipKeybind
+                            title={language.t("common.closeTab")}
+                            keybind={command.keybind("tab.close")}
+                            placement="bottom"
+                            gutter={10}
+                          >
                             <IconButton
                               icon="close-small"
                               variant="ghost"
@@ -242,7 +259,7 @@ export function SessionSidePanel(props: {
                               onClick={() => tabs().close("context")}
                               aria-label={language.t("common.closeTab")}
                             />
-                          </Tooltip>
+                          </TooltipKeybind>
                         }
                         hideCloseButton
                         onMiddleClick={() => tabs().close("context")}
@@ -266,6 +283,7 @@ export function SessionSidePanel(props: {
                           icon="plus-small"
                           variant="ghost"
                           iconSize="large"
+                          class="!rounded-md"
                           onClick={() => dialog.show(() => <DialogSelectFile mode="files" onOpenFile={showAllFiles} />)}
                           aria-label={language.t("command.file.open")}
                         />
@@ -312,7 +330,7 @@ export function SessionSidePanel(props: {
                   {(tab) => {
                     const path = createMemo(() => file.pathFromTab(tab))
                     return (
-                      <div class="relative px-6 h-12 flex items-center bg-background-stronger border-x border-border-weak-base border-b border-b-transparent">
+                      <div data-component="tabs-drag-preview">
                         <Show when={path()}>{(p) => <FileVisual active path={p()} />}</Show>
                       </div>
                     )
@@ -336,7 +354,7 @@ export function SessionSidePanel(props: {
                 class="h-full"
                 data-scope="filetree"
               >
-                <Tabs.List>
+                <Tabs.List data-scrolled={store.fileTreeScrolled ? "" : undefined}>
                   <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
                     {reviewCount()}{" "}
                     {language.t(reviewCount() === 1 ? "session.review.change.one" : "session.review.change.other")}
@@ -345,7 +363,12 @@ export function SessionSidePanel(props: {
                     {language.t("session.files.all")}
                   </Tabs.Trigger>
                 </Tabs.List>
-                <Tabs.Content value="changes" class="bg-background-stronger px-3 py-0">
+                <Tabs.Content
+                  value="changes"
+                  ref={(el: HTMLDivElement) => (changesEl = el)}
+                  onScroll={(e: UIEvent & { currentTarget: HTMLDivElement }) => syncFileTreeScrolled(e.currentTarget)}
+                  class="bg-background-stronger px-3 py-0"
+                >
                   <Switch>
                     <Match when={hasReview()}>
                       <Show
@@ -374,7 +397,12 @@ export function SessionSidePanel(props: {
                     </Match>
                   </Switch>
                 </Tabs.Content>
-                <Tabs.Content value="all" class="bg-background-stronger px-3 py-0">
+                <Tabs.Content
+                  value="all"
+                  ref={(el: HTMLDivElement) => (allEl = el)}
+                  onScroll={(e: UIEvent & { currentTarget: HTMLDivElement }) => syncFileTreeScrolled(e.currentTarget)}
+                  class="bg-background-stronger px-3 py-0"
+                >
                   <FileTree
                     path=""
                     modified={diffFiles()}
