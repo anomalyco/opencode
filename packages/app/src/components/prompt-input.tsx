@@ -1081,12 +1081,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ text, mode: "steer" }),
-          }).catch(() => {
-            showToast({
-              title: "Failed to steer",
-              description: "Could not inject message into current turn",
-            })
           })
+            .then(async (r) => {
+              if (!r.ok) throw new Error(await r.text().catch(() => r.statusText))
+            })
+            .catch((err) => {
+              console.error("[steer] shift+enter failed", err)
+              showToast({
+                title: "Failed to steer",
+                description: err?.message || "Could not inject message into current turn",
+              })
+            })
           prompt.reset()
           clearEditor()
           showToast({
@@ -1176,13 +1181,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           fetch(`${sdk.url}/session/${sessionID}/steer`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text }),
-          }).catch(() => {
-            showToast({
-              title: "Failed to queue message",
-              description: "Could not steer the session",
-            })
+            body: JSON.stringify({ text, mode: "queue" }),
           })
+            .then(async (r) => {
+              if (!r.ok) throw new Error(await r.text().catch(() => r.statusText))
+            })
+            .catch((err) => {
+              console.error("[queue] enter key failed", err)
+              showToast({
+                title: "Failed to queue message",
+                description: err?.message || "Could not queue the message",
+              })
+            })
           prompt.reset()
           clearEditor()
           showToast({
@@ -1412,12 +1422,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ text, mode: "queue" }),
-                          }).catch(() => {
-                            showToast({
-                              title: "Failed to queue message",
-                              description: "Could not queue the message",
-                            })
                           })
+                            .then(async (r) => {
+                              if (!r.ok) throw new Error(await r.text().catch(() => r.statusText))
+                            })
+                            .catch((err) => {
+                              console.error("[queue] button failed", err)
+                              showToast({
+                                title: "Failed to queue message",
+                                description: err?.message || "Could not queue the message",
+                              })
+                            })
                           prompt.reset()
                           clearEditor()
                           showToast({
@@ -1457,12 +1472,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ text, mode: "steer" }),
-                          }).catch(() => {
-                            showToast({
-                              title: "Failed to steer",
-                              description: "Could not inject message into current turn",
-                            })
                           })
+                            .then(async (r) => {
+                              if (!r.ok) throw new Error(await r.text().catch(() => r.statusText))
+                            })
+                            .catch((err) => {
+                              console.error("[steer] button failed", err)
+                              showToast({
+                                title: "Failed to steer",
+                                description: err?.message || "Could not inject message into current turn",
+                              })
+                            })
                           prompt.reset()
                           clearEditor()
                           showToast({

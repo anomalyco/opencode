@@ -107,7 +107,7 @@ body::before {
 
 [data-slot="session-turn-thinking-heading"] {
   color: var(--text-weak) !important;
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: 500;
 }
 
@@ -127,7 +127,7 @@ body::before {
   padding: 12px 16px;
   border-top: 1px solid color-mix(in srgb, var(--border-base) 30%, transparent);
   font-family: var(--font-family-mono) !important;
-  font-size: 12px !important;
+  font-size: var(--font-size-small) !important;
   color: var(--text-weak) !important;
 }
 
@@ -174,7 +174,7 @@ body::before {
   border: none !important;
   box-shadow: none !important;
   color: var(--text-weak) !important;
-  font-size: 12px;
+  font-size: var(--font-size-small);
   transition: color 150ms ease;
 }
 
@@ -337,7 +337,7 @@ body::before {
   background: var(--surface-base) !important;
   padding: 1px 6px;
   border-radius: 4px;
-  font-size: 0.9em;
+  font-size: 0.9em; /* relative to parent, scales with --font-size-base */
 }
 
 /* ============================================================
