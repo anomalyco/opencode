@@ -74,7 +74,7 @@
     "husky": "9.1.7",
     "prettier": "3.6.2",
     "semver": "^7.6.0",
-    "sst": "3.18.10",
+    "sst": "4.1.1",
     "turbo": "2.5.6"
   },
   "dependencies": {
