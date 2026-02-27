@@ -339,8 +339,11 @@ const seedSystem = [
   "Do not call any extra tools.",
 ].join(" ")
 
+const SEED_TIMEOUT = 60_000
+const SEED_ATTEMPTS = 3
+
 const wait = async <T>(input: { probe: () => Promise<T | undefined>; timeout?: number }) => {
-  const timeout = input.timeout ?? 30_000
+  const timeout = input.timeout ?? SEED_TIMEOUT
   const end = Date.now() + timeout
   while (Date.now() < end) {
     const value = await input.probe()
@@ -357,7 +360,7 @@ const seed = async <T>(input: {
   timeout?: number
   attempts?: number
 }) => {
-  for (let i = 0; i < (input.attempts ?? 2); i++) {
+  for (let i = 0; i < (input.attempts ?? SEED_ATTEMPTS); i++) {
     await input.sdk.session.promptAsync({
       sessionID: input.sessionID,
       agent: "build",
@@ -396,7 +399,7 @@ export async function seedSessionQuestion(
     sdk,
     sessionID: input.sessionID,
     prompt: text,
-    timeout: 30_000,
+    timeout: SEED_TIMEOUT,
     probe: async () => {
       const list = await sdk.question.list().then((x) => x.data ?? [])
       return list.find((item) => item.sessionID === input.sessionID && item.questions[0]?.header === first.header)
@@ -430,7 +433,7 @@ export async function seedSessionPermission(
     sdk,
     sessionID: input.sessionID,
     prompt: text,
-    timeout: 30_000,
+    timeout: SEED_TIMEOUT,
     probe: async () => {
       const list = await sdk.permission.list().then((x) => x.data ?? [])
       return list.find((item) => item.sessionID === input.sessionID)
@@ -459,7 +462,7 @@ export async function seedSessionTodos(
     sdk,
     sessionID: input.sessionID,
     prompt: text,
-    timeout: 30_000,
+    timeout: SEED_TIMEOUT,
     probe: async () => {
       const todos = await sdk.session.todo({ sessionID: input.sessionID }).then((x) => x.data ?? [])
       if (JSON.stringify(todos) !== target) return
