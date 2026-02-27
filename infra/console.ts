@@ -101,7 +101,7 @@ export const stripeWebhook = new stripe.WebhookEndpoint("StripeWebhookEndpoint",
 })
 
 const zenLiteProduct = new stripe.Product("ZenLite", {
-  name: "OpenCode Lite",
+  name: "OpenCode Go",
 })
 const zenLitePrice = new stripe.Price("ZenLitePrice", {
   product: zenLiteProduct.id,
