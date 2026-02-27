@@ -3,8 +3,12 @@ import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { Flag } from "../../flag/flag"
+import { Instance } from "../../project/instance"
+import { Log } from "../../util/log"
 import open from "open"
 import { networkInterfaces } from "os"
+
+const log = Log.create({ service: "web" })
 
 function getNetworkIPs() {
   const nets = networkInterfaces()
@@ -75,7 +79,18 @@ export const WebCommand = cmd({
       open(displayUrl).catch(() => {})
     }
 
+    // Graceful shutdown: dispose all instances (and their MCP servers) before exiting
+    async function shutdown(signal: string) {
+      log.info("received signal, shutting down", { signal })
+      await Promise.race([Instance.disposeAll(), new Promise((resolve) => setTimeout(resolve, 5000))])
+      server.stop(true)
+      process.exit(0)
+    }
+
+    for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+      process.on(signal, () => shutdown(signal))
+    }
+
     await new Promise(() => {})
-    await server.stop()
   },
 })

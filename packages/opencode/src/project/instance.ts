@@ -13,6 +13,60 @@ interface Context {
 }
 const context = Context.create<Context>("instance")
 const cache = new Map<string, Promise<Context>>()
+const lastAccess = new Map<string, number>()
+
+/** How long an instance can be idle before it is eligible for eviction (ms). */
+const IDLE_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
+
+/** How often the idle-eviction sweep runs (ms). */
+const SWEEP_INTERVAL_MS = 60 * 1000 // 1 minute
+
+const sweep = {
+  timer: undefined as ReturnType<typeof setInterval> | undefined,
+  start() {
+    if (sweep.timer) return
+    sweep.timer = setInterval(async () => {
+      const now = Date.now()
+      for (const [directory, timestamp] of lastAccess) {
+        if (now - timestamp < IDLE_TIMEOUT_MS) continue
+        if (!cache.has(directory)) {
+          lastAccess.delete(directory)
+          continue
+        }
+
+        Log.Default.info("evicting idle instance", {
+          directory,
+          idleMs: now - timestamp,
+        })
+
+        const entry = cache.get(directory)
+        if (!entry) continue
+
+        const ctx = await entry.catch(() => undefined)
+        if (!ctx) {
+          cache.delete(directory)
+          lastAccess.delete(directory)
+          continue
+        }
+
+        // re-check — may have been accessed while awaiting
+        const current = lastAccess.get(directory)
+        if (current && now - current < IDLE_TIMEOUT_MS) continue
+
+        await context.provide(ctx, async () => {
+          await Instance.dispose()
+        })
+        lastAccess.delete(directory)
+      }
+    }, SWEEP_INTERVAL_MS)
+    sweep.timer.unref()
+  },
+  stop() {
+    if (!sweep.timer) return
+    clearInterval(sweep.timer)
+    sweep.timer = undefined
+  },
+}
 
 const disposal = {
   all: undefined as Promise<void> | undefined,
@@ -20,6 +74,9 @@ const disposal = {
 
 export const Instance = {
   async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
+    lastAccess.set(input.directory, Date.now())
+    sweep.start()
+
     let existing = cache.get(input.directory)
     if (!existing) {
       Log.Default.info("creating instance", { directory: input.directory })
@@ -70,6 +127,7 @@ export const Instance = {
     Log.Default.info("disposing instance", { directory: Instance.directory })
     await State.dispose(Instance.directory)
     cache.delete(Instance.directory)
+    lastAccess.delete(Instance.directory)
     GlobalBus.emit("event", {
       directory: Instance.directory,
       payload: {
@@ -85,6 +143,7 @@ export const Instance = {
 
     disposal.all = iife(async () => {
       Log.Default.info("disposing all instances")
+      sweep.stop()
       const entries = [...cache.entries()]
       for (const [key, value] of entries) {
         if (cache.get(key) !== value) continue
@@ -105,6 +164,7 @@ export const Instance = {
           await Instance.dispose()
         })
       }
+      lastAccess.clear()
     }).finally(() => {
       disposal.all = undefined
     })
