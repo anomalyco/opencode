@@ -6,6 +6,9 @@ export const dict: Record<Keys, string> = {
   "ui.sessionReview.title.lastTurn": "Endringer i siste tur",
   "ui.sessionReview.diffStyle.unified": "Samlet",
   "ui.sessionReview.diffStyle.split": "Delt",
+  "ui.sessionReview.openFile": "Åpne fil",
+  "ui.sessionReview.selection.line": "linje {{line}}",
+  "ui.sessionReview.selection.lines": "linjer {{start}}-{{end}}",
   "ui.sessionReview.expandAll": "Utvid alle",
   "ui.sessionReview.collapseAll": "Fold sammen alle",
   "ui.sessionReview.change.added": "Lagt til",
@@ -56,6 +59,13 @@ export const dict: Record<Keys, string> = {
   "ui.sessionTurn.status.gatheringThoughts": "Samler tanker",
   "ui.sessionTurn.status.consideringNextSteps": "Vurderer neste trinn",
 
+  "ui.messagePart.questions.dismissed": "Spørsmål avvist",
+  "ui.messagePart.context.read.one": "{{count}} lest",
+  "ui.messagePart.context.read.other": "{{count}} lest",
+  "ui.messagePart.context.search.one": "{{count}} søk",
+  "ui.messagePart.context.search.other": "{{count}} søk",
+  "ui.messagePart.context.list.one": "{{count}} liste",
+  "ui.messagePart.context.list.other": "{{count}} lister",
   "ui.messagePart.diagnostic.error": "Feil",
   "ui.messagePart.title.edit": "Rediger",
   "ui.messagePart.title.write": "Skriv",
@@ -75,6 +85,7 @@ export const dict: Record<Keys, string> = {
   "ui.textField.copied": "Kopiert",
 
   "ui.imagePreview.alt": "Bildeforhåndsvisning",
+  "ui.scrollView.ariaLabel": "rullbart innhold",
 
   "ui.tool.read": "Les",
   "ui.tool.loaded": "Lastet",
