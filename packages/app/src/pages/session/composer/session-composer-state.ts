@@ -5,15 +5,20 @@ import { useParams } from "@solidjs/router"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
+import { usePermission } from "@/context/permission"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { sessionPermissionRequest, sessionQuestionRequest } from "./session-request-tree"
 
 export function createSessionComposerBlocked() {
   const params = useParams()
+  const permission = usePermission()
+  const sdk = useSDK()
   const sync = useSync()
   const permissionRequest = createMemo(() =>
-    sessionPermissionRequest(sync.data.session, sync.data.permission, params.id),
+    sessionPermissionRequest(sync.data.session, sync.data.permission, params.id, (item) => {
+      return !permission.autoResponds(item, sdk.directory)
+    }),
   )
   const questionRequest = createMemo(() => sessionQuestionRequest(sync.data.session, sync.data.question, params.id))
 
@@ -30,13 +35,16 @@ export function createSessionComposerState() {
   const sync = useSync()
   const globalSync = useGlobalSync()
   const language = useLanguage()
+  const permission = usePermission()
 
   const questionRequest = createMemo((): QuestionRequest | undefined => {
     return sessionQuestionRequest(sync.data.session, sync.data.question, params.id)
   })
 
   const permissionRequest = createMemo((): PermissionRequest | undefined => {
-    return sessionPermissionRequest(sync.data.session, sync.data.permission, params.id)
+    return sessionPermissionRequest(sync.data.session, sync.data.permission, params.id, (item) => {
+      return !permission.autoResponds(item, sdk.directory)
+    })
   })
 
   const blocked = createMemo(() => {
