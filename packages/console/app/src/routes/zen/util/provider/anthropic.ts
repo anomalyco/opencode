@@ -402,13 +402,19 @@ export function toAnthropicRequest(body: CommonRequest) {
     }
 
     if ((m as any).role === "tool") {
+      const toolContent = (m as any).content
       msgsOut.push({
         role: "user",
         content: [
           {
             type: "tool_result",
             tool_use_id: (m as any).tool_call_id,
-            content: (m as any).content,
+            content:
+              typeof toolContent === "string" && toolContent.length > 0
+                ? toolContent
+                : Array.isArray(toolContent) && toolContent.length > 0
+                  ? toolContent
+                  : "(no output)",
             ...cc(),
           },
         ],
