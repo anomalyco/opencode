@@ -4,7 +4,7 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { useParams } from "@solidjs/router"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
+import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Mark } from "@opencode-ai/ui/logo"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
@@ -151,6 +151,11 @@ export function SessionSidePanel(props: {
   let changesEl: HTMLDivElement | undefined
   let allEl: HTMLDivElement | undefined
 
+  const syncFileTreeScrolled = (el?: HTMLDivElement) => {
+    const next = (el?.scrollTop ?? 0) > 0
+    setStore("fileTreeScrolled", (current) => (current === next ? current : next))
+  }
+
   const handleDragStart = (event: unknown) => {
     const id = getDraggableId(event)
     if (!id) return
@@ -173,10 +178,7 @@ export function SessionSidePanel(props: {
 
   createEffect(() => {
     if (!layout.fileTree.opened()) return
-    const tab = fileTreeTab()
-    const el = tab === "changes" ? changesEl : allEl
-    const next = (el?.scrollTop ?? 0) > 0
-    setStore("fileTreeScrolled", (current) => (current === next ? current : next))
+    syncFileTreeScrolled(fileTreeTab() === "changes" ? changesEl : allEl)
   })
 
   createEffect(() => {
@@ -244,7 +246,12 @@ export function SessionSidePanel(props: {
                       <Tabs.Trigger
                         value="context"
                         closeButton={
-                          <Tooltip value={language.t("common.closeTab")} placement="bottom" gutter={10}>
+                          <TooltipKeybind
+                            title={language.t("common.closeTab")}
+                            keybind={command.keybind("tab.close")}
+                            placement="bottom"
+                            gutter={10}
+                          >
                             <IconButton
                               icon="close-small"
                               variant="ghost"
@@ -252,7 +259,7 @@ export function SessionSidePanel(props: {
                               onClick={() => tabs().close("context")}
                               aria-label={language.t("common.closeTab")}
                             />
-                          </Tooltip>
+                          </TooltipKeybind>
                         }
                         hideCloseButton
                         onMiddleClick={() => tabs().close("context")}
@@ -359,11 +366,7 @@ export function SessionSidePanel(props: {
                 <Tabs.Content
                   value="changes"
                   ref={(el: HTMLDivElement) => (changesEl = el)}
-                  onScroll={(e: UIEvent & { currentTarget: HTMLDivElement }) => {
-                    if (fileTreeTab() !== "changes") return
-                    const next = e.currentTarget.scrollTop > 0
-                    setStore("fileTreeScrolled", (current) => (current === next ? current : next))
-                  }}
+                  onScroll={(e: UIEvent & { currentTarget: HTMLDivElement }) => syncFileTreeScrolled(e.currentTarget)}
                   class="bg-background-stronger px-3 py-0"
                 >
                   <Switch>
@@ -397,11 +400,7 @@ export function SessionSidePanel(props: {
                 <Tabs.Content
                   value="all"
                   ref={(el: HTMLDivElement) => (allEl = el)}
-                  onScroll={(e: UIEvent & { currentTarget: HTMLDivElement }) => {
-                    if (fileTreeTab() !== "all") return
-                    const next = e.currentTarget.scrollTop > 0
-                    setStore("fileTreeScrolled", (current) => (current === next ? current : next))
-                  }}
+                  onScroll={(e: UIEvent & { currentTarget: HTMLDivElement }) => syncFileTreeScrolled(e.currentTarget)}
                   class="bg-background-stronger px-3 py-0"
                 >
                   <FileTree

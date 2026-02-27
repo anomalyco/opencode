@@ -35,6 +35,7 @@ const OPEN_APPS = [
   "terminal",
   "iterm2",
   "ghostty",
+  "warp",
   "xcode",
   "android-studio",
   "powershell",
@@ -63,6 +64,7 @@ const MAC_APPS = [
   { id: "terminal", label: "Terminal", icon: "terminal", openWith: "Terminal" },
   { id: "iterm2", label: "iTerm2", icon: "iterm2", openWith: "iTerm" },
   { id: "ghostty", label: "Ghostty", icon: "ghostty", openWith: "Ghostty" },
+  { id: "warp", label: "Warp", icon: "warp", openWith: "Warp" },
   { id: "xcode", label: "Xcode", icon: "xcode", openWith: "Xcode" },
   {
     id: "android-studio",
