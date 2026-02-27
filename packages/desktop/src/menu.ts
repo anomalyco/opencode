@@ -16,7 +16,7 @@ export async function createMenu(trigger: (id: string) => void) {
   const menu = await Menu.new({
     items: [
       await Submenu.new({
-        text: "OpenCode",
+        text: t("desktop.menu.app"),
         items: [
           await PredefinedMenuItem.new({
             item: { About: null },
@@ -62,15 +62,15 @@ export async function createMenu(trigger: (id: string) => void) {
         ].filter(Boolean),
       }),
       await Submenu.new({
-        text: "File",
+        text: t("desktop.menu.file"),
         items: [
           await MenuItem.new({
-            text: "New Session",
+            text: t("desktop.menu.file.newSession"),
             accelerator: "Shift+Cmd+S",
             action: () => trigger("session.new"),
           }),
           await MenuItem.new({
-            text: "Open Project...",
+            text: t("desktop.menu.file.openProject"),
             accelerator: "Cmd+O",
             action: () => trigger("project.open"),
           }),
@@ -83,7 +83,7 @@ export async function createMenu(trigger: (id: string) => void) {
         ],
       }),
       await Submenu.new({
-        text: "Edit",
+        text: t("desktop.menu.edit"),
         items: [
           await PredefinedMenuItem.new({
             item: "Undo",
@@ -109,44 +109,44 @@ export async function createMenu(trigger: (id: string) => void) {
         ],
       }),
       await Submenu.new({
-        text: "View",
+        text: t("desktop.menu.view"),
         items: [
           await MenuItem.new({
             action: () => trigger("sidebar.toggle"),
-            text: "Toggle Sidebar",
+            text: t("desktop.menu.view.toggleSidebar"),
             accelerator: "Cmd+B",
           }),
           await MenuItem.new({
             action: () => trigger("terminal.toggle"),
-            text: "Toggle Terminal",
+            text: t("desktop.menu.view.toggleTerminal"),
             accelerator: "Ctrl+`",
           }),
           await MenuItem.new({
             action: () => trigger("fileTree.toggle"),
-            text: "Toggle File Tree",
+            text: t("desktop.menu.view.toggleFileTree"),
           }),
           await PredefinedMenuItem.new({
             item: "Separator",
           }),
           await MenuItem.new({
             action: () => trigger("common.goBack"),
-            text: "Back",
+            text: t("desktop.menu.view.back"),
           }),
           await MenuItem.new({
             action: () => trigger("common.goForward"),
-            text: "Forward",
+            text: t("desktop.menu.view.forward"),
           }),
           await PredefinedMenuItem.new({
             item: "Separator",
           }),
           await MenuItem.new({
             action: () => trigger("session.previous"),
-            text: "Previous Session",
+            text: t("desktop.menu.view.previousSession"),
             accelerator: "Option+ArrowUp",
           }),
           await MenuItem.new({
             action: () => trigger("session.next"),
-            text: "Next Session",
+            text: t("desktop.menu.view.nextSession"),
             accelerator: "Option+ArrowDown",
           }),
           await PredefinedMenuItem.new({
@@ -155,16 +155,16 @@ export async function createMenu(trigger: (id: string) => void) {
         ],
       }),
       await Submenu.new({
-        text: "Help",
+        text: t("desktop.menu.help"),
         items: [
           // missing native macos search
           await MenuItem.new({
             action: () => openUrl("https://opencode.ai/docs"),
-            text: "OpenCode Documentation",
+            text: t("desktop.menu.help.documentation"),
           }),
           await MenuItem.new({
             action: () => openUrl("https://discord.com/invite/opencode"),
-            text: "Support Forum",
+            text: t("desktop.menu.help.supportForum"),
           }),
           await PredefinedMenuItem.new({
             item: "Separator",
@@ -177,11 +177,11 @@ export async function createMenu(trigger: (id: string) => void) {
           }),
           await MenuItem.new({
             action: () => openUrl("https://github.com/anomalyco/opencode/issues/new?template=feature_request.yml"),
-            text: "Share Feedback",
+            text: t("desktop.menu.help.shareFeedback"),
           }),
           await MenuItem.new({
             action: () => openUrl("https://github.com/anomalyco/opencode/issues/new?template=bug_report.yml"),
-            text: "Report a Bug",
+            text: t("desktop.menu.help.reportBug"),
           }),
         ],
       }),

@@ -430,7 +430,7 @@ export function SessionHeader() {
                               <Spinner class="size-3.5 text-icon-base" />
                             </Show>
                           </div>
-                          <span class="text-12-regular text-text-strong">Open</span>
+                          <span class="text-12-regular text-text-strong">{language.t("common.open")}</span>
                         </Button>
                         <div class="self-stretch w-px bg-border-weak-base" />
                         <DropdownMenu

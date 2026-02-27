@@ -3,6 +3,9 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "Ændringer fra sidste tur",
   "ui.sessionReview.diffStyle.unified": "Samlet",
   "ui.sessionReview.diffStyle.split": "Opdelt",
+  "ui.sessionReview.openFile": "Åbn fil",
+  "ui.sessionReview.selection.line": "linje {{line}}",
+  "ui.sessionReview.selection.lines": "linjer {{start}}-{{end}}",
   "ui.sessionReview.expandAll": "Udvid alle",
   "ui.sessionReview.collapseAll": "Skjul alle",
 
@@ -52,6 +55,13 @@ export const dict = {
   "ui.sessionTurn.status.gatheringThoughts": "Samler tanker",
   "ui.sessionTurn.status.consideringNextSteps": "Overvejer næste skridt",
 
+  "ui.messagePart.questions.dismissed": "Spørgsmål afvist",
+  "ui.messagePart.context.read.one": "{{count}} læsning",
+  "ui.messagePart.context.read.other": "{{count}} læsninger",
+  "ui.messagePart.context.search.one": "{{count}} søgning",
+  "ui.messagePart.context.search.other": "{{count}} søgninger",
+  "ui.messagePart.context.list.one": "{{count}} liste",
+  "ui.messagePart.context.list.other": "{{count}} lister",
   "ui.messagePart.diagnostic.error": "Fejl",
   "ui.messagePart.title.edit": "Rediger",
   "ui.messagePart.title.write": "Skriv",
@@ -71,6 +81,7 @@ export const dict = {
   "ui.textField.copied": "Kopieret",
 
   "ui.imagePreview.alt": "Billedforhåndsvisning",
+  "ui.scrollView.ariaLabel": "rulbart indhold",
 
   "ui.tool.read": "Læs",
   "ui.tool.loaded": "Indlæst",
