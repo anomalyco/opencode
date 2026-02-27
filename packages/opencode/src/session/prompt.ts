@@ -1,6 +1,7 @@
 import path from "path"
 import os from "os"
 import fs from "fs/promises"
+import { StringDecoder } from "string_decoder"
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import { Identifier } from "../id/id"
@@ -1635,9 +1636,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     })
 
     let output = ""
+    const stdoutDecoder = new StringDecoder("utf8")
+    const stderrDecoder = new StringDecoder("utf8")
 
-    proc.stdout?.on("data", (chunk) => {
-      output += chunk.toString()
+    proc.stdout?.on("data", (chunk: Buffer) => {
+      output += stdoutDecoder.write(chunk)
       if (part.state.status === "running") {
         part.state.metadata = {
           output: output,
@@ -1647,8 +1650,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }
     })
 
-    proc.stderr?.on("data", (chunk) => {
-      output += chunk.toString()
+    proc.stderr?.on("data", (chunk: Buffer) => {
+      output += stderrDecoder.write(chunk)
       if (part.state.status === "running") {
         part.state.metadata = {
           output: output,
