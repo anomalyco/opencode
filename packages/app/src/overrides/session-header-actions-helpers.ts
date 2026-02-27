@@ -9,7 +9,7 @@ export function extractDirectory(result: string | string[] | null): string | nul
  */
 export function buildTokenPersistCommand(token: string): string {
   if (!token) return ""
-  return "mkdir -p ~/.config/laterapi && printf '%s' \"$LATERAPI_KEY\" > ~/.config/laterapi/token && "
+  return "mkdir -p ~/.config/laterapi && printf '%s' \"$LATERAPI_KEY\" > ~/.config/laterapi/token && chmod 600 ~/.config/laterapi/token && "
 }
 
 /**
