@@ -350,7 +350,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       console.log("bootstrapping")
       const start = Date.now() - 30 * 24 * 60 * 60 * 1000
       const sessionListPromise = sdk.client.session
-        .list({ start: start })
+        .list({ start: start, roots: true })
         .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
 
       // blocking - include session.list when continuing a session
@@ -432,6 +432,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     })
 
     const fullSyncedSessions = new Set<string>()
+    const treeSyncedRoots = new Set<string>()
     const result = {
       data: store,
       set: setStore,
@@ -479,6 +480,60 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             }),
           )
           fullSyncedSessions.add(sessionID)
+        },
+        async syncTree(sessionID: string) {
+          // Walk up to find the root session
+          let rootID = sessionID
+          const visited = new Set<string>()
+          while (true) {
+            if (visited.has(rootID)) break
+            visited.add(rootID)
+            const match = Binary.search(store.session, rootID, (s) => s.id)
+            if (!match.found) break
+            const parentID = store.session[match.index].parentID
+            if (!parentID) break
+            const parentMatch = Binary.search(store.session, parentID, (s) => s.id)
+            if (parentMatch.found) {
+              rootID = parentID
+              continue
+            }
+            // Parent not in store — fetch it
+            const res = await sdk.client.session.get({ sessionID: parentID }).catch(() => undefined)
+            if (!res?.data) break
+            setStore(
+              produce((draft) => {
+                const idx = Binary.search(draft.session, res.data!.id, (s) => s.id)
+                if (!idx.found) draft.session.splice(idx.index, 0, res.data!)
+              }),
+            )
+            rootID = parentID
+          }
+
+          if (treeSyncedRoots.has(rootID)) return
+          treeSyncedRoots.add(rootID)
+
+          // BFS from root — load all descendants level by level
+          const queue = [rootID]
+          while (queue.length > 0) {
+            const level = [...queue]
+            queue.length = 0
+            const results = await Promise.all(
+              level.map((id) => sdk.client.session.children({ sessionID: id }).catch(() => undefined)),
+            )
+            const all = results.flatMap((r) => r?.data ?? [])
+            if (all.length === 0) break
+            setStore(
+              produce((draft) => {
+                for (const child of all) {
+                  const idx = Binary.search(draft.session, child.id, (s) => s.id)
+                  if (!idx.found) draft.session.splice(idx.index, 0, child)
+                }
+              }),
+            )
+            for (const child of all) {
+              queue.push(child.id)
+            }
+          }
         },
       },
       bootstrap,

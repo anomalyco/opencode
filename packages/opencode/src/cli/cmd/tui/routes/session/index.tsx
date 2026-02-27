@@ -229,6 +229,7 @@ export function Session() {
         })
         return navigate({ type: "home" })
       })
+    sync.session.syncTree(route.sessionID).catch(() => {})
   })
 
   const toast = useToast()
