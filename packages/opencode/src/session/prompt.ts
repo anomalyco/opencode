@@ -539,7 +539,7 @@ export namespace SessionPrompt {
         continue
       }
 
-      // context overflow, needs compaction
+      // context overflow, needs compaction (legacy: based on previous response token count)
       if (
         lastFinished &&
         lastFinished.summary !== true &&
@@ -552,6 +552,20 @@ export namespace SessionPrompt {
           auto: true,
         })
         continue
+      }
+
+      // pre-emptive compaction: estimate actual message tokens before prune strips data
+      {
+        const modelMessages = MessageV2.toModelMessages(msgs, model)
+        if (SessionCompaction.shouldCompact(modelMessages, model)) {
+          await SessionCompaction.create({
+            sessionID,
+            agent: lastUser.agent,
+            model: lastUser.model,
+            auto: true,
+          })
+          continue
+        }
       }
 
       // normal processing
@@ -714,7 +728,8 @@ export namespace SessionPrompt {
       }
       continue
     }
-    SessionCompaction.prune({ sessionID })
+    // prune is now deferred — only runs after compaction has had a chance to summarize
+    // SessionCompaction.prune({ sessionID })
     for await (const item of MessageV2.stream(sessionID)) {
       if (item.info.role === "user") continue
       const queued = state()[sessionID]?.callbacks ?? []

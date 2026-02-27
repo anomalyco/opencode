@@ -19,6 +19,7 @@ export namespace ProviderError {
     /context window exceeds limit/i, // MiniMax
     /exceeded model token limit/i, // Kimi For Coding, Moonshot
     /context[_ ]length[_ ]exceeded/i, // Generic fallback
+    /improperly formed request/i, // Kiro (payload too large)
   ]
 
   function isOpenAiErrorRetryable(e: APICallError) {

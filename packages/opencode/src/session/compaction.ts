@@ -27,7 +27,7 @@ export namespace SessionCompaction {
     ),
   }
 
-  const COMPACTION_BUFFER = 20_000
+  const COMPACTION_BUFFER = 30_000
 
   export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
     const config = await Config.get()
@@ -45,6 +45,71 @@ export namespace SessionCompaction {
       ? input.model.limit.input - reserved
       : context - ProviderTransform.maxOutputTokens(input.model)
     return count >= usable
+  }
+
+  // Estimate tokens for a single ModelMessage using the simple 4-chars-per-token heuristic,
+  // with a correction factor to approximate tiktoken-based counting (used by kiro pre-flight).
+  const TOKEN_CORRECTION = 1.3 // Token.estimate undercounts vs tiktoken×1.15; add safety margin
+  export function estimateMessageTokens(msg: import("ai").ModelMessage): number {
+    if (typeof msg.content === "string") return Math.ceil(Token.estimate(msg.content) * TOKEN_CORRECTION)
+    if (!Array.isArray(msg.content)) return 0
+    let tokens = 0
+    for (const part of msg.content) {
+      if ("text" in part && typeof part.text === "string") tokens += Token.estimate(part.text)
+      if ("input" in part) tokens += Token.estimate(typeof part.input === "string" ? part.input : JSON.stringify(part.input))
+      if ("output" in part) {
+        const out = part.output
+        if (typeof out === "string") tokens += Token.estimate(out)
+        else if (out && typeof out === "object" && "value" in out) tokens += Token.estimate(typeof out.value === "string" ? out.value : JSON.stringify(out.value))
+      }
+    }
+    return Math.ceil(tokens * TOKEN_CORRECTION)
+  }
+
+  export function usableTokens(model: Provider.Model): number {
+    const context = model.limit.context
+    if (context === 0) return Infinity
+    return model.limit.input
+      ? model.limit.input - COMPACTION_BUFFER - SYSTEM_OVERHEAD
+      : context - ProviderTransform.maxOutputTokens(model) - COMPACTION_BUFFER - SYSTEM_OVERHEAD
+  }
+
+  // Pre-trim modelMessages from the front (oldest) so the total fits within the model's context limit.
+  // This avoids the repeated fail-and-slice loop when the compaction LLM call itself overflows.
+  export function fitMessages(msgs: import("ai").ModelMessage[], model: Provider.Model, extraTokens: number): import("ai").ModelMessage[] {
+    const context = model.limit.context
+    if (context === 0) return msgs
+    const budget = context - ProviderTransform.maxOutputTokens(model) - COMPACTION_BUFFER - extraTokens
+    if (budget <= 0) {
+      return msgs.slice(-1)
+    }
+
+    // Accumulate from the end (newest) to preserve recent context
+    let total = 0
+    let cutoff = 0
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      total += estimateMessageTokens(msgs[i])
+      if (total > budget) {
+        cutoff = i + 1
+        break
+      }
+    }
+    if (cutoff === 0) {
+      return msgs
+    }
+    return msgs.slice(cutoff)
+  }
+  // Overhead for system prompt, tool definitions, JSON structure etc.
+  // kiro's estimatePayloadTokens counts these but estimateMessageTokens does not.
+  const SYSTEM_OVERHEAD = 16_000
+
+  export function shouldCompact(msgs: import("ai").ModelMessage[], model: Provider.Model): boolean {
+    const context = model.limit.context
+    if (context === 0) return false
+    const usable = usableTokens(model)
+    let total = 0
+    for (const msg of msgs) total += estimateMessageTokens(msg)
+    return total >= usable
   }
 
   export const PRUNE_MINIMUM = 20_000
@@ -136,12 +201,6 @@ export namespace SessionCompaction {
         created: Date.now(),
       },
     })) as MessageV2.Assistant
-    const processor = SessionProcessor.create({
-      assistantMessage: msg,
-      sessionID: input.sessionID,
-      model,
-      abort: input.abort,
-    })
     // Allow plugins to inject context or replace compaction prompt
     const compacting = await Plugin.trigger(
       "experimental.session.compacting",
@@ -177,27 +236,47 @@ When constructing the summary, try to stick to this template:
 ---`
 
     const promptText = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
-    const result = await processor.process({
-      user: userMessage,
-      agent,
-      abort: input.abort,
-      sessionID: input.sessionID,
-      tools: {},
-      system: [],
-      messages: [
-        ...MessageV2.toModelMessages(input.messages, model),
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: promptText,
-            },
-          ],
-        },
-      ],
-      model,
-    })
+    const compactionPrompt = {
+      role: "user" as const,
+      content: [{ type: "text" as const, text: promptText }],
+    }
+    let modelMessages = MessageV2.toModelMessages(input.messages, model)
+    const promptTokens = Math.ceil(Token.estimate(promptText) * TOKEN_CORRECTION)
+    const originalCount = modelMessages.length
+    modelMessages = fitMessages(modelMessages, model, promptTokens)
+    let result: SessionProcessor.Result = "compact"
+    let attempt = 0
+    while (result === "compact") {
+      attempt++
+      if (modelMessages.length === 0) break
+      // Reset assistant message state for each attempt
+      msg.error = undefined
+      msg.finish = undefined as any
+      msg.time = { created: Date.now() }
+      msg.tokens = { output: 0, input: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+      msg.cost = 0
+      await Session.updateMessage(msg)
+      const proc = SessionProcessor.create({
+        assistantMessage: msg,
+        sessionID: input.sessionID,
+        model,
+        abort: input.abort,
+      })
+      result = await proc.process({
+        user: userMessage,
+        agent,
+        abort: input.abort,
+        sessionID: input.sessionID,
+        tools: {},
+        system: [],
+        messages: [...modelMessages, compactionPrompt],
+        model,
+      })
+      if (result === "compact") {
+        if (modelMessages.length <= 1) break
+        modelMessages = modelMessages.slice(1)
+      }
+    }
 
     if (result === "continue" && input.auto) {
       const continueMsg = await Session.updateMessage({
@@ -223,7 +302,8 @@ When constructing the summary, try to stick to this template:
         },
       })
     }
-    if (processor.message.error) return "stop"
+    if (msg.error) return "stop"
+    // prune disabled: compaction already summarizes old tool outputs
     Bus.publish(Event.Compacted, { sessionID: input.sessionID })
     return "continue"
   }

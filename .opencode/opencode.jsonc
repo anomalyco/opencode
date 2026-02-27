@@ -10,4 +10,7 @@
     "github-triage": false,
     "github-pr-search": false,
   },
+  "compaction": {
+    "reserved": 180000
+  }
 }

@@ -4,7 +4,7 @@ import type {
   LanguageModelV2ToolCallPart,
   LanguageModelV2ToolResultPart,
 } from "@ai-sdk/provider"
-
+import { estimatePayloadTokens, countTokens } from "./tokenizer"
 export interface KiroTool {
   toolSpecification: {
     name: string
@@ -674,17 +674,10 @@ export function convertToKiroPayload(
   }
 
   const payload: KiroPayload = { conversationState }
-  return truncateKiroPayload(payload)
+  return fitKiroPayload(cleanKiroPayload(payload))
 }
 
-// Kiro API has ~200K token input limit.
-// Token/byte ratio varies; use 800KB as safe limit.
-const MAX_PAYLOAD_BYTES = 500_000
-const TRUNCATION_SUFFIX = "\n\n[content truncated]"
-function payloadBytes(payload: KiroPayload): number {
-  return new TextEncoder().encode(JSON.stringify(payload)).byteLength
-}
-function truncateKiroPayload(payload: KiroPayload): KiroPayload {
+function cleanKiroPayload(payload: KiroPayload): KiroPayload {
   // Clean history items: remove fields only needed in currentMessage
   for (const item of payload.conversationState.history) {
     if (item.userInputMessage) {
@@ -698,61 +691,11 @@ function truncateKiroPayload(payload: KiroPayload): KiroPayload {
       delete (item.assistantResponseMessage as any).modelId
     }
   }
-  // Sanitize empty user messages — Kiro API rejects content: "" with empty context
+  // Sanitize empty user messages — Kiro API rejects content: ""
   for (const item of payload.conversationState.history) {
-    if (item.userInputMessage && !item.userInputMessage.content && !item.userInputMessage.userInputMessageContext?.toolResults?.length) {
+    if (item.userInputMessage && !item.userInputMessage.content) {
       item.userInputMessage.content = "."
     }
-  }
-  fixOrphanedToolResults(payload)
-  let size = payloadBytes(payload)
-  if (size <= MAX_PAYLOAD_BYTES) return payload
-  // Collect ALL tool results (history + current), sort biggest first, truncate
-  const entries: Array<{ text: string }> = []
-  for (const item of payload.conversationState.history) {
-    for (const tr of item.userInputMessage?.userInputMessageContext?.toolResults ?? []) {
-      for (const c of tr.content) entries.push(c as { text: string })
-    }
-  }
-  for (const tr of payload.conversationState.currentMessage.userInputMessage.userInputMessageContext?.toolResults ?? []) {
-    for (const c of tr.content) entries.push(c as { text: string })
-  }
-  entries.sort((a, b) => b.text.length - a.text.length)
-  for (const entry of entries) {
-    if (size <= MAX_PAYLOAD_BYTES) break
-    const half = Math.floor(entry.text.length / 2)
-    const target = Math.max(200, half)
-    if (target < entry.text.length) {
-      entry.text = entry.text.slice(0, target) + TRUNCATION_SUFFIX
-      size = payloadBytes(payload)
-    }
-  }
-  if (size <= MAX_PAYLOAD_BYTES) return payload
-  // Still over: aggressively truncate all entries to minimum
-  for (const entry of entries) {
-    if (size <= MAX_PAYLOAD_BYTES) break
-    entry.text = entry.text.slice(0, 200) + TRUNCATION_SUFFIX
-    size = payloadBytes(payload)
-  }
-  if (size <= MAX_PAYLOAD_BYTES) return payload
-  // Still over: remove oldest history pairs, but preserve last assistant+user pair for currentMessage pairing
-  const history = payload.conversationState.history
-  // Find the last assistant with toolUses that match currentMessage toolResults
-  const cmTrIds = new Set(
-    (payload.conversationState.currentMessage.userInputMessage.userInputMessageContext?.toolResults ?? []).map((tr) => tr.toolUseId)
-  )
-  let preserveFrom = -1
-  for (let i = history.length - 1; i >= 0; i--) {
-    const tus = history[i].assistantResponseMessage?.toolUses ?? []
-    if (tus.some((tu) => cmTrIds.has(tu.toolUseId))) {
-      preserveFrom = i
-      break
-    }
-  }
-  // Remove from index 2 up to preserveFrom (keep first 2 + preserved tail)
-  if (preserveFrom > 2) {
-    history.splice(2, preserveFrom - 2)
-    size = payloadBytes(payload)
   }
   fixOrphanedToolResults(payload)
   ensureAlternation(payload)
@@ -787,4 +730,85 @@ function ensureAlternation(payload: KiroPayload) {
     }
     i++
   }
+}
+
+const KIRO_CONTEXT_LIMIT = 180_000
+const KIRO_PAYLOAD_BYTE_LIMIT = 450_000
+const COMPACT_SUFFIX = "\n\n[content compacted]"
+
+function payloadBytes(payload: KiroPayload) {
+  return Buffer.byteLength(JSON.stringify(payload), "utf-8")
+}
+
+function isOverLimit(payload: KiroPayload) {
+  // Check bytes first (cheap) before tokens (expensive tiktoken call)
+  if (payloadBytes(payload) > KIRO_PAYLOAD_BYTE_LIMIT) return true
+  return estimatePayloadTokens(payload) > KIRO_CONTEXT_LIMIT
+}
+
+// Progressive fit: compact tool results → drop oldest history → return as-is for upstream overflow
+function fitKiroPayload(payload: KiroPayload): KiroPayload {
+  if (!isOverLimit(payload)) return payload
+
+  // Phase 1: Compact large tool results (history + currentMessage, biggest-first)
+  const entries: Array<{ text: string; tokens: number; ref: { text: string } }> = []
+  for (const item of payload.conversationState.history) {
+    for (const tr of item.userInputMessage?.userInputMessageContext?.toolResults ?? []) {
+      for (const c of tr.content) {
+        const t = countTokens(c.text)
+        if (t > 200) entries.push({ text: c.text, tokens: t, ref: c })
+      }
+    }
+  }
+  // Also include currentMessage toolResults — these can be huge (e.g. 30 tool results)
+  for (const tr of payload.conversationState.currentMessage.userInputMessage.userInputMessageContext?.toolResults ?? []) {
+    for (const c of tr.content) {
+      const t = countTokens(c.text)
+      if (t > 200) entries.push({ text: c.text, tokens: t, ref: c })
+    }
+  }
+  // Sort biggest first so we reclaim the most space per compaction
+  entries.sort((a, b) => b.tokens - a.tokens)
+  for (const entry of entries) {
+    entry.ref.text = entry.ref.text.slice(0, 200) + COMPACT_SUFFIX
+    if (!isOverLimit(payload)) return payload
+  }
+
+  // Phase 2: Drop oldest history pairs (keep first 2 + tail needed by currentMessage)
+  const history = payload.conversationState.history
+  const cmTrIds = new Set(
+    (payload.conversationState.currentMessage.userInputMessage.userInputMessageContext?.toolResults ?? []).map((tr) => tr.toolUseId)
+  )
+  let preserveFrom = history.length
+  for (let i = history.length - 1; i >= 0; i--) {
+    const tus = history[i].assistantResponseMessage?.toolUses ?? []
+    if (tus.some((tu) => cmTrIds.has(tu.toolUseId))) {
+      preserveFrom = i
+      break
+    }
+  }
+  if (preserveFrom > 2) {
+    history.splice(2, preserveFrom - 2)
+    fixOrphanedToolResults(payload)
+    ensureAlternation(payload)
+  }
+
+  // Phase 3: If still over, progressively drop oldest history one-by-one
+  while (isOverLimit(payload) && history.length > 2) {
+    history.splice(2, 1)
+    fixOrphanedToolResults(payload)
+    ensureAlternation(payload)
+  }
+
+  // Phase 4: Last resort — compact ALL currentMessage toolResults aggressively
+  const cmResults = payload.conversationState.currentMessage.userInputMessage.userInputMessageContext?.toolResults ?? []
+  for (const tr of cmResults) {
+    for (const c of tr.content) {
+      if (c.text.length > 100) c.text = c.text.slice(0, 100) + COMPACT_SUFFIX
+    }
+    if (!isOverLimit(payload)) return payload
+  }
+
+  // Return regardless — if still over, upstream pre-flight check will trigger compaction
+  return payload
 }

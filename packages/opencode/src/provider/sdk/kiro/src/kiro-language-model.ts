@@ -186,6 +186,24 @@ export class KiroLanguageModel implements LanguageModelV2 {
 
     const payload = convertToKiroPayload(options.prompt, kiroModelId, functionTools, kiroProviderOptions)
 
+    // Pre-flight context overflow check — let the compaction system handle it
+    const KIRO_CONTEXT_LIMIT = 180_000
+    const KIRO_PAYLOAD_BYTE_LIMIT = 450_000
+    const estimated = estimatePayloadTokens(payload)
+    const payloadBytes = Buffer.byteLength(JSON.stringify(payload), "utf-8")
+    const historyLen = payload.conversationState.history?.length ?? 0
+    if (estimated > KIRO_CONTEXT_LIMIT || payloadBytes > KIRO_PAYLOAD_BYTE_LIMIT) {
+      const { APICallError } = await import("ai")
+      throw new APICallError({
+        message: `Input token count ${estimated} exceeds the maximum ${KIRO_CONTEXT_LIMIT} for this model`,
+        url: `${this.config.baseURL}/generateAssistantResponse`,
+        requestBodyValues: {},
+        statusCode: 400,
+        responseBody: `estimated ${estimated} tokens / ${payloadBytes} bytes exceeds context window`,
+        isRetryable: false,
+      })
+    }
+
     // 意味のあるコンテンツがない場合は早期リターン（無限ループ防止）
     const currentMessage = payload.conversationState.currentMessage.userInputMessage
     const hasUserContent = currentMessage.content && currentMessage.content !== "."
@@ -243,7 +261,8 @@ export class KiroLanguageModel implements LanguageModelV2 {
     if (!response.ok) {
       const errorText = await response.text()
       const fs = await import("fs")
-      fs.writeFileSync("/tmp/kiro-payload-error.json", JSON.stringify({ status: response.status, statusText: response.statusText, errorText, payload }, null, 2))
+      const debugPayloadBytes = Buffer.byteLength(JSON.stringify(payload), "utf-8")
+      fs.writeFileSync("/tmp/kiro-payload-error.json", JSON.stringify({ status: response.status, statusText: response.statusText, errorText, payloadBytes: debugPayloadBytes, payload }, null, 2))
       const { APICallError } = await import("ai")
       throw new APICallError({
         message: `${response.status} ${response.statusText}`,

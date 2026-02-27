@@ -15,6 +15,7 @@ import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
+import { Token } from "@/util/token"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -34,6 +35,7 @@ export namespace SessionProcessor {
     let blocked = false
     let attempt = 0
     let needsCompaction = false
+    let turnToolTokens = 0
 
     const result = {
       get message() {
@@ -195,6 +197,7 @@ export namespace SessionProcessor {
                         attachments: value.output.attachments,
                       },
                     })
+                    turnToolTokens += Token.estimate(typeof value.output.output === "string" ? value.output.output : JSON.stringify(value.output.output))
 
                     delete toolcalls[value.toolCallId]
                   }
@@ -282,6 +285,14 @@ export namespace SessionProcessor {
                   if (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model })) {
                     needsCompaction = true
                   }
+                  if (!needsCompaction && turnToolTokens > 0) {
+                    const historyTokens = streamInput.messages.reduce((sum, m) => sum + SessionCompaction.estimateMessageTokens(m), 0)
+                    const totalEstimate = historyTokens + Math.ceil(turnToolTokens * 1.3)
+                    const usable = SessionCompaction.usableTokens(input.model)
+                    if (totalEstimate >= usable) {
+                      needsCompaction = true
+                    }
+                  }
                   break
 
                 case "text-start":
@@ -354,7 +365,8 @@ export namespace SessionProcessor {
             })
             const error = MessageV2.fromError(e, { providerID: input.model.providerID })
             if (MessageV2.ContextOverflowError.isInstance(error)) {
-              // TODO: Handle context overflow error
+              needsCompaction = true
+              break
             }
             const retry = SessionRetry.retryable(error)
             if (retry !== undefined) {
