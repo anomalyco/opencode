@@ -2,9 +2,9 @@ import type { ValidComponent } from "solid-js"
 import { createSimpleContext } from "./helper"
 
 const ctx = createSimpleContext<ValidComponent, { component: ValidComponent }>({
-  name: "CodeComponent",
+  name: "FileComponent",
   init: (props) => props.component,
 })
 
-export const CodeComponentProvider = ctx.provider
-export const useCodeComponent = ctx.use
+export const FileComponentProvider = ctx.provider
+export const useFileComponent = ctx.use
