@@ -4,7 +4,7 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { useParams } from "@solidjs/router"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
+import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Mark } from "@opencode-ai/ui/logo"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
@@ -246,7 +246,12 @@ export function SessionSidePanel(props: {
                       <Tabs.Trigger
                         value="context"
                         closeButton={
-                          <Tooltip value={language.t("common.closeTab")} placement="bottom" gutter={10}>
+                          <TooltipKeybind
+                            title={language.t("common.closeTab")}
+                            keybind={command.keybind("tab.close")}
+                            placement="bottom"
+                            gutter={10}
+                          >
                             <IconButton
                               icon="close-small"
                               variant="ghost"
@@ -254,7 +259,7 @@ export function SessionSidePanel(props: {
                               onClick={() => tabs().close("context")}
                               aria-label={language.t("common.closeTab")}
                             />
-                          </Tooltip>
+                          </TooltipKeybind>
                         }
                         hideCloseButton
                         onMiddleClick={() => tabs().close("context")}
