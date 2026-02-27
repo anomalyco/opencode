@@ -9,6 +9,7 @@ import { Agent } from "../agent/agent"
 import { SessionPrompt } from "../session/prompt"
 import { Identifier } from "../id/id"
 import { Bus } from "../bus"
+import { Provider } from "../provider/provider"
 import type { MessageV2 } from "../session/message-v2"
 
 const TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
@@ -87,10 +88,7 @@ export const TeamTool = Tool.define("team", async () => {
           })
           await Team.join(team.id, teammate.id)
 
-          const model = {
-            modelID: agent.model?.modelID ?? "default",
-            providerID: agent.model?.providerID ?? "default",
-          }
+          const model = agent.model ?? (await Provider.defaultModel())
 
           const promise = withTimeout(
             runTeammate({
@@ -292,7 +290,7 @@ async function wakeForMessage(sessionID: string, teamID: string): Promise<string
   if (!last) return ""
 
   const isUserMessage = (msg: MessageV2.Info): msg is MessageV2.User => msg.role === "user"
-  const model = isUserMessage(last.info) ? last.info.model : { modelID: "default", providerID: "default" }
+  const model = isUserMessage(last.info) ? last.info.model : await Provider.defaultModel()
   const agentName = last.info.agent ?? "build"
 
   const pendingMsgs = TeamMessage.pending(sessionID, teamID)
