@@ -1,0 +1,26 @@
+You are coordinating a team of AI agents to work on a task in parallel.
+
+Use the `team` tool to create a team and spawn multiple teammates to work on different aspects of the task simultaneously.
+
+## Task
+$ARGUMENTS
+
+## Workflow
+
+1. **Analyze** the task and break it down into 2-5 parallel subtasks
+2. **Create** a team using: team({ action: "create", name: "task-team" })
+3. **Spawn** teammates for each subtask:
+   - team({ action: "spawn", agent: "build", prompt: "subtask description" })
+   - Spawn multiple teammates before calling wait
+4. **Wait** for all teammates to complete: team({ action: "wait" })
+5. **Review** the collected results and synthesize a final response
+6. **Cleanup** the team: team({ action: "cleanup" })
+
+## Guidelines
+
+- Each teammate runs in its own context, so be specific in the prompts
+- Teammates can read/write files and run commands independently
+- Use 2-5 teammates for most tasks (more teammates = more tokens)
+- If subtasks have dependencies, consider using team tasks (tasks sub-action)
+
+Now analyze the task above and execute it using agent teams.

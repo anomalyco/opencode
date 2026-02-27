@@ -5,6 +5,7 @@ import { Instance } from "../project/instance"
 import { Identifier } from "../id/id"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
+import PROMPT_TEAM from "./template/team.txt"
 import { MCP } from "../mcp"
 import { Skill } from "../skill"
 
@@ -54,6 +55,7 @@ export namespace Command {
   export const Default = {
     INIT: "init",
     REVIEW: "review",
+    TEAM: "team",
   } as const
 
   const state = Instance.state(async () => {
@@ -78,6 +80,15 @@ export namespace Command {
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
+      },
+      [Default.TEAM]: {
+        name: Default.TEAM,
+        description: "use agent teams to execute task in parallel",
+        source: "command",
+        get template() {
+          return PROMPT_TEAM
+        },
+        hints: hints(PROMPT_TEAM),
       },
     }
 
