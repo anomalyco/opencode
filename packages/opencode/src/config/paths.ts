@@ -6,6 +6,7 @@ import { NamedError } from "@opencode-ai/util/error"
 import { Filesystem } from "@/util/filesystem"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
+import { $ } from "bun"
 
 export namespace ConfigPaths {
   export async function projectFiles(name: string, directory: string, worktree: string) {
@@ -81,11 +82,48 @@ export namespace ConfigPaths {
     return typeof input === "string" ? path.dirname(input) : input.dir
   }
 
-  /** Apply {env:VAR} and {file:path} substitutions to config text. */
+  /** Apply {env:VAR}, {file:path}, and {cmd:command} substitutions to config text. */
   async function substitute(text: string, input: ParseSource, missing: "error" | "empty" = "error") {
     text = text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
       return process.env[varName] || ""
     })
+
+    const cmdMatches = Array.from(text.matchAll(/\{cmd:[^}]+\}/g))
+    if (cmdMatches.length) {
+      const configSource = source(input)
+      let out = ""
+      let cursor = 0
+
+      for (const match of cmdMatches) {
+        const token = match[0]
+        const index = match.index!
+        out += text.slice(cursor, index)
+
+        const lineStart = text.lastIndexOf("\n", index - 1) + 1
+        const prefix = text.slice(lineStart, index).trimStart()
+        if (prefix.startsWith("//")) {
+          out += token
+          cursor = index + token.length
+          continue
+        }
+
+        const command = token.replace(/^\{cmd:/, "").replace(/\}$/, "")
+        const cmdResult = await $`${{ raw: command }}`.quiet().nothrow()
+        if (cmdResult.exitCode !== 0) {
+          throw new InvalidError({
+            path: configSource,
+            message: `bad command reference: "${token}" command failed with exit code ${cmdResult.exitCode}: ${cmdResult.stderr}`,
+          })
+        }
+
+        const cmdOutput = cmdResult.stdout.toString().trim()
+        out += JSON.stringify(cmdOutput).slice(1, -1)
+        cursor = index + token.length
+      }
+
+      out += text.slice(cursor)
+      text = out
+    }
 
     const fileMatches = Array.from(text.matchAll(/\{file:[^}]+\}/g))
     if (!fileMatches.length) return text

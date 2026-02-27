@@ -633,7 +633,7 @@ Experimental options are not stable. They may change or be removed without notic
 
 ## Variables
 
-You can use variable substitution in your config files to reference environment variables and file contents.
+You can use variable substitution in your config files to reference environment variables, file contents, and command output.
 
 ---
 
@@ -688,3 +688,30 @@ These are useful for:
 - Keeping sensitive data like API keys in separate files.
 - Including large instruction files without cluttering your config.
 - Sharing common configuration snippets across multiple config files.
+
+---
+
+### Commands
+
+Use `{cmd:command}` to substitute the output of a shell command:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "github": {
+      "options": {
+        "token": "{cmd:gh auth token}"
+      }
+    }
+  }
+}
+```
+
+The command is executed at config load time and its stdout is embedded into the config. Commands are useful for:
+
+- Retrieving secrets from password managers (e.g., `op read`, `bw get password`)
+- Getting dynamic values from CLI tools (e.g., `gh auth token`, `aws configure get`)
+- Integrating with external credential providers
+
+The command must exit with code 0. If it fails, opencode will throw an error with the command's stderr.

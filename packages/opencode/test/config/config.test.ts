@@ -1883,4 +1883,85 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
       }
     }
   })
+
+  test("substitutes {cmd:} tokens in OPENCODE_CONFIG_CONTENT", async () => {
+    const originalEnv = process.env["OPENCODE_CONFIG_CONTENT"]
+
+    try {
+      process.env["OPENCODE_CONFIG_CONTENT"] = JSON.stringify({
+        $schema: "https://opencode.ai/config.json",
+        username: "{cmd:echo hello_from_command}",
+      })
+
+      await using tmp = await tmpdir()
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          expect(config.username).toBe("hello_from_command")
+        },
+      })
+    } finally {
+      if (originalEnv !== undefined) {
+        process.env["OPENCODE_CONFIG_CONTENT"] = originalEnv
+      } else {
+        delete process.env["OPENCODE_CONFIG_CONTENT"]
+      }
+    }
+  })
+
+  test("substitutes multiple {cmd:} tokens in OPENCODE_CONFIG_CONTENT", async () => {
+    const originalEnv = process.env["OPENCODE_CONFIG_CONTENT"]
+
+    try {
+      process.env["OPENCODE_CONFIG_CONTENT"] = JSON.stringify({
+        $schema: "https://opencode.ai/config.json",
+        username: "{cmd:echo first}",
+        model: "{cmd:echo provider/second}",
+      })
+
+      await using tmp = await tmpdir()
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          expect(config.username).toBe("first")
+          expect(config.model).toBe("provider/second")
+        },
+      })
+    } finally {
+      if (originalEnv !== undefined) {
+        process.env["OPENCODE_CONFIG_CONTENT"] = originalEnv
+      } else {
+        delete process.env["OPENCODE_CONFIG_CONTENT"]
+      }
+    }
+  })
+
+  test("throws error for failed {cmd:} command", async () => {
+    const originalEnv = process.env["OPENCODE_CONFIG_CONTENT"]
+
+    try {
+      process.env["OPENCODE_CONFIG_CONTENT"] = JSON.stringify({
+        $schema: "https://opencode.ai/config.json",
+        username: "{cmd:exit 1}",
+      })
+
+      await using tmp = await tmpdir()
+      await expect(
+        Instance.provide({
+          directory: tmp.path,
+          fn: async () => {
+            await Config.get()
+          },
+        }),
+      ).rejects.toThrow(/bad command reference/)
+    } finally {
+      if (originalEnv !== undefined) {
+        process.env["OPENCODE_CONFIG_CONTENT"] = originalEnv
+      } else {
+        delete process.env["OPENCODE_CONFIG_CONTENT"]
+      }
+    }
+  })
 })
