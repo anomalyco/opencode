@@ -215,7 +215,10 @@ export const AuthListCommand = cmd({
     const results = Object.entries(await Auth.all())
     const database = await ModelsDev.get()
 
-    const rawAuth = await Filesystem.readJson<Record<string, unknown>>(authPath).catch(() => ({}))
+    const rawAuth = (await Filesystem.readJson<Record<string, unknown>>(authPath).catch(() => ({}))) as Record<
+      string,
+      unknown
+    >
     if (rawAuth.$schema) {
       prompts.log.info(`Schema ${UI.Style.TEXT_DIM}${rawAuth.$schema}`)
     }
