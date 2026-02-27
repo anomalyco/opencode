@@ -245,16 +245,15 @@ export async function handler(
                 dataDumper?.flush()
                 await rateLimiter?.track()
                 const usage = usageParser.retrieve()
-                let cost = "0"
                 if (usage) {
                   const usageInfo = providerInfo.normalizeUsage(usage)
                   const costInfo = calculateCost(modelInfo, usageInfo)
                   await trialLimiter?.track(usageInfo)
                   await trackUsage(sessionId, billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
                   await reload(billingSource, authInfo, costInfo)
-                  cost = calculateOccuredCost(billingSource, costInfo)
+                  const cost = calculateOccuredCost(billingSource, costInfo)
+                  c.enqueue(encoder.encode(usageParser.buidlCostChunk(cost)))
                 }
-                c.enqueue(encoder.encode(usageParser.buidlCostChunk(cost)))
                 c.close()
                 return
               }
