@@ -1,6 +1,12 @@
-[data-component="diff"] {
+[data-component="file"] {
   content-visibility: auto;
+}
 
+[data-component="file"][data-mode="text"] {
+  overflow: hidden;
+}
+
+[data-component="file"][data-mode="diff"] {
   [data-slot="diff-hunk-separator-line-number"] {
     position: sticky;
     left: 0;
@@ -17,6 +23,7 @@
       color: var(--icon-strong-base);
     }
   }
+
   [data-slot="diff-hunk-separator-content"] {
     position: sticky;
     background-color: var(--surface-diff-hidden-base);
