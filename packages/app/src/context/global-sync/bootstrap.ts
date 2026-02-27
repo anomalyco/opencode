@@ -36,6 +36,9 @@ export async function bootstrapGlobal(input: {
   connectErrorTitle: string
   connectErrorDescription: string
   requestFailedTitle: string
+  unknownError: string
+  invalidConfigurationError: string
+  formatMoreCount: (count: number) => string
   setGlobalStore: SetStoreFunction<GlobalStore>
 }) {
   const health = await input.globalSDK.global
@@ -88,8 +91,11 @@ export async function bootstrapGlobal(input: {
   const results = await Promise.allSettled(tasks)
   const errors = results.filter((r): r is PromiseRejectedResult => r.status === "rejected").map((r) => r.reason)
   if (errors.length) {
-    const message = errors[0] instanceof Error ? errors[0].message : String(errors[0])
-    const more = errors.length > 1 ? ` (+${errors.length - 1} more)` : ""
+    const message = formatServerError(errors[0], {
+      unknown: input.unknownError,
+      invalidConfiguration: input.invalidConfigurationError,
+    })
+    const more = errors.length > 1 ? input.formatMoreCount(errors.length - 1) : ""
     showToast({
       variant: "error",
       title: input.requestFailedTitle,
@@ -116,6 +122,8 @@ export async function bootstrapDirectory(input: {
   setStore: SetStoreFunction<State>
   vcsCache: VcsCache
   loadSessions: (directory: string) => Promise<void> | void
+  unknownError: string
+  invalidConfigurationError: string
 }) {
   if (input.store.status !== "complete") input.setStore("status", "loading")
 
@@ -137,7 +145,10 @@ export async function bootstrapDirectory(input: {
     showToast({
       variant: "error",
       title: `Failed to reload ${project}`,
-      description: formatServerError(err),
+      description: formatServerError(err, {
+        unknown: input.unknownError,
+        invalidConfiguration: input.invalidConfigurationError,
+      }),
     })
     input.setStore("status", "partial")
     return

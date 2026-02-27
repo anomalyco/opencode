@@ -7,6 +7,9 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "Änderungen der letzten Runde",
   "ui.sessionReview.diffStyle.unified": "Vereinheitlicht",
   "ui.sessionReview.diffStyle.split": "Geteilt",
+  "ui.sessionReview.openFile": "Datei öffnen",
+  "ui.sessionReview.selection.line": "Zeile {{line}}",
+  "ui.sessionReview.selection.lines": "Zeilen {{start}}-{{end}}",
   "ui.sessionReview.expandAll": "Alle erweitern",
   "ui.sessionReview.collapseAll": "Alle reduzieren",
 
@@ -58,6 +61,13 @@ export const dict = {
   "ui.sessionTurn.status.gatheringThoughts": "Gedanken sammeln",
   "ui.sessionTurn.status.consideringNextSteps": "Nächste Schritte erwägen",
 
+  "ui.messagePart.questions.dismissed": "Fragen verworfen",
+  "ui.messagePart.context.read.one": "{{count}} Lesevorgang",
+  "ui.messagePart.context.read.other": "{{count}} Lesevorgänge",
+  "ui.messagePart.context.search.one": "{{count}} Suche",
+  "ui.messagePart.context.search.other": "{{count}} Suchen",
+  "ui.messagePart.context.list.one": "{{count}} Liste",
+  "ui.messagePart.context.list.other": "{{count}} Listen",
   "ui.messagePart.diagnostic.error": "Fehler",
   "ui.messagePart.title.edit": "Bearbeiten",
   "ui.messagePart.title.write": "Schreiben",
@@ -77,6 +87,7 @@ export const dict = {
   "ui.textField.copied": "Kopiert",
 
   "ui.imagePreview.alt": "Bildvorschau",
+  "ui.scrollView.ariaLabel": "scrollbarer Inhalt",
 
   "ui.tool.read": "Lesen",
   "ui.tool.loaded": "Geladen",

@@ -1,4 +1,4 @@
-export const dict = {
+export const dict: Record<string, string> = {
   "ui.sessionReview.title": "Session changes",
   "ui.sessionReview.title.lastTurn": "Last turn changes",
   "ui.sessionReview.diffStyle.unified": "Unified",
@@ -13,6 +13,9 @@ export const dict = {
   "ui.sessionReview.largeDiff.title": "Diff too large to render",
   "ui.sessionReview.largeDiff.meta": "Limit: {{limit}} changed lines. Current: {{current}} changed lines.",
   "ui.sessionReview.largeDiff.renderAnyway": "Render anyway",
+  "ui.sessionReview.openFile": "Open file",
+  "ui.sessionReview.selection.line": "line {{line}}",
+  "ui.sessionReview.selection.lines": "lines {{start}}-{{end}}",
 
   "ui.fileMedia.kind.image": "image",
   "ui.fileMedia.kind.audio": "audio",
@@ -59,6 +62,13 @@ export const dict = {
   "ui.messagePart.title.write": "Write",
   "ui.messagePart.option.typeOwnAnswer": "Type your own answer",
   "ui.messagePart.review.title": "Review your answers",
+  "ui.messagePart.questions.dismissed": "Questions dismissed",
+  "ui.messagePart.context.read.one": "{{count}} read",
+  "ui.messagePart.context.read.other": "{{count}} reads",
+  "ui.messagePart.context.search.one": "{{count}} search",
+  "ui.messagePart.context.search.other": "{{count}} searches",
+  "ui.messagePart.context.list.one": "{{count}} list",
+  "ui.messagePart.context.list.other": "{{count}} lists",
 
   "ui.list.loading": "Loading",
   "ui.list.empty": "No results",
@@ -73,6 +83,7 @@ export const dict = {
   "ui.textField.copied": "Copied",
 
   "ui.imagePreview.alt": "Image preview",
+  "ui.scrollView.ariaLabel": "scrollable content",
 
   "ui.tool.read": "Read",
   "ui.tool.loaded": "Loaded",

@@ -7,6 +7,9 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "上一轮变更",
   "ui.sessionReview.diffStyle.unified": "统一",
   "ui.sessionReview.diffStyle.split": "拆分",
+  "ui.sessionReview.openFile": "打开文件",
+  "ui.sessionReview.selection.line": "第 {{line}} 行",
+  "ui.sessionReview.selection.lines": "第 {{start}}-{{end}} 行",
   "ui.sessionReview.expandAll": "全部展开",
   "ui.sessionReview.collapseAll": "全部收起",
   "ui.sessionReview.change.added": "已添加",
@@ -57,6 +60,13 @@ export const dict = {
   "ui.sessionTurn.status.gatheringThoughts": "正在整理思路",
   "ui.sessionTurn.status.consideringNextSteps": "正在考虑下一步",
 
+  "ui.messagePart.questions.dismissed": "问题已忽略",
+  "ui.messagePart.context.read.one": "{{count}} 次读取",
+  "ui.messagePart.context.read.other": "{{count}} 次读取",
+  "ui.messagePart.context.search.one": "{{count}} 次搜索",
+  "ui.messagePart.context.search.other": "{{count}} 次搜索",
+  "ui.messagePart.context.list.one": "{{count}} 个列表",
+  "ui.messagePart.context.list.other": "{{count}} 个列表",
   "ui.messagePart.diagnostic.error": "错误",
   "ui.messagePart.title.edit": "编辑",
   "ui.messagePart.title.write": "写入",
@@ -76,6 +86,7 @@ export const dict = {
   "ui.textField.copied": "已复制",
 
   "ui.imagePreview.alt": "图片预览",
+  "ui.scrollView.ariaLabel": "可滚动内容",
 
   "ui.tool.read": "读取",
   "ui.tool.loaded": "已加载",
