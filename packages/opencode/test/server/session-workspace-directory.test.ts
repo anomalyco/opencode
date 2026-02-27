@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import path from "node:path"
 import { Session } from "../../src/session"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
@@ -33,7 +34,7 @@ describe("session.workspaceDirectory endpoint", () => {
         }
         expect(body.added).toBe(true)
         expect(body.directory).toBe(outside.path)
-        expect(body.glob.endsWith("/*")).toBe(true)
+        expect(body.glob).toBe(path.join(outside.path, "*"))
         expect(body.session.id).toBe(session.id)
 
         const second = await app.request(
