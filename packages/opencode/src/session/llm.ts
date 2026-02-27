@@ -180,7 +180,7 @@ export namespace LLM {
         })
       },
       async experimental_repairToolCall(failed) {
-        const lower = failed.toolCall.toolName.toLowerCase()
+        const lower = failed.toolCall.toolName.trim().toLowerCase()
         if (lower !== failed.toolCall.toolName && tools[lower]) {
           l.info("repairing tool call", {
             tool: failed.toolCall.toolName,
