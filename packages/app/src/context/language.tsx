@@ -57,6 +57,10 @@ export type Locale =
 type RawDictionary = typeof en & typeof uiEn
 type Dictionary = i18n.Flatten<RawDictionary>
 
+function cookie(locale: Locale) {
+  return `oc_locale=${encodeURIComponent(locale)}; Path=/; Max-Age=31536000; SameSite=Lax`
+}
+
 const LOCALES: readonly Locale[] = [
   "en",
   "zh",
@@ -170,6 +174,10 @@ function detectLocale(): Locale {
   return "en"
 }
 
+function normalizeLocale(value: string): Locale {
+  return LOCALES.includes(value as Locale) ? (value as Locale) : "en"
+}
+
 export const { use: useLanguage, provider: LanguageProvider } = createSimpleContext({
   name: "Language",
   init: () => {
@@ -180,15 +188,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       }),
     )
 
-    const locale = createMemo<Locale>(() =>
-      LOCALES.includes(store.locale as Locale) ? (store.locale as Locale) : "en",
-    )
-
-    createEffect(() => {
-      const current = locale()
-      if (store.locale === current) return
-      setStore("locale", current)
-    })
+    const locale = createMemo<Locale>(() => normalizeLocale(store.locale))
 
     const dict = createMemo<Dictionary>(() => DICT[locale()])
 
@@ -199,6 +199,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     createEffect(() => {
       if (typeof document !== "object") return
       document.documentElement.lang = locale()
+      document.cookie = cookie(locale())
     })
 
     return {
@@ -208,7 +209,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       label,
       t,
       setLocale(next: Locale) {
-        setStore("locale", next)
+        setStore("locale", normalizeLocale(next))
       },
     }
   },

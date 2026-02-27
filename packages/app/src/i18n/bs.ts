@@ -69,6 +69,8 @@ export const dict = {
   "command.agent.cycle.reverse.description": "Prebaci na prethodnog agenta",
   "command.model.variant.cycle": "Promijeni nivo razmišljanja",
   "command.model.variant.cycle.description": "Prebaci na sljedeći nivo",
+  "command.prompt.mode.shell": "Shell",
+  "command.prompt.mode.normal": "Prompt",
   "command.permissions.autoaccept.enable": "Automatski prihvataj izmjene",
   "command.permissions.autoaccept.disable": "Zaustavi automatsko prihvatanje izmjena",
   "command.workspace.toggle": "Prikaži/sakrij radne prostore",
@@ -98,7 +100,7 @@ export const dict = {
   "dialog.provider.tag.recommended": "Preporučeno",
   "dialog.provider.opencode.note": "Kurirani modeli uključujući Claude, GPT, Gemini i druge",
   "dialog.provider.anthropic.note": "Direktan pristup Claude modelima, uključujući Pro i Max",
-  "dialog.provider.copilot.note": "Claude modeli za pomoć pri kodiranju",
+  "dialog.provider.copilot.note": "AI modeli za pomoć pri kodiranju putem GitHub Copilot",
   "dialog.provider.openai.note": "GPT modeli za brze, sposobne opšte AI zadatke",
   "dialog.provider.google.note": "Gemini modeli za brze, strukturirane odgovore",
   "dialog.provider.openrouter.note": "Pristup svim podržanim modelima preko jednog provajdera",
@@ -224,9 +226,11 @@ export const dict = {
 
   "prompt.placeholder.shell": "Unesi shell naredbu...",
   "prompt.placeholder.normal": 'Pitaj bilo šta... "{{example}}"',
+  "prompt.placeholder.simple": "Pitaj bilo šta...",
   "prompt.placeholder.summarizeComments": "Sažmi komentare…",
   "prompt.placeholder.summarizeComment": "Sažmi komentar…",
   "prompt.mode.shell": "Shell",
+  "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "esc za izlaz",
 
   "prompt.example.1": "Popravi TODO u bazi koda",
@@ -505,6 +509,9 @@ export const dict = {
   "session.messages.jumpToLatest": "Idi na najnovije",
 
   "session.context.addToContext": "Dodaj {{selection}} u kontekst",
+  "session.todo.title": "Zadaci",
+  "session.todo.collapse": "Sažmi",
+  "session.todo.expand": "Proširi",
 
   "session.new.worktree.main": "Glavna grana",
   "session.new.worktree.mainWithBranch": "Glavna grana ({{branch}})",
@@ -576,6 +583,7 @@ export const dict = {
   "sidebar.gettingStarted.line2": "Poveži bilo kojeg provajdera da koristiš modele, npr. Claude, GPT, Gemini itd.",
   "sidebar.project.recentSessions": "Nedavne sesije",
   "sidebar.project.viewAllSessions": "Prikaži sve sesije",
+  "sidebar.project.clearNotifications": "Očisti obavijesti",
 
   "app.name.desktop": "OpenCode Desktop",
 
@@ -591,6 +599,7 @@ export const dict = {
   "settings.general.section.notifications": "Sistemske obavijesti",
   "settings.general.section.updates": "Ažuriranja",
   "settings.general.section.sounds": "Zvučni efekti",
+  "settings.general.section.feed": "Feed",
   "settings.general.section.display": "Prikaz",
 
   "settings.general.row.language.title": "Jezik",
@@ -602,6 +611,12 @@ export const dict = {
   "settings.general.row.font.title": "Font",
   "settings.general.row.font.description": "Prilagodi monospace font koji se koristi u blokovima koda",
 
+  "settings.general.row.shellToolPartsExpanded.title": "Proširi dijelove shell alata",
+  "settings.general.row.shellToolPartsExpanded.description":
+    "Prikaži dijelove shell alata podrazumijevano proširene na vremenskoj traci",
+  "settings.general.row.editToolPartsExpanded.title": "Proširi dijelove alata za uređivanje",
+  "settings.general.row.editToolPartsExpanded.description":
+    "Prikaži dijelove alata za uređivanje, pisanje i patch podrazumijevano proširene na vremenskoj traci",
   "settings.general.row.wayland.title": "Koristi nativni Wayland",
   "settings.general.row.wayland.description": "Onemogući X11 fallback na Waylandu. Zahtijeva restart.",
   "settings.general.row.wayland.tooltip":
@@ -630,6 +645,8 @@ export const dict = {
   "font.option.robotoMono": "Roboto Mono",
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
+  "font.option.geistMono": "Geist Mono",
+  "sound.option.none": "Nijedan",
   "sound.option.alert01": "Upozorenje 01",
   "sound.option.alert02": "Upozorenje 02",
   "sound.option.alert03": "Upozorenje 03",

@@ -178,7 +178,30 @@ export default defineConfig({
         "network",
         "enterprise",
         "troubleshooting",
-        "windows-wsl",
+        {
+          label: "Windows",
+          translations: {
+            en: "Windows",
+            ar: "Windows",
+            "bs-BA": "Windows",
+            "da-DK": "Windows",
+            "de-DE": "Windows",
+            "es-ES": "Windows",
+            "fr-FR": "Windows",
+            "it-IT": "Windows",
+            "ja-JP": "Windows",
+            "ko-KR": "Windows",
+            "nb-NO": "Windows",
+            "pl-PL": "Windows",
+            "pt-BR": "Windows",
+            "ru-RU": "Windows",
+            "th-TH": "Windows",
+            "tr-TR": "Windows",
+            "zh-CN": "Windows",
+            "zh-TW": "Windows",
+          },
+          link: "windows-wsl",
+        },
         {
           label: "Usage",
           translations: {
@@ -291,7 +314,7 @@ function configSchema() {
     hooks: {
       "astro:build:done": async () => {
         console.log("generating config schema")
-        spawnSync("../opencode/script/schema.ts", ["./dist/config.json"])
+        spawnSync("../opencode/script/schema.ts", ["./dist/config.json", "./dist/tui.json"])
       },
     },
   }

@@ -2,8 +2,8 @@ import { defineConfig, devices } from "@playwright/test"
 
 const enabled = process.env.OPENCODE_RUN_PLAYWRIGHT === "1"
 const port = Number(process.env.PLAYWRIGHT_PORT ?? 3000)
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${port}`
-const serverHost = process.env.PLAYWRIGHT_SERVER_HOST ?? "localhost"
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${port}`
+const serverHost = process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"
 const serverPort = process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"
 const command = `bun run dev -- --host 0.0.0.0 --port ${port}`
 const reuse = !process.env.CI

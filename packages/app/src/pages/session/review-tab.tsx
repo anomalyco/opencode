@@ -143,9 +143,9 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
       open={props.view().review.open()}
       onOpenChange={props.view().review.setOpen}
       classes={{
-        root: props.classes?.root ?? "pb-6",
-        header: props.classes?.header ?? "px-6",
-        container: props.classes?.container ?? "px-6",
+        root: props.classes?.root ?? "pb-6 pr-3",
+        header: props.classes?.header ?? "px-3",
+        container: props.classes?.container ?? "pl-3",
       }}
       diffs={props.diffs()}
       diffStyle={props.diffStyle}

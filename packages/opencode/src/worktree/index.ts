@@ -7,7 +7,8 @@ import { Global } from "../global"
 import { Instance } from "../project/instance"
 import { InstanceBootstrap } from "../project/bootstrap"
 import { Project } from "../project/project"
-import { Storage } from "../storage/storage"
+import { Database, eq } from "../storage/db"
+import { ProjectTable } from "../project/project.sql"
 import { fn } from "../util/fn"
 import { Log } from "../util/log"
 import { BusEvent } from "@/bus/bus-event"
@@ -307,7 +308,8 @@ export namespace Worktree {
   }
 
   async function runStartScripts(directory: string, input: { projectID: string; extra?: string }) {
-    const project = await Storage.read<Project.Info>(["project", input.projectID]).catch(() => undefined)
+    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, input.projectID)).get())
+    const project = row ? Project.fromRow(row) : undefined
     const startup = project?.commands?.start?.trim() ?? ""
     const ok = await runStartScript(directory, startup, "project")
     if (!ok) return false

@@ -19,10 +19,11 @@ import { sleep } from "bun"
 const PROVIDER_PRIORITY: Record<string, number> = {
   "mammouth-ai": 0,
   opencode: 1,
-  anthropic: 2,
+  openai: 2,
   "github-copilot": 3,
-  openai: 4,
-  google: 5,
+  "opencode-go": 4,
+  anthropic: 5,
+  google: 6,
 }
 
 export function createDialogProviderOptions() {
@@ -41,6 +42,7 @@ export function createDialogProviderOptions() {
           anthropic: "(Claude Max or API key)",
           "mammouth-ai": "(Mammouth API key)",
           openai: "(ChatGPT Plus/Pro or API key)",
+          "opencode-go": "(Low cost)",
         }[provider.id],
         category: provider.id == "mammouth-ai" ? "Mammouth AI" : provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
         async onSelect() {

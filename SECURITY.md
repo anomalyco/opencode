@@ -2,6 +2,12 @@
 
 This security file is unrelated to the changes that Mammouth AI made to this fork of OpenCode. It's provided here as is, straight from the original OpenCode repository, for your reference. For any questions about the security of OpenCode, please refer to the original OpenCode repository and its maintainers.
 
+## IMPORTANT
+
+We do not accept AI generated security reports. We receive a large number of
+these and we absolutely do not have the resources to review them all. If you
+submit one that will be an automatic ban from the project.
+
 ## Threat Model
 
 ### Overview
