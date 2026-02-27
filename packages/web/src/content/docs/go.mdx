@@ -71,22 +71,22 @@ The list of models may change as we test and add new ones.
 
 ## Usage limits
 
-Go includes generous usage limits with three tiers:
+OpenCode Go includes the following limits:
 
-- **5 hour limit** — $4 worth of usage
-- **Weekly limit** — $10 worth of usage
-- **Monthly limit** — $20 worth of usage
+- **5 hour limit** — $4 of usage
+- **Weekly limit** — $10 of usage
+- **Monthly limit** — $20 of usage
 
-To give you an idea of the limit in terms of tokens, $20 roughly gets you:
+In terms of tokens, $20 of usage is roughly equivalent to:
 
-- 69 million GLM 5 tokens
+- 69 million GLM-5 tokens
 - 121 million Kimi K2.5 tokens
 - 328 million MiniMax M2.5 tokens
 
 You can view your current usage in the **<a href={console}>console</a>**.
 
 :::tip
-If you hit a usage limit, you can continue using the free models available.
+If you reach a usage limit, you can continue using the free models available.
 :::
 
 Usage limits may change as we learn from early usage and feedback.
@@ -99,7 +99,7 @@ Below are the prices **per 1M tokens**.
 
 | Model        | Input | Output | Cached Read |
 | ------------ | ----- | ------ | ----------- |
-| GLM 5        | $1.00 | $3.20  | $0.20       |
+| GLM-5        | $1.00 | $3.20  | $0.20       |
 | Kimi K2.5    | $0.60 | $3.00  | $0.10       |
 | MiniMax M2.5 | $0.30 | $1.20  | $0.03       |
 
@@ -119,7 +119,7 @@ You can also access Go models through the following API endpoints.
 
 | Model        | Model ID     | Endpoint                                         | AI SDK Package              |
 | ------------ | ------------ | ------------------------------------------------ | --------------------------- |
-| GLM 5        | glm-5        | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| GLM-5        | glm-5        | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.5    | kimi-k2.5    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiniMax M2.5 | minimax-m2.5 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
