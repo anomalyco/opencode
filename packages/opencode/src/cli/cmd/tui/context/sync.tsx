@@ -25,7 +25,7 @@ import { createSimpleContext } from "./helper"
 import type { Snapshot } from "@/snapshot"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
-import { batch, onMount } from "solid-js"
+import { batch, onCleanup, onMount } from "solid-js"
 import { Log } from "@/util/log"
 import type { Path } from "@opencode-ai/sdk"
 
@@ -109,8 +109,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     // Collapses N deltas per part per flush into 1 setStore() call.
     const pending: Record<string, Record<string, Record<string, string>>> = {}
     let scheduled = false
+    let disposed = false
 
     function flushDeltas() {
+      if (disposed) return
       for (const messageID in pending) {
         const parts = store.part[messageID]
         if (!parts) {
@@ -138,6 +140,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         delete pending[messageID]
       }
     }
+
+    onCleanup(() => {
+      disposed = true
+      for (const key in pending) delete pending[key]
+    })
 
     sdk.event.listen((e) => {
       const event = e.details
