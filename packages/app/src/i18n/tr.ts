@@ -143,7 +143,8 @@ export const dict = {
   "provider.connect.opencodeZen.visit.prefix": "",
   "provider.connect.opencodeZen.visit.link": "opencode.ai/zen",
   "provider.connect.opencodeZen.visit.suffix": " adresini ziyaret ederek API anahtarınızı alın.",
-  "provider.connect.oauth.code.visit.prefix": "Hesabınızı bağlamak ve OpenCode'da {{provider}} modellerini kullanmak için ",
+  "provider.connect.oauth.code.visit.prefix":
+    "Hesabınızı bağlamak ve OpenCode'da {{provider}} modellerini kullanmak için ",
   "provider.connect.oauth.code.visit.link": "bu bağlantıya",
   "provider.connect.oauth.code.visit.suffix": " tıklayarak yetkilendirme kodunuzu alın.",
   "provider.connect.oauth.code.label": "{{method}} yetkilendirme kodu",
@@ -171,7 +172,8 @@ export const dict = {
   "provider.custom.field.baseURL.placeholder": "https://api.saglayicim.com/v1",
   "provider.custom.field.apiKey.label": "API anahtarı",
   "provider.custom.field.apiKey.placeholder": "API anahtarı",
-  "provider.custom.field.apiKey.description": "İsteğe bağlı. Kimlik doğrulamayı başlıklar ile yönetiyorsanız boş bırakın.",
+  "provider.custom.field.apiKey.description":
+    "İsteğe bağlı. Kimlik doğrulamayı başlıklar ile yönetiyorsanız boş bırakın.",
   "provider.custom.models.label": "Modeller",
   "provider.custom.models.id.label": "Kimlik",
   "provider.custom.models.id.placeholder": "model-kimlik",
@@ -466,12 +468,14 @@ export const dict = {
   "error.chain.didYouMean": "Bunu mu demek istediniz: {{suggestions}}",
   "error.chain.modelNotFound": "Model bulunamadı: {{provider}}/{{model}}",
   "error.chain.checkConfig": "Yapılandırma dosyanızı (opencode.json) sağlayıcı/model adlarını kontrol edin",
-  "error.chain.mcpFailed": 'MCP sunucusu "{{name}}" başarısız oldu. Not: OpenCode henüz MCP kimlik doğrulamasını desteklemiyor.',
+  "error.chain.mcpFailed":
+    'MCP sunucusu "{{name}}" başarısız oldu. Not: OpenCode henüz MCP kimlik doğrulamasını desteklemiyor.',
   "error.chain.providerAuthFailed": "Sağlayıcı kimlik doğrulaması başarısız ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
     '"{{provider}}" sağlayıcısı başlatılamadı. Kimlik bilgilerini ve yapılandırmayı kontrol edin.',
   "error.chain.configJsonInvalid": "{{path}} adresindeki yapılandırma dosyası geçerli JSON(C) değil",
-  "error.chain.configJsonInvalidWithMessage": "{{path}} adresindeki yapılandırma dosyası geçerli JSON(C) değil: {{message}}",
+  "error.chain.configJsonInvalidWithMessage":
+    "{{path}} adresindeki yapılandırma dosyası geçerli JSON(C) değil: {{message}}",
   "error.chain.configDirectoryTypo":
     '"{{dir}}" dizini {{path}} içinde geçerli değil. Dizini "{{suggestion}}" olarak yeniden adlandırın veya kaldırın. Bu yaygın bir yazım hatasıdır.',
   "error.chain.configFrontmatterError": "{{path}} içindeki ön bilgi ayrıştırılamadı:\n{{message}}",
@@ -541,8 +545,7 @@ export const dict = {
   "status.popover.action.manageServers": "Sunucuları yönet",
 
   "session.share.popover.title": "Web'de yayınla",
-  "session.share.popover.description.shared":
-    "Bu oturum web'de herkese açıktır. Bağlantıya sahip herkes erişebilir.",
+  "session.share.popover.description.shared": "Bu oturum web'de herkese açıktır. Bağlantıya sahip herkes erişebilir.",
   "session.share.popover.description.unshared":
     "Oturumu web'de herkese açık olarak paylaşın. Bağlantıya sahip herkes erişebilecek.",
   "session.share.action.share": "Paylaş",
@@ -628,7 +631,8 @@ export const dict = {
     "Zaman çizelgesinde düzenleme, yazma ve yama araç bileşenlerini varsayılan olarak genişletilmiş göster",
 
   "settings.general.row.wayland.title": "Yerel Wayland kullan",
-  "settings.general.row.wayland.description": "Wayland'da X11 geri dönüşünü devre dışı bırak. Yeniden başlatma gerektirir.",
+  "settings.general.row.wayland.description":
+    "Wayland'da X11 geri dönüşünü devre dışı bırak. Yeniden başlatma gerektirir.",
   "settings.general.row.wayland.tooltip":
     "Karışık yenileme hızlı monitörlere sahip Linux'ta yerel Wayland daha kararlı olabilir.",
 
