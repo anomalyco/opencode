@@ -953,17 +953,6 @@ export function Session() {
       },
     },
     {
-      title: "Go to child session",
-      value: "session.child.first",
-      keybind: "session_child_first",
-      category: "Session",
-      hidden: true,
-      onSelect: (dialog) => {
-        moveToFirstChild()
-        dialog.clear()
-      },
-    },
-    {
       title: "Go to first child session",
       value: "session.child.down",
       keybind: "session_child_down",
@@ -2039,12 +2028,10 @@ function Task(props: ToolProps<typeof TaskTool>) {
               }}
             </Show>
           </box>
-          <Show when={props.metadata.sessionId}>
-            <text fg={theme.text}>
-              {keybind.print("session_child_down")}
-              <span style={{ fg: theme.textMuted }}> view subagents</span>
-            </text>
-          </Show>
+          <text fg={theme.text}>
+            {keybind.print("session_child_down")}
+            <span style={{ fg: theme.textMuted }}> view subagents</span>
+          </text>
         </BlockTool>
       </Match>
       <Match when={true}>
