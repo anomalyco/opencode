@@ -44,4 +44,5 @@ export {
   shadesOfPurpleTheme,
   nightowlTheme,
   vesperTheme,
+  auroraTheme,
 } from "./default-themes"

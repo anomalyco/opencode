@@ -1,0 +1,318 @@
+/* ================================================================
+   Aurora Design System — "Code illuminated from within"
+   Digital luminescence: elements emit light on void-dark backgrounds
+   ================================================================ */
+
+/* ============================================================
+   1. AURORA GLOW SYSTEM — The soul of Aurora
+   Elements radiate light via box-shadow on interaction
+   ============================================================ */
+
+html[data-theme="aurora"] {
+  /* Glow tokens — reusable colored light emissions */
+  --glow-cyan: 0 0 20px -5px rgba(0, 212, 255, 0.35);
+  --glow-cyan-hover: 0 0 30px -5px rgba(0, 212, 255, 0.45), 0 0 0 1px rgba(0, 212, 255, 0.15);
+  --glow-cyan-focus: 0 0 30px -5px rgba(0, 212, 255, 0.5), 0 0 0 3px rgba(0, 212, 255, 0.2);
+  --glow-violet: 0 0 20px -5px rgba(167, 139, 250, 0.35);
+  --glow-violet-hover: 0 0 30px -5px rgba(167, 139, 250, 0.45), 0 0 0 1px rgba(167, 139, 250, 0.15);
+  --glow-rose: 0 0 20px -5px rgba(255, 107, 157, 0.35);
+  --glow-green: 0 0 20px -5px rgba(74, 222, 128, 0.35);
+  --glow-red: 0 0 16px -5px rgba(248, 113, 113, 0.4);
+  --glow-amber: 0 0 16px -5px rgba(255, 187, 51, 0.35);
+
+  /* Aurora spring easing — matches CSS approximation of spring physics */
+  --ease-aurora: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Aurora-specific font override: JetBrains Mono for code */
+  --font-family-mono: "JetBrains Mono", "JetBrains Mono Nerd Font", "IBM Plex Mono", monospace;
+}
+
+/* ============================================================
+   2. BUTTON GLOW — Buttons emit light on hover
+   ============================================================ */
+
+html[data-theme="aurora"] [data-component="button"][data-variant="primary"]:hover,
+html[data-theme="aurora"] [data-component="icon-button"][data-variant="primary"]:hover {
+  box-shadow: var(--glow-cyan-hover);
+  transition: box-shadow 0.25s var(--ease-aurora);
+}
+
+html[data-theme="aurora"] [data-component="button"][data-variant="primary"]:focus-visible,
+html[data-theme="aurora"] [data-component="icon-button"][data-variant="primary"]:focus-visible {
+  box-shadow: var(--glow-cyan-focus);
+}
+
+html[data-theme="aurora"] [data-component="button"][data-variant="secondary"]:hover,
+html[data-theme="aurora"] [data-component="icon-button"][data-variant="secondary"]:hover {
+  box-shadow: 0 0 16px -6px rgba(0, 212, 255, 0.2);
+  transition: box-shadow 0.25s var(--ease-aurora);
+}
+
+html[data-theme="aurora"] [data-component="button"][data-variant="danger"]:hover {
+  box-shadow: var(--glow-red);
+  transition: box-shadow 0.25s var(--ease-aurora);
+}
+
+/* ============================================================
+   3. INPUT GLOW — Inputs emit light on focus
+   ============================================================ */
+
+html[data-theme="aurora"] input:focus,
+html[data-theme="aurora"] textarea:focus,
+html[data-theme="aurora"] select:focus,
+html[data-theme="aurora"] [data-component="input"]:focus-within {
+  box-shadow: var(--glow-cyan-focus) !important;
+  border-color: rgba(0, 212, 255, 0.4) !important;
+  transition: box-shadow 0.25s var(--ease-aurora),
+              border-color 0.25s var(--ease-aurora);
+}
+
+/* ============================================================
+   4. COLOR-CODED MESSAGE BORDERS — Instant role parsing
+   User = cyan left border, Assistant = violet left border
+   ============================================================ */
+
+html[data-theme="aurora"] [data-component="user-message"] {
+  border-left: 2px solid rgba(0, 212, 255, 0.6);
+  padding-left: 12px;
+}
+
+html[data-theme="aurora"] [data-component="user-message"] [data-slot="user-message-text"] {
+  background: rgba(0, 212, 255, 0.04) !important;
+  border-color: rgba(0, 212, 255, 0.12) !important;
+}
+
+html[data-theme="aurora"] [data-slot="session-turn-assistant-content"] {
+  border-left: 2px solid rgba(167, 139, 250, 0.5);
+  padding-left: 12px;
+}
+
+/* ============================================================
+   5. PROSE WIDTH — Readability constraint on chat messages
+   ============================================================ */
+
+html[data-theme="aurora"] [data-component="markdown"] {
+  max-width: 70ch;
+}
+
+html[data-theme="aurora"] [data-slot="session-turn-assistant-content"] [data-component="markdown"] {
+  max-width: 70ch;
+}
+
+/* ============================================================
+   6. PROMPT INPUT HERO — The centerpiece of Aurora
+   Glass background + cyan glow on focus
+   ============================================================ */
+
+html[data-theme="aurora"] [data-dock-surface="shell"] {
+  background: rgba(14, 14, 20, 0.85) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(0, 212, 255, 0.08) !important;
+  border-radius: 16px !important;
+  transition: border-color 0.3s var(--ease-aurora),
+              box-shadow 0.3s var(--ease-aurora);
+  will-change: transform;
+}
+
+html[data-theme="aurora"] [data-dock-surface="shell"]:focus-within {
+  border-color: rgba(0, 212, 255, 0.3) !important;
+  box-shadow:
+    0 0 0 4px rgba(0, 212, 255, 0.1),
+    0 0 40px -10px rgba(0, 212, 255, 0.25),
+    0 20px 60px -15px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Send button glow — enhanced for Aurora */
+html[data-theme="aurora"] [data-dock-surface="shell"] [data-component="icon-button"][data-variant="primary"],
+html[data-theme="aurora"] [data-dock-surface="shell"] [data-component="button"][data-variant="primary"] {
+  box-shadow: 0 0 24px rgba(0, 212, 255, 0.3) !important;
+  border-radius: 12px !important;
+  transition: box-shadow 0.25s var(--ease-aurora);
+}
+
+html[data-theme="aurora"] [data-dock-surface="shell"] [data-component="icon-button"][data-variant="primary"]:hover,
+html[data-theme="aurora"] [data-dock-surface="shell"] [data-component="button"][data-variant="primary"]:hover {
+  box-shadow: 0 0 36px rgba(0, 212, 255, 0.5) !important;
+}
+
+/* ============================================================
+   7. GLASS EFFECTS — On fixed/overlay elements only
+   Sidebar, titlebar, dialogs — NOT on messages
+   ============================================================ */
+
+/* Sidebar glass */
+html[data-theme="aurora"] [data-component="layout-sidebar"],
+html[data-theme="aurora"] [data-slot="layout-sidebar"] {
+  background: rgba(7, 7, 16, 0.9) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border-right-color: rgba(0, 212, 255, 0.06) !important;
+}
+
+/* Titlebar glass */
+html[data-theme="aurora"] [data-component="session-header"],
+html[data-theme="aurora"] [data-component="titlebar"] {
+  background: rgba(7, 7, 16, 0.85) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border-bottom-color: rgba(0, 212, 255, 0.06) !important;
+}
+
+/* Dialog glass */
+html[data-theme="aurora"] [data-component="dialog"] [data-slot="dialog-content"] {
+  background: rgba(14, 14, 20, 0.95) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  box-shadow:
+    0 0 0 1px rgba(0, 212, 255, 0.08),
+    0 0 60px -10px rgba(0, 212, 255, 0.12),
+    0 24px 64px -16px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Popover/menu glass */
+html[data-theme="aurora"] [data-component="popover-content"],
+html[data-theme="aurora"] [data-component="dropdown-menu"],
+html[data-theme="aurora"] [data-component="context-menu"] {
+  background: rgba(14, 14, 20, 0.95) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  box-shadow:
+    0 0 0 1px rgba(0, 212, 255, 0.08),
+    0 16px 48px -8px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* ============================================================
+   8. CARD & COLLAPSIBLE GLOW — Hover feedback
+   ============================================================ */
+
+html[data-theme="aurora"] [data-component="collapsible"] > [data-slot="collapsible-trigger"]:hover {
+  background: rgba(0, 212, 255, 0.04) !important;
+}
+
+html[data-theme="aurora"] [data-component="edit-tool"] > [data-component="collapsible"],
+html[data-theme="aurora"] [data-component="write-tool"] > [data-component="collapsible"],
+html[data-theme="aurora"] [data-component="apply-patch-tool"] > [data-component="collapsible"] {
+  border-color: rgba(0, 212, 255, 0.08) !important;
+  transition: border-color 0.2s var(--ease-aurora),
+              box-shadow 0.2s var(--ease-aurora);
+}
+
+html[data-theme="aurora"] [data-component="edit-tool"] > [data-component="collapsible"]:hover,
+html[data-theme="aurora"] [data-component="write-tool"] > [data-component="collapsible"]:hover,
+html[data-theme="aurora"] [data-component="apply-patch-tool"] > [data-component="collapsible"]:hover {
+  border-color: rgba(0, 212, 255, 0.15) !important;
+  box-shadow: 0 0 20px -8px rgba(0, 212, 255, 0.15) !important;
+}
+
+/* ============================================================
+   9. PERMISSION PROMPT — Amber glow for warnings
+   ============================================================ */
+
+html[data-theme="aurora"] [data-component="tool-part-wrapper"][data-permission="true"] {
+  box-shadow:
+    0 0 0 1px rgba(255, 187, 51, 0.3),
+    0 0 20px -6px rgba(255, 187, 51, 0.2) !important;
+}
+
+/* ============================================================
+   10. AURORA KEYFRAMES — Cyan glow pulse + shimmer
+   ============================================================ */
+
+@keyframes aurora-pulse {
+  0%, 100% {
+    box-shadow: 0 0 8px 2px rgba(0, 212, 255, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 16px 4px rgba(0, 212, 255, 0.3);
+  }
+}
+
+@keyframes aurora-breathe {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Thinking indicator uses aurora pulse in aurora theme */
+html[data-theme="aurora"] [data-slot="session-turn-thinking"]::before {
+  background: #00D4FF !important;
+  box-shadow: 0 0 8px #00D4FF !important;
+  animation: aurora-pulse 2s ease-in-out infinite !important;
+}
+
+/* ============================================================
+   11. EMPTY STATE — Aurora radial glow
+   ============================================================ */
+
+html[data-theme="aurora"] [data-component="session-turn"] .size-full:has(> .text-20-medium) {
+  background: radial-gradient(
+    ellipse 60% 40% at 50% 60%,
+    rgba(0, 212, 255, 0.06),
+    rgba(167, 139, 250, 0.03) 50%,
+    transparent
+  ) !important;
+}
+
+/* ============================================================
+   12. ASSISTANT IDENTITY — Aurora cyan accent
+   ============================================================ */
+
+html[data-theme="aurora"] [data-slot="session-turn-assistant-content"]::before {
+  color: #00D4FF !important;
+}
+
+/* ============================================================
+   13. CODE BLOCKS — Deeper void with subtle cyan border
+   ============================================================ */
+
+html[data-theme="aurora"] [data-component="markdown"] .shiki,
+html[data-theme="aurora"] [data-component="markdown"] pre {
+  background: rgba(5, 5, 10, 0.6) !important;
+  border-color: rgba(0, 212, 255, 0.08) !important;
+}
+
+/* ============================================================
+   14. SCROLLBAR — Cyan-tinted thumb
+   ============================================================ */
+
+html[data-theme="aurora"] [data-slot="session-turn-content"]::-webkit-scrollbar-thumb {
+  background: rgba(0, 212, 255, 0.15) !important;
+}
+
+html[data-theme="aurora"] [data-slot="session-turn-content"]::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 212, 255, 0.25) !important;
+}
+
+html[data-theme="aurora"] [data-slot="session-turn-content"] {
+  scrollbar-color: rgba(0, 212, 255, 0.15) transparent !important;
+}
+
+/* ============================================================
+   15. TABS — Cyan active indicator
+   ============================================================ */
+
+html[data-theme="aurora"] [data-component="tabs"][data-variant="alt"] [data-slot="tabs-trigger-wrapper"]:has([data-selected]) {
+  border-bottom-color: #00D4FF !important;
+}
+
+/* ============================================================
+   16. SELECTION COLOR — Cyan tint
+   ============================================================ */
+
+html[data-theme="aurora"] ::selection {
+  background: rgba(0, 212, 255, 0.2);
+  color: inherit;
+}
+
+/* ============================================================
+   17. LINK HOVER — Violet glow
+   ============================================================ */
+
+html[data-theme="aurora"] [data-component="markdown"] a:hover {
+  text-shadow: 0 0 12px rgba(167, 139, 250, 0.4);
+  transition: text-shadow 0.2s var(--ease-aurora);
+}
