@@ -346,6 +346,7 @@
   position: relative;
   overflow: hidden;
 
+
   [data-slot="bash-copy"] {
     position: absolute;
     top: 4px;
@@ -649,6 +650,7 @@
 [data-component="reasoning-part"],
 [data-component="tool-error"],
 [data-component="tool-output"],
+[data-component="bash-output"],
 [data-component="edit-content"],
 [data-component="write-content"],
 [data-component="todos"],
