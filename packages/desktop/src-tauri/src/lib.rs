@@ -186,11 +186,13 @@ fn open_path(_app: AppHandle, path: String, app_name: Option<String>) -> Result<
     {
         let app_name = app_name.map(|v| os::windows::resolve_windows_app_path(&v).unwrap_or(v));
         let is_powershell = app_name.as_ref().is_some_and(|v| {
-            v.to_ascii_lowercase()
-                .replace('/', "\\")
-                .rsplit('\\')
-                .next()
-                .is_some_and(|name| name == "powershell" || name == "powershell.exe")
+            std::path::Path::new(v)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| {
+                    name.eq_ignore_ascii_case("powershell")
+                        || name.eq_ignore_ascii_case("powershell.exe")
+                })
         });
 
         if is_powershell {
