@@ -379,11 +379,58 @@ export default function Page() {
     })
   }
 
+  const updateCommentInContext = (input: {
+    id: string
+    file: string
+    selection: SelectedLineRange
+    comment: string
+    preview?: string
+  }) => {
+    comments.update(input.file, input.id, input.comment)
+    prompt.context.updateComment(input.file, input.id, {
+      comment: input.comment,
+      ...(input.preview ? { preview: input.preview } : {}),
+    })
+  }
+
+  const removeCommentFromContext = (input: { id: string; file: string }) => {
+    comments.remove(input.file, input.id)
+    prompt.context.removeComment(input.file, input.id)
+  }
+
+  const reviewCommentActions = createMemo(() => ({
+    moreLabel: language.t("common.moreOptions"),
+    editLabel: language.t("common.edit"),
+    deleteLabel: language.t("common.delete"),
+    saveLabel: language.t("common.save"),
+  }))
+
+  const isEditableTarget = (target: EventTarget | null | undefined) => {
+    if (!(target instanceof HTMLElement)) return false
+    return /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName) || target.isContentEditable
+  }
+
+  const deepActiveElement = () => {
+    let current: Element | null = document.activeElement
+    while (current instanceof HTMLElement && current.shadowRoot?.activeElement) {
+      current = current.shadowRoot.activeElement
+    }
+    return current instanceof HTMLElement ? current : undefined
+  }
+
   const handleKeyDown = (event: KeyboardEvent) => {
-    const activeElement = document.activeElement as HTMLElement | undefined
+    const path = event.composedPath()
+    const target = path.find((item): item is HTMLElement => item instanceof HTMLElement)
+    const activeElement = deepActiveElement()
+
+    const protectedTarget = path.some(
+      (item) => item instanceof HTMLElement && item.closest("[data-prevent-autofocus]") !== null,
+    )
+    if (protectedTarget || isEditableTarget(target)) return
+
     if (activeElement) {
       const isProtected = activeElement.closest("[data-prevent-autofocus]")
-      const isInput = /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(activeElement.tagName) || activeElement.isContentEditable
+      const isInput = isEditableTarget(activeElement)
       if (isProtected || isInput) return
     }
     if (dialog.active) return
@@ -500,6 +547,9 @@ export default function Page() {
           onScrollRef={(el) => setTree("reviewScroll", el)}
           focusedFile={tree.activeDiff}
           onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+          onLineCommentUpdate={updateCommentInContext}
+          onLineCommentDelete={removeCommentFromContext}
+          lineCommentActions={reviewCommentActions()}
           comments={comments.all()}
           focusedComment={comments.focus()}
           onFocusedCommentChange={comments.setFocus}
@@ -521,6 +571,9 @@ export default function Page() {
             onScrollRef={(el) => setTree("reviewScroll", el)}
             focusedFile={tree.activeDiff}
             onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+            onLineCommentUpdate={updateCommentInContext}
+            onLineCommentDelete={removeCommentFromContext}
+            lineCommentActions={reviewCommentActions()}
             comments={comments.all()}
             focusedComment={comments.focus()}
             onFocusedCommentChange={comments.setFocus}
@@ -549,6 +602,9 @@ export default function Page() {
           onScrollRef={(el) => setTree("reviewScroll", el)}
           focusedFile={tree.activeDiff}
           onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+          onLineCommentUpdate={updateCommentInContext}
+          onLineCommentDelete={removeCommentFromContext}
+          lineCommentActions={reviewCommentActions()}
           comments={comments.all()}
           focusedComment={comments.focus()}
           onFocusedCommentChange={comments.setFocus}
