@@ -40,6 +40,7 @@ import { SessionProcessor } from "./processor"
 import { TaskTool } from "@/tool/task"
 import { Tool } from "@/tool/tool"
 import { PermissionNext } from "@/permission/next"
+import { Skill } from "@/skill"
 import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
@@ -648,7 +649,7 @@ export namespace SessionPrompt {
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
       // Build system prompt, adding structured output instruction if needed
-      const system = [...(await SystemPrompt.environment(model)), ...(await InstructionPrompt.system())]
+      const system = [...(await SystemPrompt.environment(model)), SystemPrompt.skills(), ...(await InstructionPrompt.system())]
       const format = lastUser.format ?? { type: "text" }
       if (format.type === "json_schema") {
         system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
@@ -1321,6 +1322,43 @@ export namespace SessionPrompt {
   async function insertReminders(input: { messages: MessageV2.WithParts[]; agent: Agent.Info; session: Session.Info }) {
     const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
     if (!userMessage) return input.messages
+
+    // Inject available skills list as a system-reminder before all messages
+    const skills = await Skill.all()
+    const accessibleSkills = input.agent
+      ? skills.filter((skill) => {
+          const rule = PermissionNext.evaluate("skill", skill.name, input.agent.permission)
+          return rule.action !== "deny"
+        })
+      : skills
+
+    if (accessibleSkills.length > 0) {
+      const firstUserMessage = input.messages.find((msg) => msg.info.role === "user")
+      if (firstUserMessage) {
+        firstUserMessage.parts.unshift({
+          id: Identifier.ascending("part"),
+          messageID: firstUserMessage.info.id,
+          sessionID: firstUserMessage.info.sessionID,
+          type: "text",
+          text: [
+            "<system-reminder>",
+            "The following skills are available for use with the skill tool:",
+            "",
+            "<available_skills>",
+            ...accessibleSkills.flatMap((s) => [
+              `  <skill>`,
+              `    <name>${s.name}</name>`,
+              `    <description>${s.description}</description>`,
+              `    <location>${pathToFileURL(s.location).href}</location>`,
+              `  </skill>`,
+            ]),
+            "</available_skills>",
+            "</system-reminder>",
+          ].join("\n"),
+          synthetic: true,
+        })
+      }
+    }
 
     // Original logic when experimental plan mode is disabled
     if (!Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE) {

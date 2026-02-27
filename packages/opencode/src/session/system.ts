@@ -26,6 +26,9 @@ export namespace SystemPrompt {
     return [PROMPT_ANTHROPIC_WITHOUT_TODO]
   }
 
+  export function skills() {
+    return `/<skill-name> is shorthand for users to invoke a skill. When executed, the skill gets expanded to a full prompt. Use the skill tool to execute them. IMPORTANT: Only use the skill tool for skills listed in the available skills - do not guess or use built-in CLI commands.`
+  }
   export async function environment(model: Provider.Model) {
     const project = Instance.project
     return [

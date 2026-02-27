@@ -18,7 +18,7 @@ const baseCtx: Omit<Tool.Context, "ask"> = {
 }
 
 describe("tool.skill", () => {
-  test("description lists skill location URL", async () => {
+  test("description lists available skills", async () => {
     await using tmp = await tmpdir({
       git: true,
       init: async (dir) => {
@@ -44,8 +44,8 @@ description: Skill for tool tests.
         directory: tmp.path,
         fn: async () => {
           const tool = await SkillTool.init()
-          const skillPath = path.join(tmp.path, ".opencode", "skill", "tool-skill", "SKILL.md")
-          expect(tool.description).toContain(`<location>${pathToFileURL(skillPath).href}</location>`)
+          expect(tool.description).toContain("Execute a skill within the current conversation.")
+          expect(tool.description).toContain("Available skills are listed in <system-reminder> blocks")
         },
       })
     } finally {

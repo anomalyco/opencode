@@ -23,26 +23,17 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
     accessibleSkills.length === 0
       ? "Load a specialized skill that provides domain-specific instructions and workflows. No skills are currently available."
       : [
-          "Load a specialized skill that provides domain-specific instructions and workflows.",
+          "Execute a skill within the current conversation.",
           "",
-          "When you recognize that a task matches one of the available skills listed below, use this tool to load the full skill instructions.",
-          "",
+          "When you recognize that a task matches one of the available skills, use this tool to load the full skill instructions.",
           "The skill will inject detailed instructions, workflows, and access to bundled resources (scripts, references, templates) into the conversation context.",
           "",
-          'Tool output includes a `<skill_content name="...">` block with the loaded content.',
+          "When users reference a slash command or /<name> (e.g., /" + accessibleSkills[0]?.name + "), they are referring to a skill. Use this tool to invoke it.",
           "",
-          "The following skills provide specialized sets of instructions for particular tasks",
-          "Invoke this tool to load a skill when a task matches one of the available skills listed below:",
-          "",
-          "<available_skills>",
-          ...accessibleSkills.flatMap((skill) => [
-            `  <skill>`,
-            `    <name>${skill.name}</name>`,
-            `    <description>${skill.description}</description>`,
-            `    <location>${pathToFileURL(skill.location).href}</location>`,
-            `  </skill>`,
-          ]),
-          "</available_skills>",
+          "Important:",
+          "- Available skills are listed in <system-reminder> blocks in the conversation",
+          "- When a skill matches the user's request, invoke this tool BEFORE generating any other response about the task",
+          "- If a skill's content has already been loaded in the current conversation turn, follow the instructions directly instead of calling this tool again",
         ].join("\n")
 
   const examples = accessibleSkills
