@@ -14,5 +14,5 @@ export function DialogGitLabWorkflowModel(props: {
       },
     }))
 
-  return <DialogSelect<string> options={options()} title="Select GitLab workflow model" />
+  return <DialogSelect<string> options={options()} title="Select GitLab DAP model" />
 }

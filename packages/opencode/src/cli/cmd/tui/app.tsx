@@ -701,7 +701,7 @@ function App() {
       }
 
       if (!hasCachedSelection) {
-        toast.show({ variant: "info", message: "Discovering GitLab workflow models...", duration: 60000 })
+        toast.show({ variant: "info", message: "Discovering GitLab DAP models...", duration: 60000 })
       }
       sdk
         .fetch(`${sdk.url}/gitlab-workflow-model-select/discover`, {
@@ -714,7 +714,7 @@ function App() {
           if (data.status === "no_provider") {
             toast.show({ variant: "error", message: "GitLab provider not configured", duration: 3000 })
           } else if (data.status === "no_models") {
-            toast.show({ variant: "warning", message: "No GitLab workflow models found", duration: 3000 })
+            toast.show({ variant: "warning", message: "No GitLab DAP models found", duration: 3000 })
           } else if (data.status === "cached") {
             toast.dismiss()
             if (data.modelName) local.model.setGitLabWorkflowSubModelName(data.modelName)
@@ -731,7 +731,7 @@ function App() {
           }
         })
         .catch((err) => {
-          toast.show({ variant: "error", message: `GitLab workflow discovery failed: ${err}`, duration: 3000 })
+          toast.show({ variant: "error", message: `GitLab DAP discovery failed: ${err}`, duration: 3000 })
         })
     })
   })
