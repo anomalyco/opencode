@@ -104,6 +104,41 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     const sdk = useSDK()
 
+    // Delta coalescing: accumulate deltas in a plain record (zero reactive overhead),
+    // flush to store via queueMicrotask after sdk.tsx's batch() completes.
+    // Collapses N deltas per part per flush into 1 setStore() call.
+    const pending: Record<string, Record<string, Record<string, string>>> = {}
+    let scheduled = false
+
+    function flushDeltas() {
+      for (const messageID in pending) {
+        const parts = store.part[messageID]
+        if (!parts) {
+          delete pending[messageID]
+          continue
+        }
+        for (const partID in pending[messageID]) {
+          const result = Binary.search(parts, partID, (p) => p.id)
+          if (!result.found) {
+            delete pending[messageID][partID]
+            continue
+          }
+          for (const field in pending[messageID][partID]) {
+            const delta = pending[messageID][partID][field]
+            setStore(
+              "part",
+              messageID,
+              result.index,
+              field as keyof Part,
+              (prev: unknown) => (typeof prev === "string" ? prev : "") + delta,
+            )
+          }
+          delete pending[messageID][partID]
+        }
+        delete pending[messageID]
+      }
+    }
+
     sdk.event.listen((e) => {
       const event = e.details
       switch (event.type) {
@@ -279,6 +314,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
         case "message.part.updated": {
+          // Clear pending deltas — full update supersedes them
+          delete pending[event.properties.part.messageID]?.[event.properties.part.id]
           const parts = store.part[event.properties.part.messageID]
           if (!parts) {
             setStore("part", event.properties.part.messageID, [event.properties.part])
@@ -300,21 +337,22 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
 
         case "message.part.delta": {
-          const parts = store.part[event.properties.messageID]
-          if (!parts) break
-          const result = Binary.search(parts, event.properties.partID, (p) => p.id)
-          if (!result.found) break
-          setStore(
-            "part",
-            event.properties.messageID,
-            result.index,
-            event.properties.field as keyof Part,
-            (prev: unknown) => (typeof prev === "string" ? prev : "") + event.properties.delta,
-          )
+          const p = event.properties
+          const msg = (pending[p.messageID] ??= {})
+          const part = (msg[p.partID] ??= {})
+          part[p.field] = (part[p.field] ?? "") + p.delta
+          if (!scheduled) {
+            scheduled = true
+            queueMicrotask(() => {
+              scheduled = false
+              batch(() => flushDeltas())
+            })
+          }
           break
         }
 
         case "message.part.removed": {
+          delete pending[event.properties.messageID]?.[event.properties.partID]
           const parts = store.part[event.properties.messageID]
           const result = Binary.search(parts, event.properties.partID, (p) => p.id)
           if (result.found)
