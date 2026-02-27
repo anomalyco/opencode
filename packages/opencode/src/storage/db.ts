@@ -10,8 +10,7 @@ import { Log } from "../util/log"
 import { NamedError } from "@opencode-ai/util/error"
 import z from "zod"
 import path from "path"
-import { readFileSync, readdirSync, existsSync, statfsSync, unlinkSync, mkdirSync } from "fs"
-import os from "os"
+import { readFileSync, readdirSync, existsSync, statfsSync, unlinkSync } from "fs"
 import * as schema from "./schema"
 
 declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number }[] | undefined
@@ -88,34 +87,21 @@ export namespace Database {
     }
   }
 
-  /** Resolve the database directory, falling back to a local path on NFS. */
-  function resolveDbDir(): string {
-    const dataDir = Global.Path.data
-    if (!isNFS(dataDir)) return dataDir
-
-    // SQLite's WAL mode requires shared memory via mmap, which is broken on
-    // NFS. Instead of downgrading journal mode (slower, still fragile), just
-    // put the database on a local filesystem.
-    const localDir = path.join(os.tmpdir(), "opencode-" + os.userInfo().uid)
-    mkdirSync(localDir, { recursive: true })
-    log.info("NFS detected, using local database path", { nfs: dataDir, local: localDir })
-    return localDir
-  }
-
   export const Client = lazy(() => {
-    const dbDir = resolveDbDir()
-    const dbPath = path.join(dbDir, "opencode.db")
+    const dbPath = path.join(Global.Path.data, "opencode.db")
+    const nfs = isNFS(Global.Path.data)
     Path = dbPath
-    log.info("opening database", { path: dbPath })
+    log.info("opening database", { path: dbPath, nfs })
 
     let sqlite: BunDatabase
     try {
       sqlite = new BunDatabase(dbPath, { create: true })
 
-      // Integrity check — detect corruption before it causes harder-to-debug errors
-      const result = sqlite.prepare("PRAGMA integrity_check").get() as { integrity_check: string } | undefined
-      if (result?.integrity_check !== "ok") {
-        log.warn("database corrupted, recreating", { path: dbPath, integrity: result?.integrity_check })
+      // quick_check is fast (unlike integrity_check which reads every page and
+      // can hang indefinitely on large corrupt databases)
+      const result = sqlite.prepare("PRAGMA quick_check").get() as { quick_check: string } | undefined
+      if (result?.quick_check !== "ok") {
+        log.warn("database corrupted, recreating", { path: dbPath, check: result?.quick_check })
         sqlite.close()
         removeDatabase(dbPath)
         sqlite = new BunDatabase(dbPath, { create: true })
@@ -127,10 +113,27 @@ export namespace Database {
       sqlite = new BunDatabase(dbPath, { create: true })
     }
 
-    sqlite.run("PRAGMA journal_mode = WAL")
-    try { sqlite.run("PRAGMA wal_checkpoint(PASSIVE)") } catch {}
-    sqlite.run("PRAGMA synchronous = NORMAL")
+    // busy_timeout must be set first — changing journal mode requires an
+    // exclusive lock and NFS can have stale locks from killed processes.
     sqlite.run("PRAGMA busy_timeout = 5000")
+
+    // WAL mode uses mmap'd shared memory (-shm file) for coordination, which
+    // is fundamentally broken on NFS — concurrent writers corrupt the database.
+    // DELETE mode uses only file-level locks (handled by NFS lock manager).
+    if (nfs) {
+      log.info("NFS detected, using DELETE journal mode to avoid WAL/mmap corruption")
+      try {
+        sqlite.run("PRAGMA journal_mode = DELETE")
+      } catch (e) {
+        // Stale NFS locks can block journal mode changes — log and continue.
+        // The database may still be in WAL mode but at least it won't crash.
+        log.warn("failed to set DELETE journal mode, continuing with current mode", { error: String(e) })
+      }
+    } else {
+      sqlite.run("PRAGMA journal_mode = WAL")
+      try { sqlite.run("PRAGMA wal_checkpoint(PASSIVE)") } catch {}
+    }
+    sqlite.run("PRAGMA synchronous = NORMAL")
     sqlite.run("PRAGMA cache_size = -64000")
     sqlite.run("PRAGMA foreign_keys = ON")
 
