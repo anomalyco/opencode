@@ -16,7 +16,6 @@ on:
       - "nix/scripts/**"
       - "patches/**"
       - ".github/workflows/nix-hashes.yml"
-      - ".github/TEAM_MEMBERS"
 
 jobs:
   # Native runners required: bun install cross-compilation flags (--os/--cpu)
