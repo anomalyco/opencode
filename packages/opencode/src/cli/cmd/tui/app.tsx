@@ -182,6 +182,7 @@ export function tui(input: {
       },
       {
         targetFps: 60,
+        widthMethod: input.config.width_method,
         gatherStats: false,
         exitOnCtrlC: false,
         useKittyKeyboard: {},
