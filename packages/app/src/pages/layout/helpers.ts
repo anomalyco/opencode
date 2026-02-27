@@ -33,6 +33,13 @@ export const latestRootSession = (stores: { session: Session[]; path: { director
     .flatMap((store) => store.session.filter((session) => isRootVisibleSession(session, store.path.directory)))
     .sort(sortSessions(now))[0]
 
+export function hasProjectPermissions<T>(
+  request: Record<string, T[] | undefined>,
+  include: (item: T) => boolean = () => true,
+) {
+  return Object.values(request).some((list) => list?.some(include))
+}
+
 export const childMapByParent = (sessions: Session[]) => {
   const map = new Map<string, string[]>()
   for (const session of sessions) {

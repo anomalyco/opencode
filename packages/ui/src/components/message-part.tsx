@@ -27,8 +27,7 @@ import {
   QuestionInfo,
 } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
-import { useDiffComponent } from "../context/diff"
-import { useCodeComponent } from "../context/code"
+import { useFileComponent } from "../context/file"
 import { useDialog } from "../context/dialog"
 import { useI18n } from "../context/i18n"
 import { BasicTool } from "./basic-tool"
@@ -464,14 +463,22 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
   }
 }
 
-function contextToolSummary(parts: ToolPart[]) {
+function contextToolSummary(parts: ToolPart[], i18n: ReturnType<typeof useI18n>) {
   const read = parts.filter((part) => part.tool === "read").length
   const search = parts.filter((part) => part.tool === "glob" || part.tool === "grep").length
   const list = parts.filter((part) => part.tool === "list").length
   return [
-    read ? `${read} ${read === 1 ? "read" : "reads"}` : undefined,
-    search ? `${search} ${search === 1 ? "search" : "searches"}` : undefined,
-    list ? `${list} ${list === 1 ? "list" : "lists"}` : undefined,
+    read
+      ? i18n.t(read === 1 ? "ui.messagePart.context.read.one" : "ui.messagePart.context.read.other", { count: read })
+      : undefined,
+    search
+      ? i18n.t(search === 1 ? "ui.messagePart.context.search.one" : "ui.messagePart.context.search.other", {
+          count: search,
+        })
+      : undefined,
+    list
+      ? i18n.t(list === 1 ? "ui.messagePart.context.list.one" : "ui.messagePart.context.list.other", { count: list })
+      : undefined,
   ].filter((value): value is string => !!value)
 }
 
@@ -596,7 +603,7 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
     () =>
       !!props.busy || props.parts.some((part) => part.state.status === "pending" || part.state.status === "running"),
   )
-  const summary = createMemo(() => contextToolSummary(props.parts))
+  const summary = createMemo(() => contextToolSummary(props.parts, i18n))
   const details = createMemo(() => summary().join(", "))
 
   return (
@@ -980,7 +987,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
                 return (
                   <div style="width: 100%; display: flex; justify-content: flex-end;">
                     <span class="text-13-regular text-text-weak cursor-default">
-                      {i18n.t("ui.tool.questions")} dismissed
+                      {i18n.t("ui.messagePart.questions.dismissed")}
                     </span>
                   </div>
                 )
@@ -1452,7 +1459,7 @@ ToolRegistry.register({
   name: "edit",
   render(props) {
     const i18n = useI18n()
-    const diffComponent = useDiffComponent()
+    const fileComponent = useFileComponent()
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
     const path = createMemo(() => props.metadata?.filediff?.file || props.input.filePath || "")
     const filename = () => getFilename(props.input.filePath ?? "")
@@ -1499,7 +1506,8 @@ ToolRegistry.register({
             >
               <div data-component="edit-content">
                 <Dynamic
-                  component={diffComponent}
+                  component={fileComponent}
+                  mode="diff"
                   before={{
                     name: props.metadata?.filediff?.file || props.input.filePath,
                     contents: props.metadata?.filediff?.before || props.input.oldString,
@@ -1523,7 +1531,7 @@ ToolRegistry.register({
   name: "write",
   render(props) {
     const i18n = useI18n()
-    const codeComponent = useCodeComponent()
+    const fileComponent = useFileComponent()
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
     const path = createMemo(() => props.input.filePath || "")
     const filename = () => getFilename(props.input.filePath ?? "")
@@ -1561,7 +1569,8 @@ ToolRegistry.register({
             <ToolFileAccordion path={path()}>
               <div data-component="write-content">
                 <Dynamic
-                  component={codeComponent}
+                  component={fileComponent}
+                  mode="text"
                   file={{
                     name: props.input.filePath,
                     contents: props.input.content,
@@ -1595,7 +1604,7 @@ ToolRegistry.register({
   name: "apply_patch",
   render(props) {
     const i18n = useI18n()
-    const diffComponent = useDiffComponent()
+    const fileComponent = useFileComponent()
     const files = createMemo(() => (props.metadata.files ?? []) as ApplyPatchFile[])
     const pending = createMemo(() => props.status === "pending" || props.status === "running")
     const single = createMemo(() => {
@@ -1703,7 +1712,8 @@ ToolRegistry.register({
                             <Show when={visible()}>
                               <div data-component="apply-patch-file-diff">
                                 <Dynamic
-                                  component={diffComponent}
+                                  component={fileComponent}
+                                  mode="diff"
                                   before={{ name: file.filePath, contents: file.before }}
                                   after={{ name: file.movePath ?? file.filePath, contents: file.after }}
                                 />
@@ -1780,7 +1790,8 @@ ToolRegistry.register({
               >
                 <div data-component="apply-patch-file-diff">
                   <Dynamic
-                    component={diffComponent}
+                    component={fileComponent}
+                    mode="diff"
                     before={{ name: file().filePath, contents: file().before }}
                     after={{ name: file().movePath ?? file().filePath, contents: file().after }}
                   />
