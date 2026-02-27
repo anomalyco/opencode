@@ -31,6 +31,7 @@ export function SessionHeaderActions() {
   const view = createMemo(() => layout.view(sessionKey))
 
   const [bigqueryToken, setBigqueryToken] = createSignal("")
+  const [tokenPersisted, setTokenPersisted] = createSignal(false)
 
   const fetchBigQueryToken = async () => {
     try {
@@ -57,6 +58,12 @@ export function SessionHeaderActions() {
   })
   onCleanup(() => window.removeEventListener("preview-run", onPreviewRun))
 
+  const persistToken = () => {
+    if (tokenPersisted() || !bigqueryToken()) return ""
+    setTokenPersisted(true)
+    return "mkdir -p ~/.config/laterapi && printf '%s' \"$LATERAPI_KEY\" > ~/.config/laterapi/token && "
+  }
+
   const runCommand = (input: { command: string; args?: string[]; label: string; env?: Record<string, string> }) => {
     if (!params.dir) {
       showToast({
@@ -73,8 +80,11 @@ export function SessionHeaderActions() {
       ...(bqToken ? { LATERAPI_KEY: bqToken } : {}),
       ...input.env,
     }
+    const writeToken = persistToken()
+    const cmd = [input.command, ...(input.args || [])].join(" ")
+
     view().terminal.open()
-    terminal.run({ command: input.command, args: input.args, title: input.label, cwd, env })
+    terminal.run({ command: "sh", args: ["-c", writeToken + cmd], title: input.label, cwd, env })
   }
 
   const run = () => {
