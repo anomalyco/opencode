@@ -151,7 +151,7 @@ export const dict = {
   "home.faq.a3.p4.localLink": "โมเดล Local ของคุณ",
   "home.faq.q4": "ฉันสามารถใช้การสมัครสมาชิก AI ที่มีอยู่กับ OpenCode ได้หรือไม่?",
   "home.faq.a4.p1":
-    "ได้ OpenCode รองรับแผนการสมัครสมาชิกจากผู้ให้บริการหลักทั้งหมด คุณสามารถใช้การสมัครสมาชิก Claude Pro/Max, ChatGPT Plus/Pro หรือ GitHub Copilot ของคุณได้",
+    "ได้ OpenCode รองรับแผนการสมัครสมาชิกจากผู้ให้บริการหลักทั้งหมด คุณสามารถใช้การสมัครสมาชิก ChatGPT Plus/Pro หรือ GitHub Copilot ของคุณได้",
   "home.faq.q5": "ฉันใช้ OpenCode ได้เฉพาะในเทอร์มินัลใช่หรือไม่?",
   "home.faq.a5.beforeDesktop": "ไม่อีกต่อไป! OpenCode มีแอปสำหรับ",
   "home.faq.a5.desktop": "เดสก์ท็อป",

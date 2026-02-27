@@ -151,7 +151,7 @@ export const dict = {
   "home.faq.a3.p4.localLink": "النماذج المحلية",
   "home.faq.q4": "هل يمكنني استخدام اشتراكاتي الحالية مع OpenCode؟",
   "home.faq.a4.p1":
-    "نعم، يدعم OpenCode خطط الاشتراك من كل المزودين الرئيسيين. يمكنك استخدام اشتراكات Claude Pro/Max، ChatGPT Plus/Pro، أو GitHub Copilot.",
+    "نعم، يدعم OpenCode خطط الاشتراك من كل المزودين الرئيسيين. يمكنك استخدام اشتراكات ChatGPT Plus/Pro أو GitHub Copilot.",
   "home.faq.q5": "هل يمكنني استخدام OpenCode في الطرفية فقط؟",
   "home.faq.a5.beforeDesktop": "ليس بعد الآن! OpenCode متاح الآن كتطبيق لـ",
   "home.faq.a5.desktop": "سطح المكتب",

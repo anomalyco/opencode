@@ -153,7 +153,7 @@ export const dict = {
   "home.faq.a3.p4.localLink": "lokale modeller",
   "home.faq.q4": "Kan jeg bruge mine eksisterende AI-abonnementer med OpenCode?",
   "home.faq.a4.p1":
-    "Ja. OpenCode understøtter abonnementer fra alle store udbydere. Du kan bruge Claude Pro/Max, ChatGPT Plus/Pro eller GitHub Copilot.",
+    "Ja. OpenCode understøtter abonnementer fra alle store udbydere. Du kan bruge ChatGPT Plus/Pro eller GitHub Copilot.",
   "home.faq.q5": "Kan jeg kun bruge OpenCode i terminalen?",
   "home.faq.a5.beforeDesktop": "Ikke længere! OpenCode er nu tilgængelig som en app til",
   "home.faq.a5.desktop": "desktop",

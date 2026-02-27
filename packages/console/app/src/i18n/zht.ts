@@ -149,7 +149,7 @@ export const dict = {
   "home.faq.a3.p4.localLink": "本地模型",
   "home.faq.q4": "可以使用我現有的 AI 訂閱嗎？",
   "home.faq.a4.p1":
-    "可以。OpenCode 支援主流供應商的訂閱方案，包括 Claude Pro/Max、ChatGPT Plus/Pro 與 GitHub Copilot。",
+    "可以。OpenCode 支援主流供應商的訂閱方案，包括 ChatGPT Plus/Pro 與 GitHub Copilot。",
   "home.faq.q5": "OpenCode 只能在終端中使用嗎？",
   "home.faq.a5.beforeDesktop": "不再是了！OpenCode 現在也提供",
   "home.faq.a5.desktop": "桌面端",

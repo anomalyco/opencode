@@ -99,7 +99,7 @@ export const dict = {
   "dialog.provider.group.other": "Andre",
   "dialog.provider.tag.recommended": "Anbefalet",
   "dialog.provider.opencode.note": "Udvalgte modeller inklusive Claude, GPT, Gemini og flere",
-  "dialog.provider.anthropic.note": "Direkte adgang til Claude-modeller, inklusive Pro og Max",
+  "dialog.provider.anthropic.note": "Direkte adgang til Claude-modeller via API-nøgle",
   "dialog.provider.copilot.note": "Claude-modeller til kodningsassistance",
   "dialog.provider.openai.note": "GPT-modeller til hurtige, kompetente generelle AI-opgaver",
   "dialog.provider.google.note": "Gemini-modeller til hurtige, strukturerede svar",
@@ -118,7 +118,7 @@ export const dict = {
   "dialog.provider.viewAll": "Vis flere udbydere",
 
   "provider.connect.title": "Forbind {{provider}}",
-  "provider.connect.title.anthropicProMax": "Log ind med Claude Pro/Max",
+  "provider.connect.title.anthropicProMax": "Log ind med Anthropic",
   "provider.connect.selectMethod": "Vælg loginmetode for {{provider}}.",
   "provider.connect.method.apiKey": "API-nøgle",
   "provider.connect.status.inProgress": "Godkendelse i gang...",

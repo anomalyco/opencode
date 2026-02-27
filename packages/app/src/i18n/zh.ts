@@ -126,7 +126,7 @@ export const dict = {
   "dialog.provider.group.other": "其他",
   "dialog.provider.tag.recommended": "推荐",
   "dialog.provider.opencode.note": "使用 OpenCode Zen 或 API 密钥连接",
-  "dialog.provider.anthropic.note": "使用 Claude Pro/Max 或 API 密钥连接",
+  "dialog.provider.anthropic.note": "通过 API 密钥直接访问 Claude 模型",
   "dialog.provider.copilot.note": "使用 Copilot 或 API 密钥连接",
   "dialog.provider.openai.note": "使用 ChatGPT Pro/Plus 或 API 密钥连接",
   "dialog.provider.google.note": "使用 Google 账号或 API 密钥连接",
@@ -144,7 +144,7 @@ export const dict = {
   "dialog.provider.viewAll": "查看更多提供商",
 
   "provider.connect.title": "连接 {{provider}}",
-  "provider.connect.title.anthropicProMax": "使用 Claude Pro/Max 登录",
+  "provider.connect.title.anthropicProMax": "使用 Anthropic 登录",
   "provider.connect.selectMethod": "选择 {{provider}} 的登录方式。",
   "provider.connect.method.apiKey": "API 密钥",
   "provider.connect.status.inProgress": "正在授权...",

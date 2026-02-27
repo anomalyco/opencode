@@ -154,7 +154,7 @@ export const dict = {
   "home.faq.a3.p4.localLink": "локальные модели",
   "home.faq.q4": "Могу ли я использовать мои существующие AI-подписки с OpenCode?",
   "home.faq.a4.p1":
-    "Да, OpenCode поддерживает подписки всех основных провайдеров. Вы можете использовать ваши подписки Claude Pro/Max, ChatGPT Plus/Pro или GitHub Copilot.",
+    "Да, OpenCode поддерживает подписки всех основных провайдеров. Вы можете использовать ваши подписки ChatGPT Plus/Pro или GitHub Copilot.",
   "home.faq.q5": "Можно ли использовать OpenCode только в терминале?",
   "home.faq.a5.beforeDesktop": "Больше нет! OpenCode теперь доступен как приложение для",
   "home.faq.a5.desktop": "десктопа",

@@ -153,7 +153,7 @@ export const dict = {
   "home.faq.a3.p4.localLink": "lokalen Modelle verbinden",
   "home.faq.q4": "Kann ich meine bestehenden AI-Abos mit OpenCode nutzen?",
   "home.faq.a4.p1":
-    "Ja, OpenCode unterstützt Abos von allen großen Anbietern. Du kannst deine Claude Pro/Max, ChatGPT Plus/Pro oder GitHub Copilot Abos nutzen.",
+    "Ja, OpenCode unterstützt Abos von allen großen Anbietern. Du kannst deine ChatGPT Plus/Pro oder GitHub Copilot Abos nutzen.",
   "home.faq.q5": "Kann ich OpenCode nur im Terminal nutzen?",
   "home.faq.a5.beforeDesktop": "Nicht mehr! OpenCode ist jetzt als App für",
   "home.faq.a5.desktop": "Desktop",

@@ -151,7 +151,7 @@ export const dict = {
   "home.faq.a3.p4.localLink": "yerel modellerinizi",
   "home.faq.q4": "Mevcut AI aboneliklerimi OpenCode ile kullanabilir miyim?",
   "home.faq.a4.p1":
-    "Evet. OpenCode tüm büyük sağlayıcıların aboneliklerini destekler. Claude Pro/Max, ChatGPT Plus/Pro veya GitHub Copilot kullanabilirsiniz.",
+    "Evet. OpenCode tüm büyük sağlayıcıların aboneliklerini destekler. ChatGPT Plus/Pro veya GitHub Copilot kullanabilirsiniz.",
   "home.faq.q5": "OpenCode'u sadece terminalde mi kullanabilirim?",
   "home.faq.a5.beforeDesktop": "Artık hayır! OpenCode şimdi",
   "home.faq.a5.desktop": "masaüstü",
