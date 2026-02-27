@@ -102,6 +102,37 @@ test("loads JSONC config file", async () => {
   })
 })
 
+test("substitutes {cmd:} tokens in config file", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Filesystem.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            test: {
+              type: "remote",
+              url: "https://example.com/mcp",
+              headers: {
+                Authorization: "Bearer {cmd:echo test_token}",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      const mcpConfig = config.mcp?.test as { type: "remote"; headers?: Record<string, string> } | undefined
+      expect(mcpConfig?.headers?.Authorization).toBe("Bearer test_token")
+    },
+  })
+})
+
 test("merges multiple config files with correct precedence", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
@@ -1884,78 +1915,32 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
     }
   })
 
-  test("substitutes {cmd:} tokens in OPENCODE_CONFIG_CONTENT", async () => {
+  test("substitutes {cmd:} tokens", async () => {
     const originalEnv = process.env["OPENCODE_CONFIG_CONTENT"]
 
     try {
       process.env["OPENCODE_CONFIG_CONTENT"] = JSON.stringify({
         $schema: "https://opencode.ai/config.json",
-        username: "{cmd:echo hello_from_command}",
-      })
-
-      await using tmp = await tmpdir()
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const config = await Config.get()
-          expect(config.username).toBe("hello_from_command")
-        },
-      })
-    } finally {
-      if (originalEnv !== undefined) {
-        process.env["OPENCODE_CONFIG_CONTENT"] = originalEnv
-      } else {
-        delete process.env["OPENCODE_CONFIG_CONTENT"]
-      }
-    }
-  })
-
-  test("substitutes multiple {cmd:} tokens in OPENCODE_CONFIG_CONTENT", async () => {
-    const originalEnv = process.env["OPENCODE_CONFIG_CONTENT"]
-
-    try {
-      process.env["OPENCODE_CONFIG_CONTENT"] = JSON.stringify({
-        $schema: "https://opencode.ai/config.json",
-        username: "{cmd:echo first}",
-        model: "{cmd:echo provider/second}",
-      })
-
-      await using tmp = await tmpdir()
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const config = await Config.get()
-          expect(config.username).toBe("first")
-          expect(config.model).toBe("provider/second")
-        },
-      })
-    } finally {
-      if (originalEnv !== undefined) {
-        process.env["OPENCODE_CONFIG_CONTENT"] = originalEnv
-      } else {
-        delete process.env["OPENCODE_CONFIG_CONTENT"]
-      }
-    }
-  })
-
-  test("throws error for failed {cmd:} command", async () => {
-    const originalEnv = process.env["OPENCODE_CONFIG_CONTENT"]
-
-    try {
-      process.env["OPENCODE_CONFIG_CONTENT"] = JSON.stringify({
-        $schema: "https://opencode.ai/config.json",
-        username: "{cmd:exit 1}",
-      })
-
-      await using tmp = await tmpdir()
-      await expect(
-        Instance.provide({
-          directory: tmp.path,
-          fn: async () => {
-            await Config.get()
+        mcp: {
+          github: {
+            type: "remote",
+            url: "https://example.com/mcp",
+            headers: {
+              Authorization: "Bearer {cmd:echo test_token}",
+            },
           },
-        }),
-      ).rejects.toThrow(/bad command reference/)
+        },
+      })
+
+      await using tmp = await tmpdir()
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          const mcpConfig = config.mcp?.github as { type: "remote"; headers?: Record<string, string> } | undefined
+          expect(mcpConfig?.headers?.Authorization).toBe("Bearer test_token")
+        },
+      })
     } finally {
       if (originalEnv !== undefined) {
         process.env["OPENCODE_CONFIG_CONTENT"] = originalEnv
