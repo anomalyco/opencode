@@ -162,7 +162,7 @@ export const SettingsProviders: Component = () => {
                       when={canDisconnect(item)}
                       fallback={
                         <span class="text-14-regular text-text-base opacity-0 group-hover:opacity-100 transition-opacity duration-200 pr-3 cursor-default">
-                          Connected from your environment variables
+                          {language.t("settings.providers.connected.environmentDescription")}
                         </span>
                       }
                     >
@@ -229,10 +229,12 @@ export const SettingsProviders: Component = () => {
               <div class="flex flex-col min-w-0">
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <ProviderIcon id={icon("synthetic")} class="size-5 shrink-0 icon-strong-base" />
-                  <span class="text-14-medium text-text-strong">Custom provider</span>
+                  <span class="text-14-medium text-text-strong">{language.t("provider.custom.title")}</span>
                   <Tag>{language.t("settings.providers.tag.custom")}</Tag>
                 </div>
-                <span class="text-12-regular text-text-weak pl-8">Add an OpenAI-compatible provider by base URL.</span>
+                <span class="text-12-regular text-text-weak pl-8">
+                  {language.t("settings.providers.custom.description")}
+                </span>
               </div>
               <Button
                 size="large"
