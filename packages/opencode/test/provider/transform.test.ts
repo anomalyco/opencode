@@ -618,6 +618,63 @@ describe("ProviderTransform.schema - gemini non-object properties removal", () =
 
     expect(result.properties.data.properties).toBeDefined()
   })
+
+  test("does not apply to github-copilot provider even when api.id includes gemini", () => {
+    const copilotGeminiModel = {
+      providerID: "github-copilot",
+      api: {
+        id: "gemini-3-flash-preview",
+      },
+    } as any
+
+    const schema = {
+      type: "object",
+      properties: {
+        status: {
+          type: "integer",
+          enum: [1, 2, 3],
+        },
+        data: {
+          type: "string",
+          properties: { invalid: { type: "string" } },
+          required: ["invalid"],
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(copilotGeminiModel, schema) as any
+
+    // enum values should NOT be converted to strings
+    expect(result.properties.status.type).toBe("integer")
+    expect(result.properties.status.enum).toEqual([1, 2, 3])
+    // properties/required should NOT be stripped from non-object types
+    expect(result.properties.data.properties).toBeDefined()
+    expect(result.properties.data.required).toBeDefined()
+  })
+
+  test("does not apply to github-copilot-enterprise provider", () => {
+    const copilotEnterpriseModel = {
+      providerID: "github-copilot-enterprise",
+      api: {
+        id: "gemini-3-flash-preview",
+      },
+    } as any
+
+    const schema = {
+      type: "object",
+      properties: {
+        count: {
+          type: "integer",
+          enum: [10, 20],
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(copilotEnterpriseModel, schema) as any
+
+    expect(result.properties.count.type).toBe("integer")
+    expect(result.properties.count.enum).toEqual([10, 20])
+  })
 })
 
 describe("ProviderTransform.message - DeepSeek reasoning content", () => {
