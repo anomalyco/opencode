@@ -16,7 +16,18 @@ import { useFileComponent } from "../context/file"
 import { useI18n } from "../context/i18n"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
-import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch, type JSX } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Match,
+  onCleanup,
+  Show,
+  Switch,
+  untrack,
+  type JSX,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { type FileContent, type FileDiff } from "@opencode-ai/sdk/v2"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
@@ -442,50 +453,52 @@ export const SessionReview = (props: SessionReviewProps) => {
     const focus = props.focusedComment
     if (!focus) return
 
-    focusToken++
-    const token = focusToken
+    untrack(() => {
+      focusToken++
+      const token = focusToken
 
-    setOpened(focus)
+      setOpened(focus)
 
-    const comment = (props.comments ?? []).find((c) => c.file === focus.file && c.id === focus.id)
-    if (comment) setSelection({ file: comment.file, range: cloneSelectedLineRange(comment.selection) })
+      const comment = (props.comments ?? []).find((c) => c.file === focus.file && c.id === focus.id)
+      if (comment) setSelection({ file: comment.file, range: cloneSelectedLineRange(comment.selection) })
 
-    const current = open()
-    if (!current.includes(focus.file)) {
-      handleChange([...current, focus.file])
-    }
-
-    const scrollTo = (attempt: number) => {
-      if (token !== focusToken) return
-
-      const root = scroll
-      if (!root) return
-
-      const wrapper = anchors.get(focus.file)
-      const anchor = wrapper?.querySelector(`[data-comment-id="${focus.id}"]`)
-      const ready = anchor instanceof HTMLElement
-
-      const target = ready ? anchor : wrapper
-      if (!target) {
-        if (attempt >= 120) return
-        requestAnimationFrame(() => scrollTo(attempt + 1))
-        return
+      const current = open()
+      if (!current.includes(focus.file)) {
+        handleChange([...current, focus.file])
       }
 
-      const rootRect = root.getBoundingClientRect()
-      const targetRect = target.getBoundingClientRect()
-      const offset = targetRect.top - rootRect.top
-      const next = root.scrollTop + offset - rootRect.height / 2 + targetRect.height / 2
-      root.scrollTop = Math.max(0, next)
+      const scrollTo = (attempt: number) => {
+        if (token !== focusToken) return
 
-      if (ready) return
-      if (attempt >= 120) return
-      requestAnimationFrame(() => scrollTo(attempt + 1))
-    }
+        const root = scroll
+        if (!root) return
 
-    requestAnimationFrame(() => scrollTo(0))
+        const wrapper = anchors.get(focus.file)
+        const anchor = wrapper?.querySelector(`[data-comment-id="${focus.id}"]`)
+        const ready = anchor instanceof HTMLElement
 
-    requestAnimationFrame(() => props.onFocusedCommentChange?.(null))
+        const target = ready ? anchor : wrapper
+        if (!target) {
+          if (attempt >= 120) return
+          requestAnimationFrame(() => scrollTo(attempt + 1))
+          return
+        }
+
+        const rootRect = root.getBoundingClientRect()
+        const targetRect = target.getBoundingClientRect()
+        const offset = targetRect.top - rootRect.top
+        const next = root.scrollTop + offset - rootRect.height / 2 + targetRect.height / 2
+        root.scrollTop = Math.max(0, next)
+
+        if (ready) return
+        if (attempt >= 120) return
+        requestAnimationFrame(() => scrollTo(attempt + 1))
+      }
+
+      requestAnimationFrame(() => scrollTo(0))
+
+      requestAnimationFrame(() => props.onFocusedCommentChange?.(null))
+    })
   })
 
   const handleReviewKeyDown = (event: KeyboardEvent) => {
