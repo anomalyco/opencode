@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "OpenCode Dev",
-  "identifier": "ai.opencode.desktop.dev",
+  "productName": "OpenCode Prax-Dev",
+  "identifier": "ai.opencode.desktop.prax-dev",
   "mainBinaryName": "OpenCode",
   "version": "../package.json",
   "build": {
@@ -25,11 +25,11 @@
   },
   "bundle": {
     "icon": [
-      "icons/dev/32x32.png",
-      "icons/dev/128x128.png",
-      "icons/dev/128x128@2x.png",
-      "icons/dev/icon.icns",
-      "icons/dev/icon.ico"
+      "icons/prax-dev/32x32.png",
+      "icons/prax-dev/128x128.png",
+      "icons/prax-dev/128x128@2x.png",
+      "icons/prax-dev/icon.icns",
+      "icons/prax-dev/icon.ico"
     ],
     "active": true,
     "targets": ["deb", "rpm", "dmg", "nsis", "app"],
@@ -46,7 +46,7 @@
     },
     "windows": {
       "nsis": {
-        "installerIcon": "icons/dev/icon.ico",
+        "installerIcon": "icons/prax-dev/icon.ico",
         "headerImage": "assets/nsis-header.bmp",
         "sidebarImage": "assets/nsis-sidebar.bmp"
       }

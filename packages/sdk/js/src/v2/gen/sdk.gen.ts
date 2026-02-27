@@ -133,6 +133,12 @@ import type {
   SessionShellResponses,
   SessionStatusErrors,
   SessionStatusResponses,
+  SessionSteerErrors,
+  SessionSteerListErrors,
+  SessionSteerListResponses,
+  SessionSteerRemoveErrors,
+  SessionSteerRemoveResponses,
+  SessionSteerResponses,
   SessionSummarizeErrors,
   SessionSummarizeResponses,
   SessionTodoErrors,
@@ -973,6 +979,72 @@ export class Experimental extends HeyApiClient {
   private _resource?: Resource
   get resource(): Resource {
     return (this._resource ??= new Resource({ client: this.client }))
+  }
+}
+
+export class Steer extends HeyApiClient {
+  /**
+   * Get steer queue
+   *
+   * List all pending steered messages for a session without draining the queue.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionSteerListResponses, SessionSteerListErrors, ThrowOnError>({
+      url: "/session/{sessionID}/steer",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Remove steered message
+   *
+   * Remove a specific queued steered message by its ID before it gets injected.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      steerID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "steerID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<SessionSteerRemoveResponses, SessionSteerRemoveErrors, ThrowOnError>(
+      {
+        url: "/session/{sessionID}/steer/{steerID}",
+        ...options,
+        ...params,
+      },
+    )
   }
 }
 
@@ -1856,6 +1928,50 @@ export class Session2 extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  /**
+   * Steer session
+   *
+   * Push a message into the session's pending input buffer. If the session is busy, the message will be injected at the next agentic loop boundary. If idle, it is queued for the next turn.
+   */
+  public steer<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      text?: string
+      mode?: "queue" | "steer"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "text" },
+            { in: "body", key: "mode" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionSteerResponses, SessionSteerErrors, ThrowOnError>({
+      url: "/session/{sessionID}/steer",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  private _steer?: Steer
+  get steer2(): Steer {
+    return (this._steer ??= new Steer({ client: this.client }))
   }
 }
 

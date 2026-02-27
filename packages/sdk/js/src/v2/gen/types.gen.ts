@@ -794,6 +794,19 @@ export type EventCommandExecuted = {
   }
 }
 
+export type EventSessionQueueChanged = {
+  type: "session.queue.changed"
+  properties: {
+    sessionID: string
+    queue: Array<{
+      id: string
+      text: string
+      time: number
+      mode: "queue" | "steer"
+    }>
+  }
+}
+
 export type PermissionAction = "allow" | "deny" | "ask"
 
 export type PermissionRule = {
@@ -973,6 +986,7 @@ export type Event =
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
   | EventCommandExecuted
+  | EventSessionQueueChanged
   | EventSessionCreated
   | EventSessionUpdated
   | EventSessionDeleted
@@ -3545,6 +3559,137 @@ export type SessionUnrevertResponses = {
 }
 
 export type SessionUnrevertResponse = SessionUnrevertResponses[keyof SessionUnrevertResponses]
+
+export type SessionSteerListData = {
+  body?: never
+  path: {
+    /**
+     * Session ID
+     */
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/steer"
+}
+
+export type SessionSteerListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionSteerListError = SessionSteerListErrors[keyof SessionSteerListErrors]
+
+export type SessionSteerListResponses = {
+  /**
+   * Pending steered messages
+   */
+  200: Array<{
+    id: string
+    text: string
+    time: number
+    mode: "queue" | "steer"
+  }>
+}
+
+export type SessionSteerListResponse = SessionSteerListResponses[keyof SessionSteerListResponses]
+
+export type SessionSteerData = {
+  body?: {
+    /**
+     * The message text to inject
+     */
+    text: string
+    /**
+     * queue waits for turn end, steer injects mid-turn
+     */
+    mode?: "queue" | "steer"
+  }
+  path: {
+    /**
+     * Session ID
+     */
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/steer"
+}
+
+export type SessionSteerErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionSteerError = SessionSteerErrors[keyof SessionSteerErrors]
+
+export type SessionSteerResponses = {
+  /**
+   * Queued message
+   */
+  200: {
+    id: string
+    text: string
+    time: number
+    mode: "queue" | "steer"
+  }
+}
+
+export type SessionSteerResponse = SessionSteerResponses[keyof SessionSteerResponses]
+
+export type SessionSteerRemoveData = {
+  body?: never
+  path: {
+    /**
+     * Session ID
+     */
+    sessionID: string
+    /**
+     * Steer message ID
+     */
+    steerID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/steer/{steerID}"
+}
+
+export type SessionSteerRemoveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionSteerRemoveError = SessionSteerRemoveErrors[keyof SessionSteerRemoveErrors]
+
+export type SessionSteerRemoveResponses = {
+  /**
+   * Whether the message was found and removed
+   */
+  200: boolean
+}
+
+export type SessionSteerRemoveResponse = SessionSteerRemoveResponses[keyof SessionSteerRemoveResponses]
 
 export type PermissionRespondData = {
   body?: {
