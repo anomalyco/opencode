@@ -24,6 +24,12 @@ export const TuiOptions = z.object({
     .optional()
     .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
   mouse: z.boolean().optional().describe("Enable or disable mouse capture (default: true)"),
+  width_method: z
+    .enum(["unicode", "wcwidth", "no_zwj"])
+    .optional()
+    .describe(
+      "Character width calculation method. Use 'no_zwj' if ZWJ emoji sequences cause layout corruption in your terminal (common with tmux and older terminals). Default: 'unicode'",
+    ),
 })
 
 export const TuiInfo = z
