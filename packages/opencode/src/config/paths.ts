@@ -7,6 +7,7 @@ import { Filesystem } from "@/util/filesystem"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 import { $ } from "bun"
+import { withTimeout } from "@/util/timeout"
 
 export namespace ConfigPaths {
   export async function projectFiles(name: string, directory: string, worktree: string) {
@@ -108,7 +109,11 @@ export namespace ConfigPaths {
         }
 
         const command = token.replace(/^\{cmd:/, "").replace(/\}$/, "")
-        const cmdResult = await $`${{ raw: command }}`.quiet().nothrow()
+        const parts = command.trim().split(/\s+/)
+        const cmd = parts[0]
+        const args = parts.slice(1)
+        const cmdResult = await withTimeout($`${cmd} ${args}`.quiet().nothrow(), 5_000)
+
         if (cmdResult.exitCode !== 0) {
           throw new InvalidError({
             path: configSource,
