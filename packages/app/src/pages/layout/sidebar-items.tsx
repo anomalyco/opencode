@@ -27,9 +27,9 @@ const statusClassName = (status: ProjectIconStatus) => {
     case "errored":
       return "bg-icon-critical-base"
     case "completed":
-      return "bg-icon-success-base"
+      return "bg-surface-success-strong"
     case "running":
-      return "bg-icon-info-base"
+      return "bg-surface-info-strong"
     case "idle":
     default:
       return undefined
