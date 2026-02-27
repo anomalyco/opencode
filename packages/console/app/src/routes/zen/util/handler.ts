@@ -654,12 +654,12 @@ export async function handler(
         }
 
         // Check rolling limit
-        if (sub.monthlyUsage && sub.timeMonthlyUpdated) {
+        if (sub.rollingUsage && sub.timeRollingUpdated) {
           const result = Subscription.analyzeRollingUsage({
             limit: liteData.rollingLimit,
             window: liteData.rollingWindow,
-            usage: sub.monthlyUsage,
-            timeUpdated: sub.timeMonthlyUpdated,
+            usage: sub.rollingUsage,
+            timeUpdated: sub.timeRollingUpdated,
           })
           if (result.status === "rate-limited")
             throw new SubscriptionUsageLimitError(
