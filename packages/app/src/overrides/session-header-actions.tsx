@@ -33,7 +33,7 @@ export function SessionHeaderActions() {
   const [bigqueryToken, setBigqueryToken] = createSignal("")
   const [tokenPersisted, setTokenPersisted] = createSignal(false)
 
-  const fetchBigQueryToken = async () => {
+  const fetchAndPersistToken = async () => {
     try {
       const res = await fetch("/auth/bigquery-token", { credentials: "include" })
       if (!res.ok) {
@@ -41,9 +41,26 @@ export function SessionHeaderActions() {
         return
       }
       const { token } = await res.json()
-      if (token) {
-        setBigqueryToken(token)
-        console.log("[laterapi] BigQuery token provisioned")
+      if (!token) return
+
+      setBigqueryToken(token)
+      console.log("[laterapi] BigQuery token provisioned")
+
+      // Write token to VibeMachine so the agent can access it immediately
+      if (params.dir) {
+        const cwd = decode64(params.dir) ?? params.dir
+        const writeCmd = buildTokenPersistCommand(token)
+        if (writeCmd) {
+          setTokenPersisted(true)
+          terminal.run({
+            command: "sh",
+            args: ["-c", writeCmd.replace(/ && $/, "")],
+            title: "Setup",
+            cwd,
+            env: { LATERAPI_KEY: token },
+          })
+          console.log("[laterapi] BigQuery token persisted to ~/.config/laterapi/token")
+        }
       }
     } catch (err) {
       console.error("[laterapi] Error fetching BigQuery token:", err)
@@ -51,7 +68,7 @@ export function SessionHeaderActions() {
   }
 
   onMount(() => {
-    fetchBigQueryToken()
+    fetchAndPersistToken()
   })
 
   const runCommand = (input: { command: string; args?: string[]; label: string; env?: Record<string, string> }) => {
