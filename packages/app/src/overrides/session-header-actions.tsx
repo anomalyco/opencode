@@ -1,4 +1,4 @@
-import { createMemo, createSignal, onMount } from "solid-js"
+import { createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -49,9 +49,13 @@ export function SessionHeaderActions() {
     }
   }
 
+  const onPreviewRun = () => run()
+
   onMount(() => {
     fetchBigQueryToken()
+    window.addEventListener("preview-run", onPreviewRun)
   })
+  onCleanup(() => window.removeEventListener("preview-run", onPreviewRun))
 
   const runCommand = (input: { command: string; args?: string[]; label: string; env?: Record<string, string> }) => {
     if (!params.dir) {

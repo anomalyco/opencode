@@ -1,12 +1,16 @@
-import { createSignal, Show } from "solid-js"
+import { createSignal, onCleanup, onMount, Show } from "solid-js"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
-import { PREVIEW_URL } from "./preview-panel-helpers"
+import { PREVIEW_URL, PLACEHOLDER_HTML } from "./preview-panel-helpers"
 
 const [previewOpen, setPreviewOpen] = createSignal(false)
 const [previewWidth, setPreviewWidth] = createSignal(480)
+const [previewLoaded, setPreviewLoaded] = createSignal(false)
 
 export { previewOpen, setPreviewOpen, previewWidth }
+
+const POLL_INTERVAL = 3000
+const MAX_POLLS = 20
 
 function RefreshIcon() {
   return (
@@ -24,12 +28,80 @@ function RefreshIcon() {
 
 export function PreviewPanel(props: { open: boolean }) {
   let iframeRef: HTMLIFrameElement | undefined
+  let pollTimer: ReturnType<typeof setInterval> | undefined
+  let pollCount = 0
 
-  const refresh = () => {
+  const sendStateToIframe = (state: string) => {
+    iframeRef?.contentWindow?.postMessage({ state }, "*")
+  }
+
+  const stopPolling = () => {
+    if (pollTimer) {
+      clearInterval(pollTimer)
+      pollTimer = undefined
+    }
+  }
+
+  const loadPreview = () => {
+    stopPolling()
     if (iframeRef) {
+      setPreviewLoaded(true)
+      iframeRef.removeAttribute("srcdoc")
       iframeRef.src = PREVIEW_URL
     }
   }
+
+  const checkReady = async () => {
+    pollCount++
+    if (pollCount > MAX_POLLS) {
+      stopPolling()
+      sendStateToIframe("timeout")
+      return
+    }
+    try {
+      const res = await fetch(PREVIEW_URL + "?_t=" + Date.now(), {
+        method: "HEAD",
+        credentials: "include",
+      })
+      if (res.ok) {
+        loadPreview()
+      }
+    } catch {
+      // not ready yet
+    }
+  }
+
+  const startPolling = () => {
+    stopPolling()
+    pollCount = 0
+    sendStateToIframe("loading")
+    pollTimer = setInterval(checkReady, POLL_INTERVAL)
+  }
+
+  const onMessage = (e: MessageEvent) => {
+    if (e.data?.type === "preview-start") {
+      window.dispatchEvent(new CustomEvent("preview-run"))
+      startPolling()
+    } else if (e.data?.type === "preview-retry") {
+      startPolling()
+    } else if (e.data?.type === "preview-refresh") {
+      loadPreview()
+    }
+  }
+
+  const refresh = () => {
+    if (previewLoaded()) {
+      if (iframeRef) iframeRef.src = PREVIEW_URL
+    } else {
+      loadPreview()
+    }
+  }
+
+  onMount(() => window.addEventListener("message", onMessage))
+  onCleanup(() => {
+    window.removeEventListener("message", onMessage)
+    stopPolling()
+  })
 
   return (
     <Show when={props.open}>
@@ -58,7 +130,8 @@ export function PreviewPanel(props: { open: boolean }) {
         </div>
         <iframe
           ref={iframeRef}
-          src={PREVIEW_URL}
+          srcdoc={previewLoaded() ? undefined : PLACEHOLDER_HTML}
+          src={previewLoaded() ? PREVIEW_URL : undefined}
           class="flex-1 w-full border-0"
           title="App preview"
         />
