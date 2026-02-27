@@ -4,7 +4,29 @@
 - Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
 - Prefer automation: execute requested actions without confirmation unless blocked by missing info or safety/irreversibility.
 
-## Style Guide
+## Build, Lint, and Test Commands
+
+### Root Level
+
+- `bun turbo typecheck` - Typecheck all packages via Turbo
+- Tests cannot run from repo root; use package directories
+
+### Package Level (run from package directory)
+
+- `bun test --timeout 30000` - Run all tests
+- `bun test <path/to/test.test.ts>` - Run a single test file
+- `bun test --timeout 30000 <pattern>` - Run tests matching pattern
+- `tsgo --noEmit` or `tsc --noEmit` - Typecheck package
+- `bun run db` - Run Drizzle Kit for database operations
+- `bun run db generate --name <slug>` - Generate migration
+
+### Database (Drizzle)
+
+- Schema files: `src/**/*.sql.ts` (snake_case columns)
+- Migration output: `migration/`
+- Migration tests read per-folder layout (no `_journal.json`)
+
+## Code Style Guide
 
 ### General Principles
 
@@ -13,12 +35,12 @@
 - Avoid using the `any` type
 - Prefer single word variable names where possible
 - Use Bun APIs when possible, like `Bun.file()`
-- Rely on type inference when possible; avoid explicit type annotations or interfaces unless necessary for exports or clarity
-- Prefer functional array methods (flatMap, filter, map) over for loops; use type guards on filter to maintain type inference downstream
+- Rely on type inference when possible; avoid explicit type annotations unless necessary for exports
+- Prefer functional array methods (flatMap, filter, map) over for loops; use type guards to maintain inference
 
 ### Naming
 
-Prefer single word names for variables and functions. Only use multiple words if necessary.
+Prefer single word names for variables and functions. Use multiple words only when necessary.
 
 ```ts
 // Good
@@ -30,7 +52,7 @@ const fooBar = 1
 function prepareJournal(dir: string) {}
 ```
 
-Reduce total variable count by inlining when a value is only used once.
+Inline single-use values instead of intermediate variables.
 
 ```ts
 // Good
@@ -106,8 +128,16 @@ const table = sqliteTable("session", {
 })
 ```
 
+### Formatting
+
+- No semicolons (Prettier config)
+- 120 character line width
+- Bun runtime as package manager
+
 ## Testing
 
 - Avoid mocks as much as possible
 - Test actual implementation, do not duplicate logic into tests
-- Tests cannot run from repo root (guard: `do-not-run-tests-from-root`); run from package dirs like `packages/opencode`.
+- Use `bun:test` framework
+- Test fixtures: `await using tmp = await tmpdir()` with automatic cleanup
+- Fixture options: `git?: boolean`, `config?: Partial<Config.Info>`, `init?: (dir) => Promise<T>`, `dispose?: (dir) => Promise<void>`

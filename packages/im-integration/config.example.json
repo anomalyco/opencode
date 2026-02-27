@@ -1,0 +1,21 @@
+{
+  "im": {
+    "type": "telegram",
+    "token": "YOUR_TELEGRAM_BOT_TOKEN",
+    "maxFileSize": 20971520,
+    "allowedTypes": ["image/*", "application/pdf", "text/*", "application/json", "application/zip"],
+    "storagePath": "~/.opencode/im-media",
+    "cleanupDays": 15,
+    "allowedUsers": []
+  },
+  "projects": {
+    "api": {
+      "directory": "~/projects/api",
+      "name": "Backend API"
+    }
+  },
+  "compaction": {
+    "auto": true,
+    "notify": true
+  }
+}
