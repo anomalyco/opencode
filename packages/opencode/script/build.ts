@@ -65,6 +65,7 @@ const allTargets: {
   arch: "arm64" | "x64"
   abi?: "musl"
   avx2?: false
+  noCa?: true
 }[] = [
   {
     os: "linux",
@@ -117,6 +118,17 @@ const allTargets: {
     arch: "x64",
     avx2: false,
   },
+  {
+    os: "win32",
+    arch: "x64",
+    noCa: true,
+  },
+  {
+    os: "win32",
+    arch: "x64",
+    avx2: false,
+    noCa: true,
+  },
 ]
 
 const targets = singleFlag
@@ -133,6 +145,11 @@ const targets = singleFlag
 
       // also skip abi-specific builds for the same reason
       if (item.abi !== undefined) {
+        return false
+      }
+
+      // skip no-ca variants for local dev builds
+      if (item.noCa) {
         return false
       }
 
@@ -155,6 +172,7 @@ for (const item of targets) {
     item.arch,
     item.avx2 === false ? "baseline" : undefined,
     item.abi === undefined ? undefined : item.abi,
+    item.noCa ? "no-ca" : undefined,
   ]
     .filter(Boolean)
     .join("-")
@@ -180,7 +198,7 @@ for (const item of targets) {
       autoloadPackageJson: true,
       target: name.replace(pkg.name, "bun") as any,
       outfile: `dist/${name}/bin/opencode`,
-      execArgv: [`--user-agent=opencode/${Script.version}`, ...(process.env.OPENCODE_DISABLE_SYSTEM_CA !== 'true' ? ['--use-system-ca'] : []), "--"],
+      execArgv: [`--user-agent=opencode/${Script.version}`, ...(!item.noCa && process.env.OPENCODE_DISABLE_SYSTEM_CA !== 'true' ? ['--use-system-ca'] : []), "--"],
       windows: {},
     },
     entrypoints: ["./src/index.ts", parserWorker, workerPath],

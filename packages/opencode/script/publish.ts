@@ -10,6 +10,7 @@ process.chdir(dir)
 const binaries: Record<string, string> = {}
 for (const filepath of new Bun.Glob("*/package.json").scanSync({ cwd: "./dist" })) {
   const pkg = await Bun.file(`./dist/${filepath}`).json()
+  if (pkg.name.includes("-no-ca")) continue
   binaries[pkg.name] = pkg.version
 }
 console.log("binaries", binaries)
