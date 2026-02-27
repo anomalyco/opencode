@@ -379,7 +379,7 @@ export namespace File {
       }
 
       const set = new Set<string>()
-      for await (const file of Ripgrep.files({ cwd: Instance.directory })) {
+      for await (const file of Ripgrep.files({ cwd: Instance.directory, maxDepth: 3 })) {
         result.files.push(file)
         let current = file
         while (true) {
@@ -411,7 +411,9 @@ export namespace File {
   })
 
   export function init() {
-    state()
+    // Disabled automatic scanning to prevent CPU/memory exhaustion
+    // Scanning will be triggered lazily on first access
+    // state()
   }
 
   export async function status() {

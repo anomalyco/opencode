@@ -199,17 +199,52 @@ function useDirectorySearch(args: {
     const cap = 12
     const branch = 4
     let paths = [scopedInput.directory]
-    for (const part of head) {
-      if (!active()) return []
-      if (part === "..") {
-        paths = paths.map(parentOf)
-        continue
+    // Optimization: Try to construct the full exact path first
+    // This avoids triggering Instance initialization for each segment
+    const potentialExactPaths: string[] = []
+    for (const p of paths) {
+      let currentPath = p
+      for (const part of head) {
+        if (part === "..") {
+          currentPath = parentOf(currentPath)
+        } else {
+          currentPath = joinPath(currentPath, part)
+        }
       }
+      potentialExactPaths.push(currentPath)
+    }
 
-      const next = (await Promise.all(paths.map((p) => match(p, part, branch)))).flat()
-      if (!active()) return []
-      paths = Array.from(new Set(next)).slice(0, cap)
-      if (paths.length === 0) return [] as string[]
+    // Verify if any of the exact paths exist (only ONE API call per potential path)
+    const exactPathResults = await Promise.all(
+      potentialExactPaths.map(async (exactPath) => {
+        try {
+          await dirs(exactPath)
+          return exactPath
+        } catch {
+          return null
+        }
+      })
+    )
+
+    const validExactPaths = exactPathResults.filter((p): p is string => p !== null)
+
+    if (validExactPaths.length > 0) {
+      // Exact path exists, use it directly
+      paths = validExactPaths
+    } else {
+      // Exact path doesn't exist, fall back to segment-by-segment fuzzy matching
+      paths = [scopedInput.directory]
+      for (const part of head) {
+        if (!active()) return []
+        if (part === "..") {
+          paths = paths.map(parentOf)
+          continue
+        }
+        const next = (await Promise.all(paths.map((p) => match(p, part, branch)))).flat()
+        if (!active()) return []
+        paths = Array.from(new Set(next)).slice(0, cap)
+        if (paths.length === 0) return [] as string[]
+      }
     }
 
     const out = (await Promise.all(paths.map((p) => match(p, tail, 50)))).flat()
