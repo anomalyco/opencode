@@ -11,6 +11,7 @@ import type { FetchFunction } from "@ai-sdk/provider-utils"
 import { convertToKiroPayload, type KiroProviderOptions } from "./converters"
 import { normalizeModelName } from "./model-resolver"
 import { parseAwsEventStream, type KiroEvent } from "./streaming"
+import { estimatePayloadTokens, countTokens } from "./tokenizer"
 
 export interface KiroLanguageModelConfig {
   provider: string
@@ -243,7 +244,15 @@ export class KiroLanguageModel implements LanguageModelV2 {
       const errorText = await response.text()
       const fs = await import("fs")
       fs.writeFileSync("/tmp/kiro-payload-error.json", JSON.stringify({ status: response.status, statusText: response.statusText, errorText, payload }, null, 2))
-      throw new Error(`Kiro API error: ${response.status} ${response.statusText} - ${errorText}`)
+      const { APICallError } = await import("ai")
+      throw new APICallError({
+        message: `${response.status} ${response.statusText}`,
+        url,
+        requestBodyValues: payload as unknown as Record<string, unknown>,
+        statusCode: response.status,
+        responseBody: errorText,
+        isRetryable: response.status >= 500,
+      })
     }
 
     if (!response.body) {
@@ -282,6 +291,7 @@ export class KiroLanguageModel implements LanguageModelV2 {
     let textStarted = false
     let reasoningStarted = false
     const toolCallIds: Map<string, string> = new Map() // toolUseId -> toolName
+    let outputText = ""
 
     const responseHeaders = headersToRecord(response.headers)
 
@@ -307,6 +317,7 @@ export class KiroLanguageModel implements LanguageModelV2 {
                   id: textId,
                   delta: event.content,
                 })
+                outputText += event.content
                 break
 
               case "thinking_start":
@@ -325,6 +336,7 @@ export class KiroLanguageModel implements LanguageModelV2 {
                     id: reasoningId,
                     delta: event.thinking,
                   })
+                  outputText += event.thinking
                 }
                 break
 
@@ -374,9 +386,11 @@ export class KiroLanguageModel implements LanguageModelV2 {
                 break
 
               case "usage":
-                usage.inputTokens = event.inputTokens
                 usage.outputTokens = event.outputTokens
-                usage.totalTokens = event.inputTokens + event.outputTokens
+                if (event.inputTokens > 0) {
+                  usage.inputTokens = event.inputTokens
+                  usage.totalTokens = event.inputTokens + event.outputTokens
+                }
                 break
 
               case "done":
@@ -396,6 +410,15 @@ export class KiroLanguageModel implements LanguageModelV2 {
           },
 
           flush(controller) {
+            // Estimate tokens from payload using tiktoken (kiro-gateway style)
+            if (!usage.inputTokens) {
+              usage.inputTokens = estimatePayloadTokens(payload)
+            }
+            if (!usage.outputTokens && outputText) {
+              usage.outputTokens = countTokens(outputText)
+            }
+            usage.totalTokens = (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0)
+
             // Close any open text part
             if (textStarted) {
               controller.enqueue({

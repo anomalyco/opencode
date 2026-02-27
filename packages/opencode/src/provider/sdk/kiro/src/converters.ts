@@ -698,6 +698,12 @@ function truncateKiroPayload(payload: KiroPayload): KiroPayload {
       delete (item.assistantResponseMessage as any).modelId
     }
   }
+  // Sanitize empty user messages — Kiro API rejects content: "" with empty context
+  for (const item of payload.conversationState.history) {
+    if (item.userInputMessage && !item.userInputMessage.content && !item.userInputMessage.userInputMessageContext?.toolResults?.length) {
+      item.userInputMessage.content = "."
+    }
+  }
   fixOrphanedToolResults(payload)
   let size = payloadBytes(payload)
   if (size <= MAX_PAYLOAD_BYTES) return payload
@@ -776,7 +782,7 @@ function ensureAlternation(payload: KiroPayload) {
       if (currIsUser) {
         history.splice(i, 0, { assistantResponseMessage: { content: "" } } as any)
       } else {
-        history.splice(i, 0, { userInputMessage: { content: "", userInputMessageContext: {} } } as any)
+        history.splice(i, 0, { userInputMessage: { content: ".", userInputMessageContext: {} } } as any)
       }
     }
     i++

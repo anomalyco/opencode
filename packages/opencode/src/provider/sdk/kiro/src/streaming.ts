@@ -7,6 +7,7 @@ export type KiroEventType =
   | "thinking"
   | "thinking_stop"
   | "usage"
+  | "context_usage"
   | "done"
   | "error"
 
@@ -52,6 +53,11 @@ export interface KiroUsageEvent {
   outputTokens: number
 }
 
+export interface KiroContextUsageEvent {
+  type: "context_usage"
+  percentage: number
+}
+
 export interface KiroDoneEvent {
   type: "done"
 }
@@ -70,6 +76,7 @@ export type KiroEvent =
   | KiroThinkingEvent
   | KiroThinkingStopEvent
   | KiroUsageEvent
+  | KiroContextUsageEvent
   | KiroDoneEvent
   | KiroErrorEvent
 
@@ -185,6 +192,7 @@ interface KiroSimpleEvent {
   usage?: number
   thinking?: string
   stopReason?: string
+  contextUsagePercentage?: number
 }
 
 // Nested format: {"assistantResponseEvent": {...}}
@@ -482,6 +490,14 @@ export function parseAwsEventStream(stream: ReadableStream<Uint8Array>): Readabl
                 type: "usage",
                 inputTokens: 0,
                 outputTokens: simple.usage,
+              })
+              continue
+            }
+
+            if (simple.contextUsagePercentage !== undefined) {
+              controller.enqueue({
+                type: "context_usage",
+                percentage: simple.contextUsagePercentage,
               })
               continue
             }
