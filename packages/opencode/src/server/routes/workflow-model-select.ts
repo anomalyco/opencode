@@ -4,7 +4,7 @@ import { resolver } from "hono-openapi"
 import { WorkflowModelSelect } from "../../session/workflow-model-select"
 import { Provider } from "../../provider/provider"
 import { Instance } from "../../project/instance"
-import { GitLabModelDiscovery, GitLabProjectDetector } from "@gitlab/gitlab-ai-provider"
+import { GitLabModelDiscovery, GitLabProjectDetector, GitLabModelCache } from "@gitlab/gitlab-ai-provider"
 import { Log } from "../../util/log"
 import z from "zod"
 import { errors } from "../error"
@@ -130,10 +130,13 @@ export const WorkflowModelSelectRoutes = lazy(() =>
             }
           }
 
+          const modelCache = new GitLabModelCache(Instance.directory)
+
           if (namespaceId) {
             try {
               const discovery = new GitLabModelDiscovery({ instanceUrl, getHeaders })
               const discovered = await discovery.discover(namespaceId)
+              modelCache.saveDiscovery(discovered)
 
               log.debug("discovery result", {
                 namespaceId,
@@ -144,7 +147,7 @@ export const WorkflowModelSelectRoutes = lazy(() =>
               })
 
               if (discovered.pinnedModel) {
-                await WorkflowModelSelect.setLastSelection(discovered.pinnedModel.ref)
+                await WorkflowModelSelect.setLastSelection(discovered.pinnedModel.ref, discovered.pinnedModel.name)
                 return c.json({
                   status: "pinned" as const,
                   modelRef: discovered.pinnedModel.ref,
@@ -176,6 +179,7 @@ export const WorkflowModelSelectRoutes = lazy(() =>
                 if (result) {
                   const match = discovered.selectableModels.find((m) => m.ref === result)
                   if (match) {
+                    await WorkflowModelSelect.setLastSelection(match.ref, match.name)
                     return c.json({ status: "asked" as const, modelRef: match.ref, modelName: match.name })
                   }
                 }
@@ -183,7 +187,7 @@ export const WorkflowModelSelectRoutes = lazy(() =>
               }
 
               if (discovered.defaultModel) {
-                await WorkflowModelSelect.setLastSelection(discovered.defaultModel.ref)
+                await WorkflowModelSelect.setLastSelection(discovered.defaultModel.ref, discovered.defaultModel.name)
                 return c.json({
                   status: "default" as const,
                   modelRef: discovered.defaultModel.ref,
@@ -198,7 +202,7 @@ export const WorkflowModelSelectRoutes = lazy(() =>
             }
           }
 
-          await WorkflowModelSelect.setLastSelection("default")
+          await WorkflowModelSelect.setLastSelection("default", "Namespace Default")
           return c.json({
             status: "default" as const,
             modelRef: "default",
@@ -260,6 +264,7 @@ export const WorkflowModelSelectRoutes = lazy(() =>
         "json",
         z.object({
           modelRef: z.string().nullable(),
+          modelName: z.string().nullable().optional(),
         }),
       ),
       async (c) => {
@@ -268,6 +273,7 @@ export const WorkflowModelSelectRoutes = lazy(() =>
         await WorkflowModelSelect.reply({
           requestID: params.requestID,
           modelRef: json.modelRef,
+          modelName: json.modelName,
         })
         return c.json(true)
       },

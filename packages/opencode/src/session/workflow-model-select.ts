@@ -2,6 +2,7 @@ import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { Instance } from "@/project/instance"
 import { Log } from "@/util/log"
+import { GitLabModelCache } from "@gitlab/gitlab-ai-provider"
 import { randomBytes } from "crypto"
 import z from "zod"
 
@@ -34,6 +35,10 @@ export namespace WorkflowModelSelect {
     ),
   }
 
+  function getModelCache(): GitLabModelCache {
+    return new GitLabModelCache(Instance.directory)
+  }
+
   const state = Instance.state(async () => {
     const pending: Record<
       string,
@@ -43,7 +48,14 @@ export namespace WorkflowModelSelect {
       }
     > = {}
 
-    let lastSelectedRef: string | null = null
+    const cache = getModelCache()
+    const cached = cache.load()
+    let lastSelectedRef: string | null = cached?.selectedModelRef ?? null
+    let lastSelectedName: string | null = cached?.selectedModelName ?? null
+
+    if (lastSelectedRef) {
+      log.info("loaded cached model selection", { ref: lastSelectedRef, name: lastSelectedName })
+    }
 
     return {
       pending,
@@ -52,6 +64,12 @@ export namespace WorkflowModelSelect {
       },
       set lastSelectedRef(v) {
         lastSelectedRef = v
+      },
+      get lastSelectedName() {
+        return lastSelectedName
+      },
+      set lastSelectedName(v) {
+        lastSelectedName = v
       },
     }
   })
@@ -87,7 +105,11 @@ export namespace WorkflowModelSelect {
     })
   }
 
-  export async function reply(input: { requestID: string; modelRef: string | null }): Promise<void> {
+  export async function reply(input: {
+    requestID: string
+    modelRef: string | null
+    modelName?: string | null
+  }): Promise<void> {
     const s = await state()
     const existing = s.pending[input.requestID]
     if (!existing) {
@@ -106,6 +128,9 @@ export namespace WorkflowModelSelect {
 
     if (input.modelRef) {
       s.lastSelectedRef = input.modelRef
+      s.lastSelectedName = input.modelName ?? null
+      const cache = getModelCache()
+      cache.saveSelection(input.modelRef, input.modelName ?? null)
       log.info("set lastSelectedRef", { ref: input.modelRef, verify: s.lastSelectedRef })
     }
 
@@ -118,9 +143,17 @@ export namespace WorkflowModelSelect {
     return s.lastSelectedRef
   }
 
-  export async function setLastSelection(ref: string | null): Promise<void> {
+  export async function getLastSelectionName(): Promise<string | null> {
+    const s = await state()
+    return s.lastSelectedName
+  }
+
+  export async function setLastSelection(ref: string | null, name?: string | null): Promise<void> {
     const s = await state()
     s.lastSelectedRef = ref
+    s.lastSelectedName = name ?? null
+    const cache = getModelCache()
+    cache.saveSelection(ref, name ?? null)
   }
 
   export async function list() {

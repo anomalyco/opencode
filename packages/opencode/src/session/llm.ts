@@ -158,9 +158,13 @@ export namespace LLM {
       const workflowModel = language as GitLabWorkflowLanguageModel
 
       const cachedRef = await WorkflowModelSelect.getLastSelection()
-      l.debug("workflow model seed", { cachedRef, existingSelected: workflowModel.selectedModelRef })
+      const cachedName = await WorkflowModelSelect.getLastSelectionName()
+      l.debug("workflow model seed", { cachedRef, cachedName, existingSelected: workflowModel.selectedModelRef })
       if (cachedRef) {
         workflowModel.selectedModelRef = cachedRef
+      }
+      if (cachedName) {
+        workflowModel.selectedModelName = cachedName
       }
 
       workflowModel.onSelectModel = async (models: AiModel[]) => {

@@ -20,7 +20,7 @@ import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogWorkflowModel } from "@tui/component/dialog-workflow-model"
-import { isWorkflowModel } from "@gitlab/gitlab-ai-provider"
+import { isWorkflowModel, GitLabModelCache } from "@gitlab/gitlab-ai-provider"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
@@ -692,7 +692,16 @@ function App() {
     if (discoveredForModel === modelKey && !isRetrigger) return
     discoveredForModel = modelKey
     untrack(() => {
-      toast.show({ variant: "info", message: "Discovering workflow models...", duration: 60000 })
+      const fileCache = new GitLabModelCache(process.cwd())
+      const cached = fileCache.load()
+      const hasCachedSelection = !!(cached?.selectedModelName && cached?.selectedModelRef)
+      if (cached?.selectedModelName) {
+        local.model.setWorkflowSubModelName(cached.selectedModelName)
+      }
+
+      if (!hasCachedSelection) {
+        toast.show({ variant: "info", message: "Discovering workflow models...", duration: 60000 })
+      }
       sdk
         .fetch(`${sdk.url}/workflow-model-select/discover`, {
           method: "POST",
@@ -795,14 +804,14 @@ function App() {
     }
     const { id, models } = evt.properties
     let replied = false
-    const reply = (modelRef: string | null) => {
+    const reply = (modelRef: string | null, modelName?: string | null) => {
       if (replied) return
       replied = true
       sdk
         .fetch(`${sdk.url}/workflow-model-select/${id}/reply`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ modelRef }),
+          body: JSON.stringify({ modelRef, modelName }),
         })
         .catch(() => {})
     }
@@ -813,11 +822,11 @@ function App() {
           requestID={id}
           models={models}
           onReply={(modelRef) => {
-            reply(modelRef)
+            const selected = models.find((m) => m.ref === modelRef)
+            reply(modelRef, selected?.name ?? null)
             dialog.clear()
-            if (modelRef) {
-              const selected = models.find((m) => m.ref === modelRef)
-              if (selected) local.model.setWorkflowSubModelName(selected.name)
+            if (modelRef && selected) {
+              local.model.setWorkflowSubModelName(selected.name)
             }
           }}
         />
