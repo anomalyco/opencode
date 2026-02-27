@@ -2204,6 +2204,7 @@ export class WorkflowModelSelect extends HeyApiClient {
       requestID: string
       directory?: string
       modelRef?: string | null
+      modelName?: string | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2215,6 +2216,7 @@ export class WorkflowModelSelect extends HeyApiClient {
             { in: "path", key: "requestID" },
             { in: "query", key: "directory" },
             { in: "body", key: "modelRef" },
+            { in: "body", key: "modelName" },
           ],
         },
       ],

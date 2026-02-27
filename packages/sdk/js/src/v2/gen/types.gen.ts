@@ -3823,6 +3823,7 @@ export type WorkflowModelSelectClearResponse =
 export type WorkflowModelSelectReplyData = {
   body?: {
     modelRef: string | null
+    modelName?: string | null
   }
   path: {
     requestID: string

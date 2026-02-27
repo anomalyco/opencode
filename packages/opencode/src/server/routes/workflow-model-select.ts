@@ -130,7 +130,7 @@ export const WorkflowModelSelectRoutes = lazy(() =>
             }
           }
 
-          const modelCache = new GitLabModelCache(Instance.directory)
+          const modelCache = new GitLabModelCache(Instance.directory, instanceUrl)
 
           if (namespaceId) {
             try {

@@ -209,7 +209,16 @@ export namespace SessionProcessor {
                       state: {
                         status: "error",
                         input: value.input ?? match.state.input,
-                        error: (value.error as any).toString(),
+                        error:
+                          typeof value.error === "string"
+                            ? value.error
+                            : value.error instanceof Error
+                              ? value.error.message
+                              : typeof value.error === "object" && value.error !== null
+                                ? (value.error as Record<string, unknown>).output?.toString() ||
+                                  (value.error as Record<string, unknown>).message?.toString() ||
+                                  JSON.stringify(value.error)
+                                : String(value.error),
                         time: {
                           start: match.state.time.start,
                           end: Date.now(),

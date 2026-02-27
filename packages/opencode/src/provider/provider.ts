@@ -466,10 +466,15 @@ export namespace Provider {
     },
     gitlab: async (input) => {
       const instanceUrl = Env.get("GITLAB_INSTANCE_URL") || "https://gitlab.com"
+      const normalizedInstanceUrl = instanceUrl.replace(/\/$/, "")
 
       const auth = await Auth.get(input.id)
       const apiKey = await (async () => {
-        if (auth?.type === "oauth") return auth.access
+        if (auth?.type === "oauth") {
+          const authInstance = (auth.enterpriseUrl || "https://gitlab.com").replace(/\/$/, "")
+          if (authInstance === normalizedInstanceUrl) return auth.access
+          return Env.get("GITLAB_TOKEN")
+        }
         if (auth?.type === "api") return auth.key
         return Env.get("GITLAB_TOKEN")
       })()

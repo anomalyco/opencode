@@ -1,5 +1,6 @@
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
+import { Env } from "@/env"
 import { Instance } from "@/project/instance"
 import { Log } from "@/util/log"
 import { GitLabModelCache } from "@gitlab/gitlab-ai-provider"
@@ -36,7 +37,8 @@ export namespace WorkflowModelSelect {
   }
 
   function getModelCache(): GitLabModelCache {
-    return new GitLabModelCache(Instance.directory)
+    const instanceUrl = Env.get("GITLAB_INSTANCE_URL") || "https://gitlab.com"
+    return new GitLabModelCache(Instance.directory, instanceUrl)
   }
 
   const state = Instance.state(async () => {

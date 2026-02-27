@@ -692,7 +692,8 @@ function App() {
     if (discoveredForModel === modelKey && !isRetrigger) return
     discoveredForModel = modelKey
     untrack(() => {
-      const fileCache = new GitLabModelCache(process.cwd())
+      const instanceUrl = process.env.GITLAB_INSTANCE_URL || "https://gitlab.com"
+      const fileCache = new GitLabModelCache(process.cwd(), instanceUrl)
       const cached = fileCache.load()
       const hasCachedSelection = !!(cached?.selectedModelName && cached?.selectedModelRef)
       if (cached?.selectedModelName) {
