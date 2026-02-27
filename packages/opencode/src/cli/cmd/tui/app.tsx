@@ -39,7 +39,7 @@ import open from "open"
 import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { Keybind } from "@/util/keybind"
-import { TuiConfigProvider } from "./context/tui-config"
+import { TuiConfigProvider, useTuiConfig } from "./context/tui-config"
 import { TuiConfig } from "@/config/tui"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
@@ -217,6 +217,7 @@ function App() {
   const exit = useExit()
   const promptRef = usePromptRef()
   const keybind = useKeybind()
+  const tuiConfig = useTuiConfig()
 
   useKeyboard((evt) => {
     if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
@@ -667,7 +668,7 @@ function App() {
     if (dialog.stack.length > 0) return
     if (evt.defaultPrevented) return
 
-    const keybinds = sync.data.config.keybinds ?? {}
+    const keybinds = tuiConfig.keybinds ?? {}
     for (const [key, value] of Object.entries(keybinds)) {
       if (!key.startsWith("/")) continue
       if (!value) continue

@@ -8,7 +8,7 @@ const KeybindOverride = z
       z.ZodOptional<z.ZodString>
     >,
   )
-  .strict()
+  .catchall(z.string().optional())
 
 export const TuiOptions = z.object({
   scroll_speed: z.number().min(0.001).optional().describe("TUI scroll speed"),
