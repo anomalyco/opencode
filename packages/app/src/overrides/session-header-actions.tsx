@@ -10,7 +10,7 @@ import { decode64 } from "@/utils/base64"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { SettingsPopup } from "./settings-popup"
 import { DialogSelectDirectory } from "./dialog-select-directory"
-import { extractDirectory } from "./session-header-actions-helpers"
+import { extractDirectory, buildTokenPersistCommand, buildShellCommand } from "./session-header-actions-helpers"
 import { previewOpen, setPreviewOpen } from "./preview-panel"
 
 function RunIcon() {
@@ -33,7 +33,7 @@ export function SessionHeaderActions() {
   const [bigqueryToken, setBigqueryToken] = createSignal("")
   const [tokenPersisted, setTokenPersisted] = createSignal(false)
 
-  const fetchBigQueryToken = async () => {
+  const fetchAndPersistToken = async () => {
     try {
       const res = await fetch("/auth/bigquery-token", { credentials: "include" })
       if (!res.ok) {
@@ -41,9 +41,26 @@ export function SessionHeaderActions() {
         return
       }
       const { token } = await res.json()
-      if (token) {
-        setBigqueryToken(token)
-        console.log("[laterapi] BigQuery token provisioned")
+      if (!token) return
+
+      setBigqueryToken(token)
+      console.log("[laterapi] BigQuery token provisioned")
+
+      // Write token to VibeMachine so the agent can access it immediately
+      if (params.dir) {
+        const cwd = decode64(params.dir) ?? params.dir
+        const writeCmd = buildTokenPersistCommand(token)
+        if (writeCmd) {
+          setTokenPersisted(true)
+          terminal.run({
+            command: "sh",
+            args: ["-c", writeCmd.replace(/ && $/, "")],
+            title: "Setup",
+            cwd,
+            env: { LATERAPI_KEY: token },
+          })
+          console.log("[laterapi] BigQuery token persisted to ~/.config/laterapi/token")
+        }
       }
     } catch (err) {
       console.error("[laterapi] Error fetching BigQuery token:", err)
@@ -53,16 +70,10 @@ export function SessionHeaderActions() {
   const onPreviewRun = () => run()
 
   onMount(() => {
-    fetchBigQueryToken()
+    fetchAndPersistToken()
     window.addEventListener("preview-run", onPreviewRun)
   })
   onCleanup(() => window.removeEventListener("preview-run", onPreviewRun))
-
-  const persistToken = () => {
-    if (tokenPersisted() || !bigqueryToken()) return ""
-    setTokenPersisted(true)
-    return "mkdir -p ~/.config/laterapi && printf '%s' \"$LATERAPI_KEY\" > ~/.config/laterapi/token && "
-  }
 
   const runCommand = (input: { command: string; args?: string[]; label: string; env?: Record<string, string> }) => {
     if (!params.dir) {
@@ -80,11 +91,13 @@ export function SessionHeaderActions() {
       ...(bqToken ? { LATERAPI_KEY: bqToken } : {}),
       ...input.env,
     }
-    const writeToken = persistToken()
-    const cmd = [input.command, ...(input.args || [])].join(" ")
+
+    const prefix = !tokenPersisted() ? buildTokenPersistCommand(bqToken) : ""
+    if (prefix) setTokenPersisted(true)
+    const shell = buildShellCommand(input.command, input.args || [], prefix)
 
     view().terminal.open()
-    terminal.run({ command: "sh", args: ["-c", writeToken + cmd], title: input.label, cwd, env })
+    terminal.run({ command: shell.command, args: shell.args, title: input.label, cwd, env })
   }
 
   const run = () => {
