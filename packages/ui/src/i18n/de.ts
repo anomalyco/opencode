@@ -18,6 +18,17 @@ export const dict = {
   "ui.sessionReview.largeDiff.title": "Diff zu groß zum Rendern",
   "ui.sessionReview.largeDiff.meta": "Limit: {{limit}} geänderte Zeilen. Aktuell: {{current}} geänderte Zeilen.",
   "ui.sessionReview.largeDiff.renderAnyway": "Trotzdem rendern",
+  "ui.fileMedia.kind.image": "bild",
+  "ui.fileMedia.kind.audio": "audio",
+  "ui.fileMedia.state.removed": "{{kind}} entfernt",
+  "ui.fileMedia.state.loading": "{{kind}} wird geladen",
+  "ui.fileMedia.state.error": "Fehler bei {{kind}}",
+  "ui.fileMedia.state.unavailable": "{{kind}} nicht verfügbar",
+  "ui.fileMedia.binary.title": "Binärdatei",
+  "ui.fileMedia.binary.description.path":
+    "{{path}} kann nicht angezeigt werden, da es sich um eine Binärdatei handelt.",
+  "ui.fileMedia.binary.description.default":
+    "Diese Datei kann nicht angezeigt werden, da es sich um eine Binärdatei handelt.",
   "ui.lineComment.label.prefix": "Kommentar zu ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Kommentiere ",
