@@ -13,6 +13,7 @@ import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
 import { Process } from "../../util/process"
 import { text } from "node:stream/consumers"
+import { Filesystem } from "../../util/filesystem"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
 
@@ -213,6 +214,20 @@ export const AuthListCommand = cmd({
     prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
     const results = Object.entries(await Auth.all())
     const database = await ModelsDev.get()
+
+    const rawAuth = await Filesystem.readJson<Record<string, unknown>>(authPath).catch(() => ({}))
+    if (rawAuth.$schema) {
+      prompts.log.info(`Schema ${UI.Style.TEXT_DIM}${rawAuth.$schema}`)
+    }
+
+    if (rawAuth.provider) {
+      const providerSection = rawAuth.provider as Record<string, unknown>
+      for (const [providerID, config] of Object.entries(providerSection)) {
+        const name = (config as any)?.name || providerID
+        const hasCredentials = results.some(([id]) => id === providerID)
+        prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${hasCredentials ? "(configured)" : "(not configured)"}`)
+      }
+    }
 
     for (const [providerID, result] of results) {
       const name = database[providerID]?.name || providerID
