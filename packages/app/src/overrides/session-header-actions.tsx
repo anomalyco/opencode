@@ -10,7 +10,7 @@ import { decode64 } from "@/utils/base64"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { SettingsPopup } from "./settings-popup"
 import { DialogSelectDirectory } from "./dialog-select-directory"
-import { extractDirectory } from "./session-header-actions-helpers"
+import { extractDirectory, buildTokenPersistCommand, buildShellCommand } from "./session-header-actions-helpers"
 import { previewOpen, setPreviewOpen } from "./preview-panel"
 
 function RunIcon() {
@@ -31,6 +31,7 @@ export function SessionHeaderActions() {
   const view = createMemo(() => layout.view(sessionKey))
 
   const [bigqueryToken, setBigqueryToken] = createSignal("")
+  const [tokenPersisted, setTokenPersisted] = createSignal(false)
 
   const fetchBigQueryToken = async () => {
     try {
@@ -69,8 +70,13 @@ export function SessionHeaderActions() {
       ...(bqToken ? { LATERAPI_KEY: bqToken } : {}),
       ...input.env,
     }
+
+    const prefix = !tokenPersisted() ? buildTokenPersistCommand(bqToken) : ""
+    if (prefix) setTokenPersisted(true)
+    const shell = buildShellCommand(input.command, input.args || [], prefix)
+
     view().terminal.open()
-    terminal.run({ command: input.command, args: input.args, title: input.label, cwd, env })
+    terminal.run({ command: shell.command, args: shell.args, title: input.label, cwd, env })
   }
 
   const run = () => {
