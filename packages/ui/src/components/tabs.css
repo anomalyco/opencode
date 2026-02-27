@@ -229,20 +229,40 @@
         }
       }
 
-      [data-component="file-icon"] {
-        filter: grayscale(1) !important;
-        transition: filter 120ms ease;
-      }
-
-      &:has([data-selected]) {
-        [data-component="file-icon"] {
-          filter: grayscale(0) !important;
-        }
-      }
-
       &:hover:not(:disabled):not(:has([data-selected])) {
         color: var(--text-base);
         background-color: var(--surface-base-hover);
+      }
+
+      /*
+        File tabs: use monochrome icon by default.
+        Full-color icon is shown on hover/selected.
+      */
+      [data-slot="tabs-trigger"] {
+        .tab-fileicon-color,
+        .tab-fileicon-mono {
+          transition: opacity 120ms ease;
+        }
+
+        .tab-fileicon-color {
+          opacity: 0;
+        }
+
+        .tab-fileicon-mono {
+          opacity: 1;
+          color: currentColor;
+        }
+
+        &[data-selected],
+        &:hover {
+          .tab-fileicon-color {
+            opacity: 1;
+          }
+
+          .tab-fileicon-mono {
+            opacity: 0;
+          }
+        }
       }
     }
   }
