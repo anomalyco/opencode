@@ -181,6 +181,15 @@ export const SessionReview = (props: SessionReviewProps) => {
     highlightedFile = undefined
   }
 
+  const openFileLabel = () => i18n.t("ui.sessionReview.openFile")
+
+  const selectionLabel = (range: SelectedLineRange) => {
+    const start = Math.min(range.start, range.end)
+    const end = Math.max(range.start, range.end)
+    if (start === end) return i18n.t("ui.sessionReview.selection.line", { line: start })
+    return i18n.t("ui.sessionReview.selection.lines", { start, end })
+  }
+
   const focusSearch = () => {
     if (!hasDiffs()) return
     setSearchOpen(true)
@@ -742,11 +751,11 @@ export const SessionReview = (props: SessionReviewProps) => {
                               </Show>
                               <span data-slot="session-review-filename">{getFilename(file)}</span>
                               <Show when={props.onViewFile}>
-                                <Tooltip value="Open file" placement="top" gutter={4}>
+                                <Tooltip value={openFileLabel()} placement="top" gutter={4}>
                                   <button
                                     data-slot="session-review-view-button"
                                     type="button"
-                                    aria-label="Open file"
+                                    aria-label={openFileLabel()}
                                     onClick={(e) => {
                                       e.stopPropagation()
                                       props.onViewFile?.(file)
