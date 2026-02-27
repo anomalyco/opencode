@@ -210,6 +210,17 @@ function getDirectory(path: string | undefined) {
   return relativizeProjectPath(_getDirectory(path), data.directory)
 }
 
+function openProjectFile(
+  path: string | undefined,
+  directory: string,
+  openFilePath?: (input: { path: string }) => void,
+) {
+  if (!path) return
+  const file = relativizeProjectPath(path, directory).replace(/^\//, "")
+  if (!file) return
+  openFilePath?.({ path: file })
+}
+
 import type { IconProps } from "./icon"
 
 export type ToolInfo = {
