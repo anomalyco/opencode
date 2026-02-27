@@ -29,6 +29,130 @@ async function withFetch(
   }
 }
 
+describe("tool.webfetch accept headers", () => {
+  test("markdown format sends text/markdown as highest priority", async () => {
+    let captured: RequestInit | undefined
+    await withFetch(
+      async (_url, init) => {
+        captured = init
+        return new Response("# Hello", { status: 200, headers: { "content-type": "text/markdown" } })
+      },
+      async () => {
+        await Instance.provide({
+          directory: projectRoot,
+          fn: async () => {
+            const webfetch = await WebFetchTool.init()
+            await webfetch.execute({ url: "https://example.com", format: "markdown" }, ctx)
+            const accept = (captured?.headers as Record<string, string>)?.Accept ?? ""
+            expect(accept).toStartWith("text/markdown")
+          },
+        })
+      },
+    )
+  })
+
+  test("text format sends text/plain as highest priority", async () => {
+    let captured: RequestInit | undefined
+    await withFetch(
+      async (_url, init) => {
+        captured = init
+        return new Response("hello", { status: 200, headers: { "content-type": "text/plain" } })
+      },
+      async () => {
+        await Instance.provide({
+          directory: projectRoot,
+          fn: async () => {
+            const webfetch = await WebFetchTool.init()
+            await webfetch.execute({ url: "https://example.com", format: "text" }, ctx)
+            const accept = (captured?.headers as Record<string, string>)?.Accept ?? ""
+            expect(accept).toStartWith("text/plain")
+          },
+        })
+      },
+    )
+  })
+
+  test("html format sends text/html as highest priority", async () => {
+    let captured: RequestInit | undefined
+    await withFetch(
+      async (_url, init) => {
+        captured = init
+        return new Response("<p>hi</p>", { status: 200, headers: { "content-type": "text/html" } })
+      },
+      async () => {
+        await Instance.provide({
+          directory: projectRoot,
+          fn: async () => {
+            const webfetch = await WebFetchTool.init()
+            await webfetch.execute({ url: "https://example.com", format: "html" }, ctx)
+            const accept = (captured?.headers as Record<string, string>)?.Accept ?? ""
+            expect(accept).toStartWith("text/html")
+          },
+        })
+      },
+    )
+  })
+
+  test("default accept header prioritizes text/markdown", async () => {
+    let captured: RequestInit | undefined
+    await withFetch(
+      async (_url, init) => {
+        captured = init
+        return new Response("# Hello", { status: 200, headers: { "content-type": "text/markdown" } })
+      },
+      async () => {
+        await Instance.provide({
+          directory: projectRoot,
+          fn: async () => {
+            const webfetch = await WebFetchTool.init()
+            // format defaults to "markdown" via zod, so we test the explicit markdown path
+            await webfetch.execute({ url: "https://example.com", format: "markdown" }, ctx)
+            const accept = (captured?.headers as Record<string, string>)?.Accept ?? ""
+            expect(accept).toContain("text/markdown")
+            expect(accept.indexOf("text/markdown")).toBeLessThan(accept.indexOf("text/html"))
+          },
+        })
+      },
+    )
+  })
+
+  test("markdown format returns server markdown without conversion", async () => {
+    const md = "# Title\n\nSome **bold** text"
+    await withFetch(
+      async () => new Response(md, { status: 200, headers: { "content-type": "text/markdown; charset=utf-8" } }),
+      async () => {
+        await Instance.provide({
+          directory: projectRoot,
+          fn: async () => {
+            const webfetch = await WebFetchTool.init()
+            const result = await webfetch.execute({ url: "https://example.com/page", format: "markdown" }, ctx)
+            expect(result.output).toBe(md)
+          },
+        })
+      },
+    )
+  })
+
+  test("markdown format converts html response to markdown", async () => {
+    const html = "<h1>Title</h1><p>Hello world</p>"
+    await withFetch(
+      async () => new Response(html, { status: 200, headers: { "content-type": "text/html; charset=utf-8" } }),
+      async () => {
+        await Instance.provide({
+          directory: projectRoot,
+          fn: async () => {
+            const webfetch = await WebFetchTool.init()
+            const result = await webfetch.execute({ url: "https://example.com/page", format: "markdown" }, ctx)
+            expect(result.output).toContain("Title")
+            expect(result.output).toContain("Hello world")
+            expect(result.output).not.toContain("<h1>")
+          },
+        })
+      },
+    )
+  })
+})
+
 describe("tool.webfetch", () => {
   test("returns image responses as file attachments", async () => {
     const bytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
