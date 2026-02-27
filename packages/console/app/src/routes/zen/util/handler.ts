@@ -632,7 +632,7 @@ export async function handler(
           })
           if (result.status === "rate-limited")
             throw new SubscriptionUsageLimitError(
-              `Subscription quota exceeded. Retry in ${formatRetryTime(result.resetInSec)}.`,
+              `Subscription quota exceeded. You can continue using free models.`,
               result.resetInSec,
             )
         }
@@ -647,7 +647,7 @@ export async function handler(
           })
           if (result.status === "rate-limited")
             throw new SubscriptionUsageLimitError(
-              `Subscription quota exceeded. Retry in ${formatRetryTime(result.resetInSec)}.`,
+              `Subscription quota exceeded. You can continue using free models.`,
               result.resetInSec,
             )
         }
@@ -662,7 +662,7 @@ export async function handler(
           })
           if (result.status === "rate-limited")
             throw new SubscriptionUsageLimitError(
-              `Subscription quota exceeded. Retry in ${formatRetryTime(result.resetInSec)}.`,
+              `Subscription quota exceeded. You can continue using free models.`,
               result.resetInSec,
             )
         }
