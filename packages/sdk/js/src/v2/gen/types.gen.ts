@@ -1456,6 +1456,112 @@ export type Config = {
      */
     reserved?: number
   }
+  /**
+   * IM (Instant Messenger) integration configuration
+   */
+  im?:
+    | {
+        type: "telegram"
+        /**
+         * Telegram Bot Token
+         */
+        token: string
+        enabled?: boolean
+        /**
+         * Maximum file size in bytes (default: 20MB)
+         */
+        maxFileSize?: number
+        /**
+         * MIME type whitelist (e.g., image*, application/pdf)
+         */
+        allowedTypes?: Array<string>
+        /**
+         * Local storage path for media files
+         */
+        storagePath?: string
+        /**
+         * Media files retention period in days
+         */
+        cleanupDays?: number
+        /**
+         * Allowed Telegram user IDs
+         */
+        allowedUsers?: Array<number>
+      }
+    | {
+        type: "slack"
+        /**
+         * Slack Bot Token
+         */
+        botToken: string
+        /**
+         * Slack Signing Secret
+         */
+        signingSecret: string
+        /**
+         * Slack App Token
+         */
+        appToken: string
+        enabled?: boolean
+        maxFileSize?: number
+        allowedTypes?: Array<string>
+        storagePath?: string
+        cleanupDays?: number
+        /**
+         * Allowed Slack user IDs
+         */
+        allowedUsers?: Array<string>
+      }
+    | {
+        type: "whatsapp"
+        /**
+         * WhatsApp Business API Token
+         */
+        token: string
+        /**
+         * WhatsApp Phone Number ID
+         */
+        phoneNumberId: string
+        enabled?: boolean
+        maxFileSize?: number
+        allowedTypes?: Array<string>
+        storagePath?: string
+        cleanupDays?: number
+      }
+    | {
+        type: "discord"
+        /**
+         * Discord Bot Token
+         */
+        token: string
+        /**
+         * Discord Client ID
+         */
+        clientId: string
+        enabled?: boolean
+        maxFileSize?: number
+        allowedTypes?: Array<string>
+        storagePath?: string
+        cleanupDays?: number
+      }
+    | {
+        type: "disabled"
+      }
+  /**
+   * Named project paths for easy switching
+   */
+  projects?: {
+    [key: string]: {
+      /**
+       * Project directory path
+       */
+      directory: string
+      /**
+       * Project display name
+       */
+      name?: string
+    }
+  }
   experimental?: {
     disable_paste_summary?: boolean
     /**

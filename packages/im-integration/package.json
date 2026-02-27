@@ -1,0 +1,22 @@
+{
+  "name": "@opencode-ai/im-integration",
+  "version": "1.2.15",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "@opencode-ai/sdk": "workspace:*",
+    "node-telegram-bot-api": "^0.66.0",
+    "@slack/bolt": "^3.17.1"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "@tsconfig/bun": "catalog:"
+  }
+}

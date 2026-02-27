@@ -1145,6 +1145,82 @@ export namespace Config {
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
         })
         .optional(),
+      im: z
+        .discriminatedUnion("type", [
+          z.object({
+            type: z.literal("telegram"),
+            token: z.string().describe("Telegram Bot Token"),
+            enabled: z.boolean().optional().default(true),
+            maxFileSize: z
+              .number()
+              .optional()
+              .default(20 * 1024 * 1024)
+              .describe("Maximum file size in bytes (default: 20MB)"),
+            allowedTypes: z
+              .array(z.string())
+              .optional()
+              .describe("MIME type whitelist (e.g., image/*, application/pdf)"),
+            storagePath: z.string().optional().describe("Local storage path for media files"),
+            cleanupDays: z.number().optional().default(15).describe("Media files retention period in days"),
+            allowedUsers: z.array(z.number()).optional().describe("Allowed Telegram user IDs"),
+          }),
+          z.object({
+            type: z.literal("slack"),
+            botToken: z.string().describe("Slack Bot Token"),
+            signingSecret: z.string().describe("Slack Signing Secret"),
+            appToken: z.string().describe("Slack App Token"),
+            enabled: z.boolean().optional().default(true),
+            maxFileSize: z
+              .number()
+              .optional()
+              .default(20 * 1024 * 1024),
+            allowedTypes: z.array(z.string()).optional(),
+            storagePath: z.string().optional(),
+            cleanupDays: z.number().optional().default(15),
+            allowedUsers: z.array(z.string()).optional().describe("Allowed Slack user IDs"),
+          }),
+          z.object({
+            type: z.literal("whatsapp"),
+            token: z.string().describe("WhatsApp Business API Token"),
+            phoneNumberId: z.string().describe("WhatsApp Phone Number ID"),
+            enabled: z.boolean().optional().default(true),
+            maxFileSize: z
+              .number()
+              .optional()
+              .default(20 * 1024 * 1024),
+            allowedTypes: z.array(z.string()).optional(),
+            storagePath: z.string().optional(),
+            cleanupDays: z.number().optional().default(15),
+          }),
+          z.object({
+            type: z.literal("discord"),
+            token: z.string().describe("Discord Bot Token"),
+            clientId: z.string().describe("Discord Client ID"),
+            enabled: z.boolean().optional().default(true),
+            maxFileSize: z
+              .number()
+              .optional()
+              .default(20 * 1024 * 1024),
+            allowedTypes: z.array(z.string()).optional(),
+            storagePath: z.string().optional(),
+            cleanupDays: z.number().optional().default(15),
+          }),
+          z.object({
+            type: z.literal("disabled"),
+          }),
+        ])
+        .optional()
+        .describe("IM (Instant Messenger) integration configuration"),
+      projects: z
+        .record(
+          z.string(),
+          z.object({
+            directory: z.string().describe("Project directory path"),
+            name: z.string().optional().describe("Project display name"),
+          }),
+        )
+        .optional()
+        .describe("Named project paths for easy switching"),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),
