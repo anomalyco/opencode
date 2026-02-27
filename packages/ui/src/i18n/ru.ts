@@ -3,6 +3,9 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "Изменения последнего хода",
   "ui.sessionReview.diffStyle.unified": "Объединённый",
   "ui.sessionReview.diffStyle.split": "Разделённый",
+  "ui.sessionReview.openFile": "Открыть файл",
+  "ui.sessionReview.selection.line": "строка {{line}}",
+  "ui.sessionReview.selection.lines": "строки {{start}}-{{end}}",
   "ui.sessionReview.expandAll": "Развернуть всё",
   "ui.sessionReview.collapseAll": "Свернуть всё",
 
@@ -52,6 +55,13 @@ export const dict = {
   "ui.sessionTurn.status.gatheringThoughts": "Сбор мыслей",
   "ui.sessionTurn.status.consideringNextSteps": "Рассмотрение следующих шагов",
 
+  "ui.messagePart.questions.dismissed": "Вопросы отклонены",
+  "ui.messagePart.context.read.one": "{{count}} чтение",
+  "ui.messagePart.context.read.other": "{{count}} чтений",
+  "ui.messagePart.context.search.one": "{{count}} поиск",
+  "ui.messagePart.context.search.other": "{{count}} поисков",
+  "ui.messagePart.context.list.one": "{{count}} список",
+  "ui.messagePart.context.list.other": "{{count}} списков",
   "ui.messagePart.diagnostic.error": "Ошибка",
   "ui.messagePart.title.edit": "Редактировать",
   "ui.messagePart.title.write": "Написать",
@@ -71,6 +81,7 @@ export const dict = {
   "ui.textField.copied": "Скопировано",
 
   "ui.imagePreview.alt": "Предпросмотр изображения",
+  "ui.scrollView.ariaLabel": "прокручиваемый контент",
 
   "ui.tool.read": "Чтение",
   "ui.tool.loaded": "Загружено",

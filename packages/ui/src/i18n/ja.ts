@@ -3,6 +3,9 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "前回ターンの変更",
   "ui.sessionReview.diffStyle.unified": "Unified",
   "ui.sessionReview.diffStyle.split": "Split",
+  "ui.sessionReview.openFile": "ファイルを開く",
+  "ui.sessionReview.selection.line": "{{line}} 行目",
+  "ui.sessionReview.selection.lines": "{{start}}-{{end}} 行目",
   "ui.sessionReview.expandAll": "すべて展開",
   "ui.sessionReview.collapseAll": "すべて折りたたむ",
 
@@ -52,6 +55,13 @@ export const dict = {
   "ui.sessionTurn.status.gatheringThoughts": "考えをまとめています",
   "ui.sessionTurn.status.consideringNextSteps": "次のステップを検討中",
 
+  "ui.messagePart.questions.dismissed": "質問をスキップしました",
+  "ui.messagePart.context.read.one": "{{count}} 件の読み取り",
+  "ui.messagePart.context.read.other": "{{count}} 件の読み取り",
+  "ui.messagePart.context.search.one": "{{count}} 件の検索",
+  "ui.messagePart.context.search.other": "{{count}} 件の検索",
+  "ui.messagePart.context.list.one": "{{count}} 件のリスト",
+  "ui.messagePart.context.list.other": "{{count}} 件のリスト",
   "ui.messagePart.diagnostic.error": "エラー",
   "ui.messagePart.title.edit": "編集",
   "ui.messagePart.title.write": "作成",
@@ -71,6 +81,7 @@ export const dict = {
   "ui.textField.copied": "コピーしました",
 
   "ui.imagePreview.alt": "画像プレビュー",
+  "ui.scrollView.ariaLabel": "スクロール可能なコンテンツ",
 
   "ui.tool.read": "読み込み",
   "ui.tool.loaded": "読み込み済み",

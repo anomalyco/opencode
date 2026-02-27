@@ -16,18 +16,8 @@ import { useFileComponent } from "../context/file"
 import { useI18n } from "../context/i18n"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
-import {
-  createEffect,
-  createMemo,
-  createSignal,
-  For,
-  Match,
-  onCleanup,
-  Show,
-  Switch,
-  untrack,
-  type JSX,
-} from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, Show, Switch, untrack, type JSX } from "solid-js"
+import { onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { type FileContent, type FileDiff } from "@opencode-ai/sdk/v2"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
@@ -189,6 +179,15 @@ export const SessionReview = (props: SessionReviewProps) => {
   const clearViewerSearch = () => {
     for (const handle of searchHandles.values()) handle.clear()
     highlightedFile = undefined
+  }
+
+  const openFileLabel = () => i18n.t("ui.sessionReview.openFile")
+
+  const selectionLabel = (range: SelectedLineRange) => {
+    const start = Math.min(range.start, range.end)
+    const end = Math.max(range.start, range.end)
+    if (start === end) return i18n.t("ui.sessionReview.selection.line", { line: start })
+    return i18n.t("ui.sessionReview.selection.lines", { start, end })
   }
 
   const focusSearch = () => {
@@ -475,7 +474,8 @@ export const SessionReview = (props: SessionReviewProps) => {
 
         const wrapper = anchors.get(focus.file)
         const anchor = wrapper?.querySelector(`[data-comment-id="${focus.id}"]`)
-        const ready = anchor instanceof HTMLElement
+        const ready =
+          anchor instanceof HTMLElement && anchor.style.pointerEvents !== "none" && anchor.style.opacity !== "0"
 
         const target = ready ? anchor : wrapper
         if (!target) {
@@ -751,11 +751,11 @@ export const SessionReview = (props: SessionReviewProps) => {
                               </Show>
                               <span data-slot="session-review-filename">{getFilename(file)}</span>
                               <Show when={props.onViewFile}>
-                                <Tooltip value="Open file" placement="top" gutter={4}>
+                                <Tooltip value={openFileLabel()} placement="top" gutter={4}>
                                   <button
                                     data-slot="session-review-view-button"
                                     type="button"
-                                    aria-label="Open file"
+                                    aria-label={openFileLabel()}
                                     onClick={(e) => {
                                       e.stopPropagation()
                                       props.onViewFile?.(file)
