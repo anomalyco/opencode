@@ -106,6 +106,7 @@ export function MessageTimeline(props: {
   onRegisterMessage: (el: HTMLDivElement, id: string) => void
   onUnregisterMessage: (id: string) => void
   lastUserMessageID?: string
+  dockHeight?: number
 }) {
   let touchGesture: number | undefined
 
@@ -522,7 +523,10 @@ export function MessageTimeline(props: {
           <div
             ref={props.setContentRef}
             role="log"
-            class="flex flex-col gap-12 items-start justify-start pb-16 transition-[margin]"
+            class="flex flex-col gap-12 items-start justify-start transition-[margin,padding-bottom]"
+            style={{
+              "padding-bottom": props.dockHeight ? `${props.dockHeight + 16}px` : "4rem",
+            }}
             classList={{
               "w-full": true,
               "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,

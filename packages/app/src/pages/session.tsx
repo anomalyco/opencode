@@ -1,4 +1,4 @@
-import { onCleanup, Show, Match, Switch, createMemo, createEffect, on, onMount } from "solid-js"
+import { onCleanup, Show, Match, Switch, createMemo, createEffect, on, onMount, createSignal } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLocal } from "@/context/local"
@@ -283,7 +283,7 @@ export default function Page() {
 
   let inputRef!: HTMLDivElement
   let promptDock: HTMLDivElement | undefined
-  let dockHeight = 0
+  const [dockHeight, setDockHeight] = createSignal(0)
   let scroller: HTMLDivElement | undefined
   let content: HTMLDivElement | undefined
 
@@ -982,13 +982,13 @@ export default function Page() {
     ({ height }) => {
       const next = Math.ceil(height)
 
-      if (next === dockHeight) return
+      if (next === dockHeight()) return
 
       const el = scroller
-      const delta = next - dockHeight
+      const delta = next - dockHeight()
       const stick = el ? el.scrollHeight - el.clientHeight - el.scrollTop < 10 + Math.max(0, delta) : false
 
-      dockHeight = next
+      setDockHeight(next)
 
       if (stick) autoScroll.forceScrollToBottom()
 
@@ -1100,6 +1100,7 @@ export default function Page() {
                     onRegisterMessage={scrollSpy.register}
                     onUnregisterMessage={scrollSpy.unregister}
                     lastUserMessageID={lastUserMessage()?.id}
+                    dockHeight={dockHeight()}
                   />
                 </Show>
               </Match>
