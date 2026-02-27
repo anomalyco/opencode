@@ -17,11 +17,13 @@ import { PermissionNext } from "@/permission/next"
 import { SessionSteer } from "@/session/steer"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { SessionProxyMiddleware } from "../../control-plane/session-proxy-middleware"
 
 const log = Log.create({ service: "server" })
 
 export const SessionRoutes = lazy(() =>
   new Hono()
+    .use(SessionProxyMiddleware)
     .get(
       "/",
       describeRoute({
