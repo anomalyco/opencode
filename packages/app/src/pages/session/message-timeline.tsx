@@ -2,6 +2,7 @@ import { For, createEffect, createMemo, on, onCleanup, Show, type JSX } from "so
 import { createStore, produce } from "solid-js/store"
 import { useNavigate, useParams } from "@solidjs/router"
 import { Button } from "@opencode-ai/ui/button"
+import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
@@ -9,8 +10,9 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
-import type { UserMessage } from "@opencode-ai/sdk/v2"
+import type { Part, TextPart, UserMessage } from "@opencode-ai/sdk/v2"
 import { showToast } from "@opencode-ai/ui/toast"
+import { getFilename } from "@opencode-ai/util/path"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -18,6 +20,35 @@ import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
+
+type MessageComment = {
+  path: string
+  comment: string
+  selection?: {
+    startLine: number
+    endLine: number
+  }
+}
+
+const messageComments = (parts: Part[]): MessageComment[] =>
+  parts.flatMap((part) => {
+    if (part.type !== "text" || !(part as TextPart).synthetic) return []
+    const next = readCommentMetadata(part.metadata) ?? parseCommentNote(part.text)
+    if (!next) return []
+    return [
+      {
+        path: next.path,
+        comment: next.comment,
+        selection: next.selection
+          ? {
+              startLine: next.selection.startLine,
+              endLine: next.selection.endLine,
+            }
+          : undefined,
+      },
+    ]
+  })
 
 const boundaryTarget = (root: HTMLElement, target: EventTarget | null) => {
   const current = target instanceof Element ? target : undefined
@@ -522,34 +553,67 @@ export function MessageTimeline(props: {
               </div>
             </Show>
             <For each={props.renderedUserMessages}>
-              {(message) => (
-                <div
-                  id={props.anchor(message.id)}
-                  data-message-id={message.id}
-                  ref={(el) => {
-                    props.onRegisterMessage(el, message.id)
-                    onCleanup(() => props.onUnregisterMessage(message.id))
-                  }}
-                  classList={{
-                    "min-w-0 w-full max-w-full": true,
-                    "md:max-w-200 2xl:max-w-[1000px]": props.centered,
-                  }}
-                >
-                  <SessionTurn
-                    sessionID={sessionID() ?? ""}
-                    messageID={message.id}
-                    lastUserMessageID={props.lastUserMessageID}
-                    showReasoningSummaries={settings.general.showReasoningSummaries()}
-                    shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
-                    editToolDefaultOpen={settings.general.editToolPartsExpanded()}
-                    classes={{
-                      root: "min-w-0 w-full relative",
-                      content: "flex flex-col justify-between !overflow-visible",
-                      container: "w-full px-4 md:px-5",
+              {(message) => {
+                const comments = createMemo(() => messageComments(sync.data.part[message.id] ?? []))
+                return (
+                  <div
+                    id={props.anchor(message.id)}
+                    data-message-id={message.id}
+                    ref={(el) => {
+                      props.onRegisterMessage(el, message.id)
+                      onCleanup(() => props.onUnregisterMessage(message.id))
                     }}
-                  />
-                </div>
-              )}
+                    classList={{
+                      "min-w-0 w-full max-w-full": true,
+                      "md:max-w-200 2xl:max-w-[1000px]": props.centered,
+                    }}
+                  >
+                    <Show when={comments().length > 0}>
+                      <div class="w-full px-4 md:px-5 pb-2">
+                        <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
+                          <div class="flex w-max min-w-full justify-end gap-2">
+                            <For each={comments()}>
+                              {(comment) => (
+                                <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
+                                  <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
+                                    <FileIcon node={{ path: comment.path, type: "file" }} class="size-3.5 shrink-0" />
+                                    <span class="truncate">{getFilename(comment.path)}</span>
+                                    <Show when={comment.selection}>
+                                      {(selection) => (
+                                        <span class="shrink-0 text-text-weak">
+                                          {selection().startLine === selection().endLine
+                                            ? `:${selection().startLine}`
+                                            : `:${selection().startLine}-${selection().endLine}`}
+                                        </span>
+                                      )}
+                                    </Show>
+                                  </div>
+                                  <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
+                                    {comment.comment}
+                                  </div>
+                                </div>
+                              )}
+                            </For>
+                          </div>
+                        </div>
+                      </div>
+                    </Show>
+                    <SessionTurn
+                      sessionID={sessionID() ?? ""}
+                      messageID={message.id}
+                      lastUserMessageID={props.lastUserMessageID}
+                      showReasoningSummaries={settings.general.showReasoningSummaries()}
+                      shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
+                      editToolDefaultOpen={settings.general.editToolPartsExpanded()}
+                      classes={{
+                        root: "min-w-0 w-full relative",
+                        content: "flex flex-col justify-between !overflow-visible",
+                        container: "w-full px-4 md:px-5",
+                      }}
+                    />
+                  </div>
+                )
+              }}
             </For>
           </div>
         </ScrollView>

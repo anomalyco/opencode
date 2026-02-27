@@ -1,6 +1,11 @@
 import { createEffect, on, onCleanup, type JSX } from "solid-js"
 import type { FileDiff } from "@opencode-ai/sdk/v2"
 import { SessionReview } from "@opencode-ai/ui/session-review"
+import type {
+  SessionReviewCommentActions,
+  SessionReviewCommentDelete,
+  SessionReviewCommentUpdate,
+} from "@opencode-ai/ui/session-review"
 import type { SelectedLineRange } from "@/context/file"
 import { useSDK } from "@/context/sdk"
 import { useLayout } from "@/context/layout"
@@ -17,6 +22,9 @@ export interface SessionReviewTabProps {
   onDiffStyleChange?: (style: DiffStyle) => void
   onViewFile?: (file: string) => void
   onLineComment?: (comment: { file: string; selection: SelectedLineRange; comment: string; preview?: string }) => void
+  onLineCommentUpdate?: (comment: SessionReviewCommentUpdate) => void
+  onLineCommentDelete?: (comment: SessionReviewCommentDelete) => void
+  lineCommentActions?: SessionReviewCommentActions
   comments?: LineComment[]
   focusedComment?: { file: string; id: string } | null
   onFocusedCommentChange?: (focus: { file: string; id: string } | null) => void
@@ -39,10 +47,11 @@ export function StickyAddButton(props: { children: JSX.Element }) {
 
 export function SessionReviewTab(props: SessionReviewTabProps) {
   let scroll: HTMLDivElement | undefined
-  let frame: number | undefined
-  let pending: { x: number; y: number } | undefined
+  let restoreFrame: number | undefined
+  let userInteracted = false
 
   const sdk = useSDK()
+  const layout = useLayout()
 
   const readFile = async (path: string) => {
     return sdk.client.file
@@ -54,48 +63,81 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
       })
   }
 
-  const restoreScroll = () => {
+  const handleInteraction = () => {
+    userInteracted = true
+  }
+
+  const doRestore = () => {
+    restoreFrame = undefined
     const el = scroll
-    if (!el) return
+    if (!el || !layout.ready() || userInteracted) return
+    if (el.clientHeight === 0 || el.clientWidth === 0) return
 
     const s = props.view().scroll("review")
-    if (!s) return
+    if (!s || (s.x === 0 && s.y === 0)) return
 
-    if (el.scrollTop !== s.y) el.scrollTop = s.y
-    if (el.scrollLeft !== s.x) el.scrollLeft = s.x
+    const maxY = Math.max(0, el.scrollHeight - el.clientHeight)
+    const maxX = Math.max(0, el.scrollWidth - el.clientWidth)
+
+    const targetY = Math.min(s.y, maxY)
+    const targetX = Math.min(s.x, maxX)
+
+    if (el.scrollTop !== targetY) el.scrollTop = targetY
+    if (el.scrollLeft !== targetX) el.scrollLeft = targetX
+  }
+
+  const queueRestore = () => {
+    if (userInteracted || restoreFrame !== undefined) return
+    restoreFrame = requestAnimationFrame(doRestore)
   }
 
   const handleScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
-    pending = {
-      x: event.currentTarget.scrollLeft,
-      y: event.currentTarget.scrollTop,
-    }
-    if (frame !== undefined) return
+    if (!layout.ready() || !userInteracted) return
 
-    frame = requestAnimationFrame(() => {
-      frame = undefined
+    const el = event.currentTarget
+    if (el.clientHeight === 0 || el.clientWidth === 0) return
 
-      const next = pending
-      pending = undefined
-      if (!next) return
-
-      props.view().setScroll("review", next)
+    props.view().setScroll("review", {
+      x: el.scrollLeft,
+      y: el.scrollTop,
     })
   }
 
   createEffect(
     on(
       () => props.diffs().length,
-      () => {
-        requestAnimationFrame(restoreScroll)
+      () => queueRestore(),
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => props.diffStyle,
+      () => queueRestore(),
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => layout.ready(),
+      (ready) => {
+        if (!ready) return
+        queueRestore()
       },
       { defer: true },
     ),
   )
 
   onCleanup(() => {
-    if (frame === undefined) return
-    cancelAnimationFrame(frame)
+    if (restoreFrame !== undefined) cancelAnimationFrame(restoreFrame)
+    if (scroll) {
+      scroll.removeEventListener("wheel", handleInteraction)
+      scroll.removeEventListener("pointerdown", handleInteraction)
+      scroll.removeEventListener("touchstart", handleInteraction)
+      scroll.removeEventListener("keydown", handleInteraction)
+    }
   })
 
   return (
@@ -104,11 +146,15 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
       empty={props.empty}
       scrollRef={(el) => {
         scroll = el
+        el.addEventListener("wheel", handleInteraction, { passive: true, capture: true })
+        el.addEventListener("pointerdown", handleInteraction, { passive: true, capture: true })
+        el.addEventListener("touchstart", handleInteraction, { passive: true, capture: true })
+        el.addEventListener("keydown", handleInteraction, { passive: true, capture: true })
         props.onScrollRef?.(el)
-        restoreScroll()
+        queueRestore()
       }}
       onScroll={handleScroll}
-      onDiffRendered={() => requestAnimationFrame(restoreScroll)}
+      onDiffRendered={queueRestore}
       open={props.view().review.open()}
       onOpenChange={props.view().review.setOpen}
       classes={{
@@ -123,6 +169,9 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
       focusedFile={props.focusedFile}
       readFile={readFile}
       onLineComment={props.onLineComment}
+      onLineCommentUpdate={props.onLineCommentUpdate}
+      onLineCommentDelete={props.onLineCommentDelete}
+      lineCommentActions={props.lineCommentActions}
       comments={props.comments}
       focusedComment={props.focusedComment}
       onFocusedCommentChange={props.onFocusedCommentChange}

@@ -14,6 +14,15 @@ export const dict = {
   "ui.sessionReview.largeDiff.meta":
     "ขีดจำกัด: {{limit}} บรรทัดที่เปลี่ยนแปลง. ปัจจุบัน: {{current}} บรรทัดที่เปลี่ยนแปลง.",
   "ui.sessionReview.largeDiff.renderAnyway": "แสดงผลต่อไป",
+  "ui.fileMedia.kind.image": "รูปภาพ",
+  "ui.fileMedia.kind.audio": "เสียง",
+  "ui.fileMedia.state.removed": "ลบ{{kind}}แล้ว",
+  "ui.fileMedia.state.loading": "กำลังโหลด{{kind}}...",
+  "ui.fileMedia.state.error": "เกิดข้อผิดพลาดในการโหลด{{kind}}",
+  "ui.fileMedia.state.unavailable": "{{kind}}ไม่พร้อมใช้งาน",
+  "ui.fileMedia.binary.title": "ไฟล์ไบนารี",
+  "ui.fileMedia.binary.description.path": "{{path}} เป็นไฟล์ไบนารีและไม่สามารถแสดงผลได้",
+  "ui.fileMedia.binary.description.default": "ไฟล์ไบนารีไม่สามารถแสดงผลได้",
 
   "ui.lineComment.label.prefix": "แสดงความคิดเห็นบน ",
   "ui.lineComment.label.suffix": "",

@@ -14,6 +14,16 @@ export const dict = {
   "ui.sessionReview.largeDiff.meta": "Limit: {{limit}} changed lines. Current: {{current}} changed lines.",
   "ui.sessionReview.largeDiff.renderAnyway": "Render anyway",
 
+  "ui.fileMedia.kind.image": "image",
+  "ui.fileMedia.kind.audio": "audio",
+  "ui.fileMedia.state.removed": "Removed {{kind}} file.",
+  "ui.fileMedia.state.loading": "Loading {{kind}}...",
+  "ui.fileMedia.state.error": "Unable to load {{kind}}.",
+  "ui.fileMedia.state.unavailable": "{{kind}} preview unavailable.",
+  "ui.fileMedia.binary.title": "Binary file",
+  "ui.fileMedia.binary.description.path": "{{path}} is binary.",
+  "ui.fileMedia.binary.description.default": "Binary content",
+
   "ui.lineComment.label.prefix": "Comment on ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Commenting on ",
