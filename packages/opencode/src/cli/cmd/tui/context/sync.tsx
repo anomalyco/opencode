@@ -18,7 +18,7 @@ import type {
   ProviderAuthMethod,
   VcsInfo,
 } from "@opencode-ai/sdk/v2"
-import { createStore, produce } from "solid-js/store"
+import { createStore, produce, reconcile } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { Binary } from "@opencode-ai/util/binary"
 import { createSimpleContext } from "./helper"
@@ -308,8 +308,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             "part",
             event.properties.messageID,
             result.index,
-            event.properties.field as any,
-            (prev: string) => (prev ?? "") + event.properties.delta,
+            event.properties.field as keyof Part,
+            (prev: unknown) => (typeof prev === "string" ? prev : "") + event.properties.delta,
           )
           break
         }
@@ -386,10 +386,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
             batch(() => {
               setStore("provider", providers.providers)
-              setStore("provider_default", providers.default)
+              setStore("provider_default", reconcile(providers.default))
               setStore("provider_next", providerList)
               setStore("agent", agents)
-              setStore("config", config)
+              setStore("config", reconcile(config))
               if (sessions !== undefined) setStore("session", sessions)
             })
           })
@@ -401,13 +401,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", sessions))]),
             sdk.client.command.list().then((x) => setStore("command", x.data ?? [])),
             sdk.client.lsp.status().then((x) => setStore("lsp", x.data!)),
-            sdk.client.mcp.status().then((x) => setStore("mcp", x.data!)),
-            sdk.client.experimental.resource.list().then((x) => setStore("mcp_resource", x.data ?? {})),
+            sdk.client.mcp.status().then((x) => setStore("mcp", reconcile(x.data!))),
+            sdk.client.experimental.resource.list().then((x) => setStore("mcp_resource", reconcile(x.data ?? {}))),
             sdk.client.formatter.status().then((x) => setStore("formatter", x.data!)),
             sdk.client.session.status().then((x) => {
-              setStore("session_status", x.data!)
+              setStore("session_status", reconcile(x.data!))
             }),
-            sdk.client.provider.auth().then((x) => setStore("provider_auth", x.data ?? {})),
+            sdk.client.provider.auth().then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
             sdk.client.vcs.get().then((x) => setStore("vcs", x.data)),
             sdk.client.path.get().then((x) => setStore("path", x.data!)),
           ]).then(() => {
