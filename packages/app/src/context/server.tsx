@@ -6,6 +6,7 @@ import { Persist, persisted } from "@/utils/persist"
 import { checkServerHealth } from "@/utils/server-health"
 
 type StoredProject = { worktree: string; expanded: boolean }
+type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
 const HEALTH_POLL_INTERVAL_MS = 10_000
 
 export function normalizeServerUrl(input: string) {
@@ -15,9 +16,9 @@ export function normalizeServerUrl(input: string) {
   return withProtocol.replace(/\/+$/, "")
 }
 
-export function serverDisplayName(conn?: ServerConnection.Any) {
+export function serverName(conn?: ServerConnection.Any, ignoreDisplayName = false) {
   if (!conn) return ""
-  if (conn.displayName) return conn.displayName
+  if (conn.displayName && !ignoreDisplayName) return conn.displayName
   return conn.http.url.replace(/^https?:\/\//, "").replace(/\/+$/, "")
 }
 
@@ -100,22 +101,33 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     const [store, setStore, _, ready] = persisted(
       Persist.global("server", ["server.v3"]),
       createStore({
-        list: [] as string[],
+        list: [] as StoredServer[],
         projects: {} as Record<string, StoredProject[]>,
         lastProject: {} as Record<string, string>,
       }),
     )
 
+    const url = (x: StoredServer) => (typeof x === "string" ? x : "type" in x ? x.http.url : x.url)
+
     const allServers = createMemo((): Array<ServerConnection.Any> => {
       const servers = [
         ...(props.servers ?? []),
-        ...store.list.map((value) => ({
-          type: "http" as const,
-          http: typeof value === "string" ? { url: value } : value,
-        })),
+        ...store.list.map((value) =>
+          typeof value === "string"
+            ? {
+                type: "http" as const,
+                http: { url: value },
+              }
+            : value,
+        ),
       ]
 
-      const deduped = new Map(servers.map((conn) => [ServerConnection.key(conn), conn]))
+      const deduped = new Map(
+        servers.map((value) => {
+          const conn: ServerConnection.Any = "type" in value ? value : { type: "http", http: value }
+          return [ServerConnection.key(conn), conn]
+        }),
+      )
 
       return [...deduped.values()]
     })
@@ -156,27 +168,29 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       if (state.active !== input) setState("active", input)
     }
 
-    function add(input: string) {
-      const url = normalizeServerUrl(input)
-      if (!url) return
+    function add(input: ServerConnection.Http) {
+      const url_ = normalizeServerUrl(input.http.url)
+      if (!url_) return
+      const conn = { ...input, http: { ...input.http, url: url_ } }
       return batch(() => {
-        const http: ServerConnection.HttpBase = { url }
-        if (!store.list.includes(url)) {
-          setStore("list", store.list.length, url)
+        const existing = store.list.findIndex((x) => url(x) === url_)
+        if (existing !== -1) {
+          setStore("list", existing, conn)
+        } else {
+          setStore("list", store.list.length, conn)
         }
-        const conn: ServerConnection.Http = { type: "http", http }
         setState("active", ServerConnection.key(conn))
         return conn
       })
     }
 
     function remove(key: ServerConnection.Key) {
-      const list = store.list.filter((x) => x !== key)
+      const list = store.list.filter((x) => url(x) !== key)
       batch(() => {
         setStore("list", list)
         if (state.active === key) {
           const next = list[0]
-          setState("active", next ? ServerConnection.key({ type: "http", http: { url: next } }) : props.defaultServer)
+          setState("active", next ? ServerConnection.Key.make(url(next)) : props.defaultServer)
         }
       })
     }
@@ -212,7 +226,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         return state.active
       },
       get name() {
-        return serverDisplayName(current())
+        return serverName(current())
       },
       get list() {
         return allServers()
