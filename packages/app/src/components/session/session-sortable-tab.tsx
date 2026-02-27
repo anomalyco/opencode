@@ -123,31 +123,29 @@ export function SortableTab(props: { tab: string; onTabClose: (tab: string) => v
       <div class="relative h-full">
         <ContextMenu>
           <ContextMenu.Trigger asChild>
-            <div class="h-full">
-              <Tabs.Trigger
-                value={props.tab}
-                closeButton={
-                  <TooltipKeybind
-                    title={language.t("common.closeTab")}
-                    keybind={command.keybind("tab.close")}
-                    placement="bottom"
-                    gutter={10}
-                  >
-                    <IconButton
-                      icon="close-small"
-                      variant="ghost"
-                      class="h-5 w-5"
-                      onClick={() => props.onTabClose(props.tab)}
-                      aria-label={language.t("common.closeTab")}
-                    />
-                  </TooltipKeybind>
-                }
-                hideCloseButton
-                onMiddleClick={() => props.onTabClose(props.tab)}
-              >
-                <Show when={content()}>{(value) => value()}</Show>
-              </Tabs.Trigger>
-            </div>
+            <Tabs.Trigger
+              value={props.tab}
+              closeButton={
+                <TooltipKeybind
+                  title={language.t("common.closeTab")}
+                  keybind={command.keybind("tab.close")}
+                  placement="bottom"
+                  gutter={10}
+                >
+                  <IconButton
+                    icon="close-small"
+                    variant="ghost"
+                    class="h-5 w-5"
+                    onClick={() => props.onTabClose(props.tab)}
+                    aria-label={language.t("common.closeTab")}
+                  />
+                </TooltipKeybind>
+              }
+              hideCloseButton
+              onMiddleClick={() => props.onTabClose(props.tab)}
+            >
+              <Show when={content()}>{(value) => value()}</Show>
+            </Tabs.Trigger>
           </ContextMenu.Trigger>
           <ContextMenu.Portal>
             <ContextMenu.Content>
