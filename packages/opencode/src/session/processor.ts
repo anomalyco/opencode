@@ -50,6 +50,7 @@ export namespace SessionProcessor {
           try {
             let currentText: MessageV2.TextPart | undefined
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
+    let finished = false
             const stream = await LLM.stream(streamInput)
 
             for await (const value of stream.fullStream) {
@@ -337,6 +338,8 @@ export namespace SessionProcessor {
                   break
 
                 case "finish":
+                  log.info("stream finish event received")
+                  finished = true
                   break
 
                 default:
@@ -345,7 +348,7 @@ export namespace SessionProcessor {
                   })
                   continue
               }
-              if (needsCompaction) break
+              if (needsCompaction || finished) break
             }
           } catch (e: any) {
             log.error("process", {

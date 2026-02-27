@@ -577,7 +577,9 @@ export namespace MCP {
 
     const toolsResults = await Promise.all(
       connectedClients.map(async ([clientName, client]) => {
-        const toolsResult = await client.listTools().catch((e) => {
+        const mcpEntry = config[clientName]
+        const timeout = (isMcpConfigured(mcpEntry) ? mcpEntry.timeout : undefined) ?? defaultTimeout ?? DEFAULT_TIMEOUT
+        const toolsResult = await withTimeout(client.listTools(), timeout).catch((e) => {
           log.error("failed to get tools", { clientName, error: e.message })
           const failedStatus = {
             status: "failed" as const,

@@ -122,7 +122,7 @@ export namespace Database {
       if (err instanceof Context.NotFound) {
         const effects: (() => void | Promise<void>)[] = []
         const result = ctx.provide({ effects, tx: Client() }, () => callback(Client()))
-        for (const effect of effects) effect()
+        for (const effect of effects) Promise.resolve(effect()).catch((e) => log.error("effect failed", { error: e }))
         return result
       }
       throw err
@@ -146,7 +146,7 @@ export namespace Database {
         const result = Client().transaction((tx) => {
           return ctx.provide({ tx, effects }, () => callback(tx))
         })
-        for (const effect of effects) effect()
+        for (const effect of effects) Promise.resolve(effect()).catch((e) => log.error("effect failed", { error: e }))
         return result
       }
       throw err
