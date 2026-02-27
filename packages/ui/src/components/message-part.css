@@ -346,7 +346,6 @@
   position: relative;
   overflow: hidden;
 
-
   [data-slot="bash-copy"] {
     position: absolute;
     top: 4px;
