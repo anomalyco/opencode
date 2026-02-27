@@ -151,6 +151,11 @@ export function SessionSidePanel(props: {
   let changesEl: HTMLDivElement | undefined
   let allEl: HTMLDivElement | undefined
 
+  const syncFileTreeScrolled = (el?: HTMLDivElement) => {
+    const next = (el?.scrollTop ?? 0) > 0
+    setStore("fileTreeScrolled", (current) => (current === next ? current : next))
+  }
+
   const handleDragStart = (event: unknown) => {
     const id = getDraggableId(event)
     if (!id) return
@@ -173,10 +178,7 @@ export function SessionSidePanel(props: {
 
   createEffect(() => {
     if (!layout.fileTree.opened()) return
-    const tab = fileTreeTab()
-    const el = tab === "changes" ? changesEl : allEl
-    const next = (el?.scrollTop ?? 0) > 0
-    setStore("fileTreeScrolled", (current) => (current === next ? current : next))
+    syncFileTreeScrolled(fileTreeTab() === "changes" ? changesEl : allEl)
   })
 
   createEffect(() => {
@@ -359,11 +361,7 @@ export function SessionSidePanel(props: {
                 <Tabs.Content
                   value="changes"
                   ref={(el: HTMLDivElement) => (changesEl = el)}
-                  onScroll={(e: UIEvent & { currentTarget: HTMLDivElement }) => {
-                    if (fileTreeTab() !== "changes") return
-                    const next = e.currentTarget.scrollTop > 0
-                    setStore("fileTreeScrolled", (current) => (current === next ? current : next))
-                  }}
+                  onScroll={(e: UIEvent & { currentTarget: HTMLDivElement }) => syncFileTreeScrolled(e.currentTarget)}
                   class="bg-background-stronger px-3 py-0"
                 >
                   <Switch>
@@ -397,11 +395,7 @@ export function SessionSidePanel(props: {
                 <Tabs.Content
                   value="all"
                   ref={(el: HTMLDivElement) => (allEl = el)}
-                  onScroll={(e: UIEvent & { currentTarget: HTMLDivElement }) => {
-                    if (fileTreeTab() !== "all") return
-                    const next = e.currentTarget.scrollTop > 0
-                    setStore("fileTreeScrolled", (current) => (current === next ? current : next))
-                  }}
+                  onScroll={(e: UIEvent & { currentTarget: HTMLDivElement }) => syncFileTreeScrolled(e.currentTarget)}
                   class="bg-background-stronger px-3 py-0"
                 >
                   <FileTree
