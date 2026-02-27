@@ -169,6 +169,14 @@ To use Amazon Bedrock with OpenCode:
 
    ***
 
+   #### /connect Command
+
+   Run the `/connect` command, select **Amazon Bedrock**, and choose either:
+   - **IAM credentials** — enter your Access Key ID, Secret Access Key, and region directly in OpenCode.
+   - **Environment variables** — view which env vars to set in your shell profile.
+
+   ***
+
    #### Environment Variables (Quick Start)
 
    Set one of these environment variables while running opencode:
@@ -259,7 +267,8 @@ To use Amazon Bedrock with OpenCode:
 
    Amazon Bedrock uses the following authentication priority:
    1. **Bearer Token** - `AWS_BEARER_TOKEN_BEDROCK` environment variable or token from `/connect` command
-   2. **AWS Credential Chain** - Profile, access keys, shared credentials, IAM roles, Web Identity Tokens (EKS IRSA), instance metadata
+   2. **IAM Credentials** - Stored via `/connect` > IAM credentials (injected into credential chain)
+   3. **AWS Credential Chain** - Profile, access keys, shared credentials, IAM roles, Web Identity Tokens (EKS IRSA), instance metadata
 
    :::note
    When a bearer token is set (via `/connect` or `AWS_BEARER_TOKEN_BEDROCK`), it takes precedence over all AWS credential methods including configured profiles.

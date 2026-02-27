@@ -292,7 +292,7 @@ Amazon Bedrock, AWS'a özgü yapılandırmayı destekler:
 - `endpoint` - VPC uç noktaları için özel uç nokta URL. Bu, AWS'e özgü terminolojiyi kullanan genel `baseURL` seçeneğinin takma adıdır. Her ikisi de belirtilirse `endpoint` öncelikli olur.
 
 :::note
-Taşıyıcı belirteçleri (`AWS_BEARER_TOKEN_BEDROCK` veya `/connect`) profil tabanlı kimlik doğrulamaya göre önceliklidir. Ayrıntılar için [authentication precedence](/docs/providers#authentication-precedence)'ye bakın.
+Taşıyıcı belirteçleri (`AWS_BEARER_TOKEN_BEDROCK` veya `/connect`) diğer tüm kimlik doğrulama yöntemlerine göre önceliklidir. `/connect` aracılığıyla saklanan IAM kimlik bilgileri AWS kimlik bilgisi zincirine enjekte edilir. Ayrıntılar için [authentication precedence](/docs/providers#authentication-precedence)'ye bakın.
 :::
 
 [Amazon Bedrock yapılandırması hakkında daha fazla bilgi](/docs/providers#amazon-bedrock).

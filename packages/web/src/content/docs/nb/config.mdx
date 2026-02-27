@@ -293,7 +293,7 @@ Amazon Bedrock støtter AWS-spesifikk konfigurasjon:
 - `endpoint` - Egendefinert endepunkt URL for VPC endepunkter. Dette er et alias for det generiske `baseURL`-alternativet som bruker AWS-spesifikk terminologi. Hvis begge er spesifisert, har `endpoint` forrang.
 
 :::note
-Bærer-tokens (`AWS_BEARER_TOKEN_BEDROCK` eller `/connect`) har forrang over profilbasert autentisering. Se [autentiseringsprioritet](/docs/providers#authentication-precedence) for detaljer.
+Bærer-tokens (`AWS_BEARER_TOKEN_BEDROCK` eller `/connect`) har forrang over alle andre autentiseringsmetoder. IAM-legitimasjon lagret via `/connect` injiseres i AWS-legitimasjonskjeden. Se [autentiseringsprioritet](/docs/providers#authentication-precedence) for detaljer.
 :::
 
 [Les mer om konfigurasjon av Amazon Bedrock](/docs/providers#amazon-bedrock).

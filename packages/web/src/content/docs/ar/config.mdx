@@ -291,7 +291,7 @@ opencode run "Hello world"
 - `endpoint` - عنوان URL لنقطة نهاية مخصصة لنقاط نهاية VPC. هذا اسم بديل للخيار العام `baseURL` باستخدام مصطلحات AWS. إذا تم تحديدهما معًا، تكون أولوية `endpoint` أعلى.
 
 :::note
-لرموز Bearer (`AWS_BEARER_TOKEN_BEDROCK` أو `/connect`) أولوية أعلى من المصادقة القائمة على ملف التعريف. راجع [أولوية المصادقة](/docs/providers#authentication-precedence) للتفاصيل.
+لرموز Bearer (`AWS_BEARER_TOKEN_BEDROCK` أو `/connect`) أولوية أعلى من جميع طرق المصادقة الأخرى. بيانات اعتماد IAM المخزنة عبر `/connect` تُحقن في سلسلة بيانات اعتماد AWS. راجع [أولوية المصادقة](/docs/providers#authentication-precedence) للتفاصيل.
 :::
 
 [تعرف على المزيد حول إعداد Amazon Bedrock](/docs/providers#amazon-bedrock).

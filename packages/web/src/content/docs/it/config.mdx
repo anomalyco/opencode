@@ -291,7 +291,7 @@ Amazon Bedrock supporta una configurazione specifica per AWS:
 - `endpoint` - URL endpoint personalizzato per gli endpoint VPC. E un alias dell'opzione generica `baseURL` usando la terminologia AWS. Se sono specificati sia `endpoint` sia `baseURL`, `endpoint` ha precedenza.
 
 :::note
-I bearer token (`AWS_BEARER_TOKEN_BEDROCK` o `/connect`) hanno precedenza sull'autenticazione basata su profilo. Vedi [ordine di precedenza dell'autenticazione](/docs/providers#authentication-precedence) per i dettagli.
+I bearer token (`AWS_BEARER_TOKEN_BEDROCK` o `/connect`) hanno precedenza su tutti gli altri metodi di autenticazione. Le credenziali IAM memorizzate tramite `/connect` vengono iniettate nella catena delle credenziali AWS. Vedi [ordine di precedenza dell'autenticazione](/docs/providers#authentication-precedence) per i dettagli.
 :::
 
 [Scopri di piu sulla configurazione di Amazon Bedrock](/docs/providers#amazon-bedrock).

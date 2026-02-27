@@ -166,6 +166,16 @@ So verwenden Sie Amazon Bedrock mit OpenCode:
 
 2. **Konfigurieren Sie die Authentifizierung** mit einer der folgenden Methoden:
 
+   ***
+
+   #### Der Befehl `/connect`
+
+   Führen Sie den Befehl `/connect` aus, wählen Sie **Amazon Bedrock** und wählen Sie eine der folgenden Optionen:
+   - **IAM-Anmeldeinformationen** — geben Sie Ihre Access Key ID, Ihren Secret Access Key und die Region direkt in OpenCode ein.
+   - **Umgebungsvariablen** — sehen Sie, welche Umgebungsvariablen in Ihrem Shell-Profil gesetzt werden müssen.
+
+   ***
+
    #### Umgebungsvariablen (Schnellstart)
 
    Legen Sie eine dieser Umgebungsvariablen fest, während Sie OpenCode ausführen:
@@ -248,7 +258,8 @@ So verwenden Sie Amazon Bedrock mit OpenCode:
 
    Amazon Bedrock verwendet die folgende Authentifizierungspriorität:
    1. **Bearer-Token** – `AWS_BEARER_TOKEN_BEDROCK`-Umgebungsvariable oder Token aus dem `/connect`-Befehl
-   2. **AWS Anmeldeinformationskette** – Profil, Zugriffsschlüssel, gemeinsame Anmeldeinformationen, IAM Rollen, Web-Identitätstoken (EKS IRSA), Instanzmetadaten
+   2. **IAM Credentials** - Gespeichert über `/connect` > IAM-Anmeldeinformationen (in die Credential Chain eingefügt)
+   3. **AWS Anmeldeinformationskette** – Profil, Zugriffsschlüssel, gemeinsame Anmeldeinformationen, IAM Rollen, Web-Identitätstoken (EKS IRSA), Instanzmetadaten
 
    :::note
    Wenn ein Inhabertoken festgelegt ist (über `/connect` oder `AWS_BEARER_TOKEN_BEDROCK`), hat es Vorrang vor allen AWS-Anmeldeinformationsmethoden, einschließlich konfigurierter Profile.

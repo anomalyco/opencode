@@ -168,6 +168,16 @@ Slik bruker du Amazon Bedrock med OpenCode:
 
 2. **Konfigurer autentisering** ved å bruke en av følgende metoder:
 
+   ***
+
+   #### /connect-kommando
+
+   Kjør `/connect`-kommandoen, velg **Amazon Bedrock**, og velg mellom:
+   - **IAM credentials** — skriv inn Access Key ID, Secret Access Key og region direkte i OpenCode.
+   - **Miljøvariabler** — se hvilke miljøvariabler som skal settes i shell-profilen din.
+
+   ***
+
    #### Miljøvariabler (hurtigstart)
 
    Angi en av disse miljøvariablene mens du kjører OpenCode:
@@ -250,7 +260,8 @@ Slik bruker du Amazon Bedrock med OpenCode:
 
    Amazon Bedrock bruker følgende autentiseringsprioritet:
    1. **Bearer Token** - `AWS_BEARER_TOKEN_BEDROCK` miljøvariabel eller token fra kommandoen `/connect`
-   2. **AWS legitimasjonskjede** - profil, tilgangsnøkler, delt legitimasjon, IAM roller, nettidentitetstokener (EKS IRSA), forekomstmetadata
+   2. **IAM Credentials** - Lagret via `/connect` > IAM-legitimasjon (injisert i legitimasjonskjeden)
+   3. **AWS legitimasjonskjede** - profil, tilgangsnøkler, delt legitimasjon, IAM roller, nettidentitetstokener (EKS IRSA), forekomstmetadata
 
    :::note
    Når et bærertoken er angitt (via `/connect` eller `AWS_BEARER_TOKEN_BEDROCK`), har det forrang over alle AWS legitimasjonsmetoder inkludert konfigurerte profiler.

@@ -166,6 +166,16 @@ Amazon Bedrock'u opencode ile kullanmak için:
 
 2. **Kimlik doğrulamayı yapılandırın**: Aşağıdaki yöntemlerden birini kullanın:
 
+   ***
+
+   #### /connect Komutu
+
+   `/connect` komutunu çalıştırın, **Amazon Bedrock**'u seçin ve şunlardan birini seçin:
+   - **IAM credentials** — Access Key ID, Secret Access Key ve bölgenizi doğrudan OpenCode'a girin.
+   - **Environment variables** — kabuk profilinizde hangi ortam değişkenlerini ayarlamanız gerektiğini görün.
+
+   ***
+
    #### Ortam Değişkenleri (Hızlı Başlangıç)
 
    opencode'u çalıştırırken bu ortam değişkenlerinden birini ayarlayın:
@@ -250,7 +260,8 @@ Bedrock için VPC uç noktaları kullanıyorsanız:
 Amazon Bedrock aşağıdaki kimlik doğrulama önceliğini kullanır:
 
 1. **Taşıyıcı Belirteç** - `AWS_BEARER_TOKEN_BEDROCK` ortam değişkeni veya `/connect` komutundan belirteç
-2. **AWS Credential Chain** - Profil, erişim anahtarları, paylaşılan kimlik bilgileri, IAM rolleri, Web Identity Tokens (EKS IRSA), örnek meta verileri
+2. **IAM Credentials** - `/connect` > IAM kimlik bilgileri ile saklanır (kimlik bilgisi zincirine enjekte edilir)
+3. **AWS Credential Chain** - Profil, erişim anahtarları, paylaşılan kimlik bilgileri, IAM rolleri, Web Identity Tokens (EKS IRSA), örnek meta verileri
 
 :::note
 Bir taşıyıcı belirteç ayarlandığında (`/connect` veya `AWS_BEARER_TOKEN_BEDROCK` yoluyla), yapılandırılmış profiller dahil olmak üzere tüm AWS kimlik bilgisi yöntemlerine göre öncelik kazanır.

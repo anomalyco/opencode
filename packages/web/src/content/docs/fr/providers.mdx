@@ -165,7 +165,17 @@ Pour utiliser Amazon Bedrock avec OpenCode :
    Vous devez avoir accès au modèle souhaité dans Amazon Bedrock.
    :::
 
-2. **Configurez l'authentification** à l'aide de l'une des méthodes suivantes :
+2. **Configurez l'authentification** à l'aide de l'une des méthodes suivantes :
+
+   ***
+
+   #### Commande /connect
+
+   Exécutez la commande `/connect`, sélectionnez **Amazon Bedrock**, puis choisissez :
+   - **IAM credentials** — saisissez votre Access Key ID, Secret Access Key et la région directement dans OpenCode.
+   - **Variables d'environnement** — consultez les variables d'environnement à définir dans votre profil shell.
+
+   ***
 
    #### Variables d'environnement (démarrage rapide)
 
@@ -252,7 +262,8 @@ L'option `endpoint` est un alias pour l'option générique `baseURL`, utilisant 
 Amazon Bedrock utilise la priorité d'authentification suivante :
 
 1.  **Bearer Token** - Variable d'environnement `AWS_BEARER_TOKEN_BEDROCK` ou jeton de la commande `/connect`
-2.  **AWS Credential Chain** - Profil, clés d'accès, informations d'identification partagées, rôles IAM, jetons d'identité Web (EKS IRSA), métadonnées d'instance
+2.  **IAM Credentials** - Stockées via `/connect` > identifiants IAM (injectées dans la chaîne de credentials)
+3.  **AWS Credential Chain** - Profil, clés d'accès, informations d'identification partagées, rôles IAM, jetons d'identité Web (EKS IRSA), métadonnées d'instance
 
 :::note
 Lorsqu'un jeton de porteur est défini (via `/connect` ou `AWS_BEARER_TOKEN_BEDROCK`), il est prioritaire sur toutes les méthodes d'identification AWS, y compris les profils configurés.

@@ -292,7 +292,7 @@ Amazon Bedrock unterstützt AWS-spezifische Konfigurationen:
 - `endpoint` – Benutzerdefinierter Endpunkt URL für VPC-Endpunkte. Dies ist ein Alias ​​​​für die generische Option `baseURL` unter Verwendung der AWS-spezifischen Terminologie. Wenn beide angegeben sind, hat `endpoint` Vorrang.
 
 :::note
-Inhabertoken (`AWS_BEARER_TOKEN_BEDROCK` oder `/connect`) haben Vorrang vor der profilbasierten Authentifizierung. Weitere Informationen finden Sie unter [Authentifizierungs-Rangfolge](/docs/providers#authentication-precedence).
+Inhabertoken (`AWS_BEARER_TOKEN_BEDROCK` oder `/connect`) haben Vorrang vor allen anderen Authentifizierungsmethoden. Über `/connect` gespeicherte IAM-Anmeldeinformationen werden in die AWS-Credential-Chain eingefügt. Weitere Informationen finden Sie unter [Authentifizierungs-Rangfolge](/docs/providers#authentication-precedence).
 :::
 
 [Erfahren Sie mehr über die Amazon Bedrock-Konfiguration](/docs/providers#amazon-bedrock).

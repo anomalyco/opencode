@@ -135,6 +135,69 @@ test("Bedrock: loads when bearer token from auth.json is present", async () => {
   }
 })
 
+test("Bedrock: loads when IAM credentials from auth.json are present", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Filesystem.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "amazon-bedrock": {
+              options: {
+                region: "us-west-2",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  const authPath = path.join(Global.Path.data, "auth.json")
+
+  let originalAuth: string | undefined
+  try {
+    originalAuth = await Filesystem.readText(authPath)
+  } catch {
+    // File doesn't exist, that's fine
+  }
+
+  try {
+    await Filesystem.write(
+      authPath,
+      JSON.stringify({
+        "amazon-bedrock": {
+          type: "aws",
+          accessKeyId: "test-access-key-id",
+          secretAccessKey: "test-secret-key",
+          region: "us-west-2",
+        },
+      }),
+    )
+
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        Env.set("AWS_PROFILE", "")
+        Env.set("AWS_ACCESS_KEY_ID", "")
+        Env.set("AWS_BEARER_TOKEN_BEDROCK", "")
+      },
+      fn: async () => {
+        const providers = await Provider.list()
+        expect(providers["amazon-bedrock"]).toBeDefined()
+        expect(providers["amazon-bedrock"].options?.region).toBe("us-west-2")
+      },
+    })
+  } finally {
+    if (originalAuth !== undefined) {
+      await Filesystem.write(authPath, originalAuth)
+    } else {
+      await unlink(authPath).catch(() => {})
+    }
+  }
+})
+
 test("Bedrock: config profile takes precedence over AWS_PROFILE env var", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

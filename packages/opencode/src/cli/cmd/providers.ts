@@ -413,13 +413,70 @@ export const ProvidersLoginCommand = cmd({
         }
 
         if (provider === "amazon-bedrock") {
-          prompts.log.info(
-            "Amazon Bedrock authentication priority:\n" +
-              "  1. Bearer token (AWS_BEARER_TOKEN_BEDROCK or /connect)\n" +
-              "  2. AWS credential chain (profile, access keys, IAM roles, EKS IRSA)\n\n" +
-              "Configure via opencode.json options (profile, region, endpoint) or\n" +
-              "AWS environment variables (AWS_PROFILE, AWS_REGION, AWS_ACCESS_KEY_ID, AWS_WEB_IDENTITY_TOKEN_FILE).",
-          )
+          const method = await prompts.select({
+            message: "Select authentication method",
+            options: [
+              { value: "aws", label: "IAM credentials (Access Key ID + Secret Access Key)" },
+              { value: "bearer", label: "Bearer token" },
+              { value: "env", label: "Environment variables (view guidance)" },
+            ],
+          })
+          if (prompts.isCancel(method)) throw new UI.CancelledError()
+
+          if (method === "env") {
+            prompts.log.info(
+              "Set one of the following environment variables in your shell profile:\n" +
+                "  • AWS_PROFILE\n" +
+                "  • AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY\n" +
+                "  • AWS_BEARER_TOKEN_BEDROCK\n\n" +
+                "If using the desktop app, restart it after changing your shell profile.",
+            )
+            prompts.outro("Done")
+            return
+          }
+
+          if (method === "aws") {
+            const accessKeyId = await prompts.text({
+              message: "AWS Access Key ID",
+              placeholder: "AKIA...",
+              validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+            })
+            if (prompts.isCancel(accessKeyId)) throw new UI.CancelledError()
+
+            const secretAccessKey = await prompts.password({
+              message: "AWS Secret Access Key",
+              validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+            })
+            if (prompts.isCancel(secretAccessKey)) throw new UI.CancelledError()
+
+            const region = await prompts.text({
+              message: "AWS Region",
+              placeholder: "us-east-1",
+              defaultValue: "us-east-1",
+            })
+            if (prompts.isCancel(region)) throw new UI.CancelledError()
+
+            await Auth.set(provider, {
+              type: "aws",
+              accessKeyId,
+              secretAccessKey,
+              region: region || "us-east-1",
+            })
+            prompts.outro("Done")
+            return
+          }
+
+          const key = await prompts.password({
+            message: "Enter your bearer token",
+            validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+          })
+          if (prompts.isCancel(key)) throw new UI.CancelledError()
+          await Auth.set(provider, {
+            type: "api",
+            key,
+          })
+          prompts.outro("Done")
+          return
         }
 
         if (provider === "opencode") {

@@ -166,6 +166,16 @@ Da biste koristili Amazon Bedrock s OpenCode:
 
 2. **Konfigurirajte autentifikaciju** koristeći jedan od sljedećih metoda:
 
+   ***
+
+   #### Naredba `/connect`
+
+   Pokrenite naredbu `/connect`, odaberite **Amazon Bedrock** i izaberite jednu od opcija:
+   - **IAM akreditivi** — unesite svoj Access Key ID, Secret Access Key i regiju direktno u OpenCode.
+   - **Varijable okruženja** — pogledajte koje varijable okruženja trebate postaviti u svom shell profilu.
+
+   ***
+
    #### Varijable okruženja (Brzi početak)
 
    Postavite jednu od ovih varijabli okruženja dok pokrećete opencode:
@@ -251,7 +261,8 @@ Opcija `endpoint` je pseudonim za generičku opciju `baseURL`, koristeći termin
 Amazon Bedrock koristi sljedeći prioritet autentifikacije:
 
 1.  **Token nosioca** - `AWS_BEARER_TOKEN_BEDROCK` varijabla okruženja ili token iz naredbe `/connect`
-2.  **AWS lanac vjerodajnica** - profil, pristupni ključevi, dijeljeni vjerodajnici, IAM uloge, tokeni web identiteta (EKS IRSA), metapodaci instance
+2.  **IAM Credentials** - Pohranjeno putem `/connect` > IAM akreditive (ubačeno u lanac akreditiva)
+3.  **AWS lanac vjerodajnica** - profil, pristupni ključevi, dijeljeni vjerodajnici, IAM uloge, tokeni web identiteta (EKS IRSA), metapodaci instance
 
 :::note
 Kada se postavi token nosioca (putem `/connect` ili `AWS_BEARER_TOKEN_BEDROCK`), on ima prednost nad svim AWS metodama akreditiva uključujući konfigurirane profile.

@@ -162,6 +162,16 @@ OpenCode Go 是一個低成本的訂閱計畫，提供對 OpenCode 團隊提供�
 
 2. 使用以下方法之一**設定身分驗證**：
 
+   ***
+
+   #### /connect 指令
+
+   執行 `/connect` 指令，選擇 **Amazon Bedrock**，然後選擇以下選項之一：
+   - **IAM credentials** — 直接在 OpenCode 中輸入您的 Access Key ID、Secret Access Key 和區域。
+   - **Environment variables** — 查看需要在 shell 設定檔中設定哪些環境變數。
+
+   ***
+
    #### 環境變數（快速上手）
 
    執行 opencode 時設定以下環境變數之一：
@@ -244,7 +254,8 @@ OpenCode Go 是一個低成本的訂閱計畫，提供對 OpenCode 團隊提供�
 
    Amazon Bedrock 使用以下認證優先順序：
    1. **Bearer Token** - `AWS_BEARER_TOKEN_BEDROCK` 環境變數或透過 `/connect` 指令取得的 Token
-   2. **AWS 憑證鏈** - 設定檔、存取金鑰、共享憑證、IAM 角色、Web Identity Token（EKS IRSA）、執行個體中繼資料
+   2. **IAM 憑證** - 透過 `/connect` > IAM 憑證儲存（注入憑證鏈）
+   3. **AWS 憑證鏈** - 設定檔、存取金鑰、共享憑證、IAM 角色、Web Identity Token（EKS IRSA）、執行個體中繼資料
 
    :::note
    當設定了 Bearer Token（透過 `/connect` 或 `AWS_BEARER_TOKEN_BEDROCK`）時，它的優先順序高於所有 AWS 憑證方式，包括已設定的設定檔。

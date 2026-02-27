@@ -133,6 +133,14 @@ OpenCode Zen 是由 OpenCode 团队提供的模型列表，这些模型已经过
 
    ***
 
+   #### /connect 命令
+
+   执行 `/connect` 命令，选择 **Amazon Bedrock**，然后选择以下选项之一：
+   - **IAM credentials** — 直接在 OpenCode 中输入你的 Access Key ID、Secret Access Key 和区域。
+   - **Environment variables** — 查看需要在 shell 配置文件中设置哪些环境变量。
+
+   ***
+
    #### 环境变量（快速上手）
 
    运行 opencode 时设置以下环境变量之一：
@@ -223,7 +231,8 @@ OpenCode Zen 是由 OpenCode 团队提供的模型列表，这些模型已经过
 
    Amazon Bedrock 使用以下认证优先级：
    1. **Bearer Token** - `AWS_BEARER_TOKEN_BEDROCK` 环境变量或通过 `/connect` 命令获取的 Token
-   2. **AWS 凭证链** - 配置文件、访问密钥、共享凭证、IAM 角色、Web Identity Token（EKS IRSA）、实例元数据
+   2. **IAM 凭证** - 通过 `/connect` > IAM 凭证存储（注入凭证链）
+   3. **AWS 凭证链** - 配置文件、访问密钥、共享凭证、IAM 角色、Web Identity Token（EKS IRSA）、实例元数据
 
    :::note
    当设置了 Bearer Token（通过 `/connect` 或 `AWS_BEARER_TOKEN_BEDROCK`）时，它的优先级高于所有 AWS 凭证方式，包括已配置的配置文件。

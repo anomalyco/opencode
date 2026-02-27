@@ -291,7 +291,7 @@ Amazon Bedrock은 AWS 전용 config를 지원합니다.
 - `endpoint` - VPC endpoint용 custom endpoint URL입니다. AWS 용어를 사용한 일반 `baseURL` 옵션의 별칭(alias)입니다. 둘 다 지정하면 `endpoint`가 우선합니다.
 
 :::note
-Bearer token(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 profile 기반 인증보다 우선합니다. 자세한 내용은 [authentication precedence](/docs/providers#authentication-precedence)를 참고하세요.
+Bearer token(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 다른 모든 인증 방법보다 우선합니다. `/connect`를 통해 저장된 IAM 자격 증명은 AWS 자격 증명 체인에 주입됩니다. 자세한 내용은 [authentication precedence](/docs/providers#authentication-precedence)를 참고하세요.
 :::
 
 [Amazon Bedrock config 더 알아보기](/docs/providers#amazon-bedrock).

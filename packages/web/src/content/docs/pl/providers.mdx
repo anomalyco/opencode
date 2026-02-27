@@ -166,6 +166,16 @@ Aby używać Amazon Bedrock z opencode:
 
 2. **Skonfiguruj uwierzytelnianie** przy użyciu jednej z następujących metod:
 
+   ***
+
+   #### Komenda /connect
+
+   Uruchom komendę `/connect`, wybierz **Amazon Bedrock**, a następnie wybierz:
+   - **IAM credentials** — wprowadź Access Key ID, Secret Access Key i region bezpośrednio w OpenCode.
+   - **Zmienne środowiskowe** — sprawdź, które zmienne środowiskowe ustawić w profilu powłoki.
+
+   ***
+
    #### Zmienne środowiskowe (Szybki start)
 
    Ustaw jedną z tych zmiennych środowiskowych podczas uruchamiania opencode:
@@ -248,7 +258,8 @@ Aby używać Amazon Bedrock z opencode:
 
    Amazon Bedrock wykorzystuje następujący priorytet uwierzytelniania:
    1. **Token nośnika** - zmienna środowiskowa `AWS_BEARER_TOKEN_BEDROCK` lub token z komendy `/connect`
-   2. **AWS Credential Chain** - Profile, access keys, shared credentials, IAM roles, Web Identity Tokens (EKS IRSA), instance metadata
+   2. **IAM Credentials** - Przechowywane przez `/connect` > dane uwierzytelniające IAM (wstrzykiwane do łańcucha poświadczeń)
+   3. **AWS Credential Chain** - Profile, access keys, shared credentials, IAM roles, Web Identity Tokens (EKS IRSA), instance metadata
 
    :::note
    Gdy ustawisz bearer token (przez `/connect` lub `AWS_BEARER_TOKEN_BEDROCK`), ma on pierwszeństwo nad wszystkimi metodami poświadczeń AWS, w tym profilami.

@@ -293,7 +293,7 @@ Amazon Bedrock 支援 AWS 特定設定：
 - `endpoint` - VPC 端點的自訂端點 URL。這是通用 `baseURL` 選項使用 AWS 特定術語的別名。如果兩者都指定，`endpoint` 優先。
 
 :::note
-Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）優先於基於設定檔的身分驗證。詳情請參見[認證優先級](/docs/providers#authentication-precedence)。
+Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）優先於所有其他身分驗證方法。透過 `/connect` 儲存的 IAM 憑證會注入 AWS 憑證鏈。詳情請參見[認證優先級](/docs/providers#authentication-precedence)。
 :::
 
 [了解更多關於 Amazon Bedrock 設定的資訊](/docs/providers#amazon-bedrock)。

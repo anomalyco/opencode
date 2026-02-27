@@ -292,7 +292,7 @@ Amazon Bedrock prend en charge la configuration spécifique à AWS :
 - `endpoint` - Point de terminaison personnalisé URL pour les points de terminaison d'un VPC. Il s'agit d'un alias pour l'option générique `baseURL` utilisant la terminologie spécifique à AWS. Si les deux sont spécifiés, `endpoint` est prioritaire.
 
 :::note
-Les jetons du porteur (`AWS_BEARER_TOKEN_BEDROCK` ou `/connect`) ont priorité sur l'authentification basée sur le profil. Voir [précédence d'authentification](/docs/providers#authentication-precedence) pour plus de détails.
+Les jetons du porteur (`AWS_BEARER_TOKEN_BEDROCK` ou `/connect`) ont priorité sur toutes les autres méthodes d'authentification. Les identifiants IAM stockés via `/connect` sont injectés dans la chaîne de credentials AWS. Voir [précédence d'authentification](/docs/providers#authentication-precedence) pour plus de détails.
 :::
 
 [En savoir plus sur la configuration d'Amazon Bedrock](/docs/providers#amazon-bedrock).

@@ -161,6 +161,16 @@ Sådan bruger du Amazon Bedrock med OpenCode:
 
 2. **Konfigurer godkendelse** ved at bruge en af følgende metoder:
 
+   ***
+
+   #### Kommandoen `/connect`
+
+   Kør kommandoen `/connect`, vælg **Amazon Bedrock**, og vælg enten:
+   - **IAM-legitimationsoplysninger** — indtast dit Access Key ID, Secret Access Key og region direkte i OpenCode.
+   - **Miljøvariabler** — se hvilke miljøvariabler der skal sættes i din shell-profil.
+
+   ***
+
    #### Miljøvariabler (hurtigstart)
 
    Angiv en af disse miljøvariabler, mens du kører opencode:
@@ -243,7 +253,8 @@ Sådan bruger du Amazon Bedrock med OpenCode:
 
    Amazon Bedrock bruger følgende godkendelsesprioritet:
    1. **Bearer Token** - `AWS_BEARER_TOKEN_BEDROCK` miljøvariabel eller token fra kommandoen `/connect`
-   2. **AWS legitimationskæde** - profil, adgangsnøgler, delte legitimationsoplysninger, IAM roller, webidentitetstokens (EKS IRSA), instansmetadata
+   2. **IAM Credentials** - Gemt via `/connect` > IAM-legitimationsoplysninger (injiceret i legitimationskæden)
+   3. **AWS legitimationskæde** - profil, adgangsnøgler, delte legitimationsoplysninger, IAM roller, webidentitetstokens (EKS IRSA), instansmetadata
 
    :::note
    Når et bearer token er angivet (via `/connect` eller `AWS_BEARER_TOKEN_BEDROCK`), har det forrang over alle AWS godkendelsesmetoder inklusiv konfigurerede profiler.

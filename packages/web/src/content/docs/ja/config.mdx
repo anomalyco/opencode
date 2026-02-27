@@ -14,11 +14,10 @@ OpenCode は、**JSON** と **JSONC** (コメント付きの JSON) 形式の両�
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
+  // Theme configuration
+  "theme": "opencode",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
-  "server": {
-    "port": 4096,
-  },
 }
 ```
 
@@ -26,15 +25,14 @@ OpenCode は、**JSON** と **JSONC** (コメント付きの JSON) 形式の両�
 
 ## ファイルの場所
 
-設定をいくつかの異なる場所に配置できます。それらは異なる優先順位を持ちます。
+設定をいくつかの異なる場所に配置できます。
+優先順位が異なります。
 
 :::note
-設定ファイルは置き換えられるのではなく、**マージ**されます。
+設定ファイルは置き換えられるのではなく、**マージ**されます。設定は、次の構成場所から結合されます。後続の設定は、競合するキーに対してのみ以前の設定をオーバーライドします。すべての設定の競合しない設定は保持されます。
 :::
 
-設定ファイルは結合され、置き換えられません。次の構成場所からの設定が結合されます。競合するキーに対してのみ、後の設定が前の設定を上書きします。すべての構成からの競合しない設定は保持されます。
-
-たとえば、グローバル設定で `autoupdate: true` を設定し、プロジェクト設定で `model: "anthropic/claude-sonnet-4-5"` を設定した場合、最終的な構成には両方の設定が含まれます。
+たとえば、グローバル設定で `theme: "opencode"` と `autoupdate: true` が設定され、プロジェクト設定で `model: "anthropic/claude-sonnet-4-5"` が設定されている場合、最終的な設定には 3 つの設定がすべて含まれます。
 
 ---
 
@@ -95,9 +93,7 @@ OpenCode は、**JSON** と **JSONC** (コメント付きの JSON) 形式の両�
 
 ### グローバル
 
-グローバル OpenCode 設定を `~/.config/opencode/opencode.json` に配置します。プロバイダー、モデル、権限などのユーザー全体の設定にはグローバル設定を使用します。
-
-TUI 固有の設定には、`~/.config/opencode/tui.json` を使用します。
+グローバル OpenCode 設定を `~/.config/opencode/opencode.json` に配置します。テーマ、プロバイダー、キーバインドなどのユーザー全体の設定にはグローバル設定を使用します。
 
 グローバル設定はリモート組織のデフォルトをオーバーライドします。
 
@@ -106,8 +102,6 @@ TUI 固有の設定には、`~/.config/opencode/tui.json` を使用します。
 ### プロジェクトごと
 
 プロジェクトのルートに `opencode.json` を追加します。プロジェクト設定は、標準設定ファイルの中で最も高い優先順位を持ち、グローバル設定とリモート設定の両方をオーバーライドします。
-
-プロジェクト固有の TUI 設定については、その横に `tui.json` を追加します。
 
 :::tip
 プロジェクト固有の設定をプロジェクトのルートに配置します。
@@ -150,9 +144,7 @@ opencode run "Hello world"
 
 ## スキーマ
 
-サーバー/ランタイム構成スキーマは [**`opencode.ai/config.json`**](https://opencode.ai/config.json) で定義されています。
-
-TUI 設定は [**`opencode.ai/tui.json`**](https://opencode.ai/tui.json) を使用します。
+設定ファイルには、[**`opencode.ai/config.json`**](https://opencode.ai/config.json) を使用します。
 
 エディターはスキーマに基づいて検証し、オートコンプリートできる必要があります。
 
@@ -160,24 +152,28 @@ TUI 設定は [**`opencode.ai/tui.json`**](https://opencode.ai/tui.json) を使�
 
 ### TUI
 
-TUI 固有の設定には、専用の `tui.json` (または `tui.jsonc`) ファイルを使用します。
+`tui` オプションを使用して TUI 固有の設定を構成できます。
 
-```json title="tui.json"
+```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
-  "scroll_speed": 3,
-  "scroll_acceleration": {
-    "enabled": true
-  },
-  "diff_style": "auto"
+  "$schema": "https://opencode.ai/config.json",
+  "tui": {
+    "scroll_speed": 3,
+    "scroll_acceleration": {
+      "enabled": true
+    },
+    "diff_style": "auto"
+  }
 }
 ```
 
-カスタム TUI 設定ファイルを指定するには、`OPENCODE_TUI_CONFIG` を使用します。
+利用可能なオプション:
 
-`opencode.json` 内の従来の `theme`、`keybinds`、および `tui` キーは非推奨となり、可能であれば自動的に移行されます。
+- `scroll_acceleration.enabled` - macOS スタイルのスクロールアクセラレーションを有効にします。 **`scroll_speed` よりも優先されます。**
+- `scroll_speed` - カスタムのスクロール速度乗数 (デフォルト: `3`、最小: `1`)。 `scroll_acceleration.enabled` が `true` の場合は無視されます。
+- `diff_style` - 差分レンダリングを制御します。 `"auto"` はターミナルの幅に適応し、`"stacked"` は常に 1 列を表示します。
 
-[TUI の設定の詳細については、こちら](/docs/tui#configure) をご覧ください。
+[TUI の使用方法の詳細については、こちら](/docs/tui) をご覧ください。
 
 ---
 
@@ -241,7 +237,7 @@ LLM が使用できるツールは、`tools` オプションを通じて管理�
 }
 ```
 
-`small_model` オプションは、タイトルの生成などの軽量タスク用に個別のモデルを構成します。デフォルトでは、OpenCode は、プロバイダーから安価なモデルが入手可能な場合は、より安価なモデルを使用しようとします。そうでない場合は、メインモデルにフォールバックします。
+`small_model` オプションは、タイトル生成などの軽量タスク用に別のモデルを構成します。デフォルトでは、OpenCode は、プロバイダーから安価なモデルが入手可能な場合は、より安価なモデルを使用しようとします。そうでない場合は、メインモデルにフォールバックします。
 
 プロバイダーオプションには、`timeout` および `setCacheKey` を含めることができます。
 
@@ -262,7 +258,7 @@ LLM が使用できるツールは、`tools` オプションを通じて管理�
 - `timeout` - リクエストのタイムアウト (ミリ秒単位) (デフォルト: 300000)。無効にするには、`false` に設定します。
 - `setCacheKey` - 指定されたプロバイダーに対してキャッシュキーが常に設定されていることを確認します。
 
-[ローカルモデル](/docs/models#local) も設定できます。[詳細はこちら](/docs/models)。
+[ローカルモデル](/docs/models#local). [詳細はこちら](/docs/models)。
 
 ---
 
@@ -294,21 +290,21 @@ Amazon Bedrock は、AWS 固有の設定をサポートしています。
 - `endpoint` - VPC エンドポイントのカスタムエンドポイント URL。これは、AWS 固有の用語を使用した汎用 `baseURL` オプションのエイリアスです。両方を指定した場合は、`endpoint` が優先されます。
 
 :::note
-ベアラー トークン (`AWS_BEARER_TOKEN_BEDROCK` または `/connect`) は、プロファイルベースの認証より優先されます。詳細については、「[認証優先順位](/docs/providers#authentication-precedence)」を参照してください。
+ベアラー トークン (`AWS_BEARER_TOKEN_BEDROCK` または `/connect`) は、他のすべての認証方法より優先されます。`/connect` 経由で保存された IAM 認証情報は AWS 認証チェーンに注入されます。詳細については、「認証優先順位](/docs/providers#authentication-precedence)」を参照してください。
 :::
 
-[Amazon Bedrock 設定](/docs/providers#amazon-bedrock) の詳細をご覧ください。
+[Amazon Bedrock 設定 ](/docs/providers#amazon-bedrock) の詳細をご覧ください。
 
 ---
 
 ### テーマ
 
-UI テーマを `tui.json` で設定します。
+`theme` オプションを使用して、OpenCode 設定で使用するテーマを構成できます。
 
-```json title="tui.json"
+```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
-  "theme": "tokyonight"
+  "$schema": "https://opencode.ai/config.json",
+  "theme": ""
 }
 ```
 
@@ -408,11 +404,11 @@ UI テーマを `tui.json` で設定します。
 
 ### キーバインド
 
-`tui.json` でキーバインドをカスタマイズします。
+`keybinds` オプションを使用してキーバインドをカスタマイズできます。
 
-```json title="tui.json"
+```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://opencode.ai/config.json",
   "keybinds": {}
 }
 ```

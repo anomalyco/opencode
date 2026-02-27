@@ -288,7 +288,7 @@ Amazon Bedrock umożliwia konfigurację połączenia z AWS:
 - `endpoint` — Niestandardowy adres URL punktu końcowego (np. dla punktów końcowych VPC). Jest to alias dla opcji ogólnej `baseURL` przy użyciu terminologii AWS. Jeśli podano oba, pierwszeństwo ma `endpoint`.
 
 :::note
-Token okaziciela (`AWS_BEARER_TOKEN_BEDROCK` lub `/connect`) ma pierwszeństwo przed uwierzytelnianiem opartym na profilu. Aby uzyskać szczegółowe informacje, zobacz [pierwszeństwo uwierzytelniania](/docs/providers#authentication-precedence).
+Token okaziciela (`AWS_BEARER_TOKEN_BEDROCK` lub `/connect`) ma pierwszeństwo przed wszystkimi innymi metodami uwierzytelniania. Dane uwierzytelniające IAM przechowywane przez `/connect` są wstrzykiwane do łańcucha poświadczeń AWS. Aby uzyskać szczegółowe informacje, zobacz [pierwszeństwo uwierzytelniania](/docs/providers#authentication-precedence).
 :::
 
 [Dowiedz się więcej o Amazon Bedrock](/docs/providers#amazon-bedrock).
