@@ -92,6 +92,7 @@ export async function handler(
     const stickyProvider = await stickyTracker?.get()
     const authInfo = await authenticate(modelInfo)
     const billingSource = validateBilling(authInfo, modelInfo)
+    logger.metric({ source: billingSource })
 
     const retriableRequest = async (retry: RetryOptions = { excludeProviders: [], retryCount: 0 }) => {
       const providerInfo = selectProvider(
@@ -244,16 +245,15 @@ export async function handler(
                 dataDumper?.flush()
                 await rateLimiter?.track()
                 const usage = usageParser.retrieve()
-                let cost = "0"
                 if (usage) {
                   const usageInfo = providerInfo.normalizeUsage(usage)
                   const costInfo = calculateCost(modelInfo, usageInfo)
                   await trialLimiter?.track(usageInfo)
                   await trackUsage(sessionId, billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
                   await reload(billingSource, authInfo, costInfo)
-                  cost = calculateOccuredCost(billingSource, costInfo)
+                  const cost = calculateOccuredCost(billingSource, costInfo)
+                  c.enqueue(encoder.encode(usageParser.buidlCostChunk(cost)))
                 }
-                c.enqueue(encoder.encode(usageParser.buidlCostChunk(cost)))
                 c.close()
                 return
               }
@@ -632,7 +632,7 @@ export async function handler(
           })
           if (result.status === "rate-limited")
             throw new SubscriptionUsageLimitError(
-              `Subscription quota exceeded. Retry in ${formatRetryTime(result.resetInSec)}.`,
+              `Subscription quota exceeded. You can continue using free models.`,
               result.resetInSec,
             )
         }
@@ -647,22 +647,22 @@ export async function handler(
           })
           if (result.status === "rate-limited")
             throw new SubscriptionUsageLimitError(
-              `Subscription quota exceeded. Retry in ${formatRetryTime(result.resetInSec)}.`,
+              `Subscription quota exceeded. You can continue using free models.`,
               result.resetInSec,
             )
         }
 
         // Check rolling limit
-        if (sub.monthlyUsage && sub.timeMonthlyUpdated) {
+        if (sub.rollingUsage && sub.timeRollingUpdated) {
           const result = Subscription.analyzeRollingUsage({
             limit: liteData.rollingLimit,
             window: liteData.rollingWindow,
-            usage: sub.monthlyUsage,
-            timeUpdated: sub.timeMonthlyUpdated,
+            usage: sub.rollingUsage,
+            timeUpdated: sub.timeRollingUpdated,
           })
           if (result.status === "rate-limited")
             throw new SubscriptionUsageLimitError(
-              `Subscription quota exceeded. Retry in ${formatRetryTime(result.resetInSec)}.`,
+              `Subscription quota exceeded. You can continue using free models.`,
               result.resetInSec,
             )
         }

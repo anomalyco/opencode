@@ -4,7 +4,7 @@ import { createEffect, on, Component, Show, For, onCleanup, Switch, Match, creat
 import { createStore } from "solid-js/store"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
-import { useFile } from "@/context/file"
+import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
 import {
   ContentPart,
   DEFAULT_PROMPT,
@@ -44,6 +44,9 @@ import {
   canNavigateHistoryAtCursor,
   navigatePromptHistory,
   prependHistoryEntry,
+  type PromptHistoryComment,
+  type PromptHistoryEntry,
+  type PromptHistoryStoredEntry,
   promptLength,
 } from "./prompt-input/history"
 import { createPromptSubmit } from "./prompt-input/submit"
@@ -173,12 +176,29 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const focus = { file: item.path, id: item.commentID }
     comments.setActive(focus)
 
+    const queueCommentFocus = (attempts = 6) => {
+      const schedule = (left: number) => {
+        requestAnimationFrame(() => {
+          comments.setFocus({ ...focus })
+          if (left <= 0) return
+          requestAnimationFrame(() => {
+            const current = comments.focus()
+            if (!current) return
+            if (current.file !== focus.file || current.id !== focus.id) return
+            schedule(left - 1)
+          })
+        })
+      }
+
+      schedule(attempts)
+    }
+
     const wantsReview = item.commentOrigin === "review" || (item.commentOrigin !== "file" && commentInReview(item.path))
     if (wantsReview) {
       if (!view().reviewPanel.opened()) view().reviewPanel.open()
       layout.fileTree.setTab("changes")
       tabs().setActive("review")
-      requestAnimationFrame(() => comments.setFocus(focus))
+      queueCommentFocus()
       return
     }
 
@@ -186,8 +206,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     layout.fileTree.setTab("all")
     const tab = files.tab(item.path)
     tabs().open(tab)
-    files.load(item.path)
-    requestAnimationFrame(() => comments.setFocus(focus))
+    tabs().setActive(tab)
+    Promise.resolve(files.load(item.path)).finally(() => queueCommentFocus())
   }
 
   const recent = createMemo(() => {
@@ -223,7 +243,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const [store, setStore] = createStore<{
     popover: "at" | "slash" | null
     historyIndex: number
-    savedPrompt: Prompt | null
+    savedPrompt: PromptHistoryEntry | null
     placeholder: number
     draggingType: "image" | "@mention" | null
     mode: "normal" | "shell"
@@ -231,7 +251,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }>({
     popover: null,
     historyIndex: -1,
-    savedPrompt: null,
+    savedPrompt: null as PromptHistoryEntry | null,
     placeholder: Math.floor(Math.random() * EXAMPLES.length),
     draggingType: null,
     mode: "normal",
@@ -260,7 +280,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const [history, setHistory] = persisted(
     Persist.global("prompt-history", ["prompt-history.v1"]),
     createStore<{
-      entries: Prompt[]
+      entries: PromptHistoryStoredEntry[]
     }>({
       entries: [],
     }),
@@ -268,7 +288,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const [shellHistory, setShellHistory] = persisted(
     Persist.global("prompt-history-shell", ["prompt-history-shell.v1"]),
     createStore<{
-      entries: Prompt[]
+      entries: PromptHistoryStoredEntry[]
     }>({
       entries: [],
     }),
@@ -286,9 +306,66 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }),
   )
 
-  const applyHistoryPrompt = (p: Prompt, position: "start" | "end") => {
+  const historyComments = () => {
+    const byID = new Map(comments.all().map((item) => [`${item.file}\n${item.id}`, item] as const))
+    return prompt.context.items().flatMap((item) => {
+      if (item.type !== "file") return []
+      const comment = item.comment?.trim()
+      if (!comment) return []
+
+      const selection = item.commentID ? byID.get(`${item.path}\n${item.commentID}`)?.selection : undefined
+      const nextSelection =
+        selection ??
+        (item.selection
+          ? ({
+              start: item.selection.startLine,
+              end: item.selection.endLine,
+            } satisfies SelectedLineRange)
+          : undefined)
+      if (!nextSelection) return []
+
+      return [
+        {
+          id: item.commentID ?? item.key,
+          path: item.path,
+          selection: { ...nextSelection },
+          comment,
+          time: item.commentID ? (byID.get(`${item.path}\n${item.commentID}`)?.time ?? Date.now()) : Date.now(),
+          origin: item.commentOrigin,
+          preview: item.preview,
+        } satisfies PromptHistoryComment,
+      ]
+    })
+  }
+
+  const applyHistoryComments = (items: PromptHistoryComment[]) => {
+    comments.replace(
+      items.map((item) => ({
+        id: item.id,
+        file: item.path,
+        selection: { ...item.selection },
+        comment: item.comment,
+        time: item.time,
+      })),
+    )
+    prompt.context.replaceComments(
+      items.map((item) => ({
+        type: "file" as const,
+        path: item.path,
+        selection: selectionFromLines(item.selection),
+        comment: item.comment,
+        commentID: item.id,
+        commentOrigin: item.origin,
+        preview: item.preview,
+      })),
+    )
+  }
+
+  const applyHistoryPrompt = (entry: PromptHistoryEntry, position: "start" | "end") => {
+    const p = entry.prompt
     const length = position === "start" ? 0 : promptLength(p)
     setStore("applyingHistory", true)
+    applyHistoryComments(entry.comments)
     prompt.set(p, length)
     requestAnimationFrame(() => {
       editorRef.focus()
@@ -850,7 +927,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const addToHistory = (prompt: Prompt, mode: "normal" | "shell") => {
     const currentHistory = mode === "shell" ? shellHistory : history
     const setCurrentHistory = mode === "shell" ? setShellHistory : setHistory
-    const next = prependHistoryEntry(currentHistory.entries, prompt)
+    const next = prependHistoryEntry(currentHistory.entries, prompt, mode === "shell" ? [] : historyComments())
     if (next === currentHistory.entries) return
     setCurrentHistory("entries", next)
   }
@@ -861,12 +938,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       entries: store.mode === "shell" ? shellHistory.entries : history.entries,
       historyIndex: store.historyIndex,
       currentPrompt: prompt.current(),
+      currentComments: historyComments(),
       savedPrompt: store.savedPrompt,
     })
     if (!result.handled) return false
     setStore("historyIndex", result.historyIndex)
     setStore("savedPrompt", result.savedPrompt)
-    applyHistoryPrompt(result.prompt, result.cursor)
+    applyHistoryPrompt(result.entry, result.cursor)
     return true
   }
 
@@ -1122,6 +1200,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const variants = createMemo(() => ["default", ...local.model.variant.list()])
+  const accepting = createMemo(() => {
+    const id = params.id
+    if (!id) return false
+    return permission.isAutoAccepting(id, sdk.directory)
+  })
 
   return (
     <div class="relative size-full _max-h-[320px] flex flex-col gap-0">
@@ -1434,7 +1517,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <TooltipKeybind
                   placement="top"
                   gutter={8}
-                  title={language.t("command.permissions.autoaccept.enable")}
+                  title={language.t(
+                    accepting() ? "command.permissions.autoaccept.disable" : "command.permissions.autoaccept.enable",
+                  )}
                   keybind={command.keybind("permissions.autoaccept")}
                 >
                   <Button
@@ -1443,20 +1528,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     onClick={() => permission.toggleAutoAccept(params.id!, sdk.directory)}
                     classList={{
                       "_hidden group-hover/prompt-input:flex size-6 items-center justify-center": true,
-                      "text-text-base": !permission.isAutoAccepting(params.id!, sdk.directory),
-                      "hover:bg-surface-success-base": permission.isAutoAccepting(params.id!, sdk.directory),
+                      "text-text-base": !accepting(),
+                      "hover:bg-surface-success-base": accepting(),
                     }}
                     aria-label={
-                      permission.isAutoAccepting(params.id!, sdk.directory)
+                      accepting()
                         ? language.t("command.permissions.autoaccept.disable")
                         : language.t("command.permissions.autoaccept.enable")
                     }
-                    aria-pressed={permission.isAutoAccepting(params.id!, sdk.directory)}
+                    aria-pressed={accepting()}
                   >
                     <Icon
                       name="chevron-double-right"
                       size="small"
-                      classList={{ "text-icon-success-base": permission.isAutoAccepting(params.id!, sdk.directory) }}
+                      classList={{ "text-icon-success-base": accepting() }}
                     />
                   </Button>
                 </TooltipKeybind>
