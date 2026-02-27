@@ -18,7 +18,7 @@ import type {
   ProviderAuthMethod,
   VcsInfo,
 } from "@opencode-ai/sdk/v2"
-import { createStore, produce, reconcile } from "solid-js/store"
+import { createStore, produce } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { Binary } from "@opencode-ai/util/binary"
 import { createSimpleContext } from "./helper"
@@ -134,7 +134,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           }
           const match = Binary.search(requests, request.id, (r) => r.id)
           if (match.found) {
-            setStore("permission", request.sessionID, match.index, reconcile(request))
+            setStore("permission", request.sessionID, match.index, request)
             break
           }
           setStore(
@@ -172,7 +172,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           }
           const match = Binary.search(requests, request.id, (r) => r.id)
           if (match.found) {
-            setStore("question", request.sessionID, match.index, reconcile(request))
+            setStore("question", request.sessionID, match.index, request)
             break
           }
           setStore(
@@ -208,7 +208,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         case "session.updated": {
           const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
           if (result.found) {
-            setStore("session", result.index, reconcile(event.properties.info))
+            setStore("session", result.index, event.properties.info)
             break
           }
           setStore(
@@ -233,7 +233,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           }
           const result = Binary.search(messages, event.properties.info.id, (m) => m.id)
           if (result.found) {
-            setStore("message", event.properties.info.sessionID, result.index, reconcile(event.properties.info))
+            setStore("message", event.properties.info.sessionID, result.index, event.properties.info)
             break
           }
           setStore(
@@ -286,7 +286,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           }
           const result = Binary.search(parts, event.properties.part.id, (p) => p.id)
           if (result.found) {
-            setStore("part", event.properties.part.messageID, result.index, reconcile(event.properties.part))
+            setStore("part", event.properties.part.messageID, result.index, event.properties.part)
             break
           }
           setStore(
@@ -307,12 +307,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           setStore(
             "part",
             event.properties.messageID,
-            produce((draft) => {
-              const part = draft[result.index]
-              const field = event.properties.field as keyof typeof part
-              const existing = part[field] as string | undefined
-              ;(part[field] as string) = (existing ?? "") + event.properties.delta
-            }),
+            result.index,
+            event.properties.field as any,
+            (prev: string) => (prev ?? "") + event.properties.delta,
           )
           break
         }
@@ -388,12 +385,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             const sessions = responses[4]
 
             batch(() => {
-              setStore("provider", reconcile(providers.providers))
-              setStore("provider_default", reconcile(providers.default))
-              setStore("provider_next", reconcile(providerList))
-              setStore("agent", reconcile(agents))
-              setStore("config", reconcile(config))
-              if (sessions !== undefined) setStore("session", reconcile(sessions))
+              setStore("provider", providers.providers)
+              setStore("provider_default", providers.default)
+              setStore("provider_next", providerList)
+              setStore("agent", agents)
+              setStore("config", config)
+              if (sessions !== undefined) setStore("session", sessions)
             })
           })
         })
@@ -401,18 +398,18 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (store.status !== "complete") setStore("status", "partial")
           // non-blocking
           Promise.all([
-            ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", reconcile(sessions)))]),
-            sdk.client.command.list().then((x) => setStore("command", reconcile(x.data ?? []))),
-            sdk.client.lsp.status().then((x) => setStore("lsp", reconcile(x.data!))),
-            sdk.client.mcp.status().then((x) => setStore("mcp", reconcile(x.data!))),
-            sdk.client.experimental.resource.list().then((x) => setStore("mcp_resource", reconcile(x.data ?? {}))),
-            sdk.client.formatter.status().then((x) => setStore("formatter", reconcile(x.data!))),
+            ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", sessions))]),
+            sdk.client.command.list().then((x) => setStore("command", x.data ?? [])),
+            sdk.client.lsp.status().then((x) => setStore("lsp", x.data!)),
+            sdk.client.mcp.status().then((x) => setStore("mcp", x.data!)),
+            sdk.client.experimental.resource.list().then((x) => setStore("mcp_resource", x.data ?? {})),
+            sdk.client.formatter.status().then((x) => setStore("formatter", x.data!)),
             sdk.client.session.status().then((x) => {
-              setStore("session_status", reconcile(x.data!))
+              setStore("session_status", x.data!)
             }),
-            sdk.client.provider.auth().then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
-            sdk.client.vcs.get().then((x) => setStore("vcs", reconcile(x.data))),
-            sdk.client.path.get().then((x) => setStore("path", reconcile(x.data!))),
+            sdk.client.provider.auth().then((x) => setStore("provider_auth", x.data ?? {})),
+            sdk.client.vcs.get().then((x) => setStore("vcs", x.data)),
+            sdk.client.path.get().then((x) => setStore("path", x.data!)),
           ]).then(() => {
             setStore("status", "complete")
           })
