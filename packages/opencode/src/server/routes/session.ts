@@ -189,7 +189,7 @@ export const SessionRoutes = lazy(() =>
         description: "Create a new OpenCode session for interacting with AI assistants and managing conversations.",
         operationId: "session.create",
         responses: {
-          ...errors(400),
+          ...errors(400, 409),
           200: {
             description: "Successfully created session",
             content: {
@@ -577,6 +577,36 @@ export const SessionRoutes = lazy(() =>
           limit: query.limit,
         })
         return c.json(messages)
+      },
+    )
+    .get(
+      "/:sessionID/message/count",
+      describeRoute({
+        summary: "Get message count",
+        description: "Get the total number of messages in a session.",
+        operationId: "session.messageCount",
+        responses: {
+          200: {
+            description: "Message count",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ count: z.number() })),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: z.string().meta({ description: "Session ID" }),
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const count = await Session.messageCount({ sessionID })
+        return c.json({ count })
       },
     )
     .get(

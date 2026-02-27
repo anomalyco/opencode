@@ -9,8 +9,9 @@ import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
 import { Identifier } from "../id/id"
 import { Installation } from "../installation"
+import { NamedError } from "@opencode-ai/util/error"
 
-import { Database, NotFoundError, eq, and, or, gte, isNull, desc, like, inArray, lt } from "../storage/db"
+import { Database, NotFoundError, eq, and, or, gte, isNull, desc, like, inArray, lt, sql } from "../storage/db"
 import type { SQL } from "../storage/db"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
@@ -26,7 +27,7 @@ import { Snapshot } from "@/snapshot"
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
 import { Global } from "@/global"
-import type { LanguageModelV2Usage } from "@ai-sdk/provider"
+import type { LanguageModelUsage } from "ai"
 import { iife } from "@/util/iife"
 
 export namespace Session {
@@ -212,13 +213,22 @@ export namespace Session {
   export const create = fn(
     z
       .object({
+        id: Identifier.schema("session").optional(),
         parentID: Identifier.schema("session").optional(),
         title: z.string().optional(),
         permission: Info.shape.permission,
       })
       .optional(),
     async (input) => {
+      if (input?.id) {
+        const existing = await get(input.id).catch((e) => {
+          if (e instanceof NotFoundError) return undefined
+          throw e
+        })
+        if (existing) throw new DuplicateIDError({ id: input.id })
+      }
       return createNext({
+        id: input?.id,
         parentID: input?.parentID,
         directory: Instance.directory,
         title: input?.title,
@@ -525,6 +535,22 @@ export namespace Session {
     },
   )
 
+  export const messageCount = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+    }),
+    async (input) => {
+      const result = Database.use((db) =>
+        db
+          .select({ count: sql<number>`COUNT(*)` })
+          .from(MessageTable)
+          .where(eq(MessageTable.session_id, input.sessionID))
+          .get(),
+      )
+      return result?.count ?? 0
+    },
+  )
+
   export function* list(input?: {
     directory?: string
     roots?: boolean
@@ -775,7 +801,7 @@ export namespace Session {
   export const getUsage = fn(
     z.object({
       model: z.custom<Provider.Model>(),
-      usage: z.custom<LanguageModelV2Usage>(),
+      usage: z.custom<LanguageModelUsage>(),
       metadata: z.custom<ProviderMetadata>().optional(),
     }),
     (input) => {
@@ -864,6 +890,13 @@ export namespace Session {
       super(`Session ${sessionID} is busy`)
     }
   }
+
+  export const DuplicateIDError = NamedError.create(
+    "DuplicateIDError",
+    z.object({
+      id: z.string(),
+    }),
+  )
 
   export const initialize = fn(
     z.object({

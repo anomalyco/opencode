@@ -1682,6 +1682,13 @@ export type McpResource = {
   client: string
 }
 
+export type DuplicateIdError = {
+  name: "DuplicateIDError"
+  data: {
+    id: string
+  }
+}
+
 export type TextPartInput = {
   id?: string
   type: "text"
@@ -2605,6 +2612,7 @@ export type SessionListResponse = SessionListResponses[keyof SessionListResponse
 
 export type SessionCreateData = {
   body?: {
+    id?: string
     parentID?: string
     title?: string
     permission?: PermissionRuleset
@@ -2621,6 +2629,10 @@ export type SessionCreateErrors = {
    * Bad request
    */
   400: BadRequestError
+  /**
+   * Conflict
+   */
+  409: DuplicateIdError
 }
 
 export type SessionCreateError = SessionCreateErrors[keyof SessionCreateErrors]
@@ -3154,6 +3166,44 @@ export type SessionPromptResponses = {
 }
 
 export type SessionPromptResponse = SessionPromptResponses[keyof SessionPromptResponses]
+
+export type SessionMessageCountData = {
+  body?: never
+  path: {
+    /**
+     * Session ID
+     */
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/message/count"
+}
+
+export type SessionMessageCountErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionMessageCountError = SessionMessageCountErrors[keyof SessionMessageCountErrors]
+
+export type SessionMessageCountResponses = {
+  /**
+   * Message count
+   */
+  200: {
+    count: number
+  }
+}
+
+export type SessionMessageCountResponse = SessionMessageCountResponses[keyof SessionMessageCountResponses]
 
 export type SessionDeleteMessageData = {
   body?: never

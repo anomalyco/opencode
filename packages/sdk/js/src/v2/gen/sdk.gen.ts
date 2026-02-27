@@ -117,6 +117,8 @@ import type {
   SessionInitErrors,
   SessionInitResponses,
   SessionListResponses,
+  SessionMessageCountErrors,
+  SessionMessageCountResponses,
   SessionMessageErrors,
   SessionMessageResponses,
   SessionMessagesErrors,
@@ -1021,6 +1023,7 @@ export class Session2 extends HeyApiClient {
   public create<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
+      id?: string
       parentID?: string
       title?: string
       permission?: PermissionRuleset
@@ -1033,6 +1036,7 @@ export class Session2 extends HeyApiClient {
         {
           args: [
             { in: "query", key: "directory" },
+            { in: "body", key: "id" },
             { in: "body", key: "parentID" },
             { in: "body", key: "title" },
             { in: "body", key: "permission" },
@@ -1560,6 +1564,36 @@ export class Session2 extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Get message count
+   *
+   * Get the total number of messages in a session.
+   */
+  public messageCount<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionMessageCountResponses, SessionMessageCountErrors, ThrowOnError>({
+      url: "/session/{sessionID}/message/count",
+      ...options,
+      ...params,
     })
   }
 

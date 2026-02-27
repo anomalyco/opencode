@@ -386,6 +386,8 @@ describe("session.getUsage", () => {
         // excluding cache read/write.
         totalTokens: 1500,
         cachedInputTokens: 200,
+        inputTokenDetails: { noCacheTokens: undefined, cacheReadTokens: 200, cacheWriteTokens: undefined },
+        outputTokenDetails: { textTokens: undefined, reasoningTokens: undefined },
       }
       if (npm === "@ai-sdk/amazon-bedrock") {
         const result = Session.getUsage({

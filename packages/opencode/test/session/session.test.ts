@@ -4,6 +4,7 @@ import { Session } from "../../src/session"
 import { Bus } from "../../src/bus"
 import { Log } from "../../src/util/log"
 import { Instance } from "../../src/project/instance"
+import { Identifier } from "../../src/id/id"
 
 const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
@@ -65,6 +66,58 @@ describe("session.started event", () => {
         expect(events.indexOf("started")).toBeLessThan(events.indexOf("updated"))
 
         await Session.remove(session.id)
+      },
+    })
+  })
+})
+
+describe("session.create custom id", () => {
+  test("custom ID accepted", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const customId = Identifier.descending("session")
+        const session = await Session.create({ id: customId })
+
+        expect(session.id).toBe(customId)
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("default behavior preserved", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const session = await Session.create({})
+
+        expect(session.id).toMatch(/^ses_[0-9a-f]{12}[0-9A-Za-z]{14}$/)
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("duplicate ID returns error", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const customId = Identifier.descending("session")
+        const session = await Session.create({ id: customId })
+
+        await expect(Session.create({ id: customId })).rejects.toThrow("DuplicateIDError")
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("invalid prefix rejected", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        expect(() => Session.create({ id: "bad_a1b2c3d4e5f6AbCdEfGhIjKlMn" })).toThrow()
       },
     })
   })
