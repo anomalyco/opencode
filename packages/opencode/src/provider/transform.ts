@@ -895,8 +895,13 @@ export namespace ProviderTransform {
     }
     */
 
-    // Convert integer enums to string enums for Google/Gemini
-    if (model.providerID === "google" || model.api.id.includes("gemini")) {
+    // Convert integer enums to string enums for Google/Gemini.
+    // Skip for Copilot models — they use OpenAI-compatible format and the
+    // Copilot API handles Gemini schema requirements internally.
+    if (
+      (model.providerID === "google" || model.api.id.includes("gemini")) &&
+      !model.providerID.includes("github-copilot")
+    ) {
       const sanitizeGemini = (obj: any): any => {
         if (obj === null || typeof obj !== "object") {
           return obj
