@@ -13,6 +13,7 @@ import {
   ImageAttachmentPart,
   AgentPart,
   FileAttachmentPart,
+  PastedPart,
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
@@ -600,12 +601,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onSelect: handleSlashSelect,
   })
 
-  const createPill = (part: FileAttachmentPart | AgentPart) => {
+  const createPill = (part: FileAttachmentPart | AgentPart | PastedPart) => {
     const pill = document.createElement("span")
-    pill.textContent = part.content
+    pill.textContent = part.type === "paste" ? part.summary : part.content
     pill.setAttribute("data-type", part.type)
     if (part.type === "file") pill.setAttribute("data-path", part.path)
     if (part.type === "agent") pill.setAttribute("data-name", part.name)
+    if (part.type === "paste") {
+      pill.setAttribute("data-content", part.content)
+      pill.setAttribute("data-summary", part.summary)
+    }
     pill.setAttribute("contenteditable", "false")
     pill.style.userSelect = "text"
     pill.style.cursor = "default"
@@ -628,6 +633,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const el = node as HTMLElement
       if (el.dataset.type === "file") return true
       if (el.dataset.type === "agent") return true
+      if (el.dataset.type === "paste") return true
       return el.tagName === "BR"
     })
 
@@ -638,7 +644,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         editorRef.appendChild(createTextFragment(part.content))
         continue
       }
-      if (part.type === "file" || part.type === "agent") {
+      if (part.type === "file" || part.type === "agent" || part.type === "paste") {
         editorRef.appendChild(createPill(part))
       }
     }
@@ -748,6 +754,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       position += content.length
     }
 
+    const pushPaste = (paste: HTMLElement) => {
+      const content = paste.dataset.content ?? ""
+      const summary = paste.dataset.summary ?? paste.textContent ?? "[Pasted text]"
+      parts.push({
+        type: "paste",
+        content,
+        summary,
+        start: position,
+        end: position + content.length,
+      })
+      position += content.length
+    }
+
     const visit = (node: Node) => {
       if (node.nodeType === Node.TEXT_NODE) {
         buffer += node.textContent ?? ""
@@ -764,6 +783,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (el.dataset.type === "agent") {
         flushText()
         pushAgent(el)
+        return
+      }
+      if (el.dataset.type === "paste") {
+        flushText()
+        pushPaste(el)
         return
       }
       if (el.tagName === "BR") {
@@ -798,7 +822,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const rawText =
       rawParts.length === 1 && rawParts[0]?.type === "text"
         ? rawParts[0].content
-        : rawParts.map((p) => ("content" in p ? p.content : "")).join("")
+        : rawParts.map((p) => (p.type === "paste" ? p.summary : "content" in p ? p.content : "")).join("")
     const hasNonText = rawParts.some((part) => part.type !== "text")
     const shouldReset = !NON_EMPTY_TEXT.test(rawText) && !hasNonText && images.length === 0
 
@@ -855,11 +879,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const range = selection.getRangeAt(0)
     if (!editorRef.contains(range.startContainer)) return false
 
-    if (part.type === "file" || part.type === "agent") {
+    if (part.type === "file" || part.type === "agent" || part.type === "paste") {
       const cursorPosition = getCursorPosition(editorRef)
       const rawText = prompt
         .current()
-        .map((p) => ("content" in p ? p.content : ""))
+        .map((p) => (p.type === "paste" ? p.summary : "content" in p ? p.content : ""))
         .join("")
       const textBeforeCursor = rawText.substring(0, cursorPosition)
       const atMatch = textBeforeCursor.match(/@(\S*)$/)
@@ -1223,6 +1247,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 "w-full pl-3 pr-2 pt-2 pb-11 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
                 "[&_[data-type=file]]:text-syntax-property": true,
                 "[&_[data-type=agent]]:text-syntax-type": true,
+                "[&_[data-type=paste]]:text-text-weak": true,
                 "font-mono!": store.mode === "shell",
               }}
             />

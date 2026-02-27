@@ -21,6 +21,11 @@ function largePaste(text: string) {
   return false
 }
 
+function pasteSummary(text: string) {
+  const lines = text.split("\n").length
+  return `[Pasted ~${lines} lines]`
+}
+
 type PromptAttachmentsInput = {
   editor: () => HTMLDivElement | undefined
   isFocused: () => boolean
@@ -104,9 +109,10 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     if (!plainText) return
 
     if (largePaste(plainText)) {
-      if (input.addPart({ type: "text", content: plainText, start: 0, end: 0 })) return
+      const summary = pasteSummary(plainText)
+      if (input.addPart({ type: "paste", content: plainText, summary, start: 0, end: 0 })) return
       input.focusEditor()
-      if (input.addPart({ type: "text", content: plainText, start: 0, end: 0 })) return
+      if (input.addPart({ type: "paste", content: plainText, summary, start: 0, end: 0 })) return
     }
 
     const inserted = typeof document.execCommand === "function" && document.execCommand("insertText", false, plainText)
