@@ -17,6 +17,7 @@ import type {
   ProviderListResponse,
   ProviderAuthMethod,
   VcsInfo,
+  TeamTasksResponse,
 } from "@opencode-ai/sdk/v2"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
@@ -73,6 +74,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       formatter: FormatterStatus[]
       vcs: VcsInfo | undefined
       path: Path
+      team_task: {
+        [teamID: string]: TeamTasksResponse
+      }
     }>({
       provider_next: {
         all: [],
@@ -100,6 +104,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       formatter: [],
       vcs: undefined,
       path: { state: "", config: "", worktree: "", directory: "" },
+      team_task: {},
     })
 
     const sdk = useSDK()
@@ -338,6 +343,17 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
         case "vcs.branch.updated": {
           setStore("vcs", { branch: event.properties.branch })
+          break
+        }
+
+        case "team.task.completed": {
+          const teamID = event.properties.teamID
+          sdk.client.team
+            ?.tasks?.({ teamID })
+            .then((x) => {
+              if (x.data) setStore("team_task", teamID, x.data)
+            })
+            .catch((e) => Log.Default.error("Failed to load team tasks", { teamID, error: e }))
           break
         }
       }

@@ -3672,6 +3672,45 @@ export type PermissionRespondResponses = {
 
 export type PermissionRespondResponse = PermissionRespondResponses[keyof PermissionRespondResponses]
 
+export type TeamTasksData = {
+  body?: never
+  path: {
+    teamID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/team/{teamID}/tasks"
+}
+
+export type TeamTasksErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type TeamTasksError = TeamTasksErrors[keyof TeamTasksErrors]
+
+export type TeamTasksResponses = {
+  /**
+   * List of team tasks
+   */
+  200: Array<{
+    id: string
+    team_id: string
+    title: string
+    description: string | null
+    status: "pending" | "in_progress" | "completed"
+    assigned_to: string | null
+    depends_on: Array<string> | null
+    time_created: number
+    time_updated: number
+  }>
+}
+
+export type TeamTasksResponse = TeamTasksResponses[keyof TeamTasksResponses]
+
 export type PermissionReplyData = {
   body?: {
     reply: "once" | "always" | "reject"

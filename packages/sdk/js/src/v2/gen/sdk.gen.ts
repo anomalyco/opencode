@@ -144,6 +144,8 @@ import type {
   SessionUpdateErrors,
   SessionUpdateResponses,
   SubtaskPartInput,
+  TeamTasksErrors,
+  TeamTasksResponses,
   TextPartInput,
   ToolIdsErrors,
   ToolIdsResponses,
@@ -2037,6 +2039,38 @@ export class Permission extends HeyApiClient {
   }
 }
 
+export class Team extends HeyApiClient {
+  /**
+   * List team tasks
+   *
+   * Get a list of all tasks for a specific team.
+   */
+  public tasks<ThrowOnError extends boolean = false>(
+    parameters: {
+      teamID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "teamID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<TeamTasksResponses, TeamTasksErrors, ThrowOnError>({
+      url: "/team/{teamID}/tasks",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Question extends HeyApiClient {
   /**
    * List pending questions
@@ -3334,6 +3368,11 @@ export class OpencodeClient extends HeyApiClient {
   private _permission?: Permission
   get permission(): Permission {
     return (this._permission ??= new Permission({ client: this.client }))
+  }
+
+  private _team?: Team
+  get team(): Team {
+    return (this._team ??= new Team({ client: this.client }))
   }
 
   private _question?: Question

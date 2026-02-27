@@ -28,7 +28,7 @@ import {
   RGBA,
 } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart, TeamTasksResponse } from "@opencode-ai/sdk/v2"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util/locale"
 import type { Tool } from "@/tool/tool"
@@ -60,6 +60,7 @@ import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
+import { TeamTasksPanel } from "../../component/team-tasks-panel"
 import { Flag } from "@/flag/flag"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
@@ -157,6 +158,7 @@ export function Session() {
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
+  const [teamTasksVisible, setTeamTasksVisible] = createSignal(false)
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -194,6 +196,19 @@ export function Session() {
         })
         return navigate({ type: "home" })
       })
+  })
+
+  // Load team tasks when session has a team
+  createEffect(() => {
+    const teamID = session()?.teamID
+    if (teamID && !sync.data.team_task[teamID]) {
+      sdk.client.team
+        ?.tasks?.({ teamID })
+        .then((x) => {
+          if (x.data) sync.set("team_task", teamID, x.data)
+        })
+        .catch((e) => console.error("Failed to load team tasks", { teamID, error: e }))
+    }
   })
 
   const toast = useToast()
@@ -968,6 +983,18 @@ export function Session() {
         dialog.clear()
       },
     },
+    {
+      title: teamTasksVisible() ? "Hide team tasks" : "Show team tasks",
+      value: "session.toggle.team_tasks",
+      keybind: "team_tasks",
+      category: "Team",
+      hidden: !session()?.teamID,
+      enabled: !!session()?.teamID,
+      onSelect: (dialog) => {
+        setTeamTasksVisible((prev) => !prev)
+        dialog.clear()
+      },
+    },
   ])
 
   const revertInfo = createMemo(() => session()?.revert)
@@ -1045,6 +1072,9 @@ export function Session() {
           <Show when={session()}>
             <Show when={showHeader() && (!sidebarVisible() || !wide())}>
               <Header />
+            </Show>
+            <Show when={teamTasksVisible() && session()?.teamID}>
+              <TeamTasksPanel teamID={session()!.teamID!} />
             </Show>
             <scrollbox
               ref={(r) => (scroll = r)}
