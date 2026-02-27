@@ -196,7 +196,7 @@ for (const item of targets) {
       autoloadDotenv: false,
       autoloadTsconfig: true,
       autoloadPackageJson: true,
-      target: name.replace(pkg.name, "bun") as any,
+      target: name.replace(pkg.name, "bun").replace("-no-ca", "") as any,
       outfile: `dist/${name}/bin/opencode`,
       execArgv: [`--user-agent=opencode/${Script.version}`, ...(!item.noCa && process.env.OPENCODE_DISABLE_SYSTEM_CA !== 'true' ? ['--use-system-ca'] : []), "--"],
       windows: {},
