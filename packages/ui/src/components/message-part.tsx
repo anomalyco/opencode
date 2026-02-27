@@ -463,14 +463,22 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
   }
 }
 
-function contextToolSummary(parts: ToolPart[]) {
+function contextToolSummary(parts: ToolPart[], i18n: ReturnType<typeof useI18n>) {
   const read = parts.filter((part) => part.tool === "read").length
   const search = parts.filter((part) => part.tool === "glob" || part.tool === "grep").length
   const list = parts.filter((part) => part.tool === "list").length
   return [
-    read ? `${read} ${read === 1 ? "read" : "reads"}` : undefined,
-    search ? `${search} ${search === 1 ? "search" : "searches"}` : undefined,
-    list ? `${list} ${list === 1 ? "list" : "lists"}` : undefined,
+    read
+      ? i18n.t(read === 1 ? "ui.messagePart.context.read.one" : "ui.messagePart.context.read.other", { count: read })
+      : undefined,
+    search
+      ? i18n.t(search === 1 ? "ui.messagePart.context.search.one" : "ui.messagePart.context.search.other", {
+          count: search,
+        })
+      : undefined,
+    list
+      ? i18n.t(list === 1 ? "ui.messagePart.context.list.one" : "ui.messagePart.context.list.other", { count: list })
+      : undefined,
   ].filter((value): value is string => !!value)
 }
 
@@ -595,7 +603,7 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
     () =>
       !!props.busy || props.parts.some((part) => part.state.status === "pending" || part.state.status === "running"),
   )
-  const summary = createMemo(() => contextToolSummary(props.parts))
+  const summary = createMemo(() => contextToolSummary(props.parts, i18n))
   const details = createMemo(() => summary().join(", "))
 
   return (
@@ -979,7 +987,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
                 return (
                   <div style="width: 100%; display: flex; justify-content: flex-end;">
                     <span class="text-13-regular text-text-weak cursor-default">
-                      {i18n.t("ui.tool.questions")} dismissed
+                      {i18n.t("ui.messagePart.questions.dismissed")}
                     </span>
                   </div>
                 )

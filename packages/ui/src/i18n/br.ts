@@ -3,6 +3,9 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "Alterações do último turno",
   "ui.sessionReview.diffStyle.unified": "Unificado",
   "ui.sessionReview.diffStyle.split": "Dividido",
+  "ui.sessionReview.openFile": "Abrir arquivo",
+  "ui.sessionReview.selection.line": "linha {{line}}",
+  "ui.sessionReview.selection.lines": "linhas {{start}}-{{end}}",
   "ui.sessionReview.expandAll": "Expandir tudo",
   "ui.sessionReview.collapseAll": "Recolher tudo",
   "ui.sessionReview.change.added": "Adicionado",
@@ -53,6 +56,13 @@ export const dict = {
   "ui.sessionTurn.status.gatheringThoughts": "Organizando pensamentos",
   "ui.sessionTurn.status.consideringNextSteps": "Considerando próximos passos",
 
+  "ui.messagePart.questions.dismissed": "Perguntas descartadas",
+  "ui.messagePart.context.read.one": "{{count}} leitura",
+  "ui.messagePart.context.read.other": "{{count}} leituras",
+  "ui.messagePart.context.search.one": "{{count}} pesquisa",
+  "ui.messagePart.context.search.other": "{{count}} pesquisas",
+  "ui.messagePart.context.list.one": "{{count}} lista",
+  "ui.messagePart.context.list.other": "{{count}} listas",
   "ui.messagePart.diagnostic.error": "Erro",
   "ui.messagePart.title.edit": "Editar",
   "ui.messagePart.title.write": "Escrever",
@@ -72,6 +82,7 @@ export const dict = {
   "ui.textField.copied": "Copiado",
 
   "ui.imagePreview.alt": "Visualização de imagem",
+  "ui.scrollView.ariaLabel": "conteúdo rolável",
 
   "ui.tool.read": "Ler",
   "ui.tool.loaded": "Carregado",

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
-import { $ } from "bun"
 import { Script } from "@opencode-ai/script"
+import { $ } from "bun"
 import { fileURLToPath } from "url"
 
 const highlightsTemplate = `
@@ -66,6 +66,8 @@ if (Script.release) {
     await $`git push origin HEAD --tags --no-verify --force-with-lease`
     await new Promise((resolve) => setTimeout(resolve, 5_000))
   }
+
+  await import(`../packages/desktop/scripts/finalize-latest-json.ts`)
 
   await $`gh release edit v${Script.version} --draft=false --repo ${process.env.GH_REPO}`
 }

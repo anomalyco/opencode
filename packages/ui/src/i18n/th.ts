@@ -3,6 +3,9 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "การเปลี่ยนแปลงของเทิร์นล่าสุด",
   "ui.sessionReview.diffStyle.unified": "แบบรวม",
   "ui.sessionReview.diffStyle.split": "แบบแยก",
+  "ui.sessionReview.openFile": "เปิดไฟล์",
+  "ui.sessionReview.selection.line": "บรรทัดที่ {{line}}",
+  "ui.sessionReview.selection.lines": "บรรทัดที่ {{start}}-{{end}}",
   "ui.sessionReview.expandAll": "ขยายทั้งหมด",
   "ui.sessionReview.collapseAll": "ย่อทั้งหมด",
   "ui.sessionReview.change.added": "เพิ่ม",
@@ -54,6 +57,13 @@ export const dict = {
   "ui.sessionTurn.status.gatheringThoughts": "รวบรวมความคิด",
   "ui.sessionTurn.status.consideringNextSteps": "พิจารณาขั้นตอนถัดไป",
 
+  "ui.messagePart.questions.dismissed": "ละทิ้งคำถามแล้ว",
+  "ui.messagePart.context.read.one": "อ่าน {{count}} รายการ",
+  "ui.messagePart.context.read.other": "อ่าน {{count}} รายการ",
+  "ui.messagePart.context.search.one": "ค้นหา {{count}} รายการ",
+  "ui.messagePart.context.search.other": "ค้นหา {{count}} รายการ",
+  "ui.messagePart.context.list.one": "รายการ {{count}} รายการ",
+  "ui.messagePart.context.list.other": "รายการ {{count}} รายการ",
   "ui.messagePart.diagnostic.error": "ข้อผิดพลาด",
   "ui.messagePart.title.edit": "แก้ไข",
   "ui.messagePart.title.write": "เขียน",
@@ -73,6 +83,7 @@ export const dict = {
   "ui.textField.copied": "คัดลอกแล้ว",
 
   "ui.imagePreview.alt": "ตัวอย่างรูปภาพ",
+  "ui.scrollView.ariaLabel": "เนื้อหาที่เลื่อนได้",
 
   "ui.tool.read": "อ่าน",
   "ui.tool.loaded": "โหลดแล้ว",
