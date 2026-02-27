@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "child_process"
+import { spawn as _spawn, type ChildProcessWithoutNullStreams, type SpawnOptionsWithoutStdio } from "child_process"
 import path from "path"
 import os from "os"
 import { Global } from "../global"
@@ -12,6 +12,16 @@ import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { Archive } from "../util/archive"
 import { Process } from "../util/process"
+
+// Wrapper that always pipes stderr to prevent LSP server output from leaking to the terminal
+function spawn(cmd: string, opts?: SpawnOptionsWithoutStdio): ChildProcessWithoutNullStreams
+function spawn(cmd: string, args: readonly string[], opts?: SpawnOptionsWithoutStdio): ChildProcessWithoutNullStreams
+function spawn(cmd: string, argsOrOpts?: readonly string[] | SpawnOptionsWithoutStdio, opts?: SpawnOptionsWithoutStdio): ChildProcessWithoutNullStreams {
+  if (Array.isArray(argsOrOpts)) {
+    return _spawn(cmd, argsOrOpts as string[], { stderr: "pipe", ...opts }) as ChildProcessWithoutNullStreams
+  }
+  return _spawn(cmd, { stderr: "pipe", ...(argsOrOpts as SpawnOptionsWithoutStdio) }) as ChildProcessWithoutNullStreams
+}
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
