@@ -959,7 +959,7 @@ export function Session() {
       category: "Session",
       hidden: true,
       onSelect: (dialog) => {
-        moveFirstChild()
+        moveToFirstChild()
         dialog.clear()
       },
     },
