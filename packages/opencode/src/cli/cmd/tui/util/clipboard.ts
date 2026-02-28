@@ -80,7 +80,8 @@ export namespace Clipboard {
       console.log("clipboard: using osascript")
       return async (text: string) => {
         const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
-        await $`osascript -e 'set the clipboard to "${escaped}"'`.nothrow().quiet()
+        const result = await $`osascript -e 'set the clipboard to "${escaped}"'`.nothrow().quiet()
+        if (result.exitCode !== 0) throw new Error("osascript failed")
       }
     }
 
@@ -92,7 +93,8 @@ export namespace Clipboard {
           if (!proc.stdin) return
           proc.stdin.write(text)
           proc.stdin.end()
-          await proc.exited.catch(() => {})
+          const code = await proc.exited
+          if (code !== 0) throw new Error("wl-copy failed")
         }
       }
       if (Bun.which("xclip")) {
@@ -106,7 +108,8 @@ export namespace Clipboard {
           if (!proc.stdin) return
           proc.stdin.write(text)
           proc.stdin.end()
-          await proc.exited.catch(() => {})
+          const code = await proc.exited
+          if (code !== 0) throw new Error("xclip failed")
         }
       }
       if (Bun.which("xsel")) {
@@ -120,9 +123,11 @@ export namespace Clipboard {
           if (!proc.stdin) return
           proc.stdin.write(text)
           proc.stdin.end()
-          await proc.exited.catch(() => {})
+          const code = await proc.exited
+          if (code !== 0) throw new Error("xsel failed")
         }
       }
+      throw new Error("No clipboard tool found. Install xclip, xsel, or wl-clipboard.")
     }
 
     if (os === "win32") {
@@ -147,13 +152,14 @@ export namespace Clipboard {
         if (!proc.stdin) return
         proc.stdin.write(text)
         proc.stdin.end()
-        await proc.exited.catch(() => {})
+        const code = await proc.exited
+        if (code !== 0) throw new Error("powershell clipboard failed")
       }
     }
 
     console.log("clipboard: no native support")
     return async (text: string) => {
-      await clipboardy.write(text).catch(() => {})
+      await clipboardy.write(text)
     }
   })
 
