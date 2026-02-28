@@ -402,6 +402,8 @@ describe("tool.bash truncation", () => {
   })
 
   test("streams to file during execution for very large output", async () => {
+    // Skip on Windows - uses /dev/zero and head -c which are Unix-specific
+    if (process.platform === "win32") return
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
@@ -429,6 +431,8 @@ describe("tool.bash truncation", () => {
   })
 
   test("preserves exit code when streaming to file", async () => {
+    // Skip on Windows - uses /dev/zero and head -c which are Unix-specific
+    if (process.platform === "win32") return
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
@@ -448,6 +452,8 @@ describe("tool.bash truncation", () => {
   })
 
   test("streams stderr to file", async () => {
+    // Skip on Windows - uses /dev/zero and head -c which are Unix-specific
+    if (process.platform === "win32") return
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
@@ -472,6 +478,8 @@ describe("tool.bash truncation", () => {
   })
 
   test("output message contains file path when streaming", async () => {
+    // Skip on Windows - uses /dev/zero and head -c which are Unix-specific
+    if (process.platform === "win32") return
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
@@ -521,6 +529,8 @@ describe("tool.bash truncation", () => {
   })
 
   test("output_filter streams to file when output exceeds threshold", async () => {
+    // Skip on Windows - uses /dev/zero and head -c which are Unix-specific
+    if (process.platform === "win32") return
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
