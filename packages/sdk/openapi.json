@@ -10482,6 +10482,9 @@
           "version": {
             "type": "string"
           },
+          "cost": {
+            "type": "number"
+          },
           "time": {
             "type": "object",
             "properties": {
