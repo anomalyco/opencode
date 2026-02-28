@@ -3,7 +3,7 @@ title: Zen
 description: OpenCode가 제공하는 엄선된 모델 목록.
 ---
 
-import config from "../../../../config.mjs"
+import config from "../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
@@ -55,6 +55,7 @@ OpenCode Zen은 OpenCode의 다른 제공자와 동일한 방식으로 작동합
 
 | 모델               | 모델 ID            | 엔드포인트                                         | AI SDK 패키지               |
 | ------------------ | ------------------ | -------------------------------------------------- | --------------------------- |
+| GPT 5.3 Codex      | gpt-5.3-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.2            | gpt-5.2            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.2 Codex      | gpt-5.2-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.1            | gpt-5.1            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
@@ -64,28 +65,30 @@ OpenCode Zen은 OpenCode의 다른 제공자와 동일한 방식으로 작동합
 | GPT 5              | gpt-5              | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5 Codex        | gpt-5-codex        | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5 Nano         | gpt-5-nano         | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| Claude Opus 4.6    | claude-opus-4-6    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.5    | claude-opus-4-5    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.1    | claude-opus-4-1    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Sonnet 4.6  | claude-sonnet-4-6  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Claude Sonnet 4.5  | claude-sonnet-4-5  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Claude Sonnet 4    | claude-sonnet-4    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Claude Haiku 4.5   | claude-haiku-4-5   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Claude Haiku 3.5   | claude-3-5-haiku   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Opus 4.6    | claude-opus-4-6    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Opus 4.5    | claude-opus-4-5    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Opus 4.1    | claude-opus-4-1    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Gemini 3.1 Pro     | gemini-3.1-pro     | `https://opencode.ai/zen/v1/models/gemini-3.1-pro` | `@ai-sdk/google`            |
 | Gemini 3 Pro       | gemini-3-pro       | `https://opencode.ai/zen/v1/models/gemini-3-pro`   | `@ai-sdk/google`            |
 | Gemini 3 Flash     | gemini-3-flash     | `https://opencode.ai/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
+| MiniMax M2.5       | minimax-m2.5       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| MiniMax M2.5 Free  | minimax-m2.5-free  | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | MiniMax M2.1       | minimax-m2.1       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| MiniMax M2.1 Free  | minimax-m2.1-free  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| GLM 5              | glm-5              | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | GLM 4.7            | glm-4.7            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| GLM 4.7 Free       | glm-4.7-free       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | GLM 4.6            | glm-4.6            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Kimi K2.5          | kimi-k2.5          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Kimi K2.5 Free     | kimi-k2.5-free     | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Kimi K2 Thinking   | kimi-k2-thinking   | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Kimi K2            | kimi-k2            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Qwen3 Coder 480B   | qwen3-coder        | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Big Pickle         | big-pickle         | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
-OpenCode 설정 파일에서 사용하는 [모델 ID](/docs/config/#models)는 `opencode/<model-id>` 형식을 따릅니다.  
+OpenCode 설정 파일에서 사용하는 [모델 ID](/docs/config/#models)는 `opencode/<model-id>` 형식을 따릅니다.
 예를 들어 GPT 5.2 Codex의 경우 설정에서 `opencode/gpt-5.2-codex`와 같이 사용합니다.
 
 ---
@@ -107,29 +110,34 @@ https://opencode.ai/zen/v1/models
 | 모델                              | 입력   | 출력   | 캐시 읽기 | 캐시 쓰기 |
 | --------------------------------- | ------ | ------ | --------- | --------- |
 | Big Pickle                        | Free   | Free   | Free      | -         |
-| MiniMax M2.1 Free                 | Free   | Free   | Free      | -         |
+| MiniMax M2.5 Free                 | Free   | Free   | Free      | -         |
+| MiniMax M2.5                      | $0.30  | $1.20  | $0.06     | -         |
 | MiniMax M2.1                      | $0.30  | $1.20  | $0.10     | -         |
-| GLM 4.7 Free                      | Free   | Free   | Free      | -         |
+| GLM 5                             | $1.00  | $3.20  | $0.20     | -         |
 | GLM 4.7                           | $0.60  | $2.20  | $0.10     | -         |
 | GLM 4.6                           | $0.60  | $2.20  | $0.10     | -         |
-| Kimi K2.5 Free                    | Free   | Free   | Free      | -         |
 | Kimi K2.5                         | $0.60  | $3.00  | $0.08     | -         |
 | Kimi K2 Thinking                  | $0.40  | $2.50  | -         | -         |
 | Kimi K2                           | $0.40  | $2.50  | -         | -         |
 | Qwen3 Coder 480B                  | $0.45  | $1.50  | -         | -         |
+| Claude Opus 4.6 (≤ 200K tokens)   | $5.00  | $25.00 | $0.50     | $6.25     |
+| Claude Opus 4.6 (> 200K tokens)   | $10.00 | $37.50 | $1.00     | $12.50    |
+| Claude Opus 4.5                   | $5.00  | $25.00 | $0.50     | $6.25     |
+| Claude Opus 4.1                   | $15.00 | $75.00 | $1.50     | $18.75    |
+| Claude Sonnet 4.6 (≤ 200K tokens) | $3.00  | $15.00 | $0.30     | $3.75     |
+| Claude Sonnet 4.6 (> 200K tokens) | $6.00  | $22.50 | $0.60     | $7.50     |
 | Claude Sonnet 4.5 (≤ 200K tokens) | $3.00  | $15.00 | $0.30     | $3.75     |
 | Claude Sonnet 4.5 (> 200K tokens) | $6.00  | $22.50 | $0.60     | $7.50     |
 | Claude Sonnet 4 (≤ 200K tokens)   | $3.00  | $15.00 | $0.30     | $3.75     |
 | Claude Sonnet 4 (> 200K tokens)   | $6.00  | $22.50 | $0.60     | $7.50     |
 | Claude Haiku 4.5                  | $1.00  | $5.00  | $0.10     | $1.25     |
 | Claude Haiku 3.5                  | $0.80  | $4.00  | $0.08     | $1.00     |
-| Claude Opus 4.6 (≤ 200K tokens)   | $5.00  | $25.00 | $0.50     | $6.25     |
-| Claude Opus 4.6 (> 200K tokens)   | $10.00 | $37.50 | $1.00     | $12.50    |
-| Claude Opus 4.5                   | $5.00  | $25.00 | $0.50     | $6.25     |
-| Claude Opus 4.1                   | $15.00 | $75.00 | $1.50     | $18.75    |
+| Gemini 3.1 Pro (≤ 200K tokens)    | $2.00  | $12.00 | $0.20     | -         |
+| Gemini 3.1 Pro (> 200K tokens)    | $4.00  | $18.00 | $0.40     | -         |
 | Gemini 3 Pro (≤ 200K tokens)      | $2.00  | $12.00 | $0.20     | -         |
 | Gemini 3 Pro (> 200K tokens)      | $4.00  | $18.00 | $0.40     | -         |
 | Gemini 3 Flash                    | $0.50  | $3.00  | $0.05     | -         |
+| GPT 5.3 Codex                     | $1.75  | $14.00 | $0.175    | -         |
 | GPT 5.2                           | $1.75  | $14.00 | $0.175    | -         |
 | GPT 5.2 Codex                     | $1.75  | $14.00 | $0.175    | -         |
 | GPT 5.1                           | $1.07  | $8.50  | $0.107    | -         |
@@ -148,8 +156,6 @@ https://opencode.ai/zen/v1/models
 
 무료 모델:
 
-- GLM 5 Free는 한정된 기간 동안 OpenCode에서 제공됩니다. 해당 기간 동안 팀은 사용자 피드백을 수집하고 모델을 개선할 예정입니다.
-- Kimi K2.5 Free는 한정된 기간 동안 OpenCode에서 제공됩니다. 해당 기간 동안 팀은 사용자 피드백을 수집하고 모델을 개선할 예정입니다.
 - MiniMax M2.5 Free는 한정된 기간 동안 OpenCode에서 제공됩니다. 해당 기간 동안 팀은 사용자 피드백을 수집하고 모델을 개선할 예정입니다.
 - Big Pickle은 한정된 기간 동안 OpenCode에서 무료로 제공되는 스텔스 모델입니다. 해당 기간 동안 팀은 사용자 피드백을 수집하고 모델을 개선할 예정입니다.
 
@@ -169,7 +175,7 @@ https://opencode.ai/zen/v1/models
 
 워크스페이스 전체 및 각 팀 구성원별로 월간 사용 한도를 설정할 수 있습니다.
 
-예를 들어 월간 사용 한도를 $20로 설정한 경우, Zen은 한 달 동안 $20을 초과하여 사용하지 않습니다.  
+예를 들어 월간 사용 한도를 $20로 설정한 경우, Zen은 한 달 동안 $20을 초과하여 사용하지 않습니다.
 다만 자동 충전이 활성화되어 있는 경우, 잔액이 $5 미만으로 내려가면 자동으로 충전이 이루어질 수 있으므로 실제 청구 금액이 $20을 초과할 수 있습니다.
 
 ---
@@ -179,8 +185,6 @@ https://opencode.ai/zen/v1/models
 당사의 모든 모델은 미국에서 호스팅됩니다. 당사 제공자는 데이터 무보존(zero-retention) 정책을 따르며, 아래의 예외를 제외하고는 귀하의 데이터를 모델 학습에 사용하지 않습니다.
 
 - Big Pickle: 무료 제공 기간 동안 수집된 데이터는 모델 개선을 위해 사용될 수 있습니다.
-- GLM 5 Free: 무료 제공 기간 동안 수집된 데이터는 모델 개선을 위해 사용될 수 있습니다.
-- Kimi K2.5 Free: 무료 제공 기간 동안 수집된 데이터는 모델 개선을 위해 사용될 수 있습니다.
 - MiniMax M2.5 Free: 무료 제공 기간 동안 수집된 데이터는 모델 개선을 위해 사용될 수 있습니다.
 - OpenAI APIs: 요청 데이터는 [OpenAI의 데이터 정책](https://platform.openai.com/docs/guides/your-data)에 따라 30일간 보관됩니다.
 - Anthropic APIs: 요청 데이터는 [Anthropic의 데이터 정책](https://docs.anthropic.com/en/docs/claude-code/data-usage)에 따라 30일간 보관됩니다.
