@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode-ai/storybook",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "storybook": "storybook dev -p 6006",
+    "build": "storybook build"
+  },
+  "devDependencies": {
+    "@opencode-ai/ui": "workspace:*",
+    "@solidjs/meta": "catalog:",
+    "@storybook/addon-a11y": "^10.2.10",
+    "@storybook/addon-docs": "^10.2.10",
+    "@storybook/addon-links": "^10.2.10",
+    "@storybook/addon-onboarding": "^10.2.10",
+    "@storybook/addon-vitest": "^10.2.10",
+    "@tsconfig/node22": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "18.0.25",
+    "react": "18.2.0",
+    "solid-js": "catalog:",
+    "storybook": "^10.2.10",
+    "storybook-solidjs-vite": "^10.0.9",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}
