@@ -2,6 +2,7 @@ import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { createResource, createMemo } from "solid-js"
 import { useDialog } from "@tui/ui/dialog"
 import { useSDK } from "@tui/context/sdk"
+import { t } from "@/cli/cmd/tui/i18n"
 
 export type DialogSkillProps = {
   onSelect: (skill: string) => void
@@ -24,7 +25,7 @@ export function DialogSkill(props: DialogSkillProps) {
       title: skill.name.padEnd(maxWidth),
       description: skill.description?.replace(/\s+/g, " ").trim(),
       value: skill.name,
-      category: "Skills",
+      category: t("dialog.skill.skills"),
       onSelect: () => {
         props.onSelect(skill.name)
         dialog.clear()
@@ -32,5 +33,5 @@ export function DialogSkill(props: DialogSkillProps) {
     }))
   })
 
-  return <DialogSelect title="Skills" placeholder="Search skills..." options={options()} />
+  return <DialogSelect title={t("dialog.skill.skills")} placeholder={t("dialog.skill.search")} options={options()} />
 }
