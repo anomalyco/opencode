@@ -13,6 +13,7 @@ import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { type LocalProject } from "@/context/layout"
 import { sidebarExpanded } from "@/pages/layout/sidebar-shell-helpers"
+import { LaterMark } from "@/overrides/later-branding"
 
 export const SidebarContent = (props: {
   mobile?: boolean
@@ -52,6 +53,7 @@ export const SidebarContent = (props: {
             <DragDropSensors />
             <ConstrainDragXAxis />
             <div class="h-full w-full flex flex-col items-center gap-3 px-3 py-2 overflow-y-auto no-scrollbar">
+              <LaterMark class="size-10 shrink-0" />
               <SortableProvider ids={props.projects().map((p) => p.worktree)}>
                 <For each={props.projects()}>{(project) => props.renderProject(project)}</For>
               </SortableProvider>
