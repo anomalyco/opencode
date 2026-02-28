@@ -31,6 +31,14 @@ import { ApplyPatchTool } from "./apply_patch"
 import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
 
+export const ToolInfo = z
+  .object({
+    name: z.string(),
+    category: z.string(),
+    disabled: z.boolean(),
+  })
+  .meta({ ref: "ToolInfo" })
+
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
 
@@ -58,7 +66,14 @@ export namespace ToolRegistry {
       }
     }
 
-    return { custom }
+    const cfg = await Config.get()
+    const disabled = new Set<string>(
+      Object.entries(cfg.tools ?? {})
+        .filter(([, v]) => v === false)
+        .map(([k]) => k),
+    )
+
+    return { custom, disabled }
   })
 
   function fromPlugin(id: string, def: ToolDefinition): Tool.Info {
@@ -126,6 +141,21 @@ export namespace ToolRegistry {
 
   export async function ids() {
     return all().then((x) => x.map((t) => t.id))
+  }
+
+  export async function disabled() {
+    const s = await state()
+    return new Set(s.disabled)
+  }
+
+  export async function disable(name: string) {
+    const s = await state()
+    s.disabled.add(name)
+  }
+
+  export async function enable(name: string) {
+    const s = await state()
+    s.disabled.delete(name)
   }
 
   export async function tools(

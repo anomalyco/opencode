@@ -74,6 +74,64 @@ describe("tool.registry", () => {
     })
   })
 
+  test("disabled() returns empty set by default", async () => {
+    await using tmp = await tmpdir({})
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const result = await ToolRegistry.disabled()
+        expect(result.size).toBe(0)
+      },
+    })
+  })
+
+  test("disable() adds a tool to the disabled set", async () => {
+    await using tmp = await tmpdir({})
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await ToolRegistry.disable("bash")
+        const result = await ToolRegistry.disabled()
+        expect(result.has("bash")).toBe(true)
+      },
+    })
+  })
+
+  test("enable() removes a tool from the disabled set", async () => {
+    await using tmp = await tmpdir({})
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await ToolRegistry.disable("bash")
+        await ToolRegistry.enable("bash")
+        const result = await ToolRegistry.disabled()
+        expect(result.has("bash")).toBe(false)
+      },
+    })
+  })
+
+  test("disabled set is seeded from config on init", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({ tools: { bash: false } }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const result = await ToolRegistry.disabled()
+        expect(result.has("bash")).toBe(true)
+      },
+    })
+  })
+
   test("loads tools with external dependencies without crashing", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
