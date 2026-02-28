@@ -272,6 +272,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           const cached = store.message[sessionID] ?? []
           const count = cached.length
           const hasParts = cached.every((message) => store.part[message.id] !== undefined)
+          // "Warm" means we already have enough local messages + parts to render
+          // immediately, so we can skip a blocking message fetch on switch.
           const warm = hasMessages && !hydrated && count >= messageInitialSize && hasParts
           const limit = hydrated
             ? (meta.limit[key] ?? messagePageSize)

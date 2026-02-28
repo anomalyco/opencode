@@ -132,37 +132,50 @@ export function MessageTimeline(props: {
     batch: 1,
     max: 10,
   }
-  const stageKey = createMemo(() => {
+  // We only stage small deferred windows so first paint mounts quickly
+  // (few turns first, then grow to full initial window).
+  const stageView = createMemo(() => {
     const list = props.renderedUserMessages
     const total = list.length
-    const head = total > 0 ? list[0].id : ""
-    const tail = total > 0 ? list[total - 1].id : ""
-    return `${sessionKey()}\n${props.turnStart}\n${total}\n${head}\n${tail}`
+    const enabled = props.turnStart > 0 && total > stageCfg.init && total <= stageCfg.max
+    return {
+      list,
+      total,
+      enabled,
+      initial: enabled ? Math.min(total, stageCfg.init) : total,
+      head: total > 0 ? list[0].id : "",
+      tail: total > 0 ? list[total - 1].id : "",
+    }
   })
-  const stageEnabled = createMemo(() => {
-    const total = props.renderedUserMessages.length
-    return props.turnStart > 0 && total > stageCfg.init && total <= stageCfg.max
+  // Use a bounded signature (count + endpoints), not all IDs.
+  const stageKey = createMemo(() => {
+    const view = stageView()
+    return `${sessionKey()}\n${props.turnStart}\n${view.total}\n${view.head}\n${view.tail}`
   })
-  const stageInitial = createMemo(() => Math.min(props.renderedUserMessages.length, stageCfg.init))
   const [staging, setStaging] = createStore({
     key: "",
     count: 0,
   })
   const stagedCount = createMemo(() => {
-    const total = props.renderedUserMessages.length
-    if (!stageEnabled()) return total
-    if (staging.key !== stageKey()) return stageInitial()
-    if (staging.count <= stageInitial()) return stageInitial()
-    if (staging.count >= total) return total
+    const view = stageView()
+    if (!view.enabled) return view.total
+    if (staging.key !== stageKey()) return view.initial
+    if (staging.count <= view.initial) return view.initial
+    if (staging.count >= view.total) return view.total
     return staging.count
   })
   const stagedUserMessages = createMemo(() => {
-    const list = props.renderedUserMessages
+    const list = stageView().list
     const count = stagedCount()
     if (count >= list.length) return list
     return list.slice(Math.max(0, list.length - count))
   })
   let stageFrame: number | undefined
+  const cancelStage = () => {
+    if (stageFrame === undefined) return
+    cancelAnimationFrame(stageFrame)
+    stageFrame = undefined
+  }
 
   const [title, setTitle] = createStore({
     draft: "",
@@ -194,37 +207,34 @@ export function MessageTimeline(props: {
     on(
       stageKey,
       () => {
-        if (stageFrame !== undefined) {
-          cancelAnimationFrame(stageFrame)
-          stageFrame = undefined
-        }
+        cancelStage()
 
         const id = sessionID()
-        const total = props.renderedUserMessages.length
+        const view = stageView()
         if (!id) {
-          setStaging({ key: "", count: total })
+          setStaging({ key: "", count: view.total })
           return
         }
 
         const key = stageKey()
-        if (!stageEnabled()) {
-          setStaging({ key, count: total })
+        if (!view.enabled) {
+          setStaging({ key, count: view.total })
           return
         }
 
-        const init = stageInitial()
-        setStaging({ key, count: init })
+        let count = view.initial
+        setStaging({ key, count })
 
         const step = () => {
           if (staging.key !== key) {
             stageFrame = undefined
             return
           }
-          const next = Math.min(total, staging.count + stageCfg.batch)
+          count = Math.min(view.total, count + stageCfg.batch)
           startTransition(() => {
-            setStaging("count", next)
+            setStaging("count", count)
           })
-          if (next >= total) {
+          if (count >= view.total) {
             stageFrame = undefined
             return
           }
@@ -238,7 +248,7 @@ export function MessageTimeline(props: {
   )
 
   onCleanup(() => {
-    if (stageFrame !== undefined) cancelAnimationFrame(stageFrame)
+    cancelStage()
   })
 
   const openTitleEditor = () => {

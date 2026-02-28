@@ -225,6 +225,8 @@ export default function Page() {
   const turnDiffs = createMemo(() => lastUserMessage()?.summary?.diffs ?? [])
   const reviewDiffs = createMemo(() => (store.changes === "session" ? diffs() : turnDiffs()))
 
+  // Keep turn window state per session so first render can be capped synchronously
+  // when switching sessions.
   const turnStart = createMemo(() => {
     const id = params.id
     const len = visibleUserMessages().length
@@ -955,6 +957,7 @@ export default function Page() {
     if (!el) return
     const start = turnStart()
     if (start <= 0) return
+    // Backfill older turns only when the user intentionally scrolls near the top.
     if (el.scrollTop < turnScrollThreshold) {
       backfillTurns()
     }
