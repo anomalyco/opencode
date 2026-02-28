@@ -10,14 +10,14 @@
     <!-- ============================================================
          GRADIENT DEFINITIONS
          ============================================================ -->
-    
+
     <!-- Background: deep void with subtle blue undertone -->
     <radialGradient id="bgRadial" cx="50%" cy="45%" r="72%" fx="48%" fy="42%">
       <stop offset="0%" stop-color="#12142B"/>
       <stop offset="45%" stop-color="#0D0F1E"/>
       <stop offset="100%" stop-color="#060710"/>
     </radialGradient>
-    
+
     <!-- Ambient aurora wash (very subtle) -->
     <radialGradient id="auroraWash" cx="50%" cy="35%" r="65%">
       <stop offset="0%" stop-color="#00D4FF" stop-opacity="0.06"/>
@@ -92,7 +92,7 @@
     <!-- ============================================================
          FILTER DEFINITIONS
          ============================================================ -->
-    
+
     <!-- Soft outer glow for the icon container -->
     <filter id="iconGlow" x="-15%" y="-15%" width="130%" height="130%">
       <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur"/>
@@ -172,10 +172,10 @@
        LAYER 1: ICON CONTAINER (squircle)
        ============================================================ -->
   <g clip-path="url(#squircle)">
-    
+
     <!-- Background fill -->
     <rect x="0" y="0" width="512" height="512" fill="url(#bgRadial)"/>
-    
+
     <!-- Aurora ambient wash -->
     <rect x="0" y="0" width="512" height="512" fill="url(#auroraWash)"/>
 
@@ -192,19 +192,19 @@
       <line x1="367" y1="320" x2="472" y2="320"/>
       <line x1="60" y1="384" x2="180" y2="384"/>
       <line x1="332" y1="384" x2="452" y2="384"/>
-      
+
       <!-- Vertical lines -->
       <line x1="128" y1="40" x2="128" y2="150"/>
       <line x1="128" y1="362" x2="128" y2="472"/>
       <line x1="384" y1="40" x2="384" y2="150"/>
       <line x1="384" y1="362" x2="384" y2="472"/>
-      
+
       <!-- Corner nodes (small dots) -->
       <circle cx="128" cy="128" r="2.5" fill="url(#circuitGrad)" stroke="none" opacity="0.6"/>
       <circle cx="384" cy="128" r="2.5" fill="url(#circuitGrad)" stroke="none" opacity="0.6"/>
       <circle cx="128" cy="384" r="2.5" fill="url(#circuitGrad)" stroke="none" opacity="0.6"/>
       <circle cx="384" cy="384" r="2.5" fill="url(#circuitGrad)" stroke="none" opacity="0.6"/>
-      
+
       <!-- Inner junction nodes -->
       <circle cx="180" cy="192" r="1.8" fill="#00D4FF" stroke="none" opacity="0.12"/>
       <circle cx="332" cy="192" r="1.8" fill="#A78BFA" stroke="none" opacity="0.1"/>
@@ -221,10 +221,10 @@
     <!-- ============================================================
          LAYER 3: CENTRAL ORB (radiant core behind brackets)
          ============================================================ -->
-    
+
     <!-- Large diffuse glow -->
     <circle cx="256" cy="256" r="110" fill="url(#coreGlow)" opacity="0.5" filter="url(#coreRadiance)"/>
-    
+
     <!-- Medium focused glow -->
     <circle cx="256" cy="256" r="65" fill="url(#coreGlow)" opacity="0.7"/>
 
@@ -240,8 +240,8 @@
     <!-- Bracket emission glow layer (behind crisp brackets) -->
     <g filter="url(#bracketEmission)" opacity="0.5">
       <!-- Left bracket glow -->
-      <path d="M170 176 L110 256 L170 336" 
-            fill="none" stroke="#00D4FF" stroke-width="16" 
+      <path d="M170 176 L110 256 L170 336"
+            fill="none" stroke="#00D4FF" stroke-width="16"
             stroke-linecap="round" stroke-linejoin="round"/>
       <!-- Right bracket glow -->
       <path d="M342 176 L402 256 L342 336"
@@ -256,7 +256,7 @@
             fill="none" stroke="url(#bracketGrad)" stroke-width="22"
             stroke-linecap="round" stroke-linejoin="round"
             opacity="0.95"/>
-      
+
       <!-- Left bracket inner highlight -->
       <path d="M175 188 L122 256 L175 324"
             fill="none" stroke="url(#bracketInnerGrad)" stroke-width="8"
@@ -268,7 +268,7 @@
             fill="none" stroke="url(#bracketGrad)" stroke-width="22"
             stroke-linecap="round" stroke-linejoin="round"
             opacity="0.95"/>
-      
+
       <!-- Right bracket inner highlight -->
       <path d="M337 188 L390 256 L337 324"
             fill="none" stroke="url(#bracketInnerGrad)" stroke-width="8"
@@ -280,10 +280,10 @@
          LAYER 5: CENTRAL CURSOR/SLASH — The AI Spark
          A vertical bar (cursor) or forward slash between brackets
          ============================================================ -->
-    
+
     <!-- Cursor emission glow -->
     <g filter="url(#bracketEmission)" opacity="0.4">
-      <line x1="256" y1="196" x2="256" y2="316" 
+      <line x1="256" y1="196" x2="256" y2="316"
             stroke="#00D4FF" stroke-width="10" stroke-linecap="round"/>
     </g>
 
@@ -292,7 +292,7 @@
       <line x1="266" y1="195" x2="246" y2="317"
             stroke="url(#bracketGrad)" stroke-width="14" stroke-linecap="round"
             opacity="0.9"/>
-      
+
       <!-- Inner highlight -->
       <line x1="264" y1="202" x2="248" y2="310"
             stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"
@@ -306,14 +306,14 @@
     <!-- ============================================================
          LAYER 6: ORBITAL RINGS — Abstract AI neural arcs
          ============================================================ -->
-    
+
     <g opacity="0.2" fill="none" stroke-linecap="round">
       <!-- Outer orbit arc (top-left to bottom-right) -->
-      <path d="M140 145 A165 165 0 0 1 372 145" 
+      <path d="M140 145 A165 165 0 0 1 372 145"
             stroke="#00D4FF" stroke-width="1.2" opacity="0.5"/>
       <path d="M140 367 A165 165 0 0 0 372 367"
             stroke="#A78BFA" stroke-width="1.2" opacity="0.5"/>
-      
+
       <!-- Orbital node dots -->
       <circle cx="140" cy="145" r="2" fill="#00D4FF" opacity="0.6"/>
       <circle cx="372" cy="145" r="2" fill="#00D4FF" opacity="0.6"/>
@@ -357,25 +357,25 @@
   </g><!-- end squircle clip -->
 
   <!-- ============================================================
-       LAYER 11: DEV BADGE — Amber "Prax Code" pill (bottom-right)
+       LAYER 11: DEV BADGE — Amber "P" indicator (bottom-right)
        ============================================================ -->
-  <g transform="translate(370, 440)" filter="url(#badgeGlow)">
-    <!-- Badge background pill -->
-    <rect x="-72" y="-22" width="144" height="44" rx="22" ry="22" fill="#1A1A2E" stroke="url(#badgeGrad)" stroke-width="2.5" opacity="0.95"/>
-    <rect x="-69" y="-19" width="138" height="38" rx="19" ry="19" fill="#1A1A2E" opacity="0.9"/>
-    
+  <g transform="translate(385, 385)" filter="url(#badgeGlow)">
+    <!-- Badge background circle -->
+    <circle cx="0" cy="0" r="36" fill="#1A1A2E" stroke="url(#badgeGrad)" stroke-width="2.5" opacity="0.95"/>
+    <circle cx="0" cy="0" r="33" fill="#1A1A2E" opacity="0.9"/>
+
     <!-- Amber glow ring -->
-    <rect x="-70" y="-20" width="140" height="40" rx="20" ry="20" fill="none" stroke="#FFBB33" stroke-width="1" opacity="0.4"/>
-    
-    <!-- "Prax Code" text -->
-    <text x="0" y="2" text-anchor="middle" dominant-baseline="middle"
+    <circle cx="0" cy="0" r="34" fill="none" stroke="#FFBB33" stroke-width="1" opacity="0.4"/>
+
+    <!-- "P" letter for Prax -->
+    <text x="0" y="6" text-anchor="middle" dominant-baseline="middle"
           font-family="'SF Pro Display', 'Inter', 'Helvetica Neue', sans-serif"
-          font-size="22" font-weight="700" fill="url(#badgeGrad)"
+          font-size="34" font-weight="700" fill="url(#badgeGrad)"
           filter="url(#textShadow)"
-          letter-spacing="1">Prax Code</text>
-    
+          letter-spacing="-1">P</text>
+
     <!-- Subtle inner highlight -->
-    <ellipse cx="-10" cy="-10" rx="40" ry="8" fill="#FFFFFF" opacity="0.06"/>
+    <ellipse cx="-4" cy="-12" rx="16" ry="10" fill="#FFFFFF" opacity="0.06"/>
   </g>
 
 </svg>
