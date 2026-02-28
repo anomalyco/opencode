@@ -12,6 +12,7 @@ import { queryBillingInfo } from "../../common"
 import styles from "./lite-section.module.css"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
+import { formError } from "~/lib/form-error"
 
 const queryLiteSubscription = query(async (workspaceID: string) => {
   "use server"
@@ -114,7 +115,7 @@ const createSessionUrl = action(async (workspaceID: string, returnUrl: string) =
 const setLiteUseBalance = action(async (form: FormData) => {
   "use server"
   const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: "Workspace ID is required" }
+  if (!workspaceID) return { error: formError.workspaceRequired }
   const useBalance = form.get("useBalance")?.toString() === "true"
 
   return json(
