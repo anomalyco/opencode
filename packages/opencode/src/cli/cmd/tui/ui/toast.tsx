@@ -1,4 +1,5 @@
 import { createContext, useContext, type ParentProps, Show } from "solid-js"
+import { t } from "@/cli/cmd/tui/i18n"
 import { createStore } from "solid-js/store"
 import { useTheme } from "@tui/context/theme"
 import { useTerminalDimensions } from "@opentui/solid"
@@ -72,7 +73,7 @@ function init() {
         })
       toast.show({
         variant: "error",
-        message: "An unknown error has occurred",
+        message: t("ui.unknown.error"),
       })
     },
     get currentToast(): ToastOptions | null {

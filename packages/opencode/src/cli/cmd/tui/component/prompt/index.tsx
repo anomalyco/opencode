@@ -1,4 +1,5 @@
-import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg } from "@opentui/core"
+import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, dim, fg } from "@opentui/core"
+import { t, tpl } from "@/cli/cmd/tui/i18n"
 import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
@@ -81,7 +82,7 @@ export function Prompt(props: PromptProps) {
   function promptModelWarning() {
     toast.show({
       variant: "warning",
-      message: "Connect a provider to send prompts",
+      message: t("prompt.no.provider"),
       duration: 3000,
     })
     if (sync.data.provider.length === 0) {
@@ -171,7 +172,7 @@ export function Prompt(props: PromptProps) {
   command.register(() => {
     return [
       {
-        title: "Clear prompt",
+        title: t("prompt.clear"),
         value: "prompt.clear",
         category: "Prompt",
         hidden: true,
@@ -182,7 +183,7 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Submit prompt",
+        title: t("prompt.submit"),
         value: "prompt.submit",
         keybind: "input_submit",
         category: "Prompt",
@@ -194,7 +195,7 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Paste",
+        title: t("prompt.paste"),
         value: "prompt.paste",
         keybind: "input_paste",
         category: "Prompt",
@@ -211,7 +212,7 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Interrupt session",
+        title: t("prompt.interrupt"),
         value: "session.interrupt",
         keybind: "session_interrupt",
         category: "Session",
@@ -243,7 +244,7 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Open editor",
+        title: t("prompt.editor"),
         category: "Session",
         keybind: "editor_open",
         value: "prompt.editor",
@@ -330,7 +331,7 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Skills",
+        title: t("prompt.skills"),
         value: "prompt.skills",
         category: "Prompt",
         slash: {
@@ -472,7 +473,7 @@ export function Prompt(props: PromptProps) {
 
   command.register(() => [
     {
-      title: "Stash prompt",
+      title: t("prompt.stash"),
       value: "prompt.stash",
       category: "Prompt",
       enabled: !!store.prompt.input,
@@ -490,7 +491,7 @@ export function Prompt(props: PromptProps) {
       },
     },
     {
-      title: "Stash pop",
+      title: t("prompt.stash.pop"),
       value: "prompt.stash.pop",
       category: "Prompt",
       enabled: stash.list().length > 0,
@@ -506,7 +507,7 @@ export function Prompt(props: PromptProps) {
       },
     },
     {
-      title: "Stash list",
+      title: t("prompt.stash.list"),
       value: "prompt.stash.list",
       category: "Prompt",
       enabled: stash.list().length > 0,
@@ -753,9 +754,10 @@ export function Prompt(props: PromptProps) {
     if (props.sessionID) return undefined
     if (store.mode === "shell") {
       const example = SHELL_PLACEHOLDERS[store.placeholder % SHELL_PLACEHOLDERS.length]
-      return `Run a command... "${example}"`
+      return tpl("prompt.run.command", { example })
     }
-    return `Ask anything... "${PLACEHOLDERS[store.placeholder % PLACEHOLDERS.length]}"`
+    const placeholder = PLACEHOLDERS[store.placeholder % PLACEHOLDERS.length]
+    return tpl("prompt.ask.anything", { placeholder })
   })
 
   const spinnerDef = createMemo(() => {
@@ -998,7 +1000,7 @@ export function Prompt(props: PromptProps) {
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
               <text fg={highlight()}>
-                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
+                {store.mode === "shell" ? t("prompt.shell") : Locale.titlecase(local.agent.current().name)}{" "}
               </text>
               <Show when={store.mode === "normal"}>
                 <box flexDirection="row" gap={1}>
@@ -1100,9 +1102,9 @@ export function Prompt(props: PromptProps) {
                       const r = retry()
                       if (!r) return ""
                       const baseMessage = message()
-                      const truncatedHint = isTruncated() ? " (click to expand)" : ""
+                      const truncatedHint = isTruncated() ? " " + t("prompt.click.expand") : ""
                       const duration = formatDuration(seconds())
-                      const retryInfo = ` [retrying ${duration ? `in ${duration} ` : ""}attempt #${r.attempt}]`
+                      const retryInfo = ` [${tpl("prompt.retrying", { duration: duration ? `in ${duration} ` : "", attempt: r.attempt.toString() })}]`
                       return baseMessage + truncatedHint + retryInfo
                     }
 
@@ -1119,7 +1121,7 @@ export function Prompt(props: PromptProps) {
               <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
                 esc{" "}
                 <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
-                  {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
+                  {store.interrupt > 0 ? t("prompt.interrupt.again") : t("prompt.interrupt.action")}
                 </span>
               </text>
             </box>
@@ -1130,19 +1132,19 @@ export function Prompt(props: PromptProps) {
                 <Match when={store.mode === "normal"}>
                   <Show when={local.model.variant.list().length > 0}>
                     <text fg={theme.text}>
-                      {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>variants</span>
+                      {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>{t("prompt.variants")}</span>
                     </text>
                   </Show>
                   <text fg={theme.text}>
-                    {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
+                    {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>{t("prompt.agents")}</span>
                   </text>
                   <text fg={theme.text}>
-                    {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
+                    {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>{t("prompt.commands")}</span>
                   </text>
                 </Match>
                 <Match when={store.mode === "shell"}>
                   <text fg={theme.text}>
-                    esc <span style={{ fg: theme.textMuted }}>exit shell mode</span>
+                    esc <span style={{ fg: theme.textMuted }}>{t("prompt.exit.shell")}</span>
                   </text>
                 </Match>
               </Switch>

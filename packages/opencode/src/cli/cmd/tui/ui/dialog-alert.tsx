@@ -1,4 +1,5 @@
 import { TextAttributes } from "@opentui/core"
+import { t } from "@/cli/cmd/tui/i18n"
 import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 import { useKeyboard } from "@opentui/solid"
@@ -42,7 +43,7 @@ export function DialogAlert(props: DialogAlertProps) {
             dialog.clear()
           }}
         >
-          <text fg={theme.selectedListItemText}>ok</text>
+          <text fg={theme.selectedListItemText}>{t("ui.ok")}</text>
         </box>
       </box>
     </box>

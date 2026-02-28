@@ -1,4 +1,5 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
+import { t } from "@/cli/cmd/tui/i18n"
 import { createMemo, Match, onMount, Show, Switch } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { useKeybind } from "@tui/context/keybind"
@@ -44,7 +45,7 @@ export function Home() {
 
   command.register(() => [
     {
-      title: tipsHidden() ? "Show tips" : "Hide tips",
+      title: tipsHidden() ? t("home.tips.show") : t("home.tips.hide"),
       value: "tips.toggle",
       keybind: "tips_toggle",
       category: "System",
@@ -61,12 +62,12 @@ export function Home() {
         <text fg={theme.text}>
           <Switch>
             <Match when={mcpError()}>
-              <span style={{ fg: theme.error }}>•</span> mcp errors{" "}
+              <span style={{ fg: theme.error }}>•</span> {t("home.mcp.errors")}{" "}
               <span style={{ fg: theme.textMuted }}>ctrl+x s</span>
             </Match>
             <Match when={true}>
               <span style={{ fg: theme.success }}>•</span>{" "}
-              {Locale.pluralize(connectedMcpCount(), "{} mcp server", "{} mcp servers")}
+              {Locale.pluralize(connectedMcpCount(), `{} ${t("home.mcp.server")}`, `{} ${t("home.mcp.servers")}`)}
             </Match>
           </Switch>
         </text>

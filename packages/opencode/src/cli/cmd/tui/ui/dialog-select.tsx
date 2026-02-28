@@ -1,4 +1,5 @@
 import { InputRenderable, RGBA, ScrollBoxRenderable, TextAttributes } from "@opentui/core"
+import { t } from "@/cli/cmd/tui/i18n"
 import { useTheme, selectedForeground } from "@tui/context/theme"
 import { entries, filter, flatMap, groupBy, pipe, take } from "remeda"
 import { batch, createEffect, createMemo, For, Show, type JSX, on } from "solid-js"
@@ -259,7 +260,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                 input.focus()
               }, 1)
             }}
-            placeholder={props.placeholder ?? "Search"}
+            placeholder={props.placeholder ?? t("ui.search")}
           />
         </box>
       </box>
@@ -267,7 +268,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         when={grouped().length > 0}
         fallback={
           <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-            <text fg={theme.textMuted}>No results found</text>
+            <text fg={theme.textMuted}>{t("ui.no.results")}</text>
           </box>
         }
       >

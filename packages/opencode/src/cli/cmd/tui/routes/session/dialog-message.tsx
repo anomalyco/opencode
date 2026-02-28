@@ -1,4 +1,5 @@
 import { createMemo } from "solid-js"
+import { t } from "@/cli/cmd/tui/i18n"
 import { useSync } from "@tui/context/sync"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useSDK } from "@tui/context/sdk"
@@ -18,12 +19,12 @@ export function DialogMessage(props: {
 
   return (
     <DialogSelect
-      title="Message Actions"
+      title={t("dialog.message.actions")}
       options={[
         {
-          title: "Revert",
+          title: t("dialog.message.revert"),
           value: "session.revert",
-          description: "undo messages and file changes",
+          description: t("dialog.message.revert.desc"),
           onSelect: (dialog) => {
             const msg = message()
             if (!msg) return
@@ -52,9 +53,9 @@ export function DialogMessage(props: {
           },
         },
         {
-          title: "Copy",
+          title: t("dialog.message.copy"),
           value: "message.copy",
-          description: "message text to clipboard",
+          description: t("dialog.message.copy.desc"),
           onSelect: async (dialog) => {
             const msg = message()
             if (!msg) return
@@ -72,9 +73,9 @@ export function DialogMessage(props: {
           },
         },
         {
-          title: "Fork",
+          title: t("dialog.message.fork"),
           value: "session.fork",
-          description: "create a new session",
+          description: t("dialog.message.fork.desc"),
           onSelect: async (dialog) => {
             const result = await sdk.client.session.fork({
               sessionID: props.sessionID,
