@@ -1,3 +1,4 @@
+import { t } from "@/cli/cmd/tui/i18n"
 import { useSync } from "@tui/context/sync"
 import { createMemo, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -100,11 +101,11 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
             </box>
             <box>
               <text fg={theme.text}>
-                <b>Context</b>
+                <b>{t("sidebar.context")}</b>
               </text>
-              <text fg={theme.textMuted}>{context()?.tokens ?? 0} tokens</text>
-              <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
-              <text fg={theme.textMuted}>{cost()} spent</text>
+              <text fg={theme.textMuted}>{context()?.tokens ?? 0} {t("sidebar.tokens")}</text>
+              <text fg={theme.textMuted}>{context()?.percentage ?? 0}{t("sidebar.pct.used")}</text>
+              <text fg={theme.textMuted}>{cost()} {t("sidebar.spent")}</text>
             </box>
             <Show when={mcpEntries().length > 0}>
               <box>
@@ -117,12 +118,12 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                     <text fg={theme.text}>{expanded.mcp ? "▼" : "▶"}</text>
                   </Show>
                   <text fg={theme.text}>
-                    <b>MCP</b>
+                    <b>{t("sidebar.mcp")}</b>
                     <Show when={!expanded.mcp}>
                       <span style={{ fg: theme.textMuted }}>
                         {" "}
-                        ({connectedMcpCount()} active
-                        {errorMcpCount() > 0 ? `, ${errorMcpCount()} error${errorMcpCount() > 1 ? "s" : ""}` : ""})
+                        ({connectedMcpCount()} {t("sidebar.active")}
+                        {errorMcpCount() > 0 ? `, ${errorMcpCount()} ${errorMcpCount() > 1 ? t("sidebar.errors") : t("sidebar.error")}` : ""})
                       </span>
                     </Show>
                   </text>
@@ -151,12 +152,12 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                           {key}{" "}
                           <span style={{ fg: theme.textMuted }}>
                             <Switch fallback={item.status}>
-                              <Match when={item.status === "connected"}>Connected</Match>
+                              <Match when={item.status === "connected"}>{t("sidebar.connected")}</Match>
                               <Match when={item.status === "failed" && item}>{(val) => <i>{val().error}</i>}</Match>
-                              <Match when={item.status === "disabled"}>Disabled</Match>
-                              <Match when={(item.status as string) === "needs_auth"}>Needs auth</Match>
+                              <Match when={item.status === "disabled"}>{t("sidebar.disabled")}</Match>
+                              <Match when={(item.status as string) === "needs_auth"}>{t("sidebar.needs.auth")}</Match>
                               <Match when={(item.status as string) === "needs_client_registration"}>
-                                Needs client ID
+                                {t("sidebar.needs.clientid")}
                               </Match>
                             </Switch>
                           </span>
@@ -177,15 +178,15 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                   <text fg={theme.text}>{expanded.lsp ? "▼" : "▶"}</text>
                 </Show>
                 <text fg={theme.text}>
-                  <b>LSP</b>
+                  <b>{t("sidebar.lsp")}</b>
                 </text>
               </box>
               <Show when={sync.data.lsp.length <= 2 || expanded.lsp}>
                 <Show when={sync.data.lsp.length === 0}>
                   <text fg={theme.textMuted}>
                     {sync.data.config.lsp === false
-                      ? "LSPs have been disabled in settings"
-                      : "LSPs will activate as files are read"}
+                      ? t("sidebar.lsp.disabled")
+                      : t("sidebar.lsp.info")}
                   </text>
                 </Show>
                 <For each={sync.data.lsp}>
@@ -221,7 +222,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                     <text fg={theme.text}>{expanded.todo ? "▼" : "▶"}</text>
                   </Show>
                   <text fg={theme.text}>
-                    <b>Todo</b>
+                    <b>{t("sidebar.todo")}</b>
                   </text>
                 </box>
                 <Show when={todo().length <= 2 || expanded.todo}>
@@ -240,7 +241,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                     <text fg={theme.text}>{expanded.diff ? "▼" : "▶"}</text>
                   </Show>
                   <text fg={theme.text}>
-                    <b>Modified Files</b>
+                    <b>{t("sidebar.modified.files")}</b>
                   </text>
                 </box>
                 <Show when={diff().length <= 2 || expanded.diff}>
@@ -286,18 +287,18 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               <box flexGrow={1} gap={1}>
                 <box flexDirection="row" justifyContent="space-between">
                   <text fg={theme.text}>
-                    <b>Getting started</b>
+                    <b>{t("sidebar.getting.started")}</b>
                   </text>
                   <text fg={theme.textMuted} onMouseDown={() => kv.set("dismissed_getting_started", true)}>
                     ✕
                   </text>
                 </box>
-                <text fg={theme.textMuted}>OpenCode includes free models so you can start immediately.</text>
+                <text fg={theme.textMuted}>{t("sidebar.free.models")}</text>
                 <text fg={theme.textMuted}>
-                  Connect from 75+ providers to use other models, including Claude, GPT, Gemini etc
+                  {t("sidebar.connect.info")}
                 </text>
                 <box flexDirection="row" gap={1} justifyContent="space-between">
-                  <text fg={theme.text}>Connect provider</text>
+                  <text fg={theme.text}>{t("sidebar.connect.provider")}</text>
                   <text fg={theme.textMuted}>/connect</text>
                 </box>
               </box>
@@ -308,9 +309,9 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
             <span style={{ fg: theme.text }}>{directory().split("/").at(-1)}</span>
           </text>
           <text fg={theme.textMuted}>
-            <span style={{ fg: theme.success }}>•</span> <b>Open</b>
+            <span style={{ fg: theme.success }}>•</span> <b>{t("sidebar.open")}</b>
             <span style={{ fg: theme.text }}>
-              <b>Code</b>
+              <b>{t("sidebar.code")}</b>
             </span>{" "}
             <span>{Installation.VERSION}</span>
           </text>
