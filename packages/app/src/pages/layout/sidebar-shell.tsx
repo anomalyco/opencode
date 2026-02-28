@@ -42,20 +42,42 @@ export const SidebarContent = (props: {
   return (
     <div class="flex h-full w-full overflow-hidden">
       <Show when={isCollapsed()}>
-        <div class="w-8 shrink-0 flex flex-col items-center pt-3">
+        <div class="w-8 shrink-0 flex flex-col items-center pt-3 gap-2">
           <Tooltip placement="right" value="Show projects">
             <IconButton
-              icon="layout-left"
+              icon="chevron-right"
               variant="ghost"
               size="small"
               onClick={props.onToggleCollapsed}
               aria-label="Show projects"
             />
           </Tooltip>
+          <TooltipKeybind placement="right" title={props.settingsLabel()} keybind={props.settingsKeybind() ?? ""}>
+            <IconButton
+              icon="settings-gear"
+              variant="ghost"
+              size="small"
+              onClick={props.onOpenSettings}
+              aria-label={props.settingsLabel()}
+            />
+          </TooltipKeybind>
         </div>
       </Show>
       <Show when={!isCollapsed()}>
         <div class="w-16 shrink-0 flex flex-col items-center overflow-hidden" onMouseMove={props.aimMove}>
+          <Show when={!props.mobile && props.onToggleCollapsed}>
+            <div class="shrink-0 w-full pt-2 flex justify-center">
+              <Tooltip placement={placement()} value="Hide projects">
+                <IconButton
+                  icon="chevron-left"
+                  variant="ghost"
+                  size="small"
+                  onClick={props.onToggleCollapsed}
+                  aria-label="Hide projects"
+                />
+              </Tooltip>
+            </div>
+          </Show>
           <div class="flex-1 min-h-0 w-full">
             <DragDropProvider
               onDragStart={props.handleDragStart}
@@ -93,17 +115,6 @@ export const SidebarContent = (props: {
             </DragDropProvider>
           </div>
           <div class="shrink-0 w-full pt-3 pb-6 flex flex-col items-center gap-2">
-            <Show when={!props.mobile && props.onToggleCollapsed}>
-              <Tooltip placement={placement()} value="Hide projects">
-                <IconButton
-                  icon="layout-left"
-                  variant="ghost"
-                  size="small"
-                  onClick={props.onToggleCollapsed}
-                  aria-label="Hide projects"
-                />
-              </Tooltip>
-            </Show>
             <TooltipKeybind
               placement={placement()}
               title={props.settingsLabel()}
