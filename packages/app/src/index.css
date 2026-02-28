@@ -216,6 +216,8 @@ body::before {
    9. SIDEBAR — Apple-style glassmorphism
    ============================================================ */
 [data-component="layout-sidebar"],
+[data-component="sidebar-nav-desktop"],
+[data-component="sidebar-nav-mobile"],
 [data-slot="layout-sidebar"] {
   background: var(--glass-strong) !important;
   backdrop-filter: var(--blur-sidebar);
