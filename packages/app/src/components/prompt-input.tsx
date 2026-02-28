@@ -610,6 +610,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (part.type === "paste") {
       pill.setAttribute("data-content", part.content)
       pill.setAttribute("data-summary", part.summary)
+      pill.style.padding = "1px 6px"
+      pill.style.borderRadius = "4px"
     }
     pill.setAttribute("contenteditable", "false")
     pill.style.userSelect = "text"
@@ -1247,7 +1249,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 "w-full pl-3 pr-2 pt-2 pb-11 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
                 "[&_[data-type=file]]:text-syntax-property": true,
                 "[&_[data-type=agent]]:text-syntax-type": true,
-                "[&_[data-type=paste]]:text-text-weak": true,
+                "[&_[data-type=paste]]:bg-surface-warning-strong": true,
+                "[&_[data-type=paste]]:text-text-on-warning-base": true,
+                "[&_[data-type=paste]]:font-bold": true,
                 "font-mono!": store.mode === "shell",
               }}
             />
