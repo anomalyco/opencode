@@ -7,7 +7,7 @@ import { ZenData } from "../src/model"
 
 const root = path.resolve(process.cwd(), "..", "..", "..")
 const models = await $`bun sst secret list`.cwd(root).text()
-const PARTS = 20
+const PARTS = 30
 
 // read the line starting with "ZEN_MODELS"
 const lines = models.split("\n")

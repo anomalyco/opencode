@@ -1,67 +1,67 @@
 ---
 title: 主题
-description: 选择内建主题或定义您自己的主题。
+description: 选择内置主题或定义您自己的主题。
 ---
 
-使用 opencode，您可以从多个内建主题中进行选择，使用适合您的终端主题的主题，或定义您自己的自定义主题。
+通过 OpenCode，您可以从多个内置主题中进行选择，使用能自动适配终端主题的主题，或者定义您自己的自定义主题。
 
-By default, opencode uses our own `opencode` theme.
+默认情况下，OpenCode 使用我们自己的 `opencode` 主题。
 
 ---
 
 ## 终端要求
 
-为了使主题能够正确显示完整的调色板，您的终端必须支持**真彩色**（24 位颜色）。大多数现代终端默认支持此功能，但您可能需要启用它：
+为了使主题能够正确显示完整的调色板，您的终端必须支持**真彩色**（24 位色）。大多数现代终端默认支持此功能，但您可能需要手动启用：
 
-- **检查支持**：执行 `echo $COLORTERM` - 它应该输出 `truecolor` 或 `24bit`
-- **启用真彩色**：在shell配置文件中设置环境变量`COLORTERM=truecolor`
-- **您的终端兼容性**：确保终端模拟器支持24位颜色（大多数现代终端，​​​​如iTerm2、Alacritty、Kitty、Windows终端和最新版本的GNOME终端都支持）
+- **检查支持情况**：运行 `echo $COLORTERM` — 输出应为 `truecolor` 或 `24bit`
+- **启用真彩色**：在您的 shell 配置文件中设置环境变量 `COLORTERM=truecolor`
+- **终端兼容性**：确保您的终端模拟器支持 24 位色（大多数现代终端如 iTerm2、Alacritty、Kitty、Windows Terminal 以及较新版本的 GNOME Terminal 均已支持）
 
-如果没有真彩色支持，主题的颜色精度可能会降低或回落到最接近的 256 色近似值。
+如果没有真彩色支持，主题可能会出现色彩精度下降的情况，或者回退到最接近的 256 色近似值。
 
 ---
 
 ## 内置主题
 
-opencode 带有几个内建主题。
+OpenCode 自带多个内置主题。
 
-| 名称                   | 描述                                                                         |
-| ---------------------- | ---------------------------------------------------------------------------- |
-| `system`               | 适应您所处的背景颜色                                                         |
-| `tokyonight`           | Based on the [Tokyonight](https://github.com/folke/tokyonight.nvim) theme    |
-| `everforest`           | Based on the [Everforest](https://github.com/sainnhe/everforest) theme       |
-| `ayu`                  | Based on the [Ayu](https://github.com/ayu-theme) dark theme                  |
-| `catppuccin`           | Based on the [Catppuccin](https://github.com/catppuccin) theme               |
-| `catppuccin-macchiato` | Based on the [Catppuccin](https://github.com/catppuccin) theme               |
-| `gruvbox`              | Based on the [Gruvbox](https://github.com/morhetz/gruvbox) theme             |
-| `kanagawa`             | Based on the [Kanagawa](https://github.com/rebelot/kanagawa.nvim) theme      |
-| `nord`                 | Based on the [Nord](https://github.com/nordtheme/nord) theme                 |
-| `matrix`               | 骇客风格黑底绿主题                                                           |
-| `one-dark`             | Based on the [Atom One](https://github.com/Th3Whit3Wolf/one-nvim) Dark theme |
+| 名称                   | 描述                                                                |
+| ---------------------- | ------------------------------------------------------------------- |
+| `system`               | 自动适配终端的背景颜色                                              |
+| `tokyonight`           | 基于 [Tokyonight](https://github.com/folke/tokyonight.nvim) 主题    |
+| `everforest`           | 基于 [Everforest](https://github.com/sainnhe/everforest) 主题       |
+| `ayu`                  | 基于 [Ayu](https://github.com/ayu-theme) 暗色主题                   |
+| `catppuccin`           | 基于 [Catppuccin](https://github.com/catppuccin) 主题               |
+| `catppuccin-macchiato` | 基于 [Catppuccin](https://github.com/catppuccin) 主题               |
+| `gruvbox`              | 基于 [Gruvbox](https://github.com/morhetz/gruvbox) 主题             |
+| `kanagawa`             | 基于 [Kanagawa](https://github.com/rebelot/kanagawa.nvim) 主题      |
+| `nord`                 | 基于 [Nord](https://github.com/nordtheme/nord) 主题                 |
+| `matrix`               | 黑客风格的黑底绿字主题                                              |
+| `one-dark`             | 基于 [Atom One](https://github.com/Th3Whit3Wolf/one-nvim) Dark 主题 |
 
-此外，我们还在不断添加新主题。
+我们还在不断添加更多主题。
 
 ---
 
 ## 系统主题
 
-`system` 主题旨在自动适应您的最终方案。与使用固定颜色的传统主题不同，_system_ 主题：
+`system` 主题旨在自动适配您终端的配色方案。与使用固定颜色的传统主题不同，_system_ 主题具有以下特点：
 
-- **生成灰度**：根据终端的背景颜色建立自定义灰度，确保最佳对比度。
-- **使用 ANSI 颜色**：使用标准 ANSI 颜色 (0-15) 进行语法突出显示和 UI 元素，尊重 Windows 的调色盘。
-- **保留默认设置**：使用 `none` 作为文字和背景颜色以保持本机的外观。
+- **生成灰度色阶**：根据终端的背景颜色创建自定义灰度色阶，确保最佳对比度。
+- **使用 ANSI 颜色**：利用标准 ANSI 颜色（0-15）进行语法高亮和 UI 元素渲染，遵循终端的调色板设置。
+- **保留终端默认值**：将文本和背景颜色设为 `none`，以保持终端的原生外观。
 
 系统主题适合以下用户：
 
-- 希望 opencode 与终端的外观相匹配
-- 使用自定义终端配色方案
-- 希望所有终端应用程序具有一致的外观
+- 希望 OpenCode 与终端的外观保持一致
+- 使用了自定义终端配色方案
+- 偏好所有终端应用程序拥有统一的视觉风格
 
 ---
 
 ## 使用主题
 
-您可以通过使用 `/theme` 命令调出主题选择来选择主题。或者您可以在 [config](/docs/config) 中指定它。
+您可以通过 `/theme` 命令调出主题选择界面来选择主题，也可以在[配置](/docs/config)文件中直接指定。
 
 ```json title="opencode.json" {3}
 {
@@ -74,35 +74,35 @@ opencode 带有几个内建主题。
 
 ## 自定义主题
 
-opencode 支持灵活的基于 JSON 的主题系统，允许用户轻松创建和自定义主题。
+OpenCode 支持灵活的基于 JSON 的主题系统，让用户可以轻松创建和自定义主题。
 
 ---
 
-### 优先级
+### 层级优先级
 
-主题按以下顺序从多个目录载入，其中后面的目录覆盖前面的目录：
+主题按以下顺序从多个目录加载，后面的目录会覆盖前面的目录：
 
-1. **内建主题** - 这些主题嵌入在二进制文件中
-2. **User config directory** - Defined in `~/.config/opencode/themes/*.json` or `$XDG_CONFIG_HOME/opencode/themes/*.json`
-3. **Project root directory** - Defined in the `<project-root>/.opencode/themes/*.json`
-4. **Current working directory** - Defined in `./.opencode/themes/*.json`
+1. **内置主题** — 嵌入在二进制文件中
+2. **用户配置目录** — 定义在 `~/.config/opencode/themes/*.json` 或 `$XDG_CONFIG_HOME/opencode/themes/*.json`
+3. **项目根目录** — 定义在 `<project-root>/.opencode/themes/*.json`
+4. **当前工作目录** — 定义在 `./.opencode/themes/*.json`
 
-如果多个目录包含同名主题，则将使用优先顺序较高的目录中的主题。
+如果多个目录包含同名主题，将使用优先级较高的目录中的主题。
 
 ---
 
 ### 创建主题
 
-要创建自定义主题，请在主题目录中创建 JSON 档案。
+要创建自定义主题，请在上述任一主题目录中创建一个 JSON 文件。
 
-对于用户范围的主题：
+创建用户级主题：
 
 ```bash no-frame
 mkdir -p ~/.config/opencode/themes
 vim ~/.config/opencode/themes/my-theme.json
 ```
 
-以及针对特定项目的主题。
+创建项目级主题：
 
 ```bash no-frame
 mkdir -p .opencode/themes
@@ -113,34 +113,34 @@ vim .opencode/themes/my-theme.json
 
 ### JSON 格式
 
-主题使用灵活的 JSON 格式，支持：
+主题使用灵活的 JSON 格式，支持以下特性：
 
-- **十六进位制造颜色**： `"#ffffff"`
-- **ANSI 颜色**： `3` (0-255)
-- **颜色参考**： `"primary"` 或自定义定义
-- **深色/light 变体**： `{"dark": "#000", "light": "#fff"}`
-- **无颜色**： `"none"` - 使用终端的默认颜色或透明
+- **十六进制颜色**：`"#ffffff"`
+- **ANSI 颜色**：`3`（0-255）
+- **颜色引用**：`"primary"` 或自定义定义的颜色名
+- **深色/浅色变体**：`{"dark": "#000", "light": "#fff"}`
+- **无颜色**：`"none"` — 使用终端的默认颜色或透明背景
 
 ---
 
 ### 颜色定义
 
-`defs` 部分是可选的，它允许您定义可在主题中引用的可重用颜色。
+`defs` 部分是可选的，它允许您定义可在主题中重复引用的可复用颜色。
 
 ---
 
 ### 终端默认值
 
-特殊值 `"none"` 可用于任何颜色以继承默认的默认颜色。这对于建立与终端方案无缝的融合主题特别有用：
+特殊值 `"none"` 可用于任何颜色属性，以继承终端的默认颜色。这在创建需要与终端配色方案无缝融合的主题时特别有用：
 
-- `"text": "none"` - 使用遥控器的预设前景色
-- `"background": "none"` - 使用桌面的背景颜色
+- `"text": "none"` — 使用终端的默认前景色
+- `"background": "none"` — 使用终端的默认背景色
 
 ---
 
-### 例子
+### 示例
 
-以下是自定义主题的示例：
+以下是一个自定义主题的完整示例：
 
 ```json title="my-theme.json"
 {
