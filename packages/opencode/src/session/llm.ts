@@ -1,6 +1,7 @@
 import { Installation } from "@/installation"
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
+import { applyDifyHeaders } from "./dify-headers"
 import {
   streamText,
   wrapLanguageModel,
@@ -143,6 +144,17 @@ export namespace LLM {
         headers: {},
       },
     )
+
+    if (input.model.providerID === "dify") {
+      await applyDifyHeaders({
+        headers: headers as Record<string, string>,
+        provider,
+        model: input.model,
+        agent: input.agent,
+        sessionID: input.sessionID,
+        user: input.user,
+      })
+    }
 
     const maxOutputTokens =
       isCodex || provider.id.includes("github-copilot") ? undefined : ProviderTransform.maxOutputTokens(input.model)
