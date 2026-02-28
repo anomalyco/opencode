@@ -5,6 +5,8 @@ import { State } from "./state"
 import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
 import { Filesystem } from "@/util/filesystem"
+import * as fs from "fs/promises"
+import * as path from "path"
 
 interface Context {
   directory: string
@@ -18,15 +20,23 @@ const disposal = {
   all: undefined as Promise<void> | undefined,
 }
 
+async function canonical(input: string) {
+  const abs = path.resolve(input)
+  const real = await fs.realpath(abs).catch(() => abs)
+  const normalized = path.normalize(real)
+  return process.platform === "win32" ? normalized.toLowerCase() : normalized
+}
+
 export const Instance = {
   async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
-    let existing = cache.get(input.directory)
+    const normalizedDirectory = await canonical(input.directory)
+    let existing = cache.get(normalizedDirectory)
     if (!existing) {
-      Log.Default.info("creating instance", { directory: input.directory })
+      Log.Default.info("creating instance", { directory: normalizedDirectory })
       existing = iife(async () => {
-        const { project, sandbox } = await Project.fromDirectory(input.directory)
+        const { project, sandbox } = await Project.fromDirectory(normalizedDirectory)
         const ctx = {
-          directory: input.directory,
+          directory: normalizedDirectory,
           worktree: sandbox,
           project,
         }
@@ -35,7 +45,7 @@ export const Instance = {
         })
         return ctx
       })
-      cache.set(input.directory, existing)
+      cache.set(normalizedDirectory, existing)
     }
     const ctx = await existing
     return context.provide(ctx, async () => {
