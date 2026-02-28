@@ -1,8 +1,8 @@
 import { SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
 import path from "path"
 import { createEffect, createMemo, onMount } from "solid-js"
-import { useSync } from "@tui/context/sync"
 import { createSimpleContext } from "./helper"
+import { Glob } from "../../../../util/glob"
 import aura from "./theme/aura.json" with { type: "json" }
 import ayu from "./theme/ayu.json" with { type: "json" }
 import catppuccin from "./theme/catppuccin.json" with { type: "json" }
@@ -41,6 +41,7 @@ import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
+import { useTuiConfig } from "./tui-config"
 
 type ThemeColors = {
   primary: RGBA
@@ -279,17 +280,17 @@ function ansiToRgba(code: number): RGBA {
 export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
   init: (props: { mode: "dark" | "light" }) => {
-    const sync = useSync()
+    const config = useTuiConfig()
     const kv = useKV()
     const [store, setStore] = createStore({
       themes: DEFAULT_THEMES,
       mode: kv.get("theme_mode", props.mode),
-      active: (sync.data.config.theme ?? kv.get("theme", "opencode")) as string,
+      active: (config.theme ?? kv.get("theme", "opencode")) as string,
       ready: false,
     })
 
     createEffect(() => {
-      const theme = sync.data.config.theme
+      const theme = config.theme
       if (theme) setStore("active", theme)
     })
 
@@ -391,7 +392,6 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   },
 })
 
-const CUSTOM_THEME_GLOB = new Bun.Glob("themes/*.json")
 async function getCustomThemes() {
   const directories = [
     Global.Path.config,
@@ -405,14 +405,14 @@ async function getCustomThemes() {
 
   const result: Record<string, ThemeJson> = {}
   for (const dir of directories) {
-    for await (const item of CUSTOM_THEME_GLOB.scan({
-      absolute: true,
-      followSymlinks: true,
-      dot: true,
+    for (const item of await Glob.scan("themes/*.json", {
       cwd: dir,
+      absolute: true,
+      dot: true,
+      symlink: true,
     })) {
       const name = path.basename(item, ".json")
-      result[name] = await Bun.file(item).json()
+      result[name] = await Filesystem.readJson(item)
     }
   }
   return result

@@ -15,6 +15,7 @@ export const dict = {
   "nav.home": "Inicio",
   "nav.openMenu": "Abrir menú",
   "nav.getStartedFree": "Empezar gratis",
+  "nav.logoAlt": "OpenCode",
 
   "nav.context.copyLogo": "Copiar logo como SVG",
   "nav.context.copyWordmark": "Copiar marca como SVG",
@@ -42,8 +43,12 @@ export const dict = {
   "notFound.docs": "Documentación",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
+  "notFound.logoLightAlt": "opencode logo claro",
+  "notFound.logoDarkAlt": "opencode logo oscuro",
 
   "user.logout": "Cerrar sesión",
+
+  "auth.callback.error.codeMissing": "No se encontró código de autorización.",
 
   "workspace.select": "Seleccionar espacio de trabajo",
   "workspace.createNew": "+ Crear nuevo espacio de trabajo",
@@ -76,6 +81,8 @@ export const dict = {
   "error.reloadAmountMin": "La cantidad de recarga debe ser al menos ${{amount}}",
   "error.reloadTriggerMin": "El disparador de saldo debe ser al menos ${{amount}}",
 
+  "app.meta.description": "OpenCode - El agente de codificación de código abierto.",
+
   "home.title": "OpenCode | El agente de codificación IA de código abierto",
 
   "temp.title": "opencode | Agente de codificación IA creado para la terminal",
@@ -91,6 +98,8 @@ export const dict = {
   "temp.feature.models.afterLink": ", incluyendo modelos locales",
   "temp.screenshot.caption": "opencode TUI con el tema tokyonight",
   "temp.screenshot.alt": "opencode TUI con tema tokyonight",
+  "temp.logoLightAlt": "logo de opencode claro",
+  "temp.logoDarkAlt": "logo de opencode oscuro",
 
   "home.banner.badge": "Nuevo",
   "home.banner.text": "Aplicación de escritorio disponible en beta",
@@ -243,11 +252,30 @@ export const dict = {
     "Todos los modelos Zen están alojados en EE. UU. Los proveedores siguen una política de cero retención y no usan tus datos para entrenamiento de modelos, con las",
   "zen.privacy.exceptionsLink": "siguientes excepciones",
 
+  "zen.api.error.rateLimitExceeded": "Límite de tasa excedido. Por favor, inténtalo de nuevo más tarde.",
+  "zen.api.error.modelNotSupported": "Modelo {{model}} no soportado",
+  "zen.api.error.modelFormatNotSupported": "Modelo {{model}} no soportado para el formato {{format}}",
+  "zen.api.error.noProviderAvailable": "Ningún proveedor disponible",
+  "zen.api.error.providerNotSupported": "Proveedor {{provider}} no soportado",
+  "zen.api.error.missingApiKey": "Falta la clave API.",
+  "zen.api.error.invalidApiKey": "Clave API inválida.",
+  "zen.api.error.subscriptionQuotaExceeded": "Cuota de suscripción excedida. Reintenta en {{retryIn}}.",
+  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
+    "Cuota de suscripción excedida. Puedes continuar usando modelos gratuitos.",
+  "zen.api.error.noPaymentMethod": "Sin método de pago. Añade un método de pago aquí: {{billingUrl}}",
+  "zen.api.error.insufficientBalance": "Saldo insuficiente. Gestiona tu facturación aquí: {{billingUrl}}",
+  "zen.api.error.workspaceMonthlyLimitReached":
+    "Tu espacio de trabajo ha alcanzado su límite de gasto mensual de ${{amount}}. Gestiona tus límites aquí: {{billingUrl}}",
+  "zen.api.error.userMonthlyLimitReached":
+    "Has alcanzado tu límite de gasto mensual de ${{amount}}. Gestiona tus límites aquí: {{membersUrl}}",
+  "zen.api.error.modelDisabled": "El modelo está deshabilitado",
+
   "black.meta.title": "OpenCode Black | Accede a los mejores modelos de codificación del mundo",
   "black.meta.description": "Obtén acceso a Claude, GPT, Gemini y más con los planes de suscripción de OpenCode Black.",
   "black.hero.title": "Accede a los mejores modelos de codificación del mundo",
   "black.hero.subtitle": "Incluyendo Claude, GPT, Gemini y más",
   "black.title": "OpenCode Black | Precios",
+  "black.paused": "La inscripción al plan Black está temporalmente pausada.",
   "black.plan.icon20": "Plan Black 20",
   "black.plan.icon100": "Plan Black 100",
   "black.plan.icon200": "Plan Black 200",
@@ -343,12 +371,15 @@ export const dict = {
   "workspace.usage.table.input": "Entrada",
   "workspace.usage.table.output": "Salida",
   "workspace.usage.table.cost": "Costo",
+  "workspace.usage.table.session": "Sesión",
   "workspace.usage.breakdown.input": "Entrada",
   "workspace.usage.breakdown.cacheRead": "Lectura de Caché",
   "workspace.usage.breakdown.cacheWrite": "Escritura de Caché",
   "workspace.usage.breakdown.output": "Salida",
   "workspace.usage.breakdown.reasoning": "Razonamiento",
-  "workspace.usage.subscription": "suscripción (${{amount}})",
+  "workspace.usage.subscription": "Black (${{amount}})",
+  "workspace.usage.lite": "Go (${{amount}})",
+  "workspace.usage.byok": "BYOK (${{amount}})",
 
   "workspace.cost.title": "Costo",
   "workspace.cost.subtitle": "Costos de uso desglosados por modelo.",
@@ -357,6 +388,7 @@ export const dict = {
   "workspace.cost.deletedSuffix": "(eliminado)",
   "workspace.cost.empty": "No hay datos de uso disponibles para el periodo seleccionado.",
   "workspace.cost.subscriptionShort": "sub",
+  "workspace.cost.liteShort": "lite",
 
   "workspace.keys.title": "Claves API",
   "workspace.keys.subtitle": "Gestiona tus claves API para acceder a los servicios de opencode.",
@@ -447,6 +479,7 @@ export const dict = {
   "workspace.reload.updatePaymentMethod": "Por favor actualiza tu método de pago e intenta de nuevo.",
   "workspace.reload.retrying": "Reintentando...",
   "workspace.reload.retry": "Reintentar",
+  "workspace.reload.error.paymentFailed": "El pago falló.",
 
   "workspace.payments.title": "Historial de Pagos",
   "workspace.payments.subtitle": "Transacciones de pago recientes.",
@@ -484,6 +517,36 @@ export const dict = {
   "workspace.black.waitlist.enrolled": "Inscrito",
   "workspace.black.waitlist.enrollNote":
     "Cuando haces clic en Inscribirse, tu suscripción comienza inmediatamente y se cargará a tu tarjeta.",
+
+  "workspace.lite.loading": "Cargando...",
+  "workspace.lite.time.day": "día",
+  "workspace.lite.time.days": "días",
+  "workspace.lite.time.hour": "hora",
+  "workspace.lite.time.hours": "horas",
+  "workspace.lite.time.minute": "minuto",
+  "workspace.lite.time.minutes": "minutos",
+  "workspace.lite.time.fewSeconds": "unos pocos segundos",
+  "workspace.lite.subscription.title": "Suscripción Go",
+  "workspace.lite.subscription.message": "Estás suscrito a OpenCode Go.",
+  "workspace.lite.subscription.manage": "Gestionar Suscripción",
+  "workspace.lite.subscription.rollingUsage": "Uso Continuo",
+  "workspace.lite.subscription.weeklyUsage": "Uso Semanal",
+  "workspace.lite.subscription.monthlyUsage": "Uso Mensual",
+  "workspace.lite.subscription.resetsIn": "Se reinicia en",
+  "workspace.lite.subscription.useBalance": "Usa tu saldo disponible después de alcanzar los límites de uso",
+  "workspace.lite.subscription.selectProvider":
+    'Selecciona "OpenCode Go" como proveedor en tu configuración de opencode para usar los modelos Go.',
+  "workspace.lite.other.title": "Suscripción Go",
+  "workspace.lite.other.message":
+    "Otro miembro de este espacio de trabajo ya está suscrito a OpenCode Go. Solo un miembro por espacio de trabajo puede suscribirse.",
+  "workspace.lite.promo.title": "OpenCode Go",
+  "workspace.lite.promo.description":
+    "OpenCode Go es una suscripción de $10 al mes que proporciona acceso confiable a modelos de codificación abiertos populares con generosos límites de uso.",
+  "workspace.lite.promo.modelsTitle": "Qué incluye",
+  "workspace.lite.promo.footer":
+    "El plan está diseñado principalmente para usuarios internacionales, con modelos alojados en EE. UU., la UE y Singapur para un acceso global estable. Los precios y los límites de uso pueden cambiar a medida que aprendemos del uso inicial y los comentarios.",
+  "workspace.lite.promo.subscribe": "Suscribirse a Go",
+  "workspace.lite.promo.subscribing": "Redirigiendo...",
 
   "download.title": "OpenCode | Descargar",
   "download.meta.description": "Descarga OpenCode para macOS, Windows y Linux",
@@ -536,6 +599,10 @@ export const dict = {
   "enterprise.form.send": "Enviar",
   "enterprise.form.sending": "Enviando...",
   "enterprise.form.success": "Mensaje enviado, estaremos en contacto pronto.",
+  "enterprise.form.success.submitted": "Formulario enviado con éxito.",
+  "enterprise.form.error.allFieldsRequired": "Todos los campos son obligatorios.",
+  "enterprise.form.error.invalidEmailFormat": "Formato de correo inválido.",
+  "enterprise.form.error.internalServer": "Error interno del servidor.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "¿Qué es OpenCode Enterprise?",
   "enterprise.faq.a1":
@@ -568,6 +635,7 @@ export const dict = {
   "bench.list.table.agent": "Agente",
   "bench.list.table.model": "Modelo",
   "bench.list.table.score": "Puntuación",
+  "bench.submission.error.allFieldsRequired": "Todos los campos son obligatorios.",
 
   "bench.detail.title": "Benchmark - {{task}}",
   "bench.detail.notFound": "Tarea no encontrada",

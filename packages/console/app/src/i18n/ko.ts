@@ -15,6 +15,7 @@ export const dict = {
   "nav.home": "홈",
   "nav.openMenu": "메뉴 열기",
   "nav.getStartedFree": "무료로 시작하기",
+  "nav.logoAlt": "OpenCode",
 
   "nav.context.copyLogo": "로고를 SVG로 복사",
   "nav.context.copyWordmark": "워드마크를 SVG로 복사",
@@ -42,8 +43,12 @@ export const dict = {
   "notFound.docs": "문서",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
+  "notFound.logoLightAlt": "opencode 밝은 로고",
+  "notFound.logoDarkAlt": "opencode 어두운 로고",
 
   "user.logout": "로그아웃",
+
+  "auth.callback.error.codeMissing": "인증 코드를 찾을 수 없습니다.",
 
   "workspace.select": "워크스페이스 선택",
   "workspace.createNew": "+ 새 워크스페이스 만들기",
@@ -76,6 +81,8 @@ export const dict = {
   "error.reloadAmountMin": "충전 금액은 최소 ${{amount}}이어야 합니다",
   "error.reloadTriggerMin": "잔액 트리거는 최소 ${{amount}}이어야 합니다",
 
+  "app.meta.description": "OpenCode - 오픈 소스 코딩 에이전트.",
+
   "home.title": "OpenCode | 오픈 소스 AI 코딩 에이전트",
 
   "temp.title": "OpenCode | 터미널을 위해 만들어진 AI 코딩 에이전트",
@@ -91,6 +98,8 @@ export const dict = {
   "temp.feature.models.afterLink": "를 통해 75개 이상의 LLM 제공자 지원",
   "temp.screenshot.caption": "tokyonight 테마가 적용된 OpenCode TUI",
   "temp.screenshot.alt": "tokyonight 테마가 적용된 OpenCode TUI",
+  "temp.logoLightAlt": "opencode 밝은 로고",
+  "temp.logoDarkAlt": "opencode 어두운 로고",
 
   "home.banner.badge": "신규",
   "home.banner.text": "데스크톱 앱 베타 버전 출시",
@@ -236,11 +245,30 @@ export const dict = {
     "모든 Zen 모델은 미국에서 호스팅됩니다. 제공자들은 데이터 보존 금지 정책을 따르며 모델 학습에 데이터를 사용하지 않습니다. 단,",
   "zen.privacy.exceptionsLink": "다음 예외",
 
+  "zen.api.error.rateLimitExceeded": "속도 제한을 초과했습니다. 나중에 다시 시도해 주세요.",
+  "zen.api.error.modelNotSupported": "{{model}} 모델은 지원되지 않습니다",
+  "zen.api.error.modelFormatNotSupported": "{{model}} 모델은 {{format}} 형식에 대해 지원되지 않습니다",
+  "zen.api.error.noProviderAvailable": "사용 가능한 제공자가 없습니다",
+  "zen.api.error.providerNotSupported": "{{provider}} 제공자는 지원되지 않습니다",
+  "zen.api.error.missingApiKey": "API 키가 누락되었습니다.",
+  "zen.api.error.invalidApiKey": "유효하지 않은 API 키입니다.",
+  "zen.api.error.subscriptionQuotaExceeded": "구독 할당량을 초과했습니다. {{retryIn}} 후 다시 시도해 주세요.",
+  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
+    "구독 할당량을 초과했습니다. 무료 모델은 계속 사용할 수 있습니다.",
+  "zen.api.error.noPaymentMethod": "결제 수단이 없습니다. 결제 수단을 추가하세요: {{billingUrl}}",
+  "zen.api.error.insufficientBalance": "잔액이 부족합니다. 결제 관리를 여기서 하세요: {{billingUrl}}",
+  "zen.api.error.workspaceMonthlyLimitReached":
+    "워크스페이스의 월간 지출 한도인 ${{amount}}에 도달했습니다. 한도 관리를 여기서 하세요: {{billingUrl}}",
+  "zen.api.error.userMonthlyLimitReached":
+    "월간 지출 한도인 ${{amount}}에 도달했습니다. 한도 관리를 여기서 하세요: {{membersUrl}}",
+  "zen.api.error.modelDisabled": "모델이 비활성화되었습니다",
+
   "black.meta.title": "OpenCode Black | 세계 최고의 코딩 모델에 액세스하세요",
   "black.meta.description": "OpenCode Black 구독 플랜으로 Claude, GPT, Gemini 등에 액세스하세요.",
   "black.hero.title": "세계 최고의 코딩 모델에 액세스하세요",
   "black.hero.subtitle": "Claude, GPT, Gemini 등 포함",
   "black.title": "OpenCode Black | 가격",
+  "black.paused": "Black 플랜 등록이 일시적으로 중단되었습니다.",
   "black.plan.icon20": "Black 20 플랜",
   "black.plan.icon100": "Black 100 플랜",
   "black.plan.icon200": "Black 200 플랜",
@@ -336,12 +364,15 @@ export const dict = {
   "workspace.usage.table.input": "입력",
   "workspace.usage.table.output": "출력",
   "workspace.usage.table.cost": "비용",
+  "workspace.usage.table.session": "세션",
   "workspace.usage.breakdown.input": "입력",
   "workspace.usage.breakdown.cacheRead": "캐시 읽기",
   "workspace.usage.breakdown.cacheWrite": "캐시 쓰기",
   "workspace.usage.breakdown.output": "출력",
   "workspace.usage.breakdown.reasoning": "추론",
-  "workspace.usage.subscription": "구독 (${{amount}})",
+  "workspace.usage.subscription": "Black (${{amount}})",
+  "workspace.usage.lite": "Go (${{amount}})",
+  "workspace.usage.byok": "BYOK (${{amount}})",
 
   "workspace.cost.title": "비용",
   "workspace.cost.subtitle": "모델별 사용 비용 내역.",
@@ -350,6 +381,7 @@ export const dict = {
   "workspace.cost.deletedSuffix": "(삭제됨)",
   "workspace.cost.empty": "선택한 기간에 사용 데이터가 없습니다.",
   "workspace.cost.subscriptionShort": "구독",
+  "workspace.cost.liteShort": "lite",
 
   "workspace.keys.title": "API 키",
   "workspace.keys.subtitle": "OpenCode 서비스 액세스를 위한 API 키를 관리하세요.",
@@ -440,6 +472,7 @@ export const dict = {
   "workspace.reload.updatePaymentMethod": "결제 수단을 업데이트하고 다시 시도해 주세요.",
   "workspace.reload.retrying": "재시도 중...",
   "workspace.reload.retry": "재시도",
+  "workspace.reload.error.paymentFailed": "결제에 실패했습니다.",
 
   "workspace.payments.title": "결제 내역",
   "workspace.payments.subtitle": "최근 결제 거래 내역입니다.",
@@ -476,6 +509,36 @@ export const dict = {
   "workspace.black.waitlist.enrolling": "등록 중...",
   "workspace.black.waitlist.enrolled": "등록됨",
   "workspace.black.waitlist.enrollNote": "등록을 클릭하면 구독이 즉시 시작되며 카드에 요금이 청구됩니다.",
+
+  "workspace.lite.loading": "로드 중...",
+  "workspace.lite.time.day": "일",
+  "workspace.lite.time.days": "일",
+  "workspace.lite.time.hour": "시간",
+  "workspace.lite.time.hours": "시간",
+  "workspace.lite.time.minute": "분",
+  "workspace.lite.time.minutes": "분",
+  "workspace.lite.time.fewSeconds": "몇 초",
+  "workspace.lite.subscription.title": "Go 구독",
+  "workspace.lite.subscription.message": "현재 OpenCode Go를 구독 중입니다.",
+  "workspace.lite.subscription.manage": "구독 관리",
+  "workspace.lite.subscription.rollingUsage": "롤링 사용량",
+  "workspace.lite.subscription.weeklyUsage": "주간 사용량",
+  "workspace.lite.subscription.monthlyUsage": "월간 사용량",
+  "workspace.lite.subscription.resetsIn": "초기화까지 남은 시간:",
+  "workspace.lite.subscription.useBalance": "사용 한도 도달 후에는 보유 잔액 사용",
+  "workspace.lite.subscription.selectProvider":
+    'Go 모델을 사용하려면 opencode 설정에서 "OpenCode Go"를 공급자로 선택하세요.',
+  "workspace.lite.other.title": "Go 구독",
+  "workspace.lite.other.message":
+    "이 워크스페이스의 다른 멤버가 이미 OpenCode Go를 구독 중입니다. 워크스페이스당 한 명의 멤버만 구독할 수 있습니다.",
+  "workspace.lite.promo.title": "OpenCode Go",
+  "workspace.lite.promo.description":
+    "OpenCode Go는 넉넉한 사용 한도와 함께 인기 있는 오픈 코딩 모델에 대한 안정적인 액세스를 제공하는 월 $10의 구독입니다.",
+  "workspace.lite.promo.modelsTitle": "포함 내역",
+  "workspace.lite.promo.footer":
+    "이 플랜은 주로 글로벌 사용자를 위해 설계되었으며, 안정적인 글로벌 액세스를 위해 미국, EU 및 싱가포르에 모델이 호스팅되어 있습니다. 가격 및 사용 한도는 초기 사용을 통해 학습하고 피드백을 수집함에 따라 변경될 수 있습니다.",
+  "workspace.lite.promo.subscribe": "Go 구독하기",
+  "workspace.lite.promo.subscribing": "리디렉션 중...",
 
   "download.title": "OpenCode | 다운로드",
   "download.meta.description": "macOS, Windows, Linux용 OpenCode 다운로드",
@@ -527,6 +590,10 @@ export const dict = {
   "enterprise.form.send": "전송",
   "enterprise.form.sending": "전송 중...",
   "enterprise.form.success": "메시지가 전송되었습니다. 곧 연락드리겠습니다.",
+  "enterprise.form.success.submitted": "양식이 성공적으로 제출되었습니다.",
+  "enterprise.form.error.allFieldsRequired": "모든 필드는 필수 항목입니다.",
+  "enterprise.form.error.invalidEmailFormat": "유효하지 않은 이메일 형식입니다.",
+  "enterprise.form.error.internalServer": "내부 서버 오류입니다.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "OpenCode 엔터프라이즈란 무엇인가요?",
   "enterprise.faq.a1":
@@ -559,6 +626,7 @@ export const dict = {
   "bench.list.table.agent": "에이전트",
   "bench.list.table.model": "모델",
   "bench.list.table.score": "점수",
+  "bench.submission.error.allFieldsRequired": "모든 필드는 필수 항목입니다.",
 
   "bench.detail.title": "벤치마크 - {{task}}",
   "bench.detail.notFound": "태스크를 찾을 수 없음",
