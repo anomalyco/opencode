@@ -36,10 +36,22 @@ export namespace SessionProcessor {
     let attempt = 0
     let needsCompaction = false
     let turnToolTokens = 0
+    let toolBudgetRemaining = Infinity
 
     const result = {
       get message() {
         return input.assistantMessage
+      },
+      get toolBudget() {
+        return {
+          get remaining() { return toolBudgetRemaining },
+          reserve(tokens: number) { toolBudgetRemaining -= tokens },
+          adjust(reserved: number, actual: number) { toolBudgetRemaining += reserved - actual },
+          exceeded() { return toolBudgetRemaining <= 0 },
+        }
+      },
+      initToolBudget(remaining: number) {
+        toolBudgetRemaining = remaining
       },
       partFromToolCall(toolCallID: string) {
         return toolcalls[toolCallID]
@@ -198,6 +210,7 @@ export namespace SessionProcessor {
                       },
                     })
                     turnToolTokens += Token.estimate(typeof value.output.output === "string" ? value.output.output : JSON.stringify(value.output.output))
+                    if (toolBudgetRemaining <= 0) needsCompaction = true
 
                     delete toolcalls[value.toolCallId]
                   }

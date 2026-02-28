@@ -187,7 +187,7 @@ export class KiroLanguageModel implements LanguageModelV2 {
     const payload = convertToKiroPayload(options.prompt, kiroModelId, functionTools, kiroProviderOptions)
 
     // Pre-flight context overflow check — let the compaction system handle it
-    const KIRO_CONTEXT_LIMIT = 180_000
+    const KIRO_CONTEXT_LIMIT = 210_000
     const KIRO_PAYLOAD_BYTE_LIMIT = 450_000
     const estimated = estimatePayloadTokens(payload)
     const payloadBytes = Buffer.byteLength(JSON.stringify(payload), "utf-8")

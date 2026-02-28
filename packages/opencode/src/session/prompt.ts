@@ -46,6 +46,7 @@ import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncation"
+import { Token } from "@/util/token"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -614,6 +615,16 @@ export namespace SessionPrompt {
       const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
       const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
 
+
+      // Initialize tool budget: estimate how many tokens are left for tool results
+      {
+        const modelMessages = MessageV2.toModelMessages(clone(msgs), model)
+        const historyTokens = modelMessages.reduce((sum, m) => sum + SessionCompaction.estimateMessageTokens(m), 0)
+        const usable = SessionCompaction.usableTokens(model)
+        const remaining = usable - historyTokens
+        processor.initToolBudget(remaining)
+      }
+
       const tools = await resolveTools({
         agent,
         session,
@@ -807,6 +818,16 @@ export namespace SessionPrompt {
         inputSchema: jsonSchema(schema as any),
         async execute(args, options) {
           const ctx = context(args, options)
+          const reservation = 5000
+          input.processor.toolBudget.reserve(reservation)
+          if (input.processor.toolBudget.exceeded()) {
+            input.processor.toolBudget.adjust(reservation, 0)
+            return {
+              output: `Tool execution skipped: context budget exceeded. Process the results you have and call remaining tools in the next turn if needed.`,
+              title: item.id,
+              metadata: { budgetExceeded: true },
+            }
+          }
           await Plugin.trigger(
             "tool.execute.before",
             {
@@ -828,6 +849,9 @@ export namespace SessionPrompt {
               messageID: input.processor.message.id,
             })),
           }
+          const outputStr = typeof output.output === "string" ? output.output : JSON.stringify(output.output)
+          const actual = Math.ceil(Token.estimate(outputStr) * 1.3)
+          input.processor.toolBudget.adjust(reservation, actual)
           await Plugin.trigger(
             "tool.execute.after",
             {
@@ -852,7 +876,15 @@ export namespace SessionPrompt {
       // Wrap execute to add plugin hooks and format output
       item.execute = async (args, opts) => {
         const ctx = context(args, opts)
+        const reservation = 5000
+        input.processor.toolBudget.reserve(reservation)
 
+        if (input.processor.toolBudget.exceeded()) {
+          input.processor.toolBudget.adjust(reservation, 0)
+          return {
+            content: [{ type: "text" as const, text: `Tool execution skipped: context budget exceeded. Process the results you have and call remaining tools in the next turn if needed.` }],
+          }
+        }
         await Plugin.trigger(
           "tool.execute.before",
           {
@@ -920,6 +952,8 @@ export namespace SessionPrompt {
           ...(truncated.truncated && { outputPath: truncated.outputPath }),
         }
 
+        const actual = Math.ceil(Token.estimate(truncated.content) * 1.3)
+        input.processor.toolBudget.adjust(reservation, actual)
         return {
           title: "",
           metadata,

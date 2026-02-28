@@ -14,6 +14,7 @@ import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { ProviderTransform } from "@/provider/transform"
+import { Todo } from "./todo"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -235,7 +236,11 @@ When constructing the summary, try to stick to this template:
 [Construct a structured list of relevant files that have been read, edited, or created that pertain to the task at hand. If all the files in a directory are relevant, include the path to the directory.]
 ---`
 
-    const promptText = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
+    const todos = Todo.get(input.sessionID)
+    const todoSection = todos.length
+      ? `\n\nIMPORTANT — Current task progress (todo list). Use this as the authoritative source for what has been accomplished and what remains:\n${todos.map((t, i) => `${i + 1}. [${t.status}] ${t.content}`).join("\n")}`
+      : ""
+    const promptText = compacting.prompt ?? [defaultPrompt + todoSection, ...compacting.context].join("\n\n")
     const compactionPrompt = {
       role: "user" as const,
       content: [{ type: "text" as const, text: promptText }],
