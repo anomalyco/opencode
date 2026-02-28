@@ -3,6 +3,7 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout, type LocalProject, getAvatarColors } from "@/context/layout"
 import { useNotification } from "@/context/notification"
+import { usePermission } from "@/context/permission"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { Avatar } from "@opencode-ai/ui/avatar"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
@@ -16,16 +17,27 @@ import { getFilename } from "@opencode-ai/util/path"
 import { type Message, type Session, type TextPart, type UserMessage } from "@opencode-ai/sdk/v2/client"
 import { For, Match, Show, Switch, createMemo, onCleanup, type Accessor, type JSX } from "solid-js"
 import { agentColor } from "@/utils/agent"
+import { hasProjectPermissions } from "./helpers"
+import { sessionPermissionRequest } from "../session/composer/session-request-tree"
 
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
 export const ProjectIcon = (props: { project: LocalProject; class?: string; notify?: boolean }): JSX.Element => {
+  const globalSync = useGlobalSync()
   const notification = useNotification()
+  const permission = usePermission()
   const dirs = createMemo(() => [props.project.worktree, ...(props.project.sandboxes ?? [])])
   const unseenCount = createMemo(() =>
     dirs().reduce((total, directory) => total + notification.project.unseenCount(directory), 0),
   )
   const hasError = createMemo(() => dirs().some((directory) => notification.project.unseenHasError(directory)))
+  const hasPermissions = createMemo(() =>
+    dirs().some((directory) => {
+      const [store] = globalSync.child(directory, { bootstrap: false })
+      return hasProjectPermissions(store.permission, (item) => !permission.autoResponds(item, directory))
+    }),
+  )
+  const notify = createMemo(() => props.notify && (hasPermissions() || unseenCount() > 0))
   const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
   return (
     <div class={`relative size-8 shrink-0 rounded ${props.class ?? ""}`}>
@@ -37,15 +49,16 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
           }
           {...getAvatarColors(props.project.icon?.color)}
           class="size-full rounded"
-          classList={{ "badge-mask": unseenCount() > 0 && props.notify }}
+          classList={{ "badge-mask": notify() }}
         />
       </div>
-      <Show when={unseenCount() > 0 && props.notify}>
+      <Show when={notify()}>
         <div
           classList={{
             "absolute top-px right-px size-1.5 rounded-full z-10": true,
-            "bg-icon-critical-base": hasError(),
-            "bg-text-interactive-base": !hasError(),
+            "bg-surface-warning-strong": hasPermissions(),
+            "bg-icon-critical-base": !hasPermissions() && hasError(),
+            "bg-text-interactive-base": !hasPermissions() && !hasError(),
           }}
         />
       </Show>
@@ -186,19 +199,15 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const layout = useLayout()
   const language = useLanguage()
   const notification = useNotification()
+  const permission = usePermission()
   const globalSync = useGlobalSync()
   const unseenCount = createMemo(() => notification.session.unseenCount(props.session.id))
   const hasError = createMemo(() => notification.session.unseenHasError(props.session.id))
   const [sessionStore] = globalSync.child(props.session.directory)
   const hasPermissions = createMemo(() => {
-    const permissions = sessionStore.permission?.[props.session.id] ?? []
-    if (permissions.length > 0) return true
-
-    for (const id of props.children.get(props.session.id) ?? []) {
-      const childPermissions = sessionStore.permission?.[id] ?? []
-      if (childPermissions.length > 0) return true
-    }
-    return false
+    return !!sessionPermissionRequest(sessionStore.session, sessionStore.permission, props.session.id, (item) => {
+      return !permission.autoResponds(item, props.session.directory)
+    })
   })
   const isWorking = createMemo(() => {
     if (hasPermissions()) return false

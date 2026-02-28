@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { fn } from "./util/fn"
 import { Resource } from "@opencode-ai/console-resource"
-import { SubscriptionPlan } from "./schema/billing.sql"
+import { BlackPlans } from "./schema/billing.sql"
 
 export namespace BlackData {
   const Schema = z.object({
@@ -28,7 +28,7 @@ export namespace BlackData {
 
   export const getLimits = fn(
     z.object({
-      plan: z.enum(SubscriptionPlan),
+      plan: z.enum(BlackPlans),
     }),
     ({ plan }) => {
       const json = JSON.parse(Resource.ZEN_BLACK_LIMITS.value)
@@ -36,9 +36,11 @@ export namespace BlackData {
     },
   )
 
+  export const productID = fn(z.void(), () => Resource.ZEN_BLACK_PRICE.product)
+
   export const planToPriceID = fn(
     z.object({
-      plan: z.enum(SubscriptionPlan),
+      plan: z.enum(BlackPlans),
     }),
     ({ plan }) => {
       if (plan === "200") return Resource.ZEN_BLACK_PRICE.plan200

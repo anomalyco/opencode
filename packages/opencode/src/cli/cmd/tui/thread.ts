@@ -12,6 +12,8 @@ import { Filesystem } from "@/util/filesystem"
 import type { Event } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
+import { TuiConfig } from "@/config/tui"
+import { Instance } from "@/project/instance"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -135,6 +137,10 @@ export const TuiThreadCommand = cmd({
         if (!args.prompt) return piped
         return piped ? piped + "\n" + args.prompt : args.prompt
       })
+      const config = await Instance.provide({
+        directory: cwd,
+        fn: () => TuiConfig.get(),
+      })
 
       // Check if server should be started (port or hostname explicitly set in CLI or config)
       const networkOpts = await resolveNetworkOptions(args)
@@ -163,6 +169,8 @@ export const TuiThreadCommand = cmd({
 
       const tuiPromise = tui({
         url,
+        config,
+        directory: cwd,
         fetch: customFetch,
         events,
         args: {

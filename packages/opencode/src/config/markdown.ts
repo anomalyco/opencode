@@ -22,7 +22,7 @@ export namespace ConfigMarkdown {
     if (!match) return content
 
     const frontmatter = match[1]
-    const lines = frontmatter.split("\n")
+    const lines = frontmatter.split(/\r?\n/)
     const result: string[] = []
 
     for (const line of lines) {
