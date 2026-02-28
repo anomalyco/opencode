@@ -197,7 +197,7 @@ export namespace ACP {
                 const diff = typeof metadata["diff"] === "string" ? metadata["diff"] : ""
                 if (filepath && diff) {
                   const oldText = (await Filesystem.exists(filepath)) ? await Filesystem.readText(filepath) : ""
-                  const newText = getNewContent(content, diff)
+                  const newText = getNewContent(oldText, diff)
                   diffContext = { type: "diff", path: filepath, oldText, newText }
                 }
               }
