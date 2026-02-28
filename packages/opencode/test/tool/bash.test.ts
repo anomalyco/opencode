@@ -507,7 +507,8 @@ describe("tool.bash truncation", () => {
         // Small build output with warnings/errors - stays in memory
         const result = await bash.execute(
           {
-            command: `echo "compiling..."; echo "warning: unused variable"; echo "done"; echo "error: type mismatch"`,
+            command:
+              "bun -e \"console.log('compiling...');console.log('warning: unused variable');console.log('done');console.log('error: type mismatch')\"",
             output_filter: "^(warning|error):",
             description: "Build with filter (small)",
           },
