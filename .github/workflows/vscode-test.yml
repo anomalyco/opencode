@@ -1,0 +1,38 @@
+name: VS Code Extension Tests
+
+on:
+  push:
+    branches: [dev]
+    paths: [sdks/vscode/**]
+  pull_request:
+    paths: [sdks/vscode/**]
+
+jobs:
+  vscode:
+    name: vscode (${{ matrix.os }})
+    strategy:
+      matrix:
+        os: [blacksmith-4vcpu-ubuntu-2404, blacksmith-4vcpu-windows-2025]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-bun
+
+      - name: Install vscode dependencies
+        run: bun install --cwd sdks/vscode --dev
+        shell: bash
+
+      - name: Install xvfb
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: Build
+        run: bun --cwd sdks/vscode run compile
+
+      - name: Test
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" bun run --cwd sdks/vscode test
+
+      - name: Test
+        if: runner.os == 'Windows'
+        run: bun --cwd sdks/vscode run test

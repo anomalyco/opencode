@@ -1,17 +1,19 @@
-// This method is called when your extension is deactivated
-export function deactivate() {}
-
 import * as vscode from "vscode"
+import { OpenCodeChatParticipant } from "./vscode/participant"
+import { ActivationController } from "./vscode/activation"
 
 const TERMINAL_NAME = "opencode"
 
 export function activate(context: vscode.ExtensionContext) {
+  // Create activation controller for on-demand ACP process management
+  const activationController = new ActivationController(context)
+
+  // Register terminal commands
   let openNewTerminalDisposable = vscode.commands.registerCommand("opencode.openNewTerminal", async () => {
     await openTerminal()
   })
 
   let openTerminalDisposable = vscode.commands.registerCommand("opencode.openTerminal", async () => {
-    // An opencode terminal already exists => focus it
     const existingTerminal = vscode.window.terminals.find((t) => t.name === TERMINAL_NAME)
     if (existingTerminal) {
       existingTerminal.show()
@@ -23,24 +25,25 @@ export function activate(context: vscode.ExtensionContext) {
 
   let addFilepathDisposable = vscode.commands.registerCommand("opencode.addFilepathToTerminal", async () => {
     const fileRef = getActiveFile()
-    if (!fileRef) {
-      return
-    }
+    if (!fileRef) return
 
     const terminal = vscode.window.activeTerminal
-    if (!terminal) {
-      return
-    }
+    if (!terminal) return
 
     if (terminal.name === TERMINAL_NAME) {
-      // @ts-ignore
-      const port = terminal.creationOptions.env?.["_EXTENSION_OPENCODE_PORT"]
+      const opts = terminal.creationOptions as any
+      const port = opts?.env?._EXTENSION_OPENCODE_PORT
       port ? await appendPrompt(parseInt(port), fileRef) : terminal.sendText(fileRef, false)
       terminal.show()
     }
   })
 
-  context.subscriptions.push(openTerminalDisposable, addFilepathDisposable)
+  context.subscriptions.push(openNewTerminalDisposable, openTerminalDisposable, addFilepathDisposable)
+
+  // Register OpenCode chat participant with activation controller
+  const participant = new OpenCodeChatParticipant(context, activationController)
+  participant.register()
+  context.subscriptions.push({ dispose: () => participant.dispose() })
 
   async function openTerminal() {
     // Create a new terminal in split screen

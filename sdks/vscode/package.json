@@ -23,6 +23,25 @@
   "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
+    "chatParticipants": [
+      {
+        "id": "opencode",
+        "name": "opencode",
+        "fullName": "OpenCode",
+        "description": "AI coding assistant powered by OpenCode",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "new",
+            "description": "Start a new session"
+          },
+          {
+            "name": "clear",
+            "description": "Clear conversation"
+          }
+        ]
+      }
+    ],
     "commands": [
       {
         "command": "opencode.openTerminal",
@@ -86,7 +105,7 @@
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
     "package": "bun run check-types && bun run lint && node esbuild.js --production",
-    "compile-tests": "tsc -p . --outDir out",
+    "compile-tests": "tsc -p tsconfig.test.json",
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "bun run compile-tests && bun run compile && bun run lint",
     "check-types": "tsc --noEmit",
