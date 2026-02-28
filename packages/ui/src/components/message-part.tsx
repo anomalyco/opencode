@@ -250,6 +250,11 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
         icon: "bubble-5",
         title: i18n.t("ui.tool.questions"),
       }
+    case "skill":
+      return {
+        icon: "brain",
+        title: input.name || "skill",
+      }
     default:
       return {
         icon: "mcp",
@@ -1898,5 +1903,27 @@ ToolRegistry.register({
         </Show>
       </BasicTool>
     )
+  },
+})
+
+ToolRegistry.register({
+  name: "skill",
+  render(props) {
+    const title = createMemo(() => props.input.name || "skill")
+    const running = createMemo(() => props.status === "pending" || props.status === "running")
+
+    const titleContent = () => <TextShimmer text={title()} active={running()} />
+
+    const trigger = () => (
+      <div data-slot="basic-tool-tool-info-structured">
+        <div data-slot="basic-tool-tool-info-main">
+          <span data-slot="basic-tool-tool-title" class="capitalize agent-title">
+            {titleContent()}
+          </span>
+        </div>
+      </div>
+    )
+
+    return <BasicTool icon="brain" status={props.status} trigger={trigger()} hideDetails />
   },
 })
