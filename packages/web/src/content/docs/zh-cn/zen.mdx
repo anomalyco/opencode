@@ -64,19 +64,22 @@ OpenCode Zen 的工作方式与 OpenCode 中的任何其他提供商相同。
 | GPT 5              | gpt-5              | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5 Codex        | gpt-5-codex        | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5 Nano         | gpt-5-nano         | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| Claude Opus 4.6    | claude-opus-4-6    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.5    | claude-opus-4-5    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.1    | claude-opus-4-1    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Sonnet 4.6  | claude-sonnet-4-6  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Claude Sonnet 4.5  | claude-sonnet-4-5  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Claude Sonnet 4    | claude-sonnet-4    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Claude Haiku 4.5   | claude-haiku-4-5   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Claude Haiku 3.5   | claude-3-5-haiku   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Opus 4.6    | claude-opus-4-6    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Opus 4.5    | claude-opus-4-5    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Opus 4.1    | claude-opus-4-1    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Gemini 3.1 Pro     | gemini-3.1-pro     | `https://opencode.ai/zen/v1/models/gemini-3.1-pro` | `@ai-sdk/google`            |
 | Gemini 3 Pro       | gemini-3-pro       | `https://opencode.ai/zen/v1/models/gemini-3-pro`   | `@ai-sdk/google`            |
 | Gemini 3 Flash     | gemini-3-flash     | `https://opencode.ai/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
 | MiniMax M2.5       | minimax-m2.5       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | MiniMax M2.5 Free  | minimax-m2.5-free  | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | MiniMax M2.1       | minimax-m2.1       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | GLM 5              | glm-5              | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| GLM 5 Free         | glm-5-free         | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | GLM 4.7            | glm-4.7            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | GLM 4.6            | glm-4.6            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Kimi K2.5          | kimi-k2.5          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
@@ -104,42 +107,47 @@ https://opencode.ai/zen/v1/models
 
 我们支持按量付费模式。以下是**每 100 万 Token** 的价格。
 
-| 模型                             | 输入   | 输出   | 缓存读取 | 缓存写入 |
-| -------------------------------- | ------ | ------ | -------- | -------- |
-| Big Pickle                       | 免费   | 免费   | 免费     | -        |
-| MiniMax M2.5 Free                | 免费   | 免费   | 免费     | -        |
-| MiniMax M2.5                     | $0.30  | $1.20  | $0.06    | -        |
-| MiniMax M2.1                     | $0.30  | $1.20  | $0.10    | -        |
-| GLM 5                            | $1.00  | $3.20  | $0.20    | -        |
-| GLM 4.7                          | $0.60  | $2.20  | $0.10    | -        |
-| GLM 4.6                          | $0.60  | $2.20  | $0.10    | -        |
-| Kimi K2.5 Free                   | 免费   | 免费   | 免费     | -        |
-| Kimi K2.5                        | $0.60  | $3.00  | $0.08    | -        |
-| Kimi K2 Thinking                 | $0.40  | $2.50  | -        | -        |
-| Kimi K2                          | $0.40  | $2.50  | -        | -        |
-| Qwen3 Coder 480B                 | $0.45  | $1.50  | -        | -        |
-| Claude Sonnet 4.5 (≤ 200K Token) | $3.00  | $15.00 | $0.30    | $3.75    |
-| Claude Sonnet 4.5 (> 200K Token) | $6.00  | $22.50 | $0.60    | $7.50    |
-| Claude Sonnet 4 (≤ 200K Token)   | $3.00  | $15.00 | $0.30    | $3.75    |
-| Claude Sonnet 4 (> 200K Token)   | $6.00  | $22.50 | $0.60    | $7.50    |
-| Claude Haiku 4.5                 | $1.00  | $5.00  | $0.10    | $1.25    |
-| Claude Haiku 3.5                 | $0.80  | $4.00  | $0.08    | $1.00    |
-| Claude Opus 4.6 (≤ 200K Token)   | $5.00  | $25.00 | $0.50    | $6.25    |
-| Claude Opus 4.6 (> 200K Token)   | $10.00 | $37.50 | $1.00    | $12.50   |
-| Claude Opus 4.5                  | $5.00  | $25.00 | $0.50    | $6.25    |
-| Claude Opus 4.1                  | $15.00 | $75.00 | $1.50    | $18.75   |
-| Gemini 3 Pro (≤ 200K Token)      | $2.00  | $12.00 | $0.20    | -        |
-| Gemini 3 Pro (> 200K Token)      | $4.00  | $18.00 | $0.40    | -        |
-| Gemini 3 Flash                   | $0.50  | $3.00  | $0.05    | -        |
-| GPT 5.2                          | $1.75  | $14.00 | $0.175   | -        |
-| GPT 5.2 Codex                    | $1.75  | $14.00 | $0.175   | -        |
-| GPT 5.1                          | $1.07  | $8.50  | $0.107   | -        |
-| GPT 5.1 Codex                    | $1.07  | $8.50  | $0.107   | -        |
-| GPT 5.1 Codex Max                | $1.25  | $10.00 | $0.125   | -        |
-| GPT 5.1 Codex Mini               | $0.25  | $2.00  | $0.025   | -        |
-| GPT 5                            | $1.07  | $8.50  | $0.107   | -        |
-| GPT 5 Codex                      | $1.07  | $8.50  | $0.107   | -        |
-| GPT 5 Nano                       | 免费   | 免费   | 免费     | -        |
+| 模型                              | 输入   | 输出   | 缓存读取 | 缓存写入 |
+| --------------------------------- | ------ | ------ | -------- | -------- |
+| Big Pickle                        | 免费   | 免费   | 免费     | -        |
+| MiniMax M2.5 Free                 | 免费   | 免费   | 免费     | -        |
+| MiniMax M2.5                      | $0.30  | $1.20  | $0.06    | -        |
+| MiniMax M2.1                      | $0.30  | $1.20  | $0.10    | -        |
+| GLM 5 Free                        | Free   | Free   | Free     | -        |
+| GLM 5                             | $1.00  | $3.20  | $0.20    | -        |
+| GLM 4.7                           | $0.60  | $2.20  | $0.10    | -        |
+| GLM 4.6                           | $0.60  | $2.20  | $0.10    | -        |
+| Kimi K2.5 Free                    | 免费   | 免费   | 免费     | -        |
+| Kimi K2.5                         | $0.60  | $3.00  | $0.08    | -        |
+| Kimi K2 Thinking                  | $0.40  | $2.50  | -        | -        |
+| Kimi K2                           | $0.40  | $2.50  | -        | -        |
+| Qwen3 Coder 480B                  | $0.45  | $1.50  | -        | -        |
+| Claude Opus 4.6 (≤ 200K tokens)   | $5.00  | $25.00 | $0.50    | $6.25    |
+| Claude Opus 4.6 (> 200K tokens)   | $10.00 | $37.50 | $1.00    | $12.50   |
+| Claude Opus 4.5                   | $5.00  | $25.00 | $0.50    | $6.25    |
+| Claude Opus 4.1                   | $15.00 | $75.00 | $1.50    | $18.75   |
+| Claude Sonnet 4.6 (≤ 200K tokens) | $3.00  | $15.00 | $0.30    | $3.75    |
+| Claude Sonnet 4.6 (> 200K tokens) | $6.00  | $22.50 | $0.60    | $7.50    |
+| Claude Sonnet 4.5 (≤ 200K tokens) | $3.00  | $15.00 | $0.30    | $3.75    |
+| Claude Sonnet 4.5 (> 200K tokens) | $6.00  | $22.50 | $0.60    | $7.50    |
+| Claude Sonnet 4 (≤ 200K tokens)   | $3.00  | $15.00 | $0.30    | $3.75    |
+| Claude Sonnet 4 (> 200K tokens)   | $6.00  | $22.50 | $0.60    | $7.50    |
+| Claude Haiku 4.5                  | $1.00  | $5.00  | $0.10    | $1.25    |
+| Claude Haiku 3.5                  | $0.80  | $4.00  | $0.08    | $1.00    |
+| Gemini 3.1 Pro (≤ 200K tokens)    | $2.00  | $12.00 | $0.20    | -        |
+| Gemini 3.1 Pro (> 200K tokens)    | $4.00  | $18.00 | $0.40    | -        |
+| Gemini 3 Pro (≤ 200K tokens)      | $2.00  | $12.00 | $0.20    | -        |
+| Gemini 3 Pro (> 200K tokens)      | $4.00  | $18.00 | $0.40    | -        |
+| Gemini 3 Flash                    | $0.50  | $3.00  | $0.05    | -        |
+| GPT 5.2                           | $1.75  | $14.00 | $0.175   | -        |
+| GPT 5.2 Codex                     | $1.75  | $14.00 | $0.175   | -        |
+| GPT 5.1                           | $1.07  | $8.50  | $0.107   | -        |
+| GPT 5.1 Codex                     | $1.07  | $8.50  | $0.107   | -        |
+| GPT 5.1 Codex Max                 | $1.25  | $10.00 | $0.125   | -        |
+| GPT 5.1 Codex Mini                | $0.25  | $2.00  | $0.025   | -        |
+| GPT 5                             | $1.07  | $8.50  | $0.107   | -        |
+| GPT 5 Codex                       | $1.07  | $8.50  | $0.107   | -        |
+| GPT 5 Nano                        | 免费   | 免费   | 免费     | -        |
 
 你可能会在使用记录中看到 _Claude Haiku 3.5_。这是一个[低成本模型](/docs/config/#models)，用于生成会话标题。
 
@@ -149,6 +157,7 @@ https://opencode.ai/zen/v1/models
 
 免费模型说明：
 
+- GLM 5 Free 在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
 - Kimi K2.5 Free 在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
 - MiniMax M2.5 Free 在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
 - Big Pickle 是一个隐身模型，在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
@@ -178,6 +187,7 @@ https://opencode.ai/zen/v1/models
 我们所有的模型都托管在美国。我们的提供商遵循零保留政策，不会将你的数据用于模型训练，但以下情况除外：
 
 - Big Pickle：在免费期间，收集的数据可能会被用于改进模型。
+- GLM 5 Free：在免费期间，收集的数据可能会被用于改进模型。
 - Kimi K2.5 Free：在免费期间，收集的数据可能会被用于改进模型。
 - MiniMax M2.5 Free：在免费期间，收集的数据可能会被用于改进模型。
 - OpenAI API：请求会根据 [OpenAI 数据政策](https://platform.openai.com/docs/guides/your-data)保留 30 天。

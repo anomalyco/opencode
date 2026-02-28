@@ -97,4 +97,44 @@ describe("pty", () => {
       },
     })
   })
+
+  test("treats in-place socket data mutation as the same connection", async () => {
+    await using dir = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: dir.path,
+      fn: async () => {
+        const a = await Pty.create({ command: "cat", title: "a" })
+        try {
+          const out: string[] = []
+
+          const ctx = { connId: 1 }
+          const ws = {
+            readyState: 1,
+            data: ctx,
+            send: (data: unknown) => {
+              out.push(typeof data === "string" ? data : Buffer.from(data as Uint8Array).toString("utf8"))
+            },
+            close: () => {
+              // no-op
+            },
+          }
+
+          Pty.connect(a.id, ws as any)
+          out.length = 0
+
+          // Mutating fields on ws.data should not look like a new
+          // connection lifecycle when the object identity stays stable.
+          ctx.connId = 2
+
+          Pty.write(a.id, "AAA\n")
+          await Bun.sleep(100)
+
+          expect(out.join("")).toContain("AAA")
+        } finally {
+          await Pty.remove(a.id)
+        }
+      },
+    })
+  })
 })

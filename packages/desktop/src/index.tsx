@@ -17,7 +17,6 @@ import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification"
-import { openPath as openerOpenPath } from "@tauri-apps/plugin-opener"
 import { type as ostype } from "@tauri-apps/plugin-os"
 import { relaunch } from "@tauri-apps/plugin-process"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
@@ -116,20 +115,7 @@ const createPlatform = (): Platform => {
       void shellOpen(url).catch(() => undefined)
     },
     async openPath(path: string, app?: string) {
-      const os = ostype()
-      if (os === "windows") {
-        const resolvedApp = (app && (await commands.resolveAppPath(app))) || app
-        const resolvedPath = await (async () => {
-          if (window.__OPENCODE__?.wsl) {
-            const converted = await commands.wslPath(path, "windows").catch(() => null)
-            if (converted) return converted
-          }
-
-          return path
-        })()
-        return openerOpenPath(resolvedPath, resolvedApp)
-      }
-      return openerOpenPath(path, app)
+      await commands.openPath(path, app ?? null)
     },
 
     back() {
@@ -459,7 +445,7 @@ render(() => {
             }
             const server: ServerConnection.Any = data.is_sidecar
               ? {
-                  displayName: "Local Server",
+                  displayName: t("desktop.server.local"),
                   type: "sidecar",
                   variant: "base",
                   http,
@@ -491,34 +477,19 @@ render(() => {
 // Gate component that waits for the server to be ready
 function ServerGate(props: { children: (data: ServerReadyData) => JSX.Element }) {
   const [serverData] = createResource(() => commands.awaitInitialization(new Channel<InitStep>() as any))
+  if (serverData.state === "errored") throw serverData.error
 
   return (
     <Show
-      when={serverData.state !== "errored"}
+      when={serverData.state !== "pending" && serverData()}
       fallback={
-        <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base gap-4">
-          <Splash class="w-16 h-20 opacity-50" />
-          <div class="max-w-md px-4 text-center">
-            <p class="text-sm font-medium text-red-400">Failed to start server</p>
-            <p class="mt-2 text-xs text-zinc-400 break-words whitespace-pre-wrap">
-              {String(serverData.error ?? "Unknown error")}
-            </p>
-          </div>
+        <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
+          <Splash class="w-16 h-20 opacity-50 animate-pulse" />
           <div data-tauri-decorum-tb class="flex flex-row absolute top-0 right-0 z-10 h-10" />
         </div>
       }
     >
-      <Show
-        when={serverData.state !== "pending" && serverData()}
-        fallback={
-          <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
-            <Splash class="w-16 h-20 opacity-50 animate-pulse" />
-            <div data-tauri-decorum-tb class="flex flex-row absolute top-0 right-0 z-10 h-10" />
-          </div>
-        }
-      >
-        {(data) => props.children(data())}
-      </Show>
+      {(data) => props.children(data())}
     </Show>
   )
 }
