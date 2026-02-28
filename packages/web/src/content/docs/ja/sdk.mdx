@@ -1,0 +1,391 @@
+---
+title: SDK
+description: OpenCode サーバー用の型安全な JS クライアント。
+---
+
+import config from "../../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+OpenCode JS/TS SDK は、サーバーと対話するための型安全なクライアントを提供します。
+これを使用して、統合を構築し、OpenCode をプログラムで制御します。
+
+[サーバーの仕組みについての詳細](/docs/server) をご覧ください。たとえば、コミュニティによって構築された [projects](/docs/ecosystem#projects) をチェックしてください。
+
+---
+
+## インストール
+
+npm から SDK をインストールします。
+
+```bash
+npm install @opencode-ai/sdk
+```
+
+---
+
+## クライアントの作成
+
+OpenCode のインスタンスを作成します。
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const { client } = await createOpencode()
+```
+
+これにより、サーバーとクライアントの両方が起動します
+
+#### オプション
+
+| オプション | タイプ        | 説明                                | デフォルト  |
+| ---------- | ------------- | ----------------------------------- | ----------- |
+| `hostname` | `string`      | サーバーのホスト名                  | `127.0.0.1` |
+| `port`     | `number`      | サーバーポート                      | `4096`      |
+| `signal`   | `AbortSignal` | キャンセルのためのアボート信号      | `undefined` |
+| `timeout`  | `number`      | サーバー起動のタイムアウト (ミリ秒) | `5000`      |
+| `config`   | `Config`      | 設定オブジェクト                    | `{}`        |
+
+---
+
+## 設定
+
+設定オブジェクトを渡して動作をカスタマイズできます。インスタンスは引き続き `opencode.json` を取得しますが、設定をインラインでオーバーライドまたは追加することができます。
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const opencode = await createOpencode({
+  hostname: "127.0.0.1",
+  port: 4096,
+  config: {
+    model: "anthropic/claude-3-5-sonnet-20241022",
+  },
+})
+
+console.log(`Server running at ${opencode.server.url}`)
+
+opencode.server.close()
+```
+
+## クライアントのみ
+
+すでに実行中の OpenCode のインスタンスがある場合は、それに接続するためのクライアントインスタンスを作成できます。
+
+```javascript
+import { createOpencodeClient } from "@opencode-ai/sdk"
+
+const client = createOpencodeClient({
+  baseUrl: "http://localhost:4096",
+})
+```
+
+#### オプション
+
+| オプション      | タイプ     | 説明                                     | デフォルト              |
+| --------------- | ---------- | ---------------------------------------- | ----------------------- |
+| `baseUrl`       | `string`   | サーバーの URL                           | `http://localhost:4096` |
+| `fetch`         | `function` | カスタムフェッチの実装                   | `globalThis.fetch`      |
+| `parseAs`       | `string`   | 応答解析方法                             | `auto`                  |
+| `responseStyle` | `string`   | 戻り値のスタイル: `data` または `fields` | `fields`                |
+| `throwOnError`  | `boolean`  | 返す代わりにエラーをスローする           | `false`                 |
+
+---
+
+## 型定義
+
+SDK には、すべての API タイプの TypeScript 定義が含まれています。それらを直接インポートします。
+
+```typescript
+import type { Session, Message, Part } from "@opencode-ai/sdk"
+```
+
+すべてのタイプはサーバーの OpenAPI 仕様から生成され、<a href={typesUrl}>タイプファイル</a> で使用できます。
+
+---
+
+## エラー
+
+SDK は、キャッチして処理できるエラーをスローできます。
+
+```typescript
+try {
+  await client.session.get({ path: { id: "invalid-id" } })
+} catch (error) {
+  console.error("Failed to get session:", (error as Error).message)
+}
+```
+
+---
+
+## API
+
+SDK は、型安全なクライアントを通じてすべてのサーバー API を公開します。
+
+---
+
+### Global
+
+| メソッド          | 説明                                   | 戻り値                               |
+| ----------------- | -------------------------------------- | ------------------------------------ |
+| `global.health()` | サーバーの健全性とバージョンを確認する | `{ healthy: true, version: string }` |
+
+---
+
+#### 例
+
+```javascript
+const health = await client.global.health()
+console.log(health.data.version)
+```
+
+---
+
+### App
+
+| メソッド       | 説明                                       | 戻り値                                      |
+| -------------- | ------------------------------------------ | ------------------------------------------- |
+| `app.log()`    | ログエントリを書き込む                     | `boolean`                                   |
+| `app.agents()` | 利用可能なすべてのエージェントをリストする | <a href={typesUrl}><code>Agent[]</code></a> |
+
+---
+
+#### 例
+
+```javascript
+// Write a log entry
+await client.app.log({
+  body: {
+    service: "my-app",
+    level: "info",
+    message: "Operation completed",
+  },
+})
+
+// List available agents
+const agents = await client.app.agents()
+```
+
+---
+
+### Project
+
+| メソッド            | 説明                             | 戻り値                                        |
+| ------------------- | -------------------------------- | --------------------------------------------- |
+| `project.list()`    | すべてのプロジェクトをリストする | <a href={typesUrl}><code>Project[]</code></a> |
+| `project.current()` | 現在のプロジェクトを取得         | <a href={typesUrl}><code>Project</code></a>   |
+
+---
+
+#### 例
+
+```javascript
+// List all projects
+const projects = await client.project.list()
+
+// Get current project
+const currentProject = await client.project.current()
+```
+
+---
+
+### Path
+
+| メソッド     | 説明             | 戻り値                                   |
+| ------------ | ---------------- | ---------------------------------------- |
+| `path.get()` | 現在のパスを取得 | <a href={typesUrl}><code>Path</code></a> |
+
+---
+
+#### 例
+
+```javascript
+// Get current path information
+const pathInfo = await client.path.get()
+```
+
+---
+
+### Config
+
+| メソッド             | 説明                                         | 戻り値                                                                                                |
+| -------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `config.get()`       | 設定情報を取得する                           | <a href={typesUrl}><code>Config</code></a>                                                            |
+| `config.providers()` | プロバイダーとデフォルトのモデルをリストする | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
+
+---
+
+#### 例
+
+```javascript
+const config = await client.config.get()
+
+const { providers, default: defaults } = await client.config.providers()
+```
+
+---
+
+### Sessions
+
+| メソッド                                                   | 説明                                    | 詳細                                                                                                                                                               |
+| ---------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `session.list()`                                           | セッションをリストする                  | 戻り値 <a href={typesUrl}><code>Session[]</code></a>                                                                                                               |
+| `session.get({ path })`                                    | セッションを取得                        | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
+| `session.children({ path })`                               | 子セッションをリストする                | 戻り値 <a href={typesUrl}><code>Session[]</code></a>                                                                                                               |
+| `session.create({ body })`                                 | セッションの作成                        | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
+| `session.delete({ path })`                                 | セッションを削除                        | 戻り値 `boolean`                                                                                                                                                   |
+| `session.update({ path, body })`                           | セッションのプロパティを更新する        | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
+| `session.init({ path, body })`                             | アプリを分析して `AGENTS.md` を作成する | 戻り値 `boolean`                                                                                                                                                   |
+| `session.abort({ path })`                                  | 実行中のセッションを中止する            | 戻り値 `boolean`                                                                                                                                                   |
+| `session.share({ path })`                                  | セッションを共有する                    | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
+| `session.unshare({ path })`                                | セッションの共有を解除                  | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
+| `session.summarize({ path, body })`                        | セッションを要約する                    | 戻り値 `boolean`                                                                                                                                                   |
+| `session.messages({ path })`                               | セッション内のメッセージをリストする    | 戻り値 `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                                             |
+| `session.message({ path })`                                | メッセージの詳細を取得する              | 戻り値 `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                               |
+| `session.prompt({ path, body })`                           | プロンプトメッセージを送信する          | `body.noReply: true` は UserMessage (コンテキストのみ) を返します。デフォルトでは、AI 応答を含む <a href={typesUrl}><code>AssistantMessage</code></a> を返します。 |
+| `session.command({ path, body })`                          | コマンドをセッションに送信              | 戻り値 `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                      |
+| `session.shell({ path, body })`                            | シェルコマンドを実行する                | 戻り値 <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                                        |
+| `session.revert({ path, body })`                           | メッセージを元に戻す                    | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
+| `session.unrevert({ path })`                               | 元に戻したメッセージを復元する          | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
+| `postSessionByIdPermissionsByPermissionId({ path, body })` | 許可リクエストに応答する                | 戻り値 `boolean`                                                                                                                                                   |
+
+---
+
+#### 例
+
+```javascript
+// Create and manage sessions
+const session = await client.session.create({
+  body: { title: "My session" },
+})
+
+const sessions = await client.session.list()
+
+// Send a prompt message
+const result = await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    model: { providerID: "anthropic", modelID: "claude-3-5-sonnet-20241022" },
+    parts: [{ type: "text", text: "Hello!" }],
+  },
+})
+
+// Inject context without triggering AI response (useful for plugins)
+await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    noReply: true,
+    parts: [{ type: "text", text: "You are a helpful assistant." }],
+  },
+})
+```
+
+---
+
+### Files
+
+| メソッド                  | 説明                               | 戻り値                                                                                      |
+| ------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------- |
+| `find.text({ query })`    | Search for text in files           | Array of match objects with `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
+| `find.files({ query })`   | Find files and directories by name | `string[]` (paths)                                                                          |
+| `find.symbols({ query })` | Find workspace symbols             | <a href={typesUrl}><code>Symbol[]</code></a>                                                |
+| `file.read({ query })`    | Read a file                        | `{ type: "raw" \| "patch", content: string }`                                               |
+| `file.status({ query? })` | Get status for tracked files       | <a href={typesUrl}><code>File[]</code></a>                                                  |
+
+`find.files` は、いくつかのオプションのクエリフィールドをサポートしています。
+
+- `type`: `"file"` または `"directory"`
+- `directory`: 検索用のプロジェクトルートをオーバーライドします。
+- `limit`: 最大結果 (1 ～ 200)
+
+---
+
+#### 例
+
+```javascript
+// Search and read files
+const textResults = await client.find.text({
+  query: { pattern: "function.*opencode" },
+})
+
+const files = await client.find.files({
+  query: { query: "*.ts", type: "file" },
+})
+
+const directories = await client.find.files({
+  query: { query: "packages", type: "directory", limit: 20 },
+})
+
+const content = await client.file.read({
+  query: { path: "src/index.ts" },
+})
+```
+
+---
+
+### TUI
+
+| メソッド                       | 説明                             | 戻り値    |
+| ------------------------------ | -------------------------------- | --------- |
+| `tui.appendPrompt({ body })`   | プロンプトにテキストを追加します | `boolean` |
+| `tui.openHelp()`               | ヘルプダイアログを開く           | `boolean` |
+| `tui.openSessions()`           | セッションセレクターを開く       | `boolean` |
+| `tui.openThemes()`             | テーマセレクターを開く           | `boolean` |
+| `tui.openModels()`             | モデルセレクターを開く           | `boolean` |
+| `tui.submitPrompt()`           | 現在のプロンプトを送信します     | `boolean` |
+| `tui.clearPrompt()`            | プロンプトをクリア               | `boolean` |
+| `tui.executeCommand({ body })` | コマンドを実行する               | `boolean` |
+| `tui.showToast({ body })`      | トースト通知を表示               | `boolean` |
+
+---
+
+#### 例
+
+```javascript
+// Control TUI interface
+await client.tui.appendPrompt({
+  body: { text: "Add this to prompt" },
+})
+
+await client.tui.showToast({
+  body: { message: "Task completed", variant: "success" },
+})
+```
+
+---
+
+### Auth
+
+| メソッド            | 説明                   | 戻り値    |
+| ------------------- | ---------------------- | --------- |
+| `auth.set({ ... })` | 認証資格情報を設定する | `boolean` |
+
+---
+
+#### 例
+
+```javascript
+await client.auth.set({
+  path: { id: "anthropic" },
+  body: { type: "api", key: "your-api-key" },
+})
+```
+
+---
+
+### Events
+
+| メソッド            | 説明                           | 戻り値                         |
+| ------------------- | ------------------------------ | ------------------------------ |
+| `event.subscribe()` | サーバー送信イベントストリーム | サーバー送信イベントストリーム |
+
+---
+
+#### 例
+
+```javascript
+// Listen to real-time events
+const events = await client.event.subscribe()
+for await (const event of events.stream) {
+  console.log("Event:", event.type, event.properties)
+}
+```

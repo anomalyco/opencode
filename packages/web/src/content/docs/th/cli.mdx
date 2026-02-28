@@ -1,0 +1,604 @@
+---
+title: CLI
+description: สัญญาณและคำสั่งของ OpenCode CLI
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
+OpenCode CLI จะเริ่มต้น [TUI](/docs/tui) เป็นค่าเริ่มต้นเมื่อเรียกใช้โดยไม่มีอาร์กิวเมนต์
+
+```bash
+opencode
+```
+
+นอกจากนี้ยังรับคำสั่งและแฟล็ก ซึ่งช่วยให้คุณใช้ OpenCode ผ่านโปรแกรมได้
+
+```bash
+opencode run "Explain how closures work in JavaScript"
+```
+
+---
+
+### tui
+
+เริ่ม TUI เพื่อใช้ OpenCode แบบโต้ตอบ
+
+```bash
+opencode [project]
+```
+
+#### แฟล็ก
+
+| แฟล็ก        | สั้น | คำอธิบาย                                                   |
+| ------------ | ---- | ---------------------------------------------------------- |
+| `--continue` | `-c` | ดำเนินการต่อจากเซสชันล่าสุด                                |
+| `--session`  | `-s` | ID เซสชันเพื่อดำเนินการต่อ                                 |
+| `--fork`     |      | แยกเซสชันเมื่อทำต่อ (ใช้กับ `--continue` หรือ `--session`) |
+| `--prompt`   |      | พรอมต์เริ่มต้นที่จะใช้                                     |
+| `--model`    | `-m` | โมเดลที่จะใช้ในรูปแบบ provider/model                       |
+| `--agent`    |      | เอเจนต์ที่จะใช้                                            |
+| `--port`     |      | พอร์ตที่จะฟัง                                              |
+| `--hostname` |      | ชื่อโฮสต์ที่จะฟัง                                          |
+
+---
+
+## คำสั่ง
+
+OpenCode CLI ยังมีคำสั่งย่อยอีกมากมาย
+
+---
+
+### agent
+
+จัดการเอเจนต์สำหรับ OpenCode
+
+```bash
+opencode agent [command]
+```
+
+---
+
+### attach
+
+เชื่อมต่อกับเซิร์ฟเวอร์แบ็กเอนด์ OpenCode ที่กำลังทำงานอยู่ ซึ่งเริ่มต้นผ่านคำสั่ง `serve` หรือ `web`
+
+```bash
+opencode attach [url]
+```
+
+วิธีนี้ช่วยให้คุณใช้ TUI กับแบ็กเอนด์ OpenCode ระยะไกลได้ ตัวอย่าง:
+
+```bash
+# Start the backend server for web/mobile access
+opencode web --port 4096 --hostname 0.0.0.0
+
+# In another terminal, attach the TUI to the running backend
+opencode attach http://10.20.30.40:4096
+```
+
+#### แฟล็ก
+
+| แฟล็ก       | สั้น | คำอธิบาย                               |
+| ----------- | ---- | -------------------------------------- |
+| `--dir`     |      | ไดเร็กทอรีการทำงานเพื่อเริ่มต้น TUI ใน |
+| `--session` | `-s` | ID เซสชันเพื่อดำเนินการต่อ             |
+
+---
+
+#### create
+
+สร้างเอเจนต์ใหม่
+
+```bash
+opencode agent create
+```
+
+คำสั่งนี้จะแนะนำคุณตลอดกระบวนการสร้างเอเจนต์ใหม่ พร้อมพรอมต์ระบบและความสามารถของเครื่องมือ
+
+---
+
+#### list
+
+แสดงรายชื่อเอเจนต์ที่พร้อมใช้งานทั้งหมด
+
+```bash
+opencode agent list
+```
+
+---
+
+### auth
+
+จัดการการตรวจสอบสิทธิ์และข้อมูลรับรอง
+
+```bash
+opencode auth [command]
+```
+
+---
+
+#### login
+
+OpenCode ได้รับการกำหนดค่าไว้ล่วงหน้าด้วยรายชื่อผู้ให้บริการทั่วไปที่ [Models.dev](https://models.dev) ดังนั้นคุณเพียงแค่ต้องใส่คีย์ API สำหรับผู้ให้บริการที่คุณต้องการใช้ ข้อมูลนี้จะถูกเก็บไว้ที่ `~/.local/share/opencode/auth.json`
+
+```bash
+opencode auth login
+```
+
+เมื่อ OpenCode เริ่มต้น ระบบจะโหลดข้อมูลรับรองจากไฟล์นี้ ดังนั้นคุณจึงไม่ต้องกังวลกับการตั้งค่าตัวแปรสภาพแวดล้อมหรือไฟล์ `.env` ในโปรเจ็กต์ของคุณ
+
+---
+
+#### list
+
+แสดงรายการข้อมูลรับรองการตรวจสอบสิทธิ์ทั้งหมดที่กำหนดค่าไว้
+
+```bash
+opencode auth list
+```
+
+หรือใช้นามแฝงสั้น
+
+```bash
+opencode auth ls
+```
+
+---
+
+#### logout
+
+ออกจากระบบของผู้ให้บริการและลบข้อมูลรับรองออกจากไฟล์ auth
+
+```bash
+opencode auth logout
+```
+
+---
+
+### github
+
+จัดการเอเจนต์ GitHub สำหรับเวิร์กโฟลว์อัตโนมัติ
+
+```bash
+opencode github [command]
+```
+
+---
+
+#### install
+
+ติดตั้งเอเจนต์ GitHub ใน repository ของคุณ
+
+```bash
+opencode github install
+```
+
+คำสั่งนี้จะสร้างเวิร์กโฟลว์ GitHub Actions และแนะนำคุณตลอดกระบวนการตั้งค่า [เรียนรู้เพิ่มเติม](/docs/github)
+
+---
+
+#### run
+
+รันเอเจนต์ GitHub ด้วยตนเองหรือใน GitHub Actions
+
+```bash
+opencode github run
+```
+
+##### แฟล็ก
+
+| แฟล็ก     | คำอธิบาย                               |
+| --------- | -------------------------------------- |
+| `--event` | เหตุการณ์ GitHub เพื่อทริกเกอร์เอเจนต์ |
+| `--token` | GitHub token                           |
+
+---
+
+### mcp
+
+จัดการเซิร์ฟเวอร์ Model Context Protocol (MCP)
+
+```bash
+opencode mcp [command]
+```
+
+---
+
+#### add
+
+เพิ่มเซิร์ฟเวอร์ MCP ลงในการกำหนดค่าของคุณ
+
+```bash
+opencode mcp add
+```
+
+คำสั่งนี้จะแนะนำคุณผ่านวิซาร์ดเพื่อกำหนดค่าเซิร์ฟเวอร์ MCP ใหม่
+
+---
+
+#### list
+
+แสดงรายชื่อเซิร์ฟเวอร์ MCP ทั้งหมดที่กำหนดค่าไว้และสถานะ
+
+```bash
+opencode mcp list
+```
+
+หรือใช้นามแฝงสั้น
+
+```bash
+opencode mcp ls
+```
+
+---
+
+#### auth
+
+ยืนยันตัวตนกับเซิร์ฟเวอร์ MCP ที่ต้องการ OAuth
+
+```bash
+opencode mcp auth [name]
+```
+
+หากไม่ระบุชื่อเซิร์ฟเวอร์ คุณจะได้รับแจ้งให้เลือกจากเซิร์ฟเวอร์ที่รองรับ OAuth ที่พร้อมใช้งาน
+
+คุณยังสามารถแสดงรายการสถานะการตรวจสอบสิทธิ์ OAuth ได้:
+
+```bash
+opencode mcp auth list
+```
+
+หรือใช้นามแฝงสั้น
+
+```bash
+opencode mcp auth ls
+```
+
+---
+
+#### logout
+
+ลบข้อมูลรับรอง OAuth สำหรับเซิร์ฟเวอร์ MCP
+
+```bash
+opencode mcp logout [name]
+```
+
+---
+
+#### debug
+
+ดีบักการเชื่อมต่อเซิร์ฟเวอร์ MCP
+
+```bash
+opencode mcp debug <name>
+```
+
+---
+
+### models
+
+แสดงรายการโมเดลที่พร้อมใช้งานทั้งหมดจากผู้ให้บริการที่กำหนดค่าไว้
+
+```bash
+opencode models [provider]
+```
+
+คำสั่งนี้จะแสดง ID โมเดลทั้งหมดในรูปแบบ `provider/model`
+
+คุณสามารถใช้ชื่อโมเดลเหล่านี้ในการกำหนดค่า [config](/docs/config/) ของคุณ
+
+คุณยังสามารถส่งผ่านรหัสผู้ให้บริการเพื่อกรองโมเดลตามผู้ให้บริการรายนั้นได้
+
+```bash
+opencode models anthropic
+```
+
+#### แฟล็ก
+
+| แฟล็ก       | คำอธิบาย                                               |
+| ----------- | ------------------------------------------------------ |
+| `--refresh` | รีเฟรชแคชโมเดลจาก models.dev                           |
+| `--verbose` | แสดงรายละเอียดโมเดลเพิ่มเติม (รวมข้อมูลเมตาเช่นต้นทุน) |
+| `--json`    | แสดงผลลัพธ์เป็น JSON                                   |
+
+ใช้แฟล็ก `--refresh` เพื่ออัปเดตรายการโมเดลที่แคชไว้ มีประโยชน์เมื่อมีการเพิ่มโมเดลใหม่ให้กับผู้ให้บริการและคุณต้องการเห็นใน OpenCode
+
+```bash
+opencode models --refresh
+```
+
+---
+
+### run
+
+รัน OpenCode โดยไม่ต้องใช้ TUI โดยส่งพรอมต์โดยตรง
+
+```bash
+opencode run [message..]
+```
+
+มีประโยชน์สำหรับการทำงานอัตโนมัติหรือเมื่อต้องการคำตอบอย่างรวดเร็วโดยไม่ต้องเปิด TUI ตัวอย่าง:
+
+```bash "opencode run"
+opencode run Explain the use of context in Go
+```
+
+คุณยังสามารถแนบไปกับเซิร์ฟเวอร์ `opencode serve` ที่ทำงานอยู่ หรือใช้เซิร์ฟเวอร์ MCP แบบ headless:
+
+```bash
+# Start a headless server in one terminal
+opencode serve
+
+# In another terminal, run commands that attach to it
+opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+```
+
+#### แฟล็ก
+
+| แฟล็ก        | สั้น | คำอธิบาย                                                               |
+| ------------ | ---- | ---------------------------------------------------------------------- |
+| `--command`  |      | คำสั่งที่จะรัน (ใช้ส่วนที่เหลือของ args เป็นอาร์กิวเมนต์)              |
+| `--continue` | `-c` | ดำเนินการต่อจากเซสชันล่าสุด                                            |
+| `--session`  | `-s` | ID เซสชันเพื่อดำเนินการต่อ                                             |
+| `--fork`     |      | แยกเซสชันเมื่อทำต่อ (ใช้กับ `--continue` หรือ `--session`)             |
+| `--share`    |      | สร้างลิงก์แชร์สำหรับเซสชัน                                             |
+| `--model`    | `-m` | โมเดลที่จะใช้ในรูปแบบ provider/model                                   |
+| `--agent`    |      | เอเจนต์ที่จะใช้                                                        |
+| `--file`     | `-f` | แนบไฟล์ไปกับข้อความ                                                    |
+| `--format`   |      | รูปแบบเอาต์พุต: text (จัดรูปแบบ) หรือ json (JSON ดิบ)                  |
+| `--title`    |      | ชื่อสำหรับเซสชัน (หากไม่ได้ระบุ จะสร้างจากพรอมต์)                      |
+| `--attach`   |      | แนบไปกับเซิร์ฟเวอร์ opencode ที่ทำงานอยู่ (เช่น http://localhost:4096) |
+| `--port`     |      | พอร์ตสำหรับเซิร์ฟเวอร์ภายในเครื่อง (หากไม่ได้ระบุ จะใช้พอร์ตสุ่ม)      |
+
+---
+
+### serve
+
+เริ่มต้นเซิร์ฟเวอร์ OpenCode headless ที่ให้บริการ API HTTP ดู [เอกสารเซิร์ฟเวอร์](/docs/server) สำหรับรายละเอียด API เต็มรูปแบบ
+
+```bash
+opencode serve
+```
+
+คำสั่งนี้จะเริ่มต้นเซิร์ฟเวอร์ HTTP ให้ API เข้าถึงฟังก์ชันการทำงานของ OpenCode ได้โดยไม่ต้องมี TUI นอกจากนี้ยังรองรับการตรวจสอบสิทธิ์พื้นฐาน HTTP (ชื่อผู้ใช้เริ่มต้นคือ `opencode` และรหัสผ่านระบุโดย `OPENCODE_SERVER_PASSWORD`)
+
+#### แฟล็ก
+
+| แฟล็ก        | คำอธิบาย                               |
+| ------------ | -------------------------------------- |
+| `--port`     | พอร์ตที่จะฟัง                          |
+| `--hostname` | ชื่อโฮสต์ที่จะฟัง                      |
+| `--mdns`     | เปิดใช้งานการค้นหา mDNS                |
+| `--cors`     | ต้นกำเนิดเพิ่มเติมที่อนุญาตสำหรับ CORS |
+
+---
+
+### session
+
+จัดการเซสชัน OpenCode
+
+```bash
+opencode session [command]
+```
+
+---
+
+#### list
+
+แสดงรายการเซสชัน OpenCode ทั้งหมด
+
+```bash
+opencode session list
+```
+
+##### แฟล็ก
+
+| แฟล็ก         | สั้น | คำอธิบาย                      |
+| ------------- | ---- | ----------------------------- |
+| `--max-count` | `-n` | จำกัดการแสดงผล N รายการล่าสุด |
+| `--format`    |      | รูปแบบ table หรือ json        |
+
+---
+
+### stats
+
+แสดงสถิติการใช้งานและค่าใช้จ่ายสำหรับ OpenCode ของคุณ
+
+```bash
+opencode stats
+```
+
+#### แฟล็ก
+
+| แฟล็ก       | คำอธิบาย                                             |
+| ----------- | ---------------------------------------------------- |
+| `--days`    | แสดงสถิติของ N วันที่ผ่านมา (ค่าเริ่มต้น: ตลอดเวลา)  |
+| `--tools`   | แสดงสถิติการใช้เครื่องมือ                            |
+| `--models`  | แสดงรายละเอียดการใช้งานโมเดล (ซ่อนไว้ตามค่าเริ่มต้น) |
+| `--project` | กรองตามโครงการ (ค่าเริ่มต้น: โครงการปัจจุบัน)        |
+
+---
+
+### export
+
+ส่งออกประวัติเซสชันเป็น JSON
+
+```bash
+opencode export [sessionID]
+```
+
+หากไม่ระบุรหัสเซสชัน คุณจะได้รับแจ้งให้เลือกจากรายการล่าสุด
+
+---
+
+### import
+
+นำเข้าเซสชันจากไฟล์ JSON หรือ URL ที่แชร์ของ OpenCode
+
+```bash
+opencode import <file>
+```
+
+คุณสามารถนำเข้าไฟล์ในเครื่องหรือ URL ที่แชร์
+
+```bash
+opencode import session.json
+opencode import https://opncd.ai/s/abc123
+```
+
+---
+
+### web
+
+เริ่ม OpenCode ในโหมดเซิร์ฟเวอร์พร้อมเว็บอินเตอร์เฟส
+
+```bash
+opencode web
+```
+
+คำสั่งนี้จะเริ่มต้นเซิร์ฟเวอร์ HTTP และเปิดเว็บเบราว์เซอร์เพื่อเข้าถึง OpenCode ผ่านทางเว็บอินเตอร์เฟส รองรับการตรวจสอบสิทธิ์พื้นฐาน HTTP (ชื่อผู้ใช้เริ่มต้นคือ `opencode` และรหัสผ่านระบุโดย `OPENCODE_SERVER_PASSWORD`)
+
+#### แฟล็ก
+
+| แฟล็ก        | คำอธิบาย                               |
+| ------------ | -------------------------------------- |
+| `--port`     | พอร์ตที่จะฟัง                          |
+| `--hostname` | ชื่อโฮสต์ที่จะฟัง                      |
+| `--mdns`     | เปิดใช้งานการค้นหา mDNS                |
+| `--cors`     | ต้นกำเนิดเพิ่มเติมที่อนุญาตสำหรับ CORS |
+
+---
+
+### acp
+
+เริ่มต้นเซิร์ฟเวอร์ ACP (Agent Client Protocol)
+
+```bash
+opencode acp
+```
+
+คำสั่งนี้เริ่มต้นเซิร์ฟเวอร์ ACP ที่สื่อสารผ่าน stdin/stdout ด้วย nd-JSON
+
+#### แฟล็ก
+
+| แฟล็ก        | คำอธิบาย           |
+| ------------ | ------------------ |
+| `--cwd`      | ไดเร็กทอรีการทำงาน |
+| `--port`     | พอร์ตที่จะฟัง      |
+| `--hostname` | ชื่อโฮสต์ที่จะฟัง  |
+
+---
+
+### uninstall
+
+ถอนการติดตั้ง OpenCode และลบข้อมูลการกำหนดค่าทั้งหมด
+
+```bash
+opencode uninstall
+```
+
+#### แฟล็ก
+
+| แฟล็ก           | สั้น | คำอธิบาย                            |
+| --------------- | ---- | ----------------------------------- |
+| `--keep-config` | `-c` | เก็บไฟล์การกำหนดค่าไว้              |
+| `--keep-data`   | `-d` | เก็บไฟล์ข้อมูล (เซสชันและสแน็ปช็อต) |
+| `--dry-run`     |      | แสดงสิ่งที่จะลบออกโดยไม่ต้องทำจริง  |
+| `--force`       | `-f` | บังคับลบโดยไม่มีการแจ้งเตือน        |
+
+---
+
+### upgrade
+
+อัปเกรด OpenCode เป็นเวอร์ชันล่าสุดหรือเวอร์ชันที่ระบุ
+
+```bash
+opencode upgrade [target]
+```
+
+อัปเกรดเป็นเวอร์ชันล่าสุด
+
+```bash
+opencode upgrade
+```
+
+อัปเกรดเป็นเวอร์ชันที่ระบุ
+
+```bash
+opencode upgrade v0.1.48
+```
+
+#### แฟล็ก
+
+| แฟล็ก      | สั้น | คำอธิบาย                                        |
+| ---------- | ---- | ----------------------------------------------- |
+| `--method` | `-m` | วิธีการติดตั้งที่ใช้ curl, npm, pnpm, bun, brew |
+
+---
+
+## แฟล็กระดับโลก
+
+OpenCode CLI ยอมรับแฟล็กสากลต่อไปนี้สำหรับทุกคำสั่ง
+
+| แฟล็ก          | สั้น | คำอธิบาย                                  |
+| -------------- | ---- | ----------------------------------------- |
+| `--help`       | `-h` | แสดงความช่วยเหลือ                         |
+| `--version`    | `-v` | พิมพ์เวอร์ชัน                             |
+| `--print-logs` |      | พิมพ์บันทึกไปยัง stderr                   |
+| `--log-level`  |      | ระดับการบันทึก (DEBUG, INFO, WARN, ERROR) |
+
+---
+
+## ตัวแปรสภาพแวดล้อม
+
+OpenCode สามารถกำหนดค่าโดยใช้ตัวแปรสภาพแวดล้อม
+
+| ตัวแปร                                | ชนิด    | คำอธิบาย                                                         |
+| ------------------------------------- | ------- | ---------------------------------------------------------------- |
+| `OPENCODE_AUTO_SHARE`                 | Boolean | แชร์เซสชันอัตโนมัติเมื่อสร้าง                                    |
+| `OPENCODE_GIT_BASH_PATH`              | String  | เส้นทางไปยัง Git Bash บน Windows                                 |
+| `OPENCODE_CONFIG`                     | String  | เส้นทางไปยังไฟล์การกำหนดค่า                                      |
+| `OPENCODE_CONFIG_DIR`                 | String  | เส้นทางไปยังไดเร็กทอรีการกำหนดค่า                                |
+| `OPENCODE_CONFIG_CONTENT`             | String  | เนื้อหาการกำหนดค่าแบบ inline JSON                                |
+| `OPENCODE_DISABLE_AUTOUPDATE`         | Boolean | ปิดใช้งานการอัปเดตอัตโนมัติ                                      |
+| `OPENCODE_DISABLE_PRUNE`              | Boolean | ปิดใช้งานการลบข้อมูลเซสชันเก่า                                   |
+| `OPENCODE_DISABLE_TERMINAL_TITLE`     | Boolean | ปิดใช้งานการตั้งชื่อหน้าต่าง terminal                            |
+| `OPENCODE_PERMISSION`                 | String  | การกำหนดค่าสิทธิ์แบบ inline JSON                                 |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | Boolean | ปิดใช้งานปลั๊กอินเริ่มต้น                                        |
+| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | Boolean | ปิดใช้งานการดาวน์โหลด LSP อัตโนมัติ                              |
+| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | Boolean | เปิดใช้งานโมเดลทดลอง                                             |
+| `OPENCODE_DISABLE_AUTOCOMPACT`        | Boolean | ปิดใช้งานการบีบอัดบริบทอัตโนมัติ                                 |
+| `OPENCODE_DISABLE_CLAUDE_CODE`        | Boolean | ปิดใช้งานการนำเข้าจาก `.claude` (prompt + skills)                |
+| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | Boolean | ปิดใช้งานการนำเข้า `~/.claude/CLAUDE.md`                         |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | Boolean | ปิดใช้งานการนำเข้า `.claude/skills`                              |
+| `OPENCODE_DISABLE_MODELS_FETCH`       | Boolean | ปิดใช้งานการดึงรายการโมเดลจากระยะไกล                             |
+| `OPENCODE_FAKE_VCS`                   | String  | เปิดใช้งาน VCS จำลองสำหรับการทดสอบ                               |
+| `OPENCODE_DISABLE_FILETIME_CHECK`     | Boolean | ปิดใช้งานการตรวจสอบเวลาแก้ไขไฟล์                                 |
+| `OPENCODE_CLIENT`                     | String  | ตัวระบุไคลเอนต์ (ค่าเริ่มต้นคือ `cli`)                           |
+| `OPENCODE_ENABLE_EXA`                 | Boolean | เปิดใช้งานการใช้ Exa แทน ls หากมี                                |
+| `OPENCODE_SERVER_PASSWORD`            | String  | รหัสผ่านสำหรับการตรวจสอบสิทธิ์พื้นฐาน `serve`/`web`              |
+| `OPENCODE_SERVER_USERNAME`            | String  | ชื่อผู้ใช้สำหรับการตรวจสอบสิทธิ์พื้นฐาน (ค่าเริ่มต้น `opencode`) |
+| `OPENCODE_MODELS_URL`                 | String  | URL ที่กำหนดเองสำหรับการดึงรายการโมเดล                           |
+
+---
+
+### ขั้นทดลอง
+
+ตัวแปรสภาพแวดล้อมเหล่านี้เปิดใช้งานฟีเจอร์ทดลองที่อาจมีการเปลี่ยนแปลงหรือถูกลบออก
+
+| ตัวแปร                                          | ชนิด    | คำอธิบาย                                       |
+| ----------------------------------------------- | ------- | ---------------------------------------------- |
+| `OPENCODE_EXPERIMENTAL`                         | Boolean | เปิดใช้งานฟีเจอร์ทดลองทั้งหมด                  |
+| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | Boolean | การค้นหาไอคอนทดลอง                             |
+| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | Boolean | ปิดใช้งานการคัดลอกเมื่อเลือกใน TUI             |
+| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | Number  | การหมดเวลาเริ่มต้นสำหรับคำสั่ง bash ในหน่วย ms |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | Number  | ขีดจำกัดสูงสุดสำหรับโทเค็นเอาต์พุต LLM         |
+| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | Boolean | เปิดใช้งานตัวเฝ้าดูไฟล์สำหรับไดเร็กทอรีทั้งหมด |
+| `OPENCODE_EXPERIMENTAL_OXFMT`                   | Boolean | ใช้ oxfmt เป็นตัวจัดรูปแบบ                     |
+| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | Boolean | เปิดใช้งานเครื่องมือ LSP ทดลอง                 |
+| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | Boolean | ปิดใช้งานตัวเฝ้าดูไฟล์                         |
+| `OPENCODE_EXPERIMENTAL_EXA`                     | Boolean | ฟีเจอร์ Exa ทดลอง                              |
+| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | Boolean | การตรวจสอบประเภท LSP แบบทดลอง                  |
+| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | Boolean | ใช้ Markdown renderer แบบทดลอง                 |
+| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | Boolean | เปิดใช้งาน Plan mode                           |

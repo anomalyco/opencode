@@ -33,6 +33,8 @@ export function DialogEditProject(props: { project: LocalProject }) {
     iconHover: false,
   })
 
+  let iconInput: HTMLInputElement | undefined
+
   function handleFileSelect(file: File) {
     if (!file.type.startsWith("image/")) return
     const reader = new FileReader()
@@ -72,31 +74,35 @@ export function DialogEditProject(props: { project: LocalProject }) {
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault()
 
-    setStore("saving", true)
-    const name = store.name.trim() === folderName() ? "" : store.name.trim()
-    const start = store.startup.trim()
+    await Promise.resolve()
+      .then(async () => {
+        setStore("saving", true)
+        const name = store.name.trim() === folderName() ? "" : store.name.trim()
+        const start = store.startup.trim()
 
-    if (props.project.id && props.project.id !== "global") {
-      await globalSDK.client.project.update({
-        projectID: props.project.id,
-        directory: props.project.worktree,
-        name,
-        icon: { color: store.color, override: store.iconUrl },
-        commands: { start },
+        if (props.project.id && props.project.id !== "global") {
+          await globalSDK.client.project.update({
+            projectID: props.project.id,
+            directory: props.project.worktree,
+            name,
+            icon: { color: store.color, override: store.iconUrl },
+            commands: { start },
+          })
+          globalSync.project.icon(props.project.worktree, store.iconUrl || undefined)
+          dialog.close()
+          return
+        }
+
+        globalSync.project.meta(props.project.worktree, {
+          name,
+          icon: { color: store.color, override: store.iconUrl || undefined },
+          commands: { start: start || undefined },
+        })
+        dialog.close()
       })
-      globalSync.project.icon(props.project.worktree, store.iconUrl || undefined)
-      setStore("saving", false)
-      dialog.close()
-      return
-    }
-
-    globalSync.project.meta(props.project.worktree, {
-      name,
-      icon: { color: store.color, override: store.iconUrl || undefined },
-      commands: { start: start || undefined },
-    })
-    setStore("saving", false)
-    dialog.close()
+      .finally(() => {
+        setStore("saving", false)
+      })
   }
 
   return (
@@ -134,7 +140,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
                     if (store.iconUrl && store.iconHover) {
                       clearIcon()
                     } else {
-                      document.getElementById("icon-upload")?.click()
+                      iconInput?.click()
                     }
                   }}
                 >
@@ -158,25 +164,34 @@ export function DialogEditProject(props: { project: LocalProject }) {
                   </Show>
                 </div>
                 <div
-                  class="absolute inset-0 size-16 bg-black/60 rounded-[6px] z-10 pointer-events-none flex items-center justify-center transition-opacity"
+                  class="absolute inset-0 size-16 bg-surface-raised-stronger-non-alpha/90 rounded-[6px] z-10 pointer-events-none flex items-center justify-center transition-opacity"
                   classList={{
                     "opacity-100": store.iconHover && !store.iconUrl,
                     "opacity-0": !(store.iconHover && !store.iconUrl),
                   }}
                 >
-                  <Icon name="cloud-upload" size="large" class="text-icon-invert-base" />
+                  <Icon name="cloud-upload" size="large" class="text-icon-on-interactive-base drop-shadow-sm" />
                 </div>
                 <div
-                  class="absolute inset-0 size-16 bg-black/60 rounded-[6px] z-10 pointer-events-none flex items-center justify-center transition-opacity"
+                  class="absolute inset-0 size-16 bg-surface-raised-stronger-non-alpha/90 rounded-[6px] z-10 pointer-events-none flex items-center justify-center transition-opacity"
                   classList={{
                     "opacity-100": store.iconHover && !!store.iconUrl,
                     "opacity-0": !(store.iconHover && !!store.iconUrl),
                   }}
                 >
-                  <Icon name="trash" size="large" class="text-icon-invert-base" />
+                  <Icon name="trash" size="large" class="text-icon-on-interactive-base drop-shadow-sm" />
                 </div>
               </div>
-              <input id="icon-upload" type="file" accept="image/*" class="hidden" onChange={handleInputChange} />
+              <input
+                id="icon-upload"
+                ref={(el) => {
+                  iconInput = el
+                }}
+                type="file"
+                accept="image/*"
+                class="hidden"
+                onChange={handleInputChange}
+              />
               <div class="flex flex-col gap-1.5 text-12-regular text-text-weak self-center">
                 <span>{language.t("dialog.project.edit.icon.hint")}</span>
                 <span>{language.t("dialog.project.edit.icon.recommended")}</span>
@@ -223,7 +238,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
             value={store.startup}
             onChange={(v) => setStore("startup", v)}
             spellcheck={false}
-            class="max-h-40 w-full font-mono text-xs no-scrollbar"
+            class="max-h-14 w-full overflow-y-auto font-mono text-xs"
           />
         </div>
 
