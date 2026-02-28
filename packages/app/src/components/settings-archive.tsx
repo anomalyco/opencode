@@ -164,7 +164,7 @@ export const SettingsArchive: Component = () => {
                       <Show when={session.time?.updated}>
                         {(updated) => (
                           <span class="text-12-regular text-text-weak whitespace-nowrap">
-                            {getRelativeTime(new Date(updated()).toISOString())}
+                            {getRelativeTime(new Date(updated()).toISOString(), language.t)}
                           </span>
                         )}
                       </Show>
