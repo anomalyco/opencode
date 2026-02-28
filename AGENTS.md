@@ -111,3 +111,12 @@ const table = sqliteTable("session", {
 - Avoid mocks as much as possible
 - Test actual implementation, do not duplicate logic into tests
 - Tests cannot run from repo root (guard: `do-not-run-tests-from-root`); run from package dirs like `packages/opencode`.
+
+## Cursor Cloud specific instructions
+
+- **Runtime**: Bun 1.3.10 is required (`packageManager` field in root `package.json`). The update script installs it automatically.
+- **Dev commands**: see `CONTRIBUTING.md` for all `bun dev` subcommands (`serve`, `web`, etc.). `bun dev serve` starts the headless API server on port 4096; the web UI is built into the server and served at the same port.
+- **Typecheck**: `bun typecheck` from repo root runs turbo typecheck across all packages (includes building dependencies first).
+- **Tests**: run `bun test --timeout 30000` from `packages/opencode` (not from repo root). The pre-push hook also runs typecheck.
+- **No external services needed**: The core product uses an embedded SQLite database. No Docker, PostgreSQL, or Redis is required for local development.
+- **AI provider keys**: An AI provider API key (e.g. `ANTHROPIC_API_KEY`) is needed to actually use the agent for chat, but the server starts and serves the web UI without one.
