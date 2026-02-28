@@ -357,25 +357,25 @@
   </g><!-- end squircle clip -->
 
   <!-- ============================================================
-       LAYER 11: DEV BADGE — Amber "P" indicator (bottom-right)
+       LAYER 11: DEV BADGE — Amber "Prax Code" pill (bottom-right)
        ============================================================ -->
-  <g transform="translate(385, 385)" filter="url(#badgeGlow)">
-    <!-- Badge background circle -->
-    <circle cx="0" cy="0" r="36" fill="#1A1A2E" stroke="url(#badgeGrad)" stroke-width="2.5" opacity="0.95"/>
-    <circle cx="0" cy="0" r="33" fill="#1A1A2E" opacity="0.9"/>
+  <g transform="translate(370, 440)" filter="url(#badgeGlow)">
+    <!-- Badge background pill -->
+    <rect x="-72" y="-22" width="144" height="44" rx="22" ry="22" fill="#1A1A2E" stroke="url(#badgeGrad)" stroke-width="2.5" opacity="0.95"/>
+    <rect x="-69" y="-19" width="138" height="38" rx="19" ry="19" fill="#1A1A2E" opacity="0.9"/>
     
     <!-- Amber glow ring -->
-    <circle cx="0" cy="0" r="34" fill="none" stroke="#FFBB33" stroke-width="1" opacity="0.4"/>
+    <rect x="-70" y="-20" width="140" height="40" rx="20" ry="20" fill="none" stroke="#FFBB33" stroke-width="1" opacity="0.4"/>
     
-    <!-- "P" letter for Prax -->
-    <text x="0" y="6" text-anchor="middle" dominant-baseline="middle"
+    <!-- "Prax Code" text -->
+    <text x="0" y="2" text-anchor="middle" dominant-baseline="middle"
           font-family="'SF Pro Display', 'Inter', 'Helvetica Neue', sans-serif"
-          font-size="34" font-weight="700" fill="url(#badgeGrad)"
+          font-size="22" font-weight="700" fill="url(#badgeGrad)"
           filter="url(#textShadow)"
-          letter-spacing="-1">P</text>
+          letter-spacing="1">Prax Code</text>
     
     <!-- Subtle inner highlight -->
-    <ellipse cx="-4" cy="-12" rx="16" ry="10" fill="#FFFFFF" opacity="0.06"/>
+    <ellipse cx="-10" cy="-10" rx="40" ry="8" fill="#FFFFFF" opacity="0.06"/>
   </g>
 
 </svg>
