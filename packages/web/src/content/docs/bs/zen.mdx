@@ -3,7 +3,7 @@ title: Zen
 description: Kurirana lista modela koje nudi OpenCode.
 ---
 
-import config from "../../../../config.mjs"
+import config from "../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
@@ -55,6 +55,7 @@ Nasim modelima mozete pristupiti i preko sljedecih API endpointa.
 
 | Model              | Model ID           | Endpoint                                           | AI SDK Package              |
 | ------------------ | ------------------ | -------------------------------------------------- | --------------------------- |
+| GPT 5.3 Codex      | gpt-5.3-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.2            | gpt-5.2            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.2 Codex      | gpt-5.2-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.1            | gpt-5.1            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
@@ -64,22 +65,24 @@ Nasim modelima mozete pristupiti i preko sljedecih API endpointa.
 | GPT 5              | gpt-5              | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5 Codex        | gpt-5-codex        | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5 Nano         | gpt-5-nano         | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| Claude Opus 4.6    | claude-opus-4-6    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.5    | claude-opus-4-5    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.1    | claude-opus-4-1    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Sonnet 4.6  | claude-sonnet-4-6  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Claude Sonnet 4.5  | claude-sonnet-4-5  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Claude Sonnet 4    | claude-sonnet-4    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Claude Haiku 4.5   | claude-haiku-4-5   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Claude Haiku 3.5   | claude-3-5-haiku   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Opus 4.6    | claude-opus-4-6    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Opus 4.5    | claude-opus-4-5    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Opus 4.1    | claude-opus-4-1    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Gemini 3.1 Pro     | gemini-3.1-pro     | `https://opencode.ai/zen/v1/models/gemini-3.1-pro` | `@ai-sdk/google`            |
 | Gemini 3 Pro       | gemini-3-pro       | `https://opencode.ai/zen/v1/models/gemini-3-pro`   | `@ai-sdk/google`            |
 | Gemini 3 Flash     | gemini-3-flash     | `https://opencode.ai/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
+| MiniMax M2.5       | minimax-m2.5       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| MiniMax M2.5 Free  | minimax-m2.5-free  | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | MiniMax M2.1       | minimax-m2.1       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| MiniMax M2.1 Free  | minimax-m2.1-free  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| GLM 5              | glm-5              | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | GLM 4.7            | glm-4.7            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| GLM 4.7 Free       | glm-4.7-free       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | GLM 4.6            | glm-4.6            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Kimi K2.5          | kimi-k2.5          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Kimi K2.5 Free     | kimi-k2.5-free     | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Kimi K2 Thinking   | kimi-k2-thinking   | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Kimi K2            | kimi-k2            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Qwen3 Coder 480B   | qwen3-coder        | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
@@ -106,29 +109,34 @@ Podrzavamo pay-as-you-go model. Ispod su cijene **po 1M tokena**.
 | Model                             | Input  | Output | Cached Read | Cached Write |
 | --------------------------------- | ------ | ------ | ----------- | ------------ |
 | Big Pickle                        | Free   | Free   | Free        | -            |
-| MiniMax M2.1 Free                 | Free   | Free   | Free        | -            |
+| MiniMax M2.5 Free                 | Free   | Free   | Free        | -            |
+| MiniMax M2.5                      | $0.30  | $1.20  | $0.06       | -            |
 | MiniMax M2.1                      | $0.30  | $1.20  | $0.10       | -            |
-| GLM 4.7 Free                      | Free   | Free   | Free        | -            |
+| GLM 5                             | $1.00  | $3.20  | $0.20       | -            |
 | GLM 4.7                           | $0.60  | $2.20  | $0.10       | -            |
 | GLM 4.6                           | $0.60  | $2.20  | $0.10       | -            |
-| Kimi K2.5 Free                    | Free   | Free   | Free        | -            |
 | Kimi K2.5                         | $0.60  | $3.00  | $0.08       | -            |
 | Kimi K2 Thinking                  | $0.40  | $2.50  | -           | -            |
 | Kimi K2                           | $0.40  | $2.50  | -           | -            |
 | Qwen3 Coder 480B                  | $0.45  | $1.50  | -           | -            |
+| Claude Opus 4.6 (≤ 200K tokens)   | $5.00  | $25.00 | $0.50       | $6.25        |
+| Claude Opus 4.6 (> 200K tokens)   | $10.00 | $37.50 | $1.00       | $12.50       |
+| Claude Opus 4.5                   | $5.00  | $25.00 | $0.50       | $6.25        |
+| Claude Opus 4.1                   | $15.00 | $75.00 | $1.50       | $18.75       |
+| Claude Sonnet 4.6 (≤ 200K tokens) | $3.00  | $15.00 | $0.30       | $3.75        |
+| Claude Sonnet 4.6 (> 200K tokens) | $6.00  | $22.50 | $0.60       | $7.50        |
 | Claude Sonnet 4.5 (≤ 200K tokens) | $3.00  | $15.00 | $0.30       | $3.75        |
 | Claude Sonnet 4.5 (> 200K tokens) | $6.00  | $22.50 | $0.60       | $7.50        |
 | Claude Sonnet 4 (≤ 200K tokens)   | $3.00  | $15.00 | $0.30       | $3.75        |
 | Claude Sonnet 4 (> 200K tokens)   | $6.00  | $22.50 | $0.60       | $7.50        |
 | Claude Haiku 4.5                  | $1.00  | $5.00  | $0.10       | $1.25        |
 | Claude Haiku 3.5                  | $0.80  | $4.00  | $0.08       | $1.00        |
-| Claude Opus 4.6 (≤ 200K tokens)   | $5.00  | $25.00 | $0.50       | $6.25        |
-| Claude Opus 4.6 (> 200K tokens)   | $10.00 | $37.50 | $1.00       | $12.50       |
-| Claude Opus 4.5                   | $5.00  | $25.00 | $0.50       | $6.25        |
-| Claude Opus 4.1                   | $15.00 | $75.00 | $1.50       | $18.75       |
+| Gemini 3.1 Pro (≤ 200K tokens)    | $2.00  | $12.00 | $0.20       | -            |
+| Gemini 3.1 Pro (> 200K tokens)    | $4.00  | $18.00 | $0.40       | -            |
 | Gemini 3 Pro (≤ 200K tokens)      | $2.00  | $12.00 | $0.20       | -            |
 | Gemini 3 Pro (> 200K tokens)      | $4.00  | $18.00 | $0.40       | -            |
 | Gemini 3 Flash                    | $0.50  | $3.00  | $0.05       | -            |
+| GPT 5.3 Codex                     | $1.75  | $14.00 | $0.175      | -            |
 | GPT 5.2                           | $1.75  | $14.00 | $0.175      | -            |
 | GPT 5.2 Codex                     | $1.75  | $14.00 | $0.175      | -            |
 | GPT 5.1                           | $1.07  | $8.50  | $0.107      | -            |
@@ -147,10 +155,8 @@ Naknade kartica se prenose po stvarnom trosku (4.4% + $0.30 po transakciji) i ne
 
 Besplatni modeli:
 
-- GLM 4.7 Free je dostupan na OpenCode ograniceno vrijeme. Tim koristi taj period za prikupljanje feedbacka i unapredenje modela.
-- Kimi K2.5 Free je dostupan na OpenCode ograniceno vrijeme. Tim koristi taj period za prikupljanje feedbacka i unapredenje modela.
-- MiniMax M2.1 Free je dostupan na OpenCode ograniceno vrijeme. Tim koristi taj period za prikupljanje feedbacka i unapredenje modela.
-- Big Pickle je stealth model koji je besplatan na OpenCode ograniceno vrijeme. Tim koristi taj period za prikupljanje feedbacka i unapredenje modela.
+- MiniMax M2.5 Free je dostupan na OpenCode ograniceno vrijeme. Tim koristi taj period za prikupljanje povratnih informacija i poboljsanje modela.
+- Big Pickle je stealth model koji je besplatan na OpenCode ograniceno vrijeme. Tim koristi taj period za prikupljanje povratnih informacija i poboljsanje modela.
 
 Ako imate pitanja, <a href={email}>kontaktirajte nas</a>.
 
@@ -177,11 +183,9 @@ Na primjer, ako postavite mjesecni limit na $20, Zen nece potrositi vise od $20 
 Svi nasi modeli su hostovani u SAD-u. Provajderi prate zero-retention politiku i ne koriste vase podatke za treniranje modela, uz sljedece izuzetke:
 
 - Big Pickle: Tokom besplatnog perioda, prikupljeni podaci mogu se koristiti za poboljsanje modela.
-- GLM 4.7 Free: Tokom besplatnog perioda, prikupljeni podaci mogu se koristiti za poboljsanje modela.
-- Kimi K2.5 Free: Tokom besplatnog perioda, prikupljeni podaci mogu se koristiti za poboljsanje modela.
-- MiniMax M2.1 Free: Tokom besplatnog perioda, prikupljeni podaci mogu se koristiti za poboljsanje modela.
-- OpenAI API-ji: Zahtjevi se cuvaju 30 dana prema [OpenAI Data Policies](https://platform.openai.com/docs/guides/your-data).
-- Anthropic API-ji: Zahtjevi se cuvaju 30 dana prema [Anthropic Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage).
+- MiniMax M2.5 Free: Tokom besplatnog perioda, prikupljeni podaci mogu se koristiti za poboljsanje modela.
+- OpenAI API-ji: Zahtjevi se cuvaju 30 dana prema [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data).
+- Anthropic API-ji: Zahtjevi se cuvaju 30 dana prema [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage).
 
 ---
 
