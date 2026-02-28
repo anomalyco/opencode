@@ -2,6 +2,7 @@ import { test, expect } from "bun:test"
 import path from "path"
 
 import { tmpdir } from "../fixture/fixture"
+import { Auth } from "../../src/auth"
 import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
 import { Env } from "../../src/env"
@@ -2215,6 +2216,218 @@ test("Google Vertex: supports OpenAI compatible models", async () => {
 
       expect(model).toBeDefined()
       expect(model.api.npm).toBe("@ai-sdk/openai-compatible")
+    },
+  })
+})
+
+test("google aliases inherit models from base provider", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "google-1": {
+              name: "Google Account 1",
+              extends: "google",
+            },
+            "google-2": {
+              extends: "google",
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("GOOGLE_GENERATIVE_AI_API_KEY", "test-google")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["google-1"]).toBeDefined()
+      expect(providers["google-2"]).toBeDefined()
+      expect(providers["google-1"].name).toBe("Google Account 1")
+      expect(providers["google-1"].models["gemini-3-pro-preview"]).toBeDefined()
+    },
+  })
+})
+
+test("google aliases include all major Gemini models", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "google-1": {
+              extends: "google",
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("GOOGLE_GENERATIVE_AI_API_KEY", "test-google")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const google1 = providers["google-1"]
+      expect(google1).toBeDefined()
+      expect(google1.models["gemini-3-pro-high"]).toBeDefined()
+      expect(google1.models["gemini-3-pro-low"]).toBeDefined()
+      expect(google1.models["gemini-3-flash"]).toBeDefined()
+      expect(google1.models["gemini-2.5-pro"]).toBeDefined()
+      expect(google1.models["gemini-2.5-flash"]).toBeDefined()
+      expect(google1.models["gemini-2.5-flash-lite"]).toBeDefined()
+      expect(google1.models["gemini-2.0-flash"]).toBeDefined()
+      expect(google1.models["gemini-2.0-flash-lite"]).toBeDefined()
+      expect(google1.models["gemini-1.5-pro"]).toBeDefined()
+      expect(google1.models["gemini-1.5-flash"]).toBeDefined()
+      expect(google1.models["gemini-1.5-flash-8b"]).toBeDefined()
+    },
+  })
+})
+
+test("google aliases can be loaded directly from auth profiles", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await Auth.set("google-1", { type: "api", key: "key-1" })
+      await Auth.set("google-2", { type: "api", key: "key-2" })
+      try {
+        const providers = await Provider.list()
+        expect(providers["google-1"]).toBeDefined()
+        expect(providers["google-2"]).toBeDefined()
+        expect(providers["google-1"].models["gemini-3-pro-preview"]).toBeDefined()
+      } finally {
+        await Auth.remove("google-1")
+        await Auth.remove("google-2")
+      }
+    },
+  })
+})
+
+test("google provider auto-adds antigravity gemini aliases", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("GOOGLE_GENERATIVE_AI_API_KEY", "test-google")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const provider = providers["google"]
+      expect(provider).toBeDefined()
+      expect(provider.models["gemini-3-pro-high"]).toBeDefined()
+      expect(provider.models["gemini-3-pro-low"]).toBeDefined()
+      expect(provider.models["gemini-3-flash"]).toBeDefined()
+      expect(provider.models["gemini-3-pro-high"].api.id).toBe(provider.models["gemini-3-pro-preview"].api.id)
+    },
+  })
+})
+
+test("google aliases receive automatic cross-account fallbacks", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "google-1": {
+              extends: "google",
+            },
+            "google-2": {
+              extends: "google",
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("GOOGLE_GENERATIVE_AI_API_KEY", "test-google")
+    },
+    fn: async () => {
+      const model = await Provider.getModel("google-1", "gemini-3-pro-preview")
+      const resolved = await Provider.fallbacks(model)
+      const refs = resolved.map((item) => `${item.providerID}/${item.id}`)
+      expect(refs).toContain("google-2/gemini-3-pro-preview")
+    },
+  })
+})
+
+test("explicit fallback config overrides automatic account fallback", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "google-1": {
+              extends: "google",
+              models: {
+                "gemini-3-pro-preview": {
+                  fallbacks: ["google/gemini-3-flash-preview"],
+                },
+              },
+            },
+            "google-2": {
+              extends: "google",
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("GOOGLE_GENERATIVE_AI_API_KEY", "test-google")
+    },
+    fn: async () => {
+      const model = await Provider.getModel("google-1", "gemini-3-pro-preview")
+      expect(model.fallbacks).toEqual([
+        {
+          providerID: "google",
+          modelID: "gemini-3-flash-preview",
+        },
+      ])
     },
   })
 })

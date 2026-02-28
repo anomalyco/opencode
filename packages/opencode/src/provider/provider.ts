@@ -48,6 +48,371 @@ import { Installation } from "../installation"
 export namespace Provider {
   const log = Log.create({ service: "provider" })
 
+  const ANTIGRAVITY: Record<
+    string,
+    { name: string; order: string[]; providers?: string[] }
+  > = {
+    "gemini-3.1-pro": {
+      name: "Gemini 3.1 Pro (Antigravity)",
+      order: ["gemini-3.1-pro-preview"],
+      providers: ["google"],
+    },
+    "gemini-3.1-flash": {
+      name: "Gemini 3.1 Flash (Antigravity)",
+      order: ["gemini-3.1-flash-preview"],
+      providers: ["google"],
+    },
+    "gemini-3.1-flash-image": {
+      name: "Gemini 3.1 Flash Image (Antigravity)",
+      order: ["gemini-3.1-flash-image-preview"],
+      providers: ["google"],
+    },
+    "gemini-3-pro-image": {
+      name: "Gemini 3 Pro Image (Antigravity)",
+      order: ["gemini-3-pro-image-preview"],
+      providers: ["google"],
+    },
+    "gemini-3-pro-high": {
+      name: "Gemini 3 Pro High (Antigravity)",
+      order: ["gemini-3-pro-preview", "gemini-3-pro"],
+      providers: ["google"],
+    },
+    "gemini-3-pro-low": {
+      name: "Gemini 3 Pro Low (Antigravity)",
+      order: ["gemini-3-pro-preview", "gemini-3-pro"],
+      providers: ["google"],
+    },
+    "gemini-3-flash": {
+      name: "Gemini 3 Flash (Antigravity)",
+      order: ["gemini-3-flash-preview", "gemini-3-flash"],
+      providers: ["google"],
+    },
+    "gemini-2.5-pro": {
+      name: "Gemini 2.5 Pro (Antigravity)",
+      order: ["gemini-2.5-pro-preview-06-05", "gemini-2.5-pro-preview-05-06", "gemini-2.5-pro"],
+      providers: ["google"],
+    },
+    "gemini-2.5-flash": {
+      name: "Gemini 2.5 Flash (Antigravity)",
+      order: [
+        "gemini-2.5-flash-preview-09-2025",
+        "gemini-2.5-flash-preview-04-17",
+        "gemini-2.5-flash-preview-05-20",
+        "gemini-2.5-flash",
+      ],
+      providers: ["google"],
+    },
+    "gemini-2.5-flash-lite": {
+      name: "Gemini 2.5 Flash Lite (Antigravity)",
+      order: [
+        "gemini-2.5-flash-lite-preview-09-2025",
+        "gemini-2.5-flash-lite-preview-06-17",
+        "gemini-2.5-flash-lite",
+      ],
+      providers: ["google"],
+    },
+    "gemini-2.0-flash": {
+      name: "Gemini 2.0 Flash (Antigravity)",
+      order: ["gemini-2.0-flash"],
+      providers: ["google"],
+    },
+    "gemini-2.0-flash-lite": {
+      name: "Gemini 2.0 Flash Lite (Antigravity)",
+      order: ["gemini-2.0-flash-lite"],
+      providers: ["google"],
+    },
+    "gemini-1.5-pro": {
+      name: "Gemini 1.5 Pro (Antigravity)",
+      order: ["gemini-1.5-pro"],
+      providers: ["google"],
+    },
+    "gemini-1.5-flash": {
+      name: "Gemini 1.5 Flash (Antigravity)",
+      order: ["gemini-1.5-flash"],
+      providers: ["google"],
+    },
+    "gemini-1.5-flash-8b": {
+      name: "Gemini 1.5 Flash 8B (Antigravity)",
+      order: ["gemini-1.5-flash-8b"],
+      providers: ["google"],
+    },
+    "gemini-live": {
+      name: "Gemini Live (Antigravity)",
+      order: ["gemini-live-2.5-flash"],
+      providers: ["google"],
+    },
+    "gemini-flash-latest": {
+      name: "Gemini Flash Latest (Antigravity)",
+      order: ["gemini-flash-latest"],
+      providers: ["google"],
+    },
+    "gemini-flash-lite": {
+      name: "Gemini Flash Lite (Antigravity)",
+      order: ["gemini-flash-lite-latest"],
+      providers: ["google"],
+    },
+    "gemini-2.5-flash-image": {
+      name: "Gemini 2.5 Flash Image (Antigravity)",
+      order: ["gemini-2.5-flash-image-preview", "gemini-2.5-flash-image"],
+      providers: ["google"],
+    },
+    "gemini-2.5-pro-tts": {
+      name: "Gemini 2.5 Pro TTS (Antigravity)",
+      order: ["gemini-2.5-pro-preview-tts"],
+      providers: ["google"],
+    },
+    "gemini-2.5-flash-tts": {
+      name: "Gemini 2.5 Flash TTS (Antigravity)",
+      order: ["gemini-2.5-flash-preview-tts"],
+      providers: ["google"],
+    },
+    "claude-opus": {
+      name: "Claude Opus (Antigravity)",
+      order: ["claude-opus-4-6", "claude-opus-4-5-20251101", "claude-opus-4-5", "claude-opus-4-1-20250805", "claude-opus-4"],
+      providers: ["anthropic", "claude"],
+    },
+    "claude-sonnet": {
+      name: "Claude Sonnet (Antigravity)",
+      order: [
+        "claude-sonnet-4-6",
+        "claude-sonnet-4-5-20250929",
+        "claude-sonnet-4-5",
+        "claude-sonnet-4-20250514",
+        "claude-sonnet-4",
+        "claude-3-5-sonnet-20241022",
+        "claude-3-5-sonnet-20240620",
+        "claude-3.5-sonnet",
+      ],
+      providers: ["anthropic", "claude"],
+    },
+    "claude-haiku": {
+      name: "Claude Haiku (Antigravity)",
+      order: ["claude-haiku-4-5-20251001", "claude-haiku-4-5", "claude-haiku-4.5", "claude-3.5-haiku"],
+      providers: ["anthropic", "claude"],
+    },
+    "claude-3-7-sonnet": {
+      name: "Claude 3.7 Sonnet (Antigravity)",
+      order: ["claude-3-7-sonnet-20250219", "claude-3-7-sonnet-latest"],
+      providers: ["anthropic", "claude"],
+    },
+    "gpt-5": {
+      name: "GPT-5 (Antigravity)",
+      order: ["gpt-5.2", "gpt-5.2-pro", "gpt-5.1", "gpt-5-pro", "gpt-5"],
+      providers: ["openai", "openrouter"],
+    },
+    "gpt-5-mini": {
+      name: "GPT-5 Mini (Antigravity)",
+      order: ["gpt-5-mini", "gpt-5-nano"],
+      providers: ["openai", "openrouter"],
+    },
+    "gpt-5-codex": {
+      name: "GPT-5 Codex (Antigravity)",
+      order: ["gpt-5.3-codex", "gpt-5.2-codex", "gpt-5.1-codex", "gpt-5.1-codex-max", "gpt-5-codex"],
+      providers: ["openai", "openrouter"],
+    },
+    "gpt-4o": {
+      name: "GPT-4o (Antigravity)",
+      order: ["gpt-4o", "gpt-4o-2024-11-20"],
+      providers: ["openai", "openrouter"],
+    },
+    "gpt-4o-mini": {
+      name: "GPT-4o Mini (Antigravity)",
+      order: ["gpt-4o-mini"],
+      providers: ["openai", "openrouter"],
+    },
+    "gpt-4.1": {
+      name: "GPT-4.1 (Antigravity)",
+      order: ["gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"],
+      providers: ["openai", "openrouter"],
+    },
+    "gpt-4": {
+      name: "GPT-4 (Antigravity)",
+      order: ["gpt-4", "gpt-4-turbo", "gpt-4-32k"],
+      providers: ["openai", "openrouter"],
+    },
+    "gpt-3.5-turbo": {
+      name: "GPT-3.5 Turbo (Antigravity)",
+      order: ["gpt-3.5-turbo-0125", "gpt-3.5-turbo-1106", "gpt-3.5-turbo-0613"],
+      providers: ["openai", "openrouter"],
+    },
+    "gpt-oss": {
+      name: "GPT-OSS (Antigravity)",
+      order: ["gpt-oss-120b", "gpt-oss:120b", "gpt-oss-20b", "gpt-oss:20b"],
+      providers: ["openai", "openrouter"],
+    },
+    "o3": {
+      name: "O3 (Antigravity)",
+      order: ["o3", "o3-mini"],
+      providers: ["openai", "openrouter"],
+    },
+    "o4-mini": {
+      name: "O4 Mini (Antigravity)",
+      order: ["o4-mini"],
+      providers: ["openai", "openrouter"],
+    },
+    "gpt-realtime": {
+      name: "GPT Realtime (Antigravity)",
+      order: ["gpt-realtime", "gpt-realtime-1.5", "gpt-realtime-mini"],
+      providers: ["openai"],
+    },
+    "gpt-audio": {
+      name: "GPT Audio (Antigravity)",
+      order: ["gpt-audio", "gpt-audio-1.5", "gpt-audio-mini"],
+      providers: ["openai"],
+    },
+    "gpt-image": {
+      name: "GPT Image (Antigravity)",
+      order: ["gpt-image-1.5", "chatgpt-image-latest", "gpt-image-1"],
+      providers: ["openai"],
+    },
+    "grok-4": {
+      name: "Grok 4 (Antigravity)",
+      order: ["grok-4", "grok-4-fast", "grok-4-1-fast", "grok-3"],
+      providers: ["xai"],
+    },
+    "grok-3": {
+      name: "Grok 3 (Antigravity)",
+      order: ["grok-3", "grok-3-fast", "grok-3-mini", "grok-3-mini-fast"],
+      providers: ["xai"],
+    },
+    "grok-2": {
+      name: "Grok 2 (Antigravity)",
+      order: ["grok-2", "grok-2-vision", "grok-2-latest"],
+      providers: ["xai"],
+    },
+    "deepseek-v3": {
+      name: "DeepSeek V3 (Antigravity)",
+      order: ["deepseek-v3.2", "deepseek-v3.2-thinking", "deepseek-v3.1"],
+      providers: ["deepseek"],
+    },
+    "deepseek-reasoner": {
+      name: "DeepSeek Reasoner (Antigravity)",
+      order: ["deepseek-reasoner"],
+      providers: ["deepseek"],
+    },
+    "deepseek-chat": {
+      name: "DeepSeek Chat (Antigravity)",
+      order: ["deepseek-chat"],
+      providers: ["deepseek"],
+    },
+    "mistral-large": {
+      name: "Mistral Large (Antigravity)",
+      order: ["mistral-large-2512", "mistral-large-3", "mistral-large-2"],
+      providers: ["mistral"],
+    },
+    "mistral-small": {
+      name: "Mistral Small (Antigravity)",
+      order: ["mistral-small-3.1", "mistral-small"],
+      providers: ["mistral"],
+    },
+    "codestral": {
+      name: "Codestral (Antigravity)",
+      order: ["codestral-22b", "codestral"],
+      providers: ["mistral"],
+    },
+    "ministral": {
+      name: "Ministral (Antigravity)",
+      order: ["ministral-14b", "ministral-3"],
+      providers: ["mistral"],
+    },
+    "command-r": {
+      name: "Command R (Antigravity)",
+      order: ["command-r-plus", "command-r"],
+      providers: ["cohere"],
+    },
+    "command": {
+      name: "Command (Antigravity)",
+      order: ["command-r-plus", "command-r", "command"],
+      providers: ["cohere"],
+    },
+    "qwen3": {
+      name: "Qwen3 (Antigravity)",
+      order: ["qwen3-max", "qwen3-235b-a22b", "qwen3-30b-a3b", "qwen3-32b", "qwen3-8b"],
+      providers: ["alibaba", "openrouter"],
+    },
+    "qwen2.5": {
+      name: "Qwen 2.5 (Antigravity)",
+      order: ["qwen2.5-72b-instruct", "qwen2.5-32b-instruct", "qwen2.5-14b-instruct", "qwen2.5-7b-instruct"],
+      providers: ["alibaba", "openrouter"],
+    },
+    "qwen-coder": {
+      name: "Qwen Coder (Antigravity)",
+      order: ["qwen3-coder-480b", "qwen3-coder-30b-a3b", "qwen2.5-coder-32b", "qwen2.5-coder-7b"],
+      providers: ["alibaba", "openrouter"],
+    },
+    "qwen-vl": {
+      name: "Qwen VL (Antigravity)",
+      order: ["qwen-vl-max", "qwen2.5-vl-72b", "qwen2.5-vl-7b"],
+      providers: ["alibaba", "openrouter"],
+    },
+    "llama-4": {
+      name: "Llama 4 (Antigravity)",
+      order: ["llama-4-maverick", "llama-4-scout"],
+      providers: ["meta", "openrouter"],
+    },
+    "llama-3.3": {
+      name: "Llama 3.3 (Antigravity)",
+      order: ["llama-3.3-70b"],
+      providers: ["meta", "openrouter"],
+    },
+    "llama-3.2": {
+      name: "Llama 3.2 (Antigravity)",
+      order: ["llama-3.2-11b-vision", "llama-3.2-1b"],
+      providers: ["meta", "openrouter"],
+    },
+    "llama-3": {
+      name: "Llama 3 (Antigravity)",
+      order: ["llama-3.1-70b", "llama-3-70b"],
+      providers: ["meta", "openrouter"],
+    },
+    "phi-4": {
+      name: "Phi 4 (Antigravity)",
+      order: ["phi-4-mini"],
+      providers: ["microsoft"],
+    },
+    "phi-3": {
+      name: "Phi 3 (Antigravity)",
+      order: ["phi-3-medium", "phi-3-small"],
+      providers: ["microsoft"],
+    },
+    "gemma-3": {
+      name: "Gemma 3 (Antigravity)",
+      order: ["gemma-3-27b", "gemma-3-12b", "gemma-3-4b", "gemma-3-1b"],
+      providers: ["google"],
+    },
+    "gemma-2": {
+      name: "Gemma 2 (Antigravity)",
+      order: ["gemma-2-27b", "gemma-2-2b"],
+      providers: ["google"],
+    },
+    "kimi-k2": {
+      name: "Kimi K2 (Antigravity)",
+      order: ["kimi-k2.5", "kimi-k2-thinking", "kimi-k2-turbo", "kimi-k2"],
+      providers: ["moonshotai", "moonshotai-cn"],
+    },
+    "doubao": {
+      name: "Doubao (Antigravity)",
+      order: ["doubao-seed-1-6-thinking", "doubao-seed-1-8", "doubao-seed-1-6-vision"],
+      providers: ["bytedance"],
+    },
+    "glm-4": {
+      name: "GLM-4 (Antigravity)",
+      order: ["glm-4.7", "glm-4.6", "glm-4.5", "glm-4"],
+      providers: ["zhipuai"],
+    },
+    "glm-4v": {
+      name: "GLM-4V (Antigravity)",
+      order: ["glm-4.6v", "glm-4.5v"],
+      providers: ["zhipuai"],
+    },
+  }
+
+  function shouldApplyAntigravity(providerID: string, aliasProviders?: string[]): boolean {
+    if (!aliasProviders || aliasProviders.length === 0) return true
+    const root = providerID.split(":")[0].replace(/-\d+$/, "")
+    return aliasProviders.some((p) => root === p || providerID === p || providerID.startsWith(p + "-"))
+  }
+
   function isGpt5OrLater(modelID: string): boolean {
     const match = /^gpt-(\d+)/.exec(modelID)
     if (!match) {
@@ -654,6 +1019,14 @@ export namespace Provider {
       options: z.record(z.string(), z.any()),
       headers: z.record(z.string(), z.string()),
       release_date: z.string(),
+      fallbacks: z
+        .array(
+          z.object({
+            providerID: z.string(),
+            modelID: z.string(),
+          }),
+        )
+        .optional(),
       variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
     })
     .meta({
@@ -757,8 +1130,55 @@ export namespace Provider {
   const state = Instance.state(async () => {
     using _ = log.time("state")
     const config = await Config.get()
+    const configData = config.provider ?? {}
     const modelsDev = await ModelsDev.get()
     const database = mapValues(modelsDev, fromModelsDevProvider)
+
+    const roots = new Map<string, string>()
+    const resolved = new Map<string, Config.Provider>()
+
+    function root(providerID: string, seen = new Set<string>()) {
+      const cached = roots.get(providerID)
+      if (cached) return cached
+      const current = configData[providerID]
+      if (!current?.extends) {
+        roots.set(providerID, providerID)
+        return providerID
+      }
+      if (seen.has(providerID)) {
+        roots.set(providerID, providerID)
+        return providerID
+      }
+      seen.add(providerID)
+      const value = configData[current.extends] ? root(current.extends, seen) : current.extends
+      roots.set(providerID, value)
+      return value
+    }
+
+    function resolve(providerID: string, seen = new Set<string>()) {
+      const cached = resolved.get(providerID)
+      if (cached) return cached
+      const current = configData[providerID]
+      if (!current) return undefined
+      if (!current.extends) {
+        resolved.set(providerID, current)
+        return current
+      }
+      if (seen.has(providerID)) {
+        resolved.set(providerID, current)
+        return current
+      }
+      seen.add(providerID)
+      const value = configData[current.extends]
+        ? mergeDeep(resolve(current.extends, seen) ?? {}, current)
+        : current
+      resolved.set(providerID, value)
+      return value
+    }
+
+    for (const providerID of Object.keys(configData)) {
+      root(providerID)
+    }
 
     const disabled = new Set(config.disabled_providers ?? [])
     const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
@@ -778,7 +1198,9 @@ export namespace Provider {
 
     log.info("init")
 
-    const configProviders = Object.entries(config.provider ?? {})
+    const configProviders = Object.keys(configData).map(
+      (providerID) => [providerID, resolve(providerID) ?? configData[providerID]] as const,
+    )
 
     // Add GitHub Copilot Enterprise provider that inherits from GitHub Copilot
     if (database["github-copilot"]) {
@@ -807,16 +1229,54 @@ export namespace Provider {
       providers[providerID] = mergeDeep(match, provider)
     }
 
+    function copyModels(models: Record<string, Model>, providerID: string) {
+      return mapValues(models, (model) => ({
+        ...model,
+        providerID,
+      }))
+    }
+
+    function antigravity(providerID: string, models: Record<string, Model>) {
+      const result = {
+        ...models,
+      }
+      for (const [modelID, alias] of Object.entries(ANTIGRAVITY)) {
+        if (result[modelID]) continue
+        if (!shouldApplyAntigravity(providerID, alias.providers)) continue
+        const source = alias.order
+          .map((id) => result[id])
+          .find((item): item is Model => item !== undefined)
+        if (!source) continue
+        result[modelID] = {
+          ...source,
+          id: modelID,
+          name: alias.name,
+          providerID,
+        }
+      }
+      return result
+    }
+
+    function alias(providerID: string) {
+      const scoped = providerID.split(":")[0]
+      if (database[scoped]) return scoped
+      const numeric = providerID.match(/^(.*)-\d+$/)
+      if (!numeric) return undefined
+      return database[numeric[1]] ? numeric[1] : undefined
+    }
+
     // extend database from config
     for (const [providerID, provider] of configProviders) {
-      const existing = database[providerID]
+      const baseID = roots.get(providerID)
+      const base = database[providerID] ?? (baseID ? database[baseID] : undefined)
+      const source = modelsDev[providerID] ?? (baseID ? modelsDev[baseID] : undefined)
       const parsed: Info = {
         id: providerID,
-        name: provider.name ?? existing?.name ?? providerID,
-        env: provider.env ?? existing?.env ?? [],
-        options: mergeDeep(existing?.options ?? {}, provider.options ?? {}),
+        name: provider.name ?? base?.name ?? providerID,
+        env: provider.env ?? base?.env ?? [],
+        options: mergeDeep(base?.options ?? {}, provider.options ?? {}),
         source: "config",
-        models: existing?.models ?? {},
+        models: base ? copyModels(base.models, providerID) : {},
       }
 
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {
@@ -834,9 +1294,9 @@ export namespace Provider {
               model.provider?.npm ??
               provider.npm ??
               existingModel?.api.npm ??
-              modelsDev[providerID]?.npm ??
+              source?.npm ??
               "@ai-sdk/openai-compatible",
-            url: model.provider?.api ?? provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
+            url: model.provider?.api ?? provider?.api ?? existingModel?.api.url ?? source?.api,
           },
           status: model.status ?? existingModel?.status ?? "active",
           name,
@@ -878,6 +1338,7 @@ export namespace Provider {
           headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
           family: model.family ?? existingModel?.family ?? "",
           release_date: model.release_date ?? existingModel?.release_date ?? "",
+          fallbacks: model.fallbacks ? model.fallbacks.map(parseModel) : existingModel?.fallbacks,
           variants: {},
         }
         const merged = mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {})
@@ -887,7 +1348,15 @@ export namespace Provider {
         )
         parsed.models[modelID] = parsedModel
       }
+      if ((baseID ?? providerID) === "google") {
+        parsed.models = antigravity(providerID, parsed.models)
+      }
       database[providerID] = parsed
+    }
+
+    for (const [providerID, provider] of Object.entries(database)) {
+      if ((roots.get(providerID) ?? providerID) !== "google") continue
+      provider.models = antigravity(providerID, provider.models)
     }
 
     // load env
@@ -905,6 +1374,22 @@ export namespace Provider {
     // load apikeys
     for (const [providerID, provider] of Object.entries(await Auth.all())) {
       if (disabled.has(providerID)) continue
+      if (!database[providerID]) {
+        const baseID = alias(providerID)
+        if (baseID) {
+          const base = database[baseID]
+          database[providerID] = {
+            ...base,
+            id: providerID,
+            name: `${base.name} (${providerID})`,
+            models: copyModels(base.models, providerID),
+          }
+          roots.set(providerID, roots.get(baseID) ?? baseID)
+          if ((roots.get(providerID) ?? providerID) === "google") {
+            database[providerID].models = antigravity(providerID, database[providerID].models)
+          }
+        }
+      }
       if (provider.type === "api") {
         mergeProvider(providerID, {
           source: "api",
@@ -985,6 +1470,17 @@ export namespace Provider {
       mergeProvider(providerID, partial)
     }
 
+    const groups = new Map<string, string[]>()
+    for (const providerID of Object.keys(providers)) {
+      const base = roots.get(providerID) ?? providerID
+      const list = groups.get(base) ?? []
+      list.push(providerID)
+      groups.set(base, list)
+    }
+    for (const list of groups.values()) {
+      list.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }))
+    }
+
     for (const [providerID, provider] of Object.entries(providers)) {
       if (!isProviderAllowed(providerID)) {
         delete providers[providerID]
@@ -992,6 +1488,7 @@ export namespace Provider {
       }
 
       const configProvider = config.provider?.[providerID]
+      const base = roots.get(providerID) ?? providerID
 
       for (const [modelID, model] of Object.entries(provider.models)) {
         model.api.id = model.api.id ?? model.id ?? modelID
@@ -1015,6 +1512,17 @@ export namespace Provider {
             pickBy(merged, (v) => !v.disabled),
             (v) => omit(v, ["disabled"]),
           )
+        }
+
+        if ((!model.fallbacks || model.fallbacks.length === 0) && base === "google") {
+          const next = (groups.get(base) ?? [])
+            .filter((item) => item !== providerID)
+            .flatMap((item) => {
+              if (!isProviderAllowed(item)) return []
+              if (!providers[item]?.models[modelID]) return []
+              return [{ providerID: item, modelID }]
+            })
+          if (next.length) model.fallbacks = next
         }
       }
 
@@ -1165,6 +1673,23 @@ export namespace Provider {
       throw new ModelNotFoundError({ providerID, modelID, suggestions })
     }
     return info
+  }
+
+  export async function fallbacks(model: Model) {
+    const seen = new Set<string>([`${model.providerID}/${model.id}`])
+    const queue = [...(model.fallbacks ?? [])]
+    const result: Model[] = []
+    while (queue.length) {
+      const item = queue.shift()!
+      const key = `${item.providerID}/${item.modelID}`
+      if (seen.has(key)) continue
+      const next = await getModel(item.providerID, item.modelID).catch(() => undefined)
+      if (!next) continue
+      seen.add(key)
+      result.push(next)
+      queue.push(...(next.fallbacks ?? []))
+    }
+    return result
   }
 
   export async function getLanguage(model: Model): Promise<LanguageModelV2> {

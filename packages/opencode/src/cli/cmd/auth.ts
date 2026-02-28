@@ -193,6 +193,26 @@ export function resolvePluginProviders(input: {
   return result
 }
 
+export function resolveConfigProviders(input: {
+  configProviders: Record<string, Config.Provider>
+  existingProviders: Record<string, unknown>
+  disabled: Set<string>
+  enabled?: Set<string>
+}): Array<{ id: string; name: string; extends?: string }> {
+  const result: Array<{ id: string; name: string; extends?: string }> = []
+  for (const [id, provider] of Object.entries(input.configProviders)) {
+    if (Object.hasOwn(input.existingProviders, id)) continue
+    if (input.disabled.has(id)) continue
+    if (input.enabled && !input.enabled.has(id)) continue
+    result.push({
+      id,
+      name: provider.name ?? id,
+      extends: provider.extends,
+    })
+  }
+  return result
+}
+
 export const AuthCommand = cmd({
   command: "auth",
   describe: "manage credentials",
@@ -212,10 +232,11 @@ export const AuthListCommand = cmd({
     const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
     prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
     const results = Object.entries(await Auth.all())
+    const config = await Config.get()
     const database = await ModelsDev.get()
 
     for (const [providerID, result] of results) {
-      const name = database[providerID]?.name || providerID
+      const name = config.provider?.[providerID]?.name || database[providerID]?.name || providerID
       prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
     }
 
@@ -321,6 +342,12 @@ export const AuthLoginCommand = cmd({
           enabled,
           providerNames: Object.fromEntries(Object.entries(config.provider ?? {}).map(([id, p]) => [id, p.name])),
         })
+        const configProviders = resolveConfigProviders({
+          configProviders: config.provider ?? {},
+          existingProviders: providers,
+          disabled,
+          enabled,
+        })
         let provider = await prompts.autocomplete({
           message: "Select provider",
           maxItems: 8,
@@ -346,6 +373,11 @@ export const AuthLoginCommand = cmd({
               label: x.name,
               value: x.id,
               hint: "plugin",
+            })),
+            ...configProviders.map((x) => ({
+              label: x.name,
+              value: x.id,
+              hint: x.extends ? `extends ${x.extends}` : "config",
             })),
             {
               value: "other",

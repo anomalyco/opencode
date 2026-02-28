@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test"
-import { resolvePluginProviders } from "../../src/cli/cmd/auth"
+import { resolveConfigProviders, resolvePluginProviders } from "../../src/cli/cmd/auth"
 import type { Hooks } from "@opencode-ai/plugin"
 
 function hookWithAuth(provider: string): Hooks {
@@ -114,6 +114,72 @@ describe("resolvePluginProviders", () => {
       existingProviders: {},
       disabled: new Set(),
       providerNames: {},
+    })
+    expect(result).toEqual([])
+  })
+})
+
+describe("resolveConfigProviders", () => {
+  test("returns config-only providers not in models.dev", () => {
+    const result = resolveConfigProviders({
+      configProviders: {
+        "google-1": {
+          extends: "google",
+          name: "Google Account 1",
+        },
+      },
+      existingProviders: { google: {} },
+      disabled: new Set(),
+    })
+    expect(result).toEqual([
+      {
+        id: "google-1",
+        name: "Google Account 1",
+        extends: "google",
+      },
+    ])
+  })
+
+  test("respects disabled and enabled provider filters", () => {
+    const disabled = resolveConfigProviders({
+      configProviders: {
+        "google-1": {
+          extends: "google",
+        },
+      },
+      existingProviders: {},
+      disabled: new Set(["google-1"]),
+    })
+    expect(disabled).toEqual([])
+
+    const enabled = resolveConfigProviders({
+      configProviders: {
+        "google-1": {
+          extends: "google",
+        },
+      },
+      existingProviders: {},
+      disabled: new Set(),
+      enabled: new Set(["google-1"]),
+    })
+    expect(enabled).toEqual([
+      {
+        id: "google-1",
+        name: "google-1",
+        extends: "google",
+      },
+    ])
+  })
+
+  test("skips providers already present in models.dev", () => {
+    const result = resolveConfigProviders({
+      configProviders: {
+        google: {
+          name: "Google",
+        },
+      },
+      existingProviders: { google: {} },
+      disabled: new Set(),
     })
     expect(result).toEqual([])
   })

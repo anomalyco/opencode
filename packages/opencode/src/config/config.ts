@@ -930,12 +930,20 @@ export namespace Config {
 
   export const Provider = ModelsDev.Provider.partial()
     .extend({
+      extends: z
+        .string()
+        .optional()
+        .describe("Inherit settings and models from another provider, eg `google`"),
       whitelist: z.array(z.string()).optional(),
       blacklist: z.array(z.string()).optional(),
       models: z
         .record(
           z.string(),
           ModelsDev.Model.partial().extend({
+            fallbacks: z
+              .array(ModelId)
+              .optional()
+              .describe("Ordered fallback models in provider/model format"),
             variants: z
               .record(
                 z.string(),

@@ -41,6 +41,7 @@ import { TaskTool } from "@/tool/task"
 import { Tool } from "@/tool/tool"
 import { PermissionNext } from "@/permission/next"
 import { SessionStatus } from "./status"
+import { SessionRetry } from "./retry"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
@@ -58,6 +59,8 @@ IMPORTANT:
 - This tool provides your final answer - no further actions are taken after calling it`
 
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
+
+const MODEL_RETRY_LIMIT_WITH_FALLBACK = 2
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
@@ -563,62 +566,6 @@ export namespace SessionPrompt {
         session,
       })
 
-      const processor = SessionProcessor.create({
-        assistantMessage: (await Session.updateMessage({
-          id: Identifier.ascending("message"),
-          parentID: lastUser.id,
-          role: "assistant",
-          mode: agent.name,
-          agent: agent.name,
-          variant: lastUser.variant,
-          path: {
-            cwd: Instance.directory,
-            root: Instance.worktree,
-          },
-          cost: 0,
-          tokens: {
-            input: 0,
-            output: 0,
-            reasoning: 0,
-            cache: { read: 0, write: 0 },
-          },
-          modelID: model.id,
-          providerID: model.providerID,
-          time: {
-            created: Date.now(),
-          },
-          sessionID,
-        })) as MessageV2.Assistant,
-        sessionID: sessionID,
-        model,
-        abort,
-      })
-      using _ = defer(() => InstructionPrompt.clear(processor.message.id))
-
-      // Check if user explicitly invoked an agent via @ in this turn
-      const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
-      const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
-
-      const tools = await resolveTools({
-        agent,
-        session,
-        model,
-        tools: lastUser.tools,
-        processor,
-        bypassAgentCheck,
-        messages: msgs,
-      })
-
-      // Inject StructuredOutput tool if JSON schema mode enabled
-      if (lastUser.format?.type === "json_schema") {
-        tools["StructuredOutput"] = createStructuredOutputTool({
-          schema: lastUser.format.schema,
-          onSuccess(output) {
-            structuredOutput = output
-          },
-        })
-      }
-
       if (step === 1) {
         SessionSummary.summarize({
           sessionID: sessionID,
@@ -647,57 +594,135 @@ export namespace SessionPrompt {
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
-      // Build system prompt, adding structured output instruction if needed
-      const system = [...(await SystemPrompt.environment(model)), ...(await InstructionPrompt.system())]
       const format = lastUser.format ?? { type: "text" }
-      if (format.type === "json_schema") {
-        system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
-      }
+      const candidates = [model, ...(await Provider.fallbacks(model))]
+      let result: SessionProcessor.Result = "stop"
+      for (const [index, model] of candidates.entries()) {
+        const processor = SessionProcessor.create({
+          assistantMessage: (await Session.updateMessage({
+            id: Identifier.ascending("message"),
+            parentID: lastUser.id,
+            role: "assistant",
+            mode: agent.name,
+            agent: agent.name,
+            variant: lastUser.variant,
+            path: {
+              cwd: Instance.directory,
+              root: Instance.worktree,
+            },
+            cost: 0,
+            tokens: {
+              input: 0,
+              output: 0,
+              reasoning: 0,
+              cache: { read: 0, write: 0 },
+            },
+            modelID: model.id,
+            providerID: model.providerID,
+            time: {
+              created: Date.now(),
+            },
+            sessionID,
+          })) as MessageV2.Assistant,
+          sessionID,
+          model,
+          abort,
+        })
+        using _ = defer(() => InstructionPrompt.clear(processor.message.id))
 
-      const result = await processor.process({
-        user: lastUser,
-        agent,
-        abort,
-        sessionID,
-        system,
-        messages: [
-          ...MessageV2.toModelMessages(msgs, model),
-          ...(isLastStep
-            ? [
-                {
-                  role: "assistant" as const,
-                  content: MAX_STEPS,
-                },
-              ]
-            : []),
-        ],
-        tools,
-        model,
-        toolChoice: format.type === "json_schema" ? "required" : undefined,
-      })
+        // Check if user explicitly invoked an agent via @ in this turn
+        const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
+        const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
 
-      // If structured output was captured, save it and exit immediately
-      // This takes priority because the StructuredOutput tool was called successfully
-      if (structuredOutput !== undefined) {
-        processor.message.structured = structuredOutput
-        processor.message.finish = processor.message.finish ?? "stop"
-        await Session.updateMessage(processor.message)
-        break
-      }
+        const tools = await resolveTools({
+          agent,
+          session,
+          model,
+          tools: lastUser.tools,
+          processor,
+          bypassAgentCheck,
+          messages: msgs,
+        })
 
-      // Check if model finished (finish reason is not "tool-calls" or "unknown")
-      const modelFinished = processor.message.finish && !["tool-calls", "unknown"].includes(processor.message.finish)
+        // Inject StructuredOutput tool if JSON schema mode enabled
+        if (lastUser.format?.type === "json_schema") {
+          tools["StructuredOutput"] = createStructuredOutputTool({
+            schema: lastUser.format.schema,
+            onSuccess(output) {
+              structuredOutput = output
+            },
+          })
+        }
 
-      if (modelFinished && !processor.message.error) {
+        // Build system prompt, adding structured output instruction if needed
+        const system = [...(await SystemPrompt.environment(model)), ...(await InstructionPrompt.system())]
         if (format.type === "json_schema") {
-          // Model stopped without calling StructuredOutput tool
-          processor.message.error = new MessageV2.StructuredOutputError({
-            message: "Model did not produce structured output",
-            retries: 0,
-          }).toObject()
+          system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+        }
+
+        result = await processor.process({
+          user: lastUser,
+          agent,
+          abort,
+          sessionID,
+          system,
+          messages: [
+            ...MessageV2.toModelMessages(msgs, model),
+            ...(isLastStep
+              ? [
+                  {
+                    role: "assistant" as const,
+                    content: MAX_STEPS,
+                  },
+                ]
+              : []),
+          ],
+          tools,
+          model,
+          toolChoice: format.type === "json_schema" ? "required" : undefined,
+          maxRetries: candidates.length > 1 ? MODEL_RETRY_LIMIT_WITH_FALLBACK : undefined,
+        })
+
+        // If structured output was captured, save it and exit immediately
+        // This takes priority because the StructuredOutput tool was called successfully
+        if (structuredOutput !== undefined) {
+          processor.message.structured = structuredOutput
+          processor.message.finish = processor.message.finish ?? "stop"
           await Session.updateMessage(processor.message)
           break
         }
+
+        // Check if model finished (finish reason is not "tool-calls" or "unknown")
+        const modelFinished = processor.message.finish && !["tool-calls", "unknown"].includes(processor.message.finish)
+
+        if (modelFinished && !processor.message.error) {
+          if (format.type === "json_schema") {
+            // Model stopped without calling StructuredOutput tool
+            processor.message.error = new MessageV2.StructuredOutputError({
+              message: "Model did not produce structured output",
+              retries: 0,
+            }).toObject()
+            await Session.updateMessage(processor.message)
+            break
+          }
+        }
+
+        const retryable = processor.message.error ? SessionRetry.retryable(processor.message.error) : undefined
+        if (retryable && index < candidates.length - 1) {
+          const next = candidates[index + 1]
+          log.info("fallback", {
+            from: `${model.providerID}/${model.id}`,
+            to: `${next.providerID}/${next.id}`,
+            reason: retryable,
+          })
+          continue
+        }
+
+        break
+      }
+
+      if (structuredOutput !== undefined) {
+        break
       }
 
       if (result === "stop") break
