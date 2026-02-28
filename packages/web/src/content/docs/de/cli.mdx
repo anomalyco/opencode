@@ -27,7 +27,7 @@ Starten Sie die Terminalbenutzeroberfläche OpenCode.
 opencode [project]
 ```
 
-#### Flags
+#### Optionen
 
 | Flag         | Kurz | Beschreibung                                                           |
 | ------------ | ---- | ---------------------------------------------------------------------- |
@@ -76,7 +76,7 @@ opencode web --port 4096 --hostname 0.0.0.0
 opencode attach http://10.20.30.40:4096
 ```
 
-#### Flags
+#### Optionen
 
 | Flag        | Kurz | Beschreibung                              |
 | ----------- | ---- | ----------------------------------------- |
@@ -185,7 +185,7 @@ Führen Sie den GitHub-Agenten aus. Dies wird normalerweise in GitHub-Aktionen v
 opencode github run
 ```
 
-##### Flags
+##### Optionen
 
 | Flag      | Beschreibung                                        |
 | --------- | --------------------------------------------------- |
@@ -294,7 +294,7 @@ Sie können optional eine Anbieter-ID übergeben, um Modelle nach diesem Anbiete
 opencode models anthropic
 ```
 
-#### Flags
+#### Optionen
 
 | Flag        | Beschreibung                                                                          |
 | ----------- | ------------------------------------------------------------------------------------- |
@@ -317,7 +317,7 @@ Führen Sie OpenCode im nicht interaktiven Modus aus, indem Sie direkt eine Eing
 opencode run [message..]
 ```
 
-Dies ist nützlich für die Skripterstellung, die Automatisierung oder wenn Sie eine schnelle Antwort wünschen, ohne das vollständige TUI zu starten. Zum Beispiel.
+Dies ist nützlich für die Skripterstellung, die Automatisierung oder wenn Sie eine schnelle Antwort wünschen, ohne das vollständige TUI zu starten. Zum Beispiel:
 
 ```bash "opencode run"
 opencode run Explain the use of context in Go
@@ -333,11 +333,11 @@ opencode serve
 opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
-#### Flags
+#### Optionen
 
 | Flag         | Kurz | Beschreibung                                                                                        |
 | ------------ | ---- | --------------------------------------------------------------------------------------------------- |
-| `--command`  |      | Der auszuführende Befehl, Nachricht für Argumente verwenden                                         |
+| `--command`  |      | Der auszuführende Befehl, Argumente als Nachricht verwenden                                         |
 | `--continue` | `-c` | Setzen Sie die letzte Sitzung fort                                                                  |
 | `--session`  | `-s` | Session-ID zum Fortfahren                                                                           |
 | `--fork`     |      | Sitzung beim Fortsetzen verzweigen (mit `--continue` oder `--session` verwenden)                    |
@@ -362,7 +362,7 @@ opencode serve
 
 Dadurch wird ein HTTP-Server gestartet, der API-Zugriff auf OpenCode-Funktionalität ohne die TUI-Schnittstelle bietet. Legen Sie `OPENCODE_SERVER_PASSWORD` fest, um die HTTP-Basisauthentifizierung zu aktivieren (Benutzername ist standardmäßig `opencode`).
 
-#### Flags
+#### Optionen
 
 | Flag         | Beschreibung                                    |
 | ------------ | ----------------------------------------------- |
@@ -391,7 +391,7 @@ Listen Sie alle OpenCode-Sitzungen auf.
 opencode session list
 ```
 
-##### Flags
+##### Optionen
 
 | Flag          | Kurz | Beschreibung                             |
 | ------------- | ---- | ---------------------------------------- |
@@ -408,7 +408,7 @@ Zeigen Sie Token-Nutzungs- und Kostenstatistiken für Ihre OpenCode-Sitzungen an
 opencode stats
 ```
 
-#### Flags
+#### Optionen
 
 | Flag        | Beschreibung                                                                                                                   |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------ |
@@ -458,7 +458,7 @@ opencode web
 
 Dadurch wird ein HTTP-Server gestartet und ein Webbrowser geöffnet, um über eine Webschnittstelle auf OpenCode zuzugreifen. Legen Sie `OPENCODE_SERVER_PASSWORD` fest, um die HTTP-Basisauthentifizierung zu aktivieren (Benutzername ist standardmäßig `opencode`).
 
-#### Flags
+#### Optionen
 
 | Flag         | Beschreibung                                    |
 | ------------ | ----------------------------------------------- |
@@ -479,7 +479,7 @@ opencode acp
 
 Dieser Befehl startet einen ACP-Server, der über stdin/stdout unter Verwendung von nd-JSON kommuniziert.
 
-#### Flags
+#### Optionen
 
 | Flag         | Beschreibung         |
 | ------------ | -------------------- |
@@ -497,7 +497,7 @@ Deinstallieren Sie OpenCode und entfernen Sie alle zugehörigen Dateien.
 opencode uninstall
 ```
 
-#### Flags
+#### Optionen
 
 | Flag            | Kurz | Beschreibung                                        |
 | --------------- | ---- | --------------------------------------------------- |
@@ -516,7 +516,7 @@ Aktualisiert OpenCode auf die neueste Version oder eine bestimmte Version.
 opencode upgrade [target]
 ```
 
-Um auf die neueste Version zu aktualisieren.
+Um auf die neueste Version zu aktualisieren:
 
 ```bash
 opencode upgrade
@@ -528,11 +528,11 @@ Um auf eine bestimmte Version zu aktualisieren.
 opencode upgrade v0.1.48
 ```
 
-#### Flags
+#### Optionen
 
-| Flag       | Kurz | Beschreibung                                                    |
-| ---------- | ---- | --------------------------------------------------------------- |
-| `--method` | `-m` | Die verwendete Installationsmethode; curl, npm, pnpm, bun, brew |
+| Flag       | Kurz | Beschreibung                                                        |
+| ---------- | ---- | ------------------------------------------------------------------- |
+| `--method` | `-m` | Die zu verwendende Installationsmethode; curl, npm, pnpm, bun, brew |
 
 ---
 
@@ -582,7 +582,7 @@ OpenCode kann mithilfe von Umgebungsvariablen konfiguriert werden.
 
 ---
 
-### Experimental
+### Experimentell
 
 Diese Umgebungsvariablen ermöglichen experimentelle Funktionen, die sich ändern oder entfernt werden können.
 

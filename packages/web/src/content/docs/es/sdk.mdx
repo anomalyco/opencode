@@ -188,7 +188,7 @@ const currentProject = await client.project.current()
 
 ---
 
-### Camino
+### Ruta
 
 | Método       | Descripción         | Respuesta                                |
 | ------------ | ------------------- | ---------------------------------------- |
@@ -230,7 +230,7 @@ const { providers, default: defaults } = await client.config.providers()
 | ---------------------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `session.list()`                                           | Listar sesiones                         | Devuelve <a href={typesUrl}><code>Session[]</code></a>                                                                                                               |
 | `session.get({ path })`                                    | Obtener sesión                          | Devuelve <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
-| `session.children({ path })`                               | Listar sesiones infantiles              | Devuelve <a href={typesUrl}><code>Session[]</code></a>                                                                                                               |
+| `session.children({ path })`                               | Listar sesiones secundarias             | Devuelve <a href={typesUrl}><code>Session[]</code></a>                                                                                                               |
 | `session.create({ body })`                                 | Crear sesión                            | Devuelve <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
 | `session.delete({ path })`                                 | Eliminar sesión                         | Devuelve `boolean`                                                                                                                                                   |
 | `session.update({ path, body })`                           | Actualizar propiedades de sesión        | Devuelve <a href={typesUrl}><code>Session</code></a>                                                                                                                 |

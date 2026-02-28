@@ -1,5 +1,5 @@
 ---
-title: Rules
+title: Regeln
 description: Lege eigene Anweisungen fuer opencode fest.
 ---
 
@@ -8,7 +8,7 @@ Das ist aehnlich zu den Regeln in Cursor und wird direkt in den LLM-Kontext gela
 
 ---
 
-## Initialisieren
+## Initialisierung
 
 Um eine neue `AGENTS.md` zu erstellen, fuehre in opencode den Befehl `/init` aus.
 
@@ -23,7 +23,7 @@ Wenn bereits eine `AGENTS.md` existiert, versucht opencode sie zu erweitern.
 
 ---
 
-## Example
+## Beispiel
 
 Du kannst die Datei auch manuell anlegen.
 Hier ist ein Beispiel, was in einer `AGENTS.md` stehen kann.
@@ -60,7 +60,7 @@ Hier hinterlegst du projektspezifische Regeln, die dein Team gemeinsam nutzt.
 opencode kann `AGENTS.md` aus mehreren Orten lesen.
 Die Orte haben unterschiedliche Zwecke.
 
-### Project
+### Projekt
 
 Lege eine `AGENTS.md` im Projekt-Root ab, um projektspezifische Regeln zu definieren.
 Diese gelten nur in diesem Verzeichnis und seinen Unterordnern.
@@ -72,7 +72,7 @@ Diese gelten in allen opencode-Sitzungen.
 
 Da diese Datei nicht in Git landet und nicht mit dem Team geteilt wird, eignet sie sich fuer persoenliche Regeln.
 
-### Claude Code Compatibility
+### Claude Code-Kompatibilität
 
 Wenn du von Claude Code kommst, unterstuetzt OpenCode dessen Dateikonventionen als Fallback:
 
@@ -90,7 +90,7 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 
 ---
 
-## Precedence
+## Rangfolge
 
 Beim Start sucht opencode in dieser Reihenfolge nach Regeldateien:
 

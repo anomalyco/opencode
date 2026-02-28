@@ -1,67 +1,67 @@
 ---
 title: Temalar
-description: Yerlesik bir tema secin veya kendiniz olusturun.
+description: Yerleşik bir tema seçin veya kendiniz oluşturun.
 ---
 
-opencode ile birden fazla yerlesik tema arasindan secim yapabilir, terminal temaniza uyum saglayan bir tema kullanabilir veya kendi ozel temanizi tanimlayabilirsiniz.
+opencode ile birden fazla yerleşik tema arasından seçim yapabilir, terminal temanıza uyum sağlayan bir tema kullanabilir veya kendi özel temanızı tanımlayabilirsiniz.
 
-Varsayilan olarak opencode kendi `opencode` temasini kullanir.
+Varsayılan olarak opencode kendi `opencode` temasını kullanır.
 
 ---
 
 ## Terminal gereksinimleri
 
-Temalarin tum renk paletiyle dogru gorunmesi icin terminalinizin **truecolor** (24-bit renk) desteklemesi gerekir. Cogu modern terminal bunu varsayilan olarak destekler, ancak gerekirse etkinlestirmeniz gerekebilir:
+Temaların tüm renk paletiyle doğru görünmesi için terminalinizin **truecolor** (24-bit renk) desteklemesi gerekir. Çoğu modern terminal bunu varsayılan olarak destekler, ancak gerekirse etkinleştirmeniz gerekebilir:
 
-- **Destegi kontrol edin**: `echo $COLORTERM` calistirin - cikti `truecolor` veya `24bit` olmalidir
-- **Truecolor etkinlestirin**: kabuk profilinizde `COLORTERM=truecolor` ortam degiskenini ayarlayin
-- **Terminal uyumlulugu**: terminal emulatorunuzun 24-bit rengi desteklediginden emin olun (iTerm2, Alacritty, Kitty, Windows Terminal ve GNOME Terminal'in yeni surumleri gibi modern terminaller genelde destekler)
+- **Desteği kontrol edin**: `echo $COLORTERM` çalıştırın - çıktı `truecolor` veya `24bit` olmalıdır
+- **Truecolor etkinleştirin**: kabuk profilinizde `COLORTERM=truecolor` ortam değişkenini ayarlayın
+- **Terminal uyumluluğu**: terminal emülatörünüzün 24-bit rengi desteklediğinden emin olun (iTerm2, Alacritty, Kitty, Windows Terminal ve GNOME Terminal'in yeni sürümleri gibi modern terminaller genelde destekler)
 
-Truecolor destegi yoksa temalar daha dusuk renk dogrulugu ile gorunebilir veya en yakin 256 renk yaklasimina dusebilir.
+Truecolor desteği yoksa temalar daha düşük renk doğruluğu ile görünebilir veya en yakın 256 renk yaklaşımına düşebilir.
 
 ---
 
-## Yerlesik temalar
+## Yerleşik temalar
 
-opencode birden fazla yerlesik temayla gelir.
+opencode birden fazla yerleşik temayla gelir.
 
-| Ad                     | Aciklama                                                                      |
+| Ad                     | Açıklama                                                                      |
 | ---------------------- | ----------------------------------------------------------------------------- |
-| `system`               | Terminalinizin arka plan rengine uyum saglar                                  |
-| `tokyonight`           | [tokyonight](https://github.com/folke/tokyonight.nvim) temasini temel alir    |
-| `everforest`           | [Everforest](https://github.com/sainnhe/everforest) temasini temel alir       |
-| `ayu`                  | [Ayu](https://github.com/ayu-theme) koyu temasini temel alir                  |
-| `catppuccin`           | [Catppuccin](https://github.com/catppuccin) temasini temel alir               |
-| `catppuccin-macchiato` | [Catppuccin](https://github.com/catppuccin) temasini temel alir               |
-| `gruvbox`              | [Gruvbox](https://github.com/morhetz/gruvbox) temasini temel alir             |
-| `kanagawa`             | [Kanagawa](https://github.com/rebelot/kanagawa.nvim) temasini temel alir      |
-| `nord`                 | [Nord](https://github.com/nordtheme/nord) temasini temel alir                 |
-| `matrix`               | Hacker tarzi yesil uzerine siyah tema                                         |
-| `one-dark`             | [Atom One](https://github.com/Th3Whit3Wolf/one-nvim) Dark temasini temel alir |
+| `system`               | Terminalinizin arka plan rengine uyum sağlar                                  |
+| `tokyonight`           | [tokyonight](https://github.com/folke/tokyonight.nvim) temasını temel alır    |
+| `everforest`           | [Everforest](https://github.com/sainnhe/everforest) temasını temel alır       |
+| `ayu`                  | [Ayu](https://github.com/ayu-theme) koyu temasını temel alır                  |
+| `catppuccin`           | [Catppuccin](https://github.com/catppuccin) temasını temel alır               |
+| `catppuccin-macchiato` | [Catppuccin](https://github.com/catppuccin) temasını temel alır               |
+| `gruvbox`              | [Gruvbox](https://github.com/morhetz/gruvbox) temasını temel alır             |
+| `kanagawa`             | [Kanagawa](https://github.com/rebelot/kanagawa.nvim) temasını temel alır      |
+| `nord`                 | [Nord](https://github.com/nordtheme/nord) temasını temel alır                 |
+| `matrix`               | Hacker tarzı yeşil üzerine siyah tema                                         |
+| `one-dark`             | [Atom One](https://github.com/Th3Whit3Wolf/one-nvim) Dark temasını temel alır |
 
-Ve daha fazlasi; surekli yeni temalar ekliyoruz.
-
----
-
-## Sistem temasi
-
-`system` temasi, terminalinizin renk duzenine otomatik uyum saglamak icin tasarlanmistir. Sabit renk kullanan klasik temalardan farkli olarak _system_ temasi:
-
-- **Gri olcegi uretir**: En iyi kontrast icin terminal arka planina gore ozel gri tonlari olusturur
-- **ANSI renkleri kullanir**: 0-15 arasi standart ANSI renklerini syntax highlighting ve UI ogelerinde kullanir, boylece terminal paletinize uyar
-- **Terminal varsayilanlarini korur**: Metin ve arka plan renklerinde `none` kullanarak terminalin yerel gorunumunu korur
-
-Sistem temasi su kullanicilar icin idealdir:
-
-- opencode'un terminal gorunumuyle birebir uyumlu olmasini isteyenler
-- Ozel terminal renk semalari kullananlar
-- Tum terminal uygulamalarinda tutarli bir gorunum tercih edenler
+Ve daha fazlası; sürekli yeni temalar ekliyoruz.
 
 ---
 
-## Tema kullanin
+## Sistem teması
 
-`/theme` komutuyla tema secicisini acip tema secebilirsiniz. Isterseniz [config](/docs/config) dosyanizda da belirtebilirsiniz.
+`system` teması, terminalinizin renk düzenine otomatik uyum sağlamak için tasarlanmıştır. Sabit renk kullanan klasik temalardan farklı olarak _system_ teması:
+
+- **Gri ölçeği üretir**: En iyi kontrast için terminal arka planına göre özel gri tonları oluşturur
+- **ANSI renkleri kullanır**: 0-15 arası standart ANSI renklerini syntax highlighting ve UI öğelerinde kullanır, böylece terminal paletinize uyar
+- **Terminal varsayılanlarını korur**: Metin ve arka plan renklerinde `none` kullanarak terminalin yerel görünümünü korur
+
+Sistem teması şu kullanıcılar için idealdir:
+
+- opencode'un terminal görünümüyle birebir uyumlu olmasını isteyenler
+- Özel terminal renk şemaları kullananlar
+- Tüm terminal uygulamalarında tutarlı bir görünüm tercih edenler
+
+---
+
+## Tema kullanımı
+
+`/theme` komutuyla tema seçicisini açıp tema seçebilirsiniz. İsterseniz [config](/docs/config) dosyanızda da belirtebilirsiniz.
 
 ```json title="opencode.json" {3}
 {
@@ -72,37 +72,37 @@ Sistem temasi su kullanicilar icin idealdir:
 
 ---
 
-## Ozel temalar
+## Özel temalar
 
-opencode, kullanicilarin kolayca tema olusturup ozellestirebilmesi icin esnek bir JSON tabanli tema sistemi sunar.
-
----
-
-### Hiyerarsi
-
-Temalar birden fazla dizinden su sirayla yuklenir; daha sonra gelen dizin oncekini ezer:
-
-1. **Yerlesik temalar** - Binary icine gomuludur
-2. **Kullanici config dizini** - `~/.config/opencode/themes/*.json` veya `$XDG_CONFIG_HOME/opencode/themes/*.json`
-3. **Proje kok dizini** - `<project-root>/.opencode/themes/*.json`
-4. **Gecerli calisma dizini** - `./.opencode/themes/*.json`
-
-Birden fazla dizinde ayni adli tema varsa, onceligi daha yuksek dizindeki tema kullanilir.
+opencode, kullanıcıların kolayca tema oluşturup özelleştirebilmesi için esnek bir JSON tabanlı tema sistemi sunar.
 
 ---
 
-### Tema olusturun
+### Hiyerarşi
 
-Ozel tema olusturmak icin tema dizinlerinden birinde bir JSON dosyasi olusturun.
+Temalar birden fazla dizinden şu sırayla yüklenir; daha sonra gelen dizin öncekini ezer:
 
-Kullanici geneli temalar icin:
+1. **Yerleşik temalar** - Binary içine gömülüdür
+2. **Kullanıcı yapılandırma dizini** - `~/.config/opencode/themes/*.json` veya `$XDG_CONFIG_HOME/opencode/themes/*.json`
+3. **Proje kök dizini** - `<project-root>/.opencode/themes/*.json`
+4. **Geçerli çalışma dizini** - `./.opencode/themes/*.json`
+
+Birden fazla dizinde aynı adlı tema varsa, önceliği daha yüksek dizindeki tema kullanılır.
+
+---
+
+### Tema oluşturma
+
+Özel tema oluşturmak için tema dizinlerinden birinde bir JSON dosyası oluşturun.
+
+Kullanıcı geneli temalar için:
 
 ```bash no-frame
 mkdir -p ~/.config/opencode/themes
 vim ~/.config/opencode/themes/my-theme.json
 ```
 
-Proje ozel temalar icin:
+Proje özel temalar için:
 
 ```bash no-frame
 mkdir -p .opencode/themes
@@ -111,36 +111,36 @@ vim .opencode/themes/my-theme.json
 
 ---
 
-### JSON formati
+### JSON formatı
 
-Temalar asagidaki ozellikleri destekleyen esnek bir JSON formati kullanir:
+Temalar aşağıdaki özellikleri destekleyen esnek bir JSON formatı kullanır:
 
 - **Hex renkler**: `"#ffffff"`
 - **ANSI renkler**: `3` (0-255)
-- **Renk referanslari**: `"primary"` veya ozel tanimlar
-- **Koyu/acik varyantlar**: `{"dark": "#000", "light": "#fff"}`
-- **Renk yok**: `"none"` - Terminal varsayilan rengi veya seffaflik kullanilir
+- **Renk referansları**: `"primary"` veya özel tanımlar
+- **Koyu/açık varyantlar**: `{"dark": "#000", "light": "#fff"}`
+- **Renk yok**: `"none"` - Terminal varsayılan rengi veya şeffaflık kullanılır
 
 ---
 
-### Renk tanimlari
+### Renk tanımları
 
-`defs` bolumu istege baglidir ve tema icinde tekrar kullanilabilir renkler tanimlamanizi saglar.
-
----
-
-### Terminal varsayilanlari
-
-Ozel `"none"` degeri, terminalin varsayilan rengini miras almak icin herhangi bir renkte kullanilabilir. Bu, terminalinizin renk semasiyla dogal sekilde butunlesen temalar olustururken ozellikle faydalidir:
-
-- `"text": "none"` - Terminalin varsayilan on plan rengini kullanir
-- `"background": "none"` - Terminalin varsayilan arka plan rengini kullanir
+`defs` bölümü isteğe bağlıdır ve tema içinde tekrar kullanılabilir renkler tanımlamanızı sağlar.
 
 ---
 
-### Ornek
+### Terminal varsayılanları
 
-Asagida ozel bir tema ornegi var:
+Özel `"none"` değeri, terminalin varsayılan rengini miras almak için herhangi bir renkte kullanılabilir. Bu, terminalinizin renk şemasıyla doğal şekilde bütünleşen temalar oluştururken özellikle faydalıdır:
+
+- `"text": "none"` - Terminalin varsayılan ön plan rengini kullanır
+- `"background": "none"` - Terminalin varsayılan arka plan rengini kullanır
+
+---
+
+### Örnek
+
+Aşağıda özel bir tema örneği var:
 
 ```json title="my-theme.json"
 {

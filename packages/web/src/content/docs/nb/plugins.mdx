@@ -1,15 +1,15 @@
 ---
-title: Plugins
-description: Skriv dine egne plugins for å utvide opencode.
+title: Programtillegg
+description: Skriv dine egne programtillegg for å utvide opencode.
 ---
 
-Plugins lar deg utvide OpenCode ved å koble til ulike arrangementer og tilpasse atferd. Du kan lage plugins for å legge til nye funksjoner, integrere med eksterne tjenester eller endre standardoppførselen til OpenCode.
+Plugins lar deg utvide OpenCode ved å koble til ulike hendelser og tilpasse atferd. Du kan lage plugins for å legge til nye funksjoner, integrere med eksterne tjenester eller endre standardoppførselen til OpenCode.
 
 For eksempler, sjekk ut [plugins](/docs/ecosystem#plugins) opprettet av fellesskapet.
 
 ---
 
-## Bruk en plugin
+## Bruk av en plugin
 
 Det er to måter å laste inn plugins.
 
@@ -64,7 +64,7 @@ Dupliserte npm-pakker med samme navn og versjon lastes inn én gang. Imidlertid 
 
 ---
 
-## Opprett en plugin
+## Opprette en plugin
 
 En plugin er en **JavaScript/TypeScript-modul** som eksporterer en eller flere plugin-moduler
 funksjoner. Hver funksjon mottar et kontekstobjekt og returnerer et krokobjekt.
@@ -141,7 +141,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 ### Hendelser
 
-Plugins kan abonnere på arrangementer som vist nedenfor i Eksempler-delen. Her er en liste over de forskjellige arrangementene som er tilgjengelige.
+Plugins kan abonnere på hendelser som vist nedenfor i Eksempler-delen. Her er en liste over de forskjellige hendelsene som er tilgjengelige.
 
 #### Kommandohendelser
 
@@ -304,9 +304,9 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 
 - `description`: Hva verktøyet gjør
 - `args`: Zod-skjema for verktøyets argumenter
-- `execute`: Funksjon som kjører når verktøyet kalles
+  - `execute`: Funksjon som kjører når verktøyet kalles
 
-Dine egendefinerte verktøy vil være tilgjengelige for å OpenCode sammen med innebygde verktøy.
+Dine egendefinerte verktøy vil være tilgjengelige for OpenCode sammen med innebygde verktøy.
 
 ---
 
@@ -331,7 +331,7 @@ Nivåer: `debug`, `info`, `warn`, `error`. Se [SDK dokumentasjon](https://openco
 
 ---
 
-### Komprimeringskroker
+### Komprimerings-hooks
 
 Tilpass konteksten inkludert når en økt komprimeres:
 
@@ -355,9 +355,9 @@ Include any state that should persist across compaction:
 }
 ```
 
-`experimental.session.compacting`-kroken avfyres før LLM genererer et fortsettelsessammendrag. Bruk den til å injisere domenespesifikk kontekst som standard komprimeringsforespørsel ville gå glipp av.
+`experimental.session.compacting`-kroken trigges før LLM genererer et fortsettelsessammendrag. Bruk den til å injisere domenespesifikk kontekst som standard komprimeringsprompt ville gå glipp av.
 
-Du kan også erstatte komprimeringsmeldingen helt ved å stille inn `output.prompt`:
+Du kan også erstatte komprimeringsprompten helt ved å stille inn `output.prompt`:
 
 ```ts title=".opencode/plugins/custom-compaction.ts"
 import type { Plugin } from "@opencode-ai/plugin"

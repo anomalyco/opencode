@@ -118,7 +118,7 @@ Der opencode-Server stellt folgende APIs bereit.
 
 ---
 
-### Instance
+### Instanz
 
 | Method | Path                | Description                  | Response  |
 | ------ | ------------------- | ---------------------------- | --------- |
@@ -126,7 +126,7 @@ Der opencode-Server stellt folgende APIs bereit.
 
 ---
 
-### Config
+### Konfiguration
 
 | Method  | Path                | Description                       | Response                                                                                 |
 | ------- | ------------------- | --------------------------------- | ---------------------------------------------------------------------------------------- |
@@ -136,7 +136,7 @@ Der opencode-Server stellt folgende APIs bereit.
 
 ---
 
-### Provider
+### Anbieter
 
 | Method | Path                             | Description                          | Response                                                                            |
 | ------ | -------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------- |
@@ -147,7 +147,7 @@ Der opencode-Server stellt folgende APIs bereit.
 
 ---
 
-### Sessions
+### Sitzungen
 
 | Method   | Path                                     | Description                           | Notes                                                                              |
 | -------- | ---------------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------- |
@@ -172,7 +172,7 @@ Der opencode-Server stellt folgende APIs bereit.
 
 ---
 
-### Messages
+### Nachrichten
 
 | Method | Path                              | Description                             | Notes                                                                                                                                                                 |
 | ------ | --------------------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -185,7 +185,7 @@ Der opencode-Server stellt folgende APIs bereit.
 
 ---
 
-### Commands
+### Befehle
 
 | Method | Path       | Description       | Response                                      |
 | ------ | ---------- | ----------------- | --------------------------------------------- |
@@ -193,7 +193,7 @@ Der opencode-Server stellt folgende APIs bereit.
 
 ---
 
-### Files
+### Dateien
 
 | Method | Path                     | Description                        | Response                                                                                    |
 | ------ | ------------------------ | ---------------------------------- | ------------------------------------------------------------------------------------------- |
@@ -204,17 +204,17 @@ Der opencode-Server stellt folgende APIs bereit.
 | `GET`  | `/file/content?path=<p>` | Read a file                        | <a href={typesUrl}><code>FileContent</code></a>                                             |
 | `GET`  | `/file/status`           | Get status for tracked files       | <a href={typesUrl}><code>File[]</code></a>                                                  |
 
-#### `/find/file` query parameters
+#### `/find/file` Abfrageparameter
 
-- `query` (required) — search string (fuzzy match)
-- `type` (optional) — limit results to `"file"` or `"directory"`
-- `directory` (optional) — override the project root for the search
-- `limit` (optional) — max results (1–200)
-- `dirs` (optional) — legacy flag (`"false"` returns only files)
+- `query` (erforderlich) — Suchbegriff (Fuzzy-Suche)
+- `type` (optional) — Ergebnisse auf `"file"` oder `"directory"` beschränken
+- `directory` (optional) — Projektstammverzeichnis für die Suche überschreiben
+- `limit` (optional) — Maximale Ergebnisse (1–200)
+- `dirs` (optional) — Legacy-Flag (`"false"` gibt nur Dateien zurück)
 
 ---
 
-### Tools (Experimental)
+### Werkzeuge (Experimentell)
 
 | Method | Path                                        | Description                              | Response                                     |
 | ------ | ------------------------------------------- | ---------------------------------------- | -------------------------------------------- |
@@ -223,7 +223,7 @@ Der opencode-Server stellt folgende APIs bereit.
 
 ---
 
-### LSP, Formatters & MCP
+### LSP, Formatierer & MCP
 
 | Method | Path         | Description                | Response                                                 |
 | ------ | ------------ | -------------------------- | -------------------------------------------------------- |
@@ -234,7 +234,7 @@ Der opencode-Server stellt folgende APIs bereit.
 
 ---
 
-### Agents
+### Agenten
 
 | Method | Path     | Description               | Response                                    |
 | ------ | -------- | ------------------------- | ------------------------------------------- |
@@ -268,7 +268,7 @@ Der opencode-Server stellt folgende APIs bereit.
 
 ---
 
-### Auth
+### Authentifizierung
 
 | Method | Path        | Description                                                     | Response  |
 | ------ | ----------- | --------------------------------------------------------------- | --------- |
@@ -284,7 +284,7 @@ Der opencode-Server stellt folgende APIs bereit.
 
 ---
 
-### Docs
+### Dokumentation
 
 | Method | Path   | Description               | Response                    |
 | ------ | ------ | ------------------------- | --------------------------- |
