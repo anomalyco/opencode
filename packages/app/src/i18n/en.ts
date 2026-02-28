@@ -608,6 +608,7 @@ export const dict = {
   "sidebar.project.recentSessions": "Recent sessions",
   "sidebar.project.viewAllSessions": "View all sessions",
   "sidebar.project.clearNotifications": "Clear notifications",
+  "sidebar.threads": "Projects",
 
   "app.name.desktop": "OpenCode Desktop",
 
@@ -634,6 +635,10 @@ export const dict = {
   "settings.general.row.theme.description": "Customise how OpenCode is themed.",
   "settings.general.row.font.title": "Font",
   "settings.general.row.font.description": "Customise the mono font used in code blocks",
+  "settings.general.row.sidebarStyle.title": "Sidebar style",
+  "settings.general.row.sidebarStyle.description": "Choose between classic icon strip or list layout",
+  "sidebar.style.classic": "Classic",
+  "sidebar.style.list": "List",
   "settings.general.row.reasoningSummaries.title": "Show reasoning summaries",
   "settings.general.row.reasoningSummaries.description": "Display model reasoning summaries in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "Expand shell tool parts",

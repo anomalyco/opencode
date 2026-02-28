@@ -77,6 +77,7 @@ import {
 import { workspaceOpenState } from "./layout/sidebar-workspace-helpers"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
+import { SidebarListContent } from "./layout/sidebar-list"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -176,7 +177,8 @@ export default function Layout(props: ParentProps) {
     aim.reset()
   })
 
-  const sidebarHovering = createMemo(() => !layout.sidebar.opened() && state.hoverProject !== undefined)
+  const listMode = createMemo(() => settings.general.sidebarStyle() === "list")
+  const sidebarHovering = createMemo(() => !listMode() && !layout.sidebar.opened() && state.hoverProject !== undefined)
   const sidebarExpanded = createMemo(() => layout.sidebar.opened() || sidebarHovering())
   const setHoverProject = (value: string | undefined) => {
     setState("hoverProject", value)
@@ -1510,7 +1512,13 @@ export default function Layout(props: ParentProps) {
   )
 
   createEffect(() => {
-    const sidebarWidth = layout.sidebar.opened() ? layout.sidebar.width() : 48
+    const sidebarWidth = listMode()
+      ? layout.sidebar.opened()
+        ? layout.sidebar.width()
+        : 0
+      : layout.sidebar.opened()
+        ? layout.sidebar.width()
+        : 48
     document.documentElement.style.setProperty("--dialog-left-margin", `${sidebarWidth}px`)
   })
 
@@ -1969,10 +1977,19 @@ export default function Layout(props: ParentProps) {
           aria-label={language.t("sidebar.nav.projectsAndSessions")}
           data-component="sidebar-nav-desktop"
           classList={{
-            "hidden xl:block": true,
+            "hidden xl:block": !listMode() || layout.sidebar.opened(),
+            hidden: listMode() && !layout.sidebar.opened(),
             "relative shrink-0": true,
           }}
-          style={{ width: layout.sidebar.opened() ? `${Math.max(layout.sidebar.width(), 244)}px` : "64px" }}
+          style={{
+            width: listMode()
+              ? layout.sidebar.opened()
+                ? `${Math.max(layout.sidebar.width(), 280)}px`
+                : "0px"
+              : layout.sidebar.opened()
+                ? `${Math.max(layout.sidebar.width(), 244)}px`
+                : "64px",
+          }}
           ref={(el) => {
             setState("nav", el)
           }}
@@ -1993,48 +2010,89 @@ export default function Layout(props: ParentProps) {
             }, 300)
           }}
         >
-          <div class="@container w-full h-full contain-strict">
-            <SidebarContent
-              opened={() => layout.sidebar.opened()}
-              aimMove={aim.move}
-              projects={() => layout.projects.list()}
-              renderProject={(project) => (
-                <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} />
-              )}
-              handleDragStart={handleDragStart}
-              handleDragEnd={handleDragEnd}
-              handleDragOver={handleDragOver}
-              openProjectLabel={language.t("command.project.open")}
-              openProjectKeybind={() => command.keybind("project.open")}
-              onOpenProject={chooseProject}
-              renderProjectOverlay={() => (
-                <ProjectDragOverlay projects={() => layout.projects.list()} activeProject={() => store.activeProject} />
-              )}
-              settingsLabel={() => language.t("sidebar.settings")}
-              settingsKeybind={() => command.keybind("settings.open")}
-              onOpenSettings={openSettings}
-              helpLabel={() => language.t("sidebar.help")}
-              onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
-              renderPanel={() => <SidebarPanel project={currentProject()} />}
-            />
-          </div>
-          <Show when={!layout.sidebar.opened() ? hoverProjectData()?.worktree : undefined} keyed>
-            {(worktree) => (
-              <div class="absolute inset-y-0 left-16 z-50 flex" onMouseEnter={aim.reset}>
-                <SidebarPanel project={hoverProjectData()} />
+          <Show
+            when={listMode()}
+            fallback={
+              <>
+                <div class="@container w-full h-full contain-strict">
+                  <SidebarContent
+                    opened={() => layout.sidebar.opened()}
+                    aimMove={aim.move}
+                    projects={() => layout.projects.list()}
+                    renderProject={(project) => (
+                      <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} />
+                    )}
+                    handleDragStart={handleDragStart}
+                    handleDragEnd={handleDragEnd}
+                    handleDragOver={handleDragOver}
+                    openProjectLabel={language.t("command.project.open")}
+                    openProjectKeybind={() => command.keybind("project.open")}
+                    onOpenProject={chooseProject}
+                    renderProjectOverlay={() => (
+                      <ProjectDragOverlay
+                        projects={() => layout.projects.list()}
+                        activeProject={() => store.activeProject}
+                      />
+                    )}
+                    settingsLabel={() => language.t("sidebar.settings")}
+                    settingsKeybind={() => command.keybind("settings.open")}
+                    onOpenSettings={openSettings}
+                    helpLabel={() => language.t("sidebar.help")}
+                    onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+                    renderPanel={() => <SidebarPanel project={currentProject()} />}
+                  />
+                </div>
+                <Show when={!layout.sidebar.opened() ? hoverProjectData()?.worktree : undefined} keyed>
+                  {(_worktree) => (
+                    <div class="absolute inset-y-0 left-16 z-50 flex" onMouseEnter={aim.reset}>
+                      <SidebarPanel project={hoverProjectData()} />
+                    </div>
+                  )}
+                </Show>
+                <Show when={layout.sidebar.opened()}>
+                  <ResizeHandle
+                    direction="horizontal"
+                    size={layout.sidebar.width()}
+                    min={244}
+                    max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
+                    collapseThreshold={244}
+                    onResize={layout.sidebar.resize}
+                    onCollapse={layout.sidebar.close}
+                  />
+                </Show>
+              </>
+            }
+          >
+            <Show when={layout.sidebar.opened()}>
+              <div class="@container w-full h-full contain-strict border-t border-r border-border-weak-base">
+                <SidebarListContent
+                  projects={() => layout.projects.list()}
+                  sortNow={sortNow}
+                  onNewSession={(directory) => navigateWithSidebarReset(`/${base64Encode(directory)}/session`)}
+                  onOpenSettings={openSettings}
+                  onOpenProject={chooseProject}
+                  archiveSession={archiveSession}
+                  openProjectLabel={() => language.t("command.project.open")}
+                  settingsLabel={() => language.t("sidebar.settings")}
+                  settingsKeybind={() => command.keybind("settings.open")}
+                  newSessionLabel={() => language.t("command.session.new")}
+                  newSessionKeybind={() => command.keybind("session.new")}
+                  currentSessionId={() => params.id}
+                  threadsLabel={() => language.t("sidebar.threads")}
+                  helpLabel={() => language.t("sidebar.help")}
+                  onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+                />
               </div>
-            )}
-          </Show>
-          <Show when={layout.sidebar.opened()}>
-            <ResizeHandle
-              direction="horizontal"
-              size={layout.sidebar.width()}
-              min={244}
-              max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
-              collapseThreshold={244}
-              onResize={layout.sidebar.resize}
-              onCollapse={layout.sidebar.close}
-            />
+              <ResizeHandle
+                direction="horizontal"
+                size={layout.sidebar.width()}
+                min={280}
+                max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3}
+                collapseThreshold={280}
+                onResize={layout.sidebar.resize}
+                onCollapse={layout.sidebar.close}
+              />
+            </Show>
           </Show>
         </nav>
         <div class="xl:hidden">
@@ -2058,37 +2116,63 @@ export default function Layout(props: ParentProps) {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <SidebarContent
-              mobile
-              opened={() => layout.sidebar.opened()}
-              aimMove={aim.move}
-              projects={() => layout.projects.list()}
-              renderProject={(project) => (
-                <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} mobile />
-              )}
-              handleDragStart={handleDragStart}
-              handleDragEnd={handleDragEnd}
-              handleDragOver={handleDragOver}
-              openProjectLabel={language.t("command.project.open")}
-              openProjectKeybind={() => command.keybind("project.open")}
-              onOpenProject={chooseProject}
-              renderProjectOverlay={() => (
-                <ProjectDragOverlay projects={() => layout.projects.list()} activeProject={() => store.activeProject} />
-              )}
-              settingsLabel={() => language.t("sidebar.settings")}
-              settingsKeybind={() => command.keybind("settings.open")}
-              onOpenSettings={openSettings}
-              helpLabel={() => language.t("sidebar.help")}
-              onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
-              renderPanel={() => <SidebarPanel project={currentProject()} mobile />}
-            />
+            <Show
+              when={listMode()}
+              fallback={
+                <SidebarContent
+                  mobile
+                  opened={() => layout.sidebar.opened()}
+                  aimMove={aim.move}
+                  projects={() => layout.projects.list()}
+                  renderProject={(project) => (
+                    <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} mobile />
+                  )}
+                  handleDragStart={handleDragStart}
+                  handleDragEnd={handleDragEnd}
+                  handleDragOver={handleDragOver}
+                  openProjectLabel={language.t("command.project.open")}
+                  openProjectKeybind={() => command.keybind("project.open")}
+                  onOpenProject={chooseProject}
+                  renderProjectOverlay={() => (
+                    <ProjectDragOverlay
+                      projects={() => layout.projects.list()}
+                      activeProject={() => store.activeProject}
+                    />
+                  )}
+                  settingsLabel={() => language.t("sidebar.settings")}
+                  settingsKeybind={() => command.keybind("settings.open")}
+                  onOpenSettings={openSettings}
+                  helpLabel={() => language.t("sidebar.help")}
+                  onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+                  renderPanel={() => <SidebarPanel project={currentProject()} mobile />}
+                />
+              }
+            >
+              <SidebarListContent
+                projects={() => layout.projects.list()}
+                sortNow={sortNow}
+                onNewSession={(directory) => navigateWithSidebarReset(`/${base64Encode(directory)}/session`)}
+                onOpenSettings={openSettings}
+                onOpenProject={chooseProject}
+                archiveSession={archiveSession}
+                openProjectLabel={() => language.t("command.project.open")}
+                settingsLabel={() => language.t("sidebar.settings")}
+                settingsKeybind={() => command.keybind("settings.open")}
+                newSessionLabel={() => language.t("command.session.new")}
+                newSessionKeybind={() => command.keybind("session.new")}
+                currentSessionId={() => params.id}
+                threadsLabel={() => language.t("sidebar.threads")}
+                helpLabel={() => language.t("sidebar.help")}
+                onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+              />
+            </Show>
           </nav>
         </div>
 
         <main
           classList={{
             "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base": true,
-            "xl:border-l xl:rounded-tl-[12px]": !layout.sidebar.opened(),
+            "xl:border-l xl:rounded-tl-[12px]": !listMode() && !layout.sidebar.opened(),
           }}
         >
           <Show when={!autoselecting()} fallback={<div class="size-full" />}>

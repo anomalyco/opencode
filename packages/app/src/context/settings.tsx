@@ -18,6 +18,8 @@ export interface SoundSettings {
   errors: string
 }
 
+export type SidebarStyle = "classic" | "list"
+
 export interface Settings {
   general: {
     autoSave: boolean
@@ -25,6 +27,7 @@ export interface Settings {
     showReasoningSummaries: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
+    sidebarStyle: SidebarStyle
   }
   updates: {
     startup: boolean
@@ -48,6 +51,7 @@ const defaultSettings: Settings = {
     showReasoningSummaries: false,
     shellToolPartsExpanded: true,
     editToolPartsExpanded: false,
+    sidebarStyle: "classic" as SidebarStyle,
   },
   updates: {
     startup: true,
@@ -146,6 +150,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setEditToolPartsExpanded(value: boolean) {
           setStore("general", "editToolPartsExpanded", value)
+        },
+        sidebarStyle: withFallback(() => store.general?.sidebarStyle, defaultSettings.general.sidebarStyle),
+        setSidebarStyle(value: SidebarStyle) {
+          setStore("general", "sidebarStyle", value)
         },
       },
       updates: {

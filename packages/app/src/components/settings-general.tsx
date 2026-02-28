@@ -9,7 +9,7 @@ import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { useSettings, monoFontFamily } from "@/context/settings"
+import { useSettings, monoFontFamily, type SidebarStyle } from "@/context/settings"
 import { playSound, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
 
@@ -136,6 +136,11 @@ export const SettingsGeneral: Component = () => {
     { value: "geist-mono", label: "font.option.geistMono" },
   ] as const
   const fontOptionsList = [...fontOptions]
+
+  const sidebarStyleOptions = [
+    { value: "classic" as SidebarStyle, label: "sidebar.style.classic" as const },
+    { value: "list" as SidebarStyle, label: "sidebar.style.list" as const },
+  ]
 
   const noneSound = { id: "none", label: "sound.option.none", src: undefined } as const
   const soundOptions = [noneSound, ...SOUND_OPTIONS]
@@ -266,6 +271,23 @@ export const SettingsGeneral: Component = () => {
               </span>
             )}
           </Select>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.sidebarStyle.title")}
+          description={language.t("settings.general.row.sidebarStyle.description")}
+        >
+          <Select
+            data-action="settings-sidebar-style"
+            options={sidebarStyleOptions}
+            current={sidebarStyleOptions.find((o) => o.value === settings.general.sidebarStyle())}
+            value={(o) => o.value}
+            label={(o) => language.t(o.label)}
+            onSelect={(option) => option && settings.general.setSidebarStyle(option.value)}
+            variant="secondary"
+            size="small"
+            triggerVariant="settings"
+          />
         </SettingsRow>
       </div>
     </div>

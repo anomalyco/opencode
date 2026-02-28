@@ -11,14 +11,14 @@ import { HoverCard } from "@opencode-ai/ui/hover-card"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { MessageNav } from "@opencode-ai/ui/message-nav"
-import { Spinner } from "@opencode-ai/ui/spinner"
+
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { getFilename } from "@opencode-ai/util/path"
 import { type Message, type Session, type TextPart, type UserMessage } from "@opencode-ai/sdk/v2/client"
-import { For, Match, Show, Switch, createMemo, onCleanup, type Accessor, type JSX } from "solid-js"
+import { For, Show, createMemo, onCleanup, type Accessor, type JSX } from "solid-js"
 import { agentColor } from "@/utils/agent"
 import { hasProjectPermissions } from "./helpers"
-import { sessionPermissionRequest } from "../session/composer/session-request-tree"
+import { SessionStatusIndicator } from "./sidebar-session-status"
 
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
@@ -89,10 +89,6 @@ const SessionRow = (props: {
   mobile?: boolean
   dense?: boolean
   tint: Accessor<string | undefined>
-  isWorking: Accessor<boolean>
-  hasPermissions: Accessor<boolean>
-  hasError: Accessor<boolean>
-  unseenCount: Accessor<number>
   setHoverSession: (id: string | undefined) => void
   clearHoverProjectSoon: () => void
   sidebarOpened: Accessor<boolean>
@@ -119,20 +115,7 @@ const SessionRow = (props: {
         class="shrink-0 size-6 flex items-center justify-center"
         style={{ color: props.tint() ?? "var(--icon-interactive-base)" }}
       >
-        <Switch fallback={<Icon name="dash" size="small" class="text-icon-weak" />}>
-          <Match when={props.isWorking()}>
-            <Spinner class="size-[15px]" />
-          </Match>
-          <Match when={props.hasPermissions()}>
-            <div class="size-1.5 rounded-full bg-surface-warning-strong" />
-          </Match>
-          <Match when={props.hasError()}>
-            <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
-          </Match>
-          <Match when={props.unseenCount() > 0}>
-            <div class="size-1.5 rounded-full bg-text-interactive-base" />
-          </Match>
-        </Switch>
+        <SessionStatusIndicator session={props.session} />
       </div>
       <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
         {props.session.title}
@@ -198,22 +181,8 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const navigate = useNavigate()
   const layout = useLayout()
   const language = useLanguage()
-  const notification = useNotification()
-  const permission = usePermission()
   const globalSync = useGlobalSync()
-  const unseenCount = createMemo(() => notification.session.unseenCount(props.session.id))
-  const hasError = createMemo(() => notification.session.unseenHasError(props.session.id))
   const [sessionStore] = globalSync.child(props.session.directory)
-  const hasPermissions = createMemo(() => {
-    return !!sessionPermissionRequest(sessionStore.session, sessionStore.permission, props.session.id, (item) => {
-      return !permission.autoResponds(item, props.session.directory)
-    })
-  })
-  const isWorking = createMemo(() => {
-    if (hasPermissions()) return false
-    const status = sessionStore.session_status[props.session.id]
-    return status?.type === "busy" || status?.type === "retry"
-  })
 
   const tint = createMemo(() => {
     const messages = sessionStore.message[props.session.id]
@@ -267,10 +236,6 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       mobile={props.mobile}
       dense={props.dense}
       tint={tint}
-      isWorking={isWorking}
-      hasPermissions={hasPermissions}
-      hasError={hasError}
-      unseenCount={unseenCount}
       setHoverSession={props.setHoverSession}
       clearHoverProjectSoon={props.clearHoverProjectSoon}
       sidebarOpened={layout.sidebar.opened}
