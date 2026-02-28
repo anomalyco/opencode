@@ -184,6 +184,18 @@ export const TuiThreadCommand = cmd({
         onExit: async () => {
           await client.call("shutdown", undefined)
         },
+        onOpenWebUI: async () => {
+          if (shouldStartServer) return url
+          const defaultOpts = await resolveNetworkOptions({
+            port: 0,
+            hostname: "127.0.0.1",
+            mdns: false,
+            "mdns-domain": "opencode.local",
+            cors: [],
+          })
+          const server = await client.call("server", defaultOpts)
+          return server.url
+        },
       })
 
       setTimeout(() => {
@@ -194,89 +206,6 @@ export const TuiThreadCommand = cmd({
     } finally {
       unguard?.()
     }
-
-    const worker = new Worker(workerPath, {
-      env: Object.fromEntries(
-        Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-      ),
-    })
-    worker.onerror = (e) => {
-      Log.Default.error(e)
-    }
-    const client = Rpc.client<typeof rpc>(worker)
-    process.on("uncaughtException", (e) => {
-      Log.Default.error(e)
-    })
-    process.on("unhandledRejection", (e) => {
-      Log.Default.error(e)
-    })
-    process.on("SIGUSR2", async () => {
-      await client.call("reload", undefined)
-    })
-
-    const prompt = await iife(async () => {
-      const piped = !process.stdin.isTTY ? await Bun.stdin.text() : undefined
-      if (!args.prompt) return piped
-      return piped ? piped + "\n" + args.prompt : args.prompt
-    })
-
-    // Check if server should be started (port or hostname explicitly set in CLI or config)
-    const networkOpts = await resolveNetworkOptions(args)
-    const shouldStartServer =
-      process.argv.includes("--port") ||
-      process.argv.includes("--hostname") ||
-      process.argv.includes("--mdns") ||
-      networkOpts.mdns ||
-      networkOpts.port !== 0 ||
-      networkOpts.hostname !== "127.0.0.1"
-
-    let url: string
-    let customFetch: typeof fetch | undefined
-    let events: EventSource | undefined
-
-    if (shouldStartServer) {
-      // Start HTTP server for external access
-      const server = await client.call("server", networkOpts)
-      url = server.url
-    } else {
-      // Use direct RPC communication (no HTTP)
-      url = "http://opencode.internal"
-      customFetch = createWorkerFetch(client)
-      events = createEventSource(client)
-    }
-
-    const tuiPromise = tui({
-      url,
-      fetch: customFetch,
-      events,
-      args: {
-        continue: args.continue,
-        sessionID: args.session,
-        agent: args.agent,
-        model: args.model,
-        prompt,
-        fork: args.fork,
-      },
-      onExit: async () => {
-        await client.call("shutdown", undefined)
-      },
-      onOpenWebUI: async () => {
-        if (shouldStartServer) {
-          // Server already running, return the URL
-          return url
-        } else {
-          // Start server on demand using default network options (localhost)
-          const defaultOpts = await resolveNetworkOptions({ port: 0, hostname: "127.0.0.1", mdns: false, "mdns-domain": "opencode.local", cors: [] })
-          const server = await client.call("server", defaultOpts)
-          return server.url
-        }
-      },
-    })
-
-    setTimeout(() => {
-      client.call("checkUpgrade", { directory: cwd }).catch(() => {})
-    }, 1000)
-
-    await tuiPromise
+    process.exit(0)
   },
 })
