@@ -1,4 +1,5 @@
 import fs from "fs/promises"
+import fsSync from "fs"
 import path from "path"
 import { Global } from "../global"
 import { Identifier } from "../id/id"
@@ -7,6 +8,188 @@ import type { Agent } from "../agent/agent"
 import { Scheduler } from "../scheduler"
 import { Filesystem } from "../util/filesystem"
 import { Glob } from "../util/glob"
+import { Log } from "../util/log"
+
+const log = Log.create({ service: "truncation" })
+
+export interface StreamingOutputOptions {
+  threshold?: number
+  /** Optional regex to filter output lines. Matching lines are collected separately. */
+  filter?: RegExp
+}
+
+/**
+ * Streaming output accumulator that spills to disk when threshold is exceeded.
+ * Avoids O(n²) memory growth from string concatenation.
+ *
+ * Optionally supports line filtering - when a filter regex is provided, matching
+ * lines are collected separately while full output still streams to file.
+ */
+export class StreamingOutput {
+  private output = ""
+  private outputBytes = 0
+  private streamFile: { fd: number; path: string } | undefined
+  private streamedBytes = 0
+  private threshold: number
+  private filter?: RegExp
+  private filtered = ""
+  private filteredBytes = 0
+  private filteredCount = 0
+  private lineBuffer = ""
+
+  constructor(options: StreamingOutputOptions = {}) {
+    this.threshold = options.threshold ?? Truncate.MAX_BYTES
+    this.filter = options.filter
+  }
+
+  /** Append a chunk of output. Returns the current preview string. */
+  append(chunk: Buffer): string {
+    const text = chunk.toString()
+    this.outputBytes += chunk.length
+
+    // Spill to file when threshold exceeded
+    if (!this.streamFile && this.outputBytes > this.threshold) {
+      this.streamFile = this.createStreamFile()
+    }
+
+    if (this.streamFile) {
+      fsSync.writeSync(this.streamFile.fd, text)
+      this.streamedBytes += Buffer.byteLength(text, "utf-8")
+    } else {
+      this.output += text
+    }
+
+    // Process filter if active
+    if (this.filter) {
+      this.lineBuffer += text
+      const lines = this.lineBuffer.split("\n")
+      this.lineBuffer = lines.pop() || ""
+      for (const line of lines) {
+        if (this.filter.test(line)) {
+          const entry = line + "\n"
+          this.filtered += entry
+          this.filteredBytes += Buffer.byteLength(entry, "utf-8")
+          this.filteredCount++
+        }
+      }
+    }
+
+    return this.preview()
+  }
+
+  /** Get current preview - either full output, streaming indicator, or filter status */
+  preview(): string {
+    if (this.filter) {
+      if (this.filtered) return this.filtered
+      return `[filtering: ${this.outputBytes} bytes, ${this.matchCount} matches...]\n`
+    }
+    if (this.streamFile) {
+      return `[streaming to file: ${this.streamedBytes} bytes written...]\n`
+    }
+    return this.output
+  }
+
+  /** Whether output was streamed to file */
+  get truncated(): boolean {
+    return this.streamFile !== undefined
+  }
+
+  /** Total bytes written */
+  get totalBytes(): number {
+    return this.streamFile ? this.streamedBytes : this.outputBytes
+  }
+
+  /** Path to output file (if streaming) */
+  get outputPath(): string | undefined {
+    return this.streamFile?.path
+  }
+
+  /** Get the in-memory output (only valid if not truncated) */
+  get inMemoryOutput(): string {
+    return this.output
+  }
+
+  /** Get filtered output (only when filter is active) */
+  get filteredOutput(): string {
+    return this.filtered
+  }
+
+  /** Number of lines matching the filter */
+  get matchCount(): number {
+    return this.filteredCount
+  }
+
+  /** Bytes omitted by filtering */
+  get omittedBytes(): number {
+    return this.totalBytes - this.filteredBytes
+  }
+
+  /** Whether a filter is active */
+  get hasFilter(): boolean {
+    return this.filter !== undefined
+  }
+
+  /** Close the stream file if open. Call this after command completes. */
+  close(): void {
+    // Process any remaining content in line buffer
+    if (this.filter && this.lineBuffer) {
+      if (this.filter.test(this.lineBuffer)) {
+        const entry = this.lineBuffer + "\n"
+        this.filtered += entry
+        this.filteredBytes += Buffer.byteLength(entry, "utf-8")
+        this.filteredCount++
+      }
+    }
+    if (this.streamFile) {
+      fsSync.closeSync(this.streamFile.fd)
+    }
+  }
+
+  /** Append metadata to output (either in memory or to file) */
+  appendMetadata(text: string): void {
+    if (this.streamFile) {
+      fsSync.appendFileSync(this.streamFile.path, text)
+    } else {
+      this.output += text
+    }
+  }
+
+  /** Get final output string (for non-truncated) or hint message (for truncated) */
+  finalize(filterPattern?: string): string {
+    if (this.filter) {
+      if (this.streamFile) {
+        return `Filtered ${this.matchCount} matching lines from ${this.totalBytes} bytes of output.\nFull output saved to: ${this.streamFile.path}\nUse Grep to search or Read with offset/limit to view specific sections.\nNote: This file will be deleted after a few more commands. Copy it if you need to preserve it.`
+      }
+      return this.filtered || `[no matches for filter: ${filterPattern}]`
+    }
+    if (this.streamFile) {
+      return `The command output was ${this.streamedBytes} bytes and was truncated (inline limit: ${this.threshold} bytes).\nFull output saved to: ${this.streamFile.path}\nUse Grep to search the full content or Read with offset/limit to view specific sections.\nNote: This file will be deleted after a few more commands. Copy it if you need to preserve it.`
+    }
+    return this.output
+  }
+
+  private createStreamFile(): { fd: number; path: string } | undefined {
+    let fd: number = -1
+    try {
+      const dir = Truncate.DIR
+      fsSync.mkdirSync(dir, { recursive: true })
+      Truncate.cleanup().catch(() => {})
+      const filepath = path.join(dir, Identifier.ascending("tool"))
+      fd = fsSync.openSync(filepath, "w")
+      // Write existing buffered output to file
+      if (this.output) {
+        fsSync.writeSync(fd, this.output)
+        this.streamedBytes += Buffer.byteLength(this.output, "utf-8")
+      }
+      this.output = "" // Clear memory buffer
+      return { fd, path: filepath }
+    } catch (e) {
+      if (fd >= 0) fsSync.closeSync(fd)
+      log.warn("failed to create stream file, continuing in memory", { error: e })
+      return undefined
+    }
+  }
+}
 
 export namespace Truncate {
   export const MAX_LINES = 2000

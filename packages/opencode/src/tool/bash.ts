@@ -9,19 +9,32 @@ import { lazy } from "@/util/lazy"
 import { Language } from "web-tree-sitter"
 
 import { $ } from "bun"
-import { Filesystem } from "@/util/filesystem"
 import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag.ts"
 import { Shell } from "@/shell/shell"
+import { Filesystem } from "@/util/filesystem"
 
 import { BashArity } from "@/permission/arity"
-import { Truncate } from "./truncation"
+import { Truncate, StreamingOutput } from "./truncation"
 import { Plugin } from "@/plugin"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
 
 export const log = Log.create({ service: "bash-tool" })
+
+export interface BashMetadata {
+  output: string
+  exit: number | null
+  description: string
+  truncated?: boolean
+  outputPath?: string
+  filtered?: boolean
+  filterPattern?: string
+  matchCount?: number
+  totalBytes?: number
+  omittedBytes?: number
+}
 
 const resolveWasm = (asset: string) => {
   if (asset.startsWith("file://")) return fileURLToPath(asset)
@@ -69,6 +82,12 @@ export const BashTool = Tool.define("bash", async () => {
           `The working directory to run the command in. Defaults to ${Instance.directory}. Use this instead of 'cd' commands.`,
         )
         .optional(),
+      output_filter: z
+        .string()
+        .describe(
+          `Optional regex pattern to filter output. When set, full output streams to a file while lines matching the pattern are returned inline. Useful for build commands where you only care about warnings/errors. Example: "^(warning|error|WARN|ERROR):.*" to capture compiler diagnostics. The regex is matched against each line.`,
+        )
+        .optional(),
       description: z
         .string()
         .describe(
@@ -81,6 +100,16 @@ export const BashTool = Tool.define("bash", async () => {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
       const timeout = params.timeout ?? DEFAULT_TIMEOUT
+
+      // Parse output_filter regex if provided
+      let filter: RegExp | undefined
+      if (params.output_filter) {
+        try {
+          filter = new RegExp(params.output_filter)
+        } catch (e) {
+          throw new Error(`Invalid output_filter regex: ${params.output_filter}. ${e}`)
+        }
+      }
       const tree = await parser().then((p) => p.parse(params.command))
       if (!tree) {
         throw new Error("Failed to parse command")
@@ -169,6 +198,8 @@ export const BashTool = Tool.define("bash", async () => {
         { cwd, sessionID: ctx.sessionID, callID: ctx.callID },
         { env: {} },
       )
+      const streaming = new StreamingOutput({ filter })
+
       const proc = spawn(params.command, {
         shell,
         cwd,
@@ -180,8 +211,6 @@ export const BashTool = Tool.define("bash", async () => {
         detached: process.platform !== "win32",
       })
 
-      let output = ""
-
       // Initialize metadata with empty output
       ctx.metadata({
         metadata: {
@@ -191,11 +220,12 @@ export const BashTool = Tool.define("bash", async () => {
       })
 
       const append = (chunk: Buffer) => {
-        output += chunk.toString()
+        const preview = streaming.append(chunk)
+        const display =
+          preview.length > MAX_METADATA_LENGTH ? preview.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : preview
         ctx.metadata({
           metadata: {
-            // truncate the metadata to avoid GIANT blobs of data (has nothing to do w/ what agent can access)
-            output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
+            output: display,
             description: params.description,
           },
         })
@@ -244,29 +274,75 @@ export const BashTool = Tool.define("bash", async () => {
           cleanup()
           reject(error)
         })
+
+        proc.once("close", () => {
+          exited = true
+          cleanup()
+          resolve()
+        })
       })
 
-      const resultMetadata: string[] = []
+      streaming.close()
 
+      const resultMetadata: string[] = []
       if (timedOut) {
         resultMetadata.push(`bash tool terminated command after exceeding timeout ${timeout} ms`)
       }
-
       if (aborted) {
         resultMetadata.push("User aborted the command")
       }
-
       if (resultMetadata.length > 0) {
-        output += "\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>"
+        streaming.appendMetadata("\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>")
       }
 
+      // If using filter, return filtered lines
+      if (streaming.hasFilter) {
+        const output = streaming.truncated
+          ? `${streaming.filteredOutput}\n${streaming.finalize(params.output_filter)}`
+          : streaming.finalize(params.output_filter)
+
+        return {
+          title: params.description,
+          metadata: {
+            output: streaming.filteredOutput || `[no matches for filter: ${params.output_filter}]`,
+            exit: proc.exitCode,
+            description: params.description,
+            truncated: streaming.truncated,
+            outputPath: streaming.outputPath,
+            filtered: true,
+            filterPattern: params.output_filter,
+            matchCount: streaming.matchCount,
+            totalBytes: streaming.totalBytes,
+            omittedBytes: streaming.omittedBytes,
+          } as BashMetadata,
+          output,
+        }
+      }
+
+      // If we streamed to a file (threshold exceeded), return truncated result
+      if (streaming.truncated) {
+        return {
+          title: params.description,
+          metadata: {
+            output: `[output streamed to file: ${streaming.totalBytes} bytes]`,
+            exit: proc.exitCode,
+            description: params.description,
+            truncated: true,
+            outputPath: streaming.outputPath,
+            totalBytes: streaming.totalBytes,
+          } as BashMetadata,
+          output: streaming.finalize(),
+        }
+      }
+
+      const output = streaming.inMemoryOutput
       return {
         title: params.description,
         metadata: {
           output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
           exit: proc.exitCode,
           description: params.description,
-        },
+        } as BashMetadata,
         output,
       }
     },

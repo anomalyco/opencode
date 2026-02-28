@@ -29,7 +29,7 @@ import { ReadTool } from "../tool/read"
 import { FileTime } from "../file/time"
 import { Flag } from "../flag/flag"
 import { ulid } from "ulid"
-import { spawn } from "child_process"
+
 import { Command } from "../command"
 import { $, fileURLToPath, pathToFileURL } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
@@ -44,7 +44,8 @@ import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
-import { Truncate } from "@/tool/truncation"
+import { Truncate, StreamingOutput } from "@/tool/truncation"
+import { spawn } from "child_process"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1623,40 +1624,32 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       { cwd, sessionID: input.sessionID, callID: part.callID },
       { env: {} },
     )
+    const streaming = new StreamingOutput()
+
     const proc = spawn(shell, args, {
       cwd,
       detached: process.platform !== "win32",
-      stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
         ...shellEnv.env,
         TERM: "dumb",
       },
+      stdio: ["ignore", "pipe", "pipe"],
     })
 
-    let output = ""
-
-    proc.stdout?.on("data", (chunk) => {
-      output += chunk.toString()
+    const append = (chunk: Buffer) => {
+      const preview = streaming.append(chunk)
       if (part.state.status === "running") {
         part.state.metadata = {
-          output: output,
+          output: preview,
           description: "",
         }
         Session.updatePart(part)
       }
-    })
+    }
 
-    proc.stderr?.on("data", (chunk) => {
-      output += chunk.toString()
-      if (part.state.status === "running") {
-        part.state.metadata = {
-          output: output,
-          description: "",
-        }
-        Session.updatePart(part)
-      }
-    })
+    proc.stdout?.on("data", append)
+    proc.stderr?.on("data", append)
 
     let aborted = false
     let exited = false
@@ -1675,33 +1668,72 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
     abort.addEventListener("abort", abortHandler, { once: true })
 
-    await new Promise<void>((resolve) => {
-      proc.on("close", () => {
-        exited = true
+    await new Promise<void>((resolve, reject) => {
+      const cleanup = () => {
         abort.removeEventListener("abort", abortHandler)
+      }
+
+      proc.once("exit", () => {
+        exited = true
+        cleanup()
+        resolve()
+      })
+
+      proc.once("error", (error) => {
+        exited = true
+        cleanup()
+        reject(error)
+      })
+
+      proc.once("close", () => {
+        exited = true
+        cleanup()
         resolve()
       })
     })
 
+    streaming.close()
+
     if (aborted) {
-      output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
+      streaming.appendMetadata("\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n"))
     }
+
     msg.time.completed = Date.now()
     await Session.updateMessage(msg)
+
     if (part.state.status === "running") {
-      part.state = {
-        status: "completed",
-        time: {
-          ...part.state.time,
-          end: Date.now(),
-        },
-        input: part.state.input,
-        title: "",
-        metadata: {
+      if (streaming.truncated) {
+        part.state = {
+          status: "completed",
+          time: {
+            ...part.state.time,
+            end: Date.now(),
+          },
+          input: part.state.input,
+          title: "",
+          metadata: {
+            output: `[output streamed to file: ${streaming.totalBytes} bytes]`,
+            description: "",
+            outputPath: streaming.outputPath,
+          },
+          output: streaming.finalize(),
+        }
+      } else {
+        const output = streaming.inMemoryOutput
+        part.state = {
+          status: "completed",
+          time: {
+            ...part.state.time,
+            end: Date.now(),
+          },
+          input: part.state.input,
+          title: "",
+          metadata: {
+            output,
+            description: "",
+          },
           output,
-          description: "",
-        },
-        output,
+        }
       }
       await Session.updatePart(part)
     }
