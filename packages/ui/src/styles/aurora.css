@@ -38,29 +38,30 @@ html[data-theme="aurora"] {
    0b. MODE-AWARE TOKENS — Dark emits light, Light refracts it
    ============================================================ */
 
+/* Dark mode: OS preference OR manual override */
 @media (prefers-color-scheme: dark) {
-  html[data-theme="aurora"] {
-    /* Glow system */
-    --glow-cyan: 0 0 20px -5px rgba(0, 212, 255, 0.35);
-    --glow-cyan-hover: 0 0 30px -5px rgba(0, 212, 255, 0.5), 0 0 0 1px rgba(0, 212, 255, 0.2);
-    --glow-cyan-focus: 0 0 35px -5px rgba(0, 212, 255, 0.55), 0 0 0 3px rgba(0, 212, 255, 0.25);
-    --glow-violet: 0 0 20px -5px rgba(167, 139, 250, 0.35);
-    --glow-violet-hover: 0 0 30px -5px rgba(167, 139, 250, 0.5), 0 0 0 1px rgba(167, 139, 250, 0.2);
-    --glow-rose: 0 0 20px -5px rgba(255, 107, 157, 0.35);
-    --glow-green: 0 0 20px -5px rgba(74, 222, 128, 0.35);
-    --glow-red: 0 0 16px -5px rgba(248, 113, 113, 0.45);
-    --glow-amber: 0 0 16px -5px rgba(255, 187, 51, 0.4);
+  html[data-theme="aurora"]:not([data-color-scheme="light"]) {
+    /* Glow system — strong, unmistakable */
+    --glow-cyan: 0 0 24px -2px rgba(0, 212, 255, 0.55), 0 0 6px rgba(0, 212, 255, 0.3);
+    --glow-cyan-hover: 0 0 36px -2px rgba(0, 212, 255, 0.7), 0 0 0 1px rgba(0, 212, 255, 0.4);
+    --glow-cyan-focus: 0 0 40px -2px rgba(0, 212, 255, 0.75), 0 0 0 3px rgba(0, 212, 255, 0.4);
+    --glow-violet: 0 0 24px -2px rgba(167, 139, 250, 0.55);
+    --glow-violet-hover: 0 0 36px -2px rgba(167, 139, 250, 0.7), 0 0 0 1px rgba(167, 139, 250, 0.4);
+    --glow-rose: 0 0 24px -2px rgba(255, 107, 157, 0.55);
+    --glow-green: 0 0 24px -2px rgba(74, 222, 128, 0.55);
+    --glow-red: 0 0 20px -2px rgba(248, 113, 113, 0.6);
+    --glow-amber: 0 0 20px -2px rgba(255, 187, 51, 0.55);
 
-    /* Glass surfaces */
-    --aurora-glass: rgba(14, 14, 20, 0.85);
-    --aurora-glass-strong: rgba(7, 7, 16, 0.92);
-    --aurora-glass-subtle: rgba(20, 20, 30, 0.7);
+    /* Glass surfaces — visible tint */
+    --aurora-glass: rgba(8, 12, 24, 0.92);
+    --aurora-glass-strong: rgba(4, 6, 18, 0.96);
+    --aurora-glass-subtle: rgba(12, 18, 36, 0.8);
 
-    /* Borders */
-    --aurora-border: rgba(0, 212, 255, 0.08);
-    --aurora-border-hover: rgba(0, 212, 255, 0.2);
-    --aurora-border-focus: rgba(0, 212, 255, 0.35);
-    --aurora-border-violet: rgba(167, 139, 250, 0.15);
+    /* Borders — actually visible */
+    --aurora-border: rgba(0, 212, 255, 0.22);
+    --aurora-border-hover: rgba(0, 212, 255, 0.4);
+    --aurora-border-focus: rgba(0, 212, 255, 0.6);
+    --aurora-border-violet: rgba(167, 139, 250, 0.3);
 
     /* Accents */
     --aurora-accent: #00D4FF;
@@ -68,50 +69,96 @@ html[data-theme="aurora"] {
     --aurora-accent-warm: #FFBB33;
     --aurora-accent-rose: #FF6B9D;
 
-    /* Message colors */
-    --aurora-user-tint: rgba(0, 212, 255, 0.06);
-    --aurora-user-border: rgba(0, 212, 255, 0.5);
-    --aurora-assistant-border: rgba(167, 139, 250, 0.45);
+    /* Message colors — visible tint */
+    --aurora-user-tint: rgba(0, 212, 255, 0.12);
+    --aurora-user-border: rgba(0, 212, 255, 0.7);
+    --aurora-assistant-border: rgba(167, 139, 250, 0.65);
 
-    /* Elevated surfaces */
-    --aurora-card-bg: rgba(255, 255, 255, 0.02);
-    --aurora-card-bg-hover: rgba(0, 212, 255, 0.04);
-    --aurora-card-glow: 0 0 24px -8px rgba(0, 212, 255, 0.18);
+    /* Elevated surfaces — visible */
+    --aurora-card-bg: rgba(0, 212, 255, 0.05);
+    --aurora-card-bg-hover: rgba(0, 212, 255, 0.1);
+    --aurora-card-glow: 0 0 28px -4px rgba(0, 212, 255, 0.35), 0 0 8px rgba(0, 212, 255, 0.15);
 
     /* Code */
-    --aurora-code-bg: rgba(5, 5, 12, 0.7);
-    --aurora-code-border: rgba(0, 212, 255, 0.1);
+    --aurora-code-bg: rgba(2, 4, 16, 0.85);
+    --aurora-code-border: rgba(0, 212, 255, 0.2);
 
     /* Scrollbar */
-    --aurora-scroll: rgba(0, 212, 255, 0.15);
-    --aurora-scroll-hover: rgba(0, 212, 255, 0.3);
+    --aurora-scroll: rgba(0, 212, 255, 0.3);
+    --aurora-scroll-hover: rgba(0, 212, 255, 0.5);
 
     /* Selection */
-    --aurora-selection: rgba(0, 212, 255, 0.22);
+    --aurora-selection: rgba(0, 212, 255, 0.35);
 
-    /* Prompt hero */
-    --aurora-prompt-glow: 0 0 0 4px rgba(0, 212, 255, 0.12), 0 0 50px -10px rgba(0, 212, 255, 0.3), 0 20px 60px -15px rgba(0, 0, 0, 0.5);
-    --aurora-prompt-btn-glow: 0 0 24px rgba(0, 212, 255, 0.35);
-    --aurora-prompt-btn-glow-hover: 0 0 40px rgba(0, 212, 255, 0.55);
+    /* Prompt hero — dramatic glow */
+    --aurora-prompt-glow: 0 0 0 2px rgba(0, 212, 255, 0.3), 0 0 60px -5px rgba(0, 212, 255, 0.5), 0 20px 60px -10px rgba(0, 0, 0, 0.6);
+    --aurora-prompt-btn-glow: 0 0 28px rgba(0, 212, 255, 0.5), 0 0 8px rgba(0, 212, 255, 0.3);
+    --aurora-prompt-btn-glow-hover: 0 0 48px rgba(0, 212, 255, 0.7), 0 0 12px rgba(0, 212, 255, 0.4);
 
     /* Dialog */
-    --aurora-dialog-shadow: 0 0 0 1px rgba(0, 212, 255, 0.1), 0 0 80px -15px rgba(0, 212, 255, 0.15), 0 30px 80px -20px rgba(0, 0, 0, 0.6);
-    --aurora-popover-shadow: 0 0 0 1px rgba(0, 212, 255, 0.1), 0 20px 60px -10px rgba(0, 0, 0, 0.5);
+    --aurora-dialog-shadow: 0 0 0 1px rgba(0, 212, 255, 0.25), 0 0 100px -10px rgba(0, 212, 255, 0.3), 0 30px 80px -20px rgba(0, 0, 0, 0.7);
+    --aurora-popover-shadow: 0 0 0 1px rgba(0, 212, 255, 0.25), 0 20px 60px -10px rgba(0, 0, 0, 0.6), 0 0 40px -10px rgba(0, 212, 255, 0.2);
 
-    /* Permission */
-    --aurora-permission-glow: 0 0 0 1px rgba(255, 187, 51, 0.35), 0 0 24px -6px rgba(255, 187, 51, 0.25);
+    /* Permission — amber warning glow */
+    --aurora-permission-glow: 0 0 0 2px rgba(255, 187, 51, 0.5), 0 0 30px -4px rgba(255, 187, 51, 0.4);
 
-    /* Empty state gradient */
-    --aurora-empty-bg: radial-gradient(ellipse 60% 40% at 50% 60%, rgba(0, 212, 255, 0.08), rgba(167, 139, 250, 0.04) 50%, transparent);
+    /* Empty state gradient — visible */
+    --aurora-empty-bg: radial-gradient(ellipse 60% 40% at 50% 60%, rgba(0, 212, 255, 0.15), rgba(167, 139, 250, 0.08) 50%, transparent);
 
     /* Thinking */
     --aurora-thinking: #00D4FF;
-    --aurora-thinking-glow: 0 0 10px #00D4FF;
+    --aurora-thinking-glow: 0 0 14px rgba(0, 212, 255, 0.6);
   }
 }
 
+/* Manual dark override (user chose dark in app settings, OS might be light) */
+html[data-theme="aurora"][data-color-scheme="dark"] {
+  /* Glow system — strong, unmistakable */
+  --glow-cyan: 0 0 24px -2px rgba(0, 212, 255, 0.55), 0 0 6px rgba(0, 212, 255, 0.3);
+  --glow-cyan-hover: 0 0 36px -2px rgba(0, 212, 255, 0.7), 0 0 0 1px rgba(0, 212, 255, 0.4);
+  --glow-cyan-focus: 0 0 40px -2px rgba(0, 212, 255, 0.75), 0 0 0 3px rgba(0, 212, 255, 0.4);
+  --glow-violet: 0 0 24px -2px rgba(167, 139, 250, 0.55);
+  --glow-violet-hover: 0 0 36px -2px rgba(167, 139, 250, 0.7), 0 0 0 1px rgba(167, 139, 250, 0.4);
+  --glow-rose: 0 0 24px -2px rgba(255, 107, 157, 0.55);
+  --glow-green: 0 0 24px -2px rgba(74, 222, 128, 0.55);
+  --glow-red: 0 0 20px -2px rgba(248, 113, 113, 0.6);
+  --glow-amber: 0 0 20px -2px rgba(255, 187, 51, 0.55);
+  --aurora-glass: rgba(8, 12, 24, 0.92);
+  --aurora-glass-strong: rgba(4, 6, 18, 0.96);
+  --aurora-glass-subtle: rgba(12, 18, 36, 0.8);
+  --aurora-border: rgba(0, 212, 255, 0.22);
+  --aurora-border-hover: rgba(0, 212, 255, 0.4);
+  --aurora-border-focus: rgba(0, 212, 255, 0.6);
+  --aurora-border-violet: rgba(167, 139, 250, 0.3);
+  --aurora-accent: #00D4FF;
+  --aurora-accent-secondary: #A78BFA;
+  --aurora-accent-warm: #FFBB33;
+  --aurora-accent-rose: #FF6B9D;
+  --aurora-user-tint: rgba(0, 212, 255, 0.12);
+  --aurora-user-border: rgba(0, 212, 255, 0.7);
+  --aurora-assistant-border: rgba(167, 139, 250, 0.65);
+  --aurora-card-bg: rgba(0, 212, 255, 0.05);
+  --aurora-card-bg-hover: rgba(0, 212, 255, 0.1);
+  --aurora-card-glow: 0 0 28px -4px rgba(0, 212, 255, 0.35), 0 0 8px rgba(0, 212, 255, 0.15);
+  --aurora-code-bg: rgba(2, 4, 16, 0.85);
+  --aurora-code-border: rgba(0, 212, 255, 0.2);
+  --aurora-scroll: rgba(0, 212, 255, 0.3);
+  --aurora-scroll-hover: rgba(0, 212, 255, 0.5);
+  --aurora-selection: rgba(0, 212, 255, 0.35);
+  --aurora-prompt-glow: 0 0 0 2px rgba(0, 212, 255, 0.3), 0 0 60px -5px rgba(0, 212, 255, 0.5), 0 20px 60px -10px rgba(0, 0, 0, 0.6);
+  --aurora-prompt-btn-glow: 0 0 28px rgba(0, 212, 255, 0.5), 0 0 8px rgba(0, 212, 255, 0.3);
+  --aurora-prompt-btn-glow-hover: 0 0 48px rgba(0, 212, 255, 0.7), 0 0 12px rgba(0, 212, 255, 0.4);
+  --aurora-dialog-shadow: 0 0 0 1px rgba(0, 212, 255, 0.25), 0 0 100px -10px rgba(0, 212, 255, 0.3), 0 30px 80px -20px rgba(0, 0, 0, 0.7);
+  --aurora-popover-shadow: 0 0 0 1px rgba(0, 212, 255, 0.25), 0 20px 60px -10px rgba(0, 0, 0, 0.6), 0 0 40px -10px rgba(0, 212, 255, 0.2);
+  --aurora-permission-glow: 0 0 0 2px rgba(255, 187, 51, 0.5), 0 0 30px -4px rgba(255, 187, 51, 0.4);
+  --aurora-empty-bg: radial-gradient(ellipse 60% 40% at 50% 60%, rgba(0, 212, 255, 0.15), rgba(167, 139, 250, 0.08) 50%, transparent);
+  --aurora-thinking: #00D4FF;
+  --aurora-thinking-glow: 0 0 14px rgba(0, 212, 255, 0.6);
+}
+
+/* Light mode: OS preference OR manual override */
 @media (prefers-color-scheme: light) {
-  html[data-theme="aurora"] {
+  html[data-theme="aurora"]:not([data-color-scheme="dark"]) {
     --glow-cyan: 0 0 16px -4px rgba(8, 145, 178, 0.2), 0 2px 8px rgba(0, 0, 0, 0.06);
     --glow-cyan-hover: 0 0 24px -4px rgba(8, 145, 178, 0.3), 0 0 0 1px rgba(8, 145, 178, 0.15), 0 2px 10px rgba(0, 0, 0, 0.08);
     --glow-cyan-focus: 0 0 28px -4px rgba(8, 145, 178, 0.35), 0 0 0 3px rgba(8, 145, 178, 0.18), 0 2px 10px rgba(0, 0, 0, 0.08);
@@ -166,6 +213,50 @@ html[data-theme="aurora"] {
     --aurora-thinking: #0891B2;
     --aurora-thinking-glow: 0 0 8px rgba(8, 145, 178, 0.45);
   }
+}
+
+/* Manual light override (user chose light in app settings, OS might be dark) */
+html[data-theme="aurora"][data-color-scheme="light"] {
+  --glow-cyan: 0 0 16px -4px rgba(8, 145, 178, 0.2), 0 2px 8px rgba(0, 0, 0, 0.06);
+  --glow-cyan-hover: 0 0 24px -4px rgba(8, 145, 178, 0.3), 0 0 0 1px rgba(8, 145, 178, 0.15), 0 2px 10px rgba(0, 0, 0, 0.08);
+  --glow-cyan-focus: 0 0 28px -4px rgba(8, 145, 178, 0.35), 0 0 0 3px rgba(8, 145, 178, 0.18), 0 2px 10px rgba(0, 0, 0, 0.08);
+  --glow-violet: 0 0 16px -4px rgba(124, 58, 237, 0.2), 0 2px 8px rgba(0, 0, 0, 0.06);
+  --glow-violet-hover: 0 0 24px -4px rgba(124, 58, 237, 0.3), 0 0 0 1px rgba(124, 58, 237, 0.15);
+  --glow-rose: 0 0 16px -4px rgba(219, 39, 119, 0.2), 0 2px 8px rgba(0, 0, 0, 0.06);
+  --glow-green: 0 0 16px -4px rgba(22, 163, 74, 0.2), 0 2px 8px rgba(0, 0, 0, 0.06);
+  --glow-red: 0 0 14px -4px rgba(220, 38, 38, 0.25), 0 2px 6px rgba(0, 0, 0, 0.06);
+  --glow-amber: 0 0 14px -4px rgba(217, 119, 6, 0.22), 0 2px 6px rgba(0, 0, 0, 0.06);
+  --aurora-glass: rgba(255, 255, 255, 0.88);
+  --aurora-glass-strong: rgba(245, 245, 250, 0.94);
+  --aurora-glass-subtle: rgba(255, 255, 255, 0.75);
+  --aurora-border: rgba(8, 145, 178, 0.1);
+  --aurora-border-hover: rgba(8, 145, 178, 0.22);
+  --aurora-border-focus: rgba(8, 145, 178, 0.4);
+  --aurora-border-violet: rgba(124, 58, 237, 0.12);
+  --aurora-accent: #0891B2;
+  --aurora-accent-secondary: #7C3AED;
+  --aurora-accent-warm: #D97706;
+  --aurora-accent-rose: #DB2777;
+  --aurora-user-tint: rgba(8, 145, 178, 0.05);
+  --aurora-user-border: rgba(8, 145, 178, 0.45);
+  --aurora-assistant-border: rgba(124, 58, 237, 0.35);
+  --aurora-card-bg: rgba(0, 0, 0, 0.015);
+  --aurora-card-bg-hover: rgba(8, 145, 178, 0.04);
+  --aurora-card-glow: 0 0 20px -6px rgba(8, 145, 178, 0.15), 0 2px 8px rgba(0, 0, 0, 0.05);
+  --aurora-code-bg: rgba(232, 232, 242, 0.55);
+  --aurora-code-border: rgba(8, 145, 178, 0.12);
+  --aurora-scroll: rgba(8, 145, 178, 0.14);
+  --aurora-scroll-hover: rgba(8, 145, 178, 0.25);
+  --aurora-selection: rgba(8, 145, 178, 0.18);
+  --aurora-prompt-glow: 0 0 0 4px rgba(8, 145, 178, 0.1), 0 0 35px -10px rgba(8, 145, 178, 0.2), 0 10px 30px -10px rgba(0, 0, 0, 0.1);
+  --aurora-prompt-btn-glow: 0 0 20px rgba(8, 145, 178, 0.22), 0 2px 8px rgba(0, 0, 0, 0.08);
+  --aurora-prompt-btn-glow-hover: 0 0 30px rgba(8, 145, 178, 0.35), 0 2px 10px rgba(0, 0, 0, 0.1);
+  --aurora-dialog-shadow: 0 0 0 1px rgba(8, 145, 178, 0.1), 0 0 50px -12px rgba(8, 145, 178, 0.1), 0 30px 60px -20px rgba(0, 0, 0, 0.12);
+  --aurora-popover-shadow: 0 0 0 1px rgba(8, 145, 178, 0.1), 0 16px 40px -10px rgba(0, 0, 0, 0.12);
+  --aurora-permission-glow: 0 0 0 1px rgba(217, 119, 6, 0.3), 0 0 20px -6px rgba(217, 119, 6, 0.18), 0 2px 8px rgba(0, 0, 0, 0.05);
+  --aurora-empty-bg: radial-gradient(ellipse 60% 40% at 50% 60%, rgba(8, 145, 178, 0.07), rgba(124, 58, 237, 0.035) 50%, transparent);
+  --aurora-thinking: #0891B2;
+  --aurora-thinking-glow: 0 0 8px rgba(8, 145, 178, 0.45);
 }
 
 
