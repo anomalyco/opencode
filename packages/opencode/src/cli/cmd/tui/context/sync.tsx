@@ -13,6 +13,7 @@ import type {
   McpStatus,
   McpResource,
   FormatterStatus,
+  ToolInfo,
   SessionStatus,
   ProviderListResponse,
   ProviderAuthMethod,
@@ -70,6 +71,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       mcp_resource: {
         [key: string]: McpResource
       }
+      tools: ToolInfo[]
       formatter: FormatterStatus[]
       vcs: VcsInfo | undefined
       path: Path
@@ -95,6 +97,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       message: {},
       part: {},
       lsp: [],
+      tools: [],
       mcp: {},
       mcp_resource: {},
       formatter: [],
@@ -405,6 +408,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.command.list().then((x) => setStore("command", reconcile(x.data ?? []))),
             sdk.client.lsp.status().then((x) => setStore("lsp", reconcile(x.data!))),
             sdk.client.mcp.status().then((x) => setStore("mcp", reconcile(x.data!))),
+            sdk.client.tools.list().then((x) => setStore("tools", reconcile(x.data ?? []))),
             sdk.client.experimental.resource.list().then((x) => setStore("mcp_resource", reconcile(x.data ?? {}))),
             sdk.client.formatter.status().then((x) => setStore("formatter", reconcile(x.data!))),
             sdk.client.session.status().then((x) => {
