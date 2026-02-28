@@ -677,13 +677,6 @@ export type EventQuestionRejected = {
   }
 }
 
-export type EventSessionCompacted = {
-  type: "session.compacted"
-  properties: {
-    sessionID: string
-  }
-}
-
 export type EventFileWatcherUpdated = {
   type: "file.watcher.updated"
   properties: {
@@ -712,6 +705,13 @@ export type EventTodoUpdated = {
   properties: {
     sessionID: string
     todos: Array<Todo>
+  }
+}
+
+export type EventSessionCompacted = {
+  type: "session.compacted"
+  properties: {
+    sessionID: string
   }
 }
 
@@ -978,9 +978,9 @@ export type Event =
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
-  | EventSessionCompacted
   | EventFileWatcherUpdated
   | EventTodoUpdated
+  | EventSessionCompacted
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
@@ -1843,6 +1843,12 @@ export type McpStatus =
   | McpStatusFailed
   | McpStatusNeedsAuth
   | McpStatusNeedsClientRegistration
+
+export type ToolInfo = {
+  name: string
+  category: string
+  disabled: boolean
+}
 
 export type Path = {
   home: string
@@ -4459,6 +4465,48 @@ export type McpDisconnectResponses = {
 }
 
 export type McpDisconnectResponse = McpDisconnectResponses[keyof McpDisconnectResponses]
+
+export type ToolsListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/tools"
+}
+
+export type ToolsListResponses = {
+  /**
+   * Tool list
+   */
+  200: Array<ToolInfo>
+}
+
+export type ToolsListResponse = ToolsListResponses[keyof ToolsListResponses]
+
+export type ToolsToggleData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/tools/{name}/toggle"
+}
+
+export type ToolsToggleResponses = {
+  /**
+   * Updated disabled status
+   */
+  200: {
+    disabled: boolean
+  }
+}
+
+export type ToolsToggleResponse = ToolsToggleResponses[keyof ToolsToggleResponses]
 
 export type TuiAppendPromptData = {
   body?: {

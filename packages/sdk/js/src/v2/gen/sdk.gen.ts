@@ -154,6 +154,8 @@ import type {
   ToolIdsResponses,
   ToolListErrors,
   ToolListResponses,
+  ToolsListResponses,
+  ToolsToggleResponses,
   TuiAppendPromptErrors,
   TuiAppendPromptResponses,
   TuiClearPromptResponses,
@@ -3082,6 +3084,70 @@ export class Mcp extends HeyApiClient {
   }
 }
 
+export class Tools extends HeyApiClient {
+  /**
+   * List all tools
+   *
+   * List all available tools
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ToolsListResponses, unknown, ThrowOnError>({
+      url: "/tools",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Toggle a tool
+   *
+   * Enable or disable a tool
+   */
+  public toggle<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ToolsToggleResponses, unknown, ThrowOnError>({
+      url: "/tools/{name}/toggle",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Control extends HeyApiClient {
   /**
    * Get next TUI request
@@ -3946,6 +4012,11 @@ export class OpencodeClient extends HeyApiClient {
   private _mcp?: Mcp
   get mcp(): Mcp {
     return (this._mcp ??= new Mcp({ client: this.client }))
+  }
+
+  private _tools?: Tools
+  get tools(): Tools {
+    return (this._tools ??= new Tools({ client: this.client }))
   }
 
   private _tui?: Tui
