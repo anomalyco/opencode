@@ -18,6 +18,51 @@ const baseCtx: Omit<Tool.Context, "ask"> = {
 }
 
 describe("tool.skill", () => {
+  test("error message lists skill names not array indices", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        const skillDir = path.join(dir, ".opencode", "skill", "existing-skill")
+        await Bun.write(
+          path.join(skillDir, "SKILL.md"),
+          `---
+name: existing-skill
+description: An existing skill.
+---
+
+# Existing Skill
+`,
+        )
+      },
+    })
+
+    const home = process.env.OPENCODE_TEST_HOME
+    process.env.OPENCODE_TEST_HOME = tmp.path
+
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const tool = await SkillTool.init()
+          const ctx: Tool.Context = {
+            ...baseCtx,
+            ask: async () => {},
+          }
+
+          try {
+            await tool.execute({ name: "nonexistent-skill" }, ctx)
+            expect.unreachable("should have thrown")
+          } catch (err: any) {
+            expect(err.message).toContain("existing-skill")
+            expect(err.message).not.toContain("Available skills: 0")
+          }
+        },
+      })
+    } finally {
+      process.env.OPENCODE_TEST_HOME = home
+    }
+  })
+
   test("description lists skill location URL", async () => {
     await using tmp = await tmpdir({
       git: true,
