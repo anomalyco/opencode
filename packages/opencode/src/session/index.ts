@@ -71,6 +71,7 @@ export namespace Session {
       share,
       revert,
       permission: row.permission ?? undefined,
+      cost: row.cost ?? undefined,
       time: {
         created: row.time_created,
         updated: row.time_updated,
@@ -96,6 +97,7 @@ export namespace Session {
       summary_diffs: info.summary?.diffs,
       revert: info.revert ?? null,
       permission: info.permission,
+      cost: info.cost,
       time_created: info.time.created,
       time_updated: info.time.updated,
       time_compacting: info.time.compacting,
@@ -341,8 +343,10 @@ export namespace Session {
   })
 
   export const getCost = fn(Identifier.schema("session"), async (id) => {
-    const read = await Storage.read<Info>(["session", Instance.project.id, id])
-    return read.cost
+    const row = Database.use((db) =>
+      db.select({ cost: SessionTable.cost }).from(SessionTable).where(eq(SessionTable.id, id)).get(),
+    )
+    return row?.cost
   })
 
   export const share = fn(Identifier.schema("session"), async (id) => {
@@ -508,10 +512,19 @@ export namespace Session {
     },
   )
 
-  export async function addCost(sessionID: string, amount: number) {
+  export function addCost(sessionID: string, amount: number) {
     if (amount === 0) return
-    await update(sessionID, (draft) => {
-      draft.cost = (draft.cost ?? 0) + amount
+    Database.effect(() => {
+      const row = Database.use((db) =>
+        db.select({ cost: SessionTable.cost }).from(SessionTable).where(eq(SessionTable.id, sessionID)).get(),
+      )
+      Database.use((db) =>
+        db
+          .update(SessionTable)
+          .set({ cost: (row?.cost ?? 0) + amount })
+          .where(eq(SessionTable.id, sessionID))
+          .run(),
+      )
     })
   }
 
