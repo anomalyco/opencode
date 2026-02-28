@@ -7,8 +7,8 @@ import { getCursorPosition } from "./editor-dom"
 
 export const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 export const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
-const LARGE_PASTE_CHARS = 8000
-const LARGE_PASTE_BREAKS = 120
+const LARGE_PASTE_CHARS = 200
+const LARGE_PASTE_BREAKS = 5
 
 function largePaste(text: string) {
   if (text.length >= LARGE_PASTE_CHARS) return true
