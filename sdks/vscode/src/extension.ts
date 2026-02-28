@@ -40,10 +40,12 @@ export function activate(context: vscode.ExtensionContext) {
     }
   })
 
-  context.subscriptions.push(openTerminalDisposable, addFilepathDisposable)
+  context.subscriptions.push(openNewTerminalDisposable, openTerminalDisposable, addFilepathDisposable)
 
   async function openTerminal() {
     // Create a new terminal in split screen
+    const config = vscode.workspace.getConfiguration("opencode")
+    const tuiLocation = config.get<string>("tuiLocation", "editor")
     const port = Math.floor(Math.random() * (65535 - 16384 + 1)) + 16384
     const terminal = vscode.window.createTerminal({
       name: TERMINAL_NAME,
@@ -51,10 +53,13 @@ export function activate(context: vscode.ExtensionContext) {
         light: vscode.Uri.file(context.asAbsolutePath("images/button-dark.svg")),
         dark: vscode.Uri.file(context.asAbsolutePath("images/button-light.svg")),
       },
-      location: {
-        viewColumn: vscode.ViewColumn.Beside,
-        preserveFocus: false,
-      },
+      location:
+        tuiLocation === "terminal"
+          ? vscode.TerminalLocation.Panel
+          : {
+              viewColumn: vscode.ViewColumn.Beside,
+              preserveFocus: false,
+            },
       env: {
         _EXTENSION_OPENCODE_PORT: port.toString(),
         OPENCODE_CALLER: "vscode",

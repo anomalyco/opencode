@@ -78,7 +78,21 @@
         "win": "ctrl+alt+K",
         "linux": "ctrl+alt+K"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "opencode",
+      "properties": {
+        "opencode.tuiLocation": {
+          "type": "string",
+          "default": "editor",
+          "enum": [
+            "editor",
+            "terminal"
+          ],
+          "description": "Where to open the opencode TUI: beside the current editor or in the terminal panel."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "bun run package",
