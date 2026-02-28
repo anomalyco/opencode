@@ -215,15 +215,22 @@ body::before {
 /* ============================================================
    9. SIDEBAR — Apple-style glassmorphism
    ============================================================ */
-[data-component="layout-sidebar"],
 [data-component="sidebar-nav-desktop"],
-[data-component="sidebar-nav-mobile"],
-[data-slot="layout-sidebar"] {
+[data-component="sidebar-nav-mobile"] {
   background: var(--glass-strong) !important;
-  backdrop-filter: var(--blur-sidebar);
-  -webkit-backdrop-filter: var(--blur-sidebar);
+  backdrop-filter: var(--blur-sidebar) !important;
+  -webkit-backdrop-filter: var(--blur-sidebar) !important;
   border-right: 1px solid var(--border-accent-base) !important;
-  background-clip: padding-box;
+}
+
+/* Inner containers must be transparent so parent glass shows through */
+[data-component="sidebar-nav-desktop"] > div,
+[data-component="sidebar-nav-desktop"] > div > div,
+[data-component="sidebar-nav-desktop"] > div > div > div,
+[data-component="sidebar-nav-mobile"] > div,
+[data-component="sidebar-nav-mobile"] > div > div > div {
+  background: transparent !important;
+  background-color: transparent !important;
 }
 
 /* ============================================================
