@@ -63,12 +63,14 @@ export function DialogModel(props: { providerID?: string }) {
     }
 
     const favoriteOptions = toOptions(favorites, "Favorites")
-    const recentOptions = showRecent() ? toOptions(
-      recents.filter(
-        (item) => !favorites.some((fav) => fav.providerID === item.providerID && fav.modelID === item.modelID),
-      ),
-      "Recent",
-    ) : []
+    const recentOptions = showRecent()
+      ? toOptions(
+          recents.filter(
+            (item) => !favorites.some((fav) => fav.providerID === item.providerID && fav.modelID === item.modelID),
+          ),
+          "Recent",
+        )
+      : []
 
     const providerOptions = pipe(
       sync.data.provider,
@@ -100,7 +102,10 @@ export function DialogModel(props: { providerID?: string }) {
             if (!showSections) return true
             if (favorites.some((item) => item.providerID === x.value.providerID && item.modelID === x.value.modelID))
               return false
-            if (recents.some((item) => item.providerID === x.value.providerID && item.modelID === x.value.modelID) && showRecent())
+            if (
+              recents.some((item) => item.providerID === x.value.providerID && item.modelID === x.value.modelID) &&
+              showRecent()
+            )
               return false
             return true
           }),
