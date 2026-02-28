@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { createSignal, onCleanup, For } from "solid-js"
+import { createSignal, onCleanup } from "solid-js"
 import { AnimatedCountList, type CountItem } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
 
@@ -21,74 +21,13 @@ as it appears in the context tool group on the session page.`,
   },
 }
 
-const LOCALES = {
-  en: {
-    label: "English",
-    active: "Exploring",
-    done: "Explored",
-    read: { one: "{{count}} read", other: "{{count}} reads" },
-    search: { one: "{{count}} search", other: "{{count}} searches" },
-    list: { one: "{{count}} list", other: "{{count}} lists" },
-  },
-  fr: {
-    label: "Français",
-    active: "Exploration",
-    done: "Exploré",
-    read: { one: "{{count}} lecture", other: "{{count}} lectures" },
-    search: { one: "{{count}} recherche", other: "{{count}} recherches" },
-    list: { one: "{{count}} liste", other: "{{count}} listes" },
-  },
-  ja: {
-    label: "日本語",
-    active: "探索中",
-    done: "探索済み",
-    read: { one: "{{count}} 件の読み取り", other: "{{count}} 件の読み取り" },
-    search: { one: "{{count}} 件の検索", other: "{{count}} 件の検索" },
-    list: { one: "{{count}} 件のリスト", other: "{{count}} 件のリスト" },
-  },
-  ko: {
-    label: "한국어",
-    active: "탐색 중",
-    done: "탐색됨",
-    read: { one: "{{count}}개 읽음", other: "{{count}}개 읽음" },
-    search: { one: "{{count}}개 검색", other: "{{count}}개 검색" },
-    list: { one: "{{count}}개 목록", other: "{{count}}개 목록" },
-  },
-  de: {
-    label: "Deutsch",
-    active: "Erkunden",
-    done: "Erkundet",
-    read: { one: "{{count}} Lesevorgang", other: "{{count}} Lesevorgänge" },
-    search: { one: "{{count}} Suche", other: "{{count}} Suchen" },
-    list: { one: "{{count}} Liste", other: "{{count}} Listen" },
-  },
-  es: {
-    label: "Español",
-    active: "Explorando",
-    done: "Explorado",
-    read: { one: "{{count}} lectura", other: "{{count}} lecturas" },
-    search: { one: "{{count}} búsqueda", other: "{{count}} búsquedas" },
-    list: { one: "{{count}} lista", other: "{{count}} listas" },
-  },
-  th: {
-    label: "ไทย",
-    active: "กำลังสำรวจ",
-    done: "สำรวจแล้ว",
-    read: { one: "อ่าน {{count}} รายการ", other: "อ่าน {{count}} รายการ" },
-    search: { one: "ค้นหา {{count}} รายการ", other: "ค้นหา {{count}} รายการ" },
-    list: { one: "รายการ {{count}} รายการ", other: "รายการ {{count}} รายการ" },
-  },
-  ar: {
-    label: "العربية",
-    active: "استكشاف",
-    done: "تم الاستكشاف",
-    read: { one: "{{count}} قراءة", other: "{{count}} قراءات" },
-    search: { one: "{{count}} بحث", other: "{{count}} عمليات بحث" },
-    list: { one: "{{count}} قائمة", other: "{{count}} قوائم" },
-  },
+const TEXT = {
+  active: "Exploring",
+  done: "Explored",
+  read: { one: "{{count}} read", other: "{{count}} reads" },
+  search: { one: "{{count}} search", other: "{{count}} searches" },
+  list: { one: "{{count}} list", other: "{{count}} lists" },
 } as const
-
-type LocaleKey = keyof typeof LOCALES
 
 function rand(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min
@@ -122,10 +61,7 @@ export const Playground = {
     const [searches, setSearches] = createSignal(0)
     const [lists, setLists] = createSignal(0)
     const [active, setActive] = createSignal(false)
-    const [locale, setLocale] = createSignal<LocaleKey>("en")
     const [reducedMotion, setReducedMotion] = createSignal(false)
-
-    const l = () => LOCALES[locale()]
 
     let timeouts: ReturnType<typeof setTimeout>[] = []
 
@@ -174,9 +110,9 @@ export const Playground = {
     }
 
     const items = (): CountItem[] => [
-      { key: "read", count: reads(), one: l().read.one, other: l().read.other },
-      { key: "search", count: searches(), one: l().search.one, other: l().search.other },
-      { key: "list", count: lists(), one: l().list.one, other: l().list.other },
+      { key: "read", count: reads(), one: TEXT.read.one, other: TEXT.read.other },
+      { key: "search", count: searches(), one: TEXT.search.one, other: TEXT.search.other },
+      { key: "list", count: lists(), one: TEXT.list.one, other: TEXT.list.other },
     ]
 
     return (
@@ -205,7 +141,7 @@ export const Playground = {
           }}
         >
           <span style={{ "flex-shrink": "0" }}>
-            <ToolStatusTitle active={active()} activeText={l().active} doneText={l().done} split={false} />
+            <ToolStatusTitle active={active()} activeText={TEXT.active} doneText={TEXT.done} split={false} />
           </span>
           <span
             style={{
@@ -220,17 +156,6 @@ export const Playground = {
             <AnimatedCountList items={items()} fallback="" />
           </span>
         </span>
-
-        {/* Language picker */}
-        <div style={{ display: "flex", gap: "6px", "flex-wrap": "wrap" }}>
-          <For each={Object.keys(LOCALES) as LocaleKey[]}>
-            {(key) => (
-              <button onClick={() => setLocale(key)} style={smallBtn(locale() === key)}>
-                {LOCALES[key].label}
-              </button>
-            )}
-          </For>
-        </div>
 
         <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
           <button onClick={() => (active() ? stopSim() : startSim())} style={btn(active())}>
@@ -263,8 +188,8 @@ export const Playground = {
             "font-family": "monospace",
           }}
         >
-          {locale()} · motion: {reducedMotion() ? "reduced" : "normal"} · active: {active() ? "true" : "false"} · reads:{" "}
-          {reads()} · searches: {searches()} · lists: {lists()}
+          motion: {reducedMotion() ? "reduced" : "normal"} · active: {active() ? "true" : "false"} · reads: {reads()} ·
+          searches: {searches()} · lists: {lists()}
         </div>
       </div>
     )
