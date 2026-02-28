@@ -1972,7 +1972,13 @@ export default function Layout(props: ParentProps) {
             "hidden xl:block": true,
             "relative shrink-0": true,
           }}
-          style={{ width: layout.sidebar.opened() ? `${Math.max(layout.sidebar.width(), 244)}px` : "64px" }}
+          style={{
+            width: layout.sidebar.opened()
+              ? `${Math.max(layout.sidebar.width(), 244)}px`
+              : layout.sidebar.collapsed()
+                ? "32px"
+                : "64px",
+          }}
           ref={(el) => {
             setState("nav", el)
           }}
@@ -1996,6 +2002,8 @@ export default function Layout(props: ParentProps) {
           <div class="@container w-full h-full contain-strict">
             <SidebarContent
               opened={() => layout.sidebar.opened()}
+              collapsed={layout.sidebar.collapsed}
+              onToggleCollapsed={() => layout.sidebar.toggleCollapsed()}
               aimMove={aim.move}
               projects={() => layout.projects.list()}
               renderProject={(project) => (

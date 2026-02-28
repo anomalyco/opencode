@@ -1,14 +1,14 @@
-import { createStore, produce } from "solid-js/store"
-import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
-import { createSimpleContext } from "@opencode-ai/ui/context"
-import { useGlobalSync } from "./global-sync"
-import { useGlobalSDK } from "./global-sdk"
-import { useServer } from "./server"
-import { usePlatform } from "./platform"
-import { Project } from "@opencode-ai/sdk/v2"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
 import { same } from "@/utils/same"
+import { Project } from "@opencode-ai/sdk/v2"
+import { createSimpleContext } from "@opencode-ai/ui/context"
+import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
+import { createStore, produce } from "solid-js/store"
+import { useGlobalSDK } from "./global-sdk"
+import { useGlobalSync } from "./global-sync"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
+import { usePlatform } from "./platform"
+import { useServer } from "./server"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
 const DEFAULT_PANEL_WIDTH = 344
@@ -162,6 +162,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       createStore({
         sidebar: {
           opened: false,
+          collapsed: false,
           width: DEFAULT_PANEL_WIDTH,
           workspaces: {} as Record<string, boolean>,
           workspacesDefault: false,
@@ -526,6 +527,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         toggle() {
           setStore("sidebar", "opened", (x) => !x)
+        },
+        collapsed: createMemo(() => store.sidebar.collapsed),
+        toggleCollapsed() {
+          setStore("sidebar", "collapsed", (x) => !x)
         },
         width: createMemo(() => store.sidebar.width),
         resize(width: number) {
