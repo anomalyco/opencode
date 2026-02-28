@@ -16,6 +16,7 @@ import { Locale } from "@/util/locale"
 import { Global } from "@/global"
 import { useDialog } from "../../ui/dialog"
 import { useTuiConfig } from "../../context/tui-config"
+import { t, tpl } from "@/cli/cmd/tui/i18n"
 
 type PermissionStage = "permission" | "always" | "reject"
 
@@ -98,7 +99,7 @@ function EditBody(props: { request: PermissionRequest }) {
       </Show>
       <Show when={!diff()}>
         <box paddingLeft={1}>
-          <text fg={theme.textMuted}>No diff provided</text>
+          <text fg={theme.textMuted}>{t("permission.no.diff")}</text>
         </box>
       </Show>
     </box>
@@ -153,15 +154,15 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
     <Switch>
       <Match when={store.stage === "always"}>
         <Prompt
-          title="Always allow"
+          title={t("permission.always.allow")}
           body={
             <Switch>
               <Match when={props.request.always.length === 1 && props.request.always[0] === "*"}>
-                <TextBody title={"This will allow " + props.request.permission + " until OpenCode is restarted."} />
+                <TextBody title={tpl("permission.allow.until.restart", { permission: props.request.permission })} />
               </Match>
               <Match when={true}>
                 <box paddingLeft={1} gap={1}>
-                  <text fg={theme.textMuted}>This will allow the following patterns until OpenCode is restarted</text>
+                  <text fg={theme.textMuted}>{t("permission.allow.patterns")}</text>
                   <box>
                     <For each={props.request.always}>
                       {(pattern) => (
@@ -176,7 +177,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               </Match>
             </Switch>
           }
-          options={{ confirm: "Confirm", cancel: "Cancel" }}
+          options={{ confirm: t("permission.confirm"), cancel: t("permission.cancel") }}
           escapeKey="cancel"
           onSelect={(option) => {
             setStore("stage", "permission")
@@ -213,7 +214,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               const filepath = typeof raw === "string" ? raw : ""
               return {
                 icon: "→",
-                title: `Edit ${normalizePath(filepath)}`,
+                title: t("permission.edit") + normalizePath(filepath),
                 body: <EditBody request={props.request} />,
               }
             }
@@ -223,11 +224,11 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               const filePath = typeof raw === "string" ? raw : ""
               return {
                 icon: "→",
-                title: `Read ${normalizePath(filePath)}`,
+                title: t("permission.read") + normalizePath(filePath),
                 body: (
                   <Show when={filePath}>
                     <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Path: " + normalizePath(filePath)}</text>
+                      <text fg={theme.textMuted}>{t("permission.path") + normalizePath(filePath)}</text>
                     </box>
                   </Show>
                 ),
@@ -238,11 +239,11 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               const pattern = typeof data.pattern === "string" ? data.pattern : ""
               return {
                 icon: "✱",
-                title: `Glob "${pattern}"`,
+                title: t("permission.glob") + '"' + pattern + '"',
                 body: (
                   <Show when={pattern}>
                     <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Pattern: " + pattern}</text>
+                      <text fg={theme.textMuted}>{t("permission.pattern") + pattern}</text>
                     </box>
                   </Show>
                 ),
@@ -253,11 +254,11 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               const pattern = typeof data.pattern === "string" ? data.pattern : ""
               return {
                 icon: "✱",
-                title: `Grep "${pattern}"`,
+                title: t("permission.grep") + '"' + pattern + '"',
                 body: (
                   <Show when={pattern}>
                     <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Pattern: " + pattern}</text>
+                      <text fg={theme.textMuted}>{t("permission.pattern") + pattern}</text>
                     </box>
                   </Show>
                 ),
@@ -269,11 +270,11 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               const dir = typeof raw === "string" ? raw : ""
               return {
                 icon: "→",
-                title: `List ${normalizePath(dir)}`,
+                title: t("permission.list") + normalizePath(dir),
                 body: (
                   <Show when={dir}>
                     <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Path: " + normalizePath(dir)}</text>
+                      <text fg={theme.textMuted}>{t("permission.path") + normalizePath(dir)}</text>
                     </box>
                   </Show>
                 ),
@@ -282,7 +283,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
 
             if (permission === "bash") {
               const title =
-                typeof data.description === "string" && data.description ? data.description : "Shell command"
+                typeof data.description === "string" && data.description ? data.description : t("permission.shell")
               const command = typeof data.command === "string" ? data.command : ""
               return {
                 icon: "#",
@@ -302,7 +303,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               const desc = typeof data.description === "string" ? data.description : ""
               return {
                 icon: "#",
-                title: `${Locale.titlecase(type)} Task`,
+                title: `${Locale.titlecase(type)} ${t("permission.task")}`,
                 body: (
                   <Show when={desc}>
                     <box paddingLeft={1}>
@@ -317,11 +318,11 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               const url = typeof data.url === "string" ? data.url : ""
               return {
                 icon: "%",
-                title: `WebFetch ${url}`,
+                title: t("permission.webfetch") + url,
                 body: (
                   <Show when={url}>
                     <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"URL: " + url}</text>
+                      <text fg={theme.textMuted}>{t("permission.url") + url}</text>
                     </box>
                   </Show>
                 ),
@@ -332,11 +333,11 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               const query = typeof data.query === "string" ? data.query : ""
               return {
                 icon: "◈",
-                title: `Exa Web Search "${query}"`,
+                title: t("permission.websearch") + '"' + query + '"',
                 body: (
                   <Show when={query}>
                     <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Query: " + query}</text>
+                      <text fg={theme.textMuted}>{t("permission.query") + query}</text>
                     </box>
                   </Show>
                 ),
@@ -347,11 +348,11 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               const query = typeof data.query === "string" ? data.query : ""
               return {
                 icon: "◇",
-                title: `Exa Code Search "${query}"`,
+                title: t("permission.codesearch") + '"' + query + '"',
                 body: (
                   <Show when={query}>
                     <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Query: " + query}</text>
+                      <text fg={theme.textMuted}>{t("permission.query") + query}</text>
                     </box>
                   </Show>
                 ),
@@ -372,11 +373,11 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
 
               return {
                 icon: "←",
-                title: `Access external directory ${dir}`,
+                title: t("permission.external.dir") + dir,
                 body: (
                   <Show when={patterns.length > 0}>
                     <box paddingLeft={1} gap={1}>
-                      <text fg={theme.textMuted}>Patterns</text>
+                      <text fg={theme.textMuted}>{t("permission.patterns")}</text>
                       <box>
                         <For each={patterns}>{(p) => <text fg={theme.text}>{"- " + p}</text>}</For>
                       </box>
@@ -389,10 +390,10 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
             if (permission === "doom_loop") {
               return {
                 icon: "⟳",
-                title: "Continue after repeated failures",
+                title: t("permission.doom.loop"),
                 body: (
                   <box paddingLeft={1}>
-                    <text fg={theme.textMuted}>This keeps the session running despite repeated failures.</text>
+                    <text fg={theme.textMuted}>{t("permission.doom.loop.desc")}</text>
                   </box>
                 ),
               }
@@ -400,10 +401,10 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
 
             return {
               icon: "⚙",
-              title: `Call tool ${permission}`,
+              title: t("permission.call.tool") + permission,
               body: (
                 <box paddingLeft={1}>
-                  <text fg={theme.textMuted}>{"Tool: " + permission}</text>
+                  <text fg={theme.textMuted}>{t("permission.tool") + permission}</text>
                 </box>
               ),
             }
@@ -415,7 +416,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
             <box flexDirection="column" gap={0}>
               <box flexDirection="row" gap={1} flexShrink={0}>
                 <text fg={theme.warning}>{"△"}</text>
-                <text fg={theme.text}>Permission required</text>
+                <text fg={theme.text}>{t("permission.required")}</text>
               </box>
               <box flexDirection="row" gap={1} paddingLeft={2} flexShrink={0}>
                 <text fg={theme.textMuted} flexShrink={0}>
@@ -428,10 +429,10 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
 
           const body = (
             <Prompt
-              title="Permission required"
+              title={t("permission.required")}
               header={header()}
               body={current.body}
-              options={{ once: "Allow once", always: "Allow always", reject: "Reject" }}
+              options={{ once: t("permission.allow.once"), always: t("permission.allow.always"), reject: t("permission.reject") }}
               escapeKey="reject"
               fullscreen
               onSelect={(option) => {
@@ -498,10 +499,10 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
       <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
         <box flexDirection="row" gap={1} paddingLeft={1}>
           <text fg={theme.error}>{"△"}</text>
-          <text fg={theme.text}>Reject permission</text>
+          <text fg={theme.text}>{t("permission.reject.title")}</text>
         </box>
         <box paddingLeft={1}>
-          <text fg={theme.textMuted}>Tell OpenCode what to do differently</text>
+          <text fg={theme.textMuted}>{t("permission.reject.hint")}</text>
         </box>
       </box>
       <box
@@ -526,10 +527,10 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
         />
         <box flexDirection="row" gap={2} flexShrink={0}>
           <text fg={theme.text}>
-            enter <span style={{ fg: theme.textMuted }}>confirm</span>
+            enter <span style={{ fg: theme.textMuted }}>{t("question.confirm.action")}</span>
           </text>
           <text fg={theme.text}>
-            esc <span style={{ fg: theme.textMuted }}>cancel</span>
+            esc <span style={{ fg: theme.textMuted }}>{t("permission.cancel")}</span>
           </text>
         </box>
       </box>
@@ -592,7 +593,7 @@ function Prompt<const T extends Record<string, string>>(props: {
     }
   })
 
-  const hint = createMemo(() => (store.expanded ? "minimize" : "fullscreen"))
+  const hint = createMemo(() => (store.expanded ? t("permission.minimize") : t("permission.fullscreen")))
   const renderer = useRenderer()
 
   const content = () => (
@@ -667,10 +668,10 @@ function Prompt<const T extends Record<string, string>>(props: {
             </text>
           </Show>
           <text fg={theme.text}>
-            {"⇆"} <span style={{ fg: theme.textMuted }}>select</span>
+            {"⇆"} <span style={{ fg: theme.textMuted }}>{t("question.select")}</span>
           </text>
           <text fg={theme.text}>
-            enter <span style={{ fg: theme.textMuted }}>confirm</span>
+            enter <span style={{ fg: theme.textMuted }}>{t("question.confirm.action")}</span>
           </text>
         </box>
       </box>
