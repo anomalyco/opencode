@@ -32,6 +32,8 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     let queue: Event[] = []
     let timer: Timer | undefined
     let last = 0
+    const RECONNECT_DELAY_MS = 250
+    const HEARTBEAT_TIMEOUT_MS = 15_000
 
     const flush = () => {
       if (queue.length === 0) return
@@ -60,6 +62,8 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       }
       flush()
     }
+    const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+    const aborted = (error: unknown) => error instanceof Error && error.name === "AbortError"
 
     onMount(async () => {
       // If an event source is provided, use it instead of SSE
@@ -72,22 +76,46 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       // Fall back to SSE
       while (true) {
         if (abort.signal.aborted) break
-        const events = await sdk.event.subscribe(
-          {},
-          {
-            signal: abort.signal,
-          },
-        )
-
-        for await (const event of events.stream) {
-          handleEvent(event)
+        const attempt = new AbortController()
+        const onAbort = () => {
+          attempt.abort()
+        }
+        abort.signal.addEventListener("abort", onAbort)
+        let heartbeat: Timer | undefined
+        const resetHeartbeat = () => {
+          if (heartbeat) clearTimeout(heartbeat)
+          heartbeat = setTimeout(() => {
+            attempt.abort()
+          }, HEARTBEAT_TIMEOUT_MS)
         }
 
-        // Flush any remaining events
-        if (timer) clearTimeout(timer)
-        if (queue.length > 0) {
-          flush()
+        try {
+          const events = await sdk.event.subscribe(
+            {},
+            {
+              signal: attempt.signal,
+            },
+          )
+          resetHeartbeat()
+
+          for await (const event of events.stream) {
+            resetHeartbeat()
+            handleEvent(event)
+          }
+        } catch (error) {
+          if (!aborted(error)) {
+            // swallow and reconnect
+          }
+        } finally {
+          abort.signal.removeEventListener("abort", onAbort)
+          if (heartbeat) clearTimeout(heartbeat)
+          // Flush any remaining events before reconnect
+          if (timer) clearTimeout(timer)
+          if (queue.length > 0) flush()
         }
+
+        if (abort.signal.aborted) break
+        await wait(RECONNECT_DELAY_MS)
       }
     })
 

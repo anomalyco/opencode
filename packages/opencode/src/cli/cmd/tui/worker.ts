@@ -48,6 +48,8 @@ const startEventStream = (directory: string) => {
   const abort = new AbortController()
   eventStream.abort = abort
   const signal = abort.signal
+  const RECONNECT_DELAY_MS = 250
+  const HEARTBEAT_TIMEOUT_MS = 15_000
 
   const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init)
@@ -63,32 +65,54 @@ const startEventStream = (directory: string) => {
     signal,
   })
 
+  const aborted = (error: unknown) => error instanceof Error && error.name === "AbortError"
+
   ;(async () => {
+    let streamErrorLogged = false
     while (!signal.aborted) {
-      const events = await Promise.resolve(
-        sdk.event.subscribe(
+      const attempt = new AbortController()
+      const onAbort = () => {
+        attempt.abort()
+      }
+      signal.addEventListener("abort", onAbort)
+      let heartbeat: Timer | undefined
+      const resetHeartbeat = () => {
+        if (heartbeat) clearTimeout(heartbeat)
+        heartbeat = setTimeout(() => {
+          attempt.abort()
+        }, HEARTBEAT_TIMEOUT_MS)
+      }
+
+      try {
+        const events = await sdk.event.subscribe(
           {},
           {
-            signal,
+            signal: attempt.signal,
           },
-        ),
-      ).catch(() => undefined)
+        )
+        resetHeartbeat()
 
-      if (!events) {
-        await Bun.sleep(250)
-        continue
+        for await (const event of events.stream) {
+          streamErrorLogged = false
+          resetHeartbeat()
+          Rpc.emit("event", event as Event)
+        }
+      } catch (error) {
+        if (!aborted(error) && !streamErrorLogged) {
+          streamErrorLogged = true
+          Log.Default.error("event stream error", {
+            error: error instanceof Error ? error.message : error,
+          })
+        }
+      } finally {
+        signal.removeEventListener("abort", onAbort)
+        if (heartbeat) clearTimeout(heartbeat)
       }
 
-      for await (const event of events.stream) {
-        Rpc.emit("event", event as Event)
-      }
-
-      if (!signal.aborted) {
-        await Bun.sleep(250)
-      }
+      if (!signal.aborted) await Bun.sleep(RECONNECT_DELAY_MS)
     }
   })().catch((error) => {
-    Log.Default.error("event stream error", {
+    Log.Default.error("event stream crashed", {
       error: error instanceof Error ? error.message : error,
     })
   })

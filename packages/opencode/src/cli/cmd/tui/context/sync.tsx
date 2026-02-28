@@ -107,6 +107,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     sdk.event.listen((e) => {
       const event = e.details
       switch (event.type) {
+        case "server.connected":
+        case "global.disposed":
+          if (store.status !== "loading") bootstrap()
+          break
         case "server.instance.disposed":
           bootstrap()
           break
