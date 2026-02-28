@@ -47,6 +47,8 @@ import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
 import { TextShimmer } from "./text-shimmer"
+import { AnimatedCountList } from "./tool-count-summary"
+import { ToolStatusTitle } from "./tool-status-title"
 
 interface Diagnostic {
   range: {
@@ -469,23 +471,11 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
   }
 }
 
-function contextToolSummary(parts: ToolPart[], i18n: ReturnType<typeof useI18n>) {
+function contextToolSummary(parts: ToolPart[]) {
   const read = parts.filter((part) => part.tool === "read").length
   const search = parts.filter((part) => part.tool === "glob" || part.tool === "grep").length
   const list = parts.filter((part) => part.tool === "list").length
-  return [
-    read
-      ? i18n.t(read === 1 ? "ui.messagePart.context.read.one" : "ui.messagePart.context.read.other", { count: read })
-      : undefined,
-    search
-      ? i18n.t(search === 1 ? "ui.messagePart.context.search.one" : "ui.messagePart.context.search.other", {
-          count: search,
-        })
-      : undefined,
-    list
-      ? i18n.t(list === 1 ? "ui.messagePart.context.list.one" : "ui.messagePart.context.list.other", { count: list })
-      : undefined,
-  ].filter((value): value is string => !!value)
+  return { read, search, list }
 }
 
 export function registerPartComponent(type: string, component: PartComponent) {
@@ -610,33 +600,53 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
     () =>
       !!props.busy || props.parts.some((part) => part.state.status === "pending" || part.state.status === "running"),
   )
-  const summary = createMemo(() => contextToolSummary(props.parts, i18n))
-  const details = createMemo(() => summary().join(", "))
+  const summary = createMemo(() => contextToolSummary(props.parts))
 
   return (
     <Collapsible open={open()} onOpenChange={setOpen} variant="ghost">
       <Collapsible.Trigger>
         <div data-component="context-tool-group-trigger">
-          <Show
-            when={pending()}
-            fallback={
-              <span data-slot="context-tool-group-title">
-                <span data-slot="context-tool-group-label">{i18n.t("ui.sessionTurn.status.gatheredContext")}</span>
-                <Show when={details().length}>
-                  <span data-slot="context-tool-group-summary">{details()}</span>
-                </Show>
-              </span>
-            }
+          <span
+            data-slot="context-tool-group-title"
+            class="min-w-0 flex items-center gap-2 text-14-medium text-text-strong"
           >
-            <span data-slot="context-tool-group-title">
-              <span data-slot="context-tool-group-label">
-                <TextShimmer text={i18n.t("ui.sessionTurn.status.gatheringContext")} />
-              </span>
-              <Show when={details().length}>
-                <span data-slot="context-tool-group-summary">{details()}</span>
-              </Show>
+            <span data-slot="context-tool-group-label" class="shrink-0">
+              <ToolStatusTitle
+                active={pending()}
+                activeText={i18n.t("ui.sessionTurn.status.gatheringContext")}
+                doneText={i18n.t("ui.sessionTurn.status.gatheredContext")}
+                split={false}
+              />
             </span>
-          </Show>
+            <span
+              data-slot="context-tool-group-summary"
+              class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-normal text-text-base"
+            >
+              <AnimatedCountList
+                items={[
+                  {
+                    key: "read",
+                    count: summary().read,
+                    one: i18n.t("ui.messagePart.context.read.one"),
+                    other: i18n.t("ui.messagePart.context.read.other"),
+                  },
+                  {
+                    key: "search",
+                    count: summary().search,
+                    one: i18n.t("ui.messagePart.context.search.one"),
+                    other: i18n.t("ui.messagePart.context.search.other"),
+                  },
+                  {
+                    key: "list",
+                    count: summary().list,
+                    one: i18n.t("ui.messagePart.context.list.one"),
+                    other: i18n.t("ui.messagePart.context.list.other"),
+                  },
+                ]}
+                fallback=""
+              />
+            </span>
+          </span>
           <Collapsible.Arrow />
         </div>
       </Collapsible.Trigger>
@@ -655,7 +665,7 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
                           <div data-slot="basic-tool-tool-info-main">
                             <span data-slot="basic-tool-tool-title">
                               <Show when={running} fallback={trigger.title}>
-                                <TextShimmer text={trigger.title} />
+                                <TextShimmer text={trigger.title} active />
                               </Show>
                             </span>
                             <Show when={!running && trigger.subtitle}>
@@ -1774,9 +1784,7 @@ ToolRegistry.register({
                   <div data-slot="message-part-title-area">
                     <div data-slot="message-part-title">
                       <span data-slot="message-part-title-text">
-                        <Show when={pending()} fallback={i18n.t("ui.tool.patch")}>
-                          <TextShimmer text={i18n.t("ui.tool.patch")} />
-                        </Show>
+                        <TextShimmer text={i18n.t("ui.tool.patch")} active={pending()} />
                       </span>
                       <Show when={!pending()}>
                         <span data-slot="message-part-title-filename">{getFilename(file().relativePath)}</span>

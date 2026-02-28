@@ -213,6 +213,7 @@ export function MessageTimeline(props: {
   const dialog = useDialog()
   const language = useLanguage()
 
+  const rendered = createMemo(() => props.renderedUserMessages.map((message) => message.id))
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const sessionID = createMemo(() => params.id)
   const info = createMemo(() => {
@@ -651,17 +652,17 @@ export function MessageTimeline(props: {
                 </Button>
               </div>
             </Show>
-            <For each={staging.messages()}>
-              {(message) => {
-                const comments = createMemo(() => messageComments(sync.data.part[message.id] ?? []))
+            <For each={rendered()}>
+              {(messageID) => {
+                const comments = createMemo(() => messageComments(sync.data.part[messageID] ?? []))
                 const commentCount = createMemo(() => comments().length)
                 return (
                   <div
-                    id={props.anchor(message.id)}
-                    data-message-id={message.id}
+                    id={props.anchor(messageID)}
+                    data-message-id={messageID}
                     ref={(el) => {
-                      props.onRegisterMessage(el, message.id)
-                      onCleanup(() => props.onUnregisterMessage(message.id))
+                      props.onRegisterMessage(el, messageID)
+                      onCleanup(() => props.onUnregisterMessage(messageID))
                     }}
                     classList={{
                       "min-w-0 w-full max-w-full": true,
@@ -701,7 +702,7 @@ export function MessageTimeline(props: {
                     </Show>
                     <SessionTurn
                       sessionID={sessionID() ?? ""}
-                      messageID={message.id}
+                      messageID={messageID}
                       showReasoningSummaries={settings.general.showReasoningSummaries()}
                       shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
                       editToolDefaultOpen={settings.general.editToolPartsExpanded()}
