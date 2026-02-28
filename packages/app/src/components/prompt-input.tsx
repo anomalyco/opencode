@@ -612,8 +612,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       pill.setAttribute("data-summary", part.summary)
       pill.style.padding = "1px 6px"
       pill.style.borderRadius = "4px"
-      pill.style.setProperty("color", "var(--text-on-warning-strong)", "important")
-      pill.style.setProperty("-webkit-text-fill-color", "var(--text-on-warning-strong)", "important")
+      pill.style.setProperty("color", "var(--smoke-light-12)", "important")
+      pill.style.setProperty("-webkit-text-fill-color", "var(--smoke-light-12)", "important")
     }
     pill.setAttribute("contenteditable", "false")
     pill.style.userSelect = "text"
