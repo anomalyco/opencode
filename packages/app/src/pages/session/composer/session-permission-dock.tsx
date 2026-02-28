@@ -1,4 +1,4 @@
-import { For, Show } from "solid-js"
+import { For, Show, onCleanup, onMount } from "solid-js"
 import type { PermissionRequest } from "@opencode-ai/sdk/v2"
 import { Button } from "@opencode-ai/ui/button"
 import { DockPrompt } from "@opencode-ai/ui/dock-prompt"
@@ -11,6 +11,56 @@ export function SessionPermissionDock(props: {
   onDecide: (response: "once" | "always" | "reject") => void
 }) {
   const language = useLanguage()
+  let root: HTMLDivElement | undefined
+
+  const measure = () => {
+    if (!root) return
+
+    const scroller = document.querySelector(".scroll-view__viewport")
+    const head = scroller instanceof HTMLElement ? scroller.firstElementChild : undefined
+    const top =
+      head instanceof HTMLElement && head.classList.contains("sticky") ? head.getBoundingClientRect().bottom : 0
+    if (!top) {
+      root.style.removeProperty("--permission-prompt-max-height")
+      return
+    }
+
+    const dock = root.closest('[data-component="session-prompt-dock"]')
+    if (!(dock instanceof HTMLElement)) return
+
+    const dockBottom = dock.getBoundingClientRect().bottom
+    const below = Math.max(0, dockBottom - root.getBoundingClientRect().bottom)
+    const gap = 8
+    const max = Math.max(240, Math.floor(dockBottom - top - gap - below))
+    root.style.setProperty("--permission-prompt-max-height", `${max}px`)
+  }
+
+  onMount(() => {
+    let raf: number | undefined
+    const update = () => {
+      if (raf !== undefined) cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        raf = undefined
+        measure()
+      })
+    }
+
+    update()
+    window.addEventListener("resize", update)
+
+    const dock = root?.closest('[data-component="session-prompt-dock"]')
+    const scroller = document.querySelector(".scroll-view__viewport")
+    const observer = new ResizeObserver(update)
+    if (dock instanceof HTMLElement) observer.observe(dock)
+    if (scroller instanceof HTMLElement) observer.observe(scroller)
+
+    onCleanup(() => {
+      window.removeEventListener("resize", update)
+      observer.disconnect()
+      if (raf !== undefined) cancelAnimationFrame(raf)
+      root?.style.removeProperty("--permission-prompt-max-height")
+    })
+  })
 
   const toolDescription = () => {
     const key = `settings.permissions.tool.${props.request.permission}.description`
@@ -22,6 +72,7 @@ export function SessionPermissionDock(props: {
   return (
     <DockPrompt
       kind="permission"
+      ref={(el) => (root = el)}
       header={
         <div data-slot="permission-row" data-variant="header">
           <span data-slot="permission-icon">

@@ -669,7 +669,7 @@
   flex-direction: column;
   gap: 0;
   min-height: 0;
-  max-height: 100dvh;
+  max-height: var(--permission-prompt-max-height, 100dvh);
 
   [data-slot="permission-body"] {
     display: flex;
@@ -720,6 +720,8 @@
     gap: 4px;
     flex: 1;
     min-height: 0;
+    overflow-y: auto;
+    padding-right: 8px;
   }
 
   [data-slot="permission-hint"] {
