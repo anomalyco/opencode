@@ -13,21 +13,17 @@ export function SessionRetry(props: { status: SessionStatus; show?: boolean }) {
   })
   const [seconds, setSeconds] = createSignal(0)
   createEffect(
-    on(
-      retry,
-      (current) => {
-        if (!current) return
-        const update = () => {
-          const next = retry()?.next
-          if (!next) return
-          setSeconds(Math.round((next - Date.now()) / 1000))
-        }
-        update()
-        const timer = setInterval(update, 1000)
-        onCleanup(() => clearInterval(timer))
-      },
-      { defer: true },
-    ),
+    on(retry, (current) => {
+      if (!current) return
+      const update = () => {
+        const next = retry()?.next
+        if (!next) return
+        setSeconds(Math.round((next - Date.now()) / 1000))
+      }
+      update()
+      const timer = setInterval(update, 1000)
+      onCleanup(() => clearInterval(timer))
+    }),
   )
   const message = createMemo(() => {
     const current = retry()
@@ -41,7 +37,7 @@ export function SessionRetry(props: { status: SessionStatus; show?: boolean }) {
   const truncated = createMemo(() => {
     const current = retry()
     if (!current) return false
-    return current.message.length > 120
+    return current.message.length > 80
   })
   const info = createMemo(() => {
     const current = retry()
