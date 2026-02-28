@@ -1310,43 +1310,45 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </div>
           </div>
 
-          <Show when={store.mode === "normal" && permission.permissionsEnabled() && params.id}>
-            <div class="pointer-events-none absolute bottom-2 left-2">
-              <div class="pointer-events-auto">
-                <TooltipKeybind
-                  placement="top"
-                  gutter={8}
-                  title={language.t(
-                    accepting() ? "command.permissions.autoaccept.disable" : "command.permissions.autoaccept.enable",
-                  )}
-                  keybind={command.keybind("permissions.autoaccept")}
+          <div class="pointer-events-none absolute bottom-2 left-2">
+            <div class="pointer-events-auto">
+              <TooltipKeybind
+                placement="top"
+                gutter={8}
+                title={language.t(
+                  accepting() ? "command.permissions.autoaccept.disable" : "command.permissions.autoaccept.enable",
+                )}
+                keybind={command.keybind("permissions.autoaccept")}
+              >
+                <Button
+                  data-action="prompt-permissions"
+                  variant="ghost"
+                  disabled={!params.id}
+                  onClick={() => {
+                    if (!params.id) return
+                    permission.toggleAutoAccept(params.id, sdk.directory)
+                  }}
+                  classList={{
+                    "size-6 flex items-center justify-center": true,
+                    "text-text-base": !accepting(),
+                    "hover:bg-surface-success-base": accepting(),
+                  }}
+                  aria-label={
+                    accepting()
+                      ? language.t("command.permissions.autoaccept.disable")
+                      : language.t("command.permissions.autoaccept.enable")
+                  }
+                  aria-pressed={accepting()}
                 >
-                  <Button
-                    data-action="prompt-permissions"
-                    variant="ghost"
-                    onClick={() => permission.toggleAutoAccept(params.id!, sdk.directory)}
-                    classList={{
-                      "_hidden group-hover/prompt-input:flex size-6 items-center justify-center": true,
-                      "text-text-base": !accepting(),
-                      "hover:bg-surface-success-base": accepting(),
-                    }}
-                    aria-label={
-                      accepting()
-                        ? language.t("command.permissions.autoaccept.disable")
-                        : language.t("command.permissions.autoaccept.enable")
-                    }
-                    aria-pressed={accepting()}
-                  >
-                    <Icon
-                      name="chevron-double-right"
-                      size="small"
-                      classList={{ "text-icon-success-base": accepting() }}
-                    />
-                  </Button>
-                </TooltipKeybind>
-              </div>
+                  <Icon
+                    name="chevron-double-right"
+                    size="small"
+                    classList={{ "text-icon-success-base": accepting() }}
+                  />
+                </Button>
+              </TooltipKeybind>
             </div>
-          </Show>
+          </div>
         </div>
       </DockShellForm>
       <Show when={store.mode === "normal" || store.mode === "shell"}>

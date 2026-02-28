@@ -115,8 +115,8 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     }
 
     function isAutoAccepting(sessionID: string, directory?: string) {
-      const key = acceptKey(sessionID, directory)
-      return store.autoAccept[key] ?? store.autoAccept[sessionID] ?? false
+      const session = directory ? globalSync.child(directory, { bootstrap: false })[0].session : []
+      return autoRespondsPermission(store.autoAccept, session, { sessionID }, directory)
     }
 
     function shouldAutoRespond(permission: PermissionRequest, directory?: string) {
@@ -168,10 +168,11 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
 
     function disable(sessionID: string, directory?: string) {
       bumpEnableVersion(sessionID, directory)
-      const key = directory ? acceptKey(sessionID, directory) : undefined
+      const key = directory ? acceptKey(sessionID, directory) : sessionID
       setStore(
         produce((draft) => {
-          if (key) delete draft.autoAccept[key]
+          draft.autoAccept[key] = false
+          if (!directory) return
           delete draft.autoAccept[sessionID]
         }),
       )
