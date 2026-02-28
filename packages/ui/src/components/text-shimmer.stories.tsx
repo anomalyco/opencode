@@ -10,16 +10,14 @@ Use for pending states inside buttons or list rows.
 
 ### API
 - Required: \`text\` string.
-- Optional: \`as\`, \`active\`, \`stepMs\`, \`durationMs\`, \`swapMs\`, \`offset\`.
-- Sweep controls: \`spread\` (band width), \`size\` (travel span), \`angle\`.
-- Color controls: \`base\`, \`peak\`.
+- Optional: \`as\`, \`active\`, \`offset\`, \`class\`.
 
 ### Variants and states
 - Active/inactive state via \`active\`.
 
 ### Behavior
 - Uses a moving gradient sweep clipped to text.
-- \`offset\` and \`stepMs\` let multiple shimmers run out-of-phase.
+- \`offset\` lets multiple shimmers run out-of-phase.
 
 ### Accessibility
 - Uses \`aria-label\` with the full text.
@@ -33,12 +31,6 @@ const defaults = {
   text: "Loading...",
   active: true,
   class: "text-14-medium text-text-strong",
-  durationMs: 1200,
-  stepMs: 45,
-  swapMs: 220,
-  spread: 5.2,
-  size: 360,
-  angle: 90,
   offset: 0,
 } as const
 
@@ -54,15 +46,7 @@ export default {
     text: { control: "text" },
     class: { control: "text" },
     active: { control: "boolean" },
-    durationMs: { control: { type: "range", min: 400, max: 4000, step: 50 } },
-    stepMs: { control: { type: "range", min: 0, max: 200, step: 5 } },
-    swapMs: { control: { type: "range", min: 0, max: 800, step: 10 } },
-    spread: { control: { type: "range", min: 0.3, max: 6, step: 0.1 } },
-    size: { control: { type: "range", min: 120, max: 400, step: 5 } },
-    angle: { control: { type: "range", min: 0, max: 180, step: 1 } },
     offset: { control: { type: "range", min: 0, max: 80, step: 1 } },
-    base: { control: "text" },
-    peak: { control: "text" },
   },
   parameters: {
     docs: {
@@ -104,23 +88,5 @@ export const Inactive = {
   args: {
     text: "Static text",
     active: false,
-  },
-}
-
-export const CustomTiming = {
-  args: {
-    text: "Custom timing",
-    stepMs: 80,
-    durationMs: 1800,
-  },
-}
-
-export const CustomSweep = {
-  args: {
-    text: "Custom sweep",
-    spread: 2.8,
-    size: 280,
-    angle: 96,
-    durationMs: 1600,
   },
 }
