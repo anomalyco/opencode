@@ -1,4 +1,4 @@
-import { onCleanup, Show, Match, Switch, createMemo, createEffect, on, onMount } from "solid-js"
+import { onCleanup, Show, Match, Switch, createMemo, createEffect, on, onMount, untrack } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLocal } from "@/context/local"
@@ -209,8 +209,13 @@ export default function Page() {
     ),
   )
 
+  const turnInit = 10
+  const turnBatch = 20
+  const turnScrollThreshold = 200
+
   const [store, setStore] = createStore({
     messageId: undefined as string | undefined,
+    turnID: undefined as string | undefined,
     turnStart: 0,
     mobileTab: "session" as "session" | "changes",
     changes: "session" as "session" | "turn",
@@ -220,12 +225,31 @@ export default function Page() {
   const turnDiffs = createMemo(() => lastUserMessage()?.summary?.diffs ?? [])
   const reviewDiffs = createMemo(() => (store.changes === "session" ? diffs() : turnDiffs()))
 
+  const turnStart = createMemo(() => {
+    const id = params.id
+    const len = visibleUserMessages().length
+    if (!id || len <= 0) return 0
+    if (store.turnID !== id) return len > turnInit ? len - turnInit : 0
+    if (store.turnStart <= 0) return 0
+    if (store.turnStart >= len) return Math.max(0, len - turnInit)
+    return store.turnStart
+  })
+
+  const setTurnStart = (start: number) => {
+    const id = params.id
+    const next = start > 0 ? start : 0
+    if (!id) {
+      setStore({ turnID: undefined, turnStart: next })
+      return
+    }
+    setStore({ turnID: id, turnStart: next })
+  }
+
   const renderedUserMessages = createMemo(
     () => {
       const msgs = visibleUserMessages()
-      const start = store.turnStart
+      const start = turnStart()
       if (start <= 0) return msgs
-      if (start >= msgs.length) return emptyUserMessages
       return msgs.slice(start)
     },
     emptyUserMessages,
@@ -302,13 +326,19 @@ export default function Page() {
 
   const hasScrollGesture = () => Date.now() - ui.scrollGesture < scrollGestureWindowMs
 
-  createEffect(() => {
-    sdk.directory
-    const id = params.id
-    if (!id) return
-    void sync.session.sync(id)
-    void sync.session.todo(id)
-  })
+  createEffect(
+    on(
+      () => `${sdk.directory}\n${params.id ?? ""}`,
+      (k) => {
+        const [, id] = k.split("\n")
+        if (!id) return
+        untrack(() => {
+          void sync.session.sync(id)
+          void sync.session.todo(id)
+        })
+      },
+    ),
+  )
 
   createEffect(
     on(
@@ -894,46 +924,8 @@ export default function Page() {
     },
   )
 
-  const turnInit = 20
-  const turnBatch = 20
-  let turnHandle: number | undefined
-  let turnIdle = false
-
-  function cancelTurnBackfill() {
-    const handle = turnHandle
-    if (handle === undefined) return
-    turnHandle = undefined
-
-    if (turnIdle && window.cancelIdleCallback) {
-      window.cancelIdleCallback(handle)
-      return
-    }
-
-    clearTimeout(handle)
-  }
-
-  function scheduleTurnBackfill() {
-    if (turnHandle !== undefined) return
-    if (store.turnStart <= 0) return
-
-    if (window.requestIdleCallback) {
-      turnIdle = true
-      turnHandle = window.requestIdleCallback(() => {
-        turnHandle = undefined
-        backfillTurns()
-      })
-      return
-    }
-
-    turnIdle = false
-    turnHandle = window.setTimeout(() => {
-      turnHandle = undefined
-      backfillTurns()
-    }, 0)
-  }
-
   function backfillTurns() {
-    const start = store.turnStart
+    const start = turnStart()
     if (start <= 0) return
 
     const next = start - turnBatch
@@ -941,37 +933,42 @@ export default function Page() {
 
     const el = scroller
     if (!el) {
-      setStore("turnStart", nextStart)
-      scheduleTurnBackfill()
+      setTurnStart(nextStart)
       return
     }
 
     const beforeTop = el.scrollTop
     const beforeHeight = el.scrollHeight
 
-    setStore("turnStart", nextStart)
+    setTurnStart(nextStart)
 
     requestAnimationFrame(() => {
       const delta = el.scrollHeight - beforeHeight
       if (!delta) return
       el.scrollTop = beforeTop + delta
     })
+  }
 
-    scheduleTurnBackfill()
+  function onScrollerScroll() {
+    if (!autoScroll.userScrolled()) return
+    const el = scroller
+    if (!el) return
+    const start = turnStart()
+    if (start <= 0) return
+    if (el.scrollTop < turnScrollThreshold) {
+      backfillTurns()
+    }
   }
 
   createEffect(
     on(
       () => [params.id, messagesReady()] as const,
       ([id, ready]) => {
-        cancelTurnBackfill()
-        setStore("turnStart", 0)
         if (!id || !ready) return
 
         const len = visibleUserMessages().length
         const start = len > turnInit ? len - turnInit : 0
-        setStore("turnStart", start)
-        scheduleTurnBackfill()
+        setTurnStart(start)
       },
       { defer: true },
     ),
@@ -1002,13 +999,12 @@ export default function Page() {
     sessionID: () => params.id,
     messagesReady,
     visibleUserMessages,
-    turnStart: () => store.turnStart,
+    turnStart,
     currentMessageId: () => store.messageId,
     pendingMessage: () => ui.pendingMessage,
     setPendingMessage: (value) => setUi("pendingMessage", value),
     setActiveMessage,
-    setTurnStart: (value) => setStore("turnStart", value),
-    scheduleTurnBackfill,
+    setTurnStart,
     autoScroll,
     scroller: () => scroller,
     anchor,
@@ -1021,7 +1017,6 @@ export default function Page() {
   })
 
   onCleanup(() => {
-    cancelTurnBackfill()
     document.removeEventListener("keydown", handleKeyDown)
     scrollSpy.destroy()
     if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)
@@ -1076,6 +1071,7 @@ export default function Page() {
                     hasScrollGesture={hasScrollGesture}
                     isDesktop={isDesktop()}
                     onScrollSpyScroll={scrollSpy.onScroll}
+                    onTurnBackfillScroll={onScrollerScroll}
                     onAutoScrollInteraction={autoScroll.handleInteraction}
                     centered={centered()}
                     setContentRef={(el) => {
@@ -1085,14 +1081,14 @@ export default function Page() {
                       const root = scroller
                       if (root) scheduleScrollState(root)
                     }}
-                    turnStart={store.turnStart}
-                    onRenderEarlier={() => setStore("turnStart", 0)}
+                    turnStart={turnStart()}
+                    onRenderEarlier={() => setTurnStart(0)}
                     historyMore={historyMore()}
                     historyLoading={historyLoading()}
                     onLoadEarlier={() => {
                       const id = params.id
                       if (!id) return
-                      setStore("turnStart", 0)
+                      setTurnStart(0)
                       sync.session.history.loadMore(id)
                     }}
                     renderedUserMessages={renderedUserMessages()}

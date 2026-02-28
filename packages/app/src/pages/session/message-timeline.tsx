@@ -1,4 +1,4 @@
-import { For, createEffect, createMemo, on, onCleanup, Show, type JSX } from "solid-js"
+import { For, createEffect, createMemo, on, onCleanup, Show, startTransition, type JSX } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { useNavigate, useParams } from "@solidjs/router"
 import { Button } from "@opencode-ai/ui/button"
@@ -93,6 +93,7 @@ export function MessageTimeline(props: {
   hasScrollGesture: () => boolean
   isDesktop: boolean
   onScrollSpyScroll: () => void
+  onTurnBackfillScroll: () => void
   onAutoScrollInteraction: (event: MouseEvent) => void
   centered: boolean
   setContentRef: (el: HTMLDivElement) => void
@@ -126,6 +127,42 @@ export function MessageTimeline(props: {
   const titleValue = createMemo(() => info()?.title)
   const parentID = createMemo(() => info()?.parentID)
   const showHeader = createMemo(() => !!(titleValue() || parentID()))
+  const stageCfg = {
+    init: 3,
+    batch: 1,
+    max: 10,
+  }
+  const stageKey = createMemo(() => {
+    const list = props.renderedUserMessages
+    const total = list.length
+    const head = total > 0 ? list[0].id : ""
+    const tail = total > 0 ? list[total - 1].id : ""
+    return `${sessionKey()}\n${props.turnStart}\n${total}\n${head}\n${tail}`
+  })
+  const stageEnabled = createMemo(() => {
+    const total = props.renderedUserMessages.length
+    return props.turnStart > 0 && total > stageCfg.init && total <= stageCfg.max
+  })
+  const stageInitial = createMemo(() => Math.min(props.renderedUserMessages.length, stageCfg.init))
+  const [staging, setStaging] = createStore({
+    key: "",
+    count: 0,
+  })
+  const stagedCount = createMemo(() => {
+    const total = props.renderedUserMessages.length
+    if (!stageEnabled()) return total
+    if (staging.key !== stageKey()) return stageInitial()
+    if (staging.count <= stageInitial()) return stageInitial()
+    if (staging.count >= total) return total
+    return staging.count
+  })
+  const stagedUserMessages = createMemo(() => {
+    const list = props.renderedUserMessages
+    const count = stagedCount()
+    if (count >= list.length) return list
+    return list.slice(Math.max(0, list.length - count))
+  })
+  let stageFrame: number | undefined
 
   const [title, setTitle] = createStore({
     draft: "",
@@ -152,6 +189,57 @@ export function MessageTimeline(props: {
       { defer: true },
     ),
   )
+
+  createEffect(
+    on(
+      stageKey,
+      () => {
+        if (stageFrame !== undefined) {
+          cancelAnimationFrame(stageFrame)
+          stageFrame = undefined
+        }
+
+        const id = sessionID()
+        const total = props.renderedUserMessages.length
+        if (!id) {
+          setStaging({ key: "", count: total })
+          return
+        }
+
+        const key = stageKey()
+        if (!stageEnabled()) {
+          setStaging({ key, count: total })
+          return
+        }
+
+        const init = stageInitial()
+        setStaging({ key, count: init })
+
+        const step = () => {
+          if (staging.key !== key) {
+            stageFrame = undefined
+            return
+          }
+          const next = Math.min(total, staging.count + stageCfg.batch)
+          startTransition(() => {
+            setStaging("count", next)
+          })
+          if (next >= total) {
+            stageFrame = undefined
+            return
+          }
+          stageFrame = requestAnimationFrame(step)
+        }
+
+        stageFrame = requestAnimationFrame(step)
+      },
+      { defer: true },
+    ),
+  )
+
+  onCleanup(() => {
+    if (stageFrame !== undefined) cancelAnimationFrame(stageFrame)
+  })
 
   const openTitleEditor = () => {
     if (!sessionID()) return
@@ -392,6 +480,7 @@ export function MessageTimeline(props: {
           }}
           onScroll={(e) => {
             props.onScheduleScrollState(e.currentTarget)
+            props.onTurnBackfillScroll()
             if (!props.hasScrollGesture()) return
             props.onAutoScrollHandleScroll()
             props.onMarkScrollGesture(e.currentTarget)
@@ -551,9 +640,10 @@ export function MessageTimeline(props: {
                 </Button>
               </div>
             </Show>
-            <For each={props.renderedUserMessages}>
+            <For each={stagedUserMessages()}>
               {(message) => {
                 const comments = createMemo(() => messageComments(sync.data.part[message.id] ?? []))
+                const commentCount = createMemo(() => comments().length)
                 return (
                   <div
                     id={props.anchor(message.id)}
@@ -566,8 +656,9 @@ export function MessageTimeline(props: {
                       "min-w-0 w-full max-w-full": true,
                       "md:max-w-200 2xl:max-w-[1000px]": props.centered,
                     }}
+                    style={{ "content-visibility": "auto", "contain-intrinsic-size": "auto 500px" }}
                   >
-                    <Show when={comments().length > 0}>
+                    <Show when={commentCount() > 0}>
                       <div class="w-full px-4 md:px-5 pb-2">
                         <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
                           <div class="flex w-max min-w-full justify-end gap-2">
