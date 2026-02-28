@@ -47,12 +47,14 @@ export const dict = {
 
   "workspace.select": "Çalışma alanı seç",
   "workspace.createNew": "+ Yeni çalışma alanı oluştur",
+  "session.new.workspace.startup": "Çalışma ağacı başlatma betiği",
   "workspace.modal.title": "Yeni çalışma alanı oluştur",
   "workspace.modal.placeholder": "Çalışma alanı adını girin",
 
   "common.cancel": "İptal",
   "common.creating": "Oluşturuluyor...",
   "common.create": "Oluştur",
+  "dialog.model.unpaid.freeModels.title": "OpenCode'un sunduğu ücretsiz modeller",
 
   "common.videoUnsupported": "Tarayıcınız video etiketini desteklemiyor.",
   "common.figure": "Şekil {{n}}.",
@@ -75,6 +77,11 @@ export const dict = {
   "error.modelRequired": "Model gerekli",
   "error.reloadAmountMin": "Yükleme tutarı en az ${{amount}} olmalıdır",
   "error.reloadTriggerMin": "Bakiye tetikleyicisi en az ${{amount}} olmalıdır",
+  "prompt.dropzone.file.label": "Dosyayı referans göstermek için bırakın",
+  "provider.custom.error.duplicate": "Çakışma",
+  "error.dev.rootNotFound": "Kök eleman bulunamadı. index.html dosyanıza eklemeyi unuttunuz mu? Ya da ID özelliği yanlış mı yazıldı?",
+  "prompt.example.13": "... için yeni bir bileşen oluştur",
+  "prompt.example.24": "... için bir CLI komutu oluştur",
 
   "home.title": "OpenCode | Açık kaynaklı yapay zeka kodlama ajanı",
 
