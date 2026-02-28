@@ -3,3 +3,23 @@
   width: 16px;
   height: 16px;
 }
+
+/*
+  File tree: show monochrome weak icons by default.
+  On hover, show the original file-type colors.
+*/
+[data-component="filetree"] .filetree-icon--mono {
+  color: var(--icon-base);
+}
+
+[data-component="filetree"] .filetree-iconpair {
+  position: relative;
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+}
+
+[data-component="filetree"] .filetree-iconpair [data-component="file-icon"] {
+  position: absolute;
+  inset: 0;
+}

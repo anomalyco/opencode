@@ -16,11 +16,13 @@ import { Log } from "../../util/log"
 import { PermissionNext } from "@/permission/next"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { SessionProxyMiddleware } from "../../control-plane/session-proxy-middleware"
 
 const log = Log.create({ service: "server" })
 
 export const SessionRoutes = lazy(() =>
   new Hono()
+    .use(SessionProxyMiddleware)
     .get(
       "/",
       describeRoute({
@@ -53,15 +55,15 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const query = c.req.valid("query")
-        const term = query.search?.toLowerCase()
         const sessions: Session.Info[] = []
-        for await (const session of Session.list()) {
-          if (query.directory !== undefined && session.directory !== query.directory) continue
-          if (query.roots && session.parentID) continue
-          if (query.start !== undefined && session.time.updated < query.start) continue
-          if (term !== undefined && !session.title.toLowerCase().includes(term)) continue
+        for await (const session of Session.list({
+          directory: query.directory,
+          roots: query.roots,
+          start: query.start,
+          search: query.search,
+          limit: query.limit,
+        })) {
           sessions.push(session)
-          if (query.limit !== undefined && sessions.length >= query.limit) break
         }
         return c.json(sessions)
       },
@@ -616,6 +618,42 @@ export const SessionRoutes = lazy(() =>
           messageID: params.messageID,
         })
         return c.json(message)
+      },
+    )
+    .delete(
+      "/:sessionID/message/:messageID",
+      describeRoute({
+        summary: "Delete message",
+        description:
+          "Permanently delete a specific message (and all of its parts) from a session. This does not revert any file changes that may have been made while processing the message.",
+        operationId: "session.deleteMessage",
+        responses: {
+          200: {
+            description: "Successfully deleted message",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: z.string().meta({ description: "Session ID" }),
+          messageID: z.string().meta({ description: "Message ID" }),
+        }),
+      ),
+      async (c) => {
+        const params = c.req.valid("param")
+        SessionPrompt.assertNotBusy(params.sessionID)
+        await Session.removeMessage({
+          sessionID: params.sessionID,
+          messageID: params.messageID,
+        })
+        return c.json(true)
       },
     )
     .delete(

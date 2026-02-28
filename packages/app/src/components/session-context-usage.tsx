@@ -1,5 +1,5 @@
 import { Match, Show, Switch, createMemo } from "solid-js"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { Tooltip, type TooltipProps } from "@opencode-ai/ui/tooltip"
 import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { Button } from "@opencode-ai/ui/button"
 import { useParams } from "@solidjs/router"
@@ -11,6 +11,7 @@ import { getSessionContextMetrics } from "@/components/session/session-context-m
 
 interface SessionContextUsageProps {
   variant?: "button" | "indicator"
+  placement?: TooltipProps["placement"]
 }
 
 function openSessionContext(args: {
@@ -52,6 +53,11 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   const openContext = () => {
     if (!params.id) return
+
+    if (tabs().active() === "context") {
+      tabs().close("context")
+      return
+    }
     openSessionContext({
       view: view(),
       layout,
@@ -90,7 +96,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   return (
     <Show when={params.id}>
-      <Tooltip value={tooltipValue()} placement="top">
+      <Tooltip value={tooltipValue()} placement={props.placement ?? "top"}>
         <Switch>
           <Match when={variant() === "indicator"}>{circle()}</Match>
           <Match when={true}>
