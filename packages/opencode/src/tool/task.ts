@@ -152,6 +152,12 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         "</task_result>",
       ].join("\n")
 
+      // Clean up subagent session to free in-memory state (messages, parts,
+      // event listeners). The task output has already been captured above.
+      // If the LLM later tries to resume via task_id, Session.get() will
+      // fail gracefully and a fresh session will be created instead.
+      Session.remove(session.id).catch(() => {})
+
       return {
         title: params.description,
         metadata: {

@@ -91,6 +91,11 @@ export namespace SessionCompaction {
       for (const part of toPrune) {
         if (part.state.status === "completed") {
           part.state.time.compacted = Date.now()
+          // Clear tool output and attachments from both DB and in-memory store.
+          // toModelMessages already substitutes "[Old tool result content cleared]"
+          // for compacted parts, so this aligns stored data with model behavior.
+          part.state.output = "[compacted]"
+          part.state.attachments = undefined
           await Session.updatePart(part)
         }
       }

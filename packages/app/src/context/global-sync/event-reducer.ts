@@ -252,7 +252,12 @@ export function applyDirectoryEvent(input: {
           const part = draft[result.index]
           const field = props.field as keyof typeof part
           const existing = part[field] as string | undefined
-          ;(part[field] as string) = (existing ?? "") + props.delta
+          const MAX_PART_STRING_LENGTH = 1_048_576 // 1 MB per part field
+          const combined = (existing ?? "") + props.delta
+          ;(part[field] as string) =
+            combined.length > MAX_PART_STRING_LENGTH
+              ? combined.slice(combined.length - MAX_PART_STRING_LENGTH)
+              : combined
         }),
       )
       break
