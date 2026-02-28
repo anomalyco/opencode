@@ -1,34 +1,221 @@
 /* ================================================================
    Aurora Design System — "Code illuminated from within"
-   Digital luminescence: elements emit light on void-dark backgrounds
+   
+   DARK MODE: Digital luminescence — elements emit light into void
+   LIGHT MODE: Prismatic refraction — light refracts through crystal,
+               casting colored pools of teal and violet
    ================================================================ */
 
 /* ============================================================
-   1. AURORA GLOW SYSTEM — The soul of Aurora
-   Elements radiate light via box-shadow on interaction
+   1. AURORA TOKEN SYSTEM — Mode-aware glow & glass tokens
+   Dark: bright emission on void | Light: tinted shadow pools
    ============================================================ */
 
+/* Shared tokens (both modes) */
 html[data-theme="aurora"] {
-  /* Glow tokens — reusable colored light emissions */
-  --glow-cyan: 0 0 20px -5px rgba(0, 212, 255, 0.35);
-  --glow-cyan-hover: 0 0 30px -5px rgba(0, 212, 255, 0.45), 0 0 0 1px rgba(0, 212, 255, 0.15);
-  --glow-cyan-focus: 0 0 30px -5px rgba(0, 212, 255, 0.5), 0 0 0 3px rgba(0, 212, 255, 0.2);
-  --glow-violet: 0 0 20px -5px rgba(167, 139, 250, 0.35);
-  --glow-violet-hover: 0 0 30px -5px rgba(167, 139, 250, 0.45), 0 0 0 1px rgba(167, 139, 250, 0.15);
-  --glow-rose: 0 0 20px -5px rgba(255, 107, 157, 0.35);
-  --glow-green: 0 0 20px -5px rgba(74, 222, 128, 0.35);
-  --glow-red: 0 0 16px -5px rgba(248, 113, 113, 0.4);
-  --glow-amber: 0 0 16px -5px rgba(255, 187, 51, 0.35);
-
-  /* Aurora spring easing — matches CSS approximation of spring physics */
   --ease-aurora: cubic-bezier(0.22, 1, 0.36, 1);
-
-  /* Aurora-specific font override: JetBrains Mono for code */
   --font-family-mono: "JetBrains Mono", "JetBrains Mono Nerd Font", "IBM Plex Mono", monospace;
 }
 
+/* Dark mode tokens — elements radiate light */
+@media (prefers-color-scheme: dark) {
+  html[data-theme="aurora"] {
+    --glow-cyan: 0 0 20px -5px rgba(0, 212, 255, 0.35);
+    --glow-cyan-hover: 0 0 30px -5px rgba(0, 212, 255, 0.45), 0 0 0 1px rgba(0, 212, 255, 0.15);
+    --glow-cyan-focus: 0 0 30px -5px rgba(0, 212, 255, 0.5), 0 0 0 3px rgba(0, 212, 255, 0.2);
+    --glow-violet: 0 0 20px -5px rgba(167, 139, 250, 0.35);
+    --glow-violet-hover: 0 0 30px -5px rgba(167, 139, 250, 0.45), 0 0 0 1px rgba(167, 139, 250, 0.15);
+    --glow-rose: 0 0 20px -5px rgba(255, 107, 157, 0.35);
+    --glow-green: 0 0 20px -5px rgba(74, 222, 128, 0.35);
+    --glow-red: 0 0 16px -5px rgba(248, 113, 113, 0.4);
+    --glow-amber: 0 0 16px -5px rgba(255, 187, 51, 0.35);
+
+    /* Dark glass surfaces */
+    --aurora-glass-sidebar: rgba(7, 7, 16, 0.9);
+    --aurora-glass-titlebar: rgba(7, 7, 16, 0.85);
+    --aurora-glass-dialog: rgba(14, 14, 20, 0.95);
+    --aurora-glass-popover: rgba(14, 14, 20, 0.95);
+    --aurora-glass-prompt: rgba(14, 14, 20, 0.85);
+
+    /* Dark border tints */
+    --aurora-border-glow: rgba(0, 212, 255, 0.06);
+    --aurora-border-glow-hover: rgba(0, 212, 255, 0.15);
+    --aurora-border-focus: rgba(0, 212, 255, 0.3);
+    --aurora-border-prompt: rgba(0, 212, 255, 0.08);
+
+    /* Dark semantic accent colors */
+    --aurora-accent: #00D4FF;
+    --aurora-accent-secondary: #A78BFA;
+    --aurora-accent-warn: #FFBB33;
+
+    /* Dark message tints */
+    --aurora-user-border: rgba(0, 212, 255, 0.6);
+    --aurora-user-bg: rgba(0, 212, 255, 0.04);
+    --aurora-user-border-subtle: rgba(0, 212, 255, 0.12);
+    --aurora-assistant-border: rgba(167, 139, 250, 0.5);
+
+    /* Dark card/collapsible */
+    --aurora-card-hover-bg: rgba(0, 212, 255, 0.04);
+    --aurora-card-border: rgba(0, 212, 255, 0.08);
+    --aurora-card-border-hover: rgba(0, 212, 255, 0.15);
+    --aurora-card-glow: 0 0 20px -8px rgba(0, 212, 255, 0.15);
+
+    /* Dark permission */
+    --aurora-permission-glow: 0 0 0 1px rgba(255, 187, 51, 0.3), 0 0 20px -6px rgba(255, 187, 51, 0.2);
+
+    /* Dark code blocks */
+    --aurora-code-bg: rgba(5, 5, 10, 0.6);
+    --aurora-code-border: rgba(0, 212, 255, 0.08);
+
+    /* Dark empty state */
+    --aurora-empty-gradient: radial-gradient(
+      ellipse 60% 40% at 50% 60%,
+      rgba(0, 212, 255, 0.06),
+      rgba(167, 139, 250, 0.03) 50%,
+      transparent
+    );
+
+    /* Dark scrollbar */
+    --aurora-scrollbar: rgba(0, 212, 255, 0.15);
+    --aurora-scrollbar-hover: rgba(0, 212, 255, 0.25);
+
+    /* Dark selection */
+    --aurora-selection: rgba(0, 212, 255, 0.2);
+
+    /* Dark link hover */
+    --aurora-link-shadow: 0 0 12px rgba(167, 139, 250, 0.4);
+
+    /* Dark prompt button glow */
+    --aurora-prompt-btn-glow: 0 0 24px rgba(0, 212, 255, 0.3);
+    --aurora-prompt-btn-glow-hover: 0 0 36px rgba(0, 212, 255, 0.5);
+
+    /* Dark prompt focus ring */
+    --aurora-prompt-focus-shadow:
+      0 0 0 4px rgba(0, 212, 255, 0.1),
+      0 0 40px -10px rgba(0, 212, 255, 0.25),
+      0 20px 60px -15px rgba(0, 0, 0, 0.4);
+
+    /* Dark secondary button */
+    --aurora-secondary-hover-glow: 0 0 16px -6px rgba(0, 212, 255, 0.2);
+
+    /* Dark dialog shadow */
+    --aurora-dialog-shadow:
+      0 0 0 1px rgba(0, 212, 255, 0.08),
+      0 0 60px -10px rgba(0, 212, 255, 0.12),
+      0 24px 64px -16px rgba(0, 0, 0, 0.5);
+
+    /* Dark popover shadow */
+    --aurora-popover-shadow:
+      0 0 0 1px rgba(0, 212, 255, 0.08),
+      0 16px 48px -8px rgba(0, 0, 0, 0.4);
+
+    /* Dark thinking indicator */
+    --aurora-thinking-color: #00D4FF;
+    --aurora-thinking-glow: 0 0 8px #00D4FF;
+  }
+}
+
+/* Light mode tokens — prismatic refraction, tinted shadow pools */
+@media (prefers-color-scheme: light) {
+  html[data-theme="aurora"] {
+    --glow-cyan: 0 0 16px -4px rgba(8, 145, 178, 0.18), 0 2px 8px rgba(0, 0, 0, 0.05);
+    --glow-cyan-hover: 0 0 20px -4px rgba(8, 145, 178, 0.25), 0 0 0 1px rgba(8, 145, 178, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+    --glow-cyan-focus: 0 0 24px -4px rgba(8, 145, 178, 0.3), 0 0 0 3px rgba(8, 145, 178, 0.15), 0 2px 8px rgba(0, 0, 0, 0.06);
+    --glow-violet: 0 0 16px -4px rgba(124, 58, 237, 0.18), 0 2px 8px rgba(0, 0, 0, 0.05);
+    --glow-violet-hover: 0 0 20px -4px rgba(124, 58, 237, 0.25), 0 0 0 1px rgba(124, 58, 237, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+    --glow-rose: 0 0 16px -4px rgba(219, 39, 119, 0.18), 0 2px 8px rgba(0, 0, 0, 0.05);
+    --glow-green: 0 0 16px -4px rgba(22, 163, 74, 0.18), 0 2px 8px rgba(0, 0, 0, 0.05);
+    --glow-red: 0 0 14px -4px rgba(220, 38, 38, 0.22), 0 2px 6px rgba(0, 0, 0, 0.05);
+    --glow-amber: 0 0 14px -4px rgba(217, 119, 6, 0.2), 0 2px 6px rgba(0, 0, 0, 0.05);
+
+    /* Light glass surfaces — frosted white with subtle tint */
+    --aurora-glass-sidebar: rgba(245, 245, 250, 0.92);
+    --aurora-glass-titlebar: rgba(245, 245, 250, 0.88);
+    --aurora-glass-dialog: rgba(255, 255, 255, 0.95);
+    --aurora-glass-popover: rgba(255, 255, 255, 0.95);
+    --aurora-glass-prompt: rgba(255, 255, 255, 0.88);
+
+    /* Light border tints — deeper teal edges */
+    --aurora-border-glow: rgba(8, 145, 178, 0.08);
+    --aurora-border-glow-hover: rgba(8, 145, 178, 0.18);
+    --aurora-border-focus: rgba(8, 145, 178, 0.35);
+    --aurora-border-prompt: rgba(8, 145, 178, 0.1);
+
+    /* Light semantic accent colors */
+    --aurora-accent: #0891B2;
+    --aurora-accent-secondary: #7C3AED;
+    --aurora-accent-warn: #D97706;
+
+    /* Light message tints */
+    --aurora-user-border: rgba(8, 145, 178, 0.5);
+    --aurora-user-bg: rgba(8, 145, 178, 0.04);
+    --aurora-user-border-subtle: rgba(8, 145, 178, 0.1);
+    --aurora-assistant-border: rgba(124, 58, 237, 0.4);
+
+    /* Light card/collapsible */
+    --aurora-card-hover-bg: rgba(8, 145, 178, 0.04);
+    --aurora-card-border: rgba(8, 145, 178, 0.08);
+    --aurora-card-border-hover: rgba(8, 145, 178, 0.18);
+    --aurora-card-glow: 0 0 16px -6px rgba(8, 145, 178, 0.12), 0 2px 6px rgba(0, 0, 0, 0.04);
+
+    /* Light permission — warm amber pool */
+    --aurora-permission-glow: 0 0 0 1px rgba(217, 119, 6, 0.25), 0 0 16px -6px rgba(217, 119, 6, 0.15), 0 2px 6px rgba(0, 0, 0, 0.04);
+
+    /* Light code blocks — frosted lavender */
+    --aurora-code-bg: rgba(232, 232, 240, 0.5);
+    --aurora-code-border: rgba(8, 145, 178, 0.1);
+
+    /* Light empty state — softer teal radial on pearl */
+    --aurora-empty-gradient: radial-gradient(
+      ellipse 60% 40% at 50% 60%,
+      rgba(8, 145, 178, 0.06),
+      rgba(124, 58, 237, 0.03) 50%,
+      transparent
+    );
+
+    /* Light scrollbar — teal-tinted */
+    --aurora-scrollbar: rgba(8, 145, 178, 0.12);
+    --aurora-scrollbar-hover: rgba(8, 145, 178, 0.22);
+
+    /* Light selection — teal wash */
+    --aurora-selection: rgba(8, 145, 178, 0.15);
+
+    /* Light link hover — deeper violet pool */
+    --aurora-link-shadow: 0 0 10px rgba(124, 58, 237, 0.2);
+
+    /* Light prompt button — teal pool */
+    --aurora-prompt-btn-glow: 0 0 16px rgba(8, 145, 178, 0.2), 0 2px 6px rgba(0, 0, 0, 0.06);
+    --aurora-prompt-btn-glow-hover: 0 0 24px rgba(8, 145, 178, 0.3), 0 2px 8px rgba(0, 0, 0, 0.08);
+
+    /* Light prompt focus ring — teal refraction */
+    --aurora-prompt-focus-shadow:
+      0 0 0 4px rgba(8, 145, 178, 0.1),
+      0 0 30px -10px rgba(8, 145, 178, 0.18),
+      0 8px 24px -8px rgba(0, 0, 0, 0.08);
+
+    /* Light secondary button */
+    --aurora-secondary-hover-glow: 0 0 12px -4px rgba(8, 145, 178, 0.15), 0 2px 6px rgba(0, 0, 0, 0.04);
+
+    /* Light dialog shadow — frosted elevation */
+    --aurora-dialog-shadow:
+      0 0 0 1px rgba(8, 145, 178, 0.08),
+      0 0 40px -10px rgba(8, 145, 178, 0.08),
+      0 24px 48px -16px rgba(0, 0, 0, 0.1);
+
+    /* Light popover shadow */
+    --aurora-popover-shadow:
+      0 0 0 1px rgba(8, 145, 178, 0.08),
+      0 12px 32px -8px rgba(0, 0, 0, 0.1);
+
+    /* Light thinking indicator */
+    --aurora-thinking-color: #0891B2;
+    --aurora-thinking-glow: 0 0 8px rgba(8, 145, 178, 0.4);
+  }
+}
+
 /* ============================================================
-   2. BUTTON GLOW — Buttons emit light on hover
+   2. BUTTON GLOW — Buttons emit light (dark) / cast tinted
+      shadow pools (light) on hover
    ============================================================ */
 
 html[data-theme="aurora"] [data-component="button"][data-variant="primary"]:hover,
@@ -44,7 +231,7 @@ html[data-theme="aurora"] [data-component="icon-button"][data-variant="primary"]
 
 html[data-theme="aurora"] [data-component="button"][data-variant="secondary"]:hover,
 html[data-theme="aurora"] [data-component="icon-button"][data-variant="secondary"]:hover {
-  box-shadow: 0 0 16px -6px rgba(0, 212, 255, 0.2);
+  box-shadow: var(--aurora-secondary-hover-glow);
   transition: box-shadow 0.25s var(--ease-aurora);
 }
 
@@ -54,7 +241,7 @@ html[data-theme="aurora"] [data-component="button"][data-variant="danger"]:hover
 }
 
 /* ============================================================
-   3. INPUT GLOW — Inputs emit light on focus
+   3. INPUT GLOW — Inputs emit / refract on focus
    ============================================================ */
 
 html[data-theme="aurora"] input:focus,
@@ -62,28 +249,28 @@ html[data-theme="aurora"] textarea:focus,
 html[data-theme="aurora"] select:focus,
 html[data-theme="aurora"] [data-component="input"]:focus-within {
   box-shadow: var(--glow-cyan-focus) !important;
-  border-color: rgba(0, 212, 255, 0.4) !important;
+  border-color: var(--aurora-border-focus) !important;
   transition: box-shadow 0.25s var(--ease-aurora),
               border-color 0.25s var(--ease-aurora);
 }
 
 /* ============================================================
    4. COLOR-CODED MESSAGE BORDERS — Instant role parsing
-   User = cyan left border, Assistant = violet left border
+   User = teal/cyan left border, Assistant = violet left border
    ============================================================ */
 
 html[data-theme="aurora"] [data-component="user-message"] {
-  border-left: 2px solid rgba(0, 212, 255, 0.6);
+  border-left: 2px solid var(--aurora-user-border);
   padding-left: 12px;
 }
 
 html[data-theme="aurora"] [data-component="user-message"] [data-slot="user-message-text"] {
-  background: rgba(0, 212, 255, 0.04) !important;
-  border-color: rgba(0, 212, 255, 0.12) !important;
+  background: var(--aurora-user-bg) !important;
+  border-color: var(--aurora-user-border-subtle) !important;
 }
 
 html[data-theme="aurora"] [data-slot="session-turn-assistant-content"] {
-  border-left: 2px solid rgba(167, 139, 250, 0.5);
+  border-left: 2px solid var(--aurora-assistant-border);
   padding-left: 12px;
 }
 
@@ -101,14 +288,15 @@ html[data-theme="aurora"] [data-slot="session-turn-assistant-content"] [data-com
 
 /* ============================================================
    6. PROMPT INPUT HERO — The centerpiece of Aurora
-   Glass background + cyan glow on focus
+   Dark: glass on void with cyan emission
+   Light: frosted crystal with teal refraction
    ============================================================ */
 
 html[data-theme="aurora"] [data-dock-surface="shell"] {
-  background: rgba(14, 14, 20, 0.85) !important;
+  background: var(--aurora-glass-prompt) !important;
   backdrop-filter: blur(20px) !important;
   -webkit-backdrop-filter: blur(20px) !important;
-  border: 1px solid rgba(0, 212, 255, 0.08) !important;
+  border: 1px solid var(--aurora-border-prompt) !important;
   border-radius: 16px !important;
   transition: border-color 0.3s var(--ease-aurora),
               box-shadow 0.3s var(--ease-aurora);
@@ -116,70 +304,63 @@ html[data-theme="aurora"] [data-dock-surface="shell"] {
 }
 
 html[data-theme="aurora"] [data-dock-surface="shell"]:focus-within {
-  border-color: rgba(0, 212, 255, 0.3) !important;
-  box-shadow:
-    0 0 0 4px rgba(0, 212, 255, 0.1),
-    0 0 40px -10px rgba(0, 212, 255, 0.25),
-    0 20px 60px -15px rgba(0, 0, 0, 0.4) !important;
+  border-color: var(--aurora-border-focus) !important;
+  box-shadow: var(--aurora-prompt-focus-shadow) !important;
 }
 
-/* Send button glow — enhanced for Aurora */
+/* Send button glow */
 html[data-theme="aurora"] [data-dock-surface="shell"] [data-component="icon-button"][data-variant="primary"],
 html[data-theme="aurora"] [data-dock-surface="shell"] [data-component="button"][data-variant="primary"] {
-  box-shadow: 0 0 24px rgba(0, 212, 255, 0.3) !important;
+  box-shadow: var(--aurora-prompt-btn-glow) !important;
   border-radius: 12px !important;
   transition: box-shadow 0.25s var(--ease-aurora);
 }
 
 html[data-theme="aurora"] [data-dock-surface="shell"] [data-component="icon-button"][data-variant="primary"]:hover,
 html[data-theme="aurora"] [data-dock-surface="shell"] [data-component="button"][data-variant="primary"]:hover {
-  box-shadow: 0 0 36px rgba(0, 212, 255, 0.5) !important;
+  box-shadow: var(--aurora-prompt-btn-glow-hover) !important;
 }
 
 /* ============================================================
    7. GLASS EFFECTS — On fixed/overlay elements only
-   Sidebar, titlebar, dialogs — NOT on messages
+   Dark: translucent void with blur
+   Light: frosted white crystal with blur
    ============================================================ */
 
 /* Sidebar glass */
 html[data-theme="aurora"] [data-component="layout-sidebar"],
 html[data-theme="aurora"] [data-slot="layout-sidebar"] {
-  background: rgba(7, 7, 16, 0.9) !important;
+  background: var(--aurora-glass-sidebar) !important;
   backdrop-filter: blur(16px) !important;
   -webkit-backdrop-filter: blur(16px) !important;
-  border-right-color: rgba(0, 212, 255, 0.06) !important;
+  border-right-color: var(--aurora-border-glow) !important;
 }
 
 /* Titlebar glass */
 html[data-theme="aurora"] [data-component="session-header"],
 html[data-theme="aurora"] [data-component="titlebar"] {
-  background: rgba(7, 7, 16, 0.85) !important;
+  background: var(--aurora-glass-titlebar) !important;
   backdrop-filter: blur(16px) !important;
   -webkit-backdrop-filter: blur(16px) !important;
-  border-bottom-color: rgba(0, 212, 255, 0.06) !important;
+  border-bottom-color: var(--aurora-border-glow) !important;
 }
 
 /* Dialog glass */
 html[data-theme="aurora"] [data-component="dialog"] [data-slot="dialog-content"] {
-  background: rgba(14, 14, 20, 0.95) !important;
+  background: var(--aurora-glass-dialog) !important;
   backdrop-filter: blur(20px) !important;
   -webkit-backdrop-filter: blur(20px) !important;
-  box-shadow:
-    0 0 0 1px rgba(0, 212, 255, 0.08),
-    0 0 60px -10px rgba(0, 212, 255, 0.12),
-    0 24px 64px -16px rgba(0, 0, 0, 0.5) !important;
+  box-shadow: var(--aurora-dialog-shadow) !important;
 }
 
 /* Popover/menu glass */
 html[data-theme="aurora"] [data-component="popover-content"],
 html[data-theme="aurora"] [data-component="dropdown-menu"],
 html[data-theme="aurora"] [data-component="context-menu"] {
-  background: rgba(14, 14, 20, 0.95) !important;
+  background: var(--aurora-glass-popover) !important;
   backdrop-filter: blur(16px) !important;
   -webkit-backdrop-filter: blur(16px) !important;
-  box-shadow:
-    0 0 0 1px rgba(0, 212, 255, 0.08),
-    0 16px 48px -8px rgba(0, 0, 0, 0.4) !important;
+  box-shadow: var(--aurora-popover-shadow) !important;
 }
 
 /* ============================================================
@@ -187,13 +368,13 @@ html[data-theme="aurora"] [data-component="context-menu"] {
    ============================================================ */
 
 html[data-theme="aurora"] [data-component="collapsible"] > [data-slot="collapsible-trigger"]:hover {
-  background: rgba(0, 212, 255, 0.04) !important;
+  background: var(--aurora-card-hover-bg) !important;
 }
 
 html[data-theme="aurora"] [data-component="edit-tool"] > [data-component="collapsible"],
 html[data-theme="aurora"] [data-component="write-tool"] > [data-component="collapsible"],
 html[data-theme="aurora"] [data-component="apply-patch-tool"] > [data-component="collapsible"] {
-  border-color: rgba(0, 212, 255, 0.08) !important;
+  border-color: var(--aurora-card-border) !important;
   transition: border-color 0.2s var(--ease-aurora),
               box-shadow 0.2s var(--ease-aurora);
 }
@@ -201,22 +382,20 @@ html[data-theme="aurora"] [data-component="apply-patch-tool"] > [data-component=
 html[data-theme="aurora"] [data-component="edit-tool"] > [data-component="collapsible"]:hover,
 html[data-theme="aurora"] [data-component="write-tool"] > [data-component="collapsible"]:hover,
 html[data-theme="aurora"] [data-component="apply-patch-tool"] > [data-component="collapsible"]:hover {
-  border-color: rgba(0, 212, 255, 0.15) !important;
-  box-shadow: 0 0 20px -8px rgba(0, 212, 255, 0.15) !important;
+  border-color: var(--aurora-card-border-hover) !important;
+  box-shadow: var(--aurora-card-glow) !important;
 }
 
 /* ============================================================
-   9. PERMISSION PROMPT — Amber glow for warnings
+   9. PERMISSION PROMPT — Amber glow/pool for warnings
    ============================================================ */
 
 html[data-theme="aurora"] [data-component="tool-part-wrapper"][data-permission="true"] {
-  box-shadow:
-    0 0 0 1px rgba(255, 187, 51, 0.3),
-    0 0 20px -6px rgba(255, 187, 51, 0.2) !important;
+  box-shadow: var(--aurora-permission-glow) !important;
 }
 
 /* ============================================================
-   10. AURORA KEYFRAMES — Cyan glow pulse + shimmer
+   10. AURORA KEYFRAMES — Pulse + breathe animations
    ============================================================ */
 
 @keyframes aurora-pulse {
@@ -225,6 +404,15 @@ html[data-theme="aurora"] [data-component="tool-part-wrapper"][data-permission="
   }
   50% {
     box-shadow: 0 0 16px 4px rgba(0, 212, 255, 0.3);
+  }
+}
+
+@keyframes aurora-pulse-light {
+  0%, 100% {
+    box-shadow: 0 0 6px 2px rgba(8, 145, 178, 0.12);
+  }
+  50% {
+    box-shadow: 0 0 12px 4px rgba(8, 145, 178, 0.22);
   }
 }
 
@@ -237,82 +425,115 @@ html[data-theme="aurora"] [data-component="tool-part-wrapper"][data-permission="
   }
 }
 
-/* Thinking indicator uses aurora pulse in aurora theme */
+/* Thinking indicator — uses mode-aware tokens */
 html[data-theme="aurora"] [data-slot="session-turn-thinking"]::before {
-  background: #00D4FF !important;
-  box-shadow: 0 0 8px #00D4FF !important;
-  animation: aurora-pulse 2s ease-in-out infinite !important;
+  background: var(--aurora-accent) !important;
+  box-shadow: var(--aurora-thinking-glow) !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  html[data-theme="aurora"] [data-slot="session-turn-thinking"]::before {
+    animation: aurora-pulse 2s ease-in-out infinite !important;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  html[data-theme="aurora"] [data-slot="session-turn-thinking"]::before {
+    animation: aurora-pulse-light 2s ease-in-out infinite !important;
+  }
 }
 
 /* ============================================================
-   11. EMPTY STATE — Aurora radial glow
+   11. EMPTY STATE — Aurora radial glow/tint
    ============================================================ */
 
 html[data-theme="aurora"] [data-component="session-turn"] .size-full:has(> .text-20-medium) {
-  background: radial-gradient(
-    ellipse 60% 40% at 50% 60%,
-    rgba(0, 212, 255, 0.06),
-    rgba(167, 139, 250, 0.03) 50%,
-    transparent
-  ) !important;
+  background: var(--aurora-empty-gradient) !important;
 }
 
 /* ============================================================
-   12. ASSISTANT IDENTITY — Aurora cyan accent
+   12. ASSISTANT IDENTITY — Aurora accent
    ============================================================ */
 
 html[data-theme="aurora"] [data-slot="session-turn-assistant-content"]::before {
-  color: #00D4FF !important;
+  color: var(--aurora-accent) !important;
 }
 
 /* ============================================================
-   13. CODE BLOCKS — Deeper void with subtle cyan border
+   13. CODE BLOCKS — Deeper void (dark) / frosted lavender (light)
    ============================================================ */
 
 html[data-theme="aurora"] [data-component="markdown"] .shiki,
 html[data-theme="aurora"] [data-component="markdown"] pre {
-  background: rgba(5, 5, 10, 0.6) !important;
-  border-color: rgba(0, 212, 255, 0.08) !important;
+  background: var(--aurora-code-bg) !important;
+  border-color: var(--aurora-code-border) !important;
 }
 
 /* ============================================================
-   14. SCROLLBAR — Cyan-tinted thumb
+   14. SCROLLBAR — Mode-aware tinted thumb
    ============================================================ */
 
 html[data-theme="aurora"] [data-slot="session-turn-content"]::-webkit-scrollbar-thumb {
-  background: rgba(0, 212, 255, 0.15) !important;
+  background: var(--aurora-scrollbar) !important;
 }
 
 html[data-theme="aurora"] [data-slot="session-turn-content"]::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 212, 255, 0.25) !important;
+  background: var(--aurora-scrollbar-hover) !important;
 }
 
 html[data-theme="aurora"] [data-slot="session-turn-content"] {
-  scrollbar-color: rgba(0, 212, 255, 0.15) transparent !important;
+  scrollbar-color: var(--aurora-scrollbar) transparent !important;
 }
 
 /* ============================================================
-   15. TABS — Cyan active indicator
+   15. TABS — Active indicator in accent color
    ============================================================ */
 
 html[data-theme="aurora"] [data-component="tabs"][data-variant="alt"] [data-slot="tabs-trigger-wrapper"]:has([data-selected]) {
-  border-bottom-color: #00D4FF !important;
+  border-bottom-color: var(--aurora-accent) !important;
 }
 
 /* ============================================================
-   16. SELECTION COLOR — Cyan tint
+   16. SELECTION COLOR — Mode-aware tint
    ============================================================ */
 
 html[data-theme="aurora"] ::selection {
-  background: rgba(0, 212, 255, 0.2);
+  background: var(--aurora-selection);
   color: inherit;
 }
 
 /* ============================================================
-   17. LINK HOVER — Violet glow
+   17. LINK HOVER — Mode-aware glow / shadow
    ============================================================ */
 
 html[data-theme="aurora"] [data-component="markdown"] a:hover {
-  text-shadow: 0 0 12px rgba(167, 139, 250, 0.4);
+  text-shadow: var(--aurora-link-shadow);
   transition: text-shadow 0.2s var(--ease-aurora);
+}
+
+/* ============================================================
+   18. INTERACTIVE MANDATES — Cursor & focus-visible
+   Proper interactive cues for all clickable elements
+   ============================================================ */
+
+html[data-theme="aurora"] button,
+html[data-theme="aurora"] [role="button"],
+html[data-theme="aurora"] [data-component="button"],
+html[data-theme="aurora"] [data-component="icon-button"],
+html[data-theme="aurora"] a,
+html[data-theme="aurora"] [data-slot="collapsible-trigger"],
+html[data-theme="aurora"] [data-slot="tabs-trigger"],
+html[data-theme="aurora"] summary {
+  cursor: pointer;
+}
+
+/* Focus-visible outline — teal ring for keyboard navigation */
+html[data-theme="aurora"] :focus-visible {
+  outline: 2px solid var(--aurora-accent);
+  outline-offset: 2px;
+}
+
+/* Suppress outline for mouse/touch users */
+html[data-theme="aurora"] :focus:not(:focus-visible) {
+  outline: none;
 }
