@@ -1,25 +1,109 @@
 :root {
-  --font-family-sans: "Inter", "Inter Fallback";
+  /* ─── FONT FAMILIES ─── */
+  --font-family-sans: "Inter", "Inter Fallback", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
   --font-family-sans--font-feature-settings: "ss01" 1, "ss03" 1, "cv01" 1, "cv02" 1;
-  --font-family-mono: "IBM Plex Mono", "IBM Plex Mono Fallback";
+  --font-family-mono: "IBM Plex Mono", "BlexMono Nerd Font Mono", "IBM Plex Mono Fallback", ui-monospace, monospace;
   --font-family-mono--font-feature-settings: "ss01" 1;
+  --font-family-display:
+    "Geist", "Inter", "SF Pro Display", system-ui, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  /* Math-capable fallback (KaTeX/MathJax will use their own fonts; this covers inline math Unicode) */
+  --font-family-math: "Cambria Math", "STIX Two Math", "Latin Modern Math", math, serif;
 
+  /* ─── LEGACY FONT SIZES (kept for backward compat) ─── */
   --font-size-small: 13px;
   --font-size-base: 14px;
   --font-size-large: 16px;
   --font-size-x-large: 20px;
+
+  /* ─── AURORA TYPE SCALE — Major Third (1.250) ─── */
+  --text-xs: 0.64rem; /* ~10px — Labels, captions */
+  --text-sm: 0.8rem; /* ~13px — Small UI text */
+  --text-base: 1rem; /* 16px — Body text */
+  --text-md: 1.25rem; /* 20px — Large body */
+  --text-lg: 1.563rem; /* 25px — Section headers */
+  --text-xl: 1.953rem; /* ~31px — Page headers */
+  --text-2xl: 2.441rem; /* ~39px — Hero subheads */
+  --text-3xl: 3.052rem; /* ~49px — Hero headlines */
+  --text-4xl: 3.815rem; /* ~61px — Display text */
+
+  /* ─── FONT WEIGHTS ─── */
   --font-weight-regular: 400;
   --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* ─── LINE HEIGHTS ─── */
+  --line-height-none: 1;
+  --line-height-tight: 1.25;
+  --line-height-snug: 1.375;
   --line-height-normal: 130%;
+  --line-height-relaxed: 1.625;
+  --line-height-loose: 1.75;
   --line-height-large: 150%;
   --line-height-x-large: 180%;
   --line-height-2x-large: 200%;
+
+  /* ─── LETTER SPACING ─── */
+  --letter-spacing-tighter: -0.05em;
+  --letter-spacing-tight: -0.025em;
   --letter-spacing-normal: 0;
-  --letter-spacing-tight: -0.1599999964237213;
+  --letter-spacing-wide: 0.025em;
+  --letter-spacing-wider: 0.05em;
   --letter-spacing-tightest: -0.3199999928474426;
   --paragraph-spacing-base: 0;
 
+  /* ─── PROSE WIDTH ─── */
+  --max-prose-width: 72ch;
+
+  /* ─── SPACING SYSTEM — 4px Base Grid ─── */
   --spacing: 0.25rem;
+  --space-px: 1px;
+  --space-0: 0;
+  --space-0-5: 0.125rem; /* 2px */
+  --space-1: 0.25rem; /* 4px */
+  --space-1-5: 0.375rem; /* 6px */
+  --space-2: 0.5rem; /* 8px */
+  --space-2-5: 0.625rem; /* 10px */
+  --space-3: 0.75rem; /* 12px */
+  --space-3-5: 0.875rem; /* 14px */
+  --space-4: 1rem; /* 16px */
+  --space-5: 1.25rem; /* 20px */
+  --space-6: 1.5rem; /* 24px */
+  --space-8: 2rem; /* 32px */
+  --space-10: 2.5rem; /* 40px */
+  --space-12: 3rem; /* 48px */
+  --space-16: 4rem; /* 64px */
+  --space-20: 5rem; /* 80px */
+  --space-24: 6rem; /* 96px */
+
+  /* ─── SEMANTIC SPACING ─── */
+  --gap-xs: var(--space-1); /* 4px — Inline elements */
+  --gap-sm: var(--space-2); /* 8px — Tight groups */
+  --gap-md: var(--space-4); /* 16px — Default gap */
+  --gap-lg: var(--space-6); /* 24px — Section spacing */
+  --gap-xl: var(--space-8); /* 32px — Major sections */
+  --gap-2xl: var(--space-12); /* 48px — Page sections */
+
+  /* ─── COMPONENT PADDING ─── */
+  --padding-button: var(--space-2) var(--space-4);
+  --padding-button-sm: var(--space-1-5) var(--space-3);
+  --padding-button-lg: var(--space-3) var(--space-6);
+  --padding-card: var(--space-5);
+  --padding-card-sm: var(--space-3);
+  --padding-card-lg: var(--space-6);
+  --padding-input: var(--space-2-5) var(--space-3);
+
+  /* ─── Blur tokens (default: none — no GPU cost for non-Aurora themes) ─── */
+  --blur-card: none;
+  --blur-dialog: none;
+  --blur-overlay: blur(4px);
+  --blur-popover: none;
+  --blur-tooltip: none;
+  --blur-toast: none;
+  --blur-dock: none;
+  --blur-secondary-btn: none;
+  --blur-sidebar: none;
+  --blur-titlebar: none;
 
   --breakpoint-sm: 40rem;
   --breakpoint-md: 48rem;
@@ -42,10 +126,61 @@
   --container-7xl: 80rem;
 
   --radius-xs: 0.125rem;
-  --radius-sm: 0.25rem;
-  --radius-md: 0.375rem;
-  --radius-lg: 0.5rem;
-  --radius-xl: 0.625rem;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-2xl: 24px;
+  --radius-full: 9999px;
+
+  /* ─── Motion / Easing defaults ─── */
+  --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-snappy: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 350ms;
+
+  /* ─── Accent / Glow / Glass defaults (OC-1 fallbacks) ─── */
+  --accent-base: var(--icon-interactive-base, #0070ff);
+  --accent-hover: var(--border-interactive-hover, #005cd1);
+  --glow-accent: none;
+  --glow-accent-hover: none;
+  --glow-accent-focus: none;
+  --glow-secondary: none;
+  --glow-secondary-hover: none;
+  --glow-tertiary: none;
+  --glow-error: none;
+  --glow-success: none;
+  --glow-none: none;
+  --glass-base: var(--surface-raised-stronger-non-alpha);
+  --glass-strong: var(--surface-raised-stronger-non-alpha);
+  --glass-subtle: var(--surface-raised-base);
+  --border-accent-base: var(--border-weak-base);
+  --border-accent-hover: var(--border-hover);
+  --border-accent-focus: var(--border-interactive-base);
+  --border-accent-secondary: var(--border-weak-base);
+  --message-user-tint: transparent;
+  --message-user-border: var(--border-interactive-base);
+  --message-assistant-border: var(--border-info-base);
+  --card-bg: var(--surface-inset-base);
+  --card-bg-hover: var(--surface-base-hover);
+  --card-glow: var(--shadow-xs);
+  --code-bg: var(--surface-inset-strong);
+  --code-border: var(--border-weak-base);
+  --scroll-accent: var(--border-weak-base);
+  --scroll-accent-hover: var(--border-hover);
+  --selection-accent: var(--surface-interactive-base);
+  --prompt-glow: var(--shadow-xs-border-select);
+  --prompt-btn-glow: var(--shadow-sm);
+  --prompt-btn-glow-hover: var(--shadow-md);
+  --dialog-shadow: var(--shadow-lg-border-base);
+  --popover-shadow: var(--shadow-lg);
+  --permission-glow: var(--shadow-xs-border-critical-base);
+  --empty-bg: transparent;
+  --thinking-color: var(--icon-interactive-base);
+  --thinking-glow: none;
+  --progress-gradient: var(--border-active);
 
   --shadow-xs:
     0 1px 2px -0.5px light-dark(hsl(0 0% 0% / 0.05), hsl(0 0% 0% / 0.08)),

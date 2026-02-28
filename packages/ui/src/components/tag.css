@@ -4,10 +4,11 @@
   justify-content: center;
   user-select: none;
 
-  border-radius: var(--radius-xs);
-  border: 0.5px solid var(--border-weak-base);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-accent-base);
   background: var(--surface-raised-base);
   color: var(--text-base);
+  transition: all var(--duration-normal) var(--ease-smooth);
 
   &[data-size="normal"] {
     height: 18px;

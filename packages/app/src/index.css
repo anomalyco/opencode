@@ -75,7 +75,7 @@ body::before {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.5px;
-  color: var(--icon-agent-ask-base, #7DCFFF);
+  color: var(--icon-agent-ask-base, #7dcfff);
 }
 
 /* ============================================================
@@ -94,16 +94,23 @@ body::before {
   display: inline-block;
   width: 8px;
   height: 8px;
-  background: var(--icon-agent-ask-base, #7DCFFF);
+  background: var(--icon-agent-ask-base, #7dcfff);
   border-radius: 9999px;
   margin-right: 8px;
-  box-shadow: 0 0 8px var(--icon-agent-ask-base, #7DCFFF);
+  box-shadow: 0 0 8px var(--icon-agent-ask-base, #7dcfff);
   animation: thinkingPulse 1.5s ease-in-out infinite;
 }
 
 @keyframes thinkingPulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--icon-agent-ask-base, #7DCFFF); }
-  50% { opacity: 0.5; box-shadow: 0 0 2px var(--icon-agent-ask-base, #7DCFFF); }
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 8px var(--icon-agent-ask-base, #7dcfff);
+  }
+  50% {
+    opacity: 0.5;
+    box-shadow: 0 0 2px var(--icon-agent-ask-base, #7dcfff);
+  }
 }
 
 [data-slot="session-turn-thinking-heading"] {
@@ -194,8 +201,7 @@ body::before {
   backdrop-filter: blur(16px) !important;
   -webkit-backdrop-filter: blur(16px) !important;
   border: 1px solid color-mix(in srgb, var(--border-base) 50%, transparent) !important;
-  box-shadow:
-    0px 20px 40px -12px hsl(0 0% 0% / 0.2) !important;
+  box-shadow: 0px 20px 40px -12px hsl(0 0% 0% / 0.2) !important;
   border-radius: 18px !important;
 }
 
@@ -207,12 +213,15 @@ body::before {
 }
 
 /* ============================================================
-   9. SIDEBAR — Deep background zone
+   9. SIDEBAR — Apple-style glassmorphism
    ============================================================ */
 [data-component="layout-sidebar"],
 [data-slot="layout-sidebar"] {
-  background: var(--background-strong) !important;
-  border-right: 1px solid var(--border-weaker-base) !important;
+  background: var(--glass-strong) !important;
+  backdrop-filter: var(--blur-sidebar);
+  -webkit-backdrop-filter: var(--blur-sidebar);
+  border-right: 1px solid var(--border-accent-base) !important;
+  background-clip: padding-box;
 }
 
 /* ============================================================
@@ -223,14 +232,14 @@ body::before {
 }
 
 /* ============================================================
-   11. TITLEBAR — Glass depth
+   11. TITLEBAR — Apple-style frosted glass
    ============================================================ */
 [data-component="session-header"],
 [data-component="titlebar"] {
-  border-bottom: 1px solid var(--border-weaker-base);
-  background: color-mix(in srgb, var(--background-strong) 80%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-accent-base);
+  background: var(--glass-base);
+  backdrop-filter: var(--blur-titlebar);
+  -webkit-backdrop-filter: var(--blur-titlebar);
 }
 
 /* ============================================================

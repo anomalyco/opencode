@@ -2,11 +2,13 @@
 [data-component="context-menu-sub-content"] {
   min-width: 8rem;
   overflow: hidden;
-  border: none;
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-xs-border);
+  border: 1px solid var(--border-accent-base);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--popover-shadow);
   background-clip: padding-box;
-  background-color: var(--surface-raised-stronger-non-alpha);
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur-popover);
+  -webkit-backdrop-filter: var(--blur-popover);
   padding: 4px;
   z-index: 100;
   transform-origin: var(--kb-menu-content-transform-origin);

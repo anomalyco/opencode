@@ -1,5 +1,5 @@
+import { generateNeutralScale, generateScale, hexToOklch, hexToRgb, oklchToHex, withAlpha } from "./color"
 import type { ColorValue, DesktopTheme, HexColor, ResolvedTheme, ThemeVariant } from "./types"
-import { generateNeutralScale, generateScale, hexToOklch, oklchToHex, withAlpha } from "./color"
 
 export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): ResolvedTheme {
   const { seeds, overrides = {} } = variant
@@ -13,6 +13,14 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   const interactive = generateScale(seeds.interactive, isDark)
   const diffAdd = generateScale(seeds.diffAdd, isDark)
   const diffDelete = generateScale(seeds.diffDelete, isDark)
+
+  // Accent seeds with fallbacks
+  const accentSeed = seeds.accent ?? seeds.interactive
+  const accentSecondarySeed = seeds.accentSecondary ?? seeds.info
+  const accentTertiarySeed = seeds.accentTertiary ?? seeds.warning
+  const accent = generateScale(accentSeed, isDark)
+  const accentSecondary = generateScale(accentSecondarySeed, isDark)
+  const accentTertiary = generateScale(accentTertiarySeed, isDark)
 
   const neutralAlpha = generateNeutralAlphaScale(neutral, isDark)
 
@@ -289,6 +297,219 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["avatar-text-purple"] = isDark ? "#9d5bd2" : "#8445bc"
   tokens["avatar-text-cyan"] = isDark ? "#369eff" : "#0894b3"
   tokens["avatar-text-lime"] = isDark ? "#c4f042" : "#5d770d"
+
+  // ─── ACCENT TOKENS ───
+  tokens["accent-base"] = accent[8]
+  tokens["accent-hover"] = accent[9]
+  tokens["accent-soft"] = accent[isDark ? 6 : 7]
+  tokens["accent-muted"] = accent[isDark ? 4 : 5]
+  tokens["accent-subtle"] = accent[isDark ? 2 : 3]
+  tokens["accent-secondary-base"] = accentSecondary[8]
+  tokens["accent-secondary-hover"] = accentSecondary[9]
+  tokens["accent-secondary-soft"] = accentSecondary[isDark ? 6 : 7]
+  tokens["accent-secondary-muted"] = accentSecondary[isDark ? 4 : 5]
+  tokens["accent-tertiary-base"] = accentTertiary[8]
+  tokens["accent-tertiary-hover"] = accentTertiary[9]
+  tokens["accent-tertiary-soft"] = accentTertiary[isDark ? 6 : 7]
+
+  // RGB components for glow generation
+  const accentRgb = hexToRgb(accentSeed)
+  const ar = Math.round(accentRgb.r * 255)
+  const ag = Math.round(accentRgb.g * 255)
+  const ab = Math.round(accentRgb.b * 255)
+  const accent2Rgb = hexToRgb(accentSecondarySeed)
+  const a2r = Math.round(accent2Rgb.r * 255)
+  const a2g = Math.round(accent2Rgb.g * 255)
+  const a2b = Math.round(accent2Rgb.b * 255)
+  const accent3Rgb = hexToRgb(accentTertiarySeed)
+  const a3r = Math.round(accent3Rgb.r * 255)
+  const a3g = Math.round(accent3Rgb.g * 255)
+  const a3b = Math.round(accent3Rgb.b * 255)
+  const errRgb = hexToRgb(seeds.error)
+  const er = Math.round(errRgb.r * 255)
+  const eg_ = Math.round(errRgb.g * 255)
+  const eb = Math.round(errRgb.b * 255)
+  const sucRgb = hexToRgb(seeds.success)
+  const sr = Math.round(sucRgb.r * 255)
+  const sg = Math.round(sucRgb.g * 255)
+  const sb = Math.round(sucRgb.b * 255)
+
+  // ─── GLOW TOKENS ───
+  if (isDark) {
+    tokens["glow-accent"] = `0 0 24px -2px rgba(${ar}, ${ag}, ${ab}, 0.55), 0 0 6px rgba(${ar}, ${ag}, ${ab}, 0.3)`
+    tokens["glow-accent-hover"] =
+      `0 0 36px -2px rgba(${ar}, ${ag}, ${ab}, 0.7), 0 0 0 1px rgba(${ar}, ${ag}, ${ab}, 0.4)`
+    tokens["glow-accent-focus"] =
+      `0 0 40px -2px rgba(${ar}, ${ag}, ${ab}, 0.75), 0 0 0 3px rgba(${ar}, ${ag}, ${ab}, 0.4)`
+    tokens["glow-secondary"] = `0 0 24px -2px rgba(${a2r}, ${a2g}, ${a2b}, 0.55)`
+    tokens["glow-secondary-hover"] =
+      `0 0 36px -2px rgba(${a2r}, ${a2g}, ${a2b}, 0.7), 0 0 0 1px rgba(${a2r}, ${a2g}, ${a2b}, 0.4)`
+    tokens["glow-tertiary"] = `0 0 24px -2px rgba(${a3r}, ${a3g}, ${a3b}, 0.55)`
+    tokens["glow-error"] = `0 0 20px -2px rgba(${er}, ${eg_}, ${eb}, 0.6)`
+    tokens["glow-success"] = `0 0 24px -2px rgba(${sr}, ${sg}, ${sb}, 0.55)`
+  } else {
+    tokens["glow-accent"] = `0 0 16px -4px rgba(${ar}, ${ag}, ${ab}, 0.2), 0 2px 8px rgba(0, 0, 0, 0.06)`
+    tokens["glow-accent-hover"] =
+      `0 0 24px -4px rgba(${ar}, ${ag}, ${ab}, 0.3), 0 0 0 1px rgba(${ar}, ${ag}, ${ab}, 0.15), 0 2px 10px rgba(0, 0, 0, 0.08)`
+    tokens["glow-accent-focus"] =
+      `0 0 28px -4px rgba(${ar}, ${ag}, ${ab}, 0.35), 0 0 0 3px rgba(${ar}, ${ag}, ${ab}, 0.18), 0 2px 10px rgba(0, 0, 0, 0.08)`
+    tokens["glow-secondary"] = `0 0 16px -4px rgba(${a2r}, ${a2g}, ${a2b}, 0.2), 0 2px 8px rgba(0, 0, 0, 0.06)`
+    tokens["glow-secondary-hover"] =
+      `0 0 24px -4px rgba(${a2r}, ${a2g}, ${a2b}, 0.3), 0 0 0 1px rgba(${a2r}, ${a2g}, ${a2b}, 0.15)`
+    tokens["glow-tertiary"] = `0 0 16px -4px rgba(${a3r}, ${a3g}, ${a3b}, 0.2), 0 2px 8px rgba(0, 0, 0, 0.06)`
+    tokens["glow-error"] = `0 0 14px -4px rgba(${er}, ${eg_}, ${eb}, 0.25), 0 2px 6px rgba(0, 0, 0, 0.06)`
+    tokens["glow-success"] = `0 0 16px -4px rgba(${sr}, ${sg}, ${sb}, 0.2), 0 2px 8px rgba(0, 0, 0, 0.06)`
+  }
+  tokens["glow-none"] = "none"
+
+  // ─── GLASS TOKENS ───
+  if (isDark) {
+    tokens["glass-base"] = `rgba(${ar > 100 ? 8 : 12}, ${ag > 100 ? 12 : 8}, 24, 0.92)`
+    tokens["glass-strong"] = `rgba(${ar > 100 ? 4 : 8}, ${ag > 100 ? 6 : 4}, 18, 0.96)`
+    tokens["glass-subtle"] = `rgba(${ar > 100 ? 12 : 16}, ${ag > 100 ? 18 : 12}, 36, 0.8)`
+  } else {
+    tokens["glass-base"] = "rgba(255, 255, 255, 0.88)"
+    tokens["glass-strong"] = "rgba(245, 245, 250, 0.94)"
+    tokens["glass-subtle"] = "rgba(255, 255, 255, 0.75)"
+  }
+
+  // ─── BORDER ACCENT TOKENS ───
+  if (isDark) {
+    tokens["border-accent-base"] = `rgba(${ar}, ${ag}, ${ab}, 0.22)`
+    tokens["border-accent-hover"] = `rgba(${ar}, ${ag}, ${ab}, 0.4)`
+    tokens["border-accent-focus"] = `rgba(${ar}, ${ag}, ${ab}, 0.6)`
+    tokens["border-accent-secondary"] = `rgba(${a2r}, ${a2g}, ${a2b}, 0.3)`
+  } else {
+    tokens["border-accent-base"] = `rgba(${ar}, ${ag}, ${ab}, 0.1)`
+    tokens["border-accent-hover"] = `rgba(${ar}, ${ag}, ${ab}, 0.22)`
+    tokens["border-accent-focus"] = `rgba(${ar}, ${ag}, ${ab}, 0.4)`
+    tokens["border-accent-secondary"] = `rgba(${a2r}, ${a2g}, ${a2b}, 0.12)`
+  }
+
+  // ─── MESSAGE TOKENS ───
+  if (isDark) {
+    tokens["message-user-tint"] = `rgba(${ar}, ${ag}, ${ab}, 0.12)`
+    tokens["message-user-border"] = `rgba(${ar}, ${ag}, ${ab}, 0.7)`
+    tokens["message-assistant-border"] = `rgba(${a2r}, ${a2g}, ${a2b}, 0.65)`
+  } else {
+    tokens["message-user-tint"] = `rgba(${ar}, ${ag}, ${ab}, 0.05)`
+    tokens["message-user-border"] = `rgba(${ar}, ${ag}, ${ab}, 0.45)`
+    tokens["message-assistant-border"] = `rgba(${a2r}, ${a2g}, ${a2b}, 0.35)`
+  }
+
+  // ─── CARD TOKENS ───
+  if (isDark) {
+    tokens["card-bg"] = `rgba(${ar}, ${ag}, ${ab}, 0.05)`
+    tokens["card-bg-hover"] = `rgba(${ar}, ${ag}, ${ab}, 0.1)`
+    tokens["card-glow"] = `0 0 28px -4px rgba(${ar}, ${ag}, ${ab}, 0.35), 0 0 8px rgba(${ar}, ${ag}, ${ab}, 0.15)`
+  } else {
+    tokens["card-bg"] = "rgba(0, 0, 0, 0.015)"
+    tokens["card-bg-hover"] = `rgba(${ar}, ${ag}, ${ab}, 0.04)`
+    tokens["card-glow"] = `0 0 20px -6px rgba(${ar}, ${ag}, ${ab}, 0.15), 0 2px 8px rgba(0, 0, 0, 0.05)`
+  }
+
+  // ─── CODE BLOCK TOKENS ───
+  if (isDark) {
+    tokens["code-bg"] = "rgba(2, 4, 16, 0.85)"
+    tokens["code-border"] = `rgba(${ar}, ${ag}, ${ab}, 0.2)`
+  } else {
+    tokens["code-bg"] = "rgba(232, 232, 242, 0.55)"
+    tokens["code-border"] = `rgba(${ar}, ${ag}, ${ab}, 0.12)`
+  }
+
+  // ─── SCROLLBAR TOKENS ───
+  if (isDark) {
+    tokens["scroll-accent"] = `rgba(${ar}, ${ag}, ${ab}, 0.3)`
+    tokens["scroll-accent-hover"] = `rgba(${ar}, ${ag}, ${ab}, 0.5)`
+  } else {
+    tokens["scroll-accent"] = `rgba(${ar}, ${ag}, ${ab}, 0.14)`
+    tokens["scroll-accent-hover"] = `rgba(${ar}, ${ag}, ${ab}, 0.25)`
+  }
+
+  // ─── SELECTION ───
+  tokens["selection-accent"] = isDark ? `rgba(${ar}, ${ag}, ${ab}, 0.35)` : `rgba(${ar}, ${ag}, ${ab}, 0.18)`
+
+  // ─── PROMPT / DOCK TOKENS ───
+  if (isDark) {
+    tokens["prompt-glow"] =
+      `0 0 0 2px rgba(${ar}, ${ag}, ${ab}, 0.3), 0 0 60px -5px rgba(${ar}, ${ag}, ${ab}, 0.5), 0 20px 60px -10px rgba(0, 0, 0, 0.6)`
+    tokens["prompt-btn-glow"] = `0 0 28px rgba(${ar}, ${ag}, ${ab}, 0.5), 0 0 8px rgba(${ar}, ${ag}, ${ab}, 0.3)`
+    tokens["prompt-btn-glow-hover"] = `0 0 48px rgba(${ar}, ${ag}, ${ab}, 0.7), 0 0 12px rgba(${ar}, ${ag}, ${ab}, 0.4)`
+  } else {
+    tokens["prompt-glow"] =
+      `0 0 0 4px rgba(${ar}, ${ag}, ${ab}, 0.1), 0 0 35px -10px rgba(${ar}, ${ag}, ${ab}, 0.2), 0 10px 30px -10px rgba(0, 0, 0, 0.1)`
+    tokens["prompt-btn-glow"] = `0 0 20px rgba(${ar}, ${ag}, ${ab}, 0.22), 0 2px 8px rgba(0, 0, 0, 0.08)`
+    tokens["prompt-btn-glow-hover"] = `0 0 30px rgba(${ar}, ${ag}, ${ab}, 0.35), 0 2px 10px rgba(0, 0, 0, 0.1)`
+  }
+
+  // ─── DIALOG TOKENS ───
+  if (isDark) {
+    tokens["dialog-shadow"] =
+      `0 0 0 1px rgba(${ar}, ${ag}, ${ab}, 0.25), 0 0 100px -10px rgba(${ar}, ${ag}, ${ab}, 0.3), 0 30px 80px -20px rgba(0, 0, 0, 0.7)`
+    tokens["popover-shadow"] =
+      `0 0 0 1px rgba(${ar}, ${ag}, ${ab}, 0.25), 0 20px 60px -10px rgba(0, 0, 0, 0.6), 0 0 40px -10px rgba(${ar}, ${ag}, ${ab}, 0.2)`
+  } else {
+    tokens["dialog-shadow"] =
+      `0 0 0 1px rgba(${ar}, ${ag}, ${ab}, 0.1), 0 0 50px -12px rgba(${ar}, ${ag}, ${ab}, 0.1), 0 30px 60px -20px rgba(0, 0, 0, 0.12)`
+    tokens["popover-shadow"] = `0 0 0 1px rgba(${ar}, ${ag}, ${ab}, 0.1), 0 16px 40px -10px rgba(0, 0, 0, 0.12)`
+  }
+
+  // ─── PERMISSION WARNING TOKENS ───
+  if (isDark) {
+    tokens["permission-glow"] =
+      `0 0 0 2px rgba(${a3r}, ${a3g}, ${a3b}, 0.5), 0 0 30px -4px rgba(${a3r}, ${a3g}, ${a3b}, 0.4)`
+  } else {
+    tokens["permission-glow"] =
+      `0 0 0 1px rgba(${a3r}, ${a3g}, ${a3b}, 0.3), 0 0 20px -6px rgba(${a3r}, ${a3g}, ${a3b}, 0.18), 0 2px 8px rgba(0, 0, 0, 0.05)`
+  }
+
+  // ─── EMPTY STATE GRADIENT ───
+  if (isDark) {
+    tokens["empty-bg"] =
+      `radial-gradient(ellipse 60% 40% at 50% 60%, rgba(${ar}, ${ag}, ${ab}, 0.15), rgba(${a2r}, ${a2g}, ${a2b}, 0.08) 50%, transparent)`
+  } else {
+    tokens["empty-bg"] =
+      `radial-gradient(ellipse 60% 40% at 50% 60%, rgba(${ar}, ${ag}, ${ab}, 0.07), rgba(${a2r}, ${a2g}, ${a2b}, 0.035) 50%, transparent)`
+  }
+
+  // ─── THINKING / SPINNER ───
+  tokens["thinking-color"] = accentSeed
+  if (isDark) {
+    tokens["thinking-glow"] = `0 0 14px rgba(${ar}, ${ag}, ${ab}, 0.6)`
+  } else {
+    tokens["thinking-glow"] = `0 0 8px rgba(${ar}, ${ag}, ${ab}, 0.45)`
+  }
+
+  // ─── PROGRESS GRADIENT ───
+  tokens["progress-gradient"] = `linear-gradient(90deg, ${accentSeed}, ${accentSecondarySeed})`
+
+  // ─── BLUR TOKENS (GPU-composited, only active for accent-aware themes) ───
+  tokens["blur-card"] = "blur(12px)"
+  tokens["blur-dialog"] = "blur(24px)"
+  tokens["blur-overlay"] = "blur(8px)"
+  tokens["blur-popover"] = "blur(20px)"
+  tokens["blur-tooltip"] = "blur(12px)"
+  tokens["blur-toast"] = "blur(16px)"
+  tokens["blur-dock"] = "blur(24px)"
+  tokens["blur-secondary-btn"] = "blur(8px)"
+  tokens["blur-sidebar"] = "blur(20px)"
+  tokens["blur-titlebar"] = "blur(20px)"
+
+  // ─── RADIUS TOKENS ───
+  tokens["radius-sm"] = "6px"
+  tokens["radius-md"] = "10px"
+  tokens["radius-lg"] = "14px"
+  tokens["radius-xl"] = "18px"
+  tokens["radius-2xl"] = "24px"
+  tokens["radius-full"] = "9999px"
+
+  // ─── MOTION / EASING TOKENS ───
+  tokens["ease-smooth"] = "cubic-bezier(0.22, 1, 0.36, 1)"
+  tokens["ease-spring"] = "cubic-bezier(0.34, 1.56, 0.64, 1)"
+  tokens["ease-snappy"] = "cubic-bezier(0.16, 1, 0.3, 1)"
+  tokens["duration-fast"] = "150ms"
+  tokens["duration-normal"] = "250ms"
+  tokens["duration-slow"] = "350ms"
 
   for (const [key, value] of Object.entries(overrides)) {
     tokens[key] = value

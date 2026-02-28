@@ -7,6 +7,7 @@ export type {
   ResolvedTheme,
   ColorValue,
   CssVarRef,
+  TokenValue,
 } from "./types"
 
 export {

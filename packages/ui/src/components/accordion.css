@@ -52,7 +52,7 @@
         letter-spacing: var(--letter-spacing-normal);
 
         &:hover {
-          background-color: var(--surface-base-hover);
+          background-color: var(--card-bg-hover);
         }
         &:active {
           background-color: var(--surface-base-active);

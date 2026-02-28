@@ -38,13 +38,15 @@
   max-height: min(420px, calc(100dvh - 96px));
   overflow: hidden;
   pointer-events: auto;
-  transition: all 150ms ease-out;
+  transition: all var(--duration-fast) var(--ease-smooth);
 
   border-radius: var(--radius-lg);
-  border: 1px solid var(--border-weak-base);
+  border: 1px solid var(--border-accent-base);
   background: var(--surface-float-base);
+  backdrop-filter: var(--blur-toast);
+  -webkit-backdrop-filter: var(--blur-toast);
   color: var(--text-invert-base);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--popover-shadow);
 
   [data-slot="toast-inner"] {
     display: flex;

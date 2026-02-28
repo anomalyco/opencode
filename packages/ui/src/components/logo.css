@@ -1,4 +1,10 @@
 [data-component="logo-mark"] {
   width: 16px;
   aspect-ratio: 4/5;
+  filter: drop-shadow(0 0 6px var(--accent-base));
+  transition: filter var(--duration-slow) var(--ease-smooth);
+}
+
+[data-component="logo-mark"]:hover {
+  filter: drop-shadow(0 0 12px var(--accent-base));
 }

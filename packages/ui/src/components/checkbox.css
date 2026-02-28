@@ -89,6 +89,7 @@
   &[data-indeterminate] [data-slot="checkbox-checkbox-control"] {
     border-color: var(--border-base);
     background-color: var(--surface-weak);
+    box-shadow: var(--glow-accent);
   }
 
   &[data-checked]:hover:not([data-disabled], [data-readonly]) [data-slot="checkbox-checkbox-control"],

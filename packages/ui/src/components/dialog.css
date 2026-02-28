@@ -4,9 +4,9 @@
   position: fixed;
   inset: 0;
   z-index: 50;
-  background-color: hsl(from var(--background-base) h s l / 0.35);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background-color: hsl(from var(--background-base) h s l / 0.65);
+  backdrop-filter: var(--blur-overlay);
+  -webkit-backdrop-filter: var(--blur-overlay);
 }
 
 [data-component="dialog"] {
@@ -47,18 +47,18 @@
         display: none;
       }
 
-      /* padding: 8px; */
-      /* padding: 8px 8px 0 8px; */
       border-radius: var(--radius-xl);
-      background: var(--surface-raised-stronger-non-alpha);
+      background: var(--glass-strong);
+      backdrop-filter: var(--blur-dialog);
+      -webkit-backdrop-filter: var(--blur-dialog);
+      will-change: transform, opacity;
       background-clip: padding-box;
-      box-shadow:
-        var(--shadow-lg-border-base),
-        0 0 0 1px var(--border-weaker-base);
+      box-shadow: var(--dialog-shadow);
+      border: 1px solid var(--border-accent-base);
 
       [data-slot="dialog-header"] {
         display: flex;
-        padding: 16px 20px;
+        padding: 20px 24px;
         justify-content: space-between;
         align-items: center;
         flex-shrink: 0;
@@ -67,13 +67,13 @@
         [data-slot="dialog-title"] {
           color: var(--text-strong);
 
-          /* text-16-medium */
+          /* text-17-semibold */
           font-family: var(--font-family-sans);
-          font-size: var(--font-size-large);
+          font-size: 17px;
           font-style: normal;
-          font-weight: var(--font-weight-medium);
+          font-weight: var(--font-weight-semibold, 600);
           line-height: var(--line-height-x-large); /* 150% */
-          letter-spacing: var(--letter-spacing-tight);
+          letter-spacing: -0.02em;
         }
         /* [data-slot="dialog-close-button"] {} */
       }
@@ -140,10 +140,10 @@
 }
 
 [data-component="dialog"][data-transition] [data-slot="dialog-content"] {
-  animation: contentHide 120ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  animation: contentHide 150ms ease-in forwards;
 
   &[data-expanded] {
-    animation: contentShow 250ms cubic-bezier(0.16, 1, 0.3, 1);
+    animation: contentShow 300ms var(--ease-snappy);
   }
 }
 
@@ -176,7 +176,7 @@
 @keyframes contentShow {
   from {
     opacity: 0;
-    transform: scale(0.96) translateY(4px);
+    transform: scale(0.92) translateY(8px);
   }
   to {
     opacity: 1;
@@ -190,6 +190,6 @@
   }
   to {
     opacity: 0;
-    transform: scale(0.96) translateY(4px);
+    transform: scale(0.95) translateY(4px);
   }
 }

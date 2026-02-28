@@ -2,18 +2,21 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   text-decoration: none;
   user-select: none;
   aspect-ratio: 1;
   flex-shrink: 0;
+  cursor: pointer;
   transition:
-    background-color 120ms cubic-bezier(0.4, 0, 0.2, 1),
-    box-shadow 120ms cubic-bezier(0.4, 0, 0.2, 1),
-    transform 80ms cubic-bezier(0.4, 0, 0.2, 1);
+    background-color var(--duration-fast) var(--ease-smooth),
+    box-shadow var(--duration-fast) var(--ease-smooth),
+    transform 80ms var(--ease-smooth),
+    filter var(--duration-fast) var(--ease-smooth);
 
   &[data-variant="primary"] {
     background-color: var(--icon-strong-base);
+    box-shadow: var(--glow-accent);
 
     [data-slot="icon-svg"] {
       /* color: var(--icon-weak-base); */
@@ -29,6 +32,9 @@
 
     &:hover:not(:disabled) {
       background-color: var(--icon-strong-hover);
+      box-shadow: var(--glow-accent-hover);
+      transform: translateY(-1px);
+      filter: brightness(1.08);
     }
     &:focus:not(:disabled) {
       background-color: var(--icon-strong-focus);
@@ -88,7 +94,7 @@
     }
 
     &:hover:not(:disabled) {
-      background-color: var(--surface-base-hover);
+      background-color: var(--card-bg-hover);
 
       [data-slot="icon-svg"] {
         color: var(--icon-hover);

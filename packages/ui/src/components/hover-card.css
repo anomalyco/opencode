@@ -9,13 +9,15 @@
   min-width: 200px;
   max-width: 320px;
   max-height: calc(100vh - 1rem);
-  border-radius: 8px;
-  background-color: var(--surface-raised-stronger-non-alpha);
+  border-radius: var(--radius-lg);
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur-popover);
+  -webkit-backdrop-filter: var(--blur-popover);
   pointer-events: auto;
 
-  border: 1px solid color-mix(in oklch, var(--border-base) 50%, transparent);
+  border: 1px solid var(--border-accent-base);
   background-clip: padding-box;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--popover-shadow);
 
   transform-origin: var(--kb-hovercard-content-transform-origin);
 

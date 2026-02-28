@@ -9,9 +9,14 @@
     transition: opacity 0.15s ease-in-out;
   }
 
-  &:hover::after,
+  &:hover::after {
+    opacity: 0.5;
+    background: var(--accent-base);
+  }
+
   &:active::after {
-    opacity: 1;
+    opacity: 0.8;
+    background: var(--accent-base);
   }
 
   &[data-direction="horizontal"] {

@@ -35,8 +35,8 @@
     width: 100%;
     min-width: 0;
     max-width: 100%;
-    padding: 16px 0;
-    border-bottom: 1px solid var(--border-weaker-base);
+    padding: 20px 0;
+    border-bottom: 1px solid var(--border-accent-base);
 
     &:last-child {
       border-bottom: none;
@@ -88,6 +88,8 @@
     flex-direction: column;
     align-self: stretch;
     gap: 12px;
+    border-left: 3px solid var(--message-assistant-border);
+    padding-left: 16px;
 
     > :first-child > [data-component="markdown"]:first-child {
       margin-top: 0;

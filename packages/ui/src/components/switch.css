@@ -95,6 +95,7 @@
     box-sizing: border-box;
     border-color: var(--icon-strong-base);
     background-color: var(--icon-strong-base);
+    box-shadow: var(--glow-accent);
   }
 
   &[data-checked] [data-slot="switch-thumb"] {

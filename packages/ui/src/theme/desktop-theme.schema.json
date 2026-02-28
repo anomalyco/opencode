@@ -79,6 +79,18 @@
         "diffDelete": {
           "$ref": "#/definitions/HexColor",
           "description": "Color for diff deletions"
+        },
+        "accent": {
+          "$ref": "#/definitions/HexColor",
+          "description": "Accent color for glows, highlights, and interactive emphasis. Falls back to interactive."
+        },
+        "accentSecondary": {
+          "$ref": "#/definitions/HexColor",
+          "description": "Secondary accent for assistant borders and secondary highlights. Falls back to info."
+        },
+        "accentTertiary": {
+          "$ref": "#/definitions/HexColor",
+          "description": "Tertiary accent for warm highlights and attention states. Falls back to warning."
         }
       }
     },

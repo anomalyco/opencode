@@ -5,9 +5,9 @@
   flex-shrink: 0;
   height: 20px;
   padding: 0 8px;
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   background: var(--surface-base);
-  box-shadow: var(--shadow-xxs-border);
+  border: 1px solid var(--border-accent-base);
 
   /* text-12-regular */
   font-family: var(--font-family-sans);

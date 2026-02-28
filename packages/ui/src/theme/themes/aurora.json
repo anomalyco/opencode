@@ -12,7 +12,10 @@
       "info": "#7C3AED",
       "interactive": "#0891B2",
       "diffAdd": "#16A34A",
-      "diffDelete": "#DC2626"
+      "diffDelete": "#DC2626",
+      "accent": "#0891B2",
+      "accentSecondary": "#7C3AED",
+      "accentTertiary": "#D97706"
     },
     "overrides": {
       "background-base": "#F5F5FA",
@@ -59,7 +62,10 @@
       "info": "#A78BFA",
       "interactive": "#00D4FF",
       "diffAdd": "#4ADE80",
-      "diffDelete": "#F87171"
+      "diffDelete": "#F87171",
+      "accent": "#00D4FF",
+      "accentSecondary": "#A78BFA",
+      "accentTertiary": "#FFBB33"
     },
     "overrides": {
       "background-base": "#0A0A0F",

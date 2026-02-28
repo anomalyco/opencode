@@ -395,3 +395,39 @@ input:where([type="button"], [type="reset"], [type="submit"]),
     font-size: 16px !important;
   }
 }
+
+/* ─── Aurora: Global selection accent ─── */
+::selection {
+  background: var(--selection-accent);
+  color: inherit;
+}
+
+/* ─── Aurora: Focus-visible accent ─── */
+:focus-visible {
+  outline: 2px solid var(--accent-base);
+  outline-offset: 2px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ─── Aurora: Cursor mandate for interactive elements ─── */
+button,
+[role="button"],
+a,
+summary {
+  cursor: pointer;
+}
+
+/* ─── Aurora: Reduced motion ─── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

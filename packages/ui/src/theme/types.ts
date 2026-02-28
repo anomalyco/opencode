@@ -16,11 +16,17 @@ export interface ThemeSeedColors {
   interactive: HexColor
   diffAdd: HexColor
   diffDelete: HexColor
+  /** Accent color for glows, highlights, and interactive emphasis. Falls back to `interactive`. */
+  accent?: HexColor
+  /** Secondary accent (e.g. assistant borders, secondary highlights). Falls back to `info`. */
+  accentSecondary?: HexColor
+  /** Tertiary accent (e.g. attention, warm highlights). Falls back to `warning`. */
+  accentTertiary?: HexColor
 }
 
 export interface ThemeVariant {
   seeds: ThemeSeedColors
-  overrides?: Record<string, ColorValue>
+  overrides?: Record<string, TokenValue>
 }
 
 export interface DesktopTheme {
@@ -43,6 +49,12 @@ export type TokenCategory =
   | "markdown"
   | "diff"
   | "avatar"
+  | "accent"
+  | "glow"
+  | "glass"
+  | "motion"
+  | "radius"
+  | "message"
 
 export type ThemeToken = string
 
@@ -50,4 +62,7 @@ export type CssVarRef = `var(--${string})`
 
 export type ColorValue = HexColor | CssVarRef
 
-export type ResolvedTheme = Record<ThemeToken, ColorValue>
+/** Any CSS-valid token value — hex colors, rgba(), box-shadow strings, easing functions, etc. */
+export type TokenValue = string
+
+export type ResolvedTheme = Record<ThemeToken, TokenValue>

@@ -7,11 +7,12 @@
   min-width: 200px;
   max-width: 320px;
   border-radius: var(--radius-lg);
-  background-color: var(--surface-raised-stronger-non-alpha);
-
-  border: 1px solid color-mix(in oklch, var(--border-base) 50%, transparent);
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur-popover);
+  -webkit-backdrop-filter: var(--blur-popover);
+  border: 1px solid var(--border-accent-base);
   background-clip: padding-box;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--popover-shadow);
 
   transform-origin: var(--kb-popover-content-transform-origin);
 

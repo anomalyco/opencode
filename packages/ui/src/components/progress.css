@@ -42,8 +42,9 @@
     height: 100%;
     width: var(--kb-progress-fill-width);
     border-radius: inherit;
-    background-color: var(--border-active);
-    transition: width 200ms ease;
+    background: var(--progress-gradient);
+    box-shadow: 0 0 12px -2px var(--accent-base);
+    transition: width var(--duration-normal) var(--ease-smooth);
   }
 
   &[data-indeterminate] [data-slot="progress-fill"] {

@@ -19,15 +19,18 @@
   z-index: 1000;
   max-width: 320px;
   border-radius: var(--radius-md);
-  background-color: var(--surface-float-base);
-  color: var(--text-invert-strong);
   background: var(--surface-float-base);
+  backdrop-filter: var(--blur-tooltip);
+  -webkit-backdrop-filter: var(--blur-tooltip);
+  color: var(--text-invert-strong);
   padding: 4px 10px;
-  border: 1px solid var(--border-weak-base, rgba(0, 0, 0, 0.07));
+  border: 1px solid var(--border-accent-base);
 
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--popover-shadow);
   pointer-events: none !important;
-  transition: opacity 150ms cubic-bezier(0.4, 0, 0.2, 1), transform 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    opacity var(--duration-fast) var(--ease-smooth),
+    transform var(--duration-fast) var(--ease-smooth);
   transform: translate3d(0, 0, 0);
   transform-origin: var(--kb-tooltip-content-transform-origin);
 
