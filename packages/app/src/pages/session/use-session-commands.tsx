@@ -8,13 +8,17 @@ import { useLayout } from "@/context/layout"
 import { useLocal } from "@/context/local"
 import { usePermission } from "@/context/permission"
 import { usePrompt } from "@/context/prompt"
+import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
+import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
 import { DialogFork } from "@/components/dialog-fork"
+import { CreatePrDialog } from "@/components/dialog-create-pr"
+import { AddressCommentsDialog } from "@/components/dialog-address-comments"
 import { showToast } from "@opencode-ai/ui/toast"
 import { findLast } from "@opencode-ai/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
@@ -45,6 +49,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const permission = usePermission()
   const prompt = usePrompt()
   const sdk = useSDK()
+  const platform = usePlatform()
+  const server = useServer()
   const sync = useSync()
   const terminal = useTerminal()
   const layout = useLayout()
@@ -126,6 +132,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const mcpCommand = withCategory(language.t("command.category.mcp"))
   const agentCommand = withCategory(language.t("command.category.agent"))
   const permissionsCommand = withCategory(language.t("command.category.permissions"))
+  const prCommand = withCategory(language.t("command.category.pr"))
 
   const isAutoAcceptActive = () => {
     const sessionID = params.id
@@ -489,6 +496,56 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         disabled: !params.id || visibleUserMessages().length === 0,
         onSelect: () => dialog.show(() => <DialogFork />),
       }),
+      ...(function () {
+        const vcs = sync.data.vcs
+        if (!vcs?.github?.available) return []
+
+        const hasPr = !!vcs.pr
+        const canMutate = server.isLocal() && vcs.github.authenticated
+
+        if (hasPr) {
+          return [
+            prCommand({
+              id: "pr.open",
+              title: language.t("command.pr.open"),
+              onSelect: () => {
+                if (vcs.pr?.url) platform.openLink(vcs.pr.url)
+              },
+            }),
+            prCommand({
+              id: "pr.copy",
+              title: language.t("command.pr.copy"),
+              onSelect: () => {
+                if (!vcs.pr?.url) return
+                navigator.clipboard.writeText(vcs.pr.url).then(() => {
+                  showToast({
+                    variant: "success",
+                    icon: "circle-check",
+                    title: language.t("pr.toast.copied"),
+                  })
+                })
+              },
+            }),
+            prCommand({
+              id: "pr.comments",
+              title: language.t("command.pr.comments"),
+              disabled: !canMutate,
+              onSelect: () => dialog.show(() => <AddressCommentsDialog />),
+            }),
+          ]
+        }
+
+        if (vcs.branch === vcs.defaultBranch) return []
+
+        return [
+          prCommand({
+            id: "pr.create",
+            title: language.t("command.pr.create"),
+            disabled: !canMutate,
+            onSelect: () => dialog.show(() => <CreatePrDialog />),
+          }),
+        ]
+      })(),
       ...share,
     ]
   })

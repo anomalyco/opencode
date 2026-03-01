@@ -12,7 +12,8 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { type Session } from "@opencode-ai/sdk/v2/client"
+import { type Session, type PrInfo } from "@opencode-ai/sdk/v2/client"
+import { getPrPillStyle } from "@/utils/pr-style"
 import { type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
@@ -83,6 +84,8 @@ export const WorkspaceDragOverlay = (props: {
   )
 }
 
+const prPillStyle = getPrPillStyle
+
 const WorkspaceHeader = (props: {
   local: Accessor<boolean>
   busy: Accessor<boolean>
@@ -90,6 +93,7 @@ const WorkspaceHeader = (props: {
   directory: string
   language: ReturnType<typeof useLanguage>
   branch: Accessor<string | undefined>
+  pr: Accessor<PrInfo | undefined>
   workspaceValue: Accessor<string>
   workspaceEditActive: Accessor<boolean>
   InlineEditor: WorkspaceSidebarContext["InlineEditor"]
@@ -130,7 +134,19 @@ const WorkspaceHeader = (props: {
         openOnDblClick={false}
       />
     </Show>
-    <div class="flex items-center justify-center shrink-0 overflow-hidden w-0 opacity-0 transition-all duration-200 group-hover/workspace:w-3.5 group-hover/workspace:opacity-100 group-focus-within/workspace:w-3.5 group-focus-within/workspace:opacity-100">
+    <Show when={props.pr()}>
+      {(currentPr) => {
+        const pillStyle = () => prPillStyle(currentPr())
+        return (
+          <span
+            class={`shrink-0 ml-auto text-11-medium px-1.5 py-0.5 rounded-md border overflow-hidden transition-all duration-200 group-hover/workspace:max-w-0 group-hover/workspace:opacity-0 group-hover/workspace:px-0 group-hover/workspace:border-transparent group-focus-within/workspace:max-w-0 group-focus-within/workspace:opacity-0 group-focus-within/workspace:px-0 group-focus-within/workspace:border-transparent ${pillStyle()}`}
+          >
+            PR #{currentPr().number}
+          </span>
+        )
+      }}
+    </Show>
+    <div class="flex items-center justify-center shrink-0 w-0 overflow-hidden opacity-0 transition-all duration-200 group-hover/workspace:w-3.5 group-hover/workspace:opacity-100 group-focus-within/workspace:w-3.5 group-focus-within/workspace:opacity-100">
       <Icon name={props.open() ? "chevron-down" : "chevron-right"} size="small" class="text-icon-base" />
     </div>
   </div>
@@ -353,6 +369,7 @@ export const SortableWorkspace = (props: {
       directory={props.directory}
       language={language}
       branch={() => workspaceStore.vcs?.branch}
+      pr={() => workspaceStore.vcs?.pr}
       workspaceValue={workspaceValue}
       workspaceEditActive={workspaceEditActive}
       InlineEditor={props.ctx.InlineEditor}
@@ -382,6 +399,7 @@ export const SortableWorkspace = (props: {
         "opacity-50 pointer-events-none": busy(),
       }}
     >
+      <div class="mx-3 border-t border-border-weak-base/50" />
       <Collapsible variant="ghost" open={open()} class="shrink-0" onOpenChange={openWrapper}>
         <div class="py-1">
           <div

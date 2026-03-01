@@ -126,7 +126,7 @@ export function createChildStoreManager(input: {
     if (!children[directory]) {
       const vcs = runWithOwner(input.owner, () =>
         persisted(
-          Persist.workspace(directory, "vcs", ["vcs.v1"]),
+          Persist.workspace(directory, "vcs", ["vcs.v2"]),
           createStore({ value: undefined as VcsInfo | undefined }),
         ),
       )

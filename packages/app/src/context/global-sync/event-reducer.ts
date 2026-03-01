@@ -10,6 +10,7 @@ import type {
   Session,
   SessionStatus,
   Todo,
+  VcsInfo,
 } from "@opencode-ai/sdk/v2/client"
 import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
@@ -267,10 +268,27 @@ export function applyDirectoryEvent(input: {
       )
       break
     }
+    case "vcs.updated": {
+      const props = event.properties as {
+        branch?: string
+        defaultBranch?: string
+        dirty?: number
+        pr?: VcsInfo["pr"]
+        github?: VcsInfo["github"]
+      }
+      const next: VcsInfo = {
+        ...input.store.vcs,
+        ...props,
+        branch: props.branch ?? input.store.vcs?.branch ?? "",
+      }
+      input.setStore("vcs", next)
+      if (input.vcsCache) input.vcsCache.setStore("value", next)
+      break
+    }
     case "vcs.branch.updated": {
       const props = event.properties as { branch: string }
       if (input.store.vcs?.branch === props.branch) break
-      const next = { branch: props.branch }
+      const next = { ...input.store.vcs, branch: props.branch }
       input.setStore("vcs", next)
       if (input.vcsCache) input.vcsCache.setStore("value", next)
       break
