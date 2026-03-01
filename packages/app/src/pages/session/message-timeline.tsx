@@ -88,7 +88,6 @@ type StageConfig = {
 
 type TimelineStageInput = {
   sessionKey: () => string
-  sessionID: () => string | undefined
   turnStart: () => number
   messages: () => UserMessage[]
   config: StageConfig
@@ -102,12 +101,6 @@ type TimelineStageInput = {
  * new messages render immediately.
  */
 function createTimelineStaging(input: TimelineStageInput) {
-  const stageView = createMemo(() => {
-    const list = input.messages()
-    const total = list.length
-    return { list, total }
-  })
-
   const [state, setState] = createStore({
     activeSession: "",
     completedSession: "",
@@ -115,7 +108,7 @@ function createTimelineStaging(input: TimelineStageInput) {
   })
 
   const stagedCount = createMemo(() => {
-    const { total } = stageView()
+    const total = input.messages().length
     if (state.completedSession === input.sessionKey()) return total
     const init = Math.min(total, input.config.init)
     if (state.count <= init) return init
@@ -124,7 +117,7 @@ function createTimelineStaging(input: TimelineStageInput) {
   })
 
   const stagedUserMessages = createMemo(() => {
-    const list = stageView().list
+    const list = input.messages()
     const count = stagedCount()
     if (count >= list.length) return list
     return list.slice(Math.max(0, list.length - count))
@@ -140,11 +133,11 @@ function createTimelineStaging(input: TimelineStageInput) {
   createEffect(
     on(
       () => [input.sessionKey(), input.turnStart() > 0] as const,
-      ([sessionKey, hasMessages]) => {
+      ([sessionKey, isWindowed]) => {
         cancel()
-        const { total } = stageView()
+        const total = input.messages().length
         const shouldStage =
-          hasMessages &&
+          isWindowed &&
           total > input.config.init &&
           state.completedSession !== sessionKey &&
           state.activeSession !== sessionKey
@@ -161,7 +154,7 @@ function createTimelineStaging(input: TimelineStageInput) {
             frame = undefined
             return
           }
-          const currentTotal = stageView().total
+          const currentTotal = input.messages().length
           count = Math.min(currentTotal, count + input.config.batch)
           startTransition(() => setState("count", count))
           if (count >= currentTotal) {
@@ -233,7 +226,6 @@ export function MessageTimeline(props: {
   const stageCfg = { init: 1, batch: 1 }
   const staging = createTimelineStaging({
     sessionKey,
-    sessionID,
     turnStart: () => props.turnStart,
     messages: () => props.renderedUserMessages,
     config: stageCfg,
