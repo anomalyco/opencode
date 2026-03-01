@@ -22,7 +22,10 @@ function normalizeProjectPath(path: string, directory: string) {
 }
 
 export function parseCodeFileRef(text: string, directory: string): FileRef | undefined {
-  let value = text.trim().replace(/[),.;!?]+$/, "")
+  let value = text
+    .trim()
+    .replace(/\s*\n\s*/g, "")
+    .replace(/[),.;!?]+$/, "")
   let lineFromUrlHash: number | undefined
   if (!value) return
 
