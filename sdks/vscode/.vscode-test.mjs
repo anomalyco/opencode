@@ -10,15 +10,15 @@ export default defineConfig([
   // Unit tests (default)
   {
     label: "unit",
-    files: "out/src/acp/*.test.js",
+    files: "out/acp/*.test.js",
   },
   {
     label: "unit",
-    files: "out/src/vscode/*.test.js",
+    files: "out/vscode/*.test.js",
   },
   // Integration tests (requires Extension Host)
   {
     label: "integration",
-    files: "out/src/integration/*.test.js",
+    files: "out/integration/*.test.js",
   },
 ])
