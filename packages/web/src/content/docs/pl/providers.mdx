@@ -57,7 +57,38 @@ przetestowane i zweryfikowane, aby dobrze współpracować z opencode. [Dowiedz 
 Jeśli jesteś nowy, zalecamy rozpoczęcie od OpenCode Zen.
 :::
 
-1. Uruchom polecenie `/connect` w TUI, wybierz opencode i przejdź do [opencode.ai/auth](https://opencode.ai/auth).
+1. Uruchom polecenie `/connect` w TUI, wybierz `OpenCode Zen` i przejdź do [opencode.ai/auth](https://opencode.ai/zen).
+
+   ```txt
+   /connect
+   ```
+
+2. Zaloguj się, dodaj szczegóły rozliczeniowe i skopiuj klucz API.
+
+3. Wklej swój klucz API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Uruchom `/models` w TUI, aby zobaczyć listę zalecanych przez nas modeli.
+
+   ```txt
+   /models
+   ```
+
+Działa jak każdy inny dostawca w opencode i jest całkowicie opcjonalny w użyciu.
+
+---
+
+## OpenCode Go
+
+OpenCode Go to tani plan subskrypcji, który zapewnia niezawodny dostęp do popularnych modeli open coding dostarczanych przez zespół opencode, które zostały przetestowane i zweryfikowane pod kątem dobrej współpracy z opencode.
+
+1. Uruchom polecenie `/connect` w TUI, wybierz `OpenCode Go` i przejdź do [opencode.ai/auth](https://opencode.ai/zen).
 
    ```txt
    /connect
@@ -470,7 +501,7 @@ Cloudflare AI Gateway umożliwia dostęp do modeli z OpenAI, Anthropic, Workers 
    └ enter
    ```
 
-   Or set it as an environment variable.
+   Lub ustaw go jako zmienną środowiskową.
 
    ```bash title="~/.bash_profile"
    export CLOUDFLARE_API_TOKEN=your-api-token
@@ -834,11 +865,11 @@ Aby używać Google Vertex AI z opencode:
 2. Ustaw wymagane zmienne środowiskowe:
    - `GOOGLE_CLOUD_PROJECT`: identyfikator Twojego projektu Google Cloud
    - `VERTEX_LOCATION` (opcjonalnie): region Vertex AI (domyślnie `global`)
-   - Authentication (choose one):
+   - Uwierzytelnianie (wybierz jedno):
      - `GOOGLE_APPLICATION_CREDENTIALS`: Ścieżka do pliku klucza JSON konta usługi
      - Uwierzytelnij się za pomocą interfejsu CLI gcloud: `gcloud auth application-default login`
 
-   Set them while running opencode.
+   Ustaw je podczas uruchamiania opencode.
 
    ```bash
    GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
@@ -1472,6 +1503,39 @@ SAP AI Core zapewnia dostęp do ponad 40 modeli z OpenAI, Anthropic, Google, Ama
    :::
 
 5. Uruchom polecenie `/models`, aby wybrać spośród ponad 40 dostępnych modeli.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### STACKIT
+
+STACKIT AI Model Serving zapewnia w pełni zarządzane suwerenne środowisko hostingu dla modeli AI, koncentrując się na LLM, takich jak Llama, Mistral i Qwen, z maksymalną suwerennością danych na infrastrukturze europejskiej.
+
+1. Przejdź do [portalu STACKIT](https://portal.stackit.cloud), przejdź do **AI Model Serving**, i utwórz token autoryzacyjny dla swojego projektu.
+
+   :::tip
+   Musisz posiadać konto klienta STACKIT, konto użytkownika i projekt przed utworzeniem tokenów autoryzacyjnych.
+   :::
+
+2. Uruchom polecenie `/connect` i wyszukaj **STACKIT**.
+
+   ```txt
+   /connect
+   ```
+
+3. Wprowadź swój token autoryzacyjny STACKIT AI Model Serving.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Uruchom polecenie `/models`, aby wybrać jeden z dostępnych modeli, np. _Qwen3-VL 235B_ lub _Llama 3.3 70B_.
 
    ```txt
    /models

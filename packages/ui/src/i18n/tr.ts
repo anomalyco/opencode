@@ -36,6 +36,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "yeniden deneniyor",
   "ui.sessionTurn.retry.inSeconds": "{{seconds}}sn içinde",
+  "ui.sessionTurn.retry.attempt": "deneme #{{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - deneme #{{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini şu anda aşırı yoğun",
   "ui.sessionTurn.error.freeUsageExceeded": "Ücretsiz kullanım aşıldı",
   "ui.sessionTurn.error.addCredits": "Kredi ekle",
 
@@ -53,6 +56,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Sonraki adımlar değerlendiriliyor",
 
   "ui.messagePart.questions.dismissed": "Sorular reddedildi",
+  "ui.messagePart.compaction": "Geçmiş sıkıştırıldı",
   "ui.messagePart.context.read.one": "{{count}} okuma",
   "ui.messagePart.context.read.other": "{{count}} okuma",
   "ui.messagePart.context.search.one": "{{count}} arama",
