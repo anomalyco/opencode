@@ -11,10 +11,13 @@ import { base64Encode } from "@opencode-ai/util/encode"
 import { decode64 } from "@/utils/base64"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
+
 function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
   const navigate = useNavigate()
   const sync = useSync()
   const slug = createMemo(() => base64Encode(props.directory))
+  const platform = usePlatform()
 
   return (
     <DataProvider
@@ -22,6 +25,34 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
       directory={props.directory}
       onNavigateToSession={(sessionID: string) => navigate(`/${slug()}/session/${sessionID}`)}
       onSessionHref={(sessionID: string) => `/${slug()}/session/${sessionID}`}
+      onOpenFilePath={async (input) => {
+        const file = input.path.replace(/^[\\/]+/, "")
+        const separator = props.directory.includes("\\") ? "\\" : "/"
+        const path = props.directory.endsWith(separator) ? props.directory + file : props.directory + separator + file
+
+        if (platform.platform === "desktop" && platform.openPath) {
+          await platform.openPath(path).catch((error) => {
+            const description = error instanceof Error ? error.message : String(error)
+            showToast({
+              variant: "error",
+              title: "Open failed",
+              description,
+            })
+            window.dispatchEvent(
+              new CustomEvent("opencode:open-file-path", {
+                detail: input,
+              }),
+            )
+          })
+          return
+        }
+
+        window.dispatchEvent(
+          new CustomEvent("opencode:open-file-path", {
+            detail: input,
+          }),
+        )
+      }}
     >
       <LocalProvider>{props.children}</LocalProvider>
     </DataProvider>

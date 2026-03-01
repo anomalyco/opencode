@@ -37,6 +37,12 @@ describe("parseCodeFileRef", () => {
     })
   })
 
+  test("normalizes line breaks inside long paths", () => {
+    expect(parseCodeFileRef("clients/notes/reply-to-\nharry-2026-02-27.md", "")).toEqual({
+      path: "clients/notes/reply-to-harry-2026-02-27.md",
+    })
+  })
+
   test("ignores non-path text", () => {
     expect(parseCodeFileRef("hello-world", "")).toBeUndefined()
   })
