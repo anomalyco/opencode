@@ -34,7 +34,7 @@ export namespace Shell {
       }
     }
   }
-  const BLACKLIST = new Set(["fish", "nu"])
+  const BLACKLIST = new Set(["fish", "nu", "sh", "dash", "ash"])
 
   function fallback() {
     if (process.platform === "win32") {
