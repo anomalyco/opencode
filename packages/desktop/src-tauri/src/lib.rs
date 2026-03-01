@@ -25,7 +25,7 @@ use std::{
     time::Duration,
 };
 use tauri::{AppHandle, Listener, Manager, RunEvent, State, ipc::Channel};
-#[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_specta::Event;
 use tokio::{
@@ -596,7 +596,7 @@ async fn initialize(app: AppHandle) {
 }
 
 fn setup_app(app: &tauri::AppHandle, init_rx: watch::Receiver<InitStep>) {
-    #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     app.deep_link().register_all().ok();
 
     app.manage(InitState { current: init_rx });

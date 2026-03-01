@@ -48,7 +48,8 @@
       "nsis": {
         "installerIcon": "icons/dev/icon.ico",
         "headerImage": "assets/nsis-header.bmp",
-        "sidebarImage": "assets/nsis-sidebar.bmp"
+        "sidebarImage": "assets/nsis-sidebar.bmp",
+        "installerHooks": "./windows/hooks.nsh"
       }
     }
   },
