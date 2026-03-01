@@ -1,3 +1,15 @@
+@keyframes svg-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spin-gradient {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 :root {
   --animate-pulse: pulse-opacity 2s ease-in-out infinite;
   --animate-pulse-scale: pulse-scale 1.2s ease-in-out infinite;

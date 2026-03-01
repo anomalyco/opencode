@@ -78,8 +78,15 @@ const ProjectTile = (props: {
 }): JSX.Element => {
   const notification = useNotification()
   const layout = useLayout()
+  const globalSync = useGlobalSync()
   const unseenCount = createMemo(() =>
     props.dirs().reduce((total, directory) => total + notification.project.unseenCount(directory), 0),
+  )
+  const isBusy = createMemo(() =>
+    props.dirs().some((directory) => {
+      const [store] = globalSync.child(directory, { bootstrap: false })
+      return Object.values(store.session_status).some((s) => s?.type === "busy" || s?.type === "retry")
+    }),
   )
 
   const clear = () =>
@@ -96,47 +103,66 @@ const ProjectTile = (props: {
         if (value) props.setOpen(false)
       }}
     >
-      <ContextMenu.Trigger
-        as="button"
-        type="button"
-        aria-label={displayName(props.project)}
-        data-action="project-switch"
-        data-project={base64Encode(props.project.worktree)}
+      <div
         classList={{
-          "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
-          "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": props.selected(),
-          "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
-            !props.selected() && !props.active(),
-          "bg-surface-base-hover border border-border-weak-base": !props.selected() && props.active(),
+          "relative size-10 rounded-lg overflow-hidden cursor-default flex items-center justify-center": true,
+          "bg-icon-strong-base p-[2px]": props.selected(),
+          "bg-transparent hover:bg-border-weak-base p-[1px]": !props.selected() && !props.active(),
+          "bg-border-weak-base p-[1px]": !props.selected() && props.active(),
         }}
-        onMouseEnter={(event: MouseEvent) => {
-          if (!props.overlay()) return
-          if (props.suppressHover()) return
-          props.onProjectMouseEnter(props.project.worktree, event)
-        }}
-        onMouseLeave={() => {
-          if (props.suppressHover()) props.setSuppressHover(false)
-          if (!props.overlay()) return
-          props.onProjectMouseLeave(props.project.worktree)
-        }}
-        onFocus={() => {
-          if (!props.overlay()) return
-          if (props.suppressHover()) return
-          props.onProjectFocus(props.project.worktree)
-        }}
-        onClick={() => {
-          if (props.selected()) {
-            props.setSuppressHover(true)
-            layout.sidebar.toggle()
-            return
-          }
-          props.setSuppressHover(false)
-          props.navigateToProject(props.project.worktree)
-        }}
-        onBlur={() => props.setOpen(false)}
       >
-        <ProjectIcon project={props.project} notify />
-      </ContextMenu.Trigger>
+        <Show when={isBusy()}>
+          <div
+            class="absolute -inset-[25%] size-[150%] pointer-events-none"
+            style={{
+              background: props.selected()
+                ? "conic-gradient(from 0deg, transparent 0deg, var(--icon-interactive-base) 20deg, var(--icon-interactive-base) 40deg, transparent 120deg)"
+                : "conic-gradient(from 0deg, transparent 0deg, var(--icon-interactive-base) 40deg, var(--icon-interactive-base) 70deg, transparent 100deg)",
+              animation: "spin-gradient 2s linear infinite",
+              opacity: props.selected() ? "0.6" : "1",
+            }}
+          />
+        </Show>
+        <ContextMenu.Trigger
+          as="button"
+          type="button"
+          aria-label={displayName(props.project)}
+          data-action="project-switch"
+          data-project={base64Encode(props.project.worktree)}
+          classList={{
+            "relative z-10 flex items-center justify-center size-full rounded-md overflow-hidden transition-colors cursor-default": true,
+            "bg-background-base hover:bg-surface-base-hover": props.selected(),
+            "bg-background-base": !props.selected(),
+          }}
+          onMouseEnter={(event: MouseEvent) => {
+            if (!props.overlay()) return
+            if (props.suppressHover()) return
+            props.onProjectMouseEnter(props.project.worktree, event)
+          }}
+          onMouseLeave={() => {
+            if (props.suppressHover()) props.setSuppressHover(false)
+            if (!props.overlay()) return
+            props.onProjectMouseLeave(props.project.worktree)
+          }}
+          onFocus={() => {
+            if (!props.overlay()) return
+            if (props.suppressHover()) return
+            props.onProjectFocus(props.project.worktree)
+          }}
+          onClick={() => {
+            if (props.selected()) {
+              props.setSuppressHover(true)
+              layout.sidebar.toggle()
+              return
+            }
+            props.setSuppressHover(false)
+            props.navigateToProject(props.project.worktree)
+          }}
+          onBlur={() => props.setOpen(false)}
+        >
+          <ProjectIcon project={props.project} notify />
+        </ContextMenu.Trigger>
+      </div>
       <ContextMenu.Portal mount={!props.mobile ? props.nav() : undefined}>
         <ContextMenu.Content>
           <ContextMenu.Item onSelect={() => props.showEditProjectDialog(props.project)}>
