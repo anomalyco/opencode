@@ -33,6 +33,7 @@ const brandAssets = "/opencode-brand-assets.zip"
 
 export default function Brand() {
   const i18n = useI18n()
+  const alt = i18n.t("brand.meta.description")
   const downloadFile = async (url: string, filename: string) => {
     try {
       const response = await fetch(url)
@@ -88,7 +89,7 @@ export default function Brand() {
 
             <div data-component="brand-grid">
               <div>
-                <img src={previewLogoLight} alt="OpenCode brand guidelines" />
+                <img src={previewLogoLight} alt={alt} />
                 <div data-component="actions">
                   <button onClick={() => downloadFile(logoLightPng, "opencode-logo-light.png")}>
                     PNG
@@ -115,7 +116,7 @@ export default function Brand() {
                 </div>
               </div>
               <div>
-                <img src={previewLogoDark} alt="OpenCode brand guidelines" />
+                <img src={previewLogoDark} alt={alt} />
                 <div data-component="actions">
                   <button onClick={() => downloadFile(logoDarkPng, "opencode-logo-dark.png")}>
                     PNG
@@ -142,7 +143,7 @@ export default function Brand() {
                 </div>
               </div>
               <div>
-                <img src={previewLogoLightSquare} alt="OpenCode brand guidelines" />
+                <img src={previewLogoLightSquare} alt={alt} />
                 <div data-component="actions">
                   <button onClick={() => downloadFile(logoLightSquarePng, "opencode-logo-light-square.png")}>
                     PNG
@@ -169,7 +170,7 @@ export default function Brand() {
                 </div>
               </div>
               <div>
-                <img src={previewLogoDarkSquare} alt="OpenCode brand guidelines" />
+                <img src={previewLogoDarkSquare} alt={alt} />
                 <div data-component="actions">
                   <button onClick={() => downloadFile(logoDarkSquarePng, "opencode-logo-dark-square.png")}>
                     PNG
@@ -196,7 +197,7 @@ export default function Brand() {
                 </div>
               </div>
               <div>
-                <img src={previewWordmarkLight} alt="OpenCode brand guidelines" />
+                <img src={previewWordmarkLight} alt={alt} />
                 <div data-component="actions">
                   <button onClick={() => downloadFile(wordmarkLightPng, "opencode-wordmark-light.png")}>
                     PNG
@@ -223,7 +224,7 @@ export default function Brand() {
                 </div>
               </div>
               <div>
-                <img src={previewWordmarkDark} alt="OpenCode brand guidelines" />
+                <img src={previewWordmarkDark} alt={alt} />
                 <div data-component="actions">
                   <button onClick={() => downloadFile(wordmarkDarkPng, "opencode-wordmark-dark.png")}>
                     PNG
@@ -250,7 +251,7 @@ export default function Brand() {
                 </div>
               </div>
               <div>
-                <img src={previewWordmarkSimpleLight} alt="OpenCode brand guidelines" />
+                <img src={previewWordmarkSimpleLight} alt={alt} />
                 <div data-component="actions">
                   <button onClick={() => downloadFile(wordmarkSimpleLightPng, "opencode-wordmark-simple-light.png")}>
                     PNG
@@ -277,7 +278,7 @@ export default function Brand() {
                 </div>
               </div>
               <div>
-                <img src={previewWordmarkSimpleDark} alt="OpenCode brand guidelines" />
+                <img src={previewWordmarkSimpleDark} alt={alt} />
                 <div data-component="actions">
                   <button onClick={() => downloadFile(wordmarkSimpleDarkPng, "opencode-wordmark-simple-dark.png")}>
                     PNG

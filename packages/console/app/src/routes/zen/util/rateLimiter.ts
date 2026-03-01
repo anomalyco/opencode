@@ -3,11 +3,14 @@ import { IpRateLimitTable } from "@opencode-ai/console-core/schema/ip.sql.js"
 import { FreeUsageLimitError } from "./error"
 import { logger } from "./logger"
 import { ZenData } from "@opencode-ai/console-core/model.js"
+import { i18n } from "~/i18n"
+import { localeFromRequest } from "~/lib/language"
 
-export function createRateLimiter(limit: ZenData.RateLimit | undefined, rawIp: string, headers: Headers) {
+export function createRateLimiter(limit: ZenData.RateLimit | undefined, rawIp: string, request: Request) {
   if (!limit) return
+  const dict = i18n(localeFromRequest(request))
 
-  const limitValue = limit.checkHeader && !headers.get(limit.checkHeader) ? limit.fallbackValue! : limit.value
+  const limitValue = limit.checkHeader && !request.headers.get(limit.checkHeader) ? limit.fallbackValue! : limit.value
 
   const ip = !rawIp.length ? "unknown" : rawIp
   const now = Date.now()
@@ -36,7 +39,7 @@ export function createRateLimiter(limit: ZenData.RateLimit | undefined, rawIp: s
       logger.debug(`rate limit total: ${total}`)
       if (total >= limitValue)
         throw new FreeUsageLimitError(
-          `Rate limit exceeded. Please try again later.`,
+          dict["zen.api.error.rateLimitExceeded"],
           limit.period === "day" ? getRetryAfterDay(now) : getRetryAfterHour(rows, intervals, limitValue, now),
         )
     },
