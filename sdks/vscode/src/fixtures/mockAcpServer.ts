@@ -102,6 +102,28 @@ export class MockAcpServer extends EventEmitter {
         this.sendResponse(socket, request.id, {
           sessionId: "mock-session-123",
         })
+      } else if (request.method === "session/prompt") {
+        setTimeout(() => {
+          socket.write(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              method: "session/update",
+              params: {
+                sessionId: request.params?.sessionId,
+                type: "message",
+                role: "assistant",
+                parts: [{ type: "text", text: "Hello from OpenCode!" }],
+              },
+            }) + "\n",
+          )
+          socket.write(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id: request.id,
+              result: { stopReason: "end_turn" },
+            }) + "\n",
+          )
+        }, this.respondDelay)
       } else if (request.method === "session/cancel") {
         this.sendResponse(socket, request.id, { success: true })
       } else if (request.method === "prompts/list") {

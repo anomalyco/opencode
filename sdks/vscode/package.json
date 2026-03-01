@@ -110,7 +110,8 @@
     "pretest": "bun run compile-tests && bun run compile && bun run lint",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "test:e2e": "playwright test --config=playwright.config.ts"
   },
   "devDependencies": {
     "@types/vscode": "^1.94.0",
