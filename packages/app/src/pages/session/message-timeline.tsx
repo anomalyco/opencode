@@ -81,6 +81,110 @@ const markBoundaryGesture = (input: {
   }
 }
 
+type StageConfig = {
+  init: number
+  batch: number
+}
+
+type TimelineStageInput = {
+  sessionKey: () => string
+  sessionID: () => string | undefined
+  turnStart: () => number
+  messages: () => UserMessage[]
+  config: StageConfig
+}
+
+/**
+ * Defer-mounts small timeline windows so revealing older turns does not
+ * block first paint with a large DOM mount.
+ *
+ * Once staging completes for a session it never re-stages — backfill and
+ * new messages render immediately.
+ */
+function createTimelineStaging(input: TimelineStageInput) {
+  const stageView = createMemo(() => {
+    const list = input.messages()
+    const total = list.length
+    return { list, total }
+  })
+
+  const [state, setState] = createStore({
+    activeSession: "",
+    completedSession: "",
+    count: 0,
+  })
+
+  const stagedCount = createMemo(() => {
+    const { total } = stageView()
+    if (state.completedSession === input.sessionKey()) return total
+    const init = Math.min(total, input.config.init)
+    if (state.count <= init) return init
+    if (state.count >= total) return total
+    return state.count
+  })
+
+  const stagedUserMessages = createMemo(() => {
+    const list = stageView().list
+    const count = stagedCount()
+    if (count >= list.length) return list
+    return list.slice(Math.max(0, list.length - count))
+  })
+
+  let frame: number | undefined
+  const cancel = () => {
+    if (frame === undefined) return
+    cancelAnimationFrame(frame)
+    frame = undefined
+  }
+
+  createEffect(
+    on(
+      () => [input.sessionKey(), input.turnStart() > 0] as const,
+      ([sessionKey, hasMessages]) => {
+        cancel()
+        const { total } = stageView()
+        const shouldStage =
+          hasMessages &&
+          total > input.config.init &&
+          state.completedSession !== sessionKey &&
+          state.activeSession !== sessionKey
+        if (!shouldStage) {
+          setState("count", total)
+          return
+        }
+
+        let count = Math.min(total, input.config.init)
+        setState({ activeSession: sessionKey, count })
+
+        const step = () => {
+          if (input.sessionKey() !== sessionKey) {
+            frame = undefined
+            return
+          }
+          const currentTotal = stageView().total
+          count = Math.min(currentTotal, count + input.config.batch)
+          startTransition(() => setState("count", count))
+          if (count >= currentTotal) {
+            setState("completedSession", sessionKey)
+            frame = undefined
+            return
+          }
+          frame = requestAnimationFrame(step)
+        }
+        frame = requestAnimationFrame(step)
+      },
+    ),
+  )
+
+  const isStaging = createMemo(() => {
+    const key = input.sessionKey()
+    return state.activeSession === key && state.completedSession !== key
+  })
+
+  onCleanup(cancel)
+  return { messages: stagedUserMessages, isStaging }
+}
+
 export function MessageTimeline(props: {
   mobileChanges: boolean
   mobileFallback: JSX.Element
@@ -98,7 +202,6 @@ export function MessageTimeline(props: {
   centered: boolean
   setContentRef: (el: HTMLDivElement) => void
   turnStart: number
-  onRenderEarlier: () => void
   historyMore: boolean
   historyLoading: boolean
   onLoadEarlier: () => void
@@ -127,55 +230,14 @@ export function MessageTimeline(props: {
   const titleValue = createMemo(() => info()?.title)
   const parentID = createMemo(() => info()?.parentID)
   const showHeader = createMemo(() => !!(titleValue() || parentID()))
-  const stageCfg = {
-    init: 3,
-    batch: 1,
-    max: 10,
-  }
-  // We only stage small deferred windows so first paint mounts quickly
-  // (few turns first, then grow to full initial window).
-  const stageView = createMemo(() => {
-    const list = props.renderedUserMessages
-    const total = list.length
-    const enabled = props.turnStart > 0 && total > stageCfg.init && total <= stageCfg.max
-    return {
-      list,
-      total,
-      enabled,
-      initial: enabled ? Math.min(total, stageCfg.init) : total,
-      head: total > 0 ? list[0].id : "",
-      tail: total > 0 ? list[total - 1].id : "",
-    }
+  const stageCfg = { init: 1, batch: 1 }
+  const staging = createTimelineStaging({
+    sessionKey,
+    sessionID,
+    turnStart: () => props.turnStart,
+    messages: () => props.renderedUserMessages,
+    config: stageCfg,
   })
-  // Use a bounded signature (count + endpoints), not all IDs.
-  const stageKey = createMemo(() => {
-    const view = stageView()
-    return `${sessionKey()}\n${props.turnStart}\n${view.total}\n${view.head}\n${view.tail}`
-  })
-  const [staging, setStaging] = createStore({
-    key: "",
-    count: 0,
-  })
-  const stagedCount = createMemo(() => {
-    const view = stageView()
-    if (!view.enabled) return view.total
-    if (staging.key !== stageKey()) return view.initial
-    if (staging.count <= view.initial) return view.initial
-    if (staging.count >= view.total) return view.total
-    return staging.count
-  })
-  const stagedUserMessages = createMemo(() => {
-    const list = stageView().list
-    const count = stagedCount()
-    if (count >= list.length) return list
-    return list.slice(Math.max(0, list.length - count))
-  })
-  let stageFrame: number | undefined
-  const cancelStage = () => {
-    if (stageFrame === undefined) return
-    cancelAnimationFrame(stageFrame)
-    stageFrame = undefined
-  }
 
   const [title, setTitle] = createStore({
     draft: "",
@@ -202,54 +264,6 @@ export function MessageTimeline(props: {
       { defer: true },
     ),
   )
-
-  createEffect(
-    on(
-      stageKey,
-      () => {
-        cancelStage()
-
-        const id = sessionID()
-        const view = stageView()
-        if (!id) {
-          setStaging({ key: "", count: view.total })
-          return
-        }
-
-        const key = stageKey()
-        if (!view.enabled) {
-          setStaging({ key, count: view.total })
-          return
-        }
-
-        let count = view.initial
-        setStaging({ key, count })
-
-        const step = () => {
-          if (staging.key !== key) {
-            stageFrame = undefined
-            return
-          }
-          count = Math.min(view.total, count + stageCfg.batch)
-          startTransition(() => {
-            setStaging("count", count)
-          })
-          if (count >= view.total) {
-            stageFrame = undefined
-            return
-          }
-          stageFrame = requestAnimationFrame(step)
-        }
-
-        stageFrame = requestAnimationFrame(step)
-      },
-      { defer: true },
-    ),
-  )
-
-  onCleanup(() => {
-    cancelStage()
-  })
 
   const openTitleEditor = () => {
     if (!sessionID()) return
@@ -440,8 +454,10 @@ export function MessageTimeline(props: {
         <div
           class="absolute left-1/2 -translate-x-1/2 bottom-6 z-[60] pointer-events-none transition-all duration-200 ease-out"
           classList={{
-            "opacity-100 translate-y-0 scale-100": props.scroll.overflow && !props.scroll.bottom,
-            "opacity-0 translate-y-2 scale-95 pointer-events-none": !props.scroll.overflow || props.scroll.bottom,
+            "opacity-100 translate-y-0 scale-100":
+              props.scroll.overflow && !props.scroll.bottom && !staging.isStaging(),
+            "opacity-0 translate-y-2 scale-95 pointer-events-none":
+              !props.scroll.overflow || props.scroll.bottom || staging.isStaging(),
           }}
         >
           <button
@@ -628,14 +644,7 @@ export function MessageTimeline(props: {
               "mt-0": !props.centered,
             }}
           >
-            <Show when={props.turnStart > 0}>
-              <div class="w-full flex justify-center">
-                <Button variant="ghost" size="large" class="text-12-medium opacity-50" onClick={props.onRenderEarlier}>
-                  {language.t("session.messages.renderEarlier")}
-                </Button>
-              </div>
-            </Show>
-            <Show when={props.historyMore}>
+            <Show when={props.turnStart > 0 || props.historyMore || props.historyLoading}>
               <div class="w-full flex justify-center">
                 <Button
                   variant="ghost"
@@ -650,7 +659,7 @@ export function MessageTimeline(props: {
                 </Button>
               </div>
             </Show>
-            <For each={stagedUserMessages()}>
+            <For each={staging.messages()}>
               {(message) => {
                 const comments = createMemo(() => messageComments(sync.data.part[message.id] ?? []))
                 const commentCount = createMemo(() => comments().length)

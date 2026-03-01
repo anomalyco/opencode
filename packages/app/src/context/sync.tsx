@@ -25,6 +25,37 @@ const keyFor = (directory: string, id: string) => `${directory}\n${id}`
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 
+type SessionSyncPlanInput = {
+  hasSession: boolean
+  hasMessages: boolean
+  hydrated: boolean
+  limit: number | undefined
+  messageInitialSize: number
+  messagePageSize: number
+}
+
+/**
+ * Computes fetch policy for `session.sync`.
+ *
+ * A hydrated session can skip re-fetching messages. Otherwise we bootstrap
+ * with the initial fetch size and let pagination grow from there.
+ */
+function sessionSyncPlan(input: SessionSyncPlanInput) {
+  if (input.hasSession && input.hasMessages && input.hydrated) {
+    return {
+      done: true,
+      skipMessages: true,
+      limit: input.limit ?? input.messagePageSize,
+    }
+  }
+
+  return {
+    done: false,
+    skipMessages: input.hasMessages && input.hydrated,
+    limit: input.hydrated ? (input.limit ?? input.messagePageSize) : input.messageInitialSize,
+  }
+}
+
 type OptimisticStore = {
   message: Record<string, Message[] | undefined>
   part: Record<string, Part[] | undefined>
@@ -104,7 +135,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       return globalSync.child(directory)
     }
     const absolute = (path: string) => (current()[0].path.directory + "/" + path).replace("//", "/")
-    const messageInitialSize = 50
+    const messageInitialSize = 200
     const messagePageSize = 400
     const inflight = new Map<string, Promise<void>>()
     const inflightDiff = new Map<string, Promise<void>>()
@@ -127,9 +158,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         input.client.session.messages({ sessionID: input.sessionID, limit: input.limit }),
       )
       const items = (messages.data ?? []).filter((x) => !!x?.info?.id)
-      const session = items
-        .map((x) => x.info)
-        .sort((a, b) => cmp(a.id, b.id))
+      const session = items.map((x) => x.info).sort((a, b) => cmp(a.id, b.id))
       const part = items.map((message) => ({ id: message.info.id, part: sortParts(message.parts) }))
       return {
         session,
@@ -151,8 +180,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       setMeta("loading", key, true)
       await fetchMessages(input)
         .then((next) => {
-          const userCount = next.session.filter((m) => m.role === "user").length
-          console.log(`[sync] loadMessages sessionID=${input.sessionID.slice(0, 12)}… limit=${input.limit} fetched=${next.session.length} userMsgs=${userCount} complete=${next.complete}`)
           batch(() => {
             input.setStore("message", input.sessionID, reconcile(next.session, { key: "id" }))
             for (const p of next.part) {
@@ -229,29 +256,15 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
           const hasMessages = store.message[sessionID] !== undefined
           const hydrated = meta.limit[key] !== undefined
-          if (hasSession && hasMessages && hydrated) {
-            console.log(`[sync] sync sessionID=${sessionID.slice(0, 12)}… already hydrated, skipping`)
-            return
-          }
-
-          const cached = store.message[sessionID] ?? []
-          const count = cached.length
-          const hasParts = cached.every((message) => store.part[message.id] !== undefined)
-          // "Warm" means we already have enough local messages + parts to render
-          // immediately, so we can skip a blocking message fetch on switch.
-          const warm = hasMessages && !hydrated && count >= messageInitialSize && hasParts
-          const limit = hydrated
-            ? (meta.limit[key] ?? messagePageSize)
-            : warm
-              ? Math.max(count, messageInitialSize)
-              : messageInitialSize
-
-          console.log(`[sync] sync sessionID=${sessionID.slice(0, 12)}… hasSession=${hasSession} hasMessages=${hasMessages} hydrated=${hydrated} cached=${count} hasParts=${hasParts} warm=${warm} limit=${limit}`)
-
-          if (warm) {
-            setMeta("limit", key, limit)
-            setMeta("complete", key, count < messageInitialSize)
-          }
+          const plan = sessionSyncPlan({
+            hasSession,
+            hasMessages,
+            hydrated,
+            limit: meta.limit[key],
+            messageInitialSize,
+            messagePageSize,
+          })
+          if (plan.done) return
 
           const sessionReq = hasSession
             ? Promise.resolve()
@@ -271,16 +284,15 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 )
               })
 
-          const messagesReq =
-            hasMessages && (hydrated || warm)
-              ? Promise.resolve()
-              : loadMessages({
-                  directory,
-                  client,
-                  setStore,
-                  sessionID,
-                  limit,
-                })
+          const messagesReq = plan.skipMessages
+            ? Promise.resolve()
+            : loadMessages({
+                directory,
+                client,
+                setStore,
+                sessionID,
+                limit: plan.limit,
+              })
 
           return runInflight(inflight, key, () => Promise.all([sessionReq, messagesReq]).then(() => {}))
         },
@@ -330,19 +342,18 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             const hasMessages = store.message[sessionID] !== undefined
             const hasLimit = meta.limit[key] !== undefined
             const complete = meta.complete[key] ?? false
-            const result = hasMessages && hasLimit && !complete
-            console.log(`[sync] history.more sessionID=${sessionID.slice(0, 12)}… hasMessages=${hasMessages} hasLimit=${hasLimit} complete=${complete} → ${result}`)
-            return result
+            return hasMessages && hasLimit && !complete
           },
           loading(sessionID: string) {
             const key = keyFor(sdk.directory, sessionID)
             return meta.loading[key] ?? false
           },
-          async loadMore(sessionID: string, count = messagePageSize) {
+          async loadMore(sessionID: string, count?: number) {
             const directory = sdk.directory
             const client = sdk.client
             const [, setStore] = globalSync.child(directory)
             const key = keyFor(directory, sessionID)
+            const step = count ?? messagePageSize
             if (meta.loading[key]) return
             if (meta.complete[key]) return
 
@@ -352,7 +363,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               client,
               setStore,
               sessionID,
-              limit: currentLimit + count,
+              limit: currentLimit + step,
             })
           },
         },

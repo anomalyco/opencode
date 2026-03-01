@@ -32,6 +32,203 @@ import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 
+type LoadEarlierSource = "scroll" | "button" | "buffer"
+
+type SessionHistoryWindowInput = {
+  sessionID: () => string | undefined
+  messagesReady: () => boolean
+  visibleUserMessages: () => UserMessage[]
+  historyMore: () => boolean
+  historyLoading: () => boolean
+  loadMore: (sessionID: string) => Promise<void>
+  userScrolled: () => boolean
+  scroller: () => HTMLDivElement | undefined
+}
+
+/**
+ * Maintains the rendered history window for a session timeline.
+ *
+ * It keeps initial paint bounded to recent turns, reveals cached turns in
+ * small batches while scrolling upward, and prefetches older history near top.
+ */
+function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
+  const turnInit = 10
+  const turnBatch = 8
+  const turnScrollThreshold = 200
+  const turnPrefetchBuffer = 16
+  const prefetchCooldownMs = 400
+  const prefetchNoGrowthLimit = 2
+
+  const [state, setState] = createStore({
+    turnID: undefined as string | undefined,
+    turnStart: 0,
+    prefetchUntil: 0,
+    prefetchNoGrowth: 0,
+  })
+
+  const turnStart = createMemo(() => {
+    const id = input.sessionID()
+    const len = input.visibleUserMessages().length
+    if (!id || len <= 0) return 0
+    if (state.turnID !== id) return len > turnInit ? len - turnInit : 0
+    if (state.turnStart <= 0) return 0
+    if (state.turnStart >= len) return Math.max(0, len - turnInit)
+    return state.turnStart
+  })
+
+  const setTurnStart = (start: number) => {
+    const id = input.sessionID()
+    const next = start > 0 ? start : 0
+    if (!id) {
+      setState({ turnID: undefined, turnStart: next })
+      return
+    }
+    setState({ turnID: id, turnStart: next })
+  }
+
+  const emptyUserMessages: UserMessage[] = []
+  const renderedUserMessages = createMemo(
+    () => {
+      const msgs = input.visibleUserMessages()
+      const start = turnStart()
+      if (start <= 0) return msgs
+      return msgs.slice(start)
+    },
+    emptyUserMessages,
+    {
+      equals: same,
+    },
+  )
+
+  const preserveScroll = (fn: () => void) => {
+    const el = input.scroller()
+    if (!el) {
+      fn()
+      return
+    }
+    const beforeTop = el.scrollTop
+    const beforeHeight = el.scrollHeight
+    fn()
+    requestAnimationFrame(() => {
+      const delta = el.scrollHeight - beforeHeight
+      if (!delta) return
+      el.scrollTop = beforeTop + delta
+    })
+  }
+
+  const backfillTurns = () => {
+    const start = turnStart()
+    if (start <= 0) return
+
+    const next = start - turnBatch
+    const nextStart = next > 0 ? next : 0
+
+    preserveScroll(() => setTurnStart(nextStart))
+  }
+
+  const loadEarlier = async (opts?: {
+    source?: LoadEarlierSource
+    revealCached?: boolean
+    revealAfterLoad?: boolean
+  }) => {
+    const source = opts?.source ?? "scroll"
+    const revealCached = opts?.revealCached ?? false
+    const revealAfterLoad = opts?.revealAfterLoad ?? true
+    const id = input.sessionID()
+    if (!id) return
+
+    const start = turnStart()
+    const beforeVisible = input.visibleUserMessages().length
+    const beforeRendered = revealCached || start <= 0 ? beforeVisible : renderedUserMessages().length
+    const expectedStart = revealCached && start > 0 ? 0 : start
+    if (revealCached && start > 0) {
+      setTurnStart(0)
+    }
+
+    if (!input.historyMore() || input.historyLoading()) return
+
+    if (source === "buffer") {
+      const now = Date.now()
+      if (state.prefetchUntil > now) return
+      if (state.prefetchNoGrowth >= prefetchNoGrowthLimit) return
+      setState("prefetchUntil", now + prefetchCooldownMs)
+    }
+
+    await input.loadMore(id)
+    if (input.sessionID() !== id) return
+
+    const afterVisible = input.visibleUserMessages().length
+    const growth = afterVisible - beforeVisible
+    if (source === "buffer") {
+      const noGrowth = growth > 0 ? 0 : state.prefetchNoGrowth + 1
+      setState("prefetchNoGrowth", noGrowth)
+    }
+    if (source !== "buffer" && growth > 0 && state.prefetchNoGrowth) {
+      setState("prefetchNoGrowth", 0)
+    }
+    if (growth <= 0) return
+
+    const currentStart = turnStart()
+    if (currentStart !== expectedStart) return
+
+    const currentRendered = renderedUserMessages().length
+    const base = Math.max(beforeRendered, currentRendered)
+    const target = revealAfterLoad ? Math.min(afterVisible, base + turnBatch) : base
+    const nextStart = Math.max(0, afterVisible - target)
+    preserveScroll(() => setTurnStart(nextStart))
+  }
+
+  const onScrollerScroll = () => {
+    if (!input.userScrolled()) return
+    const el = input.scroller()
+    if (!el) return
+    if (el.scrollTop >= turnScrollThreshold) return
+
+    const start = turnStart()
+    if (start > 0) {
+      if (start <= turnPrefetchBuffer) {
+        void loadEarlier({ source: "buffer", revealAfterLoad: false })
+      }
+      backfillTurns()
+      return
+    }
+
+    void loadEarlier({ source: "scroll" })
+  }
+
+  createEffect(
+    on(
+      input.sessionID,
+      () => {
+        setState({ prefetchUntil: 0, prefetchNoGrowth: 0 })
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => [input.sessionID(), input.messagesReady()] as const,
+      ([id, ready]) => {
+        if (!id || !ready) return
+
+        const len = input.visibleUserMessages().length
+        const start = len > turnInit ? len - turnInit : 0
+        setTurnStart(start)
+      },
+      { defer: true },
+    ),
+  )
+
+  return {
+    turnStart,
+    setTurnStart,
+    renderedUserMessages,
+    loadEarlier,
+    onScrollerScroll,
+  }
+}
+
 export default function Page() {
   const layout = useLayout()
   const local = useLocal()
@@ -209,14 +406,8 @@ export default function Page() {
     ),
   )
 
-  const turnInit = 10
-  const turnBatch = 20
-  const turnScrollThreshold = 200
-
   const [store, setStore] = createStore({
     messageId: undefined as string | undefined,
-    turnID: undefined as string | undefined,
-    turnStart: 0,
     mobileTab: "session" as "session" | "changes",
     changes: "session" as "session" | "turn",
     newSessionWorktree: "main",
@@ -224,41 +415,6 @@ export default function Page() {
 
   const turnDiffs = createMemo(() => lastUserMessage()?.summary?.diffs ?? [])
   const reviewDiffs = createMemo(() => (store.changes === "session" ? diffs() : turnDiffs()))
-
-  // Keep turn window state per session so first render can be capped synchronously
-  // when switching sessions.
-  const turnStart = createMemo(() => {
-    const id = params.id
-    const len = visibleUserMessages().length
-    if (!id || len <= 0) return 0
-    if (store.turnID !== id) return len > turnInit ? len - turnInit : 0
-    if (store.turnStart <= 0) return 0
-    if (store.turnStart >= len) return Math.max(0, len - turnInit)
-    return store.turnStart
-  })
-
-  const setTurnStart = (start: number) => {
-    const id = params.id
-    const next = start > 0 ? start : 0
-    if (!id) {
-      setStore({ turnID: undefined, turnStart: next })
-      return
-    }
-    setStore({ turnID: id, turnStart: next })
-  }
-
-  const renderedUserMessages = createMemo(
-    () => {
-      const msgs = visibleUserMessages()
-      const start = turnStart()
-      if (start <= 0) return msgs
-      return msgs.slice(start)
-    },
-    emptyUserMessages,
-    {
-      equals: same,
-    },
-  )
 
   const newSessionWorktree = createMemo(() => {
     if (store.newSessionWorktree === "create") return "create"
@@ -926,56 +1082,16 @@ export default function Page() {
     },
   )
 
-  function backfillTurns() {
-    const start = turnStart()
-    if (start <= 0) return
-
-    const next = start - turnBatch
-    const nextStart = next > 0 ? next : 0
-
-    const el = scroller
-    if (!el) {
-      setTurnStart(nextStart)
-      return
-    }
-
-    const beforeTop = el.scrollTop
-    const beforeHeight = el.scrollHeight
-
-    setTurnStart(nextStart)
-
-    requestAnimationFrame(() => {
-      const delta = el.scrollHeight - beforeHeight
-      if (!delta) return
-      el.scrollTop = beforeTop + delta
-    })
-  }
-
-  function onScrollerScroll() {
-    if (!autoScroll.userScrolled()) return
-    const el = scroller
-    if (!el) return
-    const start = turnStart()
-    if (start <= 0) return
-    // Backfill older turns only when the user intentionally scrolls near the top.
-    if (el.scrollTop < turnScrollThreshold) {
-      backfillTurns()
-    }
-  }
-
-  createEffect(
-    on(
-      () => [params.id, messagesReady()] as const,
-      ([id, ready]) => {
-        if (!id || !ready) return
-
-        const len = visibleUserMessages().length
-        const start = len > turnInit ? len - turnInit : 0
-        setTurnStart(start)
-      },
-      { defer: true },
-    ),
-  )
+  const historyWindow = createSessionHistoryWindow({
+    sessionID: () => params.id,
+    messagesReady,
+    visibleUserMessages,
+    historyMore,
+    historyLoading,
+    loadMore: (sessionID) => sync.session.history.loadMore(sessionID),
+    userScrolled: autoScroll.userScrolled,
+    scroller: () => scroller,
+  })
 
   createResizeObserver(
     () => promptDock,
@@ -1002,12 +1118,12 @@ export default function Page() {
     sessionID: () => params.id,
     messagesReady,
     visibleUserMessages,
-    turnStart,
+    turnStart: historyWindow.turnStart,
     currentMessageId: () => store.messageId,
     pendingMessage: () => ui.pendingMessage,
     setPendingMessage: (value) => setUi("pendingMessage", value),
     setActiveMessage,
-    setTurnStart,
+    setTurnStart: historyWindow.setTurnStart,
     autoScroll,
     scroller: () => scroller,
     anchor,
@@ -1074,7 +1190,7 @@ export default function Page() {
                     hasScrollGesture={hasScrollGesture}
                     isDesktop={isDesktop()}
                     onScrollSpyScroll={scrollSpy.onScroll}
-                    onTurnBackfillScroll={onScrollerScroll}
+                    onTurnBackfillScroll={historyWindow.onScrollerScroll}
                     onAutoScrollInteraction={autoScroll.handleInteraction}
                     centered={centered()}
                     setContentRef={(el) => {
@@ -1084,17 +1200,13 @@ export default function Page() {
                       const root = scroller
                       if (root) scheduleScrollState(root)
                     }}
-                    turnStart={turnStart()}
-                    onRenderEarlier={() => setTurnStart(0)}
+                    turnStart={historyWindow.turnStart()}
                     historyMore={historyMore()}
                     historyLoading={historyLoading()}
                     onLoadEarlier={() => {
-                      const id = params.id
-                      if (!id) return
-                      setTurnStart(0)
-                      sync.session.history.loadMore(id)
+                      void historyWindow.loadEarlier({ source: "button", revealCached: true })
                     }}
-                    renderedUserMessages={renderedUserMessages()}
+                    renderedUserMessages={historyWindow.renderedUserMessages()}
                     anchor={anchor}
                     onRegisterMessage={scrollSpy.register}
                     onUnregisterMessage={scrollSpy.unregister}
