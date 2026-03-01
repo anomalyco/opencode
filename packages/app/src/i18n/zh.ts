@@ -729,6 +729,16 @@ export const dict = {
 
   "settings.models.title": "模型",
   "settings.models.description": "模型设置将在此处可配置。",
+  "settings.plugins.title": "插件",
+  "settings.plugins.description": "配置插件设置",
+  "settings.plugins.empty": "没有可配置设置的插件",
+  "settings.plugins.save": "保存",
+  "settings.plugins.saved.title": "设置已保存",
+  "settings.plugins.saved.description": "{{plugin}} 设置已成功更新",
+  "settings.plugins.save_failed.title": "保存失败",
+  "settings.plugins.save_failed.description": "无法更新 {{plugin}} 设置",
+  "settings.plugins.loading": "正在加载插件设置...",
+  "settings.plugins.error": "加载插件设置失败",
 
   "settings.agents.title": "智能体",
   "settings.agents.description": "智能体设置将在此处可配置。",
