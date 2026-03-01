@@ -99,9 +99,10 @@ export const createOpenReviewFile = (input: {
   openTab: (tab: string) => void
   setActive: (tab: string) => void
   openReviewPanel: () => void
+  setSelectedLines: (path: string, range: { start: number; end: number } | null) => void
   loadFile: (path: string) => any | Promise<void>
 }) => {
-  return (path: string) => {
+  return (path: string, line?: number) => {
     const tab = input.tabForPath(path)
     batch(() => {
       input.showAllFiles()
@@ -110,6 +111,7 @@ export const createOpenReviewFile = (input: {
       const openTab = () => {
         input.openTab(tab)
         input.setActive(tab)
+        input.setSelectedLines(path, line ? { start: line, end: line } : null)
       }
       if (maybePromise instanceof Promise) maybePromise.then(openTab)
       else openTab()
