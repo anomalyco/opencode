@@ -76,6 +76,7 @@ const baseState = (input: Partial<State> = {}) =>
     permission: {},
     question: {},
     mcp: {},
+    tools: [],
     lsp: [],
     vcs: undefined,
     limit: 10,

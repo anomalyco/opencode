@@ -106,6 +106,9 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
 
   createEffect(
     on(grouped, () => {
+      // Preserve cursor position if the active item is still in the list (e.g. a property changed in-place)
+      const currentActive = list.active()
+      if (currentActive && flat().some((item) => props.key(item) === currentActive)) return
       reset()
     }),
   )

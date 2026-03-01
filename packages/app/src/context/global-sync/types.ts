@@ -15,8 +15,11 @@ import type {
   Session,
   SessionStatus,
   Todo,
+  ToolInfo,
   VcsInfo,
 } from "@opencode-ai/sdk/v2/client"
+
+export type { ToolInfo }
 import type { Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 
@@ -61,6 +64,7 @@ export type State = {
   mcp: {
     [name: string]: McpStatus
   }
+  tools: ToolInfo[]
   lsp: LspStatus[]
   vcs: VcsInfo | undefined
   limit: number

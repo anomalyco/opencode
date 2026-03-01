@@ -14,6 +14,7 @@ import { useTerminal } from "@/context/terminal"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
+import { DialogSelectTools } from "@/components/dialog-select-tools"
 import { DialogFork } from "@/components/dialog-fork"
 import { showToast } from "@opencode-ai/ui/toast"
 import { findLast } from "@opencode-ai/util/array"
@@ -234,6 +235,13 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       keybind: "mod+;",
       slash: "mcp",
       onSelect: () => dialog.show(() => <DialogSelectMcp />),
+    }),
+    agentCommand({
+      id: "tools.toggle",
+      title: language.t("command.tools.toggle"),
+      description: language.t("command.tools.toggle.description"),
+      slash: "tools",
+      onSelect: () => dialog.show(() => <DialogSelectTools />),
     }),
     agentCommand({
       id: "agent.cycle",
