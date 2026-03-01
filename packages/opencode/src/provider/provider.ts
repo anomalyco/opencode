@@ -1137,7 +1137,7 @@ export namespace Provider {
     const roots = new Map<string, string>()
     const resolved = new Map<string, Config.Provider>()
 
-    function root(providerID: string, seen = new Set<string>()) {
+    function root(providerID: string, seen = new Set<string>()): string {
       const cached = roots.get(providerID)
       if (cached) return cached
       const current = configData[providerID]
@@ -1150,12 +1150,12 @@ export namespace Provider {
         return providerID
       }
       seen.add(providerID)
-      const value = configData[current.extends] ? root(current.extends, seen) : current.extends
+      const value: string = configData[current.extends] ? root(current.extends, seen) : current.extends
       roots.set(providerID, value)
       return value
     }
 
-    function resolve(providerID: string, seen = new Set<string>()) {
+    function resolve(providerID: string, seen = new Set<string>()): Config.Provider | undefined {
       const cached = resolved.get(providerID)
       if (cached) return cached
       const current = configData[providerID]
@@ -1169,7 +1169,7 @@ export namespace Provider {
         return current
       }
       seen.add(providerID)
-      const value = configData[current.extends]
+      const value: Config.Provider = configData[current.extends]
         ? mergeDeep(resolve(current.extends, seen) ?? {}, current)
         : current
       resolved.set(providerID, value)
