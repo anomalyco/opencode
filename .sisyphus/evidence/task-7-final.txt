@@ -1,0 +1,4 @@
+Sandbox config: /tmp/opencode-sandbox-final-1772350214/config/opencode/opencode.json
+State: final
+Evidence OK: final (/home/choza/projects/opencode-source/.sisyphus/evidence/task-2-final.txt)
+Captured ANSI evidence: /home/choza/projects/opencode-source/.sisyphus/evidence/task-2-final.txt

@@ -1,0 +1,4 @@
+Sandbox config: /tmp/opencode-sandbox-error-1772350207/config/opencode/opencode.json
+State: error
+Evidence OK: error (/home/choza/projects/opencode-source/.sisyphus/evidence/task-2-error.txt)
+Captured ANSI evidence: /home/choza/projects/opencode-source/.sisyphus/evidence/task-2-error.txt

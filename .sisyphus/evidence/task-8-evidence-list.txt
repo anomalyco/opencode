@@ -1,0 +1,12 @@
+/home/choza/projects/opencode-source/.sisyphus/evidence/task-2-auth.txt
+/home/choza/projects/opencode-source/.sisyphus/evidence/task-2-compile.txt
+/home/choza/projects/opencode-source/.sisyphus/evidence/task-2-error.txt
+/home/choza/projects/opencode-source/.sisyphus/evidence/task-2-final.txt
+/home/choza/projects/opencode-source/.sisyphus/evidence/task-2-log.txt
+/home/choza/projects/opencode-source/.sisyphus/evidence/task-2-stream.txt
+/home/choza/projects/opencode-source/.sisyphus/evidence/task-2-streaming.txt
+/home/choza/projects/opencode-source/.sisyphus/evidence/task-2-tool-result.txt
+/home/choza/projects/opencode-source/.sisyphus/evidence/task-2-tool-running.txt
+/home/choza/projects/opencode-source/.sisyphus/evidence/task-2-tool.txt
+/home/choza/projects/opencode-source/.sisyphus/evidence/task-2-typecheck.txt
+/home/choza/projects/opencode-source/.sisyphus/evidence/task-2-warning.txt

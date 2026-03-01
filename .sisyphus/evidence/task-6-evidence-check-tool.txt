@@ -1,0 +1,1 @@
+Evidence OK: tool (/home/choza/projects/opencode-source/.sisyphus/evidence/task-2-tool.txt)

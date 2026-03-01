@@ -1,0 +1,1 @@
+Evidence OK: stream (/home/choza/projects/opencode-source/.sisyphus/evidence/task-2-stream.txt)
