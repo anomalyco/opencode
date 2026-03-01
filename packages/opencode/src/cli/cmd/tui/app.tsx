@@ -286,22 +286,22 @@ function App() {
   const args = useArgs()
   onMount(() => {
     batch(() => {
-      if (args.agent) local.agent.set(args.agent)
-      if (args.model) {
-        const { providerID, modelID } = Provider.parseModel(args.model)
+      if (args.data.agent) local.agent.set(args.data.agent)
+      if (args.data.model) {
+        const { providerID, modelID } = Provider.parseModel(args.data.model)
         if (!providerID || !modelID)
           return toast.show({
             variant: "warning",
-            message: `Invalid model format: ${args.model}`,
+            message: `Invalid model format: ${args.data.model}`,
             duration: 3000,
           })
         local.model.set({ providerID, modelID }, { recent: true })
       }
       // Handle --session without --fork immediately (fork is handled in createEffect below)
-      if (args.sessionID && !args.fork) {
+      if (args.data.sessionID && !args.data.fork) {
         route.navigate({
           type: "session",
-          sessionID: args.sessionID,
+          sessionID: args.data.sessionID,
         })
       }
     })
@@ -310,13 +310,13 @@ function App() {
   let continued = false
   createEffect(() => {
     // When using -c, session list is loaded in blocking phase, so we can navigate at "partial"
-    if (continued || sync.status === "loading" || !args.continue) return
+    if (continued || sync.status === "loading" || !args.data.continue) return
     const match = sync.data.session
       .toSorted((a, b) => b.time.updated - a.time.updated)
       .find((x) => x.parentID === undefined)?.id
     if (match) {
       continued = true
-      if (args.fork) {
+      if (args.data.fork) {
         sdk.client.session.fork({ sessionID: match }).then((result) => {
           if (result.data?.id) {
             route.navigate({ type: "session", sessionID: result.data.id })
@@ -335,9 +335,9 @@ function App() {
   // to avoid a race where reconcile overwrites the newly forked session)
   let forked = false
   createEffect(() => {
-    if (forked || sync.status !== "complete" || !args.sessionID || !args.fork) return
+    if (forked || sync.status !== "complete" || !args.data.sessionID || !args.data.fork) return
     forked = true
-    sdk.client.session.fork({ sessionID: args.sessionID }).then((result) => {
+    sdk.client.session.fork({ sessionID: args.data.sessionID }).then((result) => {
       if (result.data?.id) {
         route.navigate({ type: "session", sessionID: result.data.id })
       } else {

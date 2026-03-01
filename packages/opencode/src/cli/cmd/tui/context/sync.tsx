@@ -363,7 +363,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         providerListPromise,
         agentsPromise,
         configPromise,
-        ...(args.continue ? [sessionListPromise] : []),
+        ...(args.data.continue ? [sessionListPromise] : []),
       ]
 
       await Promise.all(blockingRequests)
@@ -372,7 +372,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           const providerListResponse = providerListPromise.then((x) => x.data!)
           const agentsResponse = agentsPromise.then((x) => x.data ?? [])
           const configResponse = configPromise.then((x) => x.data!)
-          const sessionListResponse = args.continue ? sessionListPromise : undefined
+          const sessionListResponse = args.data.continue ? sessionListPromise : undefined
 
           return Promise.all([
             providersResponse,
@@ -401,7 +401,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (store.status !== "complete") setStore("status", "partial")
           // non-blocking
           Promise.all([
-            ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", reconcile(sessions)))]),
+            ...(args.data.continue
+              ? []
+              : [sessionListPromise.then((sessions) => setStore("session", reconcile(sessions)))]),
             sdk.client.command.list().then((x) => setStore("command", reconcile(x.data ?? []))),
             sdk.client.lsp.status().then((x) => setStore("lsp", reconcile(x.data!))),
             sdk.client.mcp.status().then((x) => setStore("mcp", reconcile(x.data!))),
