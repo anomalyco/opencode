@@ -636,7 +636,7 @@ export function MessageTimeline(props: {
               "mt-0": !props.centered,
             }}
           >
-            <Show when={props.turnStart > 0 || props.historyMore || props.historyLoading}>
+            <Show when={props.turnStart > 0 || props.historyMore}>
               <div class="w-full flex justify-center">
                 <Button
                   variant="ghost"

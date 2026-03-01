@@ -32,6 +32,8 @@ import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 
+const emptyUserMessages: UserMessage[] = []
+
 type SessionHistoryWindowInput = {
   sessionID: () => string | undefined
   messagesReady: () => boolean
@@ -86,7 +88,6 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
     setState({ turnID: id, turnStart: next })
   }
 
-  const emptyUserMessages: UserMessage[] = []
   const renderedUserMessages = createMemo(
     () => {
       const msgs = input.visibleUserMessages()
@@ -386,7 +387,6 @@ export default function Page() {
     return sync.session.history.loading(id)
   })
 
-  const emptyUserMessages: UserMessage[] = []
   const userMessages = createMemo(
     () => messages().filter((m) => m.role === "user") as UserMessage[],
     emptyUserMessages,
@@ -497,9 +497,8 @@ export default function Page() {
 
   createEffect(
     on(
-      () => `${sdk.directory}\n${params.id ?? ""}`,
-      (k) => {
-        const [, id] = k.split("\n")
+      [() => sdk.directory, () => params.id] as const,
+      ([, id]) => {
         if (!id) return
         untrack(() => {
           void sync.session.sync(id)
