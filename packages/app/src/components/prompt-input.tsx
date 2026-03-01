@@ -55,6 +55,8 @@ import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
+import { SessionContextUsage } from "@/components/session-context-usage"
+import { DockStatusPopover } from "@/components/dock-status-popover"
 
 interface PromptInputProps {
   class?: string
@@ -1460,7 +1462,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 </TooltipKeybind>
               </Show>
             </div>
-            <div class="shrink-0">
+            <div class="shrink-0 flex items-center gap-1">
+              <SessionContextUsage placement="top" />
+              <DockStatusPopover />
               <RadioGroup
                 options={["shell", "normal"] as const}
                 current={store.mode}
