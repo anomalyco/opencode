@@ -282,9 +282,16 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   init: (props: { mode: "dark" | "light" }) => {
     const config = useTuiConfig()
     const kv = useKV()
+
+    function configMode(): "dark" | "light" | undefined {
+      const override = config.theme_mode
+      if (override === "light" || override === "dark") return override
+      return undefined
+    }
+
     const [store, setStore] = createStore({
       themes: DEFAULT_THEMES,
-      mode: kv.get("theme_mode", props.mode),
+      mode: configMode() ?? kv.get("theme_mode", props.mode),
       active: (config.theme ?? kv.get("theme", "opencode")) as string,
       ready: false,
     })
@@ -292,6 +299,11 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     createEffect(() => {
       const theme = config.theme
       if (theme) setStore("active", theme)
+    })
+
+    createEffect(() => {
+      const override = configMode()
+      if (override) setStore("mode", override)
     })
 
     function init() {

@@ -28,6 +28,12 @@ export const TuiInfo = z
   .object({
     $schema: z.string().optional(),
     theme: z.string().optional(),
+    theme_mode: z
+      .enum(["light", "dark", "system"])
+      .optional()
+      .describe(
+        "Override the detected terminal color scheme. Set to 'light' or 'dark' to force a mode, or 'system' to auto-detect from terminal.",
+      ),
     keybinds: KeybindOverride.optional(),
   })
   .extend(TuiOptions.shape)
