@@ -23,7 +23,6 @@ import { Button } from "@opencode-ai/ui/button"
 import { DockShellForm, DockTray } from "@opencode-ai/ui/dock-surface"
 import { Icon } from "@opencode-ai/ui/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import type { IconName } from "@opencode-ai/ui/icons/provider"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
@@ -1310,43 +1309,45 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </div>
           </div>
 
-          <Show when={store.mode === "normal" && permission.permissionsEnabled() && params.id}>
-            <div class="pointer-events-none absolute bottom-2 left-2">
-              <div class="pointer-events-auto">
-                <TooltipKeybind
-                  placement="top"
-                  gutter={8}
-                  title={language.t(
-                    accepting() ? "command.permissions.autoaccept.disable" : "command.permissions.autoaccept.enable",
-                  )}
-                  keybind={command.keybind("permissions.autoaccept")}
+          <div class="pointer-events-none absolute bottom-2 left-2">
+            <div class="pointer-events-auto">
+              <TooltipKeybind
+                placement="top"
+                gutter={8}
+                title={language.t(
+                  accepting() ? "command.permissions.autoaccept.disable" : "command.permissions.autoaccept.enable",
+                )}
+                keybind={command.keybind("permissions.autoaccept")}
+              >
+                <Button
+                  data-action="prompt-permissions"
+                  variant="ghost"
+                  disabled={!params.id}
+                  onClick={() => {
+                    if (!params.id) return
+                    permission.toggleAutoAccept(params.id, sdk.directory)
+                  }}
+                  classList={{
+                    "size-6 flex items-center justify-center": true,
+                    "text-text-base": !accepting(),
+                    "hover:bg-surface-success-base": accepting(),
+                  }}
+                  aria-label={
+                    accepting()
+                      ? language.t("command.permissions.autoaccept.disable")
+                      : language.t("command.permissions.autoaccept.enable")
+                  }
+                  aria-pressed={accepting()}
                 >
-                  <Button
-                    data-action="prompt-permissions"
-                    variant="ghost"
-                    onClick={() => permission.toggleAutoAccept(params.id!, sdk.directory)}
-                    classList={{
-                      "_hidden group-hover/prompt-input:flex size-6 items-center justify-center": true,
-                      "text-text-base": !accepting(),
-                      "hover:bg-surface-success-base": accepting(),
-                    }}
-                    aria-label={
-                      accepting()
-                        ? language.t("command.permissions.autoaccept.disable")
-                        : language.t("command.permissions.autoaccept.enable")
-                    }
-                    aria-pressed={accepting()}
-                  >
-                    <Icon
-                      name="chevron-double-right"
-                      size="small"
-                      classList={{ "text-icon-success-base": accepting() }}
-                    />
-                  </Button>
-                </TooltipKeybind>
-              </div>
+                  <Icon
+                    name="chevron-double-right"
+                    size="small"
+                    classList={{ "text-icon-success-base": accepting() }}
+                  />
+                </Button>
+              </TooltipKeybind>
             </div>
-          </Show>
+          </div>
         </div>
       </DockShellForm>
       <Show when={store.mode === "normal" || store.mode === "shell"}>
@@ -1396,7 +1397,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       >
                         <Show when={local.model.current()?.provider?.id}>
                           <ProviderIcon
-                            id={local.model.current()!.provider.id as IconName}
+                            id={local.model.current()!.provider.id}
                             class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
                             style={{ "will-change": "opacity", transform: "translateZ(0)" }}
                           />
@@ -1426,7 +1427,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     >
                       <Show when={local.model.current()?.provider?.id}>
                         <ProviderIcon
-                          id={local.model.current()!.provider.id as IconName}
+                          id={local.model.current()!.provider.id}
                           class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
                           style={{ "will-change": "opacity", transform: "translateZ(0)" }}
                         />

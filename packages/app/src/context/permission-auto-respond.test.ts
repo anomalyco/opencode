@@ -31,12 +31,33 @@ describe("autoRespondsPermission", () => {
     expect(autoRespondsPermission({ root: true }, sessions, permission("child"), "/tmp/project")).toBe(true)
   })
 
-  test("ignores auto-accept from unrelated sessions", () => {
+  test("defaults to auto-accept when no lineage override exists", () => {
     const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" }), session({ id: "other" })]
     const autoAccept = {
       other: true,
     }
 
-    expect(autoRespondsPermission(autoAccept, sessions, permission("child"), "/tmp/project")).toBe(false)
+    expect(autoRespondsPermission(autoAccept, sessions, permission("child"), "/tmp/project")).toBe(true)
+  })
+
+  test("inherits a parent session's false override", () => {
+    const directory = "/tmp/project"
+    const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" })]
+    const autoAccept = {
+      [`${base64Encode(directory)}/root`]: false,
+    }
+
+    expect(autoRespondsPermission(autoAccept, sessions, permission("child"), directory)).toBe(false)
+  })
+
+  test("prefers a child override over parent override", () => {
+    const directory = "/tmp/project"
+    const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" })]
+    const autoAccept = {
+      [`${base64Encode(directory)}/root`]: false,
+      [`${base64Encode(directory)}/child`]: true,
+    }
+
+    expect(autoRespondsPermission(autoAccept, sessions, permission("child"), directory)).toBe(true)
   })
 })
