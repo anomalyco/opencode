@@ -1,6 +1,8 @@
 export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".abap": "abap",
   ".bat": "bat",
+  ".bicep": "bicep",
+  ".bicepparam": "bicep-params",
   ".bib": "bibtex",
   ".bibtex": "bibtex",
   ".clj": "clojure",
