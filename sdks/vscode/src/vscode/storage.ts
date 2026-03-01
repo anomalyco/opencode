@@ -242,22 +242,8 @@ export class OpenCodeStorage {
       // Write to temp file first
       await this.fs.writeFile(tempUri, new Uint8Array(data))
 
-      // Rename temp file to final (atomic operation)
-      // Note: VS Code fs API doesn't have rename, so we delete and write
-      try {
-        await this.fs.delete(uri)
-      } catch (error) {
-        if (!this.isFileNotFound(error)) throw error
-      }
-
-      await this.fs.writeFile(uri, new Uint8Array(data))
-
-      // Clean up temp file
-      try {
-        await this.fs.delete(tempUri)
-      } catch {
-        // Ignore cleanup errors
-      }
+      // Atomically rename temp file to final destination
+      await this.fs.rename(tempUri, uri, { overwrite: true })
     } catch (error) {
       // Clean up temp file on error
       try {

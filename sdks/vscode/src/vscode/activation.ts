@@ -199,22 +199,11 @@ export class ActivationController {
       return
     }
 
-    // Always move to ERROR state on crash
+    // Treat any crash as a hard failure: move to ERROR and clean up resources.
     this.state = ActivationState.ERROR
+    this.cleanup()
 
-    if (this.activeSessions > 0 && this.restartCount < this.config.maxRestarts) {
-      this.restartCount++
-
-      vscode.window.showWarningMessage(
-        `OpenCode process crashed. Restarting... (attempt ${this.restartCount}/${this.config.maxRestarts})`,
-      )
-
-      // Note: The restart will be triggered by ensureActivated() when needed
-      // For now, just clean up and let the next request restart
-      this.cleanup()
-    } else {
-      this.cleanup()
-    }
+    vscode.window.showWarningMessage("OpenCode process crashed and has been stopped.")
   }
 
   private handleProcessError(error: Error): void {

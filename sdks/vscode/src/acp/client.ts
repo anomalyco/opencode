@@ -196,19 +196,7 @@ export class AcpClient {
   }
 
   private async sendNotification(method: string, params?: unknown): Promise<void> {
-    // Notifications in JSON-RPC 2.0 don't have an id and don't expect a response
-    // We need to write directly to avoid the connection's id auto-generation
-    const stdin = (this.connection as any).stdin as NodeJS.WritableStream
-    if (!stdin) {
-      return
-    }
-
-    const notification = { jsonrpc: "2.0", method, params }
-    const line = JSON.stringify(notification) + "\n"
-
-    return new Promise((resolve) => {
-      stdin.write(line, () => resolve())
-    })
+    await this.connection.sendNotification({ method, params })
   }
 
   // Event handlers

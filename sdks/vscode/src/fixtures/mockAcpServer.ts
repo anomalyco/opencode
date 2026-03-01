@@ -70,7 +70,7 @@ export class MockAcpServer extends EventEmitter {
       // Handle different methods
       if (request.method === "initialize") {
         this.sendResponse(socket, request.id, {
-          protocolVersion: "2.0",
+          protocolVersion: { major: 1, minor: 0 },
           capabilities: {
             tools: true,
             prompts: true,
@@ -98,11 +98,11 @@ export class MockAcpServer extends EventEmitter {
         })
       } else if (request.method === "ping") {
         this.sendResponse(socket, request.id, { pong: true })
-      } else if (request.method === "session/start") {
+      } else if (request.method === "session/new") {
         this.sendResponse(socket, request.id, {
           sessionId: "mock-session-123",
         })
-      } else if (request.method === "session/end") {
+      } else if (request.method === "session/cancel") {
         this.sendResponse(socket, request.id, { success: true })
       } else if (request.method === "prompts/list") {
         this.sendResponse(socket, request.id, {

@@ -203,17 +203,25 @@ export class JsonRpcConnection {
     })
   }
 
-  sendNotification(method: string, params?: unknown): void {
+  async sendNotification(notification: { method: string; params?: unknown }): Promise<void> {
     if (this.disposed) {
       return
     }
-    if (!this.connected) {
-      return
+
+    const message = {
+      jsonrpc: "2.0",
+      method: notification.method,
+      params: notification.params,
     }
 
-    const notification: JsonRpcNotification = { jsonrpc: "2.0", method, params }
-    const line = JSON.stringify(notification) + "\n"
-    this.stdin.write(line)
+    const line = JSON.stringify(message) + "\n"
+
+    return new Promise((resolve, reject) => {
+      this.stdin.write(line, (err) => {
+        if (err) reject(err)
+        else resolve()
+      })
+    })
   }
 
   onNotification(callback: (notification: JsonRpcNotification) => void): void {
