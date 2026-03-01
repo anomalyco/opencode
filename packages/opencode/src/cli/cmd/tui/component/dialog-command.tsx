@@ -11,6 +11,7 @@ import {
 } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 import { type KeybindKey, useKeybind } from "@tui/context/keybind"
+import { t } from "@/cli/cmd/tui/i18n"
 
 type Context = ReturnType<typeof init>
 const ctx = createContext<Context>()
@@ -143,5 +144,5 @@ function DialogCommand(props: { options: CommandOption[]; suggestedOptions: Comm
     if (ref?.filter) return props.options
     return [...props.suggestedOptions, ...props.options]
   }
-  return <DialogSelect ref={(r) => (ref = r)} title="Commands" options={list()} />
+  return <DialogSelect ref={(r) => (ref = r)} title={t("dialog.commands")} options={list()} />
 }

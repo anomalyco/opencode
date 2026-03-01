@@ -1,4 +1,5 @@
 import { createMemo, onMount } from "solid-js"
+import { t } from "@/cli/cmd/tui/i18n"
 import { useSync } from "@tui/context/sync"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import type { TextPart } from "@opencode-ai/sdk/v2"
@@ -60,5 +61,5 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
     return result
   })
 
-  return <DialogSelect onMove={(option) => props.onMove(option.value)} title="Fork from message" options={options()} />
+  return <DialogSelect onMove={(option) => props.onMove(option.value)} title={t("dialog.fork.from")} options={options()} />
 }

@@ -1,4 +1,5 @@
 import { createMemo, Match, onCleanup, onMount, Show, Switch } from "solid-js"
+import { t } from "@/cli/cmd/tui/i18n"
 import { useTheme } from "../../context/theme"
 import { useSync } from "../../context/sync"
 import { useDirectory } from "../../context/directory"
@@ -56,18 +57,18 @@ export function Footer() {
         <Switch>
           <Match when={store.welcome}>
             <text fg={theme.text}>
-              Get started <span style={{ fg: theme.textMuted }}>/connect</span>
+              {t("footer.get.started")} <span style={{ fg: theme.textMuted }}>/connect</span>
             </text>
           </Match>
           <Match when={connected()}>
             <Show when={permissions().length > 0}>
               <text fg={theme.warning}>
-                <span style={{ fg: theme.warning }}>△</span> {permissions().length} Permission
-                {permissions().length > 1 ? "s" : ""}
+                <span style={{ fg: theme.warning }}>△</span> {permissions().length}{" "}
+                {permissions().length > 1 ? t("footer.permissions") : t("footer.permission")}
               </text>
             </Show>
             <text fg={theme.text}>
-              <span style={{ fg: lsp().length > 0 ? theme.success : theme.textMuted }}>•</span> {lsp().length} LSP
+              <span style={{ fg: lsp().length > 0 ? theme.success : theme.textMuted }}>•</span> {lsp().length} {t("footer.lsp")}
             </text>
             <Show when={mcp()}>
               <text fg={theme.text}>
@@ -79,7 +80,7 @@ export function Footer() {
                     <span style={{ fg: theme.success }}>⊙ </span>
                   </Match>
                 </Switch>
-                {mcp()} MCP
+                {mcp()} {t("footer.mcp")}
               </text>
             </Show>
             <text fg={theme.textMuted}>/status</text>

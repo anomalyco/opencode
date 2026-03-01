@@ -9,6 +9,7 @@ import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
 import { useTextareaKeybindings } from "../../component/textarea-keybindings"
 import { useDialog } from "../../ui/dialog"
+import { t } from "@/cli/cmd/tui/i18n"
 
 export function QuestionPrompt(props: { request: QuestionRequest }) {
   const sdk = useSDK()
@@ -306,7 +307,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
               onMouseOut={() => setTabHover(null)}
               onMouseUp={() => selectTab(questions().length)}
             >
-              <text fg={confirm() ? selectedForeground(theme, theme.accent) : theme.textMuted}>Confirm</text>
+              <text fg={confirm() ? selectedForeground(theme, theme.accent) : theme.textMuted}>{t("question.confirm")}</text>
             </box>
           </box>
         </Show>
@@ -316,7 +317,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
             <box>
               <text fg={theme.text}>
                 {question()?.question}
-                {multi() ? " (select all that apply)" : ""}
+                {multi() ? " " + t("question.select.all") : ""}
               </text>
             </box>
             <box>
@@ -367,7 +368,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                     </box>
                     <box backgroundColor={other() ? theme.backgroundElement : undefined}>
                       <text fg={other() ? theme.secondary : customPicked() ? theme.success : theme.text}>
-                        {multi() ? `[${customPicked() ? "✓" : " "}] Type your own answer` : "Type your own answer"}
+                        {multi() ? `[${customPicked() ? "✓" : " "}] ${t("question.type.own")}` : t("question.type.own")}
                       </text>
                     </box>
 
@@ -386,7 +387,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                           })
                         }}
                         initialValue={input()}
-                        placeholder="Type your own answer"
+                        placeholder={t("question.type.own")}
                         minHeight={1}
                         maxHeight={6}
                         textColor={theme.text}
@@ -409,7 +410,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
 
         <Show when={confirm() && !single()}>
           <box paddingLeft={1}>
-            <text fg={theme.text}>Review</text>
+            <text fg={theme.text}>{t("question.review")}</text>
           </box>
           <For each={questions()}>
             {(q, index) => {
@@ -420,7 +421,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                   <text>
                     <span style={{ fg: theme.textMuted }}>{q.header}:</span>{" "}
                     <span style={{ fg: answered() ? theme.text : theme.error }}>
-                      {answered() ? value() : "(not answered)"}
+                      {answered() ? value() : t("question.not.answered")}
                     </span>
                   </text>
                 </box>
@@ -441,23 +442,23 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
         <box flexDirection="row" gap={2}>
           <Show when={!single()}>
             <text fg={theme.text}>
-              {"⇆"} <span style={{ fg: theme.textMuted }}>tab</span>
+              {"⇆"} <span style={{ fg: theme.textMuted }}>{t("question.tab")}</span>
             </text>
           </Show>
           <Show when={!confirm()}>
             <text fg={theme.text}>
-              {"↑↓"} <span style={{ fg: theme.textMuted }}>select</span>
+              {"↑↓"} <span style={{ fg: theme.textMuted }}>{t("question.select")}</span>
             </text>
           </Show>
           <text fg={theme.text}>
             enter{" "}
             <span style={{ fg: theme.textMuted }}>
-              {confirm() ? "submit" : multi() ? "toggle" : single() ? "submit" : "confirm"}
+              {confirm() ? t("question.submit") : multi() ? t("question.toggle") : single() ? t("question.submit") : t("question.confirm.action")}
             </span>
           </text>
 
           <text fg={theme.text}>
-            esc <span style={{ fg: theme.textMuted }}>dismiss</span>
+            esc <span style={{ fg: theme.textMuted }}>{t("question.dismiss")}</span>
           </text>
         </box>
       </box>

@@ -1,3 +1,4 @@
+import { t } from "@/cli/cmd/tui/i18n"
 import { type Accessor, createMemo, createSignal, Match, Show, Switch } from "solid-js"
 import { useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
@@ -84,7 +85,7 @@ export function Header() {
             <box flexDirection="column" gap={1}>
               <box flexDirection={narrow() ? "column" : "row"} justifyContent="space-between" gap={narrow() ? 1 : 0}>
                 <text fg={theme.text}>
-                  <b>Subagent session</b>
+                  <b>{t("header.subagent")}</b>
                 </text>
                 <ContextInfo context={context} cost={cost} />
               </box>
@@ -96,7 +97,7 @@ export function Header() {
                   backgroundColor={hover() === "parent" ? theme.backgroundElement : theme.backgroundPanel}
                 >
                   <text fg={theme.text}>
-                    Parent <span style={{ fg: theme.textMuted }}>{keybind.print("session_parent")}</span>
+                    {t("header.parent")} <span style={{ fg: theme.textMuted }}>{keybind.print("session_parent")}</span>
                   </text>
                 </box>
                 <box
@@ -106,7 +107,7 @@ export function Header() {
                   backgroundColor={hover() === "prev" ? theme.backgroundElement : theme.backgroundPanel}
                 >
                   <text fg={theme.text}>
-                    Prev <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle_reverse")}</span>
+                    {t("header.prev")} <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle_reverse")}</span>
                   </text>
                 </box>
                 <box
@@ -116,7 +117,7 @@ export function Header() {
                   backgroundColor={hover() === "next" ? theme.backgroundElement : theme.backgroundPanel}
                 >
                   <text fg={theme.text}>
-                    Next <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle")}</span>
+                    {t("header.next")} <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle")}</span>
                   </text>
                 </box>
               </box>

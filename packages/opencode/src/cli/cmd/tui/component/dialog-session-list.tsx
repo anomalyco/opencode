@@ -11,6 +11,7 @@ import { DialogSessionRename } from "./dialog-session-rename"
 import { useKV } from "../context/kv"
 import { createDebouncedSignal } from "../util/signal"
 import { Spinner } from "./spinner"
+import { t, tpl } from "@/cli/cmd/tui/i18n"
 
 export function DialogSessionList() {
   const dialog = useDialog()
@@ -43,13 +44,13 @@ export function DialogSessionList() {
         const date = new Date(x.time.updated)
         let category = date.toDateString()
         if (category === today) {
-          category = "Today"
+          category = t("dialog.session.today")
         }
         const isDeleting = toDelete() === x.id
         const status = sync.data.session_status?.[x.id]
         const isWorking = status?.type === "busy"
         return {
-          title: isDeleting ? `Press ${keybind.print("session_delete")} again to confirm` : x.title,
+          title: isDeleting ? tpl("dialog.session.confirm", { keybind: keybind.print("session_delete") }) : x.title,
           bg: isDeleting ? theme.error : undefined,
           value: x.id,
           category,
@@ -65,7 +66,7 @@ export function DialogSessionList() {
 
   return (
     <DialogSelect
-      title="Sessions"
+      title={t("dialog.session.title")}
       options={options()}
       skipFilter={true}
       current={currentSessionID()}
@@ -83,7 +84,7 @@ export function DialogSessionList() {
       keybind={[
         {
           keybind: keybind.all.session_delete?.[0],
-          title: "delete",
+          title: t("dialog.session.delete"),
           onTrigger: async (option) => {
             if (toDelete() === option.value) {
               sdk.client.session.delete({
@@ -97,7 +98,7 @@ export function DialogSessionList() {
         },
         {
           keybind: keybind.all.session_rename?.[0],
-          title: "rename",
+          title: t("dialog.session.rename.action"),
           onTrigger: async (option) => {
             dialog.replace(() => <DialogSessionRename session={option.value} />)
           },

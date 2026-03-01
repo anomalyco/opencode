@@ -40,6 +40,7 @@ import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { TuiConfigProvider } from "./context/tui-config"
 import { TuiConfig } from "@/config/tui"
+import { t, tpl } from "@/cli/cmd/tui/i18n"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -250,7 +251,7 @@ function App() {
     if (!text || text.length === 0) return
 
     await Clipboard.copy(text)
-      .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+      .then(() => toast.show({ message: t("app.clipboard.copied"), variant: "info" }))
       .catch(toast.error)
 
     renderer.clearSelection()
@@ -292,7 +293,7 @@ function App() {
         if (!providerID || !modelID)
           return toast.show({
             variant: "warning",
-            message: `Invalid model format: ${args.model}`,
+            message: t("app.model.invalid") + args.model,
             duration: 3000,
           })
         local.model.set({ providerID, modelID }, { recent: true })
@@ -321,7 +322,7 @@ function App() {
           if (result.data?.id) {
             route.navigate({ type: "session", sessionID: result.data.id })
           } else {
-            toast.show({ message: "Failed to fork session", variant: "error" })
+            toast.show({ message: t("app.fork.failed"), variant: "error" })
           }
         })
       } else {
@@ -341,7 +342,7 @@ function App() {
       if (result.data?.id) {
         route.navigate({ type: "session", sessionID: result.data.id })
       } else {
-        toast.show({ message: "Failed to fork session", variant: "error" })
+        toast.show({ message: t("app.fork.failed"), variant: "error" })
       }
     })
   })
@@ -360,7 +361,7 @@ function App() {
   const connected = useConnected()
   command.register(() => [
     {
-      title: "Switch session",
+      title: t("app.switch.session"),
       value: "session.list",
       keybind: "session_list",
       category: "Session",
@@ -374,7 +375,7 @@ function App() {
       },
     },
     {
-      title: "New session",
+      title: t("app.new.session"),
       suggested: route.data.type === "session",
       value: "session.new",
       keybind: "session_new",
@@ -395,7 +396,7 @@ function App() {
       },
     },
     {
-      title: "Switch model",
+      title: t("app.switch.model"),
       value: "model.list",
       keybind: "model_list",
       suggested: true,
@@ -408,7 +409,7 @@ function App() {
       },
     },
     {
-      title: "Model cycle",
+      title: t("app.model.cycle"),
       value: "model.cycle_recent",
       keybind: "model_cycle_recent",
       category: "Agent",
@@ -418,7 +419,7 @@ function App() {
       },
     },
     {
-      title: "Model cycle reverse",
+      title: t("app.model.cycle.reverse"),
       value: "model.cycle_recent_reverse",
       keybind: "model_cycle_recent_reverse",
       category: "Agent",
@@ -428,7 +429,7 @@ function App() {
       },
     },
     {
-      title: "Favorite cycle",
+      title: t("app.favorite.cycle"),
       value: "model.cycle_favorite",
       keybind: "model_cycle_favorite",
       category: "Agent",
@@ -438,7 +439,7 @@ function App() {
       },
     },
     {
-      title: "Favorite cycle reverse",
+      title: t("app.favorite.cycle.reverse"),
       value: "model.cycle_favorite_reverse",
       keybind: "model_cycle_favorite_reverse",
       category: "Agent",
@@ -448,7 +449,7 @@ function App() {
       },
     },
     {
-      title: "Switch agent",
+      title: t("app.switch.agent"),
       value: "agent.list",
       keybind: "agent_list",
       category: "Agent",
@@ -460,7 +461,7 @@ function App() {
       },
     },
     {
-      title: "Toggle MCPs",
+      title: t("app.toggle.mcp"),
       value: "mcp.list",
       category: "Agent",
       slash: {
@@ -471,7 +472,7 @@ function App() {
       },
     },
     {
-      title: "Agent cycle",
+      title: t("app.agent.cycle"),
       value: "agent.cycle",
       keybind: "agent_cycle",
       category: "Agent",
@@ -481,7 +482,7 @@ function App() {
       },
     },
     {
-      title: "Variant cycle",
+      title: t("app.variant.cycle"),
       value: "variant.cycle",
       keybind: "variant_cycle",
       category: "Agent",
@@ -491,7 +492,7 @@ function App() {
       },
     },
     {
-      title: "Agent cycle reverse",
+      title: t("app.agent.cycle.reverse"),
       value: "agent.cycle.reverse",
       keybind: "agent_cycle_reverse",
       category: "Agent",
@@ -501,7 +502,7 @@ function App() {
       },
     },
     {
-      title: "Connect provider",
+      title: t("app.connect.provider"),
       value: "provider.connect",
       suggested: !connected(),
       slash: {
@@ -513,7 +514,7 @@ function App() {
       category: "Provider",
     },
     {
-      title: "View status",
+      title: t("app.view.status"),
       keybind: "status_view",
       value: "opencode.status",
       slash: {
@@ -525,7 +526,7 @@ function App() {
       category: "System",
     },
     {
-      title: "Switch theme",
+      title: t("app.switch.theme"),
       value: "theme.switch",
       keybind: "theme_list",
       slash: {
@@ -537,7 +538,7 @@ function App() {
       category: "System",
     },
     {
-      title: "Toggle appearance",
+      title: t("app.toggle.appearance"),
       value: "theme.switch_mode",
       onSelect: (dialog) => {
         setMode(mode() === "dark" ? "light" : "dark")
@@ -546,7 +547,7 @@ function App() {
       category: "System",
     },
     {
-      title: "Help",
+      title: t("app.help"),
       value: "help.show",
       slash: {
         name: "help",
@@ -557,7 +558,7 @@ function App() {
       category: "System",
     },
     {
-      title: "Open docs",
+      title: t("app.open.docs"),
       value: "docs.open",
       onSelect: () => {
         open("https://opencode.ai/docs").catch(() => {})
@@ -566,7 +567,7 @@ function App() {
       category: "System",
     },
     {
-      title: "Exit the app",
+      title: t("app.exit"),
       value: "app.exit",
       slash: {
         name: "exit",
@@ -576,7 +577,7 @@ function App() {
       category: "System",
     },
     {
-      title: "Toggle debug panel",
+      title: t("app.toggle.debug"),
       category: "System",
       value: "app.debug",
       onSelect: (dialog) => {
@@ -585,7 +586,7 @@ function App() {
       },
     },
     {
-      title: "Toggle console",
+      title: t("app.toggle.console"),
       category: "System",
       value: "app.console",
       onSelect: (dialog) => {
@@ -594,21 +595,21 @@ function App() {
       },
     },
     {
-      title: "Write heap snapshot",
+      title: t("app.heap.snapshot"),
       category: "System",
       value: "app.heap_snapshot",
       onSelect: (dialog) => {
         const path = writeHeapSnapshot()
         toast.show({
           variant: "info",
-          message: `Heap snapshot written to ${path}`,
+          message: t("app.heap.written") + path,
           duration: 5000,
         })
         dialog.clear()
       },
     },
     {
-      title: "Suspend terminal",
+      title: t("app.suspend.terminal"),
       value: "terminal.suspend",
       keybind: "terminal_suspend",
       category: "System",
@@ -624,7 +625,7 @@ function App() {
       },
     },
     {
-      title: terminalTitleEnabled() ? "Disable terminal title" : "Enable terminal title",
+      title: terminalTitleEnabled() ? t("app.terminal.title.disable") : t("app.terminal.title.enable"),
       value: "terminal.title.toggle",
       keybind: "terminal_title_toggle",
       category: "System",
@@ -639,7 +640,7 @@ function App() {
       },
     },
     {
-      title: kv.get("animations_enabled", true) ? "Disable animations" : "Enable animations",
+      title: kv.get("animations_enabled", true) ? t("app.animations.disable") : t("app.animations.enable"),
       value: "app.toggle.animations",
       category: "System",
       onSelect: (dialog) => {
@@ -648,7 +649,7 @@ function App() {
       },
     },
     {
-      title: kv.get("diff_wrap_mode", "word") === "word" ? "Disable diff wrapping" : "Enable diff wrapping",
+      title: kv.get("diff_wrap_mode", "word") === "word" ? t("app.diffwrap.disable") : t("app.diffwrap.enable"),
       value: "app.toggle.diffwrap",
       category: "System",
       onSelect: (dialog) => {
@@ -666,8 +667,8 @@ function App() {
       untrack(() => {
         DialogAlert.show(
           dialog,
-          "Warning",
-          "While openrouter is a convenient way to access LLMs your request will often be routed to subpar providers that do not work well in our testing.\n\nFor reliable access to models check out OpenCode Zen\nhttps://opencode.ai/zen",
+          t("app.warning"),
+          t("app.openrouter.warning"),
         ).then(() => kv.set("openrouter_warning", true))
       })
     }
@@ -698,7 +699,7 @@ function App() {
       route.navigate({ type: "home" })
       toast.show({
         variant: "info",
-        message: "The current session was deleted",
+        message: t("app.session.deleted"),
       })
     }
   })
@@ -707,7 +708,7 @@ function App() {
     const error = evt.properties.error
     if (error && typeof error === "object" && error.name === "MessageAbortedError") return
     const message = (() => {
-      if (!error) return "An error occurred"
+      if (!error) return t("app.error.occurred")
 
       if (typeof error === "object") {
         const data = error.data
@@ -728,8 +729,8 @@ function App() {
   sdk.event.on(Installation.Event.UpdateAvailable.type, (evt) => {
     toast.show({
       variant: "info",
-      title: "Update Available",
-      message: `OpenCode v${evt.properties.version} is available. Run 'opencode upgrade' to update manually.`,
+      title: t("app.update.available"),
+      message: tpl("app.update.message", { version: evt.properties.version }),
       duration: 10000,
     })
   })
@@ -818,22 +819,22 @@ function ErrorComponent(props: {
     <box flexDirection="column" gap={1} backgroundColor={colors.bg}>
       <box flexDirection="row" gap={1} alignItems="center">
         <text attributes={TextAttributes.BOLD} fg={colors.text}>
-          Please report an issue.
+          {t("app.error.report")}
         </text>
         <box onMouseUp={copyIssueURL} backgroundColor={colors.primary} padding={1}>
           <text attributes={TextAttributes.BOLD} fg={colors.bg}>
-            Copy issue URL (exception info pre-filled)
+            {t("app.error.copy.url")}
           </text>
         </box>
-        {copied() && <text fg={colors.muted}>Successfully copied</text>}
+        {copied() && <text fg={colors.muted}>{t("app.error.copied")}</text>}
       </box>
       <box flexDirection="row" gap={2} alignItems="center">
-        <text fg={colors.text}>A fatal error occurred!</text>
+        <text fg={colors.text}>{t("app.error.fatal")}</text>
         <box onMouseUp={props.reset} backgroundColor={colors.primary} padding={1}>
-          <text fg={colors.bg}>Reset TUI</text>
+          <text fg={colors.bg}>{t("app.error.reset")}</text>
         </box>
         <box onMouseUp={handleExit} backgroundColor={colors.primary} padding={1}>
-          <text fg={colors.bg}>Exit</text>
+          <text fg={colors.bg}>{t("app.error.exit")}</text>
         </box>
       </box>
       <scrollbox height={Math.floor(term().height * 0.7)}>
