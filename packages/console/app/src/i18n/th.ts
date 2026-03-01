@@ -15,6 +15,7 @@ export const dict = {
   "nav.home": "หน้าหลัก",
   "nav.openMenu": "เปิดเมนู",
   "nav.getStartedFree": "เริ่มต้นฟรี",
+  "nav.logoAlt": "OpenCode",
 
   "nav.context.copyLogo": "คัดลอกโลโก้เป็น SVG",
   "nav.context.copyWordmark": "คัดลอกตัวอักษรแบรนด์เป็น SVG",
@@ -42,8 +43,12 @@ export const dict = {
   "notFound.docs": "เอกสาร",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
+  "notFound.logoLightAlt": "โลโก้ opencode แบบสว่าง",
+  "notFound.logoDarkAlt": "โลโก้ opencode แบบมืด",
 
   "user.logout": "ออกจากระบบ",
+
+  "auth.callback.error.codeMissing": "ไม่พบ authorization code",
 
   "workspace.select": "เลือก Workspace",
   "workspace.createNew": "+ สร้าง Workspace ใหม่",
@@ -76,6 +81,8 @@ export const dict = {
   "error.reloadAmountMin": "จำนวนเงินที่โหลดซ้ำต้องมีอย่างน้อย ${{amount}}",
   "error.reloadTriggerMin": "ยอดคงเหลือที่กระตุ้นต้องมีอย่างน้อย ${{amount}}",
 
+  "app.meta.description": "OpenCode - เอเจนต์เขียนโค้ดแบบโอเพนซอร์ส",
+
   "home.title": "OpenCode | เอเจนต์เขียนโค้ดด้วย AI แบบโอเพนซอร์ส",
 
   "temp.title": "OpenCode | เอเจนต์เขียนโค้ด AI ที่สร้างมาเพื่อเทอร์มินัล",
@@ -91,6 +98,8 @@ export const dict = {
   "temp.feature.models.afterLink": "รวมถึงโมเดล Local",
   "temp.screenshot.caption": "OpenCode TUI พร้อมธีม tokyonight",
   "temp.screenshot.alt": "OpenCode TUI พร้อมธีม tokyonight",
+  "temp.logoLightAlt": "โลโก้ opencode แบบสว่าง",
+  "temp.logoDarkAlt": "โลโก้ opencode แบบมืด",
 
   "home.banner.badge": "ใหม่",
   "home.banner.text": "แอปเดสก์ท็อปพร้อมใช้งานในเวอร์ชันเบต้า",
@@ -238,6 +247,24 @@ export const dict = {
   "zen.privacy.beforeExceptions":
     "โมเดล Zen ทั้งหมดโฮสต์ในสหรัฐอเมริกา ผู้ให้บริการปฏิบัติตามนโยบายไม่เก็บรักษาข้อมูล (zero-retention policy) และไม่ใช้ข้อมูลของคุณสำหรับการฝึกโมเดล โดยมี",
   "zen.privacy.exceptionsLink": "ข้อยกเว้นดังนี้",
+
+  "zen.api.error.rateLimitExceeded": "เกินขีดจำกัดอัตราการใช้งาน กรุณาลองใหม่ในภายหลัง",
+  "zen.api.error.modelNotSupported": "ไม่รองรับโมเดล {{model}}",
+  "zen.api.error.modelFormatNotSupported": "ไม่รองรับโมเดล {{model}} สำหรับรูปแบบ {{format}}",
+  "zen.api.error.noProviderAvailable": "ไม่มีผู้ให้บริการที่พร้อมใช้งาน",
+  "zen.api.error.providerNotSupported": "ไม่รองรับผู้ให้บริการ {{provider}}",
+  "zen.api.error.missingApiKey": "ไม่มี API key",
+  "zen.api.error.invalidApiKey": "API key ไม่ถูกต้อง",
+  "zen.api.error.subscriptionQuotaExceeded": "โควต้าการสมัครสมาชิกเกินขีดจำกัด ลองใหม่ในอีก {{retryIn}}",
+  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
+    "โควต้าการสมัครสมาชิกเกินขีดจำกัด คุณสามารถดำเนินการต่อโดยใช้โมเดลฟรี",
+  "zen.api.error.noPaymentMethod": "ไม่มีวิธีการชำระเงิน เพิ่มวิธีการชำระเงินที่นี่: {{billingUrl}}",
+  "zen.api.error.insufficientBalance": "ยอดเงินคงเหลือไม่เพียงพอ จัดการการเรียกเก็บเงินของคุณที่นี่: {{billingUrl}}",
+  "zen.api.error.workspaceMonthlyLimitReached":
+    "Workspace ของคุณถึงขีดจำกัดการใช้จ่ายรายเดือนที่ ${{amount}} แล้ว จัดการขีดจำกัดของคุณที่นี่: {{billingUrl}}",
+  "zen.api.error.userMonthlyLimitReached":
+    "คุณถึงขีดจำกัดการใช้จ่ายรายเดือนที่ ${{amount}} แล้ว จัดการขีดจำกัดของคุณที่นี่: {{membersUrl}}",
+  "zen.api.error.modelDisabled": "โมเดลถูกปิดใช้งาน",
 
   "black.meta.title": "OpenCode Black | เข้าถึงโมเดลเขียนโค้ดที่ดีที่สุดในโลก",
   "black.meta.description": "เข้าถึง Claude, GPT, Gemini และอื่นๆ ด้วยแผนสมาชิก OpenCode Black",
@@ -448,6 +475,7 @@ export const dict = {
   "workspace.reload.updatePaymentMethod": "โปรดอัปเดตวิธีการชำระเงินของคุณแล้วลองอีกครั้ง",
   "workspace.reload.retrying": "กำลังลองอีกครั้ง...",
   "workspace.reload.retry": "ลองอีกครั้ง",
+  "workspace.reload.error.paymentFailed": "การชำระเงินล้มเหลว",
 
   "workspace.payments.title": "ประวัติการชำระเงิน",
   "workspace.payments.subtitle": "รายการธุรกรรมการชำระเงินล่าสุด",
@@ -566,6 +594,10 @@ export const dict = {
   "enterprise.form.send": "ส่ง",
   "enterprise.form.sending": "กำลังส่ง...",
   "enterprise.form.success": "ส่งข้อความแล้ว เราจะติดต่อกลับเร็วๆ นี้",
+  "enterprise.form.success.submitted": "ส่งแบบฟอร์มสำเร็จแล้ว",
+  "enterprise.form.error.allFieldsRequired": "จำเป็นต้องกรอกทุกช่อง",
+  "enterprise.form.error.invalidEmailFormat": "รูปแบบอีเมลไม่ถูกต้อง",
+  "enterprise.form.error.internalServer": "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์",
   "enterprise.faq.title": "คำถามที่พบบ่อย",
   "enterprise.faq.q1": "OpenCode Enterprise คืออะไร?",
   "enterprise.faq.a1":
@@ -598,6 +630,7 @@ export const dict = {
   "bench.list.table.agent": "เอเจนต์",
   "bench.list.table.model": "โมเดล",
   "bench.list.table.score": "คะแนน",
+  "bench.submission.error.allFieldsRequired": "จำเป็นต้องกรอกทุกช่อง",
 
   "bench.detail.title": "Benchmark - {{task}}",
   "bench.detail.notFound": "ไม่พบงาน",

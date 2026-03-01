@@ -3,6 +3,7 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "app.meta.description": "OpenCode - L'agent de code open source.",
   "nav.github": "GitHub",
   "nav.docs": "Documentation",
   "nav.changelog": "Changelog",
@@ -15,6 +16,7 @@ export const dict = {
   "nav.home": "Accueil",
   "nav.openMenu": "Ouvrir le menu",
   "nav.getStartedFree": "Commencer gratuitement",
+  "nav.logoAlt": "OpenCode",
 
   "nav.context.copyLogo": "Copier le logo en SVG",
   "nav.context.copyWordmark": "Copier le logotype en SVG",
@@ -42,6 +44,8 @@ export const dict = {
   "notFound.docs": "Documentation",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
+  "notFound.logoLightAlt": "opencode logo light",
+  "notFound.logoDarkAlt": "opencode logo dark",
 
   "user.logout": "Se déconnecter",
 
@@ -75,6 +79,7 @@ export const dict = {
   "error.modelRequired": "Le modèle est requis",
   "error.reloadAmountMin": "Le montant de recharge doit être d'au moins {{amount}} $",
   "error.reloadTriggerMin": "Le seuil de déclenchement doit être d'au moins {{amount}} $",
+  "auth.callback.error.codeMissing": "Aucun code d'autorisation trouvé.",
 
   "home.title": "OpenCode | L'agent de code IA open source",
 
@@ -91,6 +96,8 @@ export const dict = {
   "temp.feature.models.afterLink": ", y compris les modèles locaux",
   "temp.screenshot.caption": "OpenCode TUI avec le thème tokyonight",
   "temp.screenshot.alt": "OpenCode TUI avec le thème tokyonight",
+  "temp.logoLightAlt": "opencode logo light",
+  "temp.logoDarkAlt": "opencode logo dark",
 
   "home.banner.badge": "Nouveau",
   "home.banner.text": "Application desktop disponible en bêta",
@@ -245,6 +252,24 @@ export const dict = {
   "zen.privacy.beforeExceptions":
     "Tous les modèles Zen sont hébergés aux États-Unis. Les fournisseurs suivent une politique de rétention zéro et n'utilisent pas vos données pour l'entraînement des modèles, avec les",
   "zen.privacy.exceptionsLink": "exceptions suivantes",
+
+  "zen.api.error.rateLimitExceeded": "Limite de débit dépassée. Veuillez réessayer plus tard.",
+  "zen.api.error.modelNotSupported": "Modèle {{model}} non pris en charge",
+  "zen.api.error.modelFormatNotSupported": "Modèle {{model}} non pris en charge pour le format {{format}}",
+  "zen.api.error.noProviderAvailable": "Aucun fournisseur disponible",
+  "zen.api.error.providerNotSupported": "Fournisseur {{provider}} non pris en charge",
+  "zen.api.error.missingApiKey": "Clé API manquante.",
+  "zen.api.error.invalidApiKey": "Clé API invalide.",
+  "zen.api.error.subscriptionQuotaExceeded": "Quota d'abonnement dépassé. Réessayez dans {{retryIn}}.",
+  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
+    "Quota d'abonnement dépassé. Vous pouvez continuer à utiliser les modèles gratuits.",
+  "zen.api.error.noPaymentMethod": "Aucune méthode de paiement. Ajoutez une méthode de paiement ici : {{billingUrl}}",
+  "zen.api.error.insufficientBalance": "Solde insuffisant. Gérez votre facturation ici : {{billingUrl}}",
+  "zen.api.error.workspaceMonthlyLimitReached":
+    "Votre espace de travail a atteint sa limite de dépense mensuelle de {{amount}} $. Gérez vos limites ici : {{billingUrl}}",
+  "zen.api.error.userMonthlyLimitReached":
+    "Vous avez atteint votre limite de dépense mensuelle de {{amount}} $. Gérez vos limites ici : {{membersUrl}}",
+  "zen.api.error.modelDisabled": "Le modèle est désactivé",
 
   "black.meta.title": "OpenCode Black | Accédez aux meilleurs modèles de code au monde",
   "black.meta.description": "Accédez à Claude, GPT, Gemini et plus avec les forfaits d'abonnement OpenCode Black.",
@@ -457,6 +482,7 @@ export const dict = {
   "workspace.reload.updatePaymentMethod": "Veuillez mettre à jour votre méthode de paiement et réessayer.",
   "workspace.reload.retrying": "Nouvelle tentative...",
   "workspace.reload.retry": "Réessayer",
+  "workspace.reload.error.paymentFailed": "Échec du paiement.",
 
   "workspace.payments.title": "Historique des paiements",
   "workspace.payments.subtitle": "Transactions de paiement récentes.",
@@ -581,6 +607,10 @@ export const dict = {
   "enterprise.form.send": "Envoyer",
   "enterprise.form.sending": "Envoi...",
   "enterprise.form.success": "Message envoyé, nous vous contacterons bientôt.",
+  "enterprise.form.success.submitted": "Formulaire soumis avec succès.",
+  "enterprise.form.error.allFieldsRequired": "Tous les champs sont requis.",
+  "enterprise.form.error.invalidEmailFormat": "Format d'e-mail invalide.",
+  "enterprise.form.error.internalServer": "Erreur interne du serveur.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "Qu'est-ce que OpenCode Enterprise ?",
   "enterprise.faq.a1":
@@ -640,4 +670,5 @@ export const dict = {
   "bench.detail.table.duration": "Durée",
   "bench.detail.run.title": "Exécution {{n}}",
   "bench.detail.rawJson": "JSON brut",
+  "bench.submission.error.allFieldsRequired": "Tous les champs sont requis.",
 } satisfies Dict
