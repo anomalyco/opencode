@@ -72,3 +72,9 @@ packages/opencode/wrangler.jsonc
 
 .branchlet.json
 packages/web/src/content/i18n/*.json
+
+# Wrangler config (fork-local)
+packages/web/wrangler.jsonc
+
+# TypeScript build info
+*.tsbuildinfo

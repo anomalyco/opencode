@@ -563,4 +563,4 @@ export function fromV1(v1: Message.Info): MessageWithParts {
   }
 
   throw new Error("unknown message type")
-}
+}}

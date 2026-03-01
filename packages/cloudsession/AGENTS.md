@@ -121,12 +121,12 @@ This package is **fork-only** -- it does not exist in the upstream repo (`anomal
 
 ## Environment & Secrets
 
-| Binding                  | Type         | Source                | Description                                                       |
-| ------------------------ | ------------ | --------------------- | ----------------------------------------------------------------- |
-| `SESSIONS_STORE`         | R2 Bucket    | wrangler.jsonc        | R2 bucket `opencode-sessions`                                     |
-| `SESSIONS_SHARED_SECRET` | Secret       | `wrangler secret put` | Used to derive per-session secrets via UUIDv5                     |
-| `API_DOMAIN`             | Var          | wrangler.jsonc        | Base URL for share links (not including proto, ie. "https://" )  |
-| `SESSIONS_BROADCAST`     | DO Namespace | wrangler.jsonc        | Durable Object binding for `SessionBroadcast`                     |
+| Binding                  | Type         | Source                | Description                                                     |
+| ------------------------ | ------------ | --------------------- | --------------------------------------------------------------- |
+| `SESSIONS_STORE`         | R2 Bucket    | wrangler.jsonc        | R2 bucket `opencode-sessions`                                   |
+| `SESSIONS_SHARED_SECRET` | Secret       | `wrangler secret put` | Used to derive per-session secrets via UUIDv5                   |
+| `API_DOMAIN`             | Var          | wrangler.jsonc        | Base URL for share links (not including proto, ie. "https://" ) |
+| `SESSIONS_BROADCAST`     | DO Namespace | wrangler.jsonc        | Durable Object binding for `SessionBroadcast`                   |
 
 Secrets are managed with `wrangler secret put SESSIONS_SHARED_SECRET`. The CLOUDFLARE_API_TOKEN for deploy is stored externally (GNU pass).
 

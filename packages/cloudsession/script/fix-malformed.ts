@@ -113,7 +113,7 @@ function repairSession(session: AgentSession, shareID: string): AgentSession {
   const sessionID = meta.sessionID || `ses_${shareID}`
   const createdAt = meta.createdAt || Date.now()
   const lastUpdated = meta.lastUpdated || createdAt
-  
+
   // Build a proper session object
   const fixedSession = {
     ...session,
@@ -143,7 +143,7 @@ function repairSession(session: AgentSession, shareID: string): AgentSession {
       secret: meta.secret || "",
     },
   }
-  
+
   return fixedSession
 }
 
@@ -151,43 +151,43 @@ async function main() {
   console.log("Listing share/ keys from R2...")
   const shareKeys = await listKeys("share/")
   console.log(`Found ${shareKeys.length} sessions`)
-  
+
   const malformed: { key: string; id: string }[] = []
-  
+
   for (const key of shareKeys) {
     const id = key.replace("share/", "")
     if (!id) continue
-    
+
     const raw = await read(key)
     if (!raw) continue
-    
+
     let session: AgentSession
     try {
       session = JSON.parse(raw) as AgentSession
     } catch {
       continue
     }
-    
+
     if (isMalformed(session)) {
       malformed.push({ key, id })
     }
   }
-  
+
   console.log(`\nMalformed sessions: ${malformed.length}`)
   for (const { key, id } of malformed) {
     console.log(`  ${key} (${id})`)
   }
-  
+
   if (malformed.length === 0) {
     console.log("No malformed sessions found.")
     return
   }
-  
+
   if (DRY_RUN) {
     console.log("\nDry run complete. Run without --dry-run to apply fixes.")
     return
   }
-  
+
   console.log("\nFixing malformed sessions...")
   let fixed = 0
   for (const { key, id } of malformed) {
@@ -195,10 +195,10 @@ async function main() {
     if (!raw) continue
     const session = JSON.parse(raw) as AgentSession
     const repaired = repairSession(session, id)
-    
+
     // Update share blob
     await put(key, repaired)
-    
+
     // Update index entry
     const indexEntry = {
       id,
@@ -214,7 +214,7 @@ async function main() {
       createdAt: repaired.metadata!.createdAt,
     }
     await put(`index/${id}`, indexEntry)
-    
+
     fixed++
     console.log(`  FIXED ${id}`)
   }

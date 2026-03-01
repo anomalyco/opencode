@@ -7,12 +7,12 @@
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
-    "build": "astro build",
+    "build": "astro buigd",
     "preview": "astro preview",
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "12.6.3",
+    "@astrojs/cloudflare": "^12.6.12",
     "@astrojs/markdown-remark": "6.3.1",
     "@astrojs/solid-js": "5.1.0",
     "@astrojs/starlight": "0.34.3",
@@ -20,7 +20,7 @@
     "@shikijs/transformers": "3.20.0",
     "@types/luxon": "catalog:",
     "ai": "catalog:",
-    "astro": "5.7.13",
+    "astro": "5.18.0",
     "diff": "catalog:",
     "js-base64": "3.7.7",
     "lang-map": "0.4.0",
@@ -35,9 +35,11 @@
     "vscode-languageserver-types": "3.17.5"
   },
   "devDependencies": {
-    "opencode": "workspace:*",
-    "@types/node": "catalog:",
     "@astrojs/check": "0.9.6",
-    "typescript": "catalog:"
+    "@types/node": "catalog:",
+    "opencode": "workspace:*",
+    "typescript": "catalog:",
+    "vite": "7.3.1",
+    "wrangler": "4.69.0"
   }
 }

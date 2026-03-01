@@ -90,18 +90,18 @@ async function deleteKey(key: string): Promise<void> {
 function isMalformed(session: AgentSession): boolean {
   // Missing session object entirely
   if (!session.session) return true
-  
+
   // Empty session object (no properties)
   const sessionObj = session.session
   const keys = Object.keys(sessionObj)
   if (keys.length === 0) return true
-  
+
   // Missing required fields that the UI expects
   if (!sessionObj.id && !sessionObj.time) return true
-  
+
   // Missing metadata
   if (!session.metadata) return true
-  
+
   return false
 }
 
@@ -109,19 +109,19 @@ async function main() {
   console.log("Listing share/ keys from R2...")
   const shareKeys = await listKeys("share/")
   console.log(`Found ${shareKeys.length} sessions`)
-  
+
   const malformed: { key: string; id: string; reason: string }[] = []
-  
+
   for (const key of shareKeys) {
     const id = key.replace("share/", "")
     if (!id) continue
-    
+
     const raw = await read(key)
     if (!raw) {
       malformed.push({ key, id, reason: "empty blob" })
       continue
     }
-    
+
     let session: AgentSession
     try {
       session = JSON.parse(raw) as AgentSession
@@ -129,27 +129,27 @@ async function main() {
       malformed.push({ key, id, reason: "invalid JSON" })
       continue
     }
-    
+
     if (isMalformed(session)) {
       malformed.push({ key, id, reason: "malformed session object" })
     }
   }
-  
+
   console.log(`\nMalformed sessions: ${malformed.length}`)
   for (const { key, id, reason } of malformed) {
     console.log(`  ${key} (${id}) - ${reason}`)
   }
-  
+
   if (malformed.length === 0) {
     console.log("No malformed sessions found.")
     return
   }
-  
+
   if (DRY_RUN) {
     console.log("\nDry run complete. Run without --dry-run to delete.")
     return
   }
-  
+
   console.log("\nDeleting malformed sessions and their index entries...")
   let deleted = 0
   for (const { key, id } of malformed) {

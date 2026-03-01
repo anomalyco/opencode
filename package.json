@@ -68,6 +68,7 @@
   },
   "devDependencies": {
     "@actions/artifact": "5.0.1",
+    "@biomejs/biome": "2.4.4",
     "@tsconfig/bun": "catalog:",
     "@types/mime-types": "3.0.1",
     "glob": "13.0.5",

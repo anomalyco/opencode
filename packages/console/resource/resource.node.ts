@@ -2,6 +2,9 @@ import type { KVNamespaceListOptions, KVNamespaceListResult, KVNamespacePutOptio
 import { Resource as ResourceBase } from "sst"
 import Cloudflare from "cloudflare"
 
+interface Env {
+  CLOUDFLARE_DEFAULT_ACCOUNT_ID
+}
 export const waitUntil = async (promise: Promise<any>) => {
   await promise
 }
