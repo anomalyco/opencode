@@ -1,6 +1,6 @@
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { batch, createContext, Show, useContext, type JSX, type ParentProps } from "solid-js"
-import { useTheme } from "@tui/context/theme"
+import { tint, useTheme } from "@tui/context/theme"
 import { MouseButton, Renderable, RGBA } from "@opentui/core"
 import { createStore } from "solid-js/store"
 import { useToast } from "./toast"
@@ -14,10 +14,14 @@ export function Dialog(
   }>,
 ) {
   const dimensions = useTerminalDimensions()
-  const { theme } = useTheme()
+  const { mode, theme } = useTheme()
   const renderer = useRenderer()
 
   let dismiss = false
+  const overlay = () => {
+    if (theme.background.a !== 0) return RGBA.fromInts(0, 0, 0, 150)
+    return tint(theme.backgroundPanel, RGBA.fromInts(0, 0, 0), mode() === "dark" ? 0.45 : 0.18)
+  }
 
   return (
     <box
@@ -38,7 +42,7 @@ export function Dialog(
       paddingTop={dimensions().height / 4}
       left={0}
       top={0}
-      backgroundColor={RGBA.fromInts(0, 0, 0, 150)}
+      backgroundColor={overlay()}
     >
       <box
         onMouseUp={(e) => {
