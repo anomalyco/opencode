@@ -334,8 +334,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         ...(metadata ?? {}),
         ...project,
         icon: {
-          url: metadata?.icon?.url,
-          override: metadata?.icon?.override ?? childStore.icon,
+          url: metadata?.icon?.url ?? metadata?.icon?.override ?? childStore.icon,
+          override: metadata?.icon?.override ?? metadata?.icon?.url ?? childStore.icon,
           color: metadata?.icon?.color,
         },
       }
@@ -429,7 +429,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       for (const project of projects) {
         if (!project.id) continue
         if (project.id === "global") continue
-        globalSync.project.icon(project.worktree, project.icon?.override)
+        globalSync.project.icon(project.worktree, project.icon?.url ?? project.icon?.override)
       }
     })
 

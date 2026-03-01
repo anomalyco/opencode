@@ -14,9 +14,31 @@ import { GlobalBus } from "@/bus/global"
 import { existsSync } from "fs"
 import { git } from "../util/git"
 import { Glob } from "../util/glob"
+import { ConfigPaths } from "@/config/paths"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
+  const IconConfig = z.union([
+    z.string(),
+    z
+      .object({
+        path: z.string().optional(),
+        url: z.string().optional(),
+        color: z.string().optional(),
+      })
+      .strict(),
+  ])
+  const ProjectConfig = z
+    .object({
+      icon: IconConfig.optional(),
+      project: z
+        .object({
+          icon: IconConfig.optional(),
+        })
+        .strict()
+        .optional(),
+    })
+    .passthrough()
 
   function gitpath(cwd: string, name: string) {
     if (!name) return cwd
@@ -28,6 +50,47 @@ export namespace Project {
 
     if (path.isAbsolute(name)) return path.normalize(name)
     return path.resolve(cwd, name)
+  }
+
+  async function iconURL(file: string, input: string) {
+    if (input.startsWith("data:")) return input
+    if (input.startsWith("http://") || input.startsWith("https://")) return input
+    const target = path.isAbsolute(input) ? input : path.resolve(path.dirname(file), input)
+    const buffer = await Filesystem.readBytes(target)
+    const base64 = buffer.toString("base64")
+    const mime = Filesystem.mimeType(target) || "image/png"
+    return `data:${mime};base64,${base64}`
+  }
+
+  async function configuredIcon(directory: string, worktree: string) {
+    if (Flag.OPENCODE_DISABLE_PROJECT_CONFIG) return
+    const files = await ConfigPaths.projectFiles("opencode", directory, worktree)
+    const resolved = await iife(async () => {
+      let icon: z.infer<typeof IconConfig> | undefined
+      let file: string | undefined
+      for (const item of files) {
+        const text = await ConfigPaths.readFile(item)
+        if (!text) continue
+        const json = await ConfigPaths.parseText(text, item, "empty").catch(() => undefined)
+        if (!json) continue
+        const parsed = ProjectConfig.safeParse(json)
+        if (!parsed.success) continue
+        const configured = parsed.data.icon ?? parsed.data.project?.icon
+        if (!configured) continue
+        icon = configured
+        file = item
+      }
+      if (!icon || !file) return
+      const config = typeof icon === "string" ? { path: icon } : icon
+      const ref = config.url ?? config.path
+      const url = ref ? await iconURL(file, ref).catch(() => undefined) : undefined
+      if (!url && !config.color) return
+      return {
+        url,
+        color: config.color,
+      }
+    })
+    return resolved
   }
 
   export const Info = z
@@ -69,7 +132,7 @@ export namespace Project {
   export function fromRow(row: Row): Info {
     const icon =
       row.icon_url || row.icon_color
-        ? { url: row.icon_url ?? undefined, color: row.icon_color ?? undefined }
+        ? { url: row.icon_url ?? undefined, override: row.icon_url ?? undefined, color: row.icon_color ?? undefined }
         : undefined
     return {
       id: row.id,
@@ -222,10 +285,28 @@ export namespace Project {
       return fresh
     })
 
-    if (Flag.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY) discover(existing)
+    const icon = await configuredIcon(directory, data.worktree)
+      .then((item) => {
+        if (!item) return existing.icon
+        return {
+          ...existing.icon,
+          ...item,
+          override: item.url ?? existing.icon?.override,
+        }
+      })
+      .catch((error) => {
+        log.warn("failed to load project icon from config", { error, directory, worktree: data.worktree })
+        return existing.icon
+      })
+    const seeded = {
+      ...existing,
+      icon,
+    }
+
+    if (Flag.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY) discover(seeded)
 
     const result: Info = {
-      ...existing,
+      ...seeded,
       worktree: data.worktree,
       vcs: data.vcs as Info["vcs"],
       time: {
@@ -241,7 +322,7 @@ export namespace Project {
       worktree: result.worktree,
       vcs: result.vcs ?? null,
       name: result.name,
-      icon_url: result.icon?.url,
+      icon_url: result.icon?.url ?? result.icon?.override,
       icon_color: result.icon?.color,
       time_created: result.time.created,
       time_updated: result.time.updated,
@@ -253,7 +334,7 @@ export namespace Project {
       worktree: result.worktree,
       vcs: result.vcs ?? null,
       name: result.name,
-      icon_url: result.icon?.url,
+      icon_url: result.icon?.url ?? result.icon?.override,
       icon_color: result.icon?.color,
       time_updated: result.time.updated,
       time_initialized: result.time.initialized,
@@ -359,7 +440,7 @@ export namespace Project {
           .update(ProjectTable)
           .set({
             name: input.name,
-            icon_url: input.icon?.url,
+            icon_url: input.icon?.url ?? input.icon?.override,
             icon_color: input.icon?.color,
             commands: input.commands,
             time_updated: Date.now(),

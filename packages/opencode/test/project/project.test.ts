@@ -202,6 +202,52 @@ describe("Project.fromDirectory with worktrees", () => {
 })
 
 describe("Project.discover", () => {
+  test("should prefer top-level icon configured in opencode.json", async () => {
+    const p = await loadProject()
+    const iconData = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0xaa, 0xbb, 0xcc])
+    await using tmp = await tmpdir({
+      git: true,
+      config: {
+        icon: {
+          path: "./project-icon.png",
+          color: "#123456",
+        },
+      },
+    })
+    await Bun.write(path.join(tmp.path, "project-icon.png"), iconData)
+    await Bun.write(path.join(tmp.path, "favicon.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]))
+
+    const { project } = await p.fromDirectory(tmp.path)
+
+    expect(project.icon?.url).toContain(iconData.toString("base64"))
+    expect(project.icon?.override).toContain(iconData.toString("base64"))
+    expect(project.icon?.color).toBe("#123456")
+  })
+
+  test("should prefer project icon configured in opencode.json", async () => {
+    const p = await loadProject()
+    const iconData = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0xaa, 0xbb, 0xcc])
+    await using tmp = await tmpdir({
+      git: true,
+      config: {
+        project: {
+          icon: {
+            path: "./project-icon.png",
+            color: "#123456",
+          },
+        },
+      },
+    })
+    await Bun.write(path.join(tmp.path, "project-icon.png"), iconData)
+    await Bun.write(path.join(tmp.path, "favicon.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]))
+
+    const { project } = await p.fromDirectory(tmp.path)
+
+    expect(project.icon?.url).toContain(iconData.toString("base64"))
+    expect(project.icon?.override).toContain(iconData.toString("base64"))
+    expect(project.icon?.color).toBe("#123456")
+  })
+
   test("should discover favicon.png in root", async () => {
     const p = await loadProject()
     await using tmp = await tmpdir({ git: true })
@@ -279,6 +325,23 @@ describe("Project.update", () => {
 
     const fromDb = Project.get(project.id)
     expect(fromDb?.icon?.color).toBe("#ff0000")
+  })
+
+  test("should map icon override to stored url", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await Project.fromDirectory(tmp.path)
+
+    const updated = await Project.update({
+      projectID: project.id,
+      icon: { override: "https://example.com/override.png" },
+    })
+
+    expect(updated.icon?.url).toBe("https://example.com/override.png")
+    expect(updated.icon?.override).toBe("https://example.com/override.png")
+
+    const fromDb = Project.get(project.id)
+    expect(fromDb?.icon?.url).toBe("https://example.com/override.png")
+    expect(fromDb?.icon?.override).toBe("https://example.com/override.png")
   })
 
   test("should update commands", async () => {
