@@ -115,8 +115,8 @@ const table = sqliteTable("session", {
 ## Cursor Cloud specific instructions
 
 - **Runtime**: Bun 1.3.10 is required (`packageManager` field in root `package.json`). The update script installs it automatically.
-- **Dev commands**: see `CONTRIBUTING.md` for all `bun dev` subcommands (`serve`, `web`, etc.). `bun dev serve` starts the headless API server on port 4096; the web UI is built into the server and served at the same port.
+- **Dev commands**: see `CONTRIBUTING.md` for all `bun dev` subcommands (`serve`, `web`, etc.). `bun dev serve` starts the headless API server on port 4096 and proxies/hosts the web UI on the same port (by default from `https://app.opencode.ai`; for local UI development, run the web app from `packages/app`, e.g. `bun dev web`).
 - **Typecheck**: `bun typecheck` from repo root runs turbo typecheck across all packages (includes building dependencies first).
 - **Tests**: run `bun test --timeout 30000` from `packages/opencode` (not from repo root). The pre-push hook also runs typecheck.
 - **No external services needed**: The core product uses an embedded SQLite database. No Docker, PostgreSQL, or Redis is required for local development.
-- **AI provider keys**: An AI provider API key (e.g. `ANTHROPIC_API_KEY`) is needed to actually use the agent for chat, but the server starts and serves the web UI without one.
+- **AI provider keys**: An AI provider API key (e.g. `ANTHROPIC_API_KEY`) is needed to actually use the agent for chat, but the server still starts and can present the web UI (via the hosted or local app) without one.
