@@ -1,4 +1,4 @@
-import { For, createEffect, createMemo, on, onCleanup, Show, type JSX } from "solid-js"
+import { For, createEffect, createMemo, on, onCleanup, Show, startTransition, type JSX } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { useNavigate, useParams } from "@solidjs/router"
 import { Button } from "@opencode-ai/ui/button"
@@ -81,6 +81,103 @@ const markBoundaryGesture = (input: {
   }
 }
 
+type StageConfig = {
+  init: number
+  batch: number
+}
+
+type TimelineStageInput = {
+  sessionKey: () => string
+  turnStart: () => number
+  messages: () => UserMessage[]
+  config: StageConfig
+}
+
+/**
+ * Defer-mounts small timeline windows so revealing older turns does not
+ * block first paint with a large DOM mount.
+ *
+ * Once staging completes for a session it never re-stages — backfill and
+ * new messages render immediately.
+ */
+function createTimelineStaging(input: TimelineStageInput) {
+  const [state, setState] = createStore({
+    activeSession: "",
+    completedSession: "",
+    count: 0,
+  })
+
+  const stagedCount = createMemo(() => {
+    const total = input.messages().length
+    if (input.turnStart() <= 0) return total
+    if (state.completedSession === input.sessionKey()) return total
+    const init = Math.min(total, input.config.init)
+    if (state.count <= init) return init
+    if (state.count >= total) return total
+    return state.count
+  })
+
+  const stagedUserMessages = createMemo(() => {
+    const list = input.messages()
+    const count = stagedCount()
+    if (count >= list.length) return list
+    return list.slice(Math.max(0, list.length - count))
+  })
+
+  let frame: number | undefined
+  const cancel = () => {
+    if (frame === undefined) return
+    cancelAnimationFrame(frame)
+    frame = undefined
+  }
+
+  createEffect(
+    on(
+      () => [input.sessionKey(), input.turnStart() > 0, input.messages().length] as const,
+      ([sessionKey, isWindowed, total]) => {
+        cancel()
+        const shouldStage =
+          isWindowed &&
+          total > input.config.init &&
+          state.completedSession !== sessionKey &&
+          state.activeSession !== sessionKey
+        if (!shouldStage) {
+          setState({ activeSession: "", count: total })
+          return
+        }
+
+        let count = Math.min(total, input.config.init)
+        setState({ activeSession: sessionKey, count })
+
+        const step = () => {
+          if (input.sessionKey() !== sessionKey) {
+            frame = undefined
+            return
+          }
+          const currentTotal = input.messages().length
+          count = Math.min(currentTotal, count + input.config.batch)
+          startTransition(() => setState("count", count))
+          if (count >= currentTotal) {
+            setState({ completedSession: sessionKey, activeSession: "" })
+            frame = undefined
+            return
+          }
+          frame = requestAnimationFrame(step)
+        }
+        frame = requestAnimationFrame(step)
+      },
+    ),
+  )
+
+  const isStaging = createMemo(() => {
+    const key = input.sessionKey()
+    return state.activeSession === key && state.completedSession !== key
+  })
+
+  onCleanup(cancel)
+  return { messages: stagedUserMessages, isStaging }
+}
+
 export function MessageTimeline(props: {
   mobileChanges: boolean
   mobileFallback: JSX.Element
@@ -93,11 +190,11 @@ export function MessageTimeline(props: {
   hasScrollGesture: () => boolean
   isDesktop: boolean
   onScrollSpyScroll: () => void
+  onTurnBackfillScroll: () => void
   onAutoScrollInteraction: (event: MouseEvent) => void
   centered: boolean
   setContentRef: (el: HTMLDivElement) => void
   turnStart: number
-  onRenderEarlier: () => void
   historyMore: boolean
   historyLoading: boolean
   onLoadEarlier: () => void
@@ -126,6 +223,13 @@ export function MessageTimeline(props: {
   const titleValue = createMemo(() => info()?.title)
   const parentID = createMemo(() => info()?.parentID)
   const showHeader = createMemo(() => !!(titleValue() || parentID()))
+  const stageCfg = { init: 1, batch: 3 }
+  const staging = createTimelineStaging({
+    sessionKey,
+    turnStart: () => props.turnStart,
+    messages: () => props.renderedUserMessages,
+    config: stageCfg,
+  })
 
   const [title, setTitle] = createStore({
     draft: "",
@@ -342,8 +446,10 @@ export function MessageTimeline(props: {
         <div
           class="absolute left-1/2 -translate-x-1/2 bottom-6 z-[60] pointer-events-none transition-all duration-200 ease-out"
           classList={{
-            "opacity-100 translate-y-0 scale-100": props.scroll.overflow && !props.scroll.bottom,
-            "opacity-0 translate-y-2 scale-95 pointer-events-none": !props.scroll.overflow || props.scroll.bottom,
+            "opacity-100 translate-y-0 scale-100":
+              props.scroll.overflow && !props.scroll.bottom && !staging.isStaging(),
+            "opacity-0 translate-y-2 scale-95 pointer-events-none":
+              !props.scroll.overflow || props.scroll.bottom || staging.isStaging(),
           }}
         >
           <button
@@ -392,6 +498,7 @@ export function MessageTimeline(props: {
           }}
           onScroll={(e) => {
             props.onScheduleScrollState(e.currentTarget)
+            props.onTurnBackfillScroll()
             if (!props.hasScrollGesture()) return
             props.onAutoScrollHandleScroll()
             props.onMarkScrollGesture(e.currentTarget)
@@ -529,14 +636,7 @@ export function MessageTimeline(props: {
               "mt-0": !props.centered,
             }}
           >
-            <Show when={props.turnStart > 0}>
-              <div class="w-full flex justify-center">
-                <Button variant="ghost" size="large" class="text-12-medium opacity-50" onClick={props.onRenderEarlier}>
-                  {language.t("session.messages.renderEarlier")}
-                </Button>
-              </div>
-            </Show>
-            <Show when={props.historyMore}>
+            <Show when={props.turnStart > 0 || props.historyMore}>
               <div class="w-full flex justify-center">
                 <Button
                   variant="ghost"
@@ -551,9 +651,10 @@ export function MessageTimeline(props: {
                 </Button>
               </div>
             </Show>
-            <For each={props.renderedUserMessages}>
+            <For each={staging.messages()}>
               {(message) => {
                 const comments = createMemo(() => messageComments(sync.data.part[message.id] ?? []))
+                const commentCount = createMemo(() => comments().length)
                 return (
                   <div
                     id={props.anchor(message.id)}
@@ -566,8 +667,9 @@ export function MessageTimeline(props: {
                       "min-w-0 w-full max-w-full": true,
                       "md:max-w-200 2xl:max-w-[1000px]": props.centered,
                     }}
+                    style={{ "content-visibility": "auto", "contain-intrinsic-size": "auto 500px" }}
                   >
-                    <Show when={comments().length > 0}>
+                    <Show when={commentCount() > 0}>
                       <div class="w-full px-4 md:px-5 pb-2">
                         <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
                           <div class="flex w-max min-w-full justify-end gap-2">
