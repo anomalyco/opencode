@@ -77,6 +77,7 @@ let cli = yargs(hideBin(process.argv))
 
     process.env.AGENT = "1"
     process.env.OPENCODE = "1"
+    process.env.OPENCODE_PID = String(process.pid)
 
     Log.Default.info("opencode", {
       version: Installation.VERSION,
