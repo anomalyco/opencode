@@ -2073,7 +2073,7 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
   function title(file: { type: string; relativePath: string; filePath: string; deletions: number }) {
     if (file.type === "delete") return "# " + t("tool.deleted") + file.relativePath
     if (file.type === "add") return "# " + t("tool.created") + file.relativePath
-    if (file.type === "move") return "# Moved " + normalizePath(file.filePath) + t("tool.moved.to") + file.relativePath
+    if (file.type === "move") return "# " + t("tool.moved") + " " + normalizePath(file.filePath) + t("tool.moved.to") + file.relativePath
     return "← " + t("tool.patched") + file.relativePath
   }
 
