@@ -23,6 +23,22 @@ export type ProviderContext = {
   options: Record<string, any>
 }
 
+export type SettingDefinition = {
+  type: "string" | "number" | "boolean" | "select" | "secret"
+  title: string
+  description?: string
+  default?: unknown
+  required?: boolean
+  placeholder?: string
+  enum?: string[]
+  enumLabels?: string[]
+}
+
+export type PluginSettingsSchema = {
+  id: string
+  title: string
+  properties: Record<string, SettingDefinition>
+}
 export type PluginInput = {
   client: ReturnType<typeof createOpencodeClient>
   project: Project
@@ -146,6 +162,7 @@ export type AuthOuathResult = { url: string; instructions: string } & (
 )
 
 export interface Hooks {
+  settings?: PluginSettingsSchema
   event?: (input: { event: Event }) => Promise<void>
   config?: (input: Config) => Promise<void>
   tool?: {

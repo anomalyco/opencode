@@ -1337,6 +1337,11 @@ export type Config = {
     ignore?: Array<string>
   }
   plugin?: Array<string>
+  plugin_settings?: {
+    [key: string]: {
+      [key: string]: unknown
+    }
+  }
   snapshot?: boolean
   /**
    * Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing
@@ -2347,6 +2352,70 @@ export type ConfigUpdateResponses = {
 }
 
 export type ConfigUpdateResponse = ConfigUpdateResponses[keyof ConfigUpdateResponses]
+
+export type ConfigPluginSettingsGetData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/config/plugin-settings"
+}
+
+export type ConfigPluginSettingsGetResponses = {
+  /**
+   * Plugin settings schemas and values
+   */
+  200: {
+    schemas: Array<unknown>
+    values: {
+      [key: string]: {
+        [key: string]: unknown
+      }
+    }
+  }
+}
+
+export type ConfigPluginSettingsGetResponse = ConfigPluginSettingsGetResponses[keyof ConfigPluginSettingsGetResponses]
+
+export type ConfigPluginSettingsUpdateData = {
+  body?: {
+    plugin_id: string
+    settings: {
+      [key: string]: unknown
+    }
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/config/plugin-settings"
+}
+
+export type ConfigPluginSettingsUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ConfigPluginSettingsUpdateError = ConfigPluginSettingsUpdateErrors[keyof ConfigPluginSettingsUpdateErrors]
+
+export type ConfigPluginSettingsUpdateResponses = {
+  /**
+   * Successfully updated plugin settings
+   */
+  200: {
+    plugin_settings: {
+      [key: string]: {
+        [key: string]: unknown
+      }
+    }
+  }
+}
+
+export type ConfigPluginSettingsUpdateResponse =
+  ConfigPluginSettingsUpdateResponses[keyof ConfigPluginSettingsUpdateResponses]
 
 export type ConfigProvidersData = {
   body?: never

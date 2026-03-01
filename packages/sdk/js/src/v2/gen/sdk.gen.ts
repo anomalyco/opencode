@@ -16,6 +16,9 @@ import type {
   CommandListResponses,
   Config as Config3,
   ConfigGetResponses,
+  ConfigPluginSettingsGetResponses,
+  ConfigPluginSettingsUpdateErrors,
+  ConfigPluginSettingsUpdateResponses,
   ConfigProvidersResponses,
   ConfigUpdateErrors,
   ConfigUpdateResponses,
@@ -652,6 +655,70 @@ export class Pty extends HeyApiClient {
   }
 }
 
+export class PluginSettings extends HeyApiClient {
+  /**
+   * Get plugin settings
+   *
+   * Retrieve plugin settings schemas and current values.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<ConfigPluginSettingsGetResponses, unknown, ThrowOnError>({
+      url: "/config/plugin-settings",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update plugin settings
+   *
+   * Update settings for a specific plugin.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      plugin_id?: string
+      settings?: {
+        [key: string]: unknown
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "plugin_id" },
+            { in: "body", key: "settings" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      ConfigPluginSettingsUpdateResponses,
+      ConfigPluginSettingsUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/config/plugin-settings",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Config2 extends HeyApiClient {
   /**
    * Get configuration
@@ -724,6 +791,11 @@ export class Config2 extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _pluginSettings?: PluginSettings
+  get pluginSettings(): PluginSettings {
+    return (this._pluginSettings ??= new PluginSettings({ client: this.client }))
   }
 }
 

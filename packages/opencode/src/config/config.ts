@@ -997,6 +997,7 @@ export namespace Config {
         })
         .optional(),
       plugin: z.string().array().optional(),
+      plugin_settings: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
       snapshot: z.boolean().optional(),
       share: z
         .enum(["manual", "auto", "disabled"])

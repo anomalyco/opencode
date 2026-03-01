@@ -6,6 +6,7 @@ import { Provider } from "../../provider/provider"
 import { mapValues } from "remeda"
 import { errors } from "../error"
 import { Log } from "../../util/log"
+import { Plugin } from "../../plugin"
 import { lazy } from "../../util/lazy"
 
 const log = Log.create({ service: "server" })
@@ -56,6 +57,74 @@ export const ConfigRoutes = lazy(() =>
         const config = c.req.valid("json")
         await Config.update(config)
         return c.json(config)
+      },
+    )
+    .get(
+      "/plugin-settings",
+      describeRoute({
+        summary: "Get plugin settings",
+        description: "Retrieve plugin settings schemas and current values.",
+        operationId: "config.pluginSettings.get",
+        responses: {
+          200: {
+            description: "Plugin settings schemas and values",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    schemas: z.array(z.unknown()),
+                    values: z.record(z.string(), z.record(z.string(), z.unknown())),
+                  }),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const [schemas, config] = await Promise.all([Plugin.schemas(), Config.get()])
+        return c.json({
+          schemas,
+          values: config.plugin_settings ?? {},
+        })
+      },
+    )
+    .patch(
+      "/plugin-settings",
+      describeRoute({
+        summary: "Update plugin settings",
+        description: "Update settings for a specific plugin.",
+        operationId: "config.pluginSettings.update",
+        responses: {
+          200: {
+            description: "Successfully updated plugin settings",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    plugin_settings: z.record(z.string(), z.record(z.string(), z.unknown())),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          plugin_id: z.string(),
+          settings: z.record(z.string(), z.unknown()),
+        }),
+      ),
+      async (c) => {
+        const body = c.req.valid("json")
+        const config = await Config.get()
+        const current = config.plugin_settings ?? {}
+        const updated = { ...current, [body.plugin_id]: body.settings }
+        await Config.update({ plugin_settings: updated })
+        return c.json({ plugin_settings: updated })
       },
     )
     .get(
