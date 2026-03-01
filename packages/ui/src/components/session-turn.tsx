@@ -192,16 +192,29 @@ export function SessionTurn(
       (item): item is AssistantMessage => item.role === "assistant" && typeof item.time.completed !== "number",
     )
   })
+
+  const pendingUser = createMemo(() => {
+    const item = pending()
+    if (!item?.parentID) return
+    const messages = allMessages() ?? emptyMessages
+    const result = Binary.search(messages, item.parentID, (m) => m.id)
+    if (!result.found) return
+    const msg = messages[result.index]
+    if (!msg || msg.role !== "user") return
+    return msg
+  })
+
   const active = createMemo(() => {
     const msg = message()
-    const item = pending()
-    if (!msg || !item) return false
-    return item.parentID === msg.id
+    const parent = pendingUser()
+    if (!msg || !parent) return false
+    return parent.id === msg.id
   })
 
   const queued = createMemo(() => {
     const id = message()?.id
     if (!id) return false
+    if (!pendingUser()) return false
     const item = pending()
     if (!item) return false
     return id > item.id
