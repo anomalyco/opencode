@@ -193,3 +193,36 @@ You can configure to use a different trigger phrase than `@opencode`.
   ```
 
   OpenCode will review the merge request and provide feedback.
+
+---
+
+## GitLab Duo Agent Platform (DAP)
+
+:::caution[Experimental]
+GitLab Duo Agent Platform (DAP) workflow models are an experimental feature.
+The API surface and behavior may change in future releases.
+:::
+
+OpenCode supports GitLab Duo Agent Platform (DAP) workflow models, which route
+tool execution through GitLab's Duo Workflow Service (DWS). This provides an
+alternative to the standard agentic chat path and enables tighter integration
+with GitLab's AI infrastructure.
+
+### How it works
+
+1. Select a `duo-workflow-*` model via the `/models` command.
+2. OpenCode discovers available models from your GitLab namespace.
+3. If multiple models are available, a selection picker is presented.
+4. Your selection is cached to disk for fast subsequent startups.
+5. Tool execution requests are routed through OpenCode's permission-gated tool
+   system via the Duo Workflow Service.
+
+### Requirements
+
+- `@gitlab/gitlab-ai-provider` version `4.0.0` or later
+- Duo Agent Platform enabled for your GitLab user, group, or instance
+- Feature flags `duo_agent_platform_agentic_chat` and `duo_agent_platform`
+  enabled (see [provider configuration](/providers#gitlab-dap))
+
+For full provider setup and configuration details, see the
+[GitLab Duo provider documentation](/providers#gitlab-duo).

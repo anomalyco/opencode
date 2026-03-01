@@ -810,6 +810,51 @@ Customize through `opencode.json`:
 }
 ```
 
+##### GitLab Duo Agent Platform (DAP) Workflow Models {#gitlab-dap}
+
+:::caution[Experimental]
+GitLab Duo Agent Platform (DAP) workflow models are an experimental feature.
+The API surface and behavior may change in future releases.
+:::
+
+DAP workflow models provide an alternative execution path that routes tool calls
+through GitLab's Duo Workflow Service (DWS) instead of the standard agentic chat.
+When a `duo-workflow-*` model is selected, OpenCode will:
+
+1. Discover available models from your GitLab namespace
+2. Present a selection picker if multiple models are available
+3. Cache the selected model to disk for fast subsequent startups
+4. Route tool execution requests through OpenCode's permission-gated tool system
+
+Available DAP workflow models follow the `duo-workflow-*` naming convention and
+are dynamically discovered from your GitLab instance.
+
+To enable DAP workflow models, ensure the following feature flags are set in your
+`opencode.json`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "gitlab": {
+      "options": {
+        "featureFlags": {
+          "duo_agent_platform_agentic_chat": true,
+          "duo_agent_platform": true
+        }
+      }
+    }
+  }
+}
+```
+
+:::note
+Your GitLab administrator must enable the Duo Agent Platform for your user,
+group, or instance. See
+[GitLab Duo setup](https://docs.gitlab.com/user/gitlab_duo/turn_on_off/) for
+details.
+:::
+
 ##### GitLab API Tools (Optional, but highly recommended)
 
 To access GitLab tools (merge requests, issues, pipelines, CI/CD, etc.):
