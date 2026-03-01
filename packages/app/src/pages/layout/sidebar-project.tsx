@@ -128,7 +128,7 @@ const ProjectTile = (props: {
           aria-label={displayName(props.project)}
           data-action="project-switch"
           data-project={base64Encode(props.project.worktree)}
-          class="relative z-10 flex items-center justify-center size-full rounded-md overflow-hidden transition-colors cursor-default bg-background-base"
+          class="relative z-10 flex items-center justify-center size-full rounded-md overflow-hidden transition-colors cursor-default bg-background-base hover:bg-surface-base-hover"
           onMouseEnter={(event: MouseEvent) => {
             if (!props.overlay()) return
             if (props.suppressHover()) return
