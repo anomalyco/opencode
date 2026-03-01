@@ -139,7 +139,6 @@ export function SessionTurn(
   props: ParentProps<{
     sessionID: string
     messageID: string
-    lastUserMessageID?: string
     showReasoningSummaries?: boolean
     shellToolDefaultOpen?: boolean
     editToolDefaultOpen?: boolean
@@ -199,19 +198,6 @@ export function SessionTurn(
     if (!msg || !item) return false
     return item.parentID === msg.id
   })
-
-  const lastUserMessageID = createMemo(() => {
-    if (props.lastUserMessageID) return props.lastUserMessageID
-
-    const messages = allMessages() ?? emptyMessages
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const msg = messages[i]
-      if (msg?.role === "user") return msg.id
-    }
-    return undefined
-  })
-
-  const isLastUserMessage = createMemo(() => props.messageID === lastUserMessageID())
 
   const parts = createMemo(() => {
     const msg = message()
