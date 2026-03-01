@@ -882,13 +882,6 @@ export type EventSessionError = {
   }
 }
 
-export type EventVcsBranchUpdated = {
-  type: "vcs.branch.updated"
-  properties: {
-    branch?: string
-  }
-}
-
 export type EventWorkspaceReady = {
   type: "workspace.ready"
   properties: {
@@ -957,6 +950,57 @@ export type EventWorktreeFailed = {
   }
 }
 
+export type EventVcsBranchUpdated = {
+  type: "vcs.branch.updated"
+  properties: {
+    branch?: string
+  }
+}
+
+export type PrInfo = {
+  number: number
+  url: string
+  title: string
+  state: "OPEN" | "CLOSED" | "MERGED"
+  headRefName: string
+  baseRefName: string
+  isDraft: boolean
+  mergeable: "MERGEABLE" | "CONFLICTING" | "UNKNOWN"
+  reviewDecision?: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | null
+  checksState?: "SUCCESS" | "FAILURE" | "PENDING" | null
+  checksUrl?: string
+  checksSummary?: {
+    total: number
+    passed: number
+    failed: number
+    pending: number
+    skipped: number
+  }
+  unresolvedCommentCount?: number
+}
+
+export type GithubCapability = {
+  available: boolean
+  authenticated: boolean
+  repo?: {
+    owner: string
+    name: string
+  }
+  host?: string
+}
+
+export type EventVcsUpdated = {
+  type: "vcs.updated"
+  properties: {
+    branch?: string
+    defaultBranch?: string
+    branches?: Array<string>
+    dirty?: number
+    pr?: PrInfo
+    github?: GithubCapability
+  }
+}
+
 export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
@@ -994,7 +1038,6 @@ export type Event =
   | EventSessionDeleted
   | EventSessionDiff
   | EventSessionError
-  | EventVcsBranchUpdated
   | EventWorkspaceReady
   | EventWorkspaceFailed
   | EventPtyCreated
@@ -1003,6 +1046,8 @@ export type Event =
   | EventPtyDeleted
   | EventWorktreeReady
   | EventWorktreeFailed
+  | EventVcsBranchUpdated
+  | EventVcsUpdated
 
 export type GlobalEvent = {
   directory: string
@@ -1851,6 +1896,58 @@ export type File = {
   status: "added" | "deleted" | "modified"
 }
 
+export type VcsInfo = {
+  branch: string
+  defaultBranch?: string
+  branches?: Array<string>
+  dirty?: number
+  pr?: PrInfo
+  github?: GithubCapability
+}
+
+export type PrCreateInput = {
+  title: string
+  body: string
+  base?: string
+  draft?: boolean
+}
+
+export type ReviewComment = {
+  id: number
+  author: string
+  body: string
+  path: string
+  line: number | null
+  diffHunk?: string
+}
+
+export type ReviewThread = {
+  id: string
+  isResolved: boolean
+  path: string
+  line: number | null
+  comments: Array<ReviewComment>
+}
+
+export type PrCommentsResponse = {
+  threads: Array<ReviewThread>
+  promptBlock: string
+  unresolvedCount: number
+}
+
+export type PrMergeInput = {
+  strategy?: "merge" | "squash" | "rebase"
+  deleteBranch?: boolean
+}
+
+export type PrDeleteBranchInput = {
+  branch: string
+}
+
+export type VcsCommitInput = {
+  message: string
+}
+
 export type McpStatusConnected = {
   status: "connected"
 }
@@ -1886,10 +1983,6 @@ export type Path = {
   config: string
   worktree: string
   directory: string
-}
-
-export type VcsInfo = {
-  branch: string
 }
 
 export type Command = {
@@ -4248,6 +4341,207 @@ export type EventSubscribeResponses = {
 
 export type EventSubscribeResponse = EventSubscribeResponses[keyof EventSubscribeResponses]
 
+export type VcsGetData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/vcs"
+}
+
+export type VcsGetResponses = {
+  /**
+   * VCS info
+   */
+  200: VcsInfo
+}
+
+export type VcsGetResponse = VcsGetResponses[keyof VcsGetResponses]
+
+export type VcsBranchesData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/vcs/branches"
+}
+
+export type VcsBranchesResponses = {
+  /**
+   * Branch list
+   */
+  200: Array<string>
+}
+
+export type VcsBranchesResponse = VcsBranchesResponses[keyof VcsBranchesResponses]
+
+export type VcsPrGetData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/vcs/pr"
+}
+
+export type VcsPrGetResponses = {
+  /**
+   * PR info or null
+   */
+  200: PrInfo | null
+}
+
+export type VcsPrGetResponse = VcsPrGetResponses[keyof VcsPrGetResponses]
+
+export type VcsPrCreateData = {
+  body?: PrCreateInput
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/vcs/pr"
+}
+
+export type VcsPrCreateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type VcsPrCreateError = VcsPrCreateErrors[keyof VcsPrCreateErrors]
+
+export type VcsPrCreateResponses = {
+  /**
+   * Created or existing PR
+   */
+  200: PrInfo
+}
+
+export type VcsPrCreateResponse = VcsPrCreateResponses[keyof VcsPrCreateResponses]
+
+export type VcsPrCommentsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/vcs/pr/comments"
+}
+
+export type VcsPrCommentsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type VcsPrCommentsError = VcsPrCommentsErrors[keyof VcsPrCommentsErrors]
+
+export type VcsPrCommentsResponses = {
+  /**
+   * Unresolved review threads and prompt block
+   */
+  200: PrCommentsResponse
+}
+
+export type VcsPrCommentsResponse = VcsPrCommentsResponses[keyof VcsPrCommentsResponses]
+
+export type VcsPrMergeData = {
+  body?: PrMergeInput
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/vcs/pr/merge"
+}
+
+export type VcsPrMergeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type VcsPrMergeError = VcsPrMergeErrors[keyof VcsPrMergeErrors]
+
+export type VcsPrMergeResponses = {
+  /**
+   * Merged PR
+   */
+  200: PrInfo
+}
+
+export type VcsPrMergeResponse = VcsPrMergeResponses[keyof VcsPrMergeResponses]
+
+export type VcsPrDeleteBranchData = {
+  body?: PrDeleteBranchInput
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/vcs/pr/delete-branch"
+}
+
+export type VcsPrDeleteBranchErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type VcsPrDeleteBranchError = VcsPrDeleteBranchErrors[keyof VcsPrDeleteBranchErrors]
+
+export type VcsPrDeleteBranchResponses = {
+  /**
+   * Branch deleted
+   */
+  200: {
+    ok: boolean
+  }
+}
+
+export type VcsPrDeleteBranchResponse = VcsPrDeleteBranchResponses[keyof VcsPrDeleteBranchResponses]
+
+export type VcsCommitData = {
+  body?: VcsCommitInput
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/vcs/commit"
+}
+
+export type VcsCommitErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type VcsCommitError = VcsCommitErrors[keyof VcsCommitErrors]
+
+export type VcsCommitResponses = {
+  /**
+   * Commit succeeded
+   */
+  200: {
+    ok: boolean
+  }
+}
+
+export type VcsCommitResponse = VcsCommitResponses[keyof VcsCommitResponses]
+
 export type McpStatusData = {
   body?: never
   path?: never
@@ -4832,25 +5126,6 @@ export type PathGetResponses = {
 }
 
 export type PathGetResponse = PathGetResponses[keyof PathGetResponses]
-
-export type VcsGetData = {
-  body?: never
-  path?: never
-  query?: {
-    directory?: string
-    workspace?: string
-  }
-  url: "/vcs"
-}
-
-export type VcsGetResponses = {
-  /**
-   * VCS info
-   */
-  200: VcsInfo
-}
-
-export type VcsGetResponse = VcsGetResponses[keyof VcsGetResponses]
 
 export type CommandListData = {
   body?: never
