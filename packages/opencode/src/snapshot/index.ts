@@ -112,9 +112,38 @@ export namespace Snapshot {
     }
   }
 
-  export async function restore(snapshot: string) {
-    log.info("restore", { commit: snapshot })
+  export async function restore(snapshot: string, files?: string[]) {
+    log.info("restore", { commit: snapshot, files: files?.length })
     const git = gitdir()
+
+    if (files?.length) {
+      const restored = new Set<string>()
+      for (const file of files) {
+        if (restored.has(file)) continue
+        const result =
+          await $`git -c core.longpaths=true -c core.symlinks=true --git-dir ${git} --work-tree ${Instance.worktree} checkout ${snapshot} -- ${file}`
+            .quiet()
+            .cwd(Instance.worktree)
+            .nothrow()
+        if (result.exitCode !== 0) {
+          const relative = path.relative(Instance.worktree, file)
+          const check =
+            await $`git -c core.longpaths=true -c core.symlinks=true --git-dir ${git} --work-tree ${Instance.worktree} ls-tree ${snapshot} -- ${relative}`
+              .quiet()
+              .cwd(Instance.worktree)
+              .nothrow()
+          if (check.exitCode === 0 && check.text().trim()) {
+            log.info("file existed in snapshot but checkout failed, keeping", { file })
+          } else {
+            log.info("file did not exist in snapshot, deleting", { file })
+            await fs.unlink(file).catch(() => {})
+          }
+        }
+        restored.add(file)
+      }
+      return
+    }
+
     const result =
       await $`git -c core.longpaths=true -c core.symlinks=true --git-dir ${git} --work-tree ${Instance.worktree} read-tree ${snapshot} && git -c core.longpaths=true -c core.symlinks=true --git-dir ${git} --work-tree ${Instance.worktree} checkout-index -a -f`
         .quiet()

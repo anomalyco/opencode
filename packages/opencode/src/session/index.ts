@@ -152,6 +152,7 @@ export namespace Session {
           partID: z.string().optional(),
           snapshot: z.string().optional(),
           diff: z.string().optional(),
+          files: z.string().array().optional(),
         })
         .optional(),
     })
