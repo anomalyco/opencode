@@ -1,10 +1,10 @@
-import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg } from "@opentui/core"
+import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, RGBA, KeyEvent } from "@opentui/core"
 import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
 import { Filesystem } from "@/util/filesystem"
 import { useLocal } from "@tui/context/local"
-import { useTheme } from "@tui/context/theme"
+import { tint, useTheme } from "@tui/context/theme"
 import { EmptyBorder } from "@tui/component/border"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
@@ -22,6 +22,8 @@ import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
 import type { FilePart } from "@opencode-ai/sdk/v2"
+import { derivePromptBarState } from "@tui/util/prompt-bar-state"
+import { resolvePromptBarOverlay } from "@tui/util/prompt-bar-visual"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
@@ -77,6 +79,61 @@ export function Prompt(props: PromptProps) {
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
   const kv = useKV()
+  const [store, setStore] = createStore<{
+    prompt: PromptInfo
+    mode: "normal" | "shell"
+    extmarkToPartIndex: Map<number, number>
+    interrupt: number
+    placeholder: number
+  }>({
+    placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
+    prompt: {
+      input: "",
+      parts: [],
+    },
+    mode: "normal",
+    extmarkToPartIndex: new Map(),
+    interrupt: 0,
+  })
+  const promptBarState = createMemo(() => {
+    const messages = props.sessionID ? (sync.data.message[props.sessionID] ?? []) : []
+    return derivePromptBarState({
+      sessionStatus: status(),
+      messages,
+      partsByMessageId: sync.data.part,
+    })
+  })
+  const hasPromptContent = createMemo(() => store.prompt.input.trim().length > 0 || store.prompt.parts.length > 0)
+  const [idleCycleIndex, setIdleCycleIndex] = createSignal(0)
+  createEffect(() => {
+    const shouldCycle =
+      promptBarState() === "idle" && !hasPromptContent() && kv.get("animations_enabled", true)
+    if (!shouldCycle) {
+      setIdleCycleIndex(0)
+      return
+    }
+
+    const timer = setInterval(() => setIdleCycleIndex((value) => value + 1), 1000)
+    onCleanup(() => clearInterval(timer))
+  })
+  const promptBarBackground = createMemo(() => {
+    const base = theme.backgroundElement
+    const overlay = resolvePromptBarOverlay({
+      state: promptBarState(),
+      hasContent: hasPromptContent(),
+      idleCycleIndex: idleCycleIndex(),
+      idleCycleEnabled: kv.get("animations_enabled", true),
+      theme,
+    })
+    if (!overlay || base.a === 0) return base
+    const tinted = tint(base, overlay, 0.35)
+    return RGBA.fromInts(
+      Math.round(tinted.r * 255),
+      Math.round(tinted.g * 255),
+      Math.round(tinted.b * 255),
+      Math.round(base.a * 255),
+    )
+  })
 
   function promptModelWarning() {
     toast.show({
@@ -120,23 +177,6 @@ export function Prompt(props: PromptProps) {
     return messages.findLast((m) => m.role === "user")
   })
 
-  const [store, setStore] = createStore<{
-    prompt: PromptInfo
-    mode: "normal" | "shell"
-    extmarkToPartIndex: Map<number, number>
-    interrupt: number
-    placeholder: number
-  }>({
-    placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
-    prompt: {
-      input: "",
-      parts: [],
-    },
-    mode: "normal",
-    extmarkToPartIndex: new Map(),
-    interrupt: 0,
-  })
-
   createEffect(
     on(
       () => props.sessionID,
@@ -146,6 +186,7 @@ export function Prompt(props: PromptProps) {
       { defer: true },
     ),
   )
+
 
   // Initialize agent/model/variant from last user message when session changes
   let syncedSessionID: string | undefined
@@ -996,7 +1037,7 @@ export function Prompt(props: PromptProps) {
               cursorColor={theme.text}
               syntaxStyle={syntax()}
             />
-            <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
+            <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} backgroundColor={promptBarBackground()}>
               <text fg={highlight()}>
                 {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
               </text>
@@ -1108,9 +1149,15 @@ export function Prompt(props: PromptProps) {
 
                     return (
                       <Show when={retry()}>
-                        <box onMouseUp={handleMessageClick}>
+                        <button
+                          type="button"
+                          onMouseUp={handleMessageClick}
+                          onKeyDown={(event: KeyEvent) => {
+                            if (event.name === "enter" || event.name === "space") handleMessageClick()
+                          }}
+                        >
                           <text fg={theme.error}>{retryText()}</text>
-                        </box>
+                        </button>
                       </Show>
                     )
                   })()}
