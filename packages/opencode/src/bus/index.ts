@@ -102,4 +102,12 @@ export namespace Bus {
       match.splice(index, 1)
     }
   }
+
+  export function debug() {
+    const counts: Record<string, number> = {}
+    for (const [type, subs] of state().subscriptions) {
+      counts[type] = subs.length
+    }
+    return { subscriptions: counts }
+  }
 }
