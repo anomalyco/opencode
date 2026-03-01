@@ -105,8 +105,22 @@ export namespace Project {
     )
   }
 
+  function legacyWorktrees() {
+    return [
+      ...new Set(
+        Database.use((db) => db.select().from(ProjectTable).all())
+          .filter((p) => p.vcs === "git" && legacy(p.id))
+          .map((p) => p.worktree),
+      ),
+    ]
+  }
+
   function cachePath(commonDir: string) {
     return path.join(commonDir, "opencode")
+  }
+
+  function legacy(id: string) {
+    if (/^[0-9a-f]{40}$/i.test(id)) return id
   }
 
   function merge(existing: Info, dupes: Row[]) {
@@ -132,6 +146,144 @@ export namespace Project {
     void Bun.file(cachePath(commonDir))
       .write(id)
       .catch(() => undefined)
+  }
+
+  // One-time migration for legacy git project IDs.
+  //
+  // Historical behavior: git projects used a root commit hash as the project id. That is stable
+  // across git worktrees, but it *collides across separate clones* of the same repo (same history),
+  // causing the UI to treat two clones as the same project.
+  //
+  // Current behavior: git projects use a per-clone UUID cached in the git *common* dir.
+  // - worktrees share the same common dir → same UUID
+  // - separate clones have different common dirs → different UUIDs
+  //
+  // IMPORTANT: All DB repairs/migrations are centralized in repairAll(); fromDirectory() must be
+  // side-effect free with respect to the database.
+  async function repairLegacy(worktree: string) {
+    const projects = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.worktree, worktree)).all()).filter(
+      (p) => p.vcs === "git",
+    )
+    const olds = projects.map((p) => p.id).filter((x): x is string => !!legacy(x))
+    if (olds.length === 0) return
+
+    const sessions = Database.use((db) =>
+      db
+        .select({ id: SessionTable.id, directory: SessionTable.directory })
+        .from(SessionTable)
+        .where(inArray(SessionTable.project_id, olds))
+        .all(),
+    )
+    if (sessions.length === 0) return
+
+    const src = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, olds[0]!)).get())
+    const perm = Database.use((db) => db.select().from(PermissionTable).where(eq(PermissionTable.project_id, olds[0]!)).get())
+
+    const dirs = [...new Set(sessions.map((s) => s.directory))]
+    const groups = new Map<string, { dirs: Set<string>; tops: Set<string> }>()
+    for (const dir of dirs) {
+      if (!existsSync(dir)) continue
+
+      const top = await git(["rev-parse", "--show-toplevel"], { cwd: dir })
+        .then((result) => gitpath(dir, result.text()))
+        .catch(() => dir)
+
+      const common = await commonDir(top)
+      if (!common) continue
+
+      const root = path.dirname(common)
+      const group = groups.get(root)
+      if (group) {
+        group.dirs.add(dir)
+        group.tops.add(top)
+      } else {
+        groups.set(root, { dirs: new Set([dir]), tops: new Set([top]) })
+      }
+    }
+
+    for (const [root, group] of groups) {
+      const common = await commonDir(root)
+      if (!common) continue
+
+      const cached = await Bun.file(cachePath(common))
+        .text()
+        .then((x) => x.trim())
+        .catch(() => undefined)
+
+      const canon = canonical(root)
+      const fixed = canon?.vcs === "git" && !legacy(canon.id) ? canon.id : undefined
+
+      let id = fixed ?? (cached && !legacy(cached) ? cached : crypto.randomUUID())
+      for (let i = 0; i < 3; i++) {
+        const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
+        if (!row || row.worktree === root) break
+        id = crypto.randomUUID()
+      }
+      if (id !== cached) writeCache(common, id)
+
+      const ids = sessions.filter((s) => group.dirs.has(s.directory)).map((s) => s.id)
+      if (ids.length === 0) continue
+
+      Database.transaction((db) => {
+        const now = Date.now()
+
+        const target = db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get()
+        if (!target) {
+          db.insert(ProjectTable)
+            .values({
+              id,
+              worktree: root,
+              vcs: "git",
+              name: src?.name,
+              icon_url: src?.icon_url,
+              icon_color: src?.icon_color,
+              sandboxes: [...new Set([root, ...group.tops])],
+              commands: src?.commands,
+              time_created: src?.time_created ?? now,
+              time_updated: now,
+              time_initialized: src?.time_initialized,
+            })
+            .run()
+        }
+
+        db.update(SessionTable)
+          .set({ project_id: id })
+          .where(inArray(SessionTable.id, ids))
+          .run()
+
+        const existing = db.select().from(PermissionTable).where(eq(PermissionTable.project_id, id)).get()
+        if (!existing && perm) {
+          db.insert(PermissionTable)
+            .values({
+              project_id: id,
+              data: perm.data,
+              time_created: now,
+              time_updated: now,
+            })
+            .run()
+        }
+      })
+    }
+
+    const remaining = Database.use((db) =>
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(SessionTable)
+        .where(inArray(SessionTable.project_id, olds))
+        .get()?.count,
+    )
+
+    if ((remaining ?? 0) === 0) {
+      Database.transaction((db) => {
+        db.delete(PermissionTable)
+          .where(inArray(PermissionTable.project_id, olds))
+          .run()
+
+        db.delete(ProjectTable)
+          .where(inArray(ProjectTable.id, olds))
+          .run()
+      })
+    }
   }
 
   async function repairWorktree(worktree: string) {
@@ -195,14 +347,22 @@ export namespace Project {
   }
 
   export async function repairAll() {
-    const worktrees = duplicateWorktrees()
+    // Repairs performed:
+    // 1) migrate legacy git project ids (root-commit hashes) to per-clone UUIDs
+    // 2) merge duplicate git project rows for the same worktree (split-brain worktree ids)
+    const worktrees = [...new Set([...duplicateWorktrees(), ...legacyWorktrees()])]
     if (worktrees.length === 0) return
-    process.stderr.write(`Found duplicate projects. Creating DB backup...${EOL}`)
+
+    process.stderr.write(`Found projects needing repair. Creating DB backup...${EOL}`)
     const backup = await Database.backup("project-repair")
     process.stderr.write(`DB backup created at: ${backup}${EOL}`)
-    for (const worktree of worktrees) await repairWorktree(worktree)
+
+    for (const worktree of worktrees) {
+      await repairLegacy(worktree)
+      await repairWorktree(worktree)
+    }
     process.stderr.write(
-      `Duplicate project repair complete. To revert: stop opencode and restore ${backup} (and .bak-wal/.bak-shm if present).${EOL}`,
+      `Project repair complete. To revert: stop opencode and restore ${backup} (and .bak-wal/.bak-shm if present).${EOL}`,
     )
   }
 
@@ -296,36 +456,33 @@ export namespace Project {
         const worktree = path.dirname(commonDir)
         const cacheFile = cachePath(commonDir)
 
-        // NOTE: Cache the project ID in the git *common* dir. In git worktrees `.git` is
-        // per-worktree, so caching in `.git/opencode` can cause split-brain project IDs.
-        id =
-          (await Bun.file(cacheFile)
-            .text()
-            .then((x) => x.trim())
-            .catch(() => undefined)) ?? id
+        const head = await git(["rev-parse", "--verify", "HEAD"], {
+          cwd: sandbox,
+          env: {
+            GIT_DIR: commonDir,
+            GIT_WORK_TREE: sandbox,
+          },
+        })
 
-        if (id) writeCache(commonDir, id)
-
-        if (!id) {
-          // Generate a stable ID seed for this repo. Using HEAD avoids `--all` ref differences
-          // across worktrees while still resolving the same root commit for the repo history.
-          const roots = await git(["rev-list", "--max-parents=0", "HEAD"], {
-            cwd: sandbox,
-            env: {
-              // Ensure the git command is evaluated against the common dir, not the worktree.
-              GIT_DIR: commonDir,
-              GIT_WORK_TREE: sandbox,
-            },
-          })
-            .then((result) => result.text().split("\n").filter(Boolean).map((x) => x.trim()).toSorted())
-            .catch(() => undefined)
-
-          id = roots?.[0]
-          if (id) {
-            await Bun.file(cacheFile)
-              .write(id)
-              .catch(() => undefined)
+        if (head.exitCode !== 0) {
+          return {
+            id: "global",
+            sandbox,
+            worktree,
+            vcs: "git",
           }
+        }
+
+        const cached = await Bun.file(cacheFile)
+          .text()
+          .then((x) => x.trim())
+          .catch(() => undefined)
+
+        if (cached && !legacy(cached)) {
+          id = cached
+        } else {
+          id = crypto.randomUUID()
+          writeCache(commonDir, id)
         }
 
         if (!id) {
@@ -358,7 +515,7 @@ export namespace Project {
     // sessions/icons/permissions compatible.
     const canonicalRow = data.id === "global" ? undefined : canonical(data.worktree)
 
-    const id = canonicalRow?.id ?? data.id
+    const id = legacy(canonicalRow?.id ?? "") ? data.id : (canonicalRow?.id ?? data.id)
     if (id !== data.id && data.cache) {
       void Bun.file(data.cache)
         .write(id)
