@@ -1,5 +1,3 @@
-import { type AssistantMessage, type Message, type Part } from "@opencode-ai/sdk/v2"
-
 type Session = {
   id: string
   title: string
@@ -9,18 +7,43 @@ type Session = {
   }
 }
 
+type Message = {
+  role: "user" | "assistant"
+  agent?: string
+  modelID?: string
+  time: {
+    created?: number
+    completed?: number
+  }
+}
+
+type Part = {
+  type: string
+  synthetic?: boolean
+  text?: string
+  tool?: string
+  state?: {
+    input?: unknown
+    output?: string
+    error?: string
+    status: "pending" | "running" | "completed" | "error"
+  }
+}
+
 const titlecase = (value: string) => (value ? value.charAt(0).toUpperCase() + value.slice(1) : value)
 
-const formatAssistant = (msg: AssistantMessage) => {
+const formatAssistant = (msg: Message) => {
   const duration =
     msg.time.completed && msg.time.created ? ((msg.time.completed - msg.time.created) / 1000).toFixed(1) + "s" : ""
-  return `## Assistant (${titlecase(msg.agent)} · ${msg.modelID}${duration ? ` · ${duration}` : ""})\n\n`
+  const agent = msg.agent ? titlecase(msg.agent) : "Assistant"
+  const model = msg.modelID ?? ""
+  return `## Assistant (${agent}${model ? ` · ${model}` : ""}${duration ? ` · ${duration}` : ""})\n\n`
 }
 
 const formatPart = (part: Part) => {
-  if (part.type === "text" && !part.synthetic) return `${part.text}\n\n`
-  if (part.type === "reasoning") return `_Thinking:_\n\n${part.text}\n\n`
-  if (part.type !== "tool") return ""
+  if (part.type === "text" && part.text && !part.synthetic) return `${part.text}\n\n`
+  if (part.type === "reasoning" && part.text) return `_Thinking:_\n\n${part.text}\n\n`
+  if (part.type !== "tool" || !part.tool || !part.state) return ""
 
   const input = part.state.input
     ? `\n**Input:**\n\`\`\`json\n${JSON.stringify(part.state.input, null, 2)}\n\`\`\`\n`
