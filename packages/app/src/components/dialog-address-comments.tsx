@@ -95,12 +95,19 @@ export function AddressCommentsDialog() {
     }
 
     text += `## Instructions\n\n`
-    text += `1. Read each comment above and decide whether to fix it or intentionally skip it\n`
-    text += `2. For fixes: make the code change\n`
-    text += `3. For skips: explain the design rationale in your reply\n`
-    text += `4. After addressing all comments, reply to each one on GitHub using the comment ID shown above:\n`
-    text += `   \`gh api repos/${owner}/${repoName}/pulls/${prNumber}/comments --method POST -f body="<your reply>" -F in_reply_to=<comment ID>\`\n`
-    text += `5. Do NOT merge, rebase, or force-push\n`
+    text += `Work through each comment above **one at a time**. The comment ID for each is shown above next to the author. For each comment:\n\n`
+    text += `1. Read the comment and decide whether to fix it or intentionally skip it\n`
+    text += `2. **If fixing:**\n`
+    text += `   - Make the code change\n`
+    text += `   - Commit with a descriptive message following the repository's commit conventions\n`
+    text += `   - \`git push\`\n`
+    text += `   - Get the commit SHA with \`git rev-parse HEAD\`\n`
+    text += `   - Reply on GitHub referencing the commit:\n`
+    text += `     \`gh api repos/${owner}/${repoName}/pulls/${prNumber}/comments --method POST -f body="Fixed in <SHA>: <brief explanation>" -F in_reply_to=<comment ID>\`\n`
+    text += `3. **If skipping:**\n`
+    text += `   - Reply on GitHub explaining the design rationale:\n`
+    text += `     \`gh api repos/${owner}/${repoName}/pulls/${prNumber}/comments --method POST -f body="<rationale>" -F in_reply_to=<comment ID>\`\n`
+    text += `4. Do NOT merge, rebase, or force-push\n`
 
     if (store.instructions.trim()) {
       text += `\n${store.instructions.trim()}\n`
