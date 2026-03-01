@@ -24,41 +24,35 @@ function runInflight(map: Map<string, Promise<void>>, key: string, task: () => P
 const keyFor = (directory: string, id: string) => `${directory}\n${id}`
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
-const perfEnabled = import.meta.env.DEV
-const perfNow = () => (typeof performance === "undefined" ? Date.now() : performance.now())
-const perfLog = (event: string, data: Record<string, unknown>) => {
-  if (!perfEnabled) return
-  console.log(`[session-perf] ${event}`, data)
-}
 
 type SessionSyncPlanInput = {
   hasSession: boolean
   hasMessages: boolean
   hydrated: boolean
   limit: number | undefined
-  messageInitialSize: number
   messagePageSize: number
 }
 
 /**
  * Computes fetch policy for `session.sync`.
  *
- * A hydrated session can skip re-fetching messages. Otherwise we bootstrap
- * with the initial fetch size and let pagination grow from there.
+ * Hydrated sessions can skip message re-fetching. Non-hydrated sessions
+ * bootstrap with the default page size.
  */
 function sessionSyncPlan(input: SessionSyncPlanInput) {
+  const limit = input.limit ?? input.messagePageSize
   if (input.hasSession && input.hasMessages && input.hydrated) {
     return {
       done: true,
       skipMessages: true,
-      limit: input.limit ?? input.messagePageSize,
+      limit,
     }
   }
 
   return {
     done: false,
     skipMessages: input.hasMessages && input.hydrated,
-    limit: input.hydrated ? (input.limit ?? input.messagePageSize) : input.messageInitialSize,
+    limit,
   }
 }
 
@@ -141,7 +135,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       return globalSync.child(directory)
     }
     const absolute = (path: string) => (current()[0].path.directory + "/" + path).replace("//", "/")
-    const messageInitialSize = 100
     const messagePageSize = 200
     const inflight = new Map<string, Promise<void>>()
     const inflightDiff = new Map<string, Promise<void>>()
@@ -183,7 +176,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       const key = keyFor(input.directory, input.sessionID)
       if (meta.loading[key]) return
 
-      const started = perfNow()
       setMeta("loading", key, true)
       await fetchMessages(input)
         .then((next) => {
@@ -195,24 +187,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             setMeta("limit", key, input.limit)
             setMeta("complete", key, next.complete)
           })
-          const userCount = next.session.filter((m) => m.role === "user").length
-          perfLog("messages", {
-            sessionID: input.sessionID.slice(0, 12),
-            limit: input.limit,
-            fetched: next.session.length,
-            user: userCount,
-            complete: next.complete,
-            ms: Math.round(perfNow() - started),
-          })
-        })
-        .catch((error) => {
-          perfLog("messages.error", {
-            sessionID: input.sessionID.slice(0, 12),
-            limit: input.limit,
-            ms: Math.round(perfNow() - started),
-            error: error instanceof Error ? error.message : "unknown",
-          })
-          throw error
         })
         .finally(() => {
           setMeta("loading", key, false)
@@ -279,7 +253,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           const key = keyFor(directory, sessionID)
           const hasSession = Binary.search(store.session, sessionID, (s) => s.id).found
 
-          const started = perfNow()
           const hasMessages = store.message[sessionID] !== undefined
           const hydrated = meta.limit[key] !== undefined
           const plan = sessionSyncPlan({
@@ -287,27 +260,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             hasMessages,
             hydrated,
             limit: meta.limit[key],
-            messageInitialSize,
             messagePageSize,
           })
-          if (plan.done) {
-            perfLog("sync.skip", {
-              sessionID: sessionID.slice(0, 12),
-              hasSession,
-              hasMessages,
-              hydrated,
-            })
-            return
-          }
-
-          perfLog("sync.start", {
-            sessionID: sessionID.slice(0, 12),
-            hasSession,
-            hasMessages,
-            hydrated,
-            skipMessages: plan.skipMessages,
-            limit: plan.limit,
-          })
+          if (plan.done) return
 
           const sessionReq = hasSession
             ? Promise.resolve()
@@ -337,18 +292,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 limit: plan.limit,
               })
 
-          return runInflight(inflight, key, () =>
-            Promise.all([sessionReq, messagesReq])
-              .then(() => {})
-              .finally(() => {
-                perfLog("sync.done", {
-                  sessionID: sessionID.slice(0, 12),
-                  ms: Math.round(perfNow() - started),
-                  skipMessages: plan.skipMessages,
-                  limit: plan.limit,
-                })
-              }),
-          )
+          return runInflight(inflight, key, () => Promise.all([sessionReq, messagesReq]).then(() => {}))
         },
         async diff(sessionID: string) {
           const directory = sdk.directory

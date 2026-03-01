@@ -223,7 +223,7 @@ export function MessageTimeline(props: {
   const titleValue = createMemo(() => info()?.title)
   const parentID = createMemo(() => info()?.parentID)
   const showHeader = createMemo(() => !!(titleValue() || parentID()))
-  const stageCfg = { init: 1, batch: 1 }
+  const stageCfg = { init: 1, batch: 3 }
   const staging = createTimelineStaging({
     sessionKey,
     turnStart: () => props.turnStart,

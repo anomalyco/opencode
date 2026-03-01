@@ -32,8 +32,6 @@ import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 
-type LoadEarlierSource = "scroll" | "button" | "buffer"
-
 type SessionHistoryWindowInput = {
   sessionID: () => string | undefined
   messagesReady: () => boolean
@@ -126,54 +124,68 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
     preserveScroll(() => setTurnStart(nextStart))
   }
 
-  const loadEarlier = async (opts?: {
-    source?: LoadEarlierSource
-    revealCached?: boolean
-    revealAfterLoad?: boolean
-  }) => {
-    const source = opts?.source ?? "scroll"
-    const revealCached = opts?.revealCached ?? false
-    const revealAfterLoad = opts?.revealAfterLoad ?? true
+  /** Button path: reveal all cached turns, fetch older history, reveal one batch. */
+  const loadAndReveal = async () => {
     const id = input.sessionID()
     if (!id) return
 
     const start = turnStart()
     const beforeVisible = input.visibleUserMessages().length
-    const beforeRendered = revealCached || start <= 0 ? beforeVisible : renderedUserMessages().length
-    const expectedStart = revealCached && start > 0 ? 0 : start
-    if (revealCached && start > 0) {
-      setTurnStart(0)
-    }
+
+    if (start > 0) setTurnStart(0)
 
     if (!input.historyMore() || input.historyLoading()) return
-
-    if (source === "buffer") {
-      const now = Date.now()
-      if (state.prefetchUntil > now) return
-      if (state.prefetchNoGrowth >= prefetchNoGrowthLimit) return
-      setState("prefetchUntil", now + prefetchCooldownMs)
-    }
 
     await input.loadMore(id)
     if (input.sessionID() !== id) return
 
     const afterVisible = input.visibleUserMessages().length
     const growth = afterVisible - beforeVisible
-    if (source === "buffer") {
-      const noGrowth = growth > 0 ? 0 : state.prefetchNoGrowth + 1
-      setState("prefetchNoGrowth", noGrowth)
+    if (state.prefetchNoGrowth) setState("prefetchNoGrowth", 0)
+    if (growth <= 0) return
+    if (turnStart() !== 0) return
+
+    const target = Math.min(afterVisible, Math.max(beforeVisible, renderedUserMessages().length) + turnBatch)
+    const nextStart = Math.max(0, afterVisible - target)
+    preserveScroll(() => setTurnStart(nextStart))
+  }
+
+  /** Scroll/prefetch path: fetch older history from server. */
+  const fetchOlderMessages = async (opts?: { prefetch?: boolean }) => {
+    const id = input.sessionID()
+    if (!id) return
+    if (!input.historyMore() || input.historyLoading()) return
+
+    if (opts?.prefetch) {
+      const now = Date.now()
+      if (state.prefetchUntil > now) return
+      if (state.prefetchNoGrowth >= prefetchNoGrowthLimit) return
+      setState("prefetchUntil", now + prefetchCooldownMs)
     }
-    if (source !== "buffer" && growth > 0 && state.prefetchNoGrowth) {
+
+    const start = turnStart()
+    const beforeVisible = input.visibleUserMessages().length
+    const beforeRendered = start <= 0 ? beforeVisible : renderedUserMessages().length
+
+    await input.loadMore(id)
+    if (input.sessionID() !== id) return
+
+    const afterVisible = input.visibleUserMessages().length
+    const growth = afterVisible - beforeVisible
+
+    if (opts?.prefetch) {
+      setState("prefetchNoGrowth", growth > 0 ? 0 : state.prefetchNoGrowth + 1)
+    } else if (growth > 0 && state.prefetchNoGrowth) {
       setState("prefetchNoGrowth", 0)
     }
+
     if (growth <= 0) return
+    if (turnStart() !== start) return
 
-    const currentStart = turnStart()
-    if (currentStart !== expectedStart) return
-
+    const reveal = !opts?.prefetch
     const currentRendered = renderedUserMessages().length
     const base = Math.max(beforeRendered, currentRendered)
-    const target = revealAfterLoad ? Math.min(afterVisible, base + turnBatch) : base
+    const target = reveal ? Math.min(afterVisible, base + turnBatch) : base
     const nextStart = Math.max(0, afterVisible - target)
     preserveScroll(() => setTurnStart(nextStart))
   }
@@ -187,13 +199,18 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
     const start = turnStart()
     if (start > 0) {
       if (start <= turnPrefetchBuffer) {
-        void loadEarlier({ source: "buffer", revealAfterLoad: false })
+        void fetchOlderMessages({ prefetch: true })
       }
-      backfillTurns()
+      // At the very top: reveal all cached turns at once instead of one batch
+      if (el.scrollTop < 1) {
+        preserveScroll(() => setTurnStart(0))
+      } else {
+        backfillTurns()
+      }
       return
     }
 
-    void loadEarlier({ source: "scroll" })
+    void fetchOlderMessages()
   }
 
   createEffect(
@@ -224,7 +241,7 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
     turnStart,
     setTurnStart,
     renderedUserMessages,
-    loadEarlier,
+    loadAndReveal,
     onScrollerScroll,
   }
 }
@@ -1204,7 +1221,7 @@ export default function Page() {
                     historyMore={historyMore()}
                     historyLoading={historyLoading()}
                     onLoadEarlier={() => {
-                      void historyWindow.loadEarlier({ source: "button", revealCached: true })
+                      void historyWindow.loadAndReveal()
                     }}
                     renderedUserMessages={historyWindow.renderedUserMessages()}
                     anchor={anchor}
