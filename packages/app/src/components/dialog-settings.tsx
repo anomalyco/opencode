@@ -8,6 +8,8 @@ import { SettingsGeneral } from "./settings-general"
 import { SettingsKeybinds } from "./settings-keybinds"
 import { SettingsProviders } from "./settings-providers"
 import { SettingsModels } from "./settings-models"
+import { SettingsPlugins } from "./settings-plugins"
+
 
 export const DialogSettings: Component = () => {
   const language = useLanguage()
@@ -45,6 +47,11 @@ export const DialogSettings: Component = () => {
                       <Icon name="models" />
                       {language.t("settings.models.title")}
                     </Tabs.Trigger>
+                    <Tabs.Trigger value="plugins">
+                      <Icon name="mcp" />
+                      {language.t("settings.plugins.title")}
+                    </Tabs.Trigger>
+
                   </div>
                 </div>
               </div>
@@ -67,6 +74,10 @@ export const DialogSettings: Component = () => {
         <Tabs.Content value="models" class="no-scrollbar">
           <SettingsModels />
         </Tabs.Content>
+        <Tabs.Content value="plugins" class="no-scrollbar">
+          <SettingsPlugins />
+        </Tabs.Content>
+
       </Tabs>
     </Dialog>
   )
