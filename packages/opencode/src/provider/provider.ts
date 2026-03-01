@@ -84,6 +84,78 @@ export namespace Provider {
     })
   }
 
+  const OPENAI_SCHEMA_PACKAGES = new Set(["@ai-sdk/openai", "@ai-sdk/openai-compatible", "@ai-sdk/azure"])
+
+  function normalizeSchema(value: unknown) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return
+    const schema = value as Record<string, unknown>
+
+    if (schema.type === "object" && !Array.isArray(schema.required)) schema.required = []
+
+    const properties = schema.properties
+    if (properties && typeof properties === "object" && !Array.isArray(properties))
+      Object.values(properties as Record<string, unknown>).forEach(normalizeSchema)
+
+    const defs = schema.$defs
+    if (defs && typeof defs === "object" && !Array.isArray(defs))
+      Object.values(defs as Record<string, unknown>).forEach(normalizeSchema)
+
+    const definitions = schema.definitions
+    if (definitions && typeof definitions === "object" && !Array.isArray(definitions))
+      Object.values(definitions as Record<string, unknown>).forEach(normalizeSchema)
+
+    if (Array.isArray(schema.items)) schema.items.forEach(normalizeSchema)
+    else normalizeSchema(schema.items)
+
+    for (const key of ["allOf", "anyOf", "oneOf", "prefixItems"]) {
+      const group = schema[key]
+      if (Array.isArray(group)) group.forEach(normalizeSchema)
+    }
+
+    for (const key of [
+      "if",
+      "then",
+      "else",
+      "not",
+      "contains",
+      "additionalProperties",
+      "propertyNames",
+      "unevaluatedItems",
+      "unevaluatedProperties",
+    ]) {
+      normalizeSchema(schema[key])
+    }
+  }
+
+  export function normalizeOpenAISchemaRequest(value: unknown) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return
+    const body = value as Record<string, unknown>
+
+    const tools = body.tools
+    if (Array.isArray(tools)) {
+      for (const tool of tools) {
+        if (!tool || typeof tool !== "object" || Array.isArray(tool)) continue
+        const fn = (tool as Record<string, unknown>).function
+        if (!fn || typeof fn !== "object" || Array.isArray(fn)) continue
+        normalizeSchema((fn as Record<string, unknown>).parameters)
+      }
+    }
+
+    const response = body.response_format
+    if (response && typeof response === "object" && !Array.isArray(response)) {
+      const json = (response as Record<string, unknown>).json_schema
+      if (json && typeof json === "object" && !Array.isArray(json))
+        normalizeSchema((json as Record<string, unknown>).schema)
+    }
+
+    const text = body.text
+    if (text && typeof text === "object" && !Array.isArray(text)) {
+      const format = (text as Record<string, unknown>).format
+      if (format && typeof format === "object" && !Array.isArray(format))
+        normalizeSchema((format as Record<string, unknown>).schema)
+    }
+  }
+
   const BUNDLED_PROVIDERS: Record<string, (options: any) => SDK> = {
     "@ai-sdk/amazon-bedrock": createAmazonBedrock,
     "@ai-sdk/anthropic": createAnthropic,
@@ -1085,22 +1157,34 @@ export namespace Provider {
           opts.signal = combined
         }
 
-        // Strip openai itemId metadata following what codex does
-        // Codex uses #[serde(skip_serializing)] on id fields for all item types:
-        // Message, Reasoning, FunctionCall, LocalShellCall, CustomToolCall, WebSearchCall
-        // IDs are only re-attached for Azure with store=true
-        if (model.api.npm === "@ai-sdk/openai" && opts.body && opts.method === "POST") {
-          const body = JSON.parse(opts.body as string)
+        const method = (opts.method ?? (opts.body ? "POST" : "GET")).toUpperCase()
+        const raw =
+          typeof opts.body === "string"
+            ? opts.body
+            : opts.body instanceof Uint8Array
+              ? new TextDecoder().decode(opts.body)
+              : opts.body instanceof ArrayBuffer
+                ? new TextDecoder().decode(new Uint8Array(opts.body))
+                : undefined
+
+        if (method === "POST" && raw && OPENAI_SCHEMA_PACKAGES.has(model.api.npm)) {
+          const body = JSON.parse(raw) as Record<string, unknown>
+          normalizeOpenAISchemaRequest(body)
+
+          // Strip openai itemId metadata following what codex does
+          // Codex uses #[serde(skip_serializing)] on id fields for all item types:
+          // Message, Reasoning, FunctionCall, LocalShellCall, CustomToolCall, WebSearchCall
+          // IDs are only re-attached for Azure with store=true
           const isAzure = model.providerID.includes("azure")
           const keepIds = isAzure && body.store === true
-          if (!keepIds && Array.isArray(body.input)) {
+          if (model.api.npm === "@ai-sdk/openai" && !keepIds && Array.isArray(body.input)) {
             for (const item of body.input) {
-              if ("id" in item) {
-                delete item.id
-              }
+              if (!item || typeof item !== "object" || Array.isArray(item)) continue
+              if ("id" in item) delete (item as { id?: unknown }).id
             }
-            opts.body = JSON.stringify(body)
           }
+
+          opts.body = JSON.stringify(body)
         }
 
         return fetchFn(input, {
