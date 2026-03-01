@@ -17,6 +17,7 @@ import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
+import { useCommand } from "@/context/command"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
@@ -116,6 +117,7 @@ export function MessageTimeline(props: {
   const settings = useSettings()
   const dialog = useDialog()
   const language = useLanguage()
+  const command = useCommand()
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const sessionID = createMemo(() => params.id)
@@ -162,6 +164,16 @@ export function MessageTimeline(props: {
       titleRef?.select()
     })
   }
+
+  command.register("session-title", () => [
+    {
+      id: "session.rename",
+      title: language.t("common.rename"),
+      category: language.t("command.category.session"),
+      disabled: !sessionID(),
+      onSelect: () => openTitleEditor(),
+    },
+  ])
 
   const closeTitleEditor = () => {
     if (title.saving) return
