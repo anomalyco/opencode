@@ -1,4 +1,5 @@
-import { screenshot, ScreenshotHelper } from "./screenshot"
+import * as vscode from "vscode"
+import { screenshot, ScreenshotHelper, waitForStableUI } from "./screenshot"
 
 /**
  * TestState tracks the current test execution state.
@@ -6,6 +7,62 @@ import { screenshot, ScreenshotHelper } from "./screenshot"
 interface TestState {
   currentTestName: string | null
   hasFailed: boolean
+}
+
+/**
+ * Error thrown when UI verification fails.
+ */
+export class UIVerificationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "UIVerificationError"
+  }
+}
+
+/**
+ * Verify that the chat panel is open and visible.
+ * Uses VS Code: API to check panel visibility state.
+ *
+ * @param vscodeApi - The VS Code: API module
+ * @throws {UIVerificationError} If chat panel is not visible
+ */
+export async function verifyChatPanelOpen(vscodeApi: typeof vscode): Promise<void> {
+  const chatTabs = vscodeApi.window.tabGroups.all
+    .flatMap((group) => group.tabs)
+    .filter((tab) => tab.label.toLowerCase().includes("chat") || tab.label.toLowerCase().includes("copilot"))
+
+  if (chatTabs.length === 0) {
+    throw new UIVerificationError("Chat panel is not open - no chat tabs found")
+  }
+
+  const activeChatTab = chatTabs.find((tab) => tab.isActive)
+  if (!activeChatTab) {
+    throw new UIVerificationError("Chat panel is not active - found chat tab but it's not the active tab")
+  }
+}
+
+/**
+ * Verify that the output channel is visible.
+ *
+ * @param vscodeApi - The VS Code: API module
+ * @param channelName - Optional specific channel name to verify
+ * @throws {UIVerificationError} If output channel is not visible
+ */
+export async function verifyOutputChannelVisible(vscodeApi: typeof vscode, channelName?: string): Promise<void> {
+  const outputTabs = vscodeApi.window.tabGroups.all
+    .flatMap((group) => group.tabs)
+    .filter((tab) => tab.label.toLowerCase().includes("output"))
+
+  if (outputTabs.length === 0) {
+    throw new UIVerificationError("Output panel is not visible - no output tabs found")
+  }
+
+  if (channelName) {
+    const specificTab = outputTabs.find((tab) => tab.label.toLowerCase().includes(channelName.toLowerCase()))
+    if (!specificTab) {
+      throw new UIVerificationError(`Output channel "${channelName}" is not visible`)
+    }
+  }
 }
 
 /**
@@ -68,6 +125,13 @@ export async function afterEachScreenshot(error?: Error): Promise<void> {
 }
 
 /**
- * Export the screenshot helper for direct use.
+ * Export the screenshot helper and UI wait utility for direct use.
  */
-export { screenshot, ScreenshotHelper }
+export { screenshot, ScreenshotHelper, waitForStableUI }
+
+/**
+ * Cleanup function for test suites. Call in after() hook.
+ */
+export function cleanup(): void {
+  screenshot.cleanup()
+}

@@ -80,7 +80,7 @@ export class JsonRpcConnection {
     })
 
     this.stdout.on("error", (err: Error) => {
-      this.eventEmitter.emit("error", err)
+      this.emitError(err)
     })
   }
 
@@ -96,18 +96,22 @@ export class JsonRpcConnection {
     }
   }
 
+  private emitError(err: Error): void {
+    if (this.eventEmitter.listenerCount("error") > 0) this.eventEmitter.emit("error", err)
+  }
+
   private processLine(line: string): void {
     let message: JsonRpcMessage
 
     try {
       message = JSON.parse(line) as JsonRpcMessage
     } catch (err) {
-      this.eventEmitter.emit("error", new Error(`Failed to parse JSON: ${err}`))
+      this.emitError(new Error(`Failed to parse JSON: ${err}`))
       return
     }
 
     if (message.jsonrpc !== "2.0") {
-      this.eventEmitter.emit("error", new Error("Invalid JSON-RPC version"))
+      this.emitError(new Error("Invalid JSON-RPC version"))
       return
     }
 
@@ -130,18 +134,18 @@ export class JsonRpcConnection {
     // Request: has method and id (but we don't handle incoming requests in this implementation)
     if (message.method !== undefined && message.id !== undefined) {
       // Incoming request - not supported in this simple implementation
-      this.eventEmitter.emit("error", new Error("Incoming requests not supported"))
+      this.emitError(new Error("Incoming requests not supported"))
       return
     }
 
     // Unknown message type
-    this.eventEmitter.emit("error", new Error("Unknown message type"))
+    this.emitError(new Error("Unknown message type"))
   }
 
   private handleResponse(message: JsonRpcResponse): void {
     const pending = this.pending.get(message.id)
     if (!pending) {
-      this.eventEmitter.emit("error", new Error(`Received response for unknown request id: ${message.id}`))
+      // Silently discard responses for unknown/duplicate request ids
       return
     }
 
@@ -182,12 +186,13 @@ export class JsonRpcConnection {
     }
 
     const id = request.id ?? ++this.requestId
+    if (typeof id === "number") this.requestId = Math.max(this.requestId, id)
     const fullRequest: JsonRpcMessage = { ...request, jsonrpc: "2.0", id }
 
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pending.delete(id)
-        reject(new Error("Request timed out"))
+        reject(new Error("Request timeout"))
       }, timeoutMs ?? this.config.defaultTimeout)
 
       this.pending.set(id, { resolve, reject, timeout })

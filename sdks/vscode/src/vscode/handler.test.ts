@@ -88,7 +88,7 @@ function createMockCancellationToken(isCancelled = false): any {
     },
     cancel: () => {
       cancelled = true
-      listeners.forEach((l) => l())
+      for (const l of listeners) l()
     },
   }
 }
@@ -108,6 +108,17 @@ function createMockChatRequest(prompt = "Hello", command?: string): any {
 // Mock ChatContext with history
 function createMockChatContext(history: any[] = []): any {
   return { history }
+}
+
+async function driveToPrompt(streams: ReturnType<typeof createMockStreams>, sessionId = "ses_test_123") {
+  await new Promise((r) => setTimeout(r, 10))
+  const last = JSON.parse(streams.stdin.written[streams.stdin.written.length - 1])
+  if (last.method === "session/new") {
+    streams.stdout.pushData(JSON.stringify({ jsonrpc: "2.0", id: last.id, result: { sessionId } }) + "\n")
+    await new Promise((r) => setTimeout(r, 10))
+    return JSON.parse(streams.stdin.written[streams.stdin.written.length - 1])
+  }
+  return last
 }
 
 describe("OpenCodeRequestHandler", () => {
@@ -165,8 +176,7 @@ describe("OpenCodeRequestHandler", () => {
       const handlePromise = handler.handle(request, context, mockStream, mockToken)
 
       // Complete the request with a response
-      await new Promise((r) => setTimeout(r, 10))
-      const req = JSON.parse(streams.stdin.written[streams.stdin.written.length - 1])
+      const req = await driveToPrompt(streams)
       streams.stdout.pushData(
         JSON.stringify({
           jsonrpc: "2.0",
@@ -185,8 +195,7 @@ describe("OpenCodeRequestHandler", () => {
 
       const handlePromise = handler.handle(request, context, mockStream, mockToken)
 
-      await new Promise((r) => setTimeout(r, 10))
-      const req = JSON.parse(streams.stdin.written[streams.stdin.written.length - 1])
+      const req = await driveToPrompt(streams)
 
       // Send streaming updates
       const update1: SessionUpdate = {
@@ -248,8 +257,7 @@ describe("OpenCodeRequestHandler", () => {
 
       const handlePromise = handler.handle(request, context, mockStream, mockToken)
 
-      await new Promise((r) => setTimeout(r, 10))
-      const req = JSON.parse(streams.stdin.written[streams.stdin.written.length - 1])
+      const req = await driveToPrompt(streams)
 
       // Verify prompt structure
       assert.ok(Array.isArray(req.params.prompt), "Prompt should be an array")
@@ -273,8 +281,7 @@ describe("OpenCodeRequestHandler", () => {
 
       const handlePromise = handler.handle(request, context, mockStream, mockToken)
 
-      await new Promise((r) => setTimeout(r, 10))
-      const req = JSON.parse(streams.stdin.written[streams.stdin.written.length - 1])
+      const req = await driveToPrompt(streams)
 
       const textPart = req.params.prompt.find((p: PromptPart) => p.type === "text")
       assert.ok(textPart, "Prompt should contain text part")
@@ -307,8 +314,7 @@ describe("OpenCodeRequestHandler", () => {
 
       const handlePromise = handler.handle(request as any, context, mockStream, mockToken)
 
-      await new Promise((r) => setTimeout(r, 10))
-      const req = JSON.parse(streams.stdin.written[streams.stdin.written.length - 1])
+      const req = await driveToPrompt(streams)
 
       const hasResourceLink = req.params.prompt.some(
         (p: PromptPart) => p.type === "resource_link" && p.uri.includes("file.ts"),
@@ -335,8 +341,7 @@ describe("OpenCodeRequestHandler", () => {
 
       const handlePromise = handler.handle(request, context, mockStream, mockToken)
 
-      await new Promise((r) => setTimeout(r, 10))
-      const req = JSON.parse(streams.stdin.written[streams.stdin.written.length - 1])
+      const req = await driveToPrompt(streams)
 
       assert.strictEqual(req.method, "session/prompt", "Should call session/prompt method")
       assert.ok(req.params.sessionId, "Should include session ID")
@@ -359,8 +364,7 @@ describe("OpenCodeRequestHandler", () => {
       const context1 = createMockChatContext()
 
       const handlePromise1 = handler.handle(request1, context1, mockStream, mockToken)
-      await new Promise((r) => setTimeout(r, 10))
-      const req1 = JSON.parse(streams.stdin.written[streams.stdin.written.length - 1])
+      const req1 = await driveToPrompt(streams)
       const sessionId1 = req1.params.sessionId
 
       // Complete first request
@@ -403,8 +407,7 @@ describe("OpenCodeRequestHandler", () => {
 
       const handlePromise = handler.handle(request, context, mockStream, mockToken)
 
-      await new Promise((r) => setTimeout(r, 10))
-      const req = JSON.parse(streams.stdin.written[streams.stdin.written.length - 1])
+      const req = await driveToPrompt(streams)
 
       // Send streaming message chunks
       const updates: SessionUpdate[] = [
@@ -447,8 +450,7 @@ describe("OpenCodeRequestHandler", () => {
 
       const handlePromise = handler.handle(request, context, mockStream, mockToken)
 
-      await new Promise((r) => setTimeout(r, 10))
-      const req = JSON.parse(streams.stdin.written[streams.stdin.written.length - 1])
+      const req = await driveToPrompt(streams)
 
       // Send thought chunks
       const update: SessionUpdate = {
@@ -485,8 +487,7 @@ describe("OpenCodeRequestHandler", () => {
 
       const handlePromise = handler.handle(request, context, mockStream, mockToken)
 
-      await new Promise((r) => setTimeout(r, 10))
-      const req = JSON.parse(streams.stdin.written[streams.stdin.written.length - 1])
+      const req = await driveToPrompt(streams)
 
       // Trigger cancellation
       mockToken.cancel()
@@ -511,8 +512,7 @@ describe("OpenCodeRequestHandler", () => {
 
       const handlePromise = handler.handle(request, context, mockStream, mockToken)
 
-      await new Promise((r) => setTimeout(r, 10))
-      const req = JSON.parse(streams.stdin.written[streams.stdin.written.length - 1])
+      const req = await driveToPrompt(streams)
       const sessionId = req.params.sessionId
 
       // Trigger cancellation
@@ -585,8 +585,7 @@ describe("OpenCodeRequestHandler", () => {
 
       const handlePromise = newHandler.handle(request, context, newStream, newToken)
 
-      await new Promise((r) => setTimeout(r, 10))
-      const req = JSON.parse(newStreams.stdin.written[newStreams.stdin.written.length - 1])
+      const req = await driveToPrompt(newStreams)
 
       // Send error response
       newStreams.stdout.pushData(
@@ -621,8 +620,7 @@ describe("OpenCodeRequestHandler", () => {
 
       const handlePromise = handler.handle(request, context, mockStream, mockToken)
 
-      await new Promise((r) => setTimeout(r, 10))
-      const req = JSON.parse(streams.stdin.written[streams.stdin.written.length - 1])
+      const req = await driveToPrompt(streams)
 
       // Send auth error response
       streams.stdout.pushData(
@@ -651,8 +649,7 @@ describe("OpenCodeRequestHandler", () => {
 
       const handlePromise = handler.handle(request, context, mockStream, mockToken)
 
-      await new Promise((r) => setTimeout(r, 10))
-      const req = JSON.parse(streams.stdin.written[streams.stdin.written.length - 1])
+      const req = await driveToPrompt(streams)
 
       // Send rate limit error
       streams.stdout.pushData(
@@ -687,8 +684,7 @@ describe("OpenCodeRequestHandler", () => {
 
       const handlePromise = handler.handle(request, context, mockStream, mockToken)
 
-      await new Promise((r) => setTimeout(r, 10))
-      const req = JSON.parse(streams.stdin.written[streams.stdin.written.length - 1])
+      const req = await driveToPrompt(streams)
 
       // Send tool call to trigger progress
       const update: SessionUpdate = {
@@ -730,8 +726,7 @@ describe("OpenCodeRequestHandler", () => {
 
       const handlePromise = handler.handle(request, context, mockStream, mockToken)
 
-      await new Promise((r) => setTimeout(r, 10))
-      const req = JSON.parse(streams.stdin.written[streams.stdin.written.length - 1])
+      const req = await driveToPrompt(streams)
 
       // Send tool call updates
       const toolCall: SessionUpdate = {

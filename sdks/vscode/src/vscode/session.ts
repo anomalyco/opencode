@@ -1,7 +1,7 @@
 import * as vscode from "vscode"
 import { AcpClient } from "../acp/client"
 
-const SESSIONS_KEY = "opencode.sessionManager.activeSessions"
+const SESSIONS_KEY = "opencode.sessions"
 
 export interface SessionMetadata {
   id: string
@@ -29,7 +29,8 @@ export class SessionManager {
       const sessions = this.getSessionsFromStorage()
       const existingSession = sessions[existingSessionId]
       if (existingSession) {
-        await this.loadAcpSession(existingSession.acpSessionId)
+        // Fire and forget - load in background without blocking return
+        void this.loadAcpSession(existingSession.acpSessionId)
         this.activeSessionId = existingSessionId
         return existingSessionId
       }
@@ -56,7 +57,7 @@ export class SessionManager {
     }
 
     session.title = title
-    session.updatedAt = Date.now()
+    session.updatedAt = Math.max(Date.now(), session.updatedAt + 1)
 
     await this.saveSessionsToStorage(sessions)
   }
@@ -86,7 +87,10 @@ export class SessionManager {
   }
 
   private async createNewSession(): Promise<SessionMetadata> {
-    const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd()
+    const cwd =
+      vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ??
+      this.context.asAbsolutePath("").replace(/[\\/]$/, "") ??
+      process.cwd()
     const acpResponse = await this.client.createSession({ cwd })
 
     const session: SessionMetadata = {

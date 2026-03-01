@@ -6,6 +6,16 @@ import { promisify } from "util"
 const execFileAsync = promisify(execFile)
 
 /**
+ * Timeout constants for screenshot operations.
+ */
+export const PANEL_OPEN_DELAY = 1000
+export const TYPING_DELAY = 500
+export const UI_STABILIZE_DELAY = 800
+export const SCREENSHOT_CAPTURE_DELAY = 500
+export const XVFB_START_TIMEOUT = 5000
+export const SCREENSHOT_TOOL_TIMEOUT = 10000
+
+/**
  * ScreenshotHelper provides utilities for capturing screenshots
  * during VS Code: extension integration tests.
  *
@@ -24,8 +34,37 @@ export class ScreenshotHelper {
 
   constructor() {
     this.sequence = new Map()
-    this.baseDir = path.join(__dirname, "..", "..", "..", "screenshots")
+    this.baseDir = process.env.SCREENSHOT_DIR ?? path.join(__dirname, "..", "screenshots")
     this.ensureDirectories()
+    this.registerExitHandlers()
+  }
+
+  /**
+   * Register process exit handlers to ensure Xvfb cleanup on crash.
+   */
+  private registerExitHandlers(): void {
+    const cleanup = () => this.cleanup()
+    process.on("exit", cleanup)
+    process.on("SIGINT", () => {
+      cleanup()
+      process.exit(0)
+    })
+    process.on("SIGTERM", () => {
+      cleanup()
+      process.exit(0)
+    })
+    process.on("uncaughtException", (err) => {
+      console.error("Uncaught exception:", err)
+      cleanup()
+      process.exit(1)
+    })
+  }
+
+  /**
+   * Cleanup Xvfb process. Can be called at test suite end.
+   */
+  cleanup(): void {
+    this.stopXvfb()
   }
 
   /**
@@ -47,7 +86,7 @@ export class ScreenshotHelper {
    * Wait for Xvfb to be ready by polling xdpyinfo.
    * Returns the display number once Xvfb is accepting connections.
    */
-  private async waitForXvfb(display: number, timeout: number = 5000): Promise<void> {
+  private async waitForXvfb(display: number, timeout: number = XVFB_START_TIMEOUT): Promise<void> {
     const start = Date.now()
     const displayStr = `:${display}`
 
@@ -147,38 +186,59 @@ export class ScreenshotHelper {
   }
 
   /**
+   * Verify that a screenshot file was created successfully.
+   * Throws an error if the file doesn't exist or is empty.
+   */
+  private async verifyScreenshot(filepath: string): Promise<void> {
+    const stats = await fs.promises.stat(filepath)
+    if (stats.size === 0) {
+      throw new Error(`Screenshot file is empty: ${filepath}`)
+    }
+  }
+
+  /**
    * Capture screenshot using system tool.
    * Automatically starts Xvfb if DISPLAY is not set.
+   * Includes delay before capture and verifies the file was created.
    */
-  private async captureWithTool(filepath: string): Promise<void> {
-  const tool = await this.detectTool()
+  private async captureWithTool(filepath: string, delay: number = SCREENSHOT_CAPTURE_DELAY): Promise<void> {
+    const tool = await this.detectTool()
 
-  if (!tool) {
-    throw new Error("No screenshot tool available. Install one of: scrot, ImageMagick (import), or gnome-screenshot")
+    if (!tool) {
+      throw new Error("No screenshot tool available. Install one of: scrot, ImageMagick (import), or gnome-screenshot")
+    }
+
+    const args = tool === "scrot" ? [filepath] : tool === "import" ? ["-window", "root", filepath] : ["-f", filepath]
+
+    const display = await this.ensureXvfb()
+
+    if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay))
+
+    try {
+      await execFileAsync(tool, args, {
+        timeout: SCREENSHOT_TOOL_TIMEOUT,
+        env: { ...process.env, DISPLAY: display },
+      })
+
+      await this.verifyScreenshot(filepath)
+    } finally {
+      this.stopXvfb()
+    }
   }
-
-  const args = tool === "scrot" ? [filepath] : tool === "import" ? ["-window", "root", filepath] : ["-f", filepath]
-
-  const display = await this.ensureXvfb()
-
-  try {
-    await execFileAsync(tool, args, {
-      timeout: 10000,
-      env: { ...process.env, DISPLAY: display },
-    })
-  } finally {
-    this.stopXvfb()
-  }
-}
 
   /**
    * Capture a screenshot of the VS Code: window.
    *
    * @param feature - The feature category ("extension", "chat", "failures")
    * @param scenario - A descriptive name for the scenario
+   * @param delay - Milliseconds to wait before capturing (default 500ms for UI to render)
    * @returns The path to the saved screenshot
    */
-  async capture(feature: "extension" | "chat" | "failures", scenario: string): Promise<string> {
+  async capture(
+    feature: "extension" | "chat" | "failures",
+    scenario: string,
+    delay: number = SCREENSHOT_CAPTURE_DELAY,
+  ): Promise<string> {
     const sequence = this.nextSequence(feature)
     const sanitized = scenario.replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase()
     const filename = `${sequence}-${sanitized}.png`
@@ -187,7 +247,7 @@ export class ScreenshotHelper {
     const filepath = path.join(this.baseDir, featureDir, filename)
 
     await fs.promises.mkdir(path.dirname(filepath), { recursive: true })
-    await this.captureWithTool(filepath)
+    await this.captureWithTool(filepath, delay)
 
     return filepath
   }
@@ -209,6 +269,31 @@ export class ScreenshotHelper {
 
     return filepath
   }
+}
+
+/**
+ * Wait for VS Code: UI to stabilize before taking screenshots.
+ * Uses multiple strategies: command execution, progress notification, and timeout.
+ *
+ * @param vscode - The VS Code: API module
+ * @param timeout - Maximum time to wait in milliseconds (default 2000ms)
+ * @returns Promise that resolves when UI should be stable
+ */
+export async function waitForStableUI(vscode: typeof import("vscode"), timeout: number = 2000): Promise<void> {
+  const startTime = Date.now()
+
+  // Execute a no-op command to flush VS Code:'s command queue
+  try {
+    await vscode.commands.executeCommand("workbench.action.focusActiveEditorGroup")
+  } catch {
+    // Ignore errors from the no-op command
+  }
+
+  // Wait for remaining time
+  const elapsed = Date.now() - startTime
+  const remaining = timeout - elapsed
+
+  if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining))
 }
 
 /**

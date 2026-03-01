@@ -647,15 +647,8 @@ describe("SessionManager", () => {
       const session2Promise = manager.getOrCreateSession(chatContext2)
       await new Promise((r) => setTimeout(r, 10))
 
-      const newSessionReq2 = streams.stdin.written.slice(-2).find((w) => {
-        try {
-          const parsed = JSON.parse(w)
-          return parsed.method === "session/new"
-        } catch {
-          return false
-        }
-      })
-      const parsed2 = JSON.parse(newSessionReq2!)
+      const newSessionReq2 = streams.stdin.written[streams.stdin.written.length - 1]
+      const parsed2 = JSON.parse(newSessionReq2)
       streams.stdout.pushData(
         JSON.stringify({
           jsonrpc: "2.0",

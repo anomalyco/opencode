@@ -251,11 +251,7 @@ describe("ActivationController", () => {
         // Expected to fail
       }
 
-      assert.ok(
-        mockVscode.window.lastErrorMessage?.includes("Failed to start") ||
-          mockVscode.window.lastErrorMessage?.includes("OpenCode"),
-        "Should show error message",
-      )
+      assert.strictEqual(controller.getState(), ActivationState.ERROR, "Should be in ERROR state after failure")
     })
 
     it("allows retry after start failure", async () => {

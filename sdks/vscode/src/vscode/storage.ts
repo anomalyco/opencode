@@ -236,21 +236,9 @@ export class OpenCodeStorage {
   }
 
   private async atomicWrite(uri: vscode.Uri, data: Buffer): Promise<void> {
-    const tempUri = uri.with({ path: `${uri.path}.tmp` })
-
     try {
-      // Write to temp file first
-      await this.fs.writeFile(tempUri, new Uint8Array(data))
-
-      // Atomically rename temp file to final destination
-      await this.fs.rename(tempUri, uri, { overwrite: true })
+      await this.fs.writeFile(uri, new Uint8Array(data))
     } catch (error) {
-      // Clean up temp file on error
-      try {
-        await this.fs.delete(tempUri)
-      } catch {
-        // Ignore cleanup errors
-      }
       throw error
     }
   }

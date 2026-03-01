@@ -4,3 +4,5 @@ dist
 screenshots/
 *.png
 !screenshots/.gitkeep
+.vscode-test/
+out/

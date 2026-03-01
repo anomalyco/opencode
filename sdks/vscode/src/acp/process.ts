@@ -236,7 +236,10 @@ export class AcpProcess {
   }
 
   async stop(): Promise<void> {
-    if (this.state === ProcessState.STOPPED) return
+    if (this.state === ProcessState.STOPPED || this.state === ProcessState.FAILED) {
+      this.cleanup()
+      return
+    }
 
     this.stopRequested = true
 

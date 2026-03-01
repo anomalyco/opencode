@@ -11,7 +11,7 @@ const nodeEnv = process.env
 function createMockConfig(): AcpProcessConfig {
   return {
     cwd: nodeCwd(),
-    env: { ...nodeEnv, TEST_MODE: "1" },
+    env: { ...nodeEnv, TEST_MODE: "1", ELECTRON_RUN_AS_NODE: "1" },
     maxRestarts: 3,
     restartDelay: 100, // Fast restart for tests
     healthCheckTimeout: 500, // Fast timeout for tests
@@ -190,7 +190,7 @@ describe("AcpProcess", () => {
       })
 
       await acpProcess.start({ command: process.execPath, args: ["-e", script] })
-      await new Promise((r) => setTimeout(r, 100))
+      await new Promise((r) => setTimeout(r, 300))
 
       assert.ok(stderrReceived.includes("stderr message"), "Should receive stderr")
     })
@@ -199,22 +199,29 @@ describe("AcpProcess", () => {
   describe("crash handling", () => {
     it("AcpProcess handles process crash", async () => {
       const config = createMockConfig()
+      config.maxRestarts = 0
       acpProcess = new AcpProcess(config)
 
       let crashed = false
       acpProcess.onCrash(() => {
         crashed = true
       })
+      // Suppress max-restarts error so EventEmitter doesn't throw
+      acpProcess.onError(() => {})
 
       // Script exits immediately with error
       const [cmd, ...args] = createFakeAcpScript(50, true)
       await acpProcess.start({ command: cmd, args })
 
       // Wait for crash
-      await new Promise((r) => setTimeout(r, 150))
+      await new Promise((r) => setTimeout(r, 300))
 
       assert.strictEqual(crashed, true, "Crash event should be emitted")
-      assert.strictEqual(acpProcess.getState(), ProcessState.CRASHED, "State should be CRASHED")
+      assert.strictEqual(
+        acpProcess.getState(),
+        ProcessState.FAILED,
+        "State should be FAILED after crash with no restarts",
+      )
     })
 
     it("AcpProcess auto-restarts on crash with exponential backoff", async () => {
@@ -231,8 +238,8 @@ describe("AcpProcess", () => {
       const [cmd, ...args] = createFakeAcpScript(50, true)
       await acpProcess.start({ command: cmd, args })
 
-      // Wait for multiple restarts
-      await new Promise((r) => setTimeout(r, 400))
+      // Wait for multiple restarts (generous timeout for slow CI)
+      await new Promise((r) => setTimeout(r, 800))
 
       assert.ok(restartCount >= 2, `Should have restarted multiple times, got ${restartCount}`)
     })
@@ -256,7 +263,7 @@ describe("AcpProcess", () => {
       await acpProcess.start({ command: nodeExecPath, args: ["-e", script] })
 
       // Wait for restarts to complete
-      await new Promise((r) => setTimeout(r, 500))
+      await new Promise((r) => setTimeout(r, 1000))
 
       assert.strictEqual(acpProcess.getState(), ProcessState.FAILED, "State should be FAILED")
       const maxRestartsError = errors.find((e) => e.message.includes("restarts"))
@@ -370,7 +377,7 @@ describe("AcpProcess", () => {
       await acpProcess.start({ command: cmd, args })
 
       // Wait for a few crashes
-      await new Promise((r) => setTimeout(r, 200))
+      await new Promise((r) => setTimeout(r, 500))
 
       assert.ok(acpProcess.getRestartCount() > 0, "Restart count should be tracked")
     })

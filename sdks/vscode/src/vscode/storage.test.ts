@@ -103,9 +103,17 @@ function createMockFileSystem(): {
       }
     },
 
-    rename: async (): Promise<void> => {
-      // Mock implementation - not used in tests
-      throw new Error("Not implemented")
+    rename: async (src: vscode.Uri, dest: vscode.Uri): Promise<void> => {
+      const srcPath = src.fsPath
+      const destPath = dest.fsPath
+      const file = files.get(srcPath)
+      if (file === undefined) {
+        const error = new Error(`ENOENT: no such file or directory, rename '${srcPath}' -> '${destPath}'`)
+        ;(error as any).code = "ENOENT"
+        throw error
+      }
+      files.set(destPath, file)
+      files.delete(srcPath)
     },
 
     copy: async (): Promise<void> => {
