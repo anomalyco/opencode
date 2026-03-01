@@ -44,6 +44,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "重试中",
   "ui.sessionTurn.retry.inSeconds": "{{seconds}} 秒后",
+  "ui.sessionTurn.retry.attempt": "第 {{attempt}} 次",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - 第 {{attempt}} 次",
+  "ui.sessionTurn.retry.geminiHot": "gemini 当前过载",
   "ui.sessionTurn.error.freeUsageExceeded": "免费使用额度已用完",
   "ui.sessionTurn.error.addCredits": "添加积分",
 
@@ -61,6 +64,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "正在考虑下一步",
 
   "ui.messagePart.questions.dismissed": "问题已忽略",
+  "ui.messagePart.compaction": "历史已压缩",
   "ui.messagePart.context.read.one": "{{count}} 次读取",
   "ui.messagePart.context.read.other": "{{count}} 次读取",
   "ui.messagePart.context.search.one": "{{count}} 次搜索",

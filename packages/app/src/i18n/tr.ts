@@ -119,7 +119,7 @@ export const dict = {
   "dialog.model.manage.description": "Model seçicide hangi modellerin görüneceğini özelleştirin.",
   "dialog.model.manage.provider.toggle": "Tüm {{provider}} modellerini aç/kapat",
 
-  "dialog.model.unpaid.freeModels.title": "OpenCode tarafından sunulan ücretsiz modeller",
+  "dialog.model.unpaid.freeModels.title": "OpenCode'un sunduğu ücretsiz modeller",
   "dialog.model.unpaid.addMore.title": "Popüler sağlayıcılardan daha fazla model ekleyin",
 
   "dialog.provider.viewAll": "Daha fazla sağlayıcı göster",
@@ -195,7 +195,7 @@ export const dict = {
   "provider.custom.error.baseURL.required": "Temel URL gerekli",
   "provider.custom.error.baseURL.format": "http:// veya https:// ile başlamalı",
   "provider.custom.error.required": "Gerekli",
-  "provider.custom.error.duplicate": "Tekrar",
+  "provider.custom.error.duplicate": "Çakışma",
 
   "provider.disconnect.toast.disconnected.title": "{{provider}} bağlantısı kesildi",
   "provider.disconnect.toast.disconnected.description": "{{provider}} modelleri artık kullanılabilir değil.",
@@ -252,7 +252,7 @@ export const dict = {
   "prompt.example.10": "API dokümantasyonu oluştur",
   "prompt.example.11": "Veritabanı sorgularını optimize et",
   "prompt.example.12": "Girdi doğrulama ekle",
-  "prompt.example.13": "İçin yeni bir bileşen oluştur...",
+  "prompt.example.13": "... için yeni bir bileşen oluştur",
   "prompt.example.14": "Bu projeyi nasıl dağıtabilirim?",
   "prompt.example.15": "Kodumu en iyi uygulamalar için incele",
   "prompt.example.16": "Bu fonksiyona hata yönetimi ekle",
@@ -263,13 +263,13 @@ export const dict = {
   "prompt.example.21": "Bir göç betiği yazmama yardım et",
   "prompt.example.22": "Bu uç nokta için önbellekleme uygula",
   "prompt.example.23": "Bu listeye sayfalama ekle",
-  "prompt.example.24": "İçin bir CLI komutu oluştur...",
+  "prompt.example.24": "... için bir CLI komutu oluştur",
   "prompt.example.25": "Ortam değişkenleri burada nasıl çalışıyor?",
 
   "prompt.popover.emptyResults": "Eşleşen sonuç yok",
   "prompt.popover.emptyCommands": "Eşleşen komut yok",
   "prompt.dropzone.label": "Görsel veya PDF'leri buraya bırakın",
-  "prompt.dropzone.file.label": "@bahsetmek için dosyayı bırakın",
+  "prompt.dropzone.file.label": "Dosyayı referans göstermek için bırakın",
   "prompt.slash.badge.custom": "özel",
   "prompt.slash.badge.skill": "beceri",
   "prompt.slash.badge.mcp": "mcp",
@@ -343,7 +343,7 @@ export const dict = {
   "dialog.project.edit.icon.recommended": "Önerilen: 128x128px",
   "dialog.project.edit.color": "Renk",
   "dialog.project.edit.color.select": "{{color}} rengini seç",
-  "dialog.project.edit.worktree.startup": "Çalışma alanı başlatma betiği",
+  "dialog.project.edit.worktree.startup": "Çalışma ağacı başlatma betiği",
   "dialog.project.edit.worktree.startup.description": "Yeni bir çalışma alanı (worktree) oluşturduktan sonra çalışır.",
   "dialog.project.edit.worktree.startup.placeholder": "örneğin bun install",
 
@@ -454,7 +454,7 @@ export const dict = {
   "error.page.version": "Sürüm: {{version}}",
 
   "error.dev.rootNotFound":
-    "Kök eleman bulunamadı. index.html dosyanıza eklemeyi unuttunuz mu? Ya da id özelliği yanlış mı yazıldı?",
+    "Kök eleman bulunamadı. index.html dosyanıza eklemeyi unuttunuz mu? Ya da ID özelliği yanlış mı yazıldı?",
 
   "error.globalSync.connectFailed": "Sunucuya bağlanılamadı. `{{url}}` adresinde çalışan bir sunucu var mı?",
   "directory.error.invalidUrl": "URL'de geçersiz dizin.",
