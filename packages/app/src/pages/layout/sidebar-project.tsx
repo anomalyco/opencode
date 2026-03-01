@@ -113,12 +113,11 @@ const ProjectTile = (props: {
       >
         <Show when={isBusy()}>
           <div
-            class="absolute -inset-[25%] size-[150%] pointer-events-none"
+            class="absolute -inset-[25%] size-[150%] pointer-events-none animate-[spin_2s_linear_infinite]"
             style={{
               background: props.selected()
                 ? "conic-gradient(from 0deg, transparent 0deg, var(--icon-interactive-base) 20deg, var(--icon-interactive-base) 40deg, transparent 120deg)"
                 : "conic-gradient(from 0deg, transparent 0deg, var(--icon-interactive-base) 40deg, var(--icon-interactive-base) 70deg, transparent 100deg)",
-              animation: "spin-gradient 2s linear infinite",
               opacity: props.selected() ? "0.6" : "1",
             }}
           />
@@ -129,11 +128,7 @@ const ProjectTile = (props: {
           aria-label={displayName(props.project)}
           data-action="project-switch"
           data-project={base64Encode(props.project.worktree)}
-          classList={{
-            "relative z-10 flex items-center justify-center size-full rounded-md overflow-hidden transition-colors cursor-default": true,
-            "bg-background-base hover:bg-surface-base-hover": props.selected(),
-            "bg-background-base": !props.selected(),
-          }}
+          class="relative z-10 flex items-center justify-center size-full rounded-md overflow-hidden transition-colors cursor-default bg-background-base"
           onMouseEnter={(event: MouseEvent) => {
             if (!props.overlay()) return
             if (props.suppressHover()) return
