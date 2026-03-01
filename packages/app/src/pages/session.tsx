@@ -496,16 +496,13 @@ export default function Page() {
   const hasScrollGesture = () => Date.now() - ui.scrollGesture < scrollGestureWindowMs
 
   createEffect(
-    on(
-      [() => sdk.directory, () => params.id] as const,
-      ([, id]) => {
-        if (!id) return
-        untrack(() => {
-          void sync.session.sync(id)
-          void sync.session.todo(id)
-        })
-      },
-    ),
+    on([() => sdk.directory, () => params.id] as const, ([, id]) => {
+      if (!id) return
+      untrack(() => {
+        void sync.session.sync(id)
+        void sync.session.todo(id)
+      })
+    }),
   )
 
   createEffect(
