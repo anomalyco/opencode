@@ -833,7 +833,7 @@ export namespace Provider {
             attachment: false,
             toolcall: true,
             input: { text: true, audio: false, image: false, video: false, pdf: false },
-            output: { text: true, audio: false, image: false },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
           },
         },
         "blackbox-pro": {
@@ -856,7 +856,7 @@ export namespace Provider {
             attachment: false,
             toolcall: true,
             input: { text: true, audio: false, image: false, video: false, pdf: false },
-            output: { text: true, audio: false, image: false },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
           },
         },
         "blackbox-search": {
@@ -879,7 +879,7 @@ export namespace Provider {
             attachment: false,
             toolcall: false,
             input: { text: true, audio: false, image: false, video: false, pdf: false },
-            output: { text: true, audio: false, image: false },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
           },
         },
       },
