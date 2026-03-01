@@ -2,6 +2,7 @@ import { strict as assert } from "assert"
 import { describe, it, before, after } from "mocha"
 import * as vscode from "vscode"
 import { MockAcpServer } from "../fixtures/mockAcpServer"
+import { screenshot } from "../test-utils/screenshot"
 
 /**
  * Integration tests for extension activation.
@@ -20,20 +21,25 @@ describe("Activation (Integration)", () => {
   })
 
   describe("server lifecycle", () => {
-    it("starts mock server successfully", () => {
+    it("starts mock server successfully", async () => {
       assert.ok(server.getPort() > 0, "Server should be running on a port")
+      // Screenshot: Extension activated
+      await screenshot.capture("extension", "activated")
     })
 
     it("accepts connections", async () => {
       // The server is running, just verify it exists
       assert.ok(server, "Mock server should exist")
+      // Screenshot: Participant registered
+      await screenshot.capture("extension", "participant-registered")
     })
 
-    it("handles initialize request", (done) => {
+    it("handles initialize request", async () => {
       // This tests the server responds correctly
       // In real integration tests, we'd connect and verify
       assert.ok(server.getPort() > 0)
-      done()
+      // Screenshot: ACP connected
+      await screenshot.capture("extension", "acp-connected")
     })
   })
 
