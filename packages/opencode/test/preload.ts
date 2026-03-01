@@ -69,6 +69,13 @@ delete process.env["DEEPSEEK_API_KEY"]
 delete process.env["FIREWORKS_API_KEY"]
 delete process.env["CEREBRAS_API_KEY"]
 delete process.env["SAMBANOVA_API_KEY"]
+delete process.env["DATABRICKS_HOST"]
+delete process.env["DATABRICKS_TOKEN"]
+delete process.env["DATABRICKS_CLIENT_ID"]
+delete process.env["DATABRICKS_CLIENT_SECRET"]
+delete process.env["ARM_CLIENT_ID"]
+delete process.env["ARM_CLIENT_SECRET"]
+delete process.env["ARM_TENANT_ID"]
 
 // Now safe to import from src/
 const { Log } = await import("../src/util/log")

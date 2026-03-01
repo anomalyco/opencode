@@ -114,6 +114,7 @@ export namespace Provider {
     autoload: boolean
     getModel?: CustomModelLoader
     options?: Record<string, any>
+    metadata?: Info["metadata"]
   }>
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
@@ -588,6 +589,428 @@ export namespace Provider {
         },
       }
     },
+    databricks: async (input) => {
+      const {
+        Config: DatabricksConfig,
+        isAnyAuthConfigured,
+        WorkspaceClient,
+      } = await import("@databricks/sdk-experimental")
+
+      const opencodeConfig = await Config.get()
+      const providerConfig = opencodeConfig.provider?.["databricks"]
+      const auth = await Auth.get("databricks")
+      const authProfile = auth?.type === "databricks-profile" ? auth.profile : undefined
+      const profile = authProfile ?? providerConfig?.options?.profile
+
+      // Build Databricks SDK Config with all available credential sources.
+      // The SDK handles the full auth chain: PAT, OAuth M2M, Databricks CLI,
+      // Azure CLI/MSI/AD, GCP credentials, and ~/.databrickscfg profiles.
+      const dbConfig = new DatabricksConfig({
+        // Use opencode's per-instance env so the SDK reads DATABRICKS_HOST,
+        // DATABRICKS_TOKEN, etc. from the correct isolated environment.
+        env: Env.all(),
+        // Host: stored auth > opencode config > SDK reads from env/databrickscfg
+        host:
+          (auth?.type === "api" ? auth.host : undefined) ??
+          providerConfig?.options?.baseURL ??
+          providerConfig?.options?.host ??
+          undefined,
+        // Token from stored auth (SDK reads DATABRICKS_TOKEN from env itself)
+        token: auth?.type === "api" ? auth.key : undefined,
+        // OAuth M2M from opencode config (SDK reads DATABRICKS_CLIENT_ID/SECRET from env)
+        clientId: providerConfig?.options?.clientId,
+        clientSecret: providerConfig?.options?.clientSecret,
+        // Azure AD from opencode config (SDK reads ARM_CLIENT_ID/SECRET/TENANT_ID from env)
+        azureClientId: providerConfig?.options?.azureClientId,
+        azureClientSecret: providerConfig?.options?.azureClientSecret,
+        azureTenantId: providerConfig?.options?.azureTenantId,
+        // Profile from stored auth selection first, then config.
+        // SDK still falls back to DATABRICKS_CONFIG_PROFILE from env.
+        profile,
+      })
+
+      const source = profile ? `profile "${profile}"` : dbConfig.host ? `host ${dbConfig.host}` : "default config"
+
+      // Resolve config (loads ~/.databrickscfg, env vars, etc.)
+      try {
+        await dbConfig.ensureResolved()
+      } catch (e) {
+        const msg = `Databricks auth failed to resolve (${source}): ${e instanceof Error ? e.message : "unknown error"}`
+        log.warn(msg)
+        return { autoload: false, metadata: { profile, error: msg } }
+      }
+
+      if (!dbConfig.host || !isAnyAuthConfigured(dbConfig)) {
+        const msg = !dbConfig.host
+          ? `Databricks: no host configured. Set DATABRICKS_HOST, add host to ~/.databrickscfg, or run /connect.`
+          : `Databricks: no authentication configured for ${dbConfig.host}. Set DATABRICKS_TOKEN, configure a profile, or run /connect.`
+        log.warn(msg)
+        return { autoload: false, metadata: { host: dbConfig.host, profile, error: msg } }
+      }
+
+      // Verify auth works by authenticating a test request
+      try {
+        const testHeaders = new Headers()
+        await dbConfig.authenticate(testHeaders)
+        if (!testHeaders.has("Authorization")) {
+          const msg = `Databricks: authentication produced no credentials for ${dbConfig.host} (${source}). Token may be expired - try running /connect or "databricks auth login".`
+          log.warn(msg)
+          return { autoload: false, metadata: { host: dbConfig.host, profile, error: msg } }
+        }
+      } catch (e) {
+        const msg = `Databricks: authentication failed for ${dbConfig.host} (${source}): ${e instanceof Error ? e.message : "unknown error"}`
+        log.warn(msg)
+        return { autoload: false, metadata: { host: dbConfig.host, profile, error: msg } }
+      }
+
+      const normalizedHost = (await dbConfig.getHost()).origin
+      const baseURL = `${normalizedHost}/serving-endpoints`
+      const anthropicBaseURL = `${normalizedHost}/serving-endpoints/anthropic/v1`
+
+      // Authenticate requests using the Databricks SDK credential chain.
+      // This handles token refresh for all auth methods (PAT, OAuth, CLI, Azure, GCP).
+      const authenticateHeaders = async (headers: Headers) => {
+        await dbConfig.authenticate(headers)
+      }
+
+      // Dynamic model discovery via Databricks SDK.
+      // Lists serving endpoints to find foundation models automatically.
+      // No hardcoded models - all models come from the workspace's serving endpoints.
+
+      // Transform ModelsDev.Model to Provider.Model format
+      function toProviderModel(model: ModelsDev.Model): Model {
+        const idLower = model.id.toLowerCase()
+        const isClaude = model.family?.includes("claude") || idLower.includes("claude")
+        const isGPT = model.family?.includes("gpt") || idLower.includes("gpt") || idLower.includes("codex")
+
+        // Determine which SDK and URL to use per model family:
+        // - Claude models: native Anthropic API for full feature support
+        // - GPT/Codex models: OpenAI Responses API (required by Databricks for Codex)
+        // - Others (Gemini, OSS): OpenAI-compatible chat completions
+        const apiNpm = isClaude ? "@ai-sdk/anthropic" : isGPT ? "@ai-sdk/openai" : "@ai-sdk/openai-compatible"
+        const apiUrl = isClaude ? anthropicBaseURL : baseURL
+
+        return {
+          id: model.id,
+          providerID: "databricks",
+          name: model.name,
+          family: model.family,
+          api: {
+            id: model.id,
+            url: apiUrl,
+            npm: apiNpm,
+          },
+          status: "active",
+          headers: {},
+          options: model.options ?? {},
+          cost: {
+            input: model.cost?.input ?? 0,
+            output: model.cost?.output ?? 0,
+            cache: {
+              read: model.cost?.cache_read ?? 0,
+              write: model.cost?.cache_write ?? 0,
+            },
+          },
+          limit: {
+            context: model.limit.context,
+            output: model.limit.output,
+          },
+          capabilities: {
+            temperature: model.temperature,
+            reasoning: model.reasoning,
+            attachment: model.attachment,
+            toolcall: model.tool_call,
+            input: {
+              text: model.modalities?.input?.includes("text") ?? false,
+              audio: model.modalities?.input?.includes("audio") ?? false,
+              image: model.modalities?.input?.includes("image") ?? false,
+              video: model.modalities?.input?.includes("video") ?? false,
+              pdf: model.modalities?.input?.includes("pdf") ?? false,
+            },
+            output: {
+              text: model.modalities?.output?.includes("text") ?? false,
+              audio: model.modalities?.output?.includes("audio") ?? false,
+              image: model.modalities?.output?.includes("image") ?? false,
+              video: model.modalities?.output?.includes("video") ?? false,
+              pdf: model.modalities?.output?.includes("pdf") ?? false,
+            },
+            interleaved: false,
+          },
+          release_date: model.release_date,
+          variants: {},
+        }
+      }
+
+      // Discover models dynamically via Databricks SDK serving endpoints.
+      try {
+        const client = new WorkspaceClient(dbConfig)
+
+        {
+          // Known model families that reliably support tool calling
+          const toolCapableFamilies = ["claude", "gpt", "codex", "gemini"]
+
+          // Default context windows and capabilities per model family
+          const familyDefaults: Record<
+            string,
+            { context: number; output: number; reasoning: boolean; attachment: boolean }
+          > = {
+            claude: { context: 200000, output: 64000, reasoning: false, attachment: true },
+            gpt: { context: 400000, output: 128000, reasoning: true, attachment: true },
+            codex: { context: 400000, output: 128000, reasoning: true, attachment: true },
+            gemini: { context: 1000000, output: 65536, reasoning: true, attachment: true },
+          }
+
+          for await (const endpoint of client.servingEndpoints.list()) {
+            const endpointName = endpoint.name
+            if (!endpointName) continue
+            // Skip if already defined in user config
+            if (input.models[endpointName]) continue
+
+            // Only include foundation model endpoints with chat task
+            const foundationModel = endpoint.config?.served_entities?.[0]?.foundation_model
+            if (!foundationModel) continue
+            if (endpoint.task && endpoint.task !== "llm/v1/chat") continue
+
+            // Determine model family from endpoint name
+            const nameLower = endpointName.toLowerCase()
+            const family = toolCapableFamilies.find((f) => nameLower.includes(f))
+
+            // Only include models from known tool-capable families
+            if (!family) continue
+
+            const defaults = familyDefaults[family] ?? {
+              context: 128000,
+              output: 16000,
+              reasoning: false,
+              attachment: false,
+            }
+
+            const discoveredModel: ModelsDev.Model = {
+              id: endpointName,
+              name: foundationModel.display_name ?? endpointName,
+              family,
+              attachment: defaults.attachment,
+              reasoning: defaults.reasoning,
+              tool_call: true,
+              temperature: true,
+              release_date: new Date().toISOString().split("T")[0],
+              modalities: {
+                input: defaults.attachment ? ["text", "image"] : ["text"],
+                output: ["text"],
+              },
+              cost: { input: 0, output: 0 },
+              limit: { context: defaults.context, output: defaults.output },
+              options: {},
+            }
+
+            input.models[endpointName] = toProviderModel(discoveredModel)
+          }
+        }
+      } catch (e) {
+        // API discovery is best-effort; if it fails, no models will be available
+        log.warn("Failed to discover Databricks serving endpoints - no models will be available", {
+          error: e instanceof Error ? e.message : "Unknown error",
+        })
+      }
+
+      // Custom fetch that authenticates requests via SDK and fixes model-specific quirks
+      const databricksFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+        const headers = new Headers(init?.headers)
+        await authenticateHeaders(headers)
+
+        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
+        const isResponsesAPI = url.endsWith("/responses")
+
+        // Fix empty content issue: Databricks API rejects messages with empty string content
+        // The AI SDK sends content: "" for assistant messages with only tool calls
+        let body = init?.body
+        let isGeminiModel = false
+        if (body && typeof body === "string") {
+          try {
+            const parsed = JSON.parse(body)
+            // Detect if this is a Gemini model request
+            isGeminiModel = parsed.model?.includes("gemini") ?? false
+
+            if (parsed.messages && Array.isArray(parsed.messages)) {
+              parsed.messages = parsed.messages.map((msg: any) => {
+                // For assistant messages with tool_calls but empty content, set content to null
+                if (msg.role === "assistant" && msg.tool_calls && msg.content === "") {
+                  return { ...msg, content: null }
+                }
+                return msg
+              })
+              body = JSON.stringify(parsed)
+            }
+          } catch {
+            // If parsing fails, use original body
+          }
+        }
+
+        const response = await fetch(input, { ...init, body, headers })
+
+        // For Responses API requests (GPT/Codex), fix mismatched item IDs in the SSE stream.
+        // Databricks' proxy uses different IDs in output_item.added (short ID) vs
+        // content_part/output_text events (long ID). The AI SDK maps text-start using
+        // the item.id from output_item.added, then looks up text-delta using item_id
+        // from output_text.delta — if these don't match, it errors with
+        // "text part <id> not found". We normalize by rewriting item_id in content/delta
+        // events to match the item.id from the corresponding output_item.added event.
+        if (isResponsesAPI && response.body) {
+          const originalBody = response.body
+          // Map output_index → item.id from output_item.added events
+          const itemIdByIndex: Record<number, string> = {}
+
+          const transformStream = new TransformStream<Uint8Array, Uint8Array>({
+            transform(chunk, controller) {
+              const text = new TextDecoder().decode(chunk)
+              const lines = text.split("\n")
+              const transformedLines = lines.map((line) => {
+                if (!line.startsWith("data: ") || line === "data: [DONE]") {
+                  return line
+                }
+
+                try {
+                  const jsonStr = line.slice(6)
+                  if (!jsonStr.trim()) return line
+
+                  const data = JSON.parse(jsonStr)
+
+                  // Track item IDs from output_item.added events
+                  if (data.type === "response.output_item.added" && data.item?.id && data.output_index != null) {
+                    itemIdByIndex[data.output_index] = data.item.id
+                  }
+
+                  // Rewrite item_id in content/delta events to match the output_item.added ID
+                  if (data.item_id && data.output_index != null && itemIdByIndex[data.output_index]) {
+                    const expected = itemIdByIndex[data.output_index]
+                    if (data.item_id !== expected) {
+                      data.item_id = expected
+                      return "data: " + JSON.stringify(data)
+                    }
+                  }
+                } catch {
+                  // If parsing fails, return original line
+                }
+                return line
+              })
+
+              controller.enqueue(new TextEncoder().encode(transformedLines.join("\n")))
+            },
+          })
+
+          const transformedBody = originalBody.pipeThrough(transformStream)
+          return new Response(transformedBody, {
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers,
+          })
+        }
+
+        // For Gemini models, transform streaming responses
+        // Gemini returns content as array [{type:"text", text:"..."}] but AI SDK expects string
+        if (isGeminiModel && response.body) {
+          const originalBody = response.body
+          const transformStream = new TransformStream<Uint8Array, Uint8Array>({
+            transform(chunk, controller) {
+              const text = new TextDecoder().decode(chunk)
+              const lines = text.split("\n")
+              const transformedLines = lines.map((line) => {
+                if (!line.startsWith("data: ") || line === "data: [DONE]") {
+                  return line
+                }
+
+                try {
+                  const jsonStr = line.slice(6) // Remove "data: " prefix
+                  if (!jsonStr.trim()) return line
+
+                  const data = JSON.parse(jsonStr)
+
+                  // Transform choices[].delta.content from array to string
+                  if (data.choices && Array.isArray(data.choices)) {
+                    for (const choice of data.choices) {
+                      if (choice.delta && Array.isArray(choice.delta.content)) {
+                        // Extract text from content array
+                        const textParts = choice.delta.content
+                          .filter((part: any) => part.type === "text" && part.text)
+                          .map((part: any) => part.text)
+                        choice.delta.content = textParts.join("")
+                      }
+                    }
+                    return "data: " + JSON.stringify(data)
+                  }
+                } catch {
+                  // If parsing fails, return original line
+                }
+                return line
+              })
+
+              controller.enqueue(new TextEncoder().encode(transformedLines.join("\n")))
+            },
+          })
+
+          const transformedBody = originalBody.pipeThrough(transformStream)
+          return new Response(transformedBody, {
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers,
+          })
+        }
+
+        return response
+      }
+
+      log.info("Databricks authenticated", { host: normalizedHost, profile })
+
+      return {
+        autoload: true,
+        metadata: { host: normalizedHost, profile },
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          const modelLower = modelID.toLowerCase()
+          // GPT/Codex models use the OpenAI Responses API
+          // Codex models *require* it - Databricks rejects Chat Completions for them
+          if (modelLower.includes("gpt") || modelLower.includes("codex")) {
+            const openaiSdk = createOpenAI({
+              baseURL,
+              apiKey: "databricks", // placeholder - real auth via databricksFetch
+              headers: {
+                "User-Agent": "opencode",
+                "x-databricks-disable-beta-headers": "true",
+              },
+              fetch: databricksFetch as typeof fetch,
+            })
+            return openaiSdk.responses(modelID)
+          }
+          // Claude models use native Anthropic API for full feature support
+          // (extended thinking, prompt caching, native tool use format)
+          if (modelLower.includes("claude")) {
+            const anthropicSdk = createAnthropic({
+              baseURL: anthropicBaseURL,
+              apiKey: "databricks", // placeholder - real auth via databricksFetch
+              headers: {
+                "User-Agent": "opencode",
+                "anthropic-beta": "interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+              },
+              fetch: databricksFetch as typeof fetch,
+            })
+            return anthropicSdk.languageModel(modelID)
+          }
+          return sdk.languageModel(modelID)
+        },
+        options: {
+          baseURL,
+          apiKey: "databricks", // placeholder - real auth via databricksFetch
+          // Disable stream_options to prevent "unknown field" errors with Databricks OSS models
+          includeUsage: false,
+          headers: {
+            "User-Agent": "opencode",
+            // Prevent Claude beta headers from breaking Databricks Model Serving
+            "x-databricks-disable-beta-headers": "true",
+          },
+          // Use custom fetch that authenticates via Databricks SDK
+          fetch: databricksFetch as typeof fetch,
+        },
+      }
+    },
   }
 
   export const Model = z
@@ -670,6 +1093,13 @@ export namespace Provider {
       key: z.string().optional(),
       options: z.record(z.string(), z.any()),
       models: z.record(z.string(), Model),
+      metadata: z
+        .object({
+          host: z.string().optional(),
+          profile: z.string().optional(),
+          error: z.string().optional(),
+        })
+        .optional(),
     })
     .meta({
       ref: "Provider",
@@ -791,6 +1221,19 @@ export namespace Provider {
           ...model,
           providerID: "github-copilot-enterprise",
         })),
+      }
+    }
+
+    // Add Databricks provider for Foundation Model APIs
+    // This provider is not in models.dev so we create it programmatically
+    if (!database["databricks"]) {
+      database["databricks"] = {
+        id: "databricks",
+        name: "Databricks",
+        source: "custom",
+        env: ["DATABRICKS_TOKEN"],
+        options: {},
+        models: {},
       }
     }
 
@@ -960,6 +1403,8 @@ export namespace Provider {
       }
     }
 
+    const failedProviders: { [providerID: string]: Info["metadata"] } = {}
+
     for (const [providerID, fn] of Object.entries(CUSTOM_LOADERS)) {
       if (disabled.has(providerID)) continue
       const data = database[providerID]
@@ -972,7 +1417,10 @@ export namespace Provider {
         if (result.getModel) modelLoaders[providerID] = result.getModel
         const opts = result.options ?? {}
         const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
+        if (result.metadata) patch.metadata = result.metadata
         mergeProvider(providerID, patch)
+      } else if (result?.metadata?.error) {
+        failedProviders[providerID] = result.metadata
       }
     }
 
@@ -1029,6 +1477,7 @@ export namespace Provider {
     return {
       models: languages,
       providers,
+      failedProviders,
       sdk,
       modelLoaders,
     }
@@ -1036,6 +1485,10 @@ export namespace Provider {
 
   export async function list() {
     return state().then((state) => state.providers)
+  }
+
+  export async function failed() {
+    return state().then((state) => state.failedProviders)
   }
 
   async function getSDK(model: Model) {

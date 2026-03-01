@@ -36,6 +36,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       status: "loading" | "partial" | "complete"
       provider: Provider[]
       provider_default: Record<string, string>
+      provider_failed: Record<string, { host?: string; profile?: string; error?: string }>
       provider_next: ProviderListResponse
       provider_auth: Record<string, ProviderAuthMethod[]>
       agent: Agent[]
@@ -88,6 +89,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       command: [],
       provider: [],
       provider_default: {},
+      provider_failed: {},
       session: [],
       session_status: {},
       session_diff: {},
@@ -390,6 +392,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             batch(() => {
               setStore("provider", reconcile(providers.providers))
               setStore("provider_default", reconcile(providers.default))
+              setStore("provider_failed", reconcile((providers as any).failed ?? {}))
               setStore("provider_next", reconcile(providerList))
               setStore("agent", reconcile(agents))
               setStore("config", reconcile(config))

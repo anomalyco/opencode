@@ -847,6 +847,442 @@ describe("ProviderTransform.message - empty image handling", () => {
   })
 })
 
+describe("ProviderTransform.message - databricks empty content filtering", () => {
+  // Test with Databricks Claude (Anthropic model via OpenAI-compatible API)
+  const databricksClaudeModel = {
+    id: "databricks-claude-sonnet-4",
+    providerID: "databricks",
+    api: {
+      id: "databricks-claude-sonnet-4",
+      url: "https://my-workspace.cloud.databricks.com/serving-endpoints",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "Claude Sonnet 4 (Databricks)",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: {
+      input: 3,
+      output: 15,
+      cache: { read: 0.3, write: 0 },
+    },
+    limit: {
+      context: 200000,
+      output: 64000,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  // Test with Databricks GPT-5 (OpenAI model via OpenAI-compatible API)
+  const databricksGptModel = {
+    id: "databricks-gpt-5",
+    providerID: "databricks",
+    api: {
+      id: "databricks-gpt-5",
+      url: "https://my-workspace.cloud.databricks.com/serving-endpoints",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "GPT-5 (Databricks)",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: {
+      input: 1.25,
+      output: 10,
+      cache: { read: 0.125, write: 0 },
+    },
+    limit: {
+      context: 400000,
+      output: 128000,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  // Test with Databricks Gemini (Google model via OpenAI-compatible API)
+  const databricksGeminiModel = {
+    id: "databricks-gemini-3-pro",
+    providerID: "databricks",
+    api: {
+      id: "databricks-gemini-3-pro",
+      url: "https://my-workspace.cloud.databricks.com/serving-endpoints",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "Gemini 3 Pro (Databricks)",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: true, image: true, video: true, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: {
+      input: 2,
+      output: 12,
+      cache: { read: 0.2, write: 0 },
+    },
+    limit: {
+      context: 1000000,
+      output: 65536,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  // Use databricksClaudeModel as the default for existing tests
+  const databricksModel = databricksClaudeModel
+
+  test("filters out messages with empty string content", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: "" },
+      { role: "user", content: "World" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, databricksModel, {})
+
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toBe("Hello")
+    expect(result[1].content).toBe("World")
+  })
+
+  test("filters out empty text parts from array content", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "" },
+          { type: "text", text: "Hello" },
+          { type: "text", text: "" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, databricksModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(1)
+    expect(result[0].content[0]).toMatchObject({ type: "text", text: "Hello" })
+  })
+
+  test("keeps tool-call parts when text parts are empty", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "" },
+          { type: "tool-call", toolCallId: "123", toolName: "bash", input: { command: "ls" } },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, databricksModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(1)
+    expect(result[0].content[0]).toMatchObject({
+      type: "tool-call",
+      toolCallId: "123",
+      toolName: "bash",
+      input: { command: "ls" },
+    })
+  })
+
+  test("keeps tool-result parts when text parts are empty", () => {
+    const msgs = [
+      {
+        role: "tool",
+        content: [{ type: "tool-result", toolCallId: "123", toolName: "bash", result: "output" }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, databricksModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(1)
+  })
+
+  test("removes entire message when all parts are empty", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "" },
+          { type: "reasoning", text: "" },
+        ],
+      },
+      { role: "user", content: "World" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, databricksModel, {})
+
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toBe("Hello")
+    expect(result[1].content).toBe("World")
+  })
+
+  test("handles assistant message with only tool call (no text)", () => {
+    const msgs = [
+      { role: "user", content: "Run a command" },
+      {
+        role: "assistant",
+        content: [{ type: "tool-call", toolCallId: "call_123", toolName: "bash", input: { command: "ls" } }],
+      },
+      {
+        role: "tool",
+        content: [{ type: "tool-result", toolCallId: "call_123", toolName: "bash", result: "file1.txt" }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, databricksModel, {})
+
+    expect(result).toHaveLength(3)
+    // Assistant message should just have tool call, no text
+    expect(result[1].content).toHaveLength(1)
+    expect(result[1].content[0]).toMatchObject({ type: "tool-call", toolCallId: "call_123" })
+    // Tool result should be preserved
+    expect(result[2].content).toHaveLength(1)
+    expect(result[2].content[0]).toMatchObject({ type: "tool-result", toolCallId: "call_123" })
+  })
+
+  test("handles empty text alongside tool call (empty text should be filtered)", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "" },
+          { type: "tool-call", toolCallId: "call_123", toolName: "bash", input: { command: "ls" } },
+          { type: "text", text: "" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, databricksModel, {})
+
+    expect(result).toHaveLength(1)
+    // Empty text parts should be filtered, only tool call remains
+    expect(result[0].content).toHaveLength(1)
+    expect(result[0].content[0]).toMatchObject({ type: "tool-call" })
+  })
+
+  // Explicit tool calling tests for each Databricks model type
+
+  describe("Databricks Claude (Anthropic) - tool calling", () => {
+    test("filters empty text and keeps tool calls", () => {
+      const msgs = [
+        { role: "user", content: "Run a command" },
+        {
+          role: "assistant",
+          content: [
+            { type: "text", text: "" },
+            { type: "tool-call", toolCallId: "claude_call_1", toolName: "bash", input: { command: "echo hello" } },
+          ],
+        },
+        {
+          role: "tool",
+          content: [{ type: "tool-result", toolCallId: "claude_call_1", toolName: "bash", result: "hello" }],
+        },
+      ] as any[]
+
+      const result = ProviderTransform.message(msgs, databricksClaudeModel, {})
+
+      expect(result).toHaveLength(3)
+      // Assistant message: empty text filtered, tool call preserved
+      expect(result[1].content).toHaveLength(1)
+      expect(result[1].content[0]).toMatchObject({
+        type: "tool-call",
+        toolCallId: "claude_call_1",
+        toolName: "bash",
+      })
+      // Tool result preserved
+      expect(result[2].content[0]).toMatchObject({
+        type: "tool-result",
+        toolCallId: "claude_call_1",
+      })
+    })
+
+    test("handles multiple tool calls with empty text", () => {
+      const msgs = [
+        {
+          role: "assistant",
+          content: [
+            { type: "text", text: "" },
+            { type: "tool-call", toolCallId: "call_1", toolName: "read", input: { file: "foo.ts" } },
+            { type: "text", text: "" },
+            { type: "tool-call", toolCallId: "call_2", toolName: "edit", input: { file: "bar.ts" } },
+            { type: "text", text: "" },
+          ],
+        },
+      ] as any[]
+
+      const result = ProviderTransform.message(msgs, databricksClaudeModel, {})
+
+      expect(result).toHaveLength(1)
+      // All empty text parts filtered, both tool calls preserved
+      expect(result[0].content).toHaveLength(2)
+      expect(result[0].content[0]).toMatchObject({ type: "tool-call", toolCallId: "call_1" })
+      expect(result[0].content[1]).toMatchObject({ type: "tool-call", toolCallId: "call_2" })
+    })
+  })
+
+  describe("Databricks GPT-5 (OpenAI) - tool calling", () => {
+    test("filters empty text and keeps tool calls", () => {
+      const msgs = [
+        { role: "user", content: "List files" },
+        {
+          role: "assistant",
+          content: [
+            { type: "text", text: "" },
+            { type: "tool-call", toolCallId: "gpt_call_1", toolName: "bash", input: { command: "ls -la" } },
+          ],
+        },
+        {
+          role: "tool",
+          content: [{ type: "tool-result", toolCallId: "gpt_call_1", toolName: "bash", result: "total 0\ndrwxr-xr-x" }],
+        },
+      ] as any[]
+
+      const result = ProviderTransform.message(msgs, databricksGptModel, {})
+
+      expect(result).toHaveLength(3)
+      // Assistant message: empty text filtered, tool call preserved
+      expect(result[1].content).toHaveLength(1)
+      expect(result[1].content[0]).toMatchObject({
+        type: "tool-call",
+        toolCallId: "gpt_call_1",
+        toolName: "bash",
+      })
+      // Tool result preserved
+      expect(result[2].content[0]).toMatchObject({
+        type: "tool-result",
+        toolCallId: "gpt_call_1",
+      })
+    })
+
+    test("handles reasoning with tool calls (empty reasoning filtered)", () => {
+      const msgs = [
+        {
+          role: "assistant",
+          content: [
+            { type: "reasoning", text: "" },
+            { type: "tool-call", toolCallId: "gpt_reason_call", toolName: "read", input: { file: "config.json" } },
+          ],
+        },
+      ] as any[]
+
+      const result = ProviderTransform.message(msgs, databricksGptModel, {})
+
+      expect(result).toHaveLength(1)
+      // Empty reasoning filtered, tool call preserved
+      expect(result[0].content).toHaveLength(1)
+      expect(result[0].content[0]).toMatchObject({ type: "tool-call", toolCallId: "gpt_reason_call" })
+    })
+  })
+
+  describe("Databricks Gemini (Google) - tool calling", () => {
+    test("filters empty text and keeps tool calls", () => {
+      const msgs = [
+        { role: "user", content: "Search for files" },
+        {
+          role: "assistant",
+          content: [
+            { type: "text", text: "" },
+            { type: "tool-call", toolCallId: "gemini_call_1", toolName: "glob", input: { pattern: "**/*.ts" } },
+          ],
+        },
+        {
+          role: "tool",
+          content: [
+            { type: "tool-result", toolCallId: "gemini_call_1", toolName: "glob", result: "src/index.ts\nsrc/app.ts" },
+          ],
+        },
+      ] as any[]
+
+      const result = ProviderTransform.message(msgs, databricksGeminiModel, {})
+
+      expect(result).toHaveLength(3)
+      // Assistant message: empty text filtered, tool call preserved
+      expect(result[1].content).toHaveLength(1)
+      expect(result[1].content[0]).toMatchObject({
+        type: "tool-call",
+        toolCallId: "gemini_call_1",
+        toolName: "glob",
+      })
+      // Tool result preserved
+      expect(result[2].content[0]).toMatchObject({
+        type: "tool-result",
+        toolCallId: "gemini_call_1",
+      })
+    })
+
+    test("handles multi-turn conversation with tools", () => {
+      const msgs = [
+        { role: "user", content: "Read the config" },
+        {
+          role: "assistant",
+          content: [
+            { type: "text", text: "" },
+            { type: "tool-call", toolCallId: "gem_1", toolName: "read", input: { file: "config.json" } },
+          ],
+        },
+        {
+          role: "tool",
+          content: [{ type: "tool-result", toolCallId: "gem_1", toolName: "read", result: '{"debug": true}' }],
+        },
+        {
+          role: "assistant",
+          content: [
+            { type: "text", text: "The config has debug enabled. Let me update it." },
+            {
+              type: "tool-call",
+              toolCallId: "gem_2",
+              toolName: "edit",
+              input: { file: "config.json", content: '{"debug": false}' },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          content: [{ type: "tool-result", toolCallId: "gem_2", toolName: "edit", result: "File updated" }],
+        },
+      ] as any[]
+
+      const result = ProviderTransform.message(msgs, databricksGeminiModel, {})
+
+      expect(result).toHaveLength(5)
+      // First assistant: only tool call (empty text filtered)
+      expect(result[1].content).toHaveLength(1)
+      expect(result[1].content[0]).toMatchObject({ type: "tool-call" })
+      // Second assistant: text + tool call preserved
+      expect(result[3].content).toHaveLength(2)
+      expect(result[3].content[0]).toMatchObject({
+        type: "text",
+        text: "The config has debug enabled. Let me update it.",
+      })
+      expect(result[3].content[1]).toMatchObject({ type: "tool-call" })
+    })
+  })
+})
+
 describe("ProviderTransform.message - anthropic empty content filtering", () => {
   const anthropicModel = {
     id: "anthropic/claude-3-5-sonnet",
@@ -2349,5 +2785,1047 @@ describe("ProviderTransform.variants", () => {
       const result = ProviderTransform.variants(model)
       expect(result).toEqual({})
     })
+  })
+})
+
+describe("ProviderTransform.message - Databricks prompt caching", () => {
+  const databricksGptModel = {
+    id: "databricks-gpt-5",
+    providerID: "databricks",
+    api: {
+      id: "databricks-gpt-5",
+      url: "https://my-workspace.cloud.databricks.com/serving-endpoints",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "GPT-5 (Databricks)",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: {
+      input: 1.25,
+      output: 10,
+      cache: { read: 0.125, write: 0 },
+    },
+    limit: {
+      context: 400000,
+      output: 128000,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  const databricksClaudeModel = {
+    id: "databricks-claude-sonnet-4",
+    providerID: "databricks",
+    api: {
+      id: "databricks-claude-sonnet-4",
+      url: "https://my-workspace.cloud.databricks.com/serving-endpoints",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "Claude Sonnet 4 (Databricks)",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: {
+      input: 3,
+      output: 15,
+      cache: { read: 0.3, write: 0 },
+    },
+    limit: {
+      context: 200000,
+      output: 64000,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  const databricksNoCacheModel = {
+    id: "databricks-no-cache-model",
+    providerID: "databricks",
+    api: {
+      id: "databricks-no-cache-model",
+      url: "https://my-workspace.cloud.databricks.com/serving-endpoints",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "No Cache Model (Databricks)",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: {
+      input: 1,
+      output: 2,
+      cache: { read: 0, write: 0 }, // No cache support
+    },
+    limit: {
+      context: 100000,
+      output: 10000,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("applies cache_control to system messages for Databricks GPT model", () => {
+    const msgs = [
+      { role: "system", content: "You are a helpful assistant." },
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: "Hi there!" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, databricksGptModel, {}) as any[]
+
+    // System message should have cache control
+    const systemMsg = result.find((m) => m.role === "system")
+    expect(systemMsg).toBeDefined()
+    expect(systemMsg!.providerOptions).toBeDefined()
+    expect(systemMsg!.providerOptions.openaiCompatible).toEqual({ cache_control: { type: "ephemeral" } })
+  })
+
+  test("applies cache_control to system messages for Databricks Claude model", () => {
+    const msgs = [
+      { role: "system", content: "You are a coding assistant." },
+      { role: "user", content: "Write code" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, databricksClaudeModel, {}) as any[]
+
+    const systemMsg = result.find((m) => m.role === "system")
+    expect(systemMsg).toBeDefined()
+    expect(systemMsg!.providerOptions).toBeDefined()
+    expect(systemMsg!.providerOptions.openaiCompatible).toEqual({ cache_control: { type: "ephemeral" } })
+  })
+
+  test("applies cache_control to last messages in conversation", () => {
+    const msgs = [
+      { role: "system", content: "System prompt" },
+      { role: "user", content: "First message" },
+      { role: "assistant", content: "First response" },
+      { role: "user", content: "Second message" },
+      { role: "assistant", content: "Second response" },
+      { role: "user", content: "Third message" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, databricksGptModel, {}) as any[]
+
+    // Last 2 non-system messages should have cache control
+    const lastTwo = result.filter((m) => m.role !== "system").slice(-2)
+    expect(lastTwo).toHaveLength(2)
+
+    for (const msg of lastTwo) {
+      expect(msg.providerOptions).toBeDefined()
+      expect(msg.providerOptions!.openaiCompatible).toEqual({ cache_control: { type: "ephemeral" } })
+    }
+  })
+
+  test("does not apply caching for Databricks model without cache cost", () => {
+    const msgs = [
+      { role: "system", content: "You are a helpful assistant." },
+      { role: "user", content: "Hello" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, databricksNoCacheModel, {}) as any[]
+
+    // No cache control should be applied when cache.read is 0
+    const systemMsg = result.find((m) => m.role === "system")
+    expect(systemMsg).toBeDefined()
+    expect(systemMsg!.providerOptions?.openaiCompatible?.cache_control).toBeUndefined()
+  })
+
+  test("applies cache_control to array content for Databricks models", () => {
+    const msgs = [
+      { role: "system", content: "System prompt" },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Hello" },
+          { type: "text", text: "World" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, databricksGptModel, {}) as any[]
+
+    // User message with array content should have cache control on last content part
+    const userMsg = result.find((m) => m.role === "user")
+    expect(userMsg).toBeDefined()
+    expect(userMsg!.content).toHaveLength(2)
+
+    // Last content part should have providerOptions with cache_control
+    const lastPart = userMsg!.content[userMsg!.content.length - 1]
+    expect(lastPart.providerOptions).toBeDefined()
+    expect(lastPart.providerOptions.openaiCompatible).toEqual({ cache_control: { type: "ephemeral" } })
+  })
+
+  test("caching is applied to first 2 system messages", () => {
+    const msgs = [
+      { role: "system", content: "First system message" },
+      { role: "system", content: "Second system message" },
+      { role: "system", content: "Third system message" },
+      { role: "user", content: "Hello" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, databricksGptModel, {}) as any[]
+
+    const systemMsgs = result.filter((m) => m.role === "system")
+
+    // First two system messages should have cache control
+    expect(systemMsgs[0].providerOptions?.openaiCompatible).toEqual({ cache_control: { type: "ephemeral" } })
+    expect(systemMsgs[1].providerOptions?.openaiCompatible).toEqual({ cache_control: { type: "ephemeral" } })
+
+    // Third system message should NOT have cache control
+    expect(systemMsgs[2].providerOptions?.openaiCompatible?.cache_control).toBeUndefined()
+  })
+})
+
+describe("ProviderTransform.schema - Databricks Gemini $schema stripping", () => {
+  const databricksGeminiModel = {
+    id: "databricks-gemini-3-pro",
+    providerID: "databricks",
+    api: {
+      id: "databricks-gemini-3-pro",
+      url: "https://workspace.cloud.databricks.com/serving-endpoints",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "Gemini 3 Pro (Databricks)",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: true, image: true, video: true, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: {
+      input: 2,
+      output: 12,
+      cache: { read: 0.2, write: 0 },
+    },
+    limit: {
+      context: 1000000,
+      output: 65536,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "2025-11-20",
+  } as any
+
+  const databricksGptModel2 = {
+    id: "databricks-gpt-5",
+    providerID: "databricks",
+    api: {
+      id: "databricks-gpt-5",
+      url: "https://workspace.cloud.databricks.com/serving-endpoints",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "GPT-5 (Databricks)",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: {
+      input: 1.25,
+      output: 10,
+      cache: { read: 0.125, write: 0 },
+    },
+    limit: {
+      context: 400000,
+      output: 128000,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "2025-06-12",
+  } as any
+
+  test("strips $schema field from Databricks Gemini tool schemas", () => {
+    const schema = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: {
+        name: { type: "string" },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(databricksGeminiModel, schema) as any
+
+    expect(result.$schema).toBeUndefined()
+    expect(result.type).toBe("object")
+    expect(result.properties.name.type).toBe("string")
+  })
+
+  test("strips $defs and definitions from Databricks Gemini tool schemas", () => {
+    const schema = {
+      type: "object",
+      $defs: {
+        MyType: { type: "string" },
+      },
+      definitions: {
+        AnotherType: { type: "number" },
+      },
+      properties: {
+        name: { type: "string" },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(databricksGeminiModel, schema) as any
+
+    expect(result.$defs).toBeUndefined()
+    expect(result.definitions).toBeUndefined()
+    expect(result.properties.name.type).toBe("string")
+  })
+
+  test("resolves $ref references inline for Databricks Gemini", () => {
+    const schema = {
+      type: "object",
+      $defs: {
+        Address: {
+          type: "object",
+          properties: {
+            street: { type: "string" },
+            city: { type: "string" },
+          },
+        },
+      },
+      properties: {
+        homeAddress: { $ref: "#/$defs/Address" },
+        workAddress: { $ref: "#/$defs/Address" },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(databricksGeminiModel, schema) as any
+
+    // $defs should be stripped
+    expect(result.$defs).toBeUndefined()
+
+    // $ref should be resolved inline
+    expect(result.properties.homeAddress.type).toBe("object")
+    expect(result.properties.homeAddress.properties.street.type).toBe("string")
+    expect(result.properties.homeAddress.$ref).toBeUndefined()
+
+    expect(result.properties.workAddress.type).toBe("object")
+    expect(result.properties.workAddress.properties.city.type).toBe("string")
+  })
+
+  test("resolves nested $ref references", () => {
+    const schema = {
+      type: "object",
+      $defs: {
+        Person: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            address: { $ref: "#/$defs/Address" },
+          },
+        },
+        Address: {
+          type: "object",
+          properties: {
+            city: { type: "string" },
+          },
+        },
+      },
+      properties: {
+        person: { $ref: "#/$defs/Person" },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(databricksGeminiModel, schema) as any
+
+    expect(result.properties.person.type).toBe("object")
+    expect(result.properties.person.properties.name.type).toBe("string")
+    expect(result.properties.person.properties.address.type).toBe("object")
+    expect(result.properties.person.properties.address.properties.city.type).toBe("string")
+  })
+
+  test("does NOT strip $schema for non-Gemini Databricks models", () => {
+    const schema = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: {
+        name: { type: "string" },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(databricksGptModel2, schema) as any
+
+    // GPT models keep $schema (they handle it fine)
+    expect(result.$schema).toBe("https://json-schema.org/draft/2020-12/schema")
+  })
+
+  test("handles schemas with both $schema and $ref", () => {
+    const schema = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      $defs: {
+        Item: { type: "string" },
+      },
+      properties: {
+        items: {
+          type: "array",
+          items: { $ref: "#/$defs/Item" },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(databricksGeminiModel, schema) as any
+
+    expect(result.$schema).toBeUndefined()
+    expect(result.$defs).toBeUndefined()
+    expect(result.properties.items.type).toBe("array")
+    expect(result.properties.items.items.type).toBe("string")
+  })
+
+  test("preserves other schema fields while stripping $schema", () => {
+    const schema = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      title: "MyTool",
+      description: "A useful tool",
+      required: ["name"],
+      properties: {
+        name: { type: "string", description: "The name" },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(databricksGeminiModel, schema) as any
+
+    expect(result.$schema).toBeUndefined()
+    expect(result.title).toBe("MyTool")
+    expect(result.description).toBe("A useful tool")
+    expect(result.required).toEqual(["name"])
+    expect(result.properties.name.description).toBe("The name")
+  })
+})
+
+describe("ProviderTransform.schema - Databricks Gemini advanced $ref and $schema handling", () => {
+  const databricksGeminiModel = {
+    id: "databricks-gemini-3-pro",
+    providerID: "databricks",
+    api: {
+      id: "databricks-gemini-3-pro",
+      url: "https://workspace.cloud.databricks.com/serving-endpoints",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "Gemini 3 Pro (Databricks)",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: true, image: true, video: true, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 2, output: 12, cache: { read: 0.2, write: 0 } },
+    limit: { context: 1000000, output: 65536 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  const openaiModel = {
+    id: "gpt-5",
+    providerID: "openai",
+    api: {
+      id: "gpt-5",
+      url: "https://api.openai.com",
+      npm: "@ai-sdk/openai",
+    },
+    name: "GPT-5",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 1.25, output: 10, cache: { read: 0.125, write: 0 } },
+    limit: { context: 400000, output: 128000 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("strips $schema from MCP tool schemas with deeply nested properties", () => {
+    // MCP tools include $schema at root - Gemini rejects this
+    const schema = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: {
+        query: { type: "string" },
+        options: {
+          type: "object",
+          properties: {
+            nested: {
+              type: "object",
+              $schema: "https://json-schema.org/draft/2020-12/schema",
+              properties: {
+                deep: { type: "string" },
+              },
+            },
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(databricksGeminiModel, schema) as any
+
+    expect(result.$schema).toBeUndefined()
+    // Nested $schema should also be stripped
+    expect(result.properties.options.properties.nested.$schema).toBeUndefined()
+    expect(result.properties.options.properties.nested.type).toBe("object")
+    expect(result.properties.options.properties.nested.properties.deep.type).toBe("string")
+  })
+
+  test("handles circular $ref without infinite loop", () => {
+    // TreeNode references itself - must not infinite loop
+    const schema = {
+      type: "object",
+      $defs: {
+        TreeNode: {
+          type: "object",
+          properties: {
+            value: { type: "string" },
+            children: {
+              type: "array",
+              items: { $ref: "#/$defs/TreeNode" },
+            },
+          },
+        },
+      },
+      properties: {
+        root: { $ref: "#/$defs/TreeNode" },
+      },
+    } as any
+
+    // Should not hang - must complete within reasonable time
+    const result = ProviderTransform.schema(databricksGeminiModel, schema) as any
+
+    // Root should be resolved
+    expect(result.properties.root.type).toBe("object")
+    expect(result.properties.root.properties.value.type).toBe("string")
+    // Circular ref should be replaced with {type: "object"} fallback
+    expect(result.properties.root.properties.children.type).toBe("array")
+    expect(result.properties.root.properties.children.items).toBeDefined()
+    // Should not have $ref remaining
+    expect(result.properties.root.properties.children.items.$ref).toBeUndefined()
+  })
+
+  test("expands $ref with definitions (legacy format)", () => {
+    const schema = {
+      type: "object",
+      definitions: {
+        Color: {
+          type: "string",
+          enum: ["red", "green", "blue"],
+        },
+      },
+      properties: {
+        favoriteColor: { $ref: "#/definitions/Color" },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(databricksGeminiModel, schema) as any
+
+    expect(result.definitions).toBeUndefined()
+    expect(result.properties.favoriteColor.type).toBe("string")
+    expect(result.properties.favoriteColor.enum).toEqual(["red", "green", "blue"])
+    expect(result.properties.favoriteColor.$ref).toBeUndefined()
+  })
+
+  test("preserves description alongside $ref", () => {
+    const schema = {
+      type: "object",
+      $defs: {
+        Address: {
+          type: "object",
+          properties: {
+            street: { type: "string" },
+          },
+        },
+      },
+      properties: {
+        home: {
+          $ref: "#/$defs/Address",
+          description: "Home address override",
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(databricksGeminiModel, schema) as any
+
+    // The resolved ref should be inlined
+    expect(result.properties.home.type).toBe("object")
+    expect(result.properties.home.properties.street.type).toBe("string")
+    expect(result.properties.home.$ref).toBeUndefined()
+    // The local description should be preserved (overrides resolved ref)
+    expect(result.properties.home.description).toBe("Home address override")
+  })
+
+  test("does not expand $ref for non-Databricks providers", () => {
+    const schema = {
+      type: "object",
+      $defs: {
+        Item: { type: "string" },
+      },
+      properties: {
+        name: { $ref: "#/$defs/Item" },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(openaiModel, schema) as any
+
+    // OpenAI provider should keep $ref as-is
+    expect(result.properties.name.$ref).toBe("#/$defs/Item")
+    expect(result.$defs).toBeDefined()
+  })
+
+  test("expands $ref in array items", () => {
+    const schema = {
+      type: "object",
+      $defs: {
+        QuestionOption: {
+          type: "object",
+          properties: {
+            label: { type: "string" },
+            description: { type: "string" },
+          },
+          required: ["label", "description"],
+        },
+      },
+      properties: {
+        options: {
+          type: "array",
+          items: { $ref: "#/$defs/QuestionOption" },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(databricksGeminiModel, schema) as any
+
+    expect(result.$defs).toBeUndefined()
+    expect(result.properties.options.type).toBe("array")
+    expect(result.properties.options.items.type).toBe("object")
+    expect(result.properties.options.items.properties.label.type).toBe("string")
+    expect(result.properties.options.items.$ref).toBeUndefined()
+  })
+})
+
+describe("ProviderTransform.schema - MCP tool schema sanitization flow", () => {
+  // These tests simulate the exact flow that prompt.ts should use:
+  // 1. Extract raw JSON schema from MCP tool (via inputSchema.jsonSchema)
+  // 2. Pass through ProviderTransform.schema(model, rawSchema)
+  // 3. Result should be safe for the target provider's API
+
+  const databricksGeminiModel = {
+    id: "databricks-gemini-3-pro",
+    providerID: "databricks",
+    api: {
+      id: "databricks-gemini-3-pro",
+      url: "https://workspace.cloud.databricks.com/serving-endpoints",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "Gemini 3 Pro (Databricks)",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: true, image: true, video: true, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 2, output: 12, cache: { read: 0.2, write: 0 } },
+    limit: { context: 1000000, output: 65536 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  const openaiModel = {
+    id: "gpt-5",
+    providerID: "openai",
+    api: {
+      id: "gpt-5",
+      url: "https://api.openai.com",
+      npm: "@ai-sdk/openai",
+    },
+    name: "GPT-5",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 1.25, output: 10, cache: { read: 0.125, write: 0 } },
+    limit: { context: 400000, output: 128000 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  const databricksNonGeminiModel = {
+    id: "databricks-dbrx-instruct",
+    providerID: "databricks",
+    api: {
+      id: "databricks-dbrx-instruct",
+      url: "https://workspace.cloud.databricks.com/serving-endpoints",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "DBRX Instruct (Databricks)",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0.75, output: 2.25, cache: { read: 0, write: 0 } },
+    limit: { context: 32768, output: 4096 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("MCP-style schema with $schema + $ref + $defs fully sanitized for Databricks Gemini", () => {
+    // Realistic MCP tool schema - has $schema (from JSON Schema spec), $defs with $ref
+    const mcpSchema = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      $defs: {
+        Option: {
+          type: "object",
+          properties: {
+            label: { type: "string" },
+            description: { type: "string" },
+          },
+          required: ["label"],
+        },
+      },
+      properties: {
+        query: { type: "string", description: "Search query" },
+        options: {
+          type: "array",
+          items: { $ref: "#/$defs/Option" },
+        },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    } as any
+
+    const result = ProviderTransform.schema(databricksGeminiModel, mcpSchema) as any
+
+    // $schema must be stripped - Gemini API rejects it
+    expect(result.$schema).toBeUndefined()
+    // $defs must be stripped - Gemini API rejects it
+    expect(result.$defs).toBeUndefined()
+    // $ref must be resolved inline
+    expect(result.properties.options.items.$ref).toBeUndefined()
+    expect(result.properties.options.items.type).toBe("object")
+    expect(result.properties.options.items.properties.label.type).toBe("string")
+    // Other fields preserved
+    expect(result.properties.query.type).toBe("string")
+    expect(result.properties.query.description).toBe("Search query")
+    expect(result.required).toEqual(["query"])
+    expect(result.type).toBe("object")
+  })
+
+  test("MCP tool schemas are unchanged for non-Databricks providers", () => {
+    const mcpSchema = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      $defs: {
+        Item: { type: "string" },
+      },
+      properties: {
+        name: { $ref: "#/$defs/Item" },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(openaiModel, mcpSchema) as any
+
+    // Non-Databricks providers should keep all fields as-is
+    expect(result.$schema).toBe("https://json-schema.org/draft/2020-12/schema")
+    expect(result.$defs).toBeDefined()
+    expect(result.properties.name.$ref).toBe("#/$defs/Item")
+  })
+
+  test("MCP tool execute function preserved after schema sanitization", () => {
+    // Simulates the prompt.ts pattern: spread tool object with new inputSchema
+    const executeResult = { content: [{ type: "text", text: "result" }] }
+    const mockExecute = async () => executeResult
+
+    // Simulate MCP tool object (like what MCP.tools() returns)
+    const mcpTool = {
+      description: "A test MCP tool",
+      inputSchema: {
+        jsonSchema: {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          type: "object",
+          properties: { query: { type: "string" } },
+        },
+      },
+      execute: mockExecute,
+      type: "dynamic" as const,
+    }
+
+    // Apply the same pattern as the prompt.ts fix
+    const rawSchema = (mcpTool.inputSchema as any)?.jsonSchema ?? {}
+    const sanitizedSchema = ProviderTransform.schema(databricksGeminiModel, rawSchema)
+    const sanitizedTool = {
+      ...mcpTool,
+      inputSchema: { jsonSchema: sanitizedSchema },
+    }
+
+    // Schema should be sanitized
+    expect((sanitizedTool.inputSchema as any).jsonSchema.$schema).toBeUndefined()
+    // Execute function should be preserved (same reference)
+    expect(sanitizedTool.execute).toBe(mockExecute)
+    // Description and type should be preserved
+    expect(sanitizedTool.description).toBe("A test MCP tool")
+    expect(sanitizedTool.type).toBe("dynamic")
+  })
+
+  test("MCP tool schemas get type:object but keep $schema for non-Gemini Databricks models", () => {
+    const mcpSchema = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      $defs: {
+        Item: { type: "string" },
+      },
+      properties: {
+        items: {
+          type: "array",
+          items: { $ref: "#/$defs/Item" },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(databricksNonGeminiModel, mcpSchema) as any
+
+    // Non-Gemini Databricks: type: "object" ensured but $schema/$ref/$defs preserved
+    expect(result.type).toBe("object")
+    expect(result.$schema).toBe("https://json-schema.org/draft/2020-12/schema")
+    expect(result.$defs).toBeDefined()
+    expect(result.properties.items.items.$ref).toBe("#/$defs/Item")
+  })
+})
+
+describe("ProviderTransform.schema - Databricks Gemini bare ref field stripping", () => {
+  const databricksGeminiModel = {
+    id: "databricks-gemini-2.0-flash",
+    providerID: "databricks",
+    api: {
+      id: "databricks-gemini-2.0-flash",
+      url: "https://workspace.cloud.databricks.com/serving-endpoints",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "Gemini 2.0 Flash (Databricks)",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+    limit: { context: 1048576, output: 8192 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  const openaiModel = {
+    id: "gpt-4o",
+    providerID: "openai",
+    api: {
+      id: "gpt-4o",
+      url: "https://api.openai.com/v1",
+      npm: "@ai-sdk/openai",
+    },
+    name: "GPT-4o",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 2.5, output: 10, cache: { read: 1.25, write: 0 } },
+    limit: { context: 128000, output: 16384 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("Databricks Gemini: strips bare ref field from Zod metadata", () => {
+    // Zod's .meta({ ref: "QuestionOption" }) produces a bare "ref" field (no $ prefix)
+    // Gemini interprets this as Schema.ref and rejects the schema
+    const schema = {
+      ref: "QuestionOption",
+      type: "object",
+      properties: {
+        label: { type: "string" },
+        description: { type: "string" },
+      },
+      required: ["label", "description"],
+    } as any
+
+    const result = ProviderTransform.schema(databricksGeminiModel, schema) as any
+
+    // Bare "ref" must be stripped
+    expect(result.ref).toBeUndefined()
+    // All other fields must be preserved
+    expect(result.type).toBe("object")
+    expect(result.properties.label.type).toBe("string")
+    expect(result.properties.description.type).toBe("string")
+    expect(result.required).toEqual(["label", "description"])
+  })
+
+  test("Databricks Gemini: strips nested bare ref fields", () => {
+    // Schema with bare "ref" at multiple nesting levels
+    const schema = {
+      ref: "Outer",
+      type: "object",
+      properties: {
+        inner: {
+          ref: "Inner",
+          type: "object",
+          properties: {
+            value: { type: "string" },
+          },
+        },
+        items: {
+          type: "array",
+          items: {
+            ref: "ArrayItem",
+            type: "string",
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(databricksGeminiModel, schema) as any
+
+    // All bare "ref" fields must be stripped at every level
+    expect(result.ref).toBeUndefined()
+    expect(result.properties.inner.ref).toBeUndefined()
+    expect(result.properties.items.items.ref).toBeUndefined()
+    // Structure preserved
+    expect(result.type).toBe("object")
+    expect(result.properties.inner.type).toBe("object")
+    expect(result.properties.inner.properties.value.type).toBe("string")
+    expect(result.properties.items.type).toBe("array")
+    expect(result.properties.items.items.type).toBe("string")
+  })
+
+  test("non-Databricks: preserves bare ref field", () => {
+    // Non-Databricks providers should NOT strip bare ref
+    const schema = {
+      ref: "QuestionOption",
+      type: "object",
+      properties: {
+        label: { type: "string" },
+      },
+      required: ["label"],
+    } as any
+
+    const result = ProviderTransform.schema(openaiModel, schema) as any
+
+    // Bare "ref" should be preserved for non-Databricks providers
+    expect(result.ref).toBe("QuestionOption")
+    expect(result.type).toBe("object")
+    expect(result.properties.label.type).toBe("string")
+  })
+
+  test("Databricks Gemini: realistic question tool schema sanitized", () => {
+    // Full QuestionInfo-like schema matching what question/index.ts produces:
+    // - $defs with QuestionOption that has ref: "QuestionOption" (Zod metadata)
+    // - options array referencing QuestionOption via $ref
+    // - Top-level ref: "QuestionInfo" (Zod metadata)
+    const schema = {
+      ref: "QuestionInfo",
+      type: "object",
+      $defs: {
+        QuestionOption: {
+          ref: "QuestionOption",
+          type: "object",
+          properties: {
+            label: { type: "string", description: "Display text for this option" },
+            description: { type: "string", description: "Explanation of this option" },
+          },
+          required: ["label", "description"],
+        },
+      },
+      properties: {
+        question: { type: "string", description: "The question to ask" },
+        options: {
+          type: "array",
+          items: { $ref: "#/$defs/QuestionOption" },
+          description: "Available choices",
+        },
+        multiSelect: { type: "boolean", description: "Allow multiple selections" },
+      },
+      required: ["question", "options"],
+    } as any
+
+    const result = ProviderTransform.schema(databricksGeminiModel, schema) as any
+
+    // No bare "ref" fields anywhere
+    expect(result.ref).toBeUndefined()
+    // $defs must be removed (resolved inline)
+    expect(result.$defs).toBeUndefined()
+    // $ref must be resolved inline
+    expect(result.properties.options.items.$ref).toBeUndefined()
+    // QuestionOption resolved inline - with its bare "ref" stripped too
+    expect(result.properties.options.items.ref).toBeUndefined()
+    expect(result.properties.options.items.type).toBe("object")
+    expect(result.properties.options.items.properties.label.type).toBe("string")
+    expect(result.properties.options.items.properties.label.description).toBe("Display text for this option")
+    expect(result.properties.options.items.properties.description.type).toBe("string")
+    expect(result.properties.options.items.required).toEqual(["label", "description"])
+    // Top-level structure preserved
+    expect(result.type).toBe("object")
+    expect(result.properties.question.type).toBe("string")
+    expect(result.properties.multiSelect.type).toBe("boolean")
+    expect(result.required).toEqual(["question", "options"])
   })
 })

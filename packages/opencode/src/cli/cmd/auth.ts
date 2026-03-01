@@ -313,6 +313,7 @@ export const AuthLoginCommand = cmd({
           google: 4,
           openrouter: 5,
           vercel: 6,
+          databricks: 7,
         }
         const pluginProviders = resolvePluginProviders({
           hooks: await Plugin.list(),
@@ -393,6 +394,24 @@ export const AuthLoginCommand = cmd({
           )
         }
 
+        if (provider === "databricks") {
+          prompts.log.info(
+            "Databricks Foundation Model APIs authentication:\n" +
+              "  /connect prompts for a Databricks profile first and stores it in auth.json.\n" +
+              "  This command stores workspace URL + Personal Access Token for fallback/manual auth.\n\n" +
+              "Authentication options (in priority order):\n" +
+              "  1. Stored /connect credentials (workspace URL + PAT)\n" +
+              "  2. Stored Databricks profile selection in auth.json\n" +
+              "  3. Environment variables: DATABRICKS_HOST + DATABRICKS_TOKEN or DATABRICKS_CONFIG_PROFILE\n" +
+              "  4. Databricks CLI profile: databricks auth login --profile <profile>\n" +
+              "  5. OAuth M2M: DATABRICKS_CLIENT_ID + DATABRICKS_CLIENT_SECRET\n" +
+              "  6. Azure AD Service Principal: ARM_CLIENT_ID + ARM_CLIENT_SECRET + ARM_TENANT_ID\n" +
+              "  7. Azure CLI (auto): uses 'az account get-access-token' when logged in\n\n" +
+              "If profile-based SDK auth is unavailable, /connect falls back to host + PAT prompts.\n" +
+              "Create PATs at: Workspace > Settings > Developer > Access tokens",
+          )
+        }
+
         if (provider === "opencode") {
           prompts.log.info("Create an api key at https://opencode.ai/auth")
         }
@@ -407,6 +426,22 @@ export const AuthLoginCommand = cmd({
           )
         }
 
+        // For Databricks, prompt for host first
+        let host: string | undefined
+        if (provider === "databricks") {
+          const hostInput = await prompts.text({
+            message: "Enter your Databricks workspace URL",
+            placeholder: "https://your-workspace.cloud.databricks.com",
+            validate: (x) => {
+              if (!x || x.length === 0) return "Required"
+              if (!x.startsWith("https://")) return "Must start with https://"
+              return undefined
+            },
+          })
+          if (prompts.isCancel(hostInput)) throw new UI.CancelledError()
+          host = hostInput.replace(/\/$/, "") // Remove trailing slash
+        }
+
         const key = await prompts.password({
           message: "Enter your API key",
           validate: (x) => (x && x.length > 0 ? undefined : "Required"),
@@ -415,6 +450,7 @@ export const AuthLoginCommand = cmd({
         await Auth.set(provider, {
           type: "api",
           key,
+          host,
         })
 
         prompts.outro("Done")

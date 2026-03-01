@@ -1518,6 +1518,12 @@ export type OAuth = {
 export type ApiAuth = {
   type: "api"
   key: string
+  host?: string
+}
+
+export type DatabricksProfileAuth = {
+  type: "databricks-profile"
+  profile: string
 }
 
 export type WellKnownAuth = {
@@ -1526,7 +1532,7 @@ export type WellKnownAuth = {
   token: string
 }
 
-export type Auth = OAuth | ApiAuth | WellKnownAuth
+export type Auth = OAuth | ApiAuth | DatabricksProfileAuth | WellKnownAuth
 
 export type NotFoundError = {
   name: "NotFoundError"
@@ -1617,6 +1623,11 @@ export type Provider = {
   }
   models: {
     [key: string]: Model
+  }
+  metadata?: {
+    host?: string
+    profile?: string
+    error?: string
   }
 }
 
@@ -2379,6 +2390,13 @@ export type ConfigProvidersResponses = {
     providers: Array<Provider>
     default: {
       [key: string]: string
+    }
+    failed?: {
+      [key: string]: {
+        host?: string
+        profile?: string
+        error?: string
+      }
     }
   }
 }

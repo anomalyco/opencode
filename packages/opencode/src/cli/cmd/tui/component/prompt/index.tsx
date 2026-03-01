@@ -1099,11 +1099,17 @@ export function Prompt(props: PromptProps) {
                     const retryText = () => {
                       const r = retry()
                       if (!r) return ""
-                      const baseMessage = message()
+                      const rawMessage = r.message.toLowerCase()
+                      const baseMessage =
+                        rawMessage.includes("too many requests") || rawMessage.includes("rate limit")
+                          ? "Rate limited by provider"
+                          : message()
                       const truncatedHint = isTruncated() ? " (click to expand)" : ""
-                      const duration = formatDuration(seconds())
-                      const retryInfo = ` [retrying ${duration ? `in ${duration} ` : ""}attempt #${r.attempt}]`
-                      return baseMessage + truncatedHint + retryInfo
+                      const duration = formatDuration(Math.max(0, seconds()))
+                      const retryInfo = duration
+                        ? `Retrying in ${duration} (attempt ${r.attempt})`
+                        : `Retrying now (attempt ${r.attempt})`
+                      return `${baseMessage}${truncatedHint} - ${retryInfo}`
                     }
 
                     return (

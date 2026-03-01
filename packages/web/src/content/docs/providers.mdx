@@ -1816,6 +1816,155 @@ Some useful routing options:
 
 ---
 
+### Databricks
+
+To use Databricks Foundation Model APIs with OpenCode:
+
+#### Quick Start with Databricks CLI (Recommended)
+
+If you have the [Databricks CLI](https://docs.databricks.com/en/dev-tools/cli/index.html) installed and authenticated, OpenCode will automatically detect and use your credentials:
+
+1. Authenticate with the Databricks CLI:
+
+   ```bash
+   databricks auth login --host https://your-workspace.cloud.databricks.com
+   ```
+
+2. Run the `/connect` command and search for **Databricks**.
+
+   ```txt
+   /connect
+   ```
+
+   :::tip
+   If you have valid CLI credentials, OpenCode will automatically detect them and skip the manual authentication prompts.
+   :::
+
+3. Run the `/models` command to see available Databricks models.
+
+   ```txt
+   /models
+   ```
+
+#### Manual Setup
+
+If you don't have the Databricks CLI, you can authenticate manually:
+
+1. Run the `/connect` command and search for **Databricks**.
+
+   ```txt
+   /connect
+   ```
+
+2. If SDK auth is not already available, enter your Databricks workspace URL and Personal Access Token.
+
+   ```txt
+   ┌ Databricks Host URL
+   │ https://your-workspace.cloud.databricks.com
+   │
+   └ enter
+   ```
+
+   ```txt
+   ┌ API key (Personal Access Token)
+   │
+   │
+   └ enter
+   ```
+
+   :::tip
+   Create a Personal Access Token at: Workspace → Settings → Developer → Access tokens
+   :::
+
+3. Run the `/models` command to see available Databricks models.
+
+   ```txt
+   /models
+   ```
+
+#### Authentication Methods
+
+Databricks supports multiple authentication methods (in priority order):
+
+1. **Stored credentials**: Workspace URL + PAT saved via `/connect`
+2. **Stored Databricks profile**: Profile selected in `/connect` and saved in `auth.json`
+3. **Configuration file**: Host/profile from `opencode.json` config
+4. **Environment variables**: `DATABRICKS_HOST`, `DATABRICKS_TOKEN`, or `DATABRICKS_CONFIG_PROFILE`
+5. **Databricks CLI profile**: Host from `~/.databrickscfg` and token from `~/.databricks/token-cache.json`
+6. **OAuth M2M**: Set `DATABRICKS_CLIENT_ID` and `DATABRICKS_CLIENT_SECRET` environment variables
+7. **Azure AD Service Principal**: Set `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, and `ARM_TENANT_ID` environment variables
+8. **Azure CLI**: Automatically used for Azure Databricks workspaces when logged in with `az login`
+
+#### Using Databricks CLI Profiles
+
+OpenCode can read your workspace host from `~/.databrickscfg` profiles:
+
+```ini title="~/.databrickscfg"
+[DEFAULT]
+host = https://your-workspace.cloud.databricks.com
+
+[staging]
+host = https://staging-workspace.cloud.databricks.com
+```
+
+To use a specific profile, set the `DATABRICKS_CONFIG_PROFILE` environment variable or configure it in `opencode.json`:
+
+```bash
+DATABRICKS_CONFIG_PROFILE=staging opencode
+```
+
+Or in your config:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "databricks": {
+      "options": {
+        "profile": "staging"
+      }
+    }
+  }
+}
+```
+
+When you choose **Databricks** in `/connect`, OpenCode prompts you to pick a Databricks CLI profile first.
+The selected profile is saved to OpenCode `auth.json`, and OpenCode then uses Databricks SDK resolution for that profile.
+If profile-based SDK auth is unavailable, `/connect` falls back to workspace host + PAT prompts.
+
+:::tip
+When using Databricks CLI authentication, OpenCode automatically refreshes expired tokens from the CLI token cache (`~/.databricks/token-cache.json`). If your token expires, simply run `databricks auth login --profile <profile>` to refresh it.
+:::
+
+#### Configuration
+
+You can also configure Databricks through your `opencode.json` file:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "databricks": {
+      "options": {
+        "baseURL": "https://your-workspace.cloud.databricks.com/serving-endpoints"
+      },
+      "models": {
+        "custom-model": {
+          "name": "My Custom Model"
+        }
+      }
+    }
+  }
+}
+```
+
+#### Workspace URL Formats
+
+- **AWS/GCP**: `https://dbc-xxx.cloud.databricks.com`
+- **Azure**: `https://adb-xxx.azuredatabricks.net`
+
+---
+
 ## Custom provider
 
 To add any **OpenAI-compatible** provider that's not listed in the `/connect` command:

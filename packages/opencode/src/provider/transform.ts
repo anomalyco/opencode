@@ -49,9 +49,9 @@ export namespace ProviderTransform {
     model: Provider.Model,
     options: Record<string, unknown>,
   ): ModelMessage[] {
-    // Anthropic rejects messages with empty content - filter out empty string messages
+    // Anthropic and Databricks reject messages with empty content - filter out empty string messages
     // and remove empty text/reasoning parts from array content
-    if (model.api.npm === "@ai-sdk/anthropic") {
+    if (model.api.npm === "@ai-sdk/anthropic" || model.providerID === "databricks") {
       msgs = msgs
         .map((msg) => {
           if (typeof msg.content === "string") {
@@ -61,7 +61,7 @@ export namespace ProviderTransform {
           if (!Array.isArray(msg.content)) return msg
           const filtered = msg.content.filter((part) => {
             if (part.type === "text" || part.type === "reasoning") {
-              return part.text !== ""
+              return (part as any).text !== ""
             }
             return true
           })
@@ -258,7 +258,9 @@ export namespace ProviderTransform {
         model.api.id.includes("claude") ||
         model.id.includes("anthropic") ||
         model.id.includes("claude") ||
-        model.api.npm === "@ai-sdk/anthropic") &&
+        model.api.npm === "@ai-sdk/anthropic" ||
+        // Apply caching for Databricks models that support it (GPT, Gemini)
+        (model.providerID === "databricks" && model.cost.cache.read > 0)) &&
       model.api.npm !== "@ai-sdk/gateway"
     ) {
       msgs = applyCaching(msgs, model)
@@ -503,6 +505,11 @@ export namespace ProviderTransform {
           }
           return arr
         })
+        // Databricks proxies GPT/Codex via @ai-sdk/openai but doesn't support
+        // encrypted reasoning content or reasoning summaries
+        if (model.providerID === "databricks") {
+          return Object.fromEntries(openaiEfforts.map((effort) => [effort, { reasoningEffort: effort }]))
+        }
         return Object.fromEntries(
           openaiEfforts.map((effort) => [
             effort,
@@ -759,7 +766,10 @@ export namespace ProviderTransform {
     if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
       if (!input.model.api.id.includes("gpt-5-pro")) {
         result["reasoningEffort"] = "medium"
-        result["reasoningSummary"] = "auto"
+        // Databricks proxies don't support reasoning summaries
+        if (input.model.providerID !== "databricks") {
+          result["reasoningSummary"] = "auto"
+        }
       }
 
       // Only set textVerbosity for non-chat gpt-5.x models
@@ -877,6 +887,92 @@ export namespace ProviderTransform {
   }
 
   export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema | JSONSchema7): JSONSchema7 {
+    // Databricks requires type: "object" on tool parameter schemas
+    if (model.providerID === "databricks") {
+      const ensureType = (obj: any): any => {
+        if (obj === null || typeof obj !== "object") {
+          return obj
+        }
+        if (Array.isArray(obj)) {
+          return obj.map(ensureType)
+        }
+        const result: any = { ...obj }
+        // If schema has properties but no type, add type: "object"
+        if (result.properties && !result.type) {
+          result.type = "object"
+        }
+        // Recursively process nested schemas
+        for (const [key, value] of Object.entries(result)) {
+          if (typeof value === "object" && value !== null) {
+            result[key] = ensureType(value)
+          }
+        }
+        return result
+      }
+      schema = ensureType(schema)
+
+      // For Databricks Gemini models, strip $schema and resolve $ref references
+      // Gemini API rejects tool schemas containing $schema field
+      if (model.id.includes("gemini")) {
+        const sanitizeForGemini = (obj: any, defs?: Record<string, any>, resolving?: Set<string>): any => {
+          if (obj === null || typeof obj !== "object") {
+            return obj
+          }
+
+          if (Array.isArray(obj)) {
+            return obj.map((item) => sanitizeForGemini(item, defs, resolving))
+          }
+
+          const result: any = {}
+          const seen = resolving ?? new Set<string>()
+
+          // Collect $defs/definitions for reference resolution
+          const definitions = obj.$defs ?? obj.definitions ?? defs
+
+          for (const [key, value] of Object.entries(obj)) {
+            // Strip $schema, $defs, and definitions fields
+            if (key === "$schema" || key === "$defs" || key === "definitions") {
+              continue
+            }
+
+            // Strip bare "ref" field (Zod metadata via .meta({ ref }) that Gemini interprets as Schema.ref)
+            if (key === "ref") {
+              continue
+            }
+
+            // Resolve $ref references inline
+            if (key === "$ref" && typeof value === "string" && definitions) {
+              const refPath = value.replace(/^#\/(\$defs|definitions)\//, "")
+              // Detect circular references
+              if (seen.has(refPath)) {
+                Object.assign(result, { type: "object" })
+                continue
+              }
+              const resolved = definitions[refPath]
+              if (resolved) {
+                seen.add(refPath)
+                // Merge resolved reference into result (without the $ref key)
+                const sanitized = sanitizeForGemini(resolved, definitions, seen)
+                Object.assign(result, sanitized)
+                seen.delete(refPath)
+                continue
+              }
+            }
+
+            if (typeof value === "object" && value !== null) {
+              result[key] = sanitizeForGemini(value, definitions, seen)
+            } else {
+              result[key] = value
+            }
+          }
+
+          return result
+        }
+
+        schema = sanitizeForGemini(schema)
+      }
+    }
+
     /*
     if (["openai", "azure"].includes(providerID)) {
       if (schema.type === "object" && schema.properties) {

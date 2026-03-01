@@ -1,4 +1,4 @@
-import { createMemo, createSignal, onMount, Show } from "solid-js"
+import { createMemo, createSignal, onMount, Show, createEffect } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { map, pipe, sortBy } from "remeda"
 import { DialogSelect } from "@tui/ui/dialog-select"
@@ -13,6 +13,9 @@ import { DialogModel } from "./dialog-model"
 import { useKeyboard } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { useToast } from "../ui/toast"
+import { parseDatabricksProfiles, pickDatabricksProfileFlow } from "@/provider/databricks-profile"
+import os from "os"
+import path from "path"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -85,6 +88,10 @@ export function createDialogProviderOptions() {
             }
           }
           if (method.type === "api") {
+            // Databricks requires both host and API key
+            if (provider.id === "databricks") {
+              return dialog.replace(() => <DatabricksApiMethod providerID={provider.id} title={method.label} />)
+            }
             return dialog.replace(() => <ApiMethod providerID={provider.id} title={method.label} />)
           }
         },
@@ -197,6 +204,249 @@ function CodeMethod(props: CodeMethodProps) {
           </Show>
         </box>
       )}
+    />
+  )
+}
+
+interface DatabricksApiMethodProps {
+  providerID: string
+  title: string
+}
+function DatabricksApiMethod(props: DatabricksApiMethodProps) {
+  const { theme } = useTheme()
+  const dialog = useDialog()
+  const sdk = useSDK()
+  const sync = useSync()
+  const [profileOptions, setProfileOptions] = createSignal<string[]>([])
+  const [showHostPrompt, setShowHostPrompt] = createSignal(false)
+  const [profileHint, setProfileHint] = createSignal<string | undefined>()
+  const [pendingProfile, setPendingProfile] = createSignal<string | undefined>()
+  // Get host from environment variable
+  const envHost = typeof process !== "undefined" ? process.env["DATABRICKS_HOST"] : undefined
+
+  const readProfiles = async () => {
+    const home = process.env["HOME"] ?? process.env["USERPROFILE"] ?? os.homedir()
+    const raw = process.env["DATABRICKS_CONFIG_FILE"] ?? path.join(home, ".databrickscfg")
+    const cfg = raw.startsWith("~/") ? path.join(home, raw.slice(2)) : raw
+    try {
+      const file = Bun.file(cfg)
+      if (!(await file.exists())) return []
+      const profiles = parseDatabricksProfiles(await file.text())
+      if (profiles.length > 0) return profiles
+    } catch {
+      // ignore and try CLI fallback
+    }
+    try {
+      const proc = Bun.spawn(["databricks", "auth", "profiles"], {
+        stdout: "pipe",
+        stderr: "ignore",
+      })
+      const output = await new Response(proc.stdout).text()
+      if ((await proc.exited) !== 0) return []
+      return output
+        .split("\n")
+        .map((line) => line.trim())
+        .flatMap((line) => {
+          if (!line || line.startsWith("Name")) return []
+          const match = line.match(/^(.+?)\s{2,}/)
+          if (!match) return []
+          const name = match[1]?.trim()
+          if (!name) return []
+          return [name]
+        })
+    } catch {
+      return []
+    }
+  }
+
+  const authWithSdk = async (profile?: string) => {
+    try {
+      const { Config: DatabricksConfig } = await import("@databricks/sdk-experimental")
+      const dbConfig = new DatabricksConfig({
+        env: process.env,
+        profile,
+      })
+      await dbConfig.ensureResolved()
+      if (!dbConfig.host) return false
+      const headers = new Headers()
+      await dbConfig.authenticate(headers)
+      return headers.has("Authorization")
+    } catch {
+      return false
+    }
+  }
+
+  const connect = async () => {
+    await sdk.client.instance.dispose()
+    await sync.bootstrap()
+    dialog.replace(() => <DialogModel providerID={props.providerID} />)
+  }
+
+  // Check if the Databricks SDK can authenticate (CLI tokens, databrickscfg, etc.)
+  onMount(async () => {
+    const envProfile = process.env["DATABRICKS_CONFIG_PROFILE"]?.trim()
+    if (envProfile) setProfileHint(envProfile)
+    if (envProfile && (await authWithSdk(envProfile))) return connect()
+
+    const profiles = await readProfiles()
+    const flow = pickDatabricksProfileFlow({ profiles })
+    if (flow.promptProfiles) setProfileOptions(flow.promptProfiles)
+    if (flow.promptProfiles) return
+    if (await authWithSdk()) return connect()
+  })
+
+  createEffect(() => {
+    const profile = pendingProfile()
+    if (!profile) return
+    void (async () => {
+      if (await authWithSdk(profile)) return connect()
+      setPendingProfile(undefined)
+      setShowHostPrompt(true)
+    })()
+  })
+
+  if (pendingProfile()) {
+    return (
+      <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
+        <text attributes={TextAttributes.BOLD} fg={theme.text}>
+          Authenticating Databricks profile
+        </text>
+        <text fg={theme.textMuted}>Profile: {pendingProfile()}</text>
+        <text fg={theme.textMuted}>Checking Databricks CLI credentials...</text>
+      </box>
+    )
+  }
+
+  if (profileOptions().length > 0) {
+    return (
+      <DialogSelect
+        title="Select Databricks profile"
+        options={profileOptions().map((profile) => ({
+          title: profile,
+          value: profile,
+        }))}
+        onSelect={async (option) => {
+          const profile = option.value
+          const updated = await sdk.client.auth
+            .set(
+              {
+                providerID: props.providerID,
+                auth: {
+                  type: "databricks-profile",
+                  profile,
+                },
+              },
+              { throwOnError: true },
+            )
+            .then(() => true)
+            .catch(() => false)
+          if (!updated) {
+            setShowHostPrompt(true)
+            return
+          }
+          setPendingProfile(profile)
+        }}
+      />
+    )
+  }
+
+  if (!showHostPrompt()) {
+    return (
+      <DialogPrompt
+        title="Databricks Profile"
+        placeholder={profileHint() ?? "DEFAULT"}
+        description={() => (
+          <box gap={1}>
+            <text fg={theme.textMuted}>Enter the Databricks CLI profile to use</text>
+            <text fg={theme.textMuted}>Run "databricks auth profiles" to list available profiles</text>
+          </box>
+        )}
+        onConfirm={async (value) => {
+          const profile = value?.trim()
+          if (!profile) return
+          const updated = await sdk.client.auth
+            .set(
+              {
+                providerID: props.providerID,
+                auth: {
+                  type: "databricks-profile",
+                  profile,
+                },
+              },
+              { throwOnError: true },
+            )
+            .then(() => true)
+            .catch(() => false)
+          if (!updated) {
+            setShowHostPrompt(true)
+            return
+          }
+          setPendingProfile(profile)
+        }}
+      />
+    )
+  }
+
+  return (
+    <DialogPrompt
+      title="Databricks Host URL"
+      placeholder="https://your-workspace.cloud.databricks.com"
+      value={envHost ? envHost.replace(/\/$/, "") : undefined}
+      description={() => (
+        <box gap={1}>
+          <text fg={theme.textMuted}>Enter your Databricks workspace URL</text>
+          <text fg={theme.textMuted}>Examples:</text>
+          <text fg={theme.textMuted}> • https://dbc-xxx.cloud.databricks.com (AWS/GCP)</text>
+          <text fg={theme.textMuted}> • https://adb-xxx.azuredatabricks.net (Azure)</text>
+        </box>
+      )}
+      onConfirm={(value) => {
+        if (!value) return
+        // Remove trailing slash if present
+        const cleanHost = value.replace(/\/$/, "")
+        dialog.replace(() => (
+          <DatabricksApiKeyMethod providerID={props.providerID} title={props.title} host={cleanHost} />
+        ))
+      }}
+    />
+  )
+}
+
+interface DatabricksApiKeyMethodProps {
+  providerID: string
+  title: string
+  host: string
+}
+function DatabricksApiKeyMethod(props: DatabricksApiKeyMethodProps) {
+  const dialog = useDialog()
+  const sdk = useSDK()
+  const sync = useSync()
+  const { theme } = useTheme()
+
+  return (
+    <DialogPrompt
+      title={props.title}
+      placeholder="API key (Personal Access Token)"
+      description={
+        <box gap={1}>
+          <text fg={theme.textMuted}>Enter your Databricks Personal Access Token</text>
+          <text fg={theme.textMuted}>Create at: Workspace → Settings → Developer → Access tokens</text>
+        </box>
+      }
+      onConfirm={async (value) => {
+        if (!value) return
+        sdk.client.auth.set({
+          providerID: props.providerID,
+          auth: {
+            type: "api",
+            key: value,
+            host: props.host,
+          },
+        })
+        await sdk.client.instance.dispose()
+        await sync.bootstrap()
+        dialog.replace(() => <DialogModel providerID={props.providerID} />)
+      }}
     />
   )
 }

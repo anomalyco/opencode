@@ -21,8 +21,16 @@ export namespace Auth {
     .object({
       type: z.literal("api"),
       key: z.string(),
+      host: z.string().optional(), // For providers like Databricks that need a host URL
     })
     .meta({ ref: "ApiAuth" })
+
+  export const DatabricksProfile = z
+    .object({
+      type: z.literal("databricks-profile"),
+      profile: z.string(),
+    })
+    .meta({ ref: "DatabricksProfileAuth" })
 
   export const WellKnown = z
     .object({
@@ -32,7 +40,7 @@ export namespace Auth {
     })
     .meta({ ref: "WellKnownAuth" })
 
-  export const Info = z.discriminatedUnion("type", [Oauth, Api, WellKnown]).meta({ ref: "Auth" })
+  export const Info = z.discriminatedUnion("type", [Oauth, Api, DatabricksProfile, WellKnown]).meta({ ref: "Auth" })
   export type Info = z.infer<typeof Info>
 
   const filepath = path.join(Global.Path.data, "auth.json")

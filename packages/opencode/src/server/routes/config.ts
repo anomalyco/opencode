@@ -73,6 +73,7 @@ export const ConfigRoutes = lazy(() =>
                   z.object({
                     providers: Provider.Info.array(),
                     default: z.record(z.string(), z.string()),
+                    failed: z.record(z.string(), Provider.Info.shape.metadata.unwrap()).optional(),
                   }),
                 ),
               },
@@ -82,10 +83,14 @@ export const ConfigRoutes = lazy(() =>
       }),
       async (c) => {
         using _ = log.time("providers")
-        const providers = await Provider.list().then((x) => mapValues(x, (item) => item))
+        const [providers, failed] = await Promise.all([
+          Provider.list().then((x) => mapValues(x, (item) => item)),
+          Provider.failed(),
+        ])
         return c.json({
           providers: Object.values(providers),
           default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
+          failed: Object.keys(failed).length > 0 ? failed : undefined,
         })
       },
     ),

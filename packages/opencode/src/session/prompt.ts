@@ -915,7 +915,14 @@ export namespace SessionPrompt {
           content: result.content, // directly return content to preserve ordering when outputting to model
         }
       }
-      tools[key] = item
+      // Sanitize MCP tool schema the same way as built-in tools (line 701)
+      // MCP tools include $schema, $ref, $defs which Gemini API rejects
+      const rawSchema = (item.inputSchema as any)?.jsonSchema ?? {}
+      const sanitizedSchema = ProviderTransform.schema(input.model, rawSchema)
+      tools[key] = {
+        ...item,
+        inputSchema: jsonSchema(sanitizedSchema as any),
+      }
     }
 
     return tools

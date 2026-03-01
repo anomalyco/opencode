@@ -20,6 +20,28 @@ export function Footer() {
   const directory = useDirectory()
   const connected = useConnected()
 
+  const databricks = createMemo(() => {
+    const hostname = (host: string) => {
+      try {
+        return new URL(host).hostname
+      } catch {
+        return host
+      }
+    }
+    const provider = sync.data.provider.find((x) => x.id === "databricks")
+    if (provider) {
+      const meta = (provider as any).metadata as { host?: string; profile?: string } | undefined
+      const label = meta?.profile ?? (meta?.host ? hostname(meta.host) : undefined) ?? "connected"
+      return { status: "connected" as const, label }
+    }
+    const failed = sync.data.provider_failed["databricks"]
+    if (failed) {
+      const label = failed.profile ?? (failed.host ? hostname(failed.host) : undefined) ?? "auth failed"
+      return { status: "failed" as const, label, error: failed.error }
+    }
+    return undefined
+  })
+
   const [store, setStore] = createStore({
     welcome: false,
   })
@@ -81,6 +103,13 @@ export function Footer() {
                 </Switch>
                 {mcp()} MCP
               </text>
+            </Show>
+            <Show when={databricks()}>
+              {(db) => (
+                <text fg={theme.text}>
+                  <span style={{ fg: db().status === "connected" ? theme.success : theme.error }}>◆</span> {db().label}
+                </text>
+              )}
             </Show>
             <text fg={theme.textMuted}>/status</text>
           </Match>

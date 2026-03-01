@@ -20,7 +20,11 @@ export function DialogPrompt(props: DialogPromptProps) {
 
   useKeyboard((evt) => {
     if (evt.name === "return") {
+      evt.preventDefault()
       props.onConfirm?.(textarea.plainText)
+    }
+    if (evt.name === "escape") {
+      props.onCancel?.()
     }
   })
 
@@ -48,6 +52,12 @@ export function DialogPrompt(props: DialogPromptProps) {
         <textarea
           onSubmit={() => {
             props.onConfirm?.(textarea.plainText)
+          }}
+          onKeyDown={(e) => {
+            if (e.name === "return") {
+              e.preventDefault()
+              props.onConfirm?.(textarea.plainText)
+            }
           }}
           height={3}
           keyBindings={[{ name: "return", action: "submit" }]}
