@@ -1,6 +1,6 @@
 import { Log } from "../util/log"
 import path from "path"
-import { pathToFileURL, fileURLToPath } from "url"
+import { pathToFileURL } from "url"
 import { createRequire } from "module"
 import os from "os"
 import z from "zod"
@@ -473,8 +473,8 @@ export namespace Config {
    */
   export function getPluginName(plugin: string): string {
     if (plugin.startsWith("file://")) {
-      const file = fileURLToPath(plugin)
-      const parts = file.split(path.sep)
+      const pathname = decodeURIComponent(new URL(plugin).pathname)
+      const parts = pathname.split("/")
       const nodeModules = parts.lastIndexOf("node_modules")
       if (nodeModules > -1) {
         const name = parts[nodeModules + 1]
@@ -484,7 +484,7 @@ export namespace Config {
         }
         if (name) return name
       }
-      return path.parse(file).name
+      return path.posix.parse(pathname).name
     }
     const lastAt = plugin.lastIndexOf("@")
     if (lastAt > 0) {
