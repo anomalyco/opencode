@@ -1542,6 +1542,14 @@ describe("getPluginName", () => {
     expect(Config.getPluginName("file:///some/path/my-plugin.js")).toBe("my-plugin")
   })
 
+  test("extracts package name from node_modules file:// URL", () => {
+    const basic = pathToFileURL(path.join("/tmp", "project", "node_modules", "foo", "index.js")).href
+    const scoped = pathToFileURL(path.join("/tmp", "project", "node_modules", "@scope", "pkg", "dist", "index.js")).href
+
+    expect(Config.getPluginName(basic)).toBe("foo")
+    expect(Config.getPluginName(scoped)).toBe("@scope/pkg")
+  })
+
   test("extracts name from npm package with version", () => {
     expect(Config.getPluginName("oh-my-opencode@2.4.3")).toBe("oh-my-opencode")
     expect(Config.getPluginName("some-plugin@1.0.0")).toBe("some-plugin")
@@ -1587,6 +1595,17 @@ describe("deduplicatePlugins", () => {
     const result = Config.deduplicatePlugins(plugins)
 
     expect(result).toEqual(["a-plugin@1.0.0", "b-plugin@1.0.0", "c-plugin@1.0.0"])
+  })
+
+  test("keeps multiple npm plugins resolved as file:// URLs", () => {
+    const plugins = [
+      pathToFileURL(path.join("/tmp", "project", "node_modules", "foo", "index.js")).href,
+      pathToFileURL(path.join("/tmp", "project", "node_modules", "bar", "index.js")).href,
+    ]
+
+    const result = Config.deduplicatePlugins(plugins)
+
+    expect(result).toEqual(plugins)
   })
 
   test("local plugin directory overrides global opencode.json plugin", async () => {

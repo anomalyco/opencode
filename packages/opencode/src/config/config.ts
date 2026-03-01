@@ -473,7 +473,18 @@ export namespace Config {
    */
   export function getPluginName(plugin: string): string {
     if (plugin.startsWith("file://")) {
-      return path.parse(new URL(plugin).pathname).name
+      const file = fileURLToPath(plugin)
+      const parts = file.split(path.sep)
+      const nodeModules = parts.lastIndexOf("node_modules")
+      if (nodeModules > -1) {
+        const name = parts[nodeModules + 1]
+        if (name?.startsWith("@")) {
+          const scoped = parts[nodeModules + 2]
+          if (scoped) return `${name}/${scoped}`
+        }
+        if (name) return name
+      }
+      return path.parse(file).name
     }
     const lastAt = plugin.lastIndexOf("@")
     if (lastAt > 0) {
