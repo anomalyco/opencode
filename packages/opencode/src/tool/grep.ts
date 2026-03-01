@@ -37,6 +37,13 @@ export const GrepTool = Tool.define("grep", {
 
     let searchPath = params.path ?? Instance.directory
     searchPath = path.isAbsolute(searchPath) ? searchPath : path.resolve(Instance.directory, searchPath)
+
+    // Prevent searching root directory
+    const parsed = path.parse(searchPath)
+    if (searchPath === parsed.root) {
+      throw new Error(`Searching root directory is not allowed: ${searchPath}`)
+    }
+
     await assertExternalDirectory(ctx, searchPath, { kind: "directory" })
 
     const rgPath = await Ripgrep.filepath()

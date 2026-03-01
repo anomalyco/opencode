@@ -31,6 +31,13 @@ export const GlobTool = Tool.define("glob", {
 
     let search = params.path ?? Instance.directory
     search = path.isAbsolute(search) ? search : path.resolve(Instance.directory, search)
+
+    // Prevent searching root directory
+    const parsed = path.parse(search)
+    if (search === parsed.root) {
+      throw new Error(`Searching root directory is not allowed: ${search}`)
+    }
+
     await assertExternalDirectory(ctx, search, { kind: "directory" })
 
     const limit = 100
