@@ -14,6 +14,7 @@ import { Collapsible } from "./collapsible"
 import { DiffChanges } from "./diff-changes"
 import { Icon } from "./icon"
 import { TextShimmer } from "./text-shimmer"
+import { SessionRetry } from "./session-retry"
 import { createAutoScroll } from "../hooks"
 import { useI18n } from "../context/i18n"
 
@@ -332,6 +333,7 @@ export function SessionTurn(
   )
   const showThinking = createMemo(() => {
     if (!working() || !!error()) return false
+    if (status().type === "retry") return false
     if (showReasoningSummaries()) return assistantVisible() === 0
     if (assistantTailVisible() === "text") return false
     return true
@@ -384,6 +386,7 @@ export function SessionTurn(
                     </Show>
                   </div>
                 </Show>
+                <SessionRetry status={status()} show={isLastUserMessage()} />
                 <Show when={edited() > 0 && !working()}>
                   <div data-slot="session-turn-diffs">
                     <Collapsible open={open()} onOpenChange={setOpen} variant="ghost">
