@@ -85,7 +85,11 @@ export async function createOpencodeServer(options?: ServerOptions) {
   return {
     url,
     close() {
-      proc.kill()
+      return new Promise<void>((resolve) => {
+        proc.on("exit", () => resolve())
+        if (proc.exitCode !== null) return resolve()
+        proc.kill()
+      })
     },
   }
 }
