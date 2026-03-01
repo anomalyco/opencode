@@ -7,7 +7,6 @@ import {
   For,
   Match,
   on,
-  onMount,
   Show,
   Switch,
   useContext,
@@ -49,7 +48,6 @@ import type { SkillTool } from "@/tool/skill"
 import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "@tui/context/sdk"
 import { useCommandDialog } from "@tui/component/dialog-command"
-import type { DialogContext } from "@tui/ui/dialog"
 import { useKeybind } from "@tui/context/keybind"
 import { Header } from "./header"
 import { parsePatch } from "diff"
@@ -79,8 +77,9 @@ import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
+import { FilePathLink, Link } from "../../ui/link"
+import { TextWithLinks } from "../../ui/text-with-links"
 import { UI } from "@/cli/ui.ts"
-import { useTuiConfig } from "../../context/tui-config"
 
 addDefaultParsers(parsers.parsers)
 
@@ -104,7 +103,6 @@ const context = createContext<{
   showGenericToolOutput: () => boolean
   diffWrapMode: () => "word" | "none"
   sync: ReturnType<typeof useSync>
-  tui: ReturnType<typeof useTuiConfig>
 }>()
 
 function use() {
@@ -117,7 +115,6 @@ export function Session() {
   const route = useRouteData("session")
   const { navigate } = useRoute()
   const sync = useSync()
-  const tuiConfig = useTuiConfig()
   const kv = useKV()
   const { theme } = useTheme()
   const promptRef = usePromptRef()
@@ -171,7 +168,7 @@ export function Session() {
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
 
   const scrollAcceleration = createMemo(() => {
-    const tui = tuiConfig
+    const tui = sync.data.config.tui
     if (tui?.scroll_acceleration?.enabled) {
       return new MacOSScrollAccel()
     }
@@ -234,8 +231,6 @@ export function Session() {
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef
   const keybind = useKeybind()
-  const dialog = useDialog()
-  const renderer = useRenderer()
 
   // Allow exit when in child session (prompt is hidden)
   const exit = useExit()
@@ -321,37 +316,16 @@ export function Session() {
 
   const local = useLocal()
 
-  function moveFirstChild() {
-    if (children().length === 1) return
-    const next = children().find((x) => !!x.parentID)
-    if (next) {
-      navigate({
-        type: "session",
-        sessionID: next.id,
-      })
-    }
-  }
-
   function moveChild(direction: number) {
     if (children().length === 1) return
-
-    const sessions = children().filter((x) => !!x.parentID)
-    let next = sessions.findIndex((x) => x.id === session()?.id) + direction
-
-    if (next >= sessions.length) next = 0
-    if (next < 0) next = sessions.length - 1
-    if (sessions[next]) {
+    let next = children().findIndex((x) => x.id === session()?.id) + direction
+    if (next >= children().length) next = 0
+    if (next < 0) next = children().length - 1
+    if (children()[next]) {
       navigate({
         type: "session",
-        sessionID: sessions[next].id,
+        sessionID: children()[next].id,
       })
-    }
-  }
-
-  function childSessionHandler(func: (dialog: DialogContext) => void) {
-    return (dialog: DialogContext) => {
-      if (!session()?.parentID || dialog.stack.length > 0) return
-      func(dialog)
     }
   }
 
@@ -924,13 +898,24 @@ export function Session() {
       },
     },
     {
-      title: "Go to child session",
-      value: "session.child.first",
-      keybind: "session_child_first",
+      title: "Next child session",
+      value: "session.child.next",
+      keybind: "session_child_cycle",
       category: "Session",
       hidden: true,
       onSelect: (dialog) => {
-        moveFirstChild()
+        moveChild(1)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Previous child session",
+      value: "session.child.previous",
+      keybind: "session_child_cycle_reverse",
+      category: "Session",
+      hidden: true,
+      onSelect: (dialog) => {
+        moveChild(-1)
         dialog.clear()
       },
     },
@@ -1025,6 +1010,9 @@ export function Session() {
     }
   })
 
+  const dialog = useDialog()
+  const renderer = useRenderer()
+
   // snap to bottom when session changes
   createEffect(on(() => route.sessionID, toBottom))
 
@@ -1042,7 +1030,6 @@ export function Session() {
         showGenericToolOutput,
         diffWrapMode,
         sync,
-        tui: tuiConfig,
       }}
     >
       <box flexDirection="row">
@@ -1342,8 +1329,6 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     return props.message.time.completed - user.time.created
   })
 
-  const keybind = useKeybind()
-
   return (
     <>
       <For each={props.parts}>
@@ -1361,14 +1346,6 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           )
         }}
       </For>
-      <Show when={props.parts.some((x) => x.type === "tool" && x.tool === "task")}>
-        <box paddingTop={1} paddingLeft={3}>
-          <text fg={theme.text}>
-            {keybind.print("session_child_first")}
-            <span style={{ fg: theme.textMuted }}> view subagents</span>
-          </text>
-        </box>
-      </Show>
       <Show when={props.message.error && props.message.error.name !== "MessageAbortedError"}>
         <box
           border={["left"]}
@@ -1455,6 +1432,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
   const { theme, syntax } = useTheme()
+
   return (
     <Show when={props.part.text.trim()}>
       <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
@@ -1638,7 +1616,6 @@ function InlineTool(props: {
   iconColor?: RGBA
   complete: any
   pending: string
-  spinner?: boolean
   children: JSX.Element
   part: ToolPart
   onClick?: () => void
@@ -1705,18 +1682,11 @@ function InlineTool(props: {
         }
       }}
     >
-      <Switch>
-        <Match when={props.spinner}>
-          <Spinner color={fg()} children={props.children} />
-        </Match>
-        <Match when={true}>
-          <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
-            <Show fallback={<>~ {props.pending}</>} when={props.complete}>
-              <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
-            </Show>
-          </text>
-        </Match>
-      </Switch>
+      <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
+        <Show fallback={<>~ {props.pending}</>} when={props.complete}>
+          <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
+        </Show>
+      </text>
       <Show when={error() && !denied()}>
         <text fg={theme.error}>{error()}</text>
       </Show>
@@ -1725,7 +1695,7 @@ function InlineTool(props: {
 }
 
 function BlockTool(props: {
-  title: string
+  title: string | JSX.Element
   children: JSX.Element
   onClick?: () => void
   part?: ToolPart
@@ -1735,6 +1705,7 @@ function BlockTool(props: {
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
+
   return (
     <box
       border={["left"]}
@@ -1761,7 +1732,9 @@ function BlockTool(props: {
           </text>
         }
       >
-        <Spinner color={theme.textMuted}>{props.title.replace(/^# /, "")}</Spinner>
+        <Spinner color={theme.textMuted}>
+          {typeof props.title === "string" ? props.title.replace(/^# /, "") : props.title}
+        </Spinner>
       </Show>
       {props.children}
       <Show when={error()}>
@@ -1821,7 +1794,7 @@ function Bash(props: ToolProps<typeof BashTool>) {
           <box gap={1}>
             <text fg={theme.text}>$ {props.input.command}</text>
             <Show when={output()}>
-              <text fg={theme.text}>{limited()}</text>
+              <TextWithLinks text={limited()} fg={theme.text} />
             </Show>
             <Show when={overflow()}>
               <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
@@ -1848,7 +1821,14 @@ function Write(props: ToolProps<typeof WriteTool>) {
   return (
     <Switch>
       <Match when={props.metadata.diagnostics !== undefined}>
-        <BlockTool title={"# Wrote " + normalizePath(props.input.filePath!)} part={props.part}>
+        <BlockTool
+          title={
+            <>
+              # Wrote <FilePathLink path={props.input.filePath!}>{normalizePath(props.input.filePath!)}</FilePathLink>
+            </>
+          }
+          part={props.part}
+        >
           <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
             <code
               conceal={false}
@@ -1863,7 +1843,7 @@ function Write(props: ToolProps<typeof WriteTool>) {
       </Match>
       <Match when={true}>
         <InlineTool icon="←" pending="Preparing write..." complete={props.input.filePath} part={props.part}>
-          Write {normalizePath(props.input.filePath!)}
+          Write <FilePathLink path={props.input.filePath!}>{normalizePath(props.input.filePath!)}</FilePathLink>
         </InlineTool>
       </Match>
     </Switch>
@@ -1873,7 +1853,10 @@ function Write(props: ToolProps<typeof WriteTool>) {
 function Glob(props: ToolProps<typeof GlobTool>) {
   return (
     <InlineTool icon="✱" pending="Finding files..." complete={props.input.pattern} part={props.part}>
-      Glob "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
+      Glob "{props.input.pattern}"{" "}
+      <Show when={props.input.path}>
+        in <FilePathLink path={props.input.path!}>{normalizePath(props.input.path)}</FilePathLink>{" "}
+      </Show>
       <Show when={props.metadata.count}>
         ({props.metadata.count} {props.metadata.count === 1 ? "match" : "matches"})
       </Show>
@@ -1883,7 +1866,6 @@ function Glob(props: ToolProps<typeof GlobTool>) {
 
 function Read(props: ToolProps<typeof ReadTool>) {
   const { theme } = useTheme()
-  const isRunning = createMemo(() => props.part.state.status === "running")
   const loaded = createMemo(() => {
     if (props.part.state.status !== "completed") return []
     if (props.part.state.time.compacted) return []
@@ -1893,14 +1875,9 @@ function Read(props: ToolProps<typeof ReadTool>) {
   })
   return (
     <>
-      <InlineTool
-        icon="→"
-        pending="Reading file..."
-        complete={props.input.filePath}
-        spinner={isRunning()}
-        part={props.part}
-      >
-        Read {normalizePath(props.input.filePath!)} {input(props.input, ["filePath"])}
+      <InlineTool icon="→" pending="Reading file..." complete={props.input.filePath} part={props.part}>
+        Read <FilePathLink path={props.input.filePath!}>{normalizePath(props.input.filePath!)}</FilePathLink>{" "}
+        {input(props.input, ["filePath"])}
       </InlineTool>
       <For each={loaded()}>
         {(filepath) => (
@@ -1918,7 +1895,10 @@ function Read(props: ToolProps<typeof ReadTool>) {
 function Grep(props: ToolProps<typeof GrepTool>) {
   return (
     <InlineTool icon="✱" pending="Searching content..." complete={props.input.pattern} part={props.part}>
-      Grep "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
+      Grep "{props.input.pattern}"{" "}
+      <Show when={props.input.path}>
+        in <FilePathLink path={props.input.path!}>{normalizePath(props.input.path)}</FilePathLink>{" "}
+      </Show>
       <Show when={props.metadata.matches}>
         ({props.metadata.matches} {props.metadata.matches === 1 ? "match" : "matches"})
       </Show>
@@ -1927,23 +1907,21 @@ function Grep(props: ToolProps<typeof GrepTool>) {
 }
 
 function List(props: ToolProps<typeof ListTool>) {
-  const dir = createMemo(() => {
-    if (props.input.path) {
-      return normalizePath(props.input.path)
-    }
-    return ""
-  })
   return (
     <InlineTool icon="→" pending="Listing directory..." complete={props.input.path !== undefined} part={props.part}>
-      List {dir()}
+      List{" "}
+      <Show when={props.input.path}>
+        <FilePathLink path={props.input.path!}>{normalizePath(props.input.path)}</FilePathLink>
+      </Show>
     </InlineTool>
   )
 }
 
 function WebFetch(props: ToolProps<typeof WebFetchTool>) {
+  const url = () => (props.input as any).url as string
   return (
-    <InlineTool icon="%" pending="Fetching from the web..." complete={(props.input as any).url} part={props.part}>
-      WebFetch {(props.input as any).url}
+    <InlineTool icon="%" pending="Fetching from the web..." complete={url()} part={props.part}>
+      WebFetch <a href={url()}>{url()}</a>
     </InlineTool>
   )
 }
@@ -1975,22 +1953,17 @@ function Task(props: ToolProps<typeof TaskTool>) {
   const local = useLocal()
   const sync = useSync()
 
-  onMount(() => {
-    if (props.metadata.sessionId && !sync.data.message[props.metadata.sessionId]?.length)
-      sync.session.sync(props.metadata.sessionId)
-  })
-
-  const messages = createMemo(() => sync.data.message[props.metadata.sessionId ?? ""] ?? [])
-
   const tools = createMemo(() => {
-    return messages().flatMap((msg) =>
+    const sessionID = props.metadata.sessionId
+    const msgs = sync.data.message[sessionID ?? ""] ?? []
+    return msgs.flatMap((msg) =>
       (sync.data.part[msg.id] ?? [])
         .filter((part): part is ToolPart => part.type === "tool")
         .map((part) => ({ tool: part.tool, state: part.state })),
     )
   })
 
-  const current = createMemo(() => tools().findLast((x) => (x.state as any).title))
+  const current = createMemo(() => tools().findLast((x) => x.state.status !== "pending"))
 
   const isRunning = createMemo(() => props.part.state.status === "running")
 
@@ -2041,7 +2014,7 @@ function Edit(props: ToolProps<typeof EditTool>) {
   const { theme, syntax } = useTheme()
 
   const view = createMemo(() => {
-    const diffStyle = ctx.tui.diff_style
+    const diffStyle = ctx.sync.data.config.tui?.diff_style
     if (diffStyle === "stacked") return "unified"
     // Default to "auto" behavior
     return ctx.width > 120 ? "split" : "unified"
@@ -2054,7 +2027,15 @@ function Edit(props: ToolProps<typeof EditTool>) {
   return (
     <Switch>
       <Match when={props.metadata.diff !== undefined}>
-        <BlockTool title={"← Edit " + normalizePath(props.input.filePath!)} part={props.part}>
+        <BlockTool
+          title={
+            <>
+              {"← Edit "}
+              <FilePathLink path={props.input.filePath!}>{normalizePath(props.input.filePath!)}</FilePathLink>
+            </>
+          }
+          part={props.part}
+        >
           <box paddingLeft={1}>
             <diff
               diff={diffContent()}
@@ -2081,7 +2062,8 @@ function Edit(props: ToolProps<typeof EditTool>) {
       </Match>
       <Match when={true}>
         <InlineTool icon="←" pending="Preparing edit..." complete={props.input.filePath} part={props.part}>
-          Edit {normalizePath(props.input.filePath!)} {input({ replaceAll: props.input.replaceAll })}
+          Edit <FilePathLink path={props.input.filePath!}>{normalizePath(props.input.filePath!)}</FilePathLink>{" "}
+          {input({ replaceAll: props.input.replaceAll })}
         </InlineTool>
       </Match>
     </Switch>
@@ -2095,7 +2077,7 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
   const files = createMemo(() => props.metadata.files ?? [])
 
   const view = createMemo(() => {
-    const diffStyle = ctx.tui.diff_style
+    const diffStyle = ctx.sync.data.config.tui?.diff_style
     if (diffStyle === "stacked") return "unified"
     return ctx.width > 120 ? "split" : "unified"
   })
