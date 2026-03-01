@@ -2367,7 +2367,70 @@ export type ConfigPluginSettingsGetResponses = {
    * Plugin settings schemas and values
    */
   200: {
-    schemas: Array<unknown>
+    schemas: Array<{
+      id: string
+      title: string
+      properties: {
+        [key: string]:
+          | {
+              type: "string"
+              title: string
+              description?: string
+              default?: string
+              required?: boolean
+              placeholder?: string
+            }
+          | {
+              type: "number"
+              title: string
+              description?: string
+              default?: number
+              required?: boolean
+              placeholder?: string
+            }
+          | {
+              type: "boolean"
+              title: string
+              description?: string
+              default?: boolean
+              required?: boolean
+            }
+          | {
+              type: "select"
+              title: string
+              description?: string
+              default?: string
+              required?: boolean
+              placeholder?: string
+              enum: Array<string>
+              enumLabels?: Array<string>
+            }
+          | {
+              type: "secret"
+              title: string
+              description?: string
+              default?: string
+              required?: boolean
+              placeholder?: string
+            }
+          | {
+              type: "object"
+              title: string
+              description?: string
+              required?: boolean
+              properties?: {
+                [key: string]: unknown
+              }
+            }
+          | {
+              type: "array"
+              title: string
+              description?: string
+              required?: boolean
+              items?: unknown
+            }
+      }
+    }>
     values: {
       [key: string]: {
         [key: string]: unknown

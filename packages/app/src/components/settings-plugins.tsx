@@ -1,4 +1,4 @@
-import { Component, For, Show, createResource, createMemo, type JSX } from "solid-js"
+import { Component, For, Show, createResource, createMemo, createSignal, type JSX } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { Switch } from "@opencode-ai/ui/switch"
@@ -33,11 +33,14 @@ type PluginSettingsResponse = {
 const SettingsRow: Component<{
   title: string | JSX.Element
   description?: string | JSX.Element
+  htmlFor?: string
   children: JSX.Element
 }> = (props) => (
   <div class="flex flex-wrap items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
     <div class="flex flex-col gap-0.5 min-w-0">
-      <span class="text-14-medium text-text-strong">{props.title}</span>
+      <Show when={props.htmlFor} fallback={<span class="text-14-medium text-text-strong">{props.title}</span>}>
+        <label for={props.htmlFor} class="text-14-medium text-text-strong cursor-pointer">{props.title}</label>
+      </Show>
       <Show when={props.description}>
         <span class="text-12-regular text-text-weak">{props.description}</span>
       </Show>
@@ -88,6 +91,9 @@ const PluginCard: Component<{
   url: string
   client?: any
   refetch: () => void
+  error?: string | null
+  onError?: (error: string) => void
+  onClearError?: () => void
 }> = (props) => {
   const language = useLanguage()
   const [state, setState] = createStore({
@@ -99,6 +105,7 @@ const PluginCard: Component<{
 
   const handleSave = async () => {
     setState("saving", true)
+    props.onClearError?.()
     try {
       const payload: Record<string, unknown> = {}
       for (const [key, def] of Object.entries(props.schema.properties)) {
@@ -125,6 +132,7 @@ const PluginCard: Component<{
       })
     } catch (error) {
       console.error("Save failed:", error)
+      props.onError?.(error instanceof Error ? error.message : "Failed to save settings")
       showToast({
         title: language.t("settings.plugins.save_failed.title"),
         description: language.t("settings.plugins.save_failed.description", { plugin: props.schema.title }),
@@ -138,15 +146,20 @@ const PluginCard: Component<{
   return (
     <div class="flex flex-col gap-1">
       <h3 class="text-14-medium text-text-strong pb-2">{props.schema.title}</h3>
+      <Show when={props.error}>
+        <p class="text-12-medium text-text-danger pb-2">{props.error}</p>
+      </Show>
       <div class="bg-surface-raised-base px-4 rounded-lg">
         <For each={Object.entries(props.schema.properties)}>
           {([key, def]) => {
             const value = createMemo(() => state.values[key])
+            const inputId = `plugin-${props.schema.id}-${key}`
 
             return (
-              <SettingsRow title={def.title} description={def.description}>
+              <SettingsRow title={def.title} description={def.description} htmlFor={inputId}>
                 <Show when={def.type === "string"}>
                   <TextField
+                    id={inputId}
                     value={(value() as string) ?? ""}
                     onInput={(e) => {
                       setState("values", key, e.currentTarget.value)
@@ -159,6 +172,7 @@ const PluginCard: Component<{
                 </Show>
                 <Show when={def.type === "secret"}>
                   <TextField
+                    id={inputId}
                     type="password"
                     value={state.touched.has(key) ? ((value() as string) ?? "") : ""}
                     onInput={(e) => {
@@ -172,11 +186,21 @@ const PluginCard: Component<{
                 </Show>
                 <Show when={def.type === "number"}>
                   <TextField
+                    id={inputId}
                     type="number"
                     value={value() !== undefined ? String(value()) : ""}
                     onInput={(e) => {
-                      const num = parseFloat(e.currentTarget.value)
-                      setState("values", key, isNaN(num) ? undefined : num)
+                      const val = e.currentTarget.value
+                      if (val === "") {
+                        setState("values", key, undefined)
+                      } else {
+                        const num = Number(val)
+                        if (!isNaN(num)) {
+                          setState("values", key, num)
+                        } else {
+                          return
+                        }
+                      }
                       setState("dirty", true)
                       setState(produce((s) => s.touched.add(key)))
                     }}
@@ -186,6 +210,7 @@ const PluginCard: Component<{
                 <Show when={def.type === "boolean"}>
                   <div data-action={`settings-plugin-${props.schema.id}-${key}`}>
                     <Switch
+                      id={inputId}
                       checked={!!value()}
                       onChange={(checked) => {
                         setState("values", key, checked)
@@ -197,6 +222,7 @@ const PluginCard: Component<{
                 </Show>
                 <Show when={def.type === "select"}>
                   <Select
+                    id={inputId}
                     options={(def.enum ?? []).map((val, idx) => ({
                       value: val,
                       label: def.enumLabels?.[idx] ?? val,
@@ -240,6 +266,7 @@ const PluginCard: Component<{
 export const SettingsPlugins: Component = () => {
   const language = useLanguage()
   const globalSDK = useGlobalSDK()
+  const [errors, setErrors] = createSignal<Record<string, string | null>>({})
 
   const [data, { refetch }] = createResource(() => fetchPluginSettings(globalSDK.url, globalSDK.client))
 
@@ -262,19 +289,35 @@ export const SettingsPlugins: Component = () => {
         <Show when={data()}>
           {(resolved) => (
             <Show
-              when={resolved().schemas.length > 0}
+              when={Array.isArray(resolved()?.schemas) && resolved()!.schemas.length > 0}
               fallback={<p class="text-12-regular text-text-weak">{language.t("settings.plugins.empty")}</p>}
             >
-              <For each={resolved().schemas}>
-                {(schema) => (
-                  <PluginCard
-                    schema={schema}
-                    values={resolved().values[schema.id] ?? {}}
-                    url={globalSDK.url}
-                    client={globalSDK.client}
-                    refetch={refetch}
-                  />
-                )}
+              <For each={resolved()!.schemas}>
+                {(schema) => {
+                  if (
+                    !schema ||
+                    typeof schema !== "object" ||
+                    typeof schema.id !== "string" ||
+                    typeof schema.title !== "string" ||
+                    typeof schema.properties !== "object" ||
+                    schema.properties === null
+                  ) {
+                    return null
+                  }
+
+                  return (
+                    <PluginCard
+                      schema={schema}
+                      values={resolved()?.values?.[schema.id] ?? {}}
+                      url={globalSDK.url}
+                      client={globalSDK.client}
+                      refetch={refetch}
+                      error={errors()[schema.id]}
+                      onError={(err) => setErrors((prev) => ({ ...prev, [schema.id]: err }))}
+                      onClearError={() => setErrors((prev) => ({ ...prev, [schema.id]: null }))}
+                    />
+                  )
+                }}
               </For>
             </Show>
           )}

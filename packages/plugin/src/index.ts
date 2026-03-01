@@ -23,16 +23,78 @@ export type ProviderContext = {
   options: Record<string, any>
 }
 
-export type SettingDefinition = {
-  type: "string" | "number" | "boolean" | "select" | "secret"
+export type StringSetting = {
+  type: "string"
   title: string
   description?: string
-  default?: unknown
+  default?: string
   required?: boolean
   placeholder?: string
-  enum?: string[]
+}
+
+export type NumberSetting = {
+  type: "number"
+  title: string
+  description?: string
+  default?: number
+  required?: boolean
+  placeholder?: string
+}
+
+export type BooleanSetting = {
+  type: "boolean"
+  title: string
+  description?: string
+  default?: boolean
+  required?: boolean
+}
+
+export type SelectSetting = {
+  type: "select"
+  title: string
+  description?: string
+  default?: string
+  required?: boolean
+  placeholder?: string
+  enum: string[]
   enumLabels?: string[]
 }
+
+export type SecretSetting = {
+  type: "secret"
+  title: string
+  description?: string
+  default?: string
+  required?: boolean
+  placeholder?: string
+}
+
+export type ObjectSetting = {
+  type: "object"
+  title: string
+  description?: string
+  default?: Record<string, unknown>
+  required?: boolean
+  properties?: Record<string, SettingDefinition>
+}
+
+export type ArraySetting = {
+  type: "array"
+  title: string
+  description?: string
+  default?: unknown[]
+  required?: boolean
+  items?: SettingDefinition
+}
+
+export type SettingDefinition =
+  | StringSetting
+  | NumberSetting
+  | BooleanSetting
+  | SelectSetting
+  | SecretSetting
+  | ObjectSetting
+  | ArraySetting
 
 export type PluginSettingsSchema = {
   id: string

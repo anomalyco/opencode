@@ -72,7 +72,24 @@ export const ConfigRoutes = lazy(() =>
               "application/json": {
                 schema: resolver(
                   z.object({
-                    schemas: z.array(z.unknown()),
+                    schemas: z.array(
+                      z.object({
+                        id: z.string(),
+                        title: z.string(),
+                        properties: z.record(
+                          z.string(),
+                          z.discriminatedUnion("type", [
+                            z.object({ type: z.literal("string"), title: z.string(), description: z.string().optional(), default: z.string().optional(), required: z.boolean().optional(), placeholder: z.string().optional() }),
+                            z.object({ type: z.literal("number"), title: z.string(), description: z.string().optional(), default: z.number().optional(), required: z.boolean().optional(), placeholder: z.string().optional() }),
+                            z.object({ type: z.literal("boolean"), title: z.string(), description: z.string().optional(), default: z.boolean().optional(), required: z.boolean().optional() }),
+                            z.object({ type: z.literal("select"), title: z.string(), description: z.string().optional(), default: z.string().optional(), required: z.boolean().optional(), placeholder: z.string().optional(), enum: z.array(z.string()), enumLabels: z.array(z.string()).optional() }),
+                            z.object({ type: z.literal("secret"), title: z.string(), description: z.string().optional(), default: z.string().optional(), required: z.boolean().optional(), placeholder: z.string().optional() }),
+                            z.object({ type: z.literal("object"), title: z.string(), description: z.string().optional(), required: z.boolean().optional(), properties: z.record(z.string(), z.unknown()).optional() }),
+                            z.object({ type: z.literal("array"), title: z.string(), description: z.string().optional(), required: z.boolean().optional(), items: z.unknown().optional() }),
+                          ])
+                        ),
+                      }),
+                    ),
                     values: z.record(z.string(), z.record(z.string(), z.unknown())),
                   }),
                 ),
@@ -122,7 +139,7 @@ export const ConfigRoutes = lazy(() =>
         const body = c.req.valid("json")
         const config = await Config.get()
         const current = config.plugin_settings ?? {}
-        const updated = { ...current, [body.plugin_id]: body.settings }
+        const updated = { ...current, [body.plugin_id]: { ...config.plugin_settings?.[body.plugin_id], ...body.settings } }
         await Config.update({ plugin_settings: updated })
         return c.json({ plugin_settings: updated })
       },
