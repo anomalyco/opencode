@@ -60,6 +60,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "다음 단계 고려 중",
 
   "ui.messagePart.questions.dismissed": "질문 무시됨",
+  "ui.messagePart.compaction": "기록이 압축됨",
   "ui.messagePart.context.read.one": "{{count}}개 읽음",
   "ui.messagePart.context.read.other": "{{count}}개 읽음",
   "ui.messagePart.context.search.one": "{{count}}개 검색",
