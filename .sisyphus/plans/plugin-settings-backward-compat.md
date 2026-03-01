@@ -406,7 +406,7 @@ legacyConfig?: {
 ## WS4: Migration Utility
 
 ### Görev
-- [ ] 4.1: JSONC parser desteği ekle
+- [x] 4.1: JSONC parser desteği ekle
 
 **Dosya**: `packages/opencode/src/plugin/index.ts` (veya yeni dosya: `packages/opencode/src/plugin/legacy.ts`)
 
@@ -417,7 +417,7 @@ legacyConfig?: {
 **QA**: JSONC dosya (yorumlu, trailing comma) parse edilebiliyor.
 
 ### Görev
-- [ ] 4.2: Migration fonksiyonu uygula
+- [x] 4.2: Migration fonksiyonu uygula
 
 **Dosya**: `packages/opencode/src/plugin/legacy.ts` (yeni dosya)
 
@@ -519,7 +519,7 @@ Bu sayede UI hangi değerin nereden geldiğini gösterebilir ve scope seçici su
 ## WS6: UI Güncellemeleri
 
 ### Görev
-- [ ] 6.1: Nested tip desteği (object/array) için UI renderer
+- [x] 6.1: Nested tip desteği (object/array) için UI renderer
 
 **Dosya**: `packages/app/src/components/settings-plugins.tsx`
 
@@ -533,7 +533,7 @@ Bu sayede UI hangi değerin nereden geldiğini gösterebilir ve scope seçici su
 **QA**: Manuel UI testi: object ve array tipinde ayarlar doğru render ediliyor, düzenleme yapılabiliyor.
 
 ### Görev
-- [ ] 6.2: Scope seçici ekle
+- [x] 6.2: Scope seçici ekle
 
 **Dosya**: `packages/app/src/components/settings-plugins.tsx`
 
@@ -547,7 +547,7 @@ Bu sayede UI hangi değerin nereden geldiğini gösterebilir ve scope seçici su
 **QA**: Manuel UI testi: scope badge'leri doğru gösteriliyor, secret alanları global-only.
 
 ### Görev
-- [ ] 6.3: Legacy migration bildirim banner'ı
+- [x] 6.3: Legacy migration bildirim banner'ı
 
 **Dosya**: `packages/app/src/components/settings-plugins.tsx`
 

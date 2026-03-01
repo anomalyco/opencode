@@ -74,3 +74,26 @@ Also excluded `legacyConfig` and `config` from `trigger()` type constraint in lo
 - Plugin identification: Internal plugins use their function names as IDs, while external plugins use their canonical package name or filename (via `Config.getPluginName`).
 - Injecting settings: Each plugin is initialized with its own `PluginInput` that contains only its specific settings from `config.plugin_settings`.
 - Shared logic: The loader (`packages/opencode/src/plugin/index.ts`) serves as the central point for mapping configurations to plugin instances.
+
+## WS5: Config merge & scope-aware persistence (2026-03-01)
+
+### 5.1: plugin_settings deep merge
+- `remeda.mergeDeep` REPLACES arrays (does NOT concatenate). Verified with bun.
+- `mergeConfigConcatArrays` only special-cases `plugin` and `instructions` arrays. `plugin_settings` is `Record<string, Record<string, unknown>>` - remeda's mergeDeep deep-merges object values correctly.
+- No custom array merge override needed for `plugin_settings` (arrays within settings values will be replaced, not concatenated - which is the desired behavior).
+
+### 5.2: PATCH scope parameter
+- Added `scope?: "global" | "project"` to PATCH `/plugin-settings` body validator (default: `"project"` for backward compat).
+- Secret guard: if `scope === "project"`, fetch schemas, find matching plugin schema, check if any key in `body.settings` is `type: "secret"`. Return 400 if blocked.
+- Scope routing: `scope === "global"` → `Config.updateGlobal(...)`, else `Config.update(...)`.
+- `Config.update()` writes to `Instance.directory/config.json` (project scope).
+- `Config.updateGlobal()` writes to `~/.config/opencode/opencode.{json,jsonc}` (global scope).
+
+### 5.3: GET layered values
+- Added `getProject()` to `config.ts` - reads `Instance.directory/config.json` (same file that `update()` writes to).
+- GET `/plugin-settings` now returns `{ schemas, values, global, project }`:
+  - `values`: merged config's `plugin_settings` (from `Config.get()`)
+  - `global`: global config's `plugin_settings` (from `Config.getGlobal()`)
+  - `project`: project config's `plugin_settings` (from `Config.getProject()`)
+- All three `Promise.all` parallel fetched.
+- `bun --bun tsc --noEmit` passes clean.
