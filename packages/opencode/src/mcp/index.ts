@@ -636,7 +636,13 @@ export namespace MCP {
       for (const mcpTool of toolsResult.tools) {
         const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
         const sanitizedToolName = mcpTool.name.replace(/[^a-zA-Z0-9_-]/g, "_")
-        result[sanitizedClientName + "_" + sanitizedToolName] = await convertMcpTool(mcpTool, client, timeout)
+        let name = sanitizedClientName + "_" + sanitizedToolName
+        if (name.length > 64) {
+          const truncated = name.slice(0, 64)
+          log.warn("truncating MCP tool name", { original: name, truncated })
+          name = truncated
+        }
+        result[name] = await convertMcpTool(mcpTool, client, timeout)
       }
     }
     return result
