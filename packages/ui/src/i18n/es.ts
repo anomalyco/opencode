@@ -60,6 +60,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Considerando siguientes pasos",
 
   "ui.messagePart.questions.dismissed": "Preguntas descartadas",
+  "ui.messagePart.compaction": "Historial compactado",
   "ui.messagePart.context.read.one": "{{count}} lectura",
   "ui.messagePart.context.read.other": "{{count}} lecturas",
   "ui.messagePart.context.search.one": "{{count}} búsqueda",
