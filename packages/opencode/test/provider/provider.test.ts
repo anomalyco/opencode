@@ -2390,6 +2390,96 @@ test("google aliases receive automatic cross-account fallbacks", async () => {
   })
 })
 
+test("email-format multi-account: google-user@gmail.com resolves to google base", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      await Auth.set("google-user@gmail.com", { type: "api", key: "test-google-1" })
+      await Auth.set("google-work@company.com", { type: "api", key: "test-google-2" })
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      // Both email-format providers should resolve to google base
+      expect(providers["google-user@gmail.com"]).toBeDefined()
+      expect(providers["google-work@company.com"]).toBeDefined()
+      // They should have google's models (including antigravity aliases)
+      expect(providers["google-user@gmail.com"].models["gemini-2.5-pro"]).toBeDefined()
+      expect(providers["google-work@company.com"].models["gemini-2.5-pro"]).toBeDefined()
+      // Display name should include the email
+      expect(providers["google-user@gmail.com"].name).toContain("user@gmail.com")
+    },
+  })
+})
+
+test("email-format multi-account: any provider supports email-suffix accounts", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      await Auth.set("anthropic-personal@gmail.com", { type: "api", key: "sk-ant-test-1" })
+      await Auth.set("openai-work@company.com", { type: "api", key: "sk-openai-test-2" })
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      // Email-format accounts should be created for any provider
+      expect(providers["anthropic-personal@gmail.com"]).toBeDefined()
+      expect(providers["openai-work@company.com"]).toBeDefined()
+      // They should inherit their base provider's models
+      expect(Object.keys(providers["anthropic-personal@gmail.com"].models).length).toBeGreaterThan(0)
+      expect(Object.keys(providers["openai-work@company.com"].models).length).toBeGreaterThan(0)
+    },
+  })
+})
+
+test("email-format accounts get cross-account fallbacks", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      await Auth.set("google-user@gmail.com", { type: "api", key: "test-google-1" })
+      await Auth.set("google-work@company.com", { type: "api", key: "test-google-2" })
+    },
+    fn: async () => {
+      const model = await Provider.getModel("google-user@gmail.com", "gemini-2.5-pro")
+      const resolved = await Provider.fallbacks(model)
+      const refs = resolved.map((item) => `${item.providerID}/${item.id}`)
+      // Should fall back to the other google account
+      expect(refs).toContain("google-work@company.com/gemini-2.5-pro")
+    },
+  })
+})
+
 test("explicit fallback config overrides automatic account fallback", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

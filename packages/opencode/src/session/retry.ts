@@ -62,7 +62,13 @@ export namespace SessionRetry {
     // context overflow errors should not be retried
     if (MessageV2.ContextOverflowError.isInstance(error)) return undefined
     if (MessageV2.APIError.isInstance(error)) {
-      if (!error.data.isRetryable) return undefined
+      if (!error.data.isRetryable) {
+        // 401 Unauthorized: token may be expired — allow fallback to another account
+        if (error.data.statusCode === 401 || error.data.statusCode === 403) {
+          return "Auth token expired or invalid — trying next account"
+        }
+        return undefined
+      }
       if (error.data.responseBody?.includes("FreeUsageLimitError"))
         return `Free usage exceeded, add credits https://opencode.ai/zen`
       return error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message

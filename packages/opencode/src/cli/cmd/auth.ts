@@ -13,6 +13,7 @@ import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
 import { Process } from "../../util/process"
 import { text } from "node:stream/consumers"
+import { Quota } from "../../provider/quota"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
 
@@ -217,7 +218,12 @@ export const AuthCommand = cmd({
   command: "auth",
   describe: "manage credentials",
   builder: (yargs) =>
-    yargs.command(AuthLoginCommand).command(AuthLogoutCommand).command(AuthListCommand).demandCommand(),
+    yargs
+      .command(AuthLoginCommand)
+      .command(AuthLogoutCommand)
+      .command(AuthListCommand)
+      .command(AuthImportOpenClawCommand)
+      .demandCommand(),
   async handler() {},
 })
 
@@ -235,9 +241,23 @@ export const AuthListCommand = cmd({
     const config = await Config.get()
     const database = await ModelsDev.get()
 
+    // Fetch quota concurrently for all providers, with a per-provider timeout
+    const quotaResults = await Promise.all(
+      results.map(async ([providerID]) => {
+        const status = await Promise.race([
+          Quota.fetch(providerID),
+          new Promise<undefined>((r) => setTimeout(r, 5000)),
+        ])
+        return [providerID, status] as const
+      }),
+    )
+    const quotaMap = Object.fromEntries(quotaResults)
+
     for (const [providerID, result] of results) {
       const name = config.provider?.[providerID]?.name || database[providerID]?.name || providerID
-      prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
+      const quota = quotaMap[providerID]
+      const quotaStr = quota ? UI.Style.TEXT_DIM + " · " + Quota.format(quota) : ""
+      prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}${quotaStr}`)
     }
 
     prompts.outro(`${results.length} credentials`)
@@ -396,8 +416,8 @@ export const AuthLoginCommand = cmd({
 
         if (provider === "other") {
           provider = await prompts.text({
-            message: "Enter provider id",
-            validate: (x) => (x && x.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only"),
+            message: "Enter provider id (e.g. google-user@gmail.com or anthropic-2)",
+            validate: (x) => (x && x.match(/^[0-9a-z]([0-9a-z\-@._+]+)?$/) ? undefined : "Must start with a-z/0-9 and may contain hyphens, @, dots"),
           })
           if (prompts.isCancel(provider)) throw new UI.CancelledError()
           provider = provider.replace(/^@ai-sdk\//, "")
@@ -452,6 +472,46 @@ export const AuthLoginCommand = cmd({
         prompts.outro("Done")
       },
     })
+  },
+})
+
+export const AuthImportOpenClawCommand = cmd({
+  command: "import-openclaw",
+  describe: "import credentials from OpenClaw auth-profiles.json",
+  builder: (yargs) =>
+    yargs.option("force", {
+      type: "boolean",
+      description: "Overwrite existing credentials",
+      default: false,
+    }),
+  async handler(args) {
+    UI.empty()
+    prompts.intro("Import from OpenClaw")
+
+    const spinner = prompts.spinner()
+    spinner.start("Searching for OpenClaw credentials...")
+
+    const result = await Auth.importFromOpenClaw({ force: args.force })
+
+    spinner.stop("Done")
+
+    if (result.imported.length > 0) {
+      prompts.log.success(`Imported: ${result.imported.join(", ")}`)
+    }
+    if (result.skipped.length > 0) {
+      prompts.log.info(`Already exists (skipped): ${result.skipped.join(", ")}`)
+      prompts.log.info("Use --force to overwrite existing credentials")
+    }
+    if (result.errors.length > 0) {
+      for (const err of result.errors) {
+        prompts.log.warn(err)
+      }
+    }
+    if (result.imported.length === 0 && result.errors.length > 0) {
+      prompts.log.error("No credentials were imported")
+    }
+
+    prompts.outro("Done")
   },
 })
 

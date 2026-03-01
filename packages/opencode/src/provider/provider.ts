@@ -409,8 +409,29 @@ export namespace Provider {
 
   function shouldApplyAntigravity(providerID: string, aliasProviders?: string[]): boolean {
     if (!aliasProviders || aliasProviders.length === 0) return true
-    const root = providerID.split(":")[0].replace(/-\d+$/, "")
+    const root = providerBaseID(providerID)
     return aliasProviders.some((p) => root === p || providerID === p || providerID.startsWith(p + "-"))
+  }
+
+  /**
+   * Extracts the base provider ID from a multi-account provider ID.
+   * Supports formats:
+   *   google-user@gmail.com  → google
+   *   anthropic-2            → anthropic
+   *   openai:scope           → openai
+   *   google                 → google
+   */
+  function providerBaseID(providerID: string): string {
+    // Handle scoped format: provider:scope
+    const scoped = providerID.split(":")[0]
+    // Handle email-suffix format: provider-user@domain.com
+    // Match the longest known provider prefix followed by a dash and an account identifier
+    // We find the base by stripping a trailing "-<non-empty>" that contains @ or is purely numeric
+    const emailMatch = scoped.match(/^(.*)-([^-]+@.+)$/)
+    if (emailMatch) return emailMatch[1]
+    const numericMatch = scoped.match(/^(.*)-(\d+)$/)
+    if (numericMatch) return numericMatch[1]
+    return scoped
   }
 
   function isGpt5OrLater(modelID: string): boolean {
@@ -1258,11 +1279,8 @@ export namespace Provider {
     }
 
     function alias(providerID: string) {
-      const scoped = providerID.split(":")[0]
-      if (database[scoped]) return scoped
-      const numeric = providerID.match(/^(.*)-\d+$/)
-      if (!numeric) return undefined
-      return database[numeric[1]] ? numeric[1] : undefined
+      const base = providerBaseID(providerID)
+      return database[base] ? base : undefined
     }
 
     // extend database from config
@@ -1348,14 +1366,11 @@ export namespace Provider {
         )
         parsed.models[modelID] = parsedModel
       }
-      if ((baseID ?? providerID) === "google") {
-        parsed.models = antigravity(providerID, parsed.models)
-      }
+      parsed.models = antigravity(providerID, parsed.models)
       database[providerID] = parsed
     }
 
     for (const [providerID, provider] of Object.entries(database)) {
-      if ((roots.get(providerID) ?? providerID) !== "google") continue
       provider.models = antigravity(providerID, provider.models)
     }
 
@@ -1378,16 +1393,17 @@ export namespace Provider {
         const baseID = alias(providerID)
         if (baseID) {
           const base = database[baseID]
+          // Derive a display name from the account suffix (e.g. "user@gmail.com" or "2")
+          const suffix = providerID.slice(baseID.length + 1) // strip "baseID-"
+          const label = suffix.includes("@") ? suffix : providerID
           database[providerID] = {
             ...base,
             id: providerID,
-            name: `${base.name} (${providerID})`,
+            name: `${base.name} (${label})`,
             models: copyModels(base.models, providerID),
           }
           roots.set(providerID, roots.get(baseID) ?? baseID)
-          if ((roots.get(providerID) ?? providerID) === "google") {
-            database[providerID].models = antigravity(providerID, database[providerID].models)
-          }
+          database[providerID].models = antigravity(providerID, database[providerID].models)
         }
       }
       if (provider.type === "api") {
@@ -1395,6 +1411,9 @@ export namespace Provider {
           source: "api",
           key: provider.key,
         })
+      }
+      if (provider.type === "oauth") {
+        mergeProvider(providerID, { source: "api" })
       }
     }
 
@@ -1514,7 +1533,7 @@ export namespace Provider {
           )
         }
 
-        if ((!model.fallbacks || model.fallbacks.length === 0) && base === "google") {
+        if (!model.fallbacks || model.fallbacks.length === 0) {
           const next = (groups.get(base) ?? [])
             .filter((item) => item !== providerID)
             .flatMap((item) => {
@@ -1565,7 +1584,17 @@ export namespace Provider {
 
       const baseURL = loadBaseURL(model, options)
       if (baseURL !== undefined) options["baseURL"] = baseURL
-      if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
+
+      // Fail-soft OAuth token refresh: if stored token is expired, attempt refresh.
+      // On failure, fall through with the original (possibly expired) token — the
+      // retry/fallback mechanism will route to another account on 401.
+      if (options["apiKey"] === undefined && provider.key) {
+        options["apiKey"] = provider.key
+      } else if (options["apiKey"] === undefined) {
+        const auth = await Auth.getWithRefresh(model.providerID)
+        if (auth?.type === "oauth") options["apiKey"] = auth.access
+        else if (auth?.type === "api") options["apiKey"] = auth.key
+      }
       if (model.headers)
         options["headers"] = {
           ...options["headers"],
