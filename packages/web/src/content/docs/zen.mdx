@@ -64,6 +64,7 @@ You can also access our models through the following API endpoints.
 
 | Model              | Model ID           | Endpoint                                           | AI SDK Package              |
 | ------------------ | ------------------ | -------------------------------------------------- | --------------------------- |
+| GPT 5.3 Codex      | gpt-5.3-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.2            | gpt-5.2            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.2 Codex      | gpt-5.2-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.1            | gpt-5.1            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
@@ -88,11 +89,9 @@ You can also access our models through the following API endpoints.
 | MiniMax M2.5 Free  | minimax-m2.5-free  | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | MiniMax M2.1       | minimax-m2.1       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | GLM 5              | glm-5              | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| GLM 5 Free         | glm-5-free         | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | GLM 4.7            | glm-4.7            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | GLM 4.6            | glm-4.6            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Kimi K2.5          | kimi-k2.5          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Kimi K2.5 Free     | kimi-k2.5-free     | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Kimi K2 Thinking   | kimi-k2-thinking   | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Kimi K2            | kimi-k2            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Qwen3 Coder 480B   | qwen3-coder        | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
@@ -124,11 +123,9 @@ We support a pay-as-you-go model. Below are the prices **per 1M tokens**.
 | MiniMax M2.5 Free                 | Free   | Free   | Free        | -            |
 | MiniMax M2.5                      | $0.30  | $1.20  | $0.06       | -            |
 | MiniMax M2.1                      | $0.30  | $1.20  | $0.10       | -            |
-| GLM 5 Free                        | Free   | Free   | Free        | -            |
 | GLM 5                             | $1.00  | $3.20  | $0.20       | -            |
 | GLM 4.7                           | $0.60  | $2.20  | $0.10       | -            |
 | GLM 4.6                           | $0.60  | $2.20  | $0.10       | -            |
-| Kimi K2.5 Free                    | Free   | Free   | Free        | -            |
 | Kimi K2.5                         | $0.60  | $3.00  | $0.08       | -            |
 | Kimi K2 Thinking                  | $0.40  | $2.50  | -           | -            |
 | Kimi K2                           | $0.40  | $2.50  | -           | -            |
@@ -150,6 +147,7 @@ We support a pay-as-you-go model. Below are the prices **per 1M tokens**.
 | Gemini 3 Pro (≤ 200K tokens)      | $2.00  | $12.00 | $0.20       | -            |
 | Gemini 3 Pro (> 200K tokens)      | $4.00  | $18.00 | $0.40       | -            |
 | Gemini 3 Flash                    | $0.50  | $3.00  | $0.05       | -            |
+| GPT 5.3 Codex                     | $1.75  | $14.00 | $0.175      | -            |
 | GPT 5.2                           | $1.75  | $14.00 | $0.175      | -            |
 | GPT 5.2 Codex                     | $1.75  | $14.00 | $0.175      | -            |
 | GPT 5.1                           | $1.07  | $8.50  | $0.107      | -            |
@@ -168,8 +166,6 @@ Credit card fees are passed along at cost (4.4% + $0.30 per transaction); we don
 
 The free models:
 
-- GLM 5 Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
-- Kimi K2.5 Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - MiniMax M2.5 Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Big Pickle is a stealth model that's free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 
@@ -201,8 +197,6 @@ charging you more than $20 if your balance goes below $5.
 All our models are hosted in the US. Our providers follow a zero-retention policy and do not use your data for model training, with the following exceptions:
 
 - Big Pickle: During its free period, collected data may be used to improve the model.
-- GLM 5 Free: During its free period, collected data may be used to improve the model.
-- Kimi K2.5 Free: During its free period, collected data may be used to improve the model.
 - MiniMax M2.5 Free: During its free period, collected data may be used to improve the model.
 - OpenAI APIs: Requests are retained for 30 days in accordance with [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data).
 - Anthropic APIs: Requests are retained for 30 days in accordance with [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage).

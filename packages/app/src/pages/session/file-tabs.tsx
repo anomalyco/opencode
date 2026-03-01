@@ -1,15 +1,17 @@
-import { createEffect, createMemo, For, Match, on, onCleanup, Show, Switch } from "solid-js"
-import { createStore, produce } from "solid-js/store"
+import { createEffect, createMemo, Match, on, onCleanup, Switch } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { useParams } from "@solidjs/router"
-import { useCodeComponent } from "@opencode-ai/ui/context/code"
+import type { FileSearchHandle } from "@opencode-ai/ui/file"
+import { useFileComponent } from "@opencode-ai/ui/context/file"
+import { cloneSelectedLineRange, previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
+import { createLineCommentController } from "@opencode-ai/ui/line-comment-annotations"
 import { sampledChecksum } from "@opencode-ai/util/encode"
-import { decode64 } from "@/utils/base64"
-import { showToast } from "@opencode-ai/ui/toast"
-import { LineComment as LineCommentView, LineCommentEditor } from "@opencode-ai/ui/line-comment"
-import { Mark } from "@opencode-ai/ui/logo"
+import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
+import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
+import { showToast } from "@opencode-ai/ui/toast"
 import { useLayout } from "@/context/layout"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { useComments } from "@/context/comments"
@@ -17,11 +19,37 @@ import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
 import { getSessionHandoff } from "@/pages/session/handoff"
 
-const formatCommentLabel = (range: SelectedLineRange) => {
-  const start = Math.min(range.start, range.end)
-  const end = Math.max(range.start, range.end)
-  if (start === end) return `line ${start}`
-  return `lines ${start}-${end}`
+function FileCommentMenu(props: {
+  moreLabel: string
+  editLabel: string
+  deleteLabel: string
+  onEdit: VoidFunction
+  onDelete: VoidFunction
+}) {
+  return (
+    <div onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+      <DropdownMenu gutter={4} placement="bottom-end">
+        <DropdownMenu.Trigger
+          as={IconButton}
+          icon="dot-grid"
+          variant="ghost"
+          size="small"
+          class="size-6 rounded-md"
+          aria-label={props.moreLabel}
+        />
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content>
+            <DropdownMenu.Item onSelect={props.onEdit}>
+              <DropdownMenu.ItemLabel>{props.editLabel}</DropdownMenu.ItemLabel>
+            </DropdownMenu.Item>
+            <DropdownMenu.Item onSelect={props.onDelete}>
+              <DropdownMenu.ItemLabel>{props.deleteLabel}</DropdownMenu.ItemLabel>
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu>
+    </div>
+  )
 }
 
 export function FileTabContent(props: { tab: string }) {
@@ -31,7 +59,7 @@ export function FileTabContent(props: { tab: string }) {
   const comments = useComments()
   const language = useLanguage()
   const prompt = usePrompt()
-  const codeComponent = useCodeComponent()
+  const fileComponent = useFileComponent()
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey))
@@ -41,6 +69,13 @@ export function FileTabContent(props: { tab: string }) {
   let scrollFrame: number | undefined
   let pending: { x: number; y: number } | undefined
   let codeScroll: HTMLElement[] = []
+  let find: FileSearchHandle | null = null
+
+  const search = {
+    register: (handle: FileSearchHandle | null) => {
+      find = handle
+    },
+  }
 
   const path = createMemo(() => file.pathFromTab(props.tab))
   const state = createMemo(() => {
@@ -50,66 +85,18 @@ export function FileTabContent(props: { tab: string }) {
   })
   const contents = createMemo(() => state()?.content?.content ?? "")
   const cacheKey = createMemo(() => sampledChecksum(contents()))
-  const isImage = createMemo(() => {
-    const c = state()?.content
-    return c?.encoding === "base64" && c?.mimeType?.startsWith("image/") && c?.mimeType !== "image/svg+xml"
-  })
-  const isSvg = createMemo(() => {
-    const c = state()?.content
-    return c?.mimeType === "image/svg+xml"
-  })
-  const isBinary = createMemo(() => state()?.content?.type === "binary")
-  const svgContent = createMemo(() => {
-    if (!isSvg()) return
-    const c = state()?.content
-    if (!c) return
-    if (c.encoding !== "base64") return c.content
-    return decode64(c.content)
-  })
-
-  const svgDecodeFailed = createMemo(() => {
-    if (!isSvg()) return false
-    const c = state()?.content
-    if (!c) return false
-    if (c.encoding !== "base64") return false
-    return svgContent() === undefined
-  })
-
-  const svgToast = { shown: false }
-  createEffect(() => {
-    if (!svgDecodeFailed()) return
-    if (svgToast.shown) return
-    svgToast.shown = true
-    showToast({
-      variant: "error",
-      title: language.t("toast.file.loadFailed.title"),
-    })
-  })
-  const svgPreviewUrl = createMemo(() => {
-    if (!isSvg()) return
-    const c = state()?.content
-    if (!c) return
-    if (c.encoding === "base64") return `data:image/svg+xml;base64,${c.content}`
-    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(c.content)}`
-  })
-  const imageDataUrl = createMemo(() => {
-    if (!isImage()) return
-    const c = state()?.content
-    return `data:${c?.mimeType};base64,${c?.content}`
-  })
-  const selectedLines = createMemo(() => {
+  const selectedLines = createMemo<SelectedLineRange | null>(() => {
     const p = path()
     if (!p) return null
-    if (file.ready()) return file.selectedLines(p) ?? null
-    return getSessionHandoff(sessionKey())?.files[p] ?? null
+    if (file.ready()) return (file.selectedLines(p) as SelectedLineRange | undefined) ?? null
+    return (getSessionHandoff(sessionKey())?.files[p] as SelectedLineRange | undefined) ?? null
   })
 
   const selectionPreview = (source: string, selection: FileSelection) => {
-    const start = Math.max(1, Math.min(selection.startLine, selection.endLine))
-    const end = Math.max(selection.startLine, selection.endLine)
-    const lines = source.split("\n").slice(start - 1, end)
-    if (lines.length === 0) return undefined
-    return lines.slice(0, 2).join("\n")
+    return previewSelectedLines(source, {
+      start: selection.startLine,
+      end: selection.endLine,
+    })
   }
 
   const addCommentToContext = (input: {
@@ -145,7 +132,25 @@ export function FileTabContent(props: { tab: string }) {
     })
   }
 
-  let wrap: HTMLDivElement | undefined
+  const updateCommentInContext = (input: {
+    id: string
+    file: string
+    selection: SelectedLineRange
+    comment: string
+  }) => {
+    comments.update(input.file, input.id, input.comment)
+    const preview =
+      input.file === path() ? selectionPreview(contents(), selectionFromLines(input.selection)) : undefined
+    prompt.context.updateComment(input.file, input.id, {
+      comment: input.comment,
+      ...(preview ? { preview } : {}),
+    })
+  }
+
+  const removeCommentFromContext = (input: { id: string; file: string }) => {
+    comments.remove(input.file, input.id)
+    prompt.context.removeComment(input.file, input.id)
+  }
 
   const fileComments = createMemo(() => {
     const p = path()
@@ -153,120 +158,104 @@ export function FileTabContent(props: { tab: string }) {
     return comments.list(p)
   })
 
-  const commentLayout = createMemo(() => {
-    return fileComments()
-      .map((comment) => `${comment.id}:${comment.selection.start}:${comment.selection.end}`)
-      .join("|")
-  })
-
   const commentedLines = createMemo(() => fileComments().map((comment) => comment.selection))
 
   const [note, setNote] = createStore({
     openedComment: null as string | null,
     commenting: null as SelectedLineRange | null,
-    draft: "",
-    positions: {} as Record<string, number>,
-    draftTop: undefined as number | undefined,
+    selected: null as SelectedLineRange | null,
   })
 
-  const setCommenting = (range: SelectedLineRange | null) => {
-    setNote("commenting", range)
-    scheduleComments()
-    if (!range) return
-    setNote("draft", "")
+  const syncSelected = (range: SelectedLineRange | null) => {
+    const p = path()
+    if (!p) return
+    file.setSelectedLines(p, range ? cloneSelectedLineRange(range) : null)
   }
 
-  const getRoot = () => {
-    const el = wrap
-    if (!el) return
+  const activeSelection = () => note.selected ?? selectedLines()
 
-    const host = el.querySelector("diffs-container")
-    if (!(host instanceof HTMLElement)) return
+  const commentsUi = createLineCommentController({
+    comments: fileComments,
+    label: language.t("ui.lineComment.submit"),
+    draftKey: () => path() ?? props.tab,
+    state: {
+      opened: () => note.openedComment,
+      setOpened: (id) => setNote("openedComment", id),
+      selected: () => note.selected,
+      setSelected: (range) => setNote("selected", range),
+      commenting: () => note.commenting,
+      setCommenting: (range) => setNote("commenting", range),
+      syncSelected,
+      hoverSelected: syncSelected,
+    },
+    getHoverSelectedRange: activeSelection,
+    cancelDraftOnCommentToggle: true,
+    clearSelectionOnSelectionEndNull: true,
+    onSubmit: ({ comment, selection }) => {
+      const p = path()
+      if (!p) return
+      addCommentToContext({ file: p, selection, comment, origin: "file" })
+    },
+    onUpdate: ({ id, comment, selection }) => {
+      const p = path()
+      if (!p) return
+      updateCommentInContext({ id, file: p, selection, comment })
+    },
+    onDelete: (comment) => {
+      const p = path()
+      if (!p) return
+      removeCommentFromContext({ id: comment.id, file: p })
+    },
+    editSubmitLabel: language.t("common.save"),
+    renderCommentActions: (_, controls) => (
+      <FileCommentMenu
+        moreLabel={language.t("common.moreOptions")}
+        editLabel={language.t("common.edit")}
+        deleteLabel={language.t("common.delete")}
+        onEdit={controls.edit}
+        onDelete={controls.remove}
+      />
+    ),
+    onDraftPopoverFocusOut: (e: FocusEvent) => {
+      const current = e.currentTarget as HTMLDivElement
+      const target = e.relatedTarget
+      if (target instanceof Node && current.contains(target)) return
 
-    const root = host.shadowRoot
-    if (!root) return
-
-    return root
-  }
-
-  const findMarker = (root: ShadowRoot, range: SelectedLineRange) => {
-    const line = Math.max(range.start, range.end)
-    const node = root.querySelector(`[data-line="${line}"]`)
-    if (!(node instanceof HTMLElement)) return
-    return node
-  }
-
-  const markerTop = (wrapper: HTMLElement, marker: HTMLElement) => {
-    const wrapperRect = wrapper.getBoundingClientRect()
-    const rect = marker.getBoundingClientRect()
-    return rect.top - wrapperRect.top + Math.max(0, (rect.height - 20) / 2)
-  }
-
-  const updateComments = () => {
-    const el = wrap
-    const root = getRoot()
-    if (!el || !root) {
-      setNote("positions", {})
-      setNote("draftTop", undefined)
-      return
-    }
-
-    const estimateTop = (range: SelectedLineRange) => {
-      const line = Math.max(range.start, range.end)
-      const height = 24
-      const offset = 2
-      return Math.max(0, (line - 1) * height + offset)
-    }
-
-    const large = contents().length > 500_000
-
-    const next: Record<string, number> = {}
-    for (const comment of fileComments()) {
-      const marker = findMarker(root, comment.selection)
-      if (marker) next[comment.id] = markerTop(el, marker)
-      else if (large) next[comment.id] = estimateTop(comment.selection)
-    }
-
-    const removed = Object.keys(note.positions).filter((id) => next[id] === undefined)
-    const changed = Object.entries(next).filter(([id, top]) => note.positions[id] !== top)
-    if (removed.length > 0 || changed.length > 0) {
-      setNote(
-        "positions",
-        produce((draft) => {
-          for (const id of removed) {
-            delete draft[id]
-          }
-
-          for (const [id, top] of changed) {
-            draft[id] = top
-          }
-        }),
-      )
-    }
-
-    const range = note.commenting
-    if (!range) {
-      setNote("draftTop", undefined)
-      return
-    }
-
-    const marker = findMarker(root, range)
-    if (marker) {
-      setNote("draftTop", markerTop(el, marker))
-      return
-    }
-
-    setNote("draftTop", large ? estimateTop(range) : undefined)
-  }
-
-  const scheduleComments = () => {
-    requestAnimationFrame(updateComments)
-  }
+      setTimeout(() => {
+        if (!document.activeElement || !current.contains(document.activeElement)) {
+          setNote("commenting", null)
+        }
+      }, 0)
+    },
+  })
 
   createEffect(() => {
-    commentLayout()
-    scheduleComments()
+    if (typeof window === "undefined") return
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return
+      if (tabs().active() !== props.tab) return
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return
+      if (event.key.toLowerCase() !== "f") return
+
+      event.preventDefault()
+      event.stopPropagation()
+      find?.focus()
+    }
+
+    window.addEventListener("keydown", onKeyDown, { capture: true })
+    onCleanup(() => window.removeEventListener("keydown", onKeyDown, { capture: true }))
   })
+
+  createEffect(
+    on(
+      path,
+      () => {
+        commentsUi.note.reset()
+      },
+      { defer: true },
+    ),
+  )
 
   createEffect(() => {
     const focus = comments.focus()
@@ -278,9 +267,7 @@ export function FileTabContent(props: { tab: string }) {
     const target = fileComments().find((comment) => comment.id === focus.id)
     if (!target) return
 
-    setNote("openedComment", target.id)
-    setCommenting(null)
-    file.setSelectedLines(p, target.selection)
+    commentsUi.note.openComment(target.id, target.selection, { cancelDraft: true })
     requestAnimationFrame(() => comments.clearFocus())
   })
 
@@ -419,99 +406,50 @@ export function FileTabContent(props: { tab: string }) {
     cancelAnimationFrame(scrollFrame)
   })
 
-  const renderCode = (source: string, wrapperClass: string) => (
-    <div
-      ref={(el) => {
-        wrap = el
-        scheduleComments()
-      }}
-      class={`relative overflow-hidden ${wrapperClass}`}
-    >
+  const renderFile = (source: string) => (
+    <div class="relative overflow-hidden pb-40">
       <Dynamic
-        component={codeComponent}
+        component={fileComponent}
+        mode="text"
         file={{
           name: path() ?? "",
           contents: source,
           cacheKey: cacheKey(),
         }}
         enableLineSelection
-        selectedLines={selectedLines()}
+        enableHoverUtility
+        selectedLines={activeSelection()}
         commentedLines={commentedLines()}
         onRendered={() => {
           requestAnimationFrame(restoreScroll)
-          requestAnimationFrame(scheduleComments)
         }}
+        annotations={commentsUi.annotations()}
+        renderAnnotation={commentsUi.renderAnnotation}
+        renderHoverUtility={commentsUi.renderHoverUtility}
         onLineSelected={(range: SelectedLineRange | null) => {
-          const p = path()
-          if (!p) return
-          file.setSelectedLines(p, range)
-          if (!range) setCommenting(null)
+          commentsUi.onLineSelected(range)
         }}
+        onLineNumberSelectionEnd={commentsUi.onLineNumberSelectionEnd}
         onLineSelectionEnd={(range: SelectedLineRange | null) => {
-          if (!range) {
-            setCommenting(null)
-            return
-          }
-
-          setNote("openedComment", null)
-          setCommenting(range)
+          commentsUi.onLineSelectionEnd(range)
         }}
+        search={search}
         overflow="scroll"
         class="select-text"
+        media={{
+          mode: "auto",
+          path: path(),
+          current: state()?.content,
+          onLoad: () => requestAnimationFrame(restoreScroll),
+          onError: (args: { kind: "image" | "audio" | "svg" }) => {
+            if (args.kind !== "svg") return
+            showToast({
+              variant: "error",
+              title: language.t("toast.file.loadFailed.title"),
+            })
+          },
+        }}
       />
-      <For each={fileComments()}>
-        {(comment) => (
-          <LineCommentView
-            id={comment.id}
-            top={note.positions[comment.id]}
-            open={note.openedComment === comment.id}
-            comment={comment.comment}
-            selection={formatCommentLabel(comment.selection)}
-            onMouseEnter={() => {
-              const p = path()
-              if (!p) return
-              file.setSelectedLines(p, comment.selection)
-            }}
-            onClick={() => {
-              const p = path()
-              if (!p) return
-              setCommenting(null)
-              setNote("openedComment", (current) => (current === comment.id ? null : comment.id))
-              file.setSelectedLines(p, comment.selection)
-            }}
-          />
-        )}
-      </For>
-      <Show when={note.commenting}>
-        {(range) => (
-          <Show when={note.draftTop !== undefined}>
-            <LineCommentEditor
-              top={note.draftTop}
-              value={note.draft}
-              selection={formatCommentLabel(range())}
-              onInput={(value) => setNote("draft", value)}
-              onCancel={cancelCommenting}
-              onSubmit={(value) => {
-                const p = path()
-                if (!p) return
-                addCommentToContext({ file: p, selection: range(), comment: value, origin: "file" })
-                setCommenting(null)
-              }}
-              onPopoverFocusOut={(e: FocusEvent) => {
-                const current = e.currentTarget as HTMLDivElement
-                const target = e.relatedTarget
-                if (target instanceof Node && current.contains(target)) return
-
-                setTimeout(() => {
-                  if (!document.activeElement || !current.contains(document.activeElement)) {
-                    cancelCommenting()
-                  }
-                }, 0)
-              }}
-            />
-          </Show>
-        )}
-      </Show>
     </div>
   )
 
@@ -526,36 +464,7 @@ export function FileTabContent(props: { tab: string }) {
         onScroll={handleScroll as any}
       >
         <Switch>
-          <Match when={state()?.loaded && isImage()}>
-            <div class="px-6 py-4 pb-40">
-              <img
-                src={imageDataUrl()}
-                alt={path()}
-                class="max-w-full"
-                onLoad={() => requestAnimationFrame(restoreScroll)}
-              />
-            </div>
-          </Match>
-          <Match when={state()?.loaded && isSvg()}>
-            <div class="flex flex-col gap-4 px-6 py-4">
-              {renderCode(svgContent() ?? "", "")}
-              <Show when={svgPreviewUrl()}>
-                <div class="flex justify-center pb-40">
-                  <img src={svgPreviewUrl()} alt={path()} class="max-w-full max-h-96" />
-                </div>
-              </Show>
-            </div>
-          </Match>
-          <Match when={state()?.loaded && isBinary()}>
-            <div class="h-full px-6 pb-42 flex flex-col items-center justify-center text-center gap-6">
-              <Mark class="w-14 opacity-10" />
-              <div class="flex flex-col gap-2 max-w-md">
-                <div class="text-14-semibold text-text-strong truncate">{path()?.split("/").pop()}</div>
-                <div class="text-14-regular text-text-weak">{language.t("session.files.binaryContent")}</div>
-              </div>
-            </div>
-          </Match>
-          <Match when={state()?.loaded}>{renderCode(contents(), "pb-40")}</Match>
+          <Match when={state()?.loaded}>{renderFile(contents())}</Match>
           <Match when={state()?.loading}>
             <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
           </Match>

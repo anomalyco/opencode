@@ -15,6 +15,7 @@ export const dict = {
   "nav.home": "Ana sayfa",
   "nav.openMenu": "Menüyü aç",
   "nav.getStartedFree": "Ücretsiz başla",
+  "nav.logoAlt": "OpenCode",
 
   "nav.context.copyLogo": "Logoyu SVG olarak kopyala",
   "nav.context.copyWordmark": "Wordmark'ı SVG olarak kopyala",
@@ -42,8 +43,12 @@ export const dict = {
   "notFound.docs": "Dokümantasyon",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
+  "notFound.logoLightAlt": "opencode açık logo",
+  "notFound.logoDarkAlt": "opencode koyu logo",
 
   "user.logout": "Çıkış",
+
+  "auth.callback.error.codeMissing": "Yetkilendirme kodu bulunamadı.",
 
   "workspace.select": "Çalışma alanı seç",
   "workspace.createNew": "+ Yeni çalışma alanı oluştur",
@@ -76,6 +81,8 @@ export const dict = {
   "error.reloadAmountMin": "Yükleme tutarı en az ${{amount}} olmalıdır",
   "error.reloadTriggerMin": "Bakiye tetikleyicisi en az ${{amount}} olmalıdır",
 
+  "app.meta.description": "OpenCode - Açık kaynaklı kodlama ajanı.",
+
   "home.title": "OpenCode | Açık kaynaklı yapay zeka kodlama ajanı",
 
   "temp.title": "opencode | Terminal için geliştirilmiş yapay zeka kodlama ajanı",
@@ -91,6 +98,8 @@ export const dict = {
   "temp.feature.models.afterLink": " üzerinden destekler",
   "temp.screenshot.caption": "opencode TUI ve tokyonight teması",
   "temp.screenshot.alt": "tokyonight temalı opencode TUI",
+  "temp.logoLightAlt": "opencode açık logo",
+  "temp.logoDarkAlt": "opencode koyu logo",
 
   "home.banner.badge": "Yeni",
   "home.banner.text": "Masaüstü uygulaması beta olarak kullanılabilir",
@@ -242,6 +251,24 @@ export const dict = {
     "Tüm Zen modelleri ABD'de barındırılmaktadır. Sağlayıcılar sıfır saklama politikası izler ve verilerinizi model eğitimi için kullanmaz; şu",
   "zen.privacy.exceptionsLink": "aşağıdaki istisnalar",
 
+  "zen.api.error.rateLimitExceeded": "İstek limiti aşıldı. Lütfen daha sonra tekrar deneyin.",
+  "zen.api.error.modelNotSupported": "{{model}} modeli desteklenmiyor",
+  "zen.api.error.modelFormatNotSupported": "{{model}} modeli {{format}} formatı için desteklenmiyor",
+  "zen.api.error.noProviderAvailable": "Kullanılabilir sağlayıcı yok",
+  "zen.api.error.providerNotSupported": "{{provider}} sağlayıcısı desteklenmiyor",
+  "zen.api.error.missingApiKey": "API anahtarı eksik.",
+  "zen.api.error.invalidApiKey": "Geçersiz API anahtarı.",
+  "zen.api.error.subscriptionQuotaExceeded": "Abonelik kotası aşıldı. {{retryIn}} içinde tekrar deneyin.",
+  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
+    "Abonelik kotası aşıldı. Ücretsiz modelleri kullanmaya devam edebilirsiniz.",
+  "zen.api.error.noPaymentMethod": "Ödeme yöntemi bulunamadı. Buradan bir ödeme yöntemi ekleyin: {{billingUrl}}",
+  "zen.api.error.insufficientBalance": "Yetersiz bakiye. Faturalandırmanızı buradan yönetin: {{billingUrl}}",
+  "zen.api.error.workspaceMonthlyLimitReached":
+    "Çalışma alanınız aylık ${{amount}} harcama limitine ulaştı. Limitlerinizi buradan yönetin: {{billingUrl}}",
+  "zen.api.error.userMonthlyLimitReached":
+    "Aylık ${{amount}} harcama limitinize ulaştınız. Limitlerinizi buradan yönetin: {{membersUrl}}",
+  "zen.api.error.modelDisabled": "Model devre dışı",
+
   "black.meta.title": "OpenCode Black | Dünyanın en iyi kodlama modellerine erişin",
   "black.meta.description": "OpenCode Black abonelik planlarıyla Claude, GPT, Gemini ve daha fazlasına erişin.",
   "black.hero.title": "Dünyanın en iyi kodlama modellerine erişin",
@@ -349,8 +376,8 @@ export const dict = {
   "workspace.usage.breakdown.cacheWrite": "Önbellek Yazma",
   "workspace.usage.breakdown.output": "Çıkış",
   "workspace.usage.breakdown.reasoning": "Muhakeme",
-  "workspace.usage.subscription": "abonelik (${{amount}})",
-  "workspace.usage.lite": "lite (${{amount}})",
+  "workspace.usage.subscription": "Black (${{amount}})",
+  "workspace.usage.lite": "Go (${{amount}})",
   "workspace.usage.byok": "BYOK (${{amount}})",
 
   "workspace.cost.title": "Maliyet",
@@ -451,6 +478,7 @@ export const dict = {
   "workspace.reload.updatePaymentMethod": "Lütfen ödeme yönteminizi güncelleyin ve tekrar deneyin.",
   "workspace.reload.retrying": "Yeniden deneniyor...",
   "workspace.reload.retry": "Yeniden dene",
+  "workspace.reload.error.paymentFailed": "Ödeme başarısız.",
 
   "workspace.payments.title": "Ödeme Geçmişi",
   "workspace.payments.subtitle": "Son ödeme işlemleri.",
@@ -497,21 +525,26 @@ export const dict = {
   "workspace.lite.time.minute": "dakika",
   "workspace.lite.time.minutes": "dakika",
   "workspace.lite.time.fewSeconds": "birkaç saniye",
-  "workspace.lite.subscription.title": "Lite Aboneliği",
-  "workspace.lite.subscription.message": "OpenCode Lite abonesisiniz.",
+  "workspace.lite.subscription.title": "Go Aboneliği",
+  "workspace.lite.subscription.message": "OpenCode Go abonesisiniz.",
   "workspace.lite.subscription.manage": "Aboneliği Yönet",
   "workspace.lite.subscription.rollingUsage": "Devam Eden Kullanım",
   "workspace.lite.subscription.weeklyUsage": "Haftalık Kullanım",
   "workspace.lite.subscription.monthlyUsage": "Aylık Kullanım",
   "workspace.lite.subscription.resetsIn": "Sıfırlama süresi",
   "workspace.lite.subscription.useBalance": "Kullanım limitlerine ulaştıktan sonra mevcut bakiyenizi kullanın",
-  "workspace.lite.other.title": "Lite Aboneliği",
+  "workspace.lite.subscription.selectProvider":
+    'Go modellerini kullanmak için opencode yapılandırmanızda "OpenCode Go"\'yu sağlayıcı olarak seçin.',
+  "workspace.lite.other.title": "Go Aboneliği",
   "workspace.lite.other.message":
-    "Bu çalışma alanındaki başka bir üye zaten OpenCode Lite abonesi. Çalışma alanı başına yalnızca bir üye abone olabilir.",
-  "workspace.lite.promo.title": "OpenCode Lite",
+    "Bu çalışma alanındaki başka bir üye zaten OpenCode Go abonesi. Çalışma alanı başına yalnızca bir üye abone olabilir.",
+  "workspace.lite.promo.title": "OpenCode Go",
   "workspace.lite.promo.description":
-    "Ayda $10 karşılığında cömert kullanım limitleriyle en iyi açık modellere — Kimi K2.5, GLM-5 ve MiniMax M2.5 — erişin.",
-  "workspace.lite.promo.subscribe": "Lite'a Abone Ol",
+    "OpenCode Go, cömert kullanım limitleriyle popüler açık kodlama modellerine güvenilir erişim sağlayan aylık 10$'lık bir aboneliktir.",
+  "workspace.lite.promo.modelsTitle": "Neler Dahil",
+  "workspace.lite.promo.footer":
+    "Plan öncelikle uluslararası kullanıcılar için tasarlanmıştır; modeller istikrarlı küresel erişim için ABD, AB ve Singapur'da barındırılmaktadır. Erken kullanımdan öğrendikçe ve geri bildirim topladıkça fiyatlandırma ve kullanım limitleri değişebilir.",
+  "workspace.lite.promo.subscribe": "Go'ya Abone Ol",
   "workspace.lite.promo.subscribing": "Yönlendiriliyor...",
 
   "download.title": "OpenCode | İndir",
@@ -566,6 +599,10 @@ export const dict = {
   "enterprise.form.send": "Gönder",
   "enterprise.form.sending": "Gönderiliyor...",
   "enterprise.form.success": "Mesaj gönderildi, yakında size dönüş yapacağız.",
+  "enterprise.form.success.submitted": "Form başarıyla gönderildi.",
+  "enterprise.form.error.allFieldsRequired": "Tüm alanlar gereklidir.",
+  "enterprise.form.error.invalidEmailFormat": "Geçersiz e-posta formatı.",
+  "enterprise.form.error.internalServer": "İç sunucu hatası.",
   "enterprise.faq.title": "SSS",
   "enterprise.faq.q1": "OpenCode Enterprise nedir?",
   "enterprise.faq.a1":
@@ -598,6 +635,7 @@ export const dict = {
   "bench.list.table.agent": "Ajan",
   "bench.list.table.model": "Model",
   "bench.list.table.score": "Puan",
+  "bench.submission.error.allFieldsRequired": "Tüm alanlar gereklidir.",
 
   "bench.detail.title": "Benchmark - {{task}}",
   "bench.detail.notFound": "Görev bulunamadı",
