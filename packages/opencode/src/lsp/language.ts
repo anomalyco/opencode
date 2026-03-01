@@ -24,6 +24,7 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".dockerfile": "dockerfile",
   ".ex": "elixir",
   ".exs": "elixir",
+  ".heex": "phoenix-heex",
   ".erl": "erlang",
   ".ets": "typescript",
   ".hrl": "erlang",
