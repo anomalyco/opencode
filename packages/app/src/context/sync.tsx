@@ -25,37 +25,6 @@ const keyFor = (directory: string, id: string) => `${directory}\n${id}`
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 
-type SessionSyncPlanInput = {
-  hasSession: boolean
-  hasMessages: boolean
-  hydrated: boolean
-  limit: number | undefined
-  messagePageSize: number
-}
-
-/**
- * Computes fetch policy for `session.sync`.
- *
- * Hydrated sessions can skip message re-fetching. Non-hydrated sessions
- * bootstrap with the default page size.
- */
-function sessionSyncPlan(input: SessionSyncPlanInput) {
-  const limit = input.limit ?? input.messagePageSize
-  if (input.hasSession && input.hasMessages && input.hydrated) {
-    return {
-      done: true,
-      skipMessages: true,
-      limit,
-    }
-  }
-
-  return {
-    done: false,
-    skipMessages: input.hasMessages && input.hydrated,
-    limit,
-  }
-}
-
 type OptimisticStore = {
   message: Record<string, Message[] | undefined>
   part: Record<string, Part[] | undefined>
@@ -253,16 +222,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           const key = keyFor(directory, sessionID)
           const hasSession = Binary.search(store.session, sessionID, (s) => s.id).found
 
-          const hasMessages = store.message[sessionID] !== undefined
-          const hydrated = meta.limit[key] !== undefined
-          const plan = sessionSyncPlan({
-            hasSession,
-            hasMessages,
-            hydrated,
-            limit: meta.limit[key],
-            messagePageSize,
-          })
-          if (plan.done) return
+          const limit = meta.limit[key] ?? messagePageSize
 
           const sessionReq = hasSession
             ? Promise.resolve()
@@ -282,15 +242,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 )
               })
 
-          const messagesReq = plan.skipMessages
-            ? Promise.resolve()
-            : loadMessages({
-                directory,
-                client,
-                setStore,
-                sessionID,
-                limit: plan.limit,
-              })
+          const messagesReq = loadMessages({
+            directory,
+            client,
+            setStore,
+            sessionID,
+            limit,
+          })
 
           return runInflight(inflight, key, () => Promise.all([sessionReq, messagesReq]).then(() => {}))
         },
@@ -337,10 +295,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           more(sessionID: string) {
             const store = current()[0]
             const key = keyFor(sdk.directory, sessionID)
-            const hasMessages = store.message[sessionID] !== undefined
-            const hasLimit = meta.limit[key] !== undefined
-            const complete = meta.complete[key] ?? false
-            return hasMessages && hasLimit && !complete
+            if (store.message[sessionID] === undefined) return false
+            if (meta.limit[key] === undefined) return false
+            if (meta.complete[key]) return false
+            return true
           },
           loading(sessionID: string) {
             const key = keyFor(sdk.directory, sessionID)

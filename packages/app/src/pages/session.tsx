@@ -64,13 +64,15 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
     prefetchNoGrowth: 0,
   })
 
+  const initialTurnStart = (len: number) => (len > turnInit ? len - turnInit : 0)
+
   const turnStart = createMemo(() => {
     const id = input.sessionID()
     const len = input.visibleUserMessages().length
     if (!id || len <= 0) return 0
-    if (state.turnID !== id) return len > turnInit ? len - turnInit : 0
+    if (state.turnID !== id) return initialTurnStart(len)
     if (state.turnStart <= 0) return 0
-    if (state.turnStart >= len) return Math.max(0, len - turnInit)
+    if (state.turnStart >= len) return initialTurnStart(len)
     return state.turnStart
   })
 
@@ -201,12 +203,7 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
       if (start <= turnPrefetchBuffer) {
         void fetchOlderMessages({ prefetch: true })
       }
-      // At the very top: reveal all cached turns at once instead of one batch
-      if (el.scrollTop < 1) {
-        preserveScroll(() => setTurnStart(0))
-      } else {
-        backfillTurns()
-      }
+      backfillTurns()
       return
     }
 
@@ -228,10 +225,7 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
       () => [input.sessionID(), input.messagesReady()] as const,
       ([id, ready]) => {
         if (!id || !ready) return
-
-        const len = input.visibleUserMessages().length
-        const start = len > turnInit ? len - turnInit : 0
-        setTurnStart(start)
+        setTurnStart(initialTurnStart(input.visibleUserMessages().length))
       },
       { defer: true },
     ),
