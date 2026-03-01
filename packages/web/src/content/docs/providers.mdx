@@ -1338,6 +1338,71 @@ To use Ollama Cloud with OpenCode:
 
 ---
 
+### oMLX
+
+You can configure opencode to use local MLX models on Apple Silicon through [oMLX](https://github.com/jundot/omlx).
+
+:::note
+oMLX requires Apple Silicon (M1/M2/M3/M4) and macOS.
+:::
+
+**Install** via [macOS app](https://github.com/jundot/omlx/releases), Homebrew, or pip:
+
+```sh
+brew tap jundot/omlx https://github.com/jundot/omlx
+brew install omlx
+
+# Or run as a background service
+brew services start omlx
+```
+
+Then start the server pointing at a directory of MLX-format model subdirectories:
+
+```sh
+omlx serve --model-dir ~/models
+```
+
+The server exposes an OpenAI-compatible API at `http://localhost:8000/v1`. Model IDs are the subdirectory names under your model dir.
+
+```json title="opencode.json" "omlx" {5, 6, 8, 10-17}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "omlx": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "oMLX (local)",
+      "options": {
+        "baseURL": "http://localhost:8000/v1"
+      },
+      "models": {
+        "Qwen3-Coder-Next-8bit": {
+          "name": "Qwen3-Coder (local)",
+          "limit": {
+            "context": 32768,
+            "output": 8192
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+In this example:
+
+- `omlx` is the custom provider ID. This can be any string you want.
+- `npm` specifies the package to use for this provider. Here, `@ai-sdk/openai-compatible` is used for any OpenAI-compatible API.
+- `name` is the display name for the provider in the UI.
+- `options.baseURL` is the endpoint for the local server.
+- `models` is a map of model IDs to their configurations. Model IDs must match the subdirectory names under your `--model-dir`.
+- `limit.context` and `limit.output` let OpenCode track context usage — set these to match your model's actual limits.
+
+:::tip
+oMLX persists KV cache to SSD across requests and server restarts. To enable it: `omlx serve --model-dir ~/models --paged-ssd-cache-dir ~/.omlx/cache`
+:::
+
+---
+
 ### OpenAI
 
 We recommend signing up for [ChatGPT Plus or Pro](https://chatgpt.com/pricing).
