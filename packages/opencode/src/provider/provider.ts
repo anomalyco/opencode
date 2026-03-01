@@ -555,22 +555,24 @@ export namespace Provider {
       const { createAiGateway } = await import("ai-gateway-provider")
       const { createUnified } = await import("ai-gateway-provider/providers/unified")
 
-      // Forward AI Gateway options from provider config (metadata, cache settings, etc.)
-      const { metadata, cacheTtl, cacheKey, skipCache, collectLog } = input.options ?? {}
-      // Also support legacy cf-aig-metadata header (JSON string in options.headers)
-      const resolvedMetadata = metadata ?? (
-        input.options?.headers?.["cf-aig-metadata"]
-          ? (() => { try { return JSON.parse(input.options.headers["cf-aig-metadata"]) } catch { return undefined } })()
-          : undefined
-      )
-      const gatewayOptions = { metadata: resolvedMetadata, cacheTtl, cacheKey, skipCache, collectLog }
-      const hasGatewayOptions = Object.values(gatewayOptions).some(v => v !== undefined)
+      const metadata = iife(() => {
+        if (input.options?.metadata) return input.options.metadata
+        try { return JSON.parse(input.options?.headers?.["cf-aig-metadata"]) }
+        catch { return undefined }
+      })
+      const opts = {
+        metadata,
+        cacheTtl: input.options?.cacheTtl,
+        cacheKey: input.options?.cacheKey,
+        skipCache: input.options?.skipCache,
+        collectLog: input.options?.collectLog,
+      }
 
       const aigateway = createAiGateway({
         accountId,
         gateway,
         apiKey: apiToken,
-        ...(hasGatewayOptions ? { options: gatewayOptions } : {}),
+        ...(Object.values(opts).some(v => v !== undefined) ? { options: opts } : {}),
       })
       const unified = createUnified()
 
