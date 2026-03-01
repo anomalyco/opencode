@@ -1287,6 +1287,11 @@ export namespace Config {
     return global()
   }
 
+  export async function getProject() {
+    const filepath = path.join(Instance.directory, "config.json")
+    return loadFile(filepath)
+  }
+
   export async function update(config: Info) {
     const filepath = path.join(Instance.directory, "config.json")
     const existing = await loadFile(filepath)

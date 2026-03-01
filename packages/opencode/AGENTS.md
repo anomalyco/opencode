@@ -8,3 +8,6 @@
 - **Command**: `bun run db generate --name <slug>`.
 - **Output**: creates `migration/<timestamp>_<slug>/migration.sql` and `snapshot.json`.
 - **Tests**: migration tests should read the per-folder layout (no `_journal.json`).
+
+- **Plugin IDs**: Loader uses function name for internal plugins and \`Config.getPluginName(pkg_or_url)\` for external/npm plugins as IDs for \`plugin_settings\`.
+- **Plugin Loading**: \`PluginInput\` always includes \`settings: Record<string, unknown>\`, injected from \`config.plugin_settings?.[pluginId]\` during load.

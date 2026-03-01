@@ -30,6 +30,7 @@ export namespace Plugin {
     })
     const config = await Config.get()
     const hooks: Hooks[] = []
+    const pluginHookMap: { id: string; hook: Hooks }[] = []
     const input: PluginInput = {
       client,
       project: Instance.project,
@@ -37,14 +38,19 @@ export namespace Plugin {
       directory: Instance.directory,
       serverUrl: Server.url(),
       $: Bun.$,
+      settings: {},
     }
 
     for (const plugin of INTERNAL_PLUGINS) {
       log.info("loading internal plugin", { name: plugin.name })
-      const init = await plugin(input).catch((err) => {
+      const settings = config.plugin_settings?.[plugin.name] ?? {}
+      const init = await plugin({ ...input, settings }).catch((err) => {
         log.error("failed to load internal plugin", { name: plugin.name, error: err })
       })
-      if (init) hooks.push(init)
+      if (init) {
+        hooks.push(init)
+        pluginHookMap.push({ id: plugin.name, hook: init })
+      }
     }
 
     let plugins = config.plugin ?? []
@@ -57,6 +63,8 @@ export namespace Plugin {
       // ignore old codex plugin since it is supported first party now
       if (plugin.includes("opencode-openai-codex-auth") || plugin.includes("opencode-copilot-auth")) continue
       log.info("loading plugin", { path: plugin })
+      const id = Config.getPluginName(plugin)
+      const settings = config.plugin_settings?.[id] ?? {}
       if (!plugin.startsWith("file://")) {
         const lastAtIndex = plugin.lastIndexOf("@")
         const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
@@ -83,7 +91,9 @@ export namespace Plugin {
           for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
             if (seen.has(fn)) continue
             seen.add(fn)
-            hooks.push(await fn(input))
+            const hook = await fn({ ...input, settings })
+            hooks.push(hook)
+            pluginHookMap.push({ id, hook })
           }
         })
         .catch((err) => {
@@ -99,12 +109,13 @@ export namespace Plugin {
 
     return {
       hooks,
+      pluginHookMap,
       input,
     }
   })
 
   export async function trigger<
-    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool" | "settings">,
+    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool" | "settings" | "legacyConfig" | "config">,
     Input = Parameters<Required<Hooks>[Name]>[0],
     Output = Parameters<Required<Hooks>[Name]>[1],
   >(name: Name, input: Input, output: Output): Promise<Output> {
@@ -134,11 +145,35 @@ export namespace Plugin {
   }
 
   export async function init() {
-    const hooks = await state().then((x) => x.hooks)
+    const { hooks, pluginHookMap } = await state()
     const config = await Config.get()
     for (const hook of hooks) {
       // @ts-expect-error this is because we haven't moved plugin to sdk v2
       await hook.config?.(config)
+    }
+    for (const { id, hook } of pluginHookMap) {
+      if (!hook.legacyConfig) continue
+      const existing = config.plugin_settings?.[id] ?? {}
+      if (Object.keys(existing).length > 0) continue
+      let migrated: Record<string, unknown> | undefined
+      for (const file of hook.legacyConfig.files) {
+        const f = Bun.file(file.path)
+        if (!(await f.exists())) continue
+        try {
+          const raw = await f.json()
+          migrated = hook.legacyConfig.migrate(raw)
+          break
+        } catch {
+          log.warn("legacyConfig: failed to parse file", { path: file.path, plugin: id })
+        }
+      }
+      if (!migrated) continue
+      const current = (await Config.get()).plugin_settings ?? {}
+      if (Object.keys(current[id] ?? {}).length > 0) continue
+      await Config.update({
+        plugin_settings: { ...current, [id]: migrated },
+      })
+      log.info("legacyConfig: migrated settings", { plugin: id })
     }
     Bus.subscribeAll(async (input) => {
       const hooks = await state().then((x) => x.hooks)

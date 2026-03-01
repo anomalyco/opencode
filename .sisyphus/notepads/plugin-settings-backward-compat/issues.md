@@ -1,0 +1,2 @@
+- Syntax errors during editing: Multi-line replacements without proper `end` tags can cause duplication of code blocks and syntax errors. Always verify with `tsc` after multiple edits.
+- Type errors: `PluginInput` type change in `packages/plugin` propagates to `packages/opencode` and requires updates in the loader to match the new interface.

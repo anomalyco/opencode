@@ -101,6 +101,7 @@ export type PluginSettingsSchema = {
   title: string
   properties: Record<string, SettingDefinition>
 }
+
 export type PluginInput = {
   client: ReturnType<typeof createOpencodeClient>
   project: Project
@@ -108,6 +109,7 @@ export type PluginInput = {
   worktree: string
   serverUrl: URL
   $: BunShell
+  settings: Record<string, unknown>
 }
 
 export type Plugin = (input: PluginInput) => Promise<Hooks>
@@ -231,6 +233,18 @@ export interface Hooks {
     [key: string]: ToolDefinition
   }
   auth?: AuthHook
+  /**
+   * Declare legacy config files to migrate into plugin_settings.
+   * Called during plugin init ONLY if plugin_settings for this plugin is empty.
+   */
+  legacyConfig?: {
+    files: Array<{
+      path: string
+      format: "json" | "jsonc" | "yaml" | "toml"
+      scope: "global" | "project"
+    }>
+    migrate: (raw: unknown) => Record<string, unknown>
+  }
   /**
    * Called when a new message is received
    */

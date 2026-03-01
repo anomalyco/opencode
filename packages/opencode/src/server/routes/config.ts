@@ -91,6 +91,8 @@ export const ConfigRoutes = lazy(() =>
                       }),
                     ),
                     values: z.record(z.string(), z.record(z.string(), z.unknown())),
+                    global: z.record(z.string(), z.record(z.string(), z.unknown())),
+                    project: z.record(z.string(), z.record(z.string(), z.unknown())),
                   }),
                 ),
               },
@@ -99,10 +101,17 @@ export const ConfigRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const [schemas, config] = await Promise.all([Plugin.schemas(), Config.get()])
+        const [schemas, config, globalConfig, projectConfig] = await Promise.all([
+          Plugin.schemas(),
+          Config.get(),
+          Config.getGlobal(),
+          Config.getProject(),
+        ])
         return c.json({
           schemas,
           values: config.plugin_settings ?? {},
+          global: globalConfig.plugin_settings ?? {},
+          project: projectConfig.plugin_settings ?? {},
         })
       },
     )
@@ -133,15 +142,37 @@ export const ConfigRoutes = lazy(() =>
         z.object({
           plugin_id: z.string(),
           settings: z.record(z.string(), z.unknown()),
+          scope: z.enum(["global", "project"]).optional(),
         }),
       ),
       async (c) => {
         const body = c.req.valid("json")
+        const scope = body.scope ?? "project"
+        if (scope === "project") {
+          const schemas = await Plugin.schemas()
+          const schema = schemas.find((s) => s.id === body.plugin_id)
+          if (schema) {
+            const secretKeys = Object.entries(schema.properties)
+              .filter(([, def]) => def.type === "secret")
+              .map(([k]) => k)
+            const blocked = secretKeys.filter((k) => k in body.settings)
+            if (blocked.length) {
+              return c.json({ error: `Cannot save secret settings to project scope: ${blocked.join(", ")}` }, 400)
+            }
+          }
+        }
+        if (scope === "global") {
+          const globalConfig = await Config.getGlobal()
+          const existing = globalConfig.plugin_settings?.[body.plugin_id] ?? {}
+          const updated = { ...existing, ...body.settings }
+          await Config.updateGlobal({ plugin_settings: { [body.plugin_id]: updated } })
+          return c.json({ plugin_settings: { ...globalConfig.plugin_settings ?? {}, [body.plugin_id]: updated } })
+        }
         const config = await Config.get()
-        const current = config.plugin_settings ?? {}
-        const updated = { ...current, [body.plugin_id]: { ...config.plugin_settings?.[body.plugin_id], ...body.settings } }
-        await Config.update({ plugin_settings: updated })
-        return c.json({ plugin_settings: updated })
+        const existing = config.plugin_settings?.[body.plugin_id] ?? {}
+        const updated = { ...existing, ...body.settings }
+        await Config.update({ plugin_settings: { ...config.plugin_settings ?? {}, [body.plugin_id]: updated } })
+        return c.json({ plugin_settings: { ...config.plugin_settings ?? {}, [body.plugin_id]: updated } })
       },
     )
     .get(

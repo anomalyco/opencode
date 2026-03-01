@@ -306,9 +306,9 @@ const fieldId = `plugin-setting-${pluginId}-${key}`
 > Ayrıca yapılmasına gerek yoktur.
 
 ### Görev
-- [ ] 1.2: Config schema'da plugin_settings tipini güncelle (doğrulama)
+- [x] 1.2: Config schema'da plugin_settings tipini güncelle (doğrulama)
 ### Görev
-- [ ] 1.2: Config schema'da plugin_settings tipini güncelle
+- [x] 1.2: Config schema'da plugin_settings tipini güncelle
 
 **Dosya**: `packages/opencode/src/config/config.ts`
 
@@ -321,7 +321,7 @@ const fieldId = `plugin-setting-${pluginId}-${key}`
 ## WS2: PluginInput'a Settings Enjeksiyonu
 
 ### Görev
-- [ ] 2.1: PluginInput tipine `settings` alanı ekle
+- [x] 2.1: PluginInput tipine `settings` alanı ekle
 
 **Dosya**: `packages/plugin/src/index.ts`
 
@@ -337,7 +337,7 @@ Bu, ilgili plugin'in `plugin_settings[pluginId]` değerlerini taşır. Plugin y�
 **QA**: `bun --cwd packages/plugin tsc --noEmit` çıkış kodu 0.
 
 ### Görev
-- [ ] 2.2: Plugin loader'da settings inject et
+- [x] 2.2: Plugin loader'da settings inject et
 
 **Dosya**: `packages/opencode/src/plugin/index.ts`
 
@@ -356,7 +356,7 @@ Bu, ilgili plugin'in `plugin_settings[pluginId]` değerlerini taşır. Plugin y�
 ## WS3: Legacy Config Discovery
 
 ### Görev
-- [ ] 3.1: `legacyConfig` hook tanımı ekle
+- [x] 3.1: `legacyConfig` hook tanımı ekle
 
 **Dosya**: `packages/plugin/src/index.ts`
 
@@ -379,7 +379,7 @@ legacyConfig?: {
 **QA**: `bun --cwd packages/plugin tsc --noEmit` çıkış kodu 0.
 
 ### Görev
-- [ ] 3.2: Plugin loader'da legacyConfig hook'unu işle
+- [x] 3.2: Plugin loader'da legacyConfig hook'unu işle
 
 **Dosya**: `packages/opencode/src/plugin/index.ts`
 
@@ -447,7 +447,7 @@ async function discover(hooks: Hooks[], configDir: string, projectDir: string): 
 ## WS5: Scope-Aware Persistence (Global + Proje Katmanlı Config)
 
 ### Görev
-- [ ] 5.1: Config merge'de plugin_settings katmanlamasını doğrula
+- [x] 5.1: Config merge'de plugin_settings katmanlamasını doğrula
 
 **Dosya**: `packages/opencode/src/config/config.ts`
 
@@ -463,7 +463,7 @@ async function discover(hooks: Hooks[], configDir: string, projectDir: string): 
 **QA**: Birim test: global+proje merge senaryoları (override, fallback, array replace). `bun --cwd packages/opencode test`
 
 ### Görev
-- [ ] 5.2: PATCH endpoint'ine `scope` parametresi ekle
+- [x] 5.2: PATCH endpoint'ine `scope` parametresi ekle
 
 **Dosya**: `packages/opencode/src/server/routes/config.ts`
 
@@ -491,7 +491,7 @@ async function discover(hooks: Hooks[], configDir: string, projectDir: string): 
 - `bun --cwd packages/opencode test` çıkış kodu 0
 
 ### Görev
-- [ ] 5.3: GET endpoint'inde katmanlı değerleri döndür
+- [x] 5.3: GET endpoint'inde katmanlı değerleri döndür
 
 **Dosya**: `packages/opencode/src/server/routes/config.ts`
 

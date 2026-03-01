@@ -1,0 +1,1 @@
+- **Plugin Lifecycle**: Default export of a plugin (the \`Plugin\` function) is passed \`PluginInput\` which includes the plugin-specific \`settings\` from \`opencode.json\`.

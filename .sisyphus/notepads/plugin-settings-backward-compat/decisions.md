@@ -1,0 +1,2 @@
+- Using function name for internal plugins: This allows internal plugins (like Codex, Copilot) to have their own configuration keys in `plugin_settings`.
+- Explicit settings injection: Decided to clone the `input` object for each plugin to ensure settings isolation and type safety.
