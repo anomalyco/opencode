@@ -81,6 +81,8 @@ export const dict = {
   "command.session.redo.description": "Redo the last undone message",
   "command.session.compact": "Compact session",
   "command.session.compact.description": "Summarize the session to reduce context size",
+  "command.session.copy": "Copy session transcript",
+  "command.session.copy.description": "Copy this session transcript to your clipboard",
   "command.session.fork": "Fork from message",
   "command.session.fork.description": "Create a new session from a previous message",
   "command.session.share": "Share session",
@@ -435,6 +437,11 @@ export const dict = {
   "toast.session.share.success.description": "Share URL copied to clipboard!",
   "toast.session.share.failed.title": "Failed to share session",
   "toast.session.share.failed.description": "An error occurred while sharing the session",
+
+  "toast.session.copy.success.title": "Session transcript copied",
+  "toast.session.copy.success.description": "The transcript has been copied to your clipboard",
+  "toast.session.copy.failed.title": "Failed to copy session transcript",
+  "toast.session.copy.failed.description": "Could not copy the transcript to your clipboard",
 
   "toast.session.unshare.success.title": "Session unshared",
   "toast.session.unshare.success.description": "Session unshared successfully!",

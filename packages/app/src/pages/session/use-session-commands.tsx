@@ -7,6 +7,7 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useLocal } from "@/context/local"
 import { usePermission } from "@/context/permission"
+import { usePlatform } from "@/context/platform"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
@@ -18,7 +19,8 @@ import { DialogFork } from "@/components/dialog-fork"
 import { showToast } from "@opencode-ai/ui/toast"
 import { findLast } from "@opencode-ai/util/array"
 import { extractPromptFromParts } from "@/utils/prompt"
-import { UserMessage } from "@opencode-ai/sdk/v2"
+import { formatSessionTranscript } from "@/utils/session-transcript"
+import { type UserMessage } from "@opencode-ai/sdk/v2"
 import { canAddSelectionContext } from "@/pages/session/session-command-helpers"
 
 export type SessionCommandContext = {
@@ -41,6 +43,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const language = useLanguage()
   const local = useLocal()
   const permission = usePermission()
+  const platform = usePlatform()
   const prompt = usePrompt()
   const sdk = useSDK()
   const sync = useSync()
@@ -63,6 +66,41 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (!revert) return userMessages()
     return userMessages().filter((m) => m.id < revert)
   })
+
+  const writeClipboard = (value: string) => {
+    if (platform.writeClipboardText) {
+      const result = platform.writeClipboardText(value)
+      if (result instanceof Promise) {
+        return result.then(
+          (ok) => ok,
+          () => false,
+        )
+      }
+      return Promise.resolve(result)
+    }
+
+    const body = typeof document === "undefined" ? undefined : document.body
+    if (body) {
+      const textarea = document.createElement("textarea")
+      textarea.value = value
+      textarea.setAttribute("readonly", "")
+      textarea.style.position = "fixed"
+      textarea.style.opacity = "0"
+      textarea.style.pointerEvents = "none"
+      body.appendChild(textarea)
+      textarea.select()
+      const copied = document.execCommand("copy")
+      body.removeChild(textarea)
+      if (copied) return Promise.resolve(true)
+    }
+
+    const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard
+    if (!clipboard?.writeText) return Promise.resolve(false)
+    return clipboard.writeText(value).then(
+      () => true,
+      () => false,
+    )
+  }
 
   const showAllFiles = () => {
     if (layout.fileTree.tab() !== "changes") return
@@ -361,6 +399,49 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       },
     }),
     sessionCommand({
+      id: "session.copy",
+      title: language.t("command.session.copy"),
+      description: language.t("command.session.copy.description"),
+      slash: "copy",
+      disabled: !params.id,
+      onSelect: async () => {
+        const sessionID = params.id
+        if (!sessionID) return
+
+        const session = info()
+        if (!session) return
+
+        const rows = await sdk.client.session.messages({ sessionID }).then(
+          (res) => res.data,
+          () => undefined,
+        )
+        if (!rows) {
+          showToast({
+            title: language.t("toast.session.copy.failed.title"),
+            description: language.t("toast.session.copy.failed.description"),
+            variant: "error",
+          })
+          return
+        }
+
+        const ok = await writeClipboard(formatSessionTranscript(session, rows))
+        if (!ok) {
+          showToast({
+            title: language.t("toast.session.copy.failed.title"),
+            description: language.t("toast.session.copy.failed.description"),
+            variant: "error",
+          })
+          return
+        }
+
+        showToast({
+          title: language.t("toast.session.copy.success.title"),
+          description: language.t("toast.session.copy.success.description"),
+          variant: "success",
+        })
+      },
+    }),
+    sessionCommand({
       id: "session.fork",
       title: language.t("command.session.fork"),
       description: language.t("command.session.fork.description"),
@@ -384,32 +465,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         onSelect: async () => {
           if (!params.id) return
 
-          const write = (value: string) => {
-            const body = typeof document === "undefined" ? undefined : document.body
-            if (body) {
-              const textarea = document.createElement("textarea")
-              textarea.value = value
-              textarea.setAttribute("readonly", "")
-              textarea.style.position = "fixed"
-              textarea.style.opacity = "0"
-              textarea.style.pointerEvents = "none"
-              body.appendChild(textarea)
-              textarea.select()
-              const copied = document.execCommand("copy")
-              body.removeChild(textarea)
-              if (copied) return Promise.resolve(true)
-            }
-
-            const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard
-            if (!clipboard?.writeText) return Promise.resolve(false)
-            return clipboard.writeText(value).then(
-              () => true,
-              () => false,
-            )
-          }
-
           const copy = async (url: string, existing: boolean) => {
-            const ok = await write(url)
+            const ok = await writeClipboard(url)
             if (!ok) {
               showToast({
                 title: language.t("toast.session.share.copyFailed.title"),
