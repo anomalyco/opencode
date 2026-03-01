@@ -80,6 +80,7 @@ import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
+import { decodeFileUrisInText } from "@opencode-ai/util/path"
 
 addDefaultParsers(parsers.parsers)
 
@@ -159,6 +160,14 @@ export function Session() {
   const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
 
+  const normalizeInitialPrompt = (promptInfo: PromptInfo) => {
+    if (promptInfo.parts.length > 0) return promptInfo
+    return {
+      ...promptInfo,
+      input: decodeFileUrisInText(promptInfo.input),
+    }
+  }
+
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
     if (session()?.parentID) return false
@@ -203,7 +212,7 @@ export function Session() {
   // Handle initial prompt from fork
   createEffect(() => {
     if (route.initialPrompt && prompt) {
-      prompt.set(route.initialPrompt)
+      prompt.set(normalizeInitialPrompt(route.initialPrompt))
     }
   })
 
@@ -1160,7 +1169,7 @@ export function Session() {
                   promptRef.set(r)
                   // Apply initial prompt when prompt component mounts (e.g., from fork)
                   if (route.initialPrompt) {
-                    r.set(route.initialPrompt)
+                    r.set(normalizeInitialPrompt(route.initialPrompt))
                   }
                 }}
                 disabled={permissions().length > 0 || questions().length > 0}

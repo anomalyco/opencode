@@ -35,3 +35,39 @@ export function truncateMiddle(text: string, maxLength: number = 20) {
   const end = Math.floor(available / 2)
   return text.slice(0, start) + "…" + text.slice(-end)
 }
+
+const FILE_URI_PATTERN = /file:\/\/[^\s<>()`"']+/g
+const PERCENT_RUN_PATTERN = /(?:%[0-9A-Fa-f]{2})+/g
+
+function decodePercentRunIfUnicode(encoded: string) {
+  try {
+    const decoded = decodeURIComponent(encoded)
+    return /[^\x00-\x7F]/.test(decoded) ? decoded : encoded
+  } catch {
+    return encoded
+  }
+}
+
+export function decodeFileUriForDisplay(uri: string) {
+  if (!uri.startsWith("file://")) return uri
+
+  const queryIndex = uri.indexOf("?")
+  const hashIndex = uri.indexOf("#")
+  const boundary =
+    queryIndex === -1
+      ? hashIndex === -1
+        ? uri.length
+        : hashIndex
+      : hashIndex === -1
+        ? queryIndex
+        : Math.min(queryIndex, hashIndex)
+
+  const base = uri.slice(0, boundary)
+  const suffix = uri.slice(boundary)
+  const path = base.slice("file://".length).replace(PERCENT_RUN_PATTERN, decodePercentRunIfUnicode)
+  return `file://${path}${suffix}`
+}
+
+export function decodeFileUrisInText(text: string) {
+  return text.replace(FILE_URI_PATTERN, decodeFileUriForDisplay)
+}

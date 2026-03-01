@@ -14,6 +14,7 @@ import { usePromptRef } from "../context/prompt"
 import { Installation } from "@/installation"
 import { useKV } from "../context/kv"
 import { useCommandDialog } from "../component/dialog-command"
+import { decodeFileUrisInText } from "@opencode-ai/util/path"
 
 // TODO: what is the best way to do this?
 let once = false
@@ -79,10 +80,18 @@ export function Home() {
   onMount(() => {
     if (once) return
     if (route.initialPrompt) {
-      prompt.set(route.initialPrompt)
+      // Keep part positions stable: only decode plain-text prompts.
+      const next =
+        route.initialPrompt.parts.length === 0
+          ? {
+              ...route.initialPrompt,
+              input: decodeFileUrisInText(route.initialPrompt.input),
+            }
+          : route.initialPrompt
+      prompt.set(next)
       once = true
     } else if (args.prompt) {
-      prompt.set({ input: args.prompt, parts: [] })
+      prompt.set({ input: decodeFileUrisInText(args.prompt), parts: [] })
       once = true
       prompt.submit()
     }
