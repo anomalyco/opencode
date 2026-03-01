@@ -142,6 +142,29 @@ test("default dock shows prompt input", async ({ page, sdk, gotoSession }) => {
   })
 })
 
+test("focused prompt stays visible after viewport shrink", async ({ page, sdk, gotoSession }) => {
+  await withDockSession(sdk, "e2e composer dock viewport", async (session) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await gotoSession(session.id)
+
+    const prompt = page.locator(promptSelector)
+    await expect(prompt).toBeVisible()
+
+    await prompt.click()
+    await expect(prompt).toBeFocused()
+
+    await page.setViewportSize({ width: 390, height: 540 })
+    await expect(prompt).toBeVisible()
+    await expect(prompt).toBeFocused()
+
+    const viewport = page.viewportSize()
+    const box = await prompt.boundingBox()
+    expect(viewport).not.toBeNull()
+    expect(box).not.toBeNull()
+    expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual((viewport?.height ?? 0) + 1)
+  })
+})
+
 test("blocked question flow unblocks after submit", async ({ page, sdk, gotoSession }) => {
   await withDockSession(sdk, "e2e composer dock question", async (session) => {
     await withDockSeed(sdk, session.id, async () => {

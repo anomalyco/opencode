@@ -48,6 +48,7 @@ export default function Page() {
   const [ui, setUi] = createStore({
     pendingMessage: undefined as string | undefined,
     scrollGesture: 0,
+    keyboardOffset: 0,
     scroll: {
       overflow: false,
       bottom: true,
@@ -410,6 +411,12 @@ export default function Page() {
     return /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName) || target.isContentEditable
   }
 
+  const isTouch = createMemo(() => {
+    const coarse = globalThis.window.matchMedia("(pointer: coarse)").matches
+    const touch = "ontouchstart" in globalThis.window || navigator.maxTouchPoints > 0
+    return coarse || touch
+  })
+
   const deepActiveElement = () => {
     let current: Element | null = document.activeElement
     while (current instanceof HTMLElement && current.shadowRoot?.activeElement) {
@@ -453,6 +460,39 @@ export default function Page() {
       if (composer.blocked()) return
       inputRef?.focus()
     }
+  }
+
+  const promptFocused = () => {
+    const active = deepActiveElement()
+    if (!active) return false
+    if (!inputRef) return false
+    return active === inputRef || inputRef.contains(active)
+  }
+
+  const clearKeyboardOffset = () => {
+    if (ui.keyboardOffset === 0) return
+    setUi("keyboardOffset", 0)
+  }
+
+  const updateKeyboardOffset = () => {
+    if (!isTouch()) {
+      clearKeyboardOffset()
+      return
+    }
+    if (!promptFocused()) {
+      clearKeyboardOffset()
+      return
+    }
+
+    const viewport = window.visualViewport
+    if (!viewport) {
+      clearKeyboardOffset()
+      return
+    }
+
+    const overlap = Math.max(0, Math.round(window.innerHeight - (viewport.height + viewport.offsetTop)))
+    if (ui.keyboardOffset === overlap) return
+    setUi("keyboardOffset", overlap)
   }
 
   const contextOpen = createMemo(() => tabs().active() === "context" || tabs().all().includes("context"))
@@ -1017,7 +1057,34 @@ export default function Page() {
   })
 
   onMount(() => {
+    let raf: number | undefined
+    const queueKeyboardOffset = () => {
+      if (raf !== undefined) cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        raf = undefined
+        updateKeyboardOffset()
+      })
+    }
+
     document.addEventListener("keydown", handleKeyDown)
+    document.addEventListener("focusin", queueKeyboardOffset, true)
+    document.addEventListener("focusout", queueKeyboardOffset, true)
+
+    const viewport = window.visualViewport
+    viewport?.addEventListener("resize", queueKeyboardOffset)
+    viewport?.addEventListener("scroll", queueKeyboardOffset)
+    window.addEventListener("resize", queueKeyboardOffset)
+    queueKeyboardOffset()
+
+    onCleanup(() => {
+      document.removeEventListener("focusin", queueKeyboardOffset, true)
+      document.removeEventListener("focusout", queueKeyboardOffset, true)
+      viewport?.removeEventListener("resize", queueKeyboardOffset)
+      viewport?.removeEventListener("scroll", queueKeyboardOffset)
+      window.removeEventListener("resize", queueKeyboardOffset)
+      if (raf !== undefined) cancelAnimationFrame(raf)
+      clearKeyboardOffset()
+    })
   })
 
   onCleanup(() => {
@@ -1028,7 +1095,10 @@ export default function Page() {
   })
 
   return (
-    <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
+    <div
+      class="relative bg-background-base size-full overflow-hidden flex flex-col"
+      style={{ "--session-keyboard-offset": `${ui.keyboardOffset}px` }}
+    >
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         <SessionMobileTabs
