@@ -199,6 +199,14 @@ export function SessionTurn(
     return item.parentID === msg.id
   })
 
+  const queued = createMemo(() => {
+    const id = message()?.id
+    if (!id) return false
+    const item = pending()
+    if (!item) return false
+    return id > item.id
+  })
+
   const parts = createMemo(() => {
     const msg = message()
     if (!msg) return emptyParts
@@ -334,6 +342,7 @@ export function SessionTurn(
   )
   const showThinking = createMemo(() => {
     if (!working() || !!error()) return false
+    if (queued()) return false
     if (status().type === "retry") return false
     if (showReasoningSummaries()) return assistantVisible() === 0
     if (assistantTailVisible() === "text") return false
@@ -364,7 +373,7 @@ export function SessionTurn(
                 class={props.classes?.container}
               >
                 <div data-slot="session-turn-message-content" aria-live="off">
-                  <Message message={msg()} parts={parts()} interrupted={interrupted()} />
+                  <Message message={msg()} parts={parts()} interrupted={interrupted()} queued={queued()} />
                 </div>
                 <Show when={compaction()}>
                   {(part) => (
