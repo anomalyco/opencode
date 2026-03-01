@@ -198,8 +198,7 @@ export function SessionTurn(
     if (!item?.parentID) return
     const messages = allMessages() ?? emptyMessages
     const result = Binary.search(messages, item.parentID, (m) => m.id)
-    if (!result.found) return
-    const msg = messages[result.index]
+    const msg = result.found ? messages[result.index] : messages.find((m) => m.id === item.parentID)
     if (!msg || msg.role !== "user") return
     return msg
   })
