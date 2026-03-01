@@ -44,6 +44,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "ponovni pokušaj",
   "ui.sessionTurn.retry.inSeconds": "za {{seconds}}s",
+  "ui.sessionTurn.retry.attempt": "pokušaj #{{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - pokušaj #{{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini je trenutno preopterećen",
   "ui.sessionTurn.error.freeUsageExceeded": "Besplatna upotreba premašena",
   "ui.sessionTurn.error.addCredits": "Dodaj kredite",
 

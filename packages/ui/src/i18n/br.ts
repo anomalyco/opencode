@@ -40,6 +40,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "tentando novamente",
   "ui.sessionTurn.retry.inSeconds": "em {{seconds}}s",
+  "ui.sessionTurn.retry.attempt": "tentativa #{{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - tentativa #{{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini está muito sobrecarregado agora",
   "ui.sessionTurn.error.freeUsageExceeded": "Limite de uso gratuito excedido",
   "ui.sessionTurn.error.addCredits": "Adicionar créditos",
 
