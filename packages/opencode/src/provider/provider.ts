@@ -267,7 +267,13 @@ export namespace Provider {
     },
     "grok-4": {
       name: "Grok 4 (Antigravity)",
-      order: ["grok-4", "grok-4-fast", "grok-4-1-fast", "grok-3"],
+      // grok-4-0709 is the versioned ID; grok-4 is its alias
+      order: ["grok-4-0709", "grok-4", "grok-4-fast-reasoning", "grok-4-fast-non-reasoning", "grok-4-1-fast-reasoning", "grok-4-1-fast-non-reasoning", "grok-3"],
+      providers: ["xai"],
+    },
+    "grok-code": {
+      name: "Grok Code (Antigravity)",
+      order: ["grok-code-fast-1"],
       providers: ["xai"],
     },
     "grok-3": {
@@ -277,12 +283,15 @@ export namespace Provider {
     },
     "grok-2": {
       name: "Grok 2 (Antigravity)",
-      order: ["grok-2", "grok-2-vision", "grok-2-latest"],
+      // grok-2-vision-1212 is the versioned ID; grok-2-vision is its alias
+      order: ["grok-2-vision-1212", "grok-2-vision", "grok-2", "grok-2-latest"],
       providers: ["xai"],
     },
+    // DeepSeek: only two models exist on the API — deepseek-chat (V3.2 non-thinking)
+    // and deepseek-reasoner (V3.2 thinking). No versioned aliases like deepseek-v3.2 exist.
     "deepseek-v3": {
       name: "DeepSeek V3 (Antigravity)",
-      order: ["deepseek-v3.2", "deepseek-v3.2-thinking", "deepseek-v3.1"],
+      order: ["deepseek-chat"],
       providers: ["deepseek"],
     },
     "deepseek-reasoner": {
@@ -290,29 +299,52 @@ export namespace Provider {
       order: ["deepseek-reasoner"],
       providers: ["deepseek"],
     },
-    "deepseek-chat": {
-      name: "DeepSeek Chat (Antigravity)",
-      order: ["deepseek-chat"],
-      providers: ["deepseek"],
-    },
     "mistral-large": {
       name: "Mistral Large (Antigravity)",
-      order: ["mistral-large-2512", "mistral-large-3", "mistral-large-2"],
+      // mistral-large-2512 is the versioned ID; mistral-large-3 and mistral-large are aliases
+      order: ["mistral-large-2512", "mistral-large-3", "mistral-large-latest", "mistral-large-2"],
+      providers: ["mistral"],
+    },
+    "mistral-medium": {
+      name: "Mistral Medium (Antigravity)",
+      // mistral-medium-2508 is Mistral Medium 3.1; mistral-medium-3 is the previous version
+      order: ["mistral-medium-2508", "mistral-medium-3", "mistral-medium-latest"],
       providers: ["mistral"],
     },
     "mistral-small": {
       name: "Mistral Small (Antigravity)",
-      order: ["mistral-small-3.1", "mistral-small"],
+      // mistral-small-2506 is Mistral Small 3.2; mistral-small-3.2 and mistral-small are aliases
+      order: ["mistral-small-2506", "mistral-small-3.2", "mistral-small-latest", "mistral-small-2503"],
+      providers: ["mistral"],
+    },
+    "devstral": {
+      name: "Devstral (Antigravity)",
+      // devstral-2512 is Devstral 2; devstral-2 and devstral are aliases
+      order: ["devstral-2512", "devstral-2", "devstral-latest"],
+      providers: ["mistral"],
+    },
+    "magistral-medium": {
+      name: "Magistral Medium (Antigravity)",
+      // magistral-medium-2509 is Magistral Medium 1.2
+      order: ["magistral-medium-2509", "magistral-medium-latest"],
+      providers: ["mistral"],
+    },
+    "magistral-small": {
+      name: "Magistral Small (Antigravity)",
+      // magistral-small-2509 is Magistral Small 1.2
+      order: ["magistral-small-2509", "magistral-small-latest"],
       providers: ["mistral"],
     },
     "codestral": {
       name: "Codestral (Antigravity)",
-      order: ["codestral-22b", "codestral"],
+      // codestral-2508 is the current version; codestral is its alias
+      order: ["codestral-2508", "codestral-latest", "codestral-2501"],
       providers: ["mistral"],
     },
     "ministral": {
       name: "Ministral (Antigravity)",
-      order: ["ministral-14b", "ministral-3"],
+      // ministral-3-14b-2512 and ministral-3-8b-2512 are the latest versioned IDs
+      order: ["ministral-3-14b-2512", "ministral-3-8b-2512", "ministral-8b-2410", "ministral-3b-2410"],
       providers: ["mistral"],
     },
     "command-r": {
