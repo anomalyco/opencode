@@ -148,7 +148,20 @@ export namespace LLM {
     const maxOutputTokens =
       isCodex || provider.id.includes("github-copilot") ? undefined : ProviderTransform.maxOutputTokens(input.model)
 
-    const tools = await resolveTools(input)
+    const { active: tools, disabled } = await resolveTools(input)
+
+    // System prompts may reference builtin tools by name.
+    // This means that some models may still attempt to call those tools, resulting in an error.
+    // Explicitly telling the model which tools are disabled prevents this.
+    if (disabled.length > 0) {
+      system.push(
+        [
+          "<system-reminder>",
+          `The following tools are currently disabled and must not be called: ${disabled.join(", ")}`,
+          "</system-reminder>",
+        ].join("\n"),
+      )
+    }
 
     // LiteLLM and some Anthropic proxies require the tools parameter to be present
     // when message history contains tool calls, even if no tools are being used.
@@ -257,7 +270,10 @@ export namespace LLM {
   }
 
   async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user">) {
-    const disabledByPermission = PermissionNext.disabled(Object.keys(input.tools), input.agent.permission)
+    const allTools = Object.keys(input.tools)
+    const builtinTools = new Set(await ToolRegistry.ids())
+
+    const disabledByPermission = PermissionNext.disabled(allTools, input.agent.permission)
     const disabledByToggle = await ToolRegistry.disabled()
     const disabledForMessage = new Set(
       Object.keys(input.user.tools ?? {}).filter((k) => input.user.tools?.[k] === false),
@@ -265,11 +281,15 @@ export namespace LLM {
 
     const disabled = new Set([...disabledByPermission, ...disabledByToggle, ...disabledForMessage])
 
-    for (const tool of Object.keys(input.tools)) {
-      if (disabled.has(tool)) delete input.tools[tool]
+    const removed: string[] = []
+    for (const tool of allTools) {
+      if (disabled.has(tool)) {
+        delete input.tools[tool]
+        if (builtinTools.has(tool)) removed.push(tool)
+      }
     }
 
-    return input.tools
+    return { active: input.tools, disabled: removed }
   }
 
   // Check if messages contain any tool-call content
