@@ -12,6 +12,7 @@ import { Session } from "../session"
 import { NamedError } from "@opencode-ai/util/error"
 import { CopilotAuthPlugin } from "./copilot"
 import { gitlabAuthPlugin as GitlabAuthPlugin } from "@gitlab/opencode-gitlab-auth"
+import { discoverLegacyConfigs } from "./legacy"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -151,29 +152,27 @@ export namespace Plugin {
       // @ts-expect-error this is because we haven't moved plugin to sdk v2
       await hook.config?.(config)
     }
-    for (const { id, hook } of pluginHookMap) {
-      if (!hook.legacyConfig) continue
-      const existing = config.plugin_settings?.[id] ?? {}
-      if (Object.keys(existing).length > 0) continue
-      let migrated: Record<string, unknown> | undefined
-      for (const file of hook.legacyConfig.files) {
-        const f = Bun.file(file.path)
-        if (!(await f.exists())) continue
-        try {
-          const raw = await f.json()
-          migrated = hook.legacyConfig.migrate(raw)
-          break
-        } catch {
-          log.warn("legacyConfig: failed to parse file", { path: file.path, plugin: id })
-        }
+    const legacyHooks = pluginHookMap.filter((x) => x.hook.legacyConfig).map((x) => ({
+      id: x.id,
+      legacyConfig: x.hook.legacyConfig!,
+    }))
+    if (legacyHooks.length > 0) {
+      const updates = await discoverLegacyConfigs(legacyHooks, config.plugin_settings ?? {})
+      if (Object.keys(updates.global).length > 0) {
+        const current = (await Config.get()).plugin_settings ?? {}
+        await Config.updateGlobal({
+          plugin_settings: { ...current, ...updates.global },
+        })
       }
-      if (!migrated) continue
-      const current = (await Config.get()).plugin_settings ?? {}
-      if (Object.keys(current[id] ?? {}).length > 0) continue
-      await Config.update({
-        plugin_settings: { ...current, [id]: migrated },
-      })
-      log.info("legacyConfig: migrated settings", { plugin: id })
+      if (Object.keys(updates.project).length > 0) {
+        const current = (await Config.get()).plugin_settings ?? {}
+        await Config.update({
+          plugin_settings: { ...current, ...updates.project },
+        })
+      }
+      for (const id of [...Object.keys(updates.global), ...Object.keys(updates.project)]) {
+        log.info("legacyConfig: migrated settings", { plugin: id })
+      }
     }
     Bus.subscribeAll(async (input) => {
       const hooks = await state().then((x) => x.hooks)

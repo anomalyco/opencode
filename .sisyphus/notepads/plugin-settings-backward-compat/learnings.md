@@ -97,3 +97,27 @@ Also excluded `legacyConfig` and `config` from `trigger()` type constraint in lo
   - `project`: project config's `plugin_settings` (from `Config.getProject()`)
 - All three `Promise.all` parallel fetched.
 - `bun --bun tsc --noEmit` passes clean.
+
+## WS4: legacy.ts JSONC parser desteği ve migration extraction (2026-03-01)
+
+### Yapı
+- `packages/opencode/src/plugin/legacy.ts` oluşturuldu
+- `discoverLegacyConfigs(hooks, existingSettings)` → `ScopedUpdates { global, project }` döndürür
+- `jsonc-parser`'dan `parse as parseJsonc` kullanır; `ParseError[]` collector ile JSONC/JSON parse edilir
+- `format: "yaml" | "toml"` için fallback: `JSON.parse()` (bu formatlar gerçek anlamda desteklenmiyor, hata fırlatır)
+- Her dosya için try/catch: parse hatası → `log.warn`, sonraki dosyaya geç
+
+### index.ts Güncelleme
+- Satır 14 sonrasına `import { discoverLegacyConfigs } from "./legacy"` eklendi
+- `init()` içindeki 24 satırlık inline for döngüsü kaldırıldı
+- Yerine: `legacyHooks` filtresi + `discoverLegacyConfigs(...)` çağrısı
+- `updates.global` → `Config.updateGlobal(...)`, `updates.project` → `Config.update(...)`
+- Idempotency: `existingSettings[id]` dolu ise `discoverLegacyConfigs` içinde atlanır
+
+### Scope davranışı
+- `file.scope` her dosya için belirtilir (`"global"` | `"project"`)
+- İlk başarılı dosya parse edilip `migrate()` çağrılınca o plugin için döngü kırılır (`break`)
+- Birden fazla plugin için sonuçlar ayrı `global` ve `project` map'lerde toplanır
+
+### Doğrulama
+- `bun --cwd packages/opencode tsc --noEmit` → sıfır hata
