@@ -2462,10 +2462,21 @@ export class GitlabWorkflowModelSelect extends HeyApiClient {
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
+      workspace?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
     return (options?.client ?? this.client).get<GitlabWorkflowModelSelectListResponses, unknown, ThrowOnError>({
       url: "/gitlab-workflow-model-select",
       ...options,
@@ -2479,6 +2490,7 @@ export class GitlabWorkflowModelSelect extends HeyApiClient {
   public discover<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
+      workspace?: string
       sessionID?: string
       force?: boolean
     },
@@ -2490,6 +2502,7 @@ export class GitlabWorkflowModelSelect extends HeyApiClient {
         {
           args: [
             { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
             { in: "body", key: "sessionID" },
             { in: "body", key: "force" },
           ],
@@ -2514,10 +2527,21 @@ export class GitlabWorkflowModelSelect extends HeyApiClient {
   public clear<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
+      workspace?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
     return (options?.client ?? this.client).post<GitlabWorkflowModelSelectClearResponses, unknown, ThrowOnError>({
       url: "/gitlab-workflow-model-select/clear",
       ...options,
@@ -2532,6 +2556,7 @@ export class GitlabWorkflowModelSelect extends HeyApiClient {
     parameters: {
       requestID: string
       directory?: string
+      workspace?: string
       modelRef?: string | null
       modelName?: string | null
     },
@@ -2544,6 +2569,7 @@ export class GitlabWorkflowModelSelect extends HeyApiClient {
           args: [
             { in: "path", key: "requestID" },
             { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
             { in: "body", key: "modelRef" },
             { in: "body", key: "modelName" },
           ],

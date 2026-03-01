@@ -3924,6 +3924,7 @@ export type GitlabWorkflowModelSelectListData = {
   path?: never
   query?: {
     directory?: string
+    workspace?: string
   }
   url: "/gitlab-workflow-model-select"
 }
@@ -3954,6 +3955,7 @@ export type GitlabWorkflowModelSelectDiscoverData = {
   path?: never
   query?: {
     directory?: string
+    workspace?: string
   }
   url: "/gitlab-workflow-model-select/discover"
 }
@@ -3977,6 +3979,7 @@ export type GitlabWorkflowModelSelectClearData = {
   path?: never
   query?: {
     directory?: string
+    workspace?: string
   }
   url: "/gitlab-workflow-model-select/clear"
 }
@@ -4001,6 +4004,7 @@ export type GitlabWorkflowModelSelectReplyData = {
   }
   query?: {
     directory?: string
+    workspace?: string
   }
   url: "/gitlab-workflow-model-select/{requestID}/reply"
 }
