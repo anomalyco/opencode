@@ -1,7 +1,7 @@
 import * as vscode from "vscode"
 import { AcpClient } from "../acp/client"
 
-const SESSIONS_KEY = "opencode.sessionManager.sessions"
+const SESSIONS_KEY = "opencode.sessionManager.activeSessions"
 
 export interface SessionMetadata {
   id: string
