@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import path from "path"
-import type { ModelMessage } from "ai"
+import { jsonSchema, tool, type ModelMessage } from "ai"
 import { LLM } from "../../src/session/llm"
 import { Global } from "../../src/global"
 import { Instance } from "../../src/project/instance"
@@ -11,6 +11,7 @@ import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 import type { Agent } from "../../src/agent/agent"
 import type { MessageV2 } from "../../src/session/message-v2"
+import { ToolRegistry } from "../../src/tool/registry"
 
 describe("session.llm.hasToolCalls", () => {
   test("returns false for empty messages array", () => {
@@ -218,6 +219,45 @@ function createEventResponse(chunks: unknown[], includeDone = false) {
     status: 200,
     headers: { "Content-Type": "text/event-stream" },
   })
+}
+
+function createAnthropicTextChunks(modelID: string) {
+  return [
+    {
+      type: "message_start",
+      message: {
+        id: "msg-1",
+        model: modelID,
+        usage: {
+          input_tokens: 3,
+          cache_creation_input_tokens: null,
+          cache_read_input_tokens: null,
+        },
+      },
+    },
+    {
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "text", text: "" },
+    },
+    {
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "text_delta", text: "Hello" },
+    },
+    { type: "content_block_stop", index: 0 },
+    {
+      type: "message_delta",
+      delta: { stop_reason: "end_turn", stop_sequence: null, container: null },
+      usage: {
+        input_tokens: 3,
+        output_tokens: 2,
+        cache_creation_input_tokens: null,
+        cache_read_input_tokens: null,
+      },
+    },
+    { type: "message_stop" },
+  ]
 }
 
 describe("session.llm.stream", () => {
@@ -455,43 +495,7 @@ describe("session.llm.stream", () => {
     const provider = fixture.provider
     const model = fixture.model
 
-    const chunks = [
-      {
-        type: "message_start",
-        message: {
-          id: "msg-1",
-          model: model.id,
-          usage: {
-            input_tokens: 3,
-            cache_creation_input_tokens: null,
-            cache_read_input_tokens: null,
-          },
-        },
-      },
-      {
-        type: "content_block_start",
-        index: 0,
-        content_block: { type: "text", text: "" },
-      },
-      {
-        type: "content_block_delta",
-        index: 0,
-        delta: { type: "text_delta", text: "Hello" },
-      },
-      { type: "content_block_stop", index: 0 },
-      {
-        type: "message_delta",
-        delta: { stop_reason: "end_turn", stop_sequence: null, container: null },
-        usage: {
-          input_tokens: 3,
-          output_tokens: 2,
-          cache_creation_input_tokens: null,
-          cache_read_input_tokens: null,
-        },
-      },
-      { type: "message_stop" },
-    ]
-    const request = waitRequest("/messages", createEventResponse(chunks))
+    const request = waitRequest("/messages", createEventResponse(createAnthropicTextChunks(model.id)))
 
     await using tmp = await tmpdir({
       init: async (dir) => {
@@ -558,6 +562,110 @@ describe("session.llm.stream", () => {
         expect(body.max_tokens).toBe(ProviderTransform.maxOutputTokens(resolved))
         expect(body.temperature).toBe(0.4)
         expect(body.top_p).toBe(0.9)
+      },
+    })
+  })
+
+  test("omits disabled builtin tools and adds disabled-tools reminder", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const providerID = "anthropic"
+    const modelID = "claude-3-5-sonnet-20241022"
+    const fixture = await loadFixture(providerID, modelID)
+    const model = fixture.model
+
+    const request = waitRequest("/messages", createEventResponse(createAnthropicTextChunks(model.id)))
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: [providerID],
+            provider: {
+              [providerID]: {
+                options: {
+                  apiKey: "test-anthropic-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await Provider.getModel(providerID, model.id)
+        await ToolRegistry.disable("bash")
+        const sessionID = "session-test-5"
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const user = {
+          id: "user-5",
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID, modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        const stream = await LLM.stream({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          abort: new AbortController().signal,
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {
+            bash: tool({
+              description: "Run shell commands",
+              inputSchema: jsonSchema({
+                type: "object",
+                properties: { command: { type: "string" } },
+                required: ["command"],
+                additionalProperties: false,
+              }),
+              execute: async () => ({ ok: true }),
+            }),
+            read: tool({
+              description: "Read files",
+              inputSchema: jsonSchema({
+                type: "object",
+                properties: { filePath: { type: "string" } },
+                required: ["filePath"],
+                additionalProperties: false,
+              }),
+              execute: async () => ({ ok: true }),
+            }),
+          },
+        })
+
+        for await (const _ of stream.fullStream) {
+        }
+
+        const capture = await request
+        const body = capture.body
+        const names = ((body.tools ?? []) as Array<{ name: string }>).map((entry) => entry.name)
+
+        expect(capture.url.pathname.endsWith("/messages")).toBe(true)
+        expect(names).toContain("read")
+        expect(names).not.toContain("bash")
+        expect(JSON.stringify(body.system ?? "")).toContain(
+          "The following tools are currently disabled and must not be called: bash",
+        )
       },
     })
   })
