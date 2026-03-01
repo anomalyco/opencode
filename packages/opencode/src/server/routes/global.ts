@@ -69,7 +69,7 @@ export const GlobalRoutes = lazy(() =>
         c.header("X-Accel-Buffering", "no")
         c.header("X-Content-Type-Options", "nosniff")
         return streamSSE(c, async (stream) => {
-          stream.writeSSE({
+          await stream.writeSSE({
             data: JSON.stringify({
               payload: {
                 type: "server.connected",
@@ -77,32 +77,51 @@ export const GlobalRoutes = lazy(() =>
               },
             }),
           })
-          async function handler(event: any) {
-            await stream.writeSSE({
-              data: JSON.stringify(event),
-            })
+
+          let done = false
+          let resolveWait: () => void = () => {}
+          let heartbeat: ReturnType<typeof setInterval> | undefined
+
+          const cleanup = () => {
+            if (done) return
+            done = true
+            clearInterval(heartbeat)
+            GlobalBus.off("event", handler)
+            resolveWait()
+            log.info("global event disconnected")
           }
+
+          async function handler(event: any) {
+            if (done) return
+            try {
+              await stream.writeSSE({ data: JSON.stringify(event) })
+            } catch {
+              cleanup()
+            }
+          }
+
           GlobalBus.on("event", handler)
 
           // Send heartbeat every 10s to prevent stalled proxy streams.
-          const heartbeat = setInterval(() => {
-            stream.writeSSE({
-              data: JSON.stringify({
-                payload: {
-                  type: "server.heartbeat",
-                  properties: {},
-                },
-              }),
-            })
+          heartbeat = setInterval(async () => {
+            if (done) return
+            try {
+              await stream.writeSSE({
+                data: JSON.stringify({
+                  payload: {
+                    type: "server.heartbeat",
+                    properties: {},
+                  },
+                }),
+              })
+            } catch {
+              cleanup()
+            }
           }, 10_000)
 
           await new Promise<void>((resolve) => {
-            stream.onAbort(() => {
-              clearInterval(heartbeat)
-              GlobalBus.off("event", handler)
-              resolve()
-              log.info("global event disconnected")
-            })
+            resolveWait = resolve
+            stream.onAbort(cleanup)
           })
         })
       },

@@ -1,5 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
+import { GlobalBus } from "@/bus/global"
 import { Log } from "../util/log"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
@@ -516,38 +517,58 @@ export namespace Server {
           c.header("X-Accel-Buffering", "no")
           c.header("X-Content-Type-Options", "nosniff")
           return streamSSE(c, async (stream) => {
-            stream.writeSSE({
+            await stream.writeSSE({
               data: JSON.stringify({
                 type: "server.connected",
                 properties: {},
               }),
             })
-            const unsub = Bus.subscribeAll(async (event) => {
-              await stream.writeSSE({
-                data: JSON.stringify(event),
-              })
-              if (event.type === Bus.InstanceDisposed.type) {
-                stream.close()
+
+            let done = false
+            let unsub: () => void = () => {}
+            let resolveWait: () => void = () => {}
+            let heartbeat: ReturnType<typeof setInterval> | undefined
+
+            const cleanup = () => {
+              if (done) return
+              done = true
+              clearInterval(heartbeat)
+              unsub()
+              resolveWait()
+              log.info("event disconnected")
+            }
+
+            unsub = Bus.subscribeAll(async (event) => {
+              if (done) return
+              try {
+                await stream.writeSSE({ data: JSON.stringify(event) })
+                if (event.type === Bus.InstanceDisposed.type) {
+                  cleanup()
+                  stream.close()
+                }
+              } catch {
+                cleanup()
               }
             })
 
             // Send heartbeat every 10s to prevent stalled proxy streams.
-            const heartbeat = setInterval(() => {
-              stream.writeSSE({
-                data: JSON.stringify({
-                  type: "server.heartbeat",
-                  properties: {},
-                }),
-              })
+            heartbeat = setInterval(async () => {
+              if (done) return
+              try {
+                await stream.writeSSE({
+                  data: JSON.stringify({
+                    type: "server.heartbeat",
+                    properties: {},
+                  }),
+                })
+              } catch {
+                cleanup()
+              }
             }, 10_000)
 
             await new Promise<void>((resolve) => {
-              stream.onAbort(() => {
-                clearInterval(heartbeat)
-                unsub()
-                resolve()
-                log.info("event disconnected")
-              })
+              resolveWait = resolve
+              stream.onAbort(cleanup)
             })
           })
         },
