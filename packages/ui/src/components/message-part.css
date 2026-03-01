@@ -188,10 +188,6 @@
     pointer-events: auto;
   }
 
-  [data-slot="user-message-copy-action"] {
-    display: inline-flex;
-  }
-
   .text-text-strong {
     color: var(--text-strong);
   }

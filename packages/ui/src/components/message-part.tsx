@@ -824,25 +824,23 @@ export function UserMessageDisplay(props: {
                 </Show>
               </span>
             </Show>
-            <span data-slot="user-message-copy-action">
-              <Tooltip
-                value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
-                placement="top"
-                gutter={4}
-              >
-                <IconButton
-                  icon={copied() ? "check" : "copy"}
-                  size="normal"
-                  variant="ghost"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    handleCopy()
-                  }}
-                  aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
-                />
-              </Tooltip>
-            </span>
+            <Tooltip
+              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
+              placement="top"
+              gutter={4}
+            >
+              <IconButton
+                icon={copied() ? "check" : "copy"}
+                size="normal"
+                variant="ghost"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  handleCopy()
+                }}
+                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
+              />
+            </Tooltip>
           </div>
         </>
       </Show>
