@@ -599,6 +599,26 @@ export namespace Config {
     return val
   }
 
+  const KNOWN_PERMISSION_KEYS = new Set([
+    "read",
+    "edit",
+    "glob",
+    "grep",
+    "list",
+    "bash",
+    "task",
+    "external_directory",
+    "todowrite",
+    "todoread",
+    "question",
+    "webfetch",
+    "websearch",
+    "codesearch",
+    "lsp",
+    "doom_loop",
+    "skill",
+  ])
+
   const permissionTransform = (x: unknown): Record<string, PermissionRule> => {
     if (typeof x === "string") return { "*": x as PermissionAction }
     const obj = x as { __originalKeys?: string[] } & Record<string, unknown>
@@ -607,6 +627,11 @@ export namespace Config {
     const result: Record<string, PermissionRule> = {}
     for (const key of __originalKeys) {
       if (key in rest) result[key] = rest[key] as PermissionRule
+      if (!KNOWN_PERMISSION_KEYS.has(key)) {
+        const lower = key.toLowerCase()
+        const hint = KNOWN_PERMISSION_KEYS.has(lower) ? ` — did you mean "${lower}"?` : ""
+        log.warn("unrecognized permission key, permission not applied", { key, hint })
+      }
     }
     return result
   }
