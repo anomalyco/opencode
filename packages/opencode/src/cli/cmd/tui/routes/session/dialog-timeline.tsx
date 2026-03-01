@@ -20,27 +20,34 @@ export function DialogTimeline(props: {
   })
 
   const options = createMemo((): DialogSelectOption<string>[] => {
+    const today = new Date().toDateString()
     const messages = sync.data.message[props.sessionID] ?? []
-    const result = [] as DialogSelectOption<string>[]
-    for (const message of messages) {
-      if (message.role !== "user") continue
-      const part = (sync.data.part[message.id] ?? []).find(
-        (x) => x.type === "text" && !x.synthetic && !x.ignored,
-      ) as TextPart
-      if (!part) continue
-      result.push({
-        title: part.text.replace(/\n/g, " "),
-        value: message.id,
-        footer: Locale.time(message.time.created),
-        onSelect: (dialog) => {
-          dialog.replace(() => (
-            <DialogMessage messageID={message.id} sessionID={props.sessionID} setPrompt={props.setPrompt} />
-          ))
-        },
+    return messages
+      .filter((x) => x.role === "user")
+      .toSorted((a, b) => b.time.created - a.time.created)
+      .map((message) => {
+        const part = (sync.data.part[message.id] ?? []).find(
+          (x) => x.type === "text" && !x.synthetic && !x.ignored,
+        ) as TextPart
+        if (!part) return undefined
+        const date = new Date(message.time.created)
+        let category = date.toDateString()
+        if (category === today) {
+          category = "Today"
+        }
+        return {
+          title: part.text.replace(/\n/g, " "),
+          value: message.id,
+          footer: Locale.time(message.time.created),
+          category,
+          onSelect: (dialog) => {
+            dialog.replace(() => (
+              <DialogMessage messageID={message.id} sessionID={props.sessionID} setPrompt={props.setPrompt} />
+            ))
+          },
+        } as DialogSelectOption<string>
       })
-    }
-    result.reverse()
-    return result
+      .filter(Boolean) as DialogSelectOption<string>[]
   })
 
   return <DialogSelect onMove={(option) => props.onMove(option.value)} title="Timeline" options={options()} />
