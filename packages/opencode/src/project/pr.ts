@@ -1,0 +1,233 @@
+import { $ } from "bun"
+import z from "zod"
+import { Log } from "@/util/log"
+import { Instance } from "./instance"
+import { Vcs } from "./vcs"
+
+const log = Log.create({ service: "pr" })
+
+export namespace PR {
+  export const ErrorCode = z.enum([
+    "GH_NOT_INSTALLED",
+    "GH_NOT_AUTHENTICATED",
+    "NO_REPO",
+    "NO_PR",
+    "UPSTREAM_MISSING",
+    "CREATE_FAILED",
+    "MERGE_FAILED",
+    "DELETE_BRANCH_FAILED",
+    "COMMENTS_FETCH_FAILED",
+  ])
+  export type ErrorCode = z.infer<typeof ErrorCode>
+
+  export class PrError extends Error {
+    constructor(
+      public code: ErrorCode,
+      message: string,
+    ) {
+      super(message)
+      this.name = "PrError"
+    }
+  }
+
+  export const CreateInput = z
+    .object({
+      title: z.string(),
+      body: z.string(),
+      base: z.string().optional(),
+      draft: z.boolean().optional(),
+    })
+    .meta({ ref: "PrCreateInput" })
+  export type CreateInput = z.infer<typeof CreateInput>
+
+  export const MergeInput = z
+    .object({
+      strategy: z.enum(["merge", "squash", "rebase"]).optional(),
+      deleteBranch: z.boolean().optional(),
+    })
+    .meta({ ref: "PrMergeInput" })
+  export type MergeInput = z.infer<typeof MergeInput>
+
+  export const DeleteBranchInput = z
+    .object({
+      branch: z.string(),
+    })
+    .meta({ ref: "PrDeleteBranchInput" })
+  export type DeleteBranchInput = z.infer<typeof DeleteBranchInput>
+
+  export const PrErrorResponse = z
+    .object({
+      code: ErrorCode,
+      message: z.string(),
+    })
+    .meta({ ref: "PrErrorResponse" })
+
+  async function ensureGithub() {
+    const info = await Vcs.info()
+    const github = info.github
+    if (!github?.available) {
+      throw new PrError("GH_NOT_INSTALLED", "GitHub CLI (gh) is not installed")
+    }
+    if (!github.authenticated) {
+      throw new PrError("GH_NOT_AUTHENTICATED", "Run `gh auth login` to authenticate")
+    }
+    return { info, github: github as Required<Vcs.GithubCapability> }
+  }
+
+  export async function get(): Promise<Vcs.PrInfo | undefined> {
+    const info = await Vcs.info()
+    return info.pr
+  }
+
+  export async function create(input: CreateInput): Promise<Vcs.PrInfo> {
+    const { info } = await ensureGithub()
+    const cwd = Instance.worktree
+
+    if (info.pr) {
+      return info.pr
+    }
+
+    const push = await $`git push -u origin HEAD`.quiet().nothrow().cwd(cwd)
+    if (push.exitCode !== 0) {
+      const errorOutput =
+        push.stderr?.toString().trim() || push.stdout?.toString().trim() || "Failed to push branch automatically"
+      log.error("push failed", { output: errorOutput })
+      throw new PrError("CREATE_FAILED", errorOutput)
+    }
+
+    const args = ["gh", "pr", "create", "--title", input.title]
+    args.push("--body", input.body)
+    if (input.base) args.push("--base", input.base)
+    if (input.draft) args.push("--draft")
+
+    const cmd = await $`${args}`
+      .quiet()
+      .nothrow()
+      .cwd(cwd)
+      .catch((e) => ({ exitCode: 1, stdout: Buffer.from(""), stderr: Buffer.from(String(e)) }))
+
+    const result = cmd.stdout.toString()
+    const errorOut = cmd.stderr.toString()
+
+    if (cmd.exitCode !== 0 || !result.trim()) {
+      log.error("pr create failed", { stdout: result, stderr: errorOut, exitCode: cmd.exitCode })
+      throw new PrError("CREATE_FAILED", errorOut.trim() || result.trim() || "Failed to create pull request")
+    }
+
+    await Vcs.refresh()
+    const updated = await Vcs.info()
+    if (updated.pr) {
+      return updated.pr
+    }
+
+    const prUrl = result.trim().split("\n").pop() ?? ""
+    const numberMatch = prUrl.match(/\/pull\/(\d+)/)
+    return {
+      number: numberMatch ? parseInt(numberMatch[1], 10) : 0,
+      url: prUrl,
+      title: input.title,
+      state: "OPEN",
+      headRefName: info.branch,
+      baseRefName: input.base ?? info.defaultBranch ?? "main",
+      isDraft: input.draft ?? false,
+      mergeable: "UNKNOWN",
+      reviewDecision: null,
+      checksState: null,
+    }
+  }
+
+  export async function merge(input: MergeInput): Promise<Vcs.PrInfo> {
+    const { info } = await ensureGithub()
+    const cwd = Instance.worktree
+
+    const currentPr = await get()
+    if (!currentPr) {
+      throw new PrError("NO_PR", "No pull request found for the current branch")
+    }
+
+    const github = info.github
+    if (!github?.repo) {
+      throw new PrError("MERGE_FAILED", "Unable to determine repository information")
+    }
+
+    const strategy = input.strategy ?? "squash"
+    const mergeMethod = strategy === "squash" ? "squash" : strategy === "merge" ? "merge" : "rebase"
+
+    const args = [
+      "gh",
+      "api",
+      `repos/${github.repo.owner}/${github.repo.name}/pulls/${currentPr.number}/merge`,
+      "-X",
+      "PUT",
+      "-f",
+      `merge_method=${mergeMethod}`,
+    ]
+
+    if (input.deleteBranch !== false) {
+      args.push("-f", "delete_branch=true")
+    }
+
+    const cmd = await $`${args}`
+      .quiet()
+      .nothrow()
+      .cwd(cwd)
+      .catch((e: unknown) => ({ exitCode: 1, stdout: Buffer.from(""), stderr: Buffer.from(String(e)) }))
+
+    const responseText = cmd.stdout.toString().trim()
+    const errorOut = cmd.stderr.toString().trim()
+
+    if (cmd.exitCode !== 0 || !responseText) {
+      let errorMessage = errorOut || responseText || "Failed to merge pull request"
+      try {
+        const errorJson = JSON.parse(errorOut || responseText)
+        if (errorJson.message) {
+          errorMessage = errorJson.message
+        }
+      } catch {}
+      log.error("pr merge failed", { stderr: errorOut, stdout: responseText, exitCode: cmd.exitCode })
+      throw new PrError("MERGE_FAILED", errorMessage)
+    }
+
+    await Vcs.refresh()
+    const updated = await Vcs.info()
+    return updated.pr ?? { ...currentPr, state: "MERGED" }
+  }
+
+  export async function deleteBranch(input: DeleteBranchInput): Promise<void> {
+    await ensureGithub()
+    const cwd = Instance.worktree
+
+    // Delete remote branch
+    const remote = await $`git push origin --delete ${input.branch}`
+      .quiet()
+      .nothrow()
+      .cwd(cwd)
+      .catch((e) => ({ exitCode: 1, stdout: Buffer.from(""), stderr: Buffer.from(String(e)) }))
+
+    if (remote.exitCode !== 0) {
+      const errorOut = remote.stderr.toString().trim()
+      // Ignore "remote ref does not exist" — branch may already be deleted
+      if (!errorOut.includes("remote ref does not exist")) {
+        log.error("delete remote branch failed", { stderr: errorOut })
+        throw new PrError("DELETE_BRANCH_FAILED", errorOut || "Failed to delete remote branch")
+      }
+    }
+
+    // Clean up local branch if it exists and isn't the current one
+    const currentBranch = await $`git rev-parse --abbrev-ref HEAD`
+      .quiet()
+      .nothrow()
+      .cwd(cwd)
+      .text()
+      .catch(() => "")
+    if (currentBranch.trim() !== input.branch) {
+      await $`git branch -D ${input.branch}`
+        .quiet()
+        .nothrow()
+        .cwd(cwd)
+        .catch(() => {})
+    }
+
+    await Vcs.refresh()
+  }
+}

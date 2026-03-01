@@ -1,16 +1,50 @@
-import { Effect, Layer, ServiceMap } from "effect"
-import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
-import { InstanceState } from "@/effect/instance-state"
-import { makeRunPromise } from "@/effect/run-service"
-import { FileWatcher } from "@/file/watcher"
-import { Log } from "@/util/log"
-import { git } from "@/util/git"
-import { Instance } from "./instance"
+import { Bus } from "@/bus"
+import { $ } from "bun"
 import z from "zod"
+import { Log } from "@/util/log"
+import { Instance } from "./instance"
+import { FileWatcher } from "@/file/watcher"
+
+const log = Log.create({ service: "vcs" })
 
 export namespace Vcs {
-  const log = Log.create({ service: "vcs" })
+  export const PrInfo = z
+    .object({
+      number: z.number(),
+      url: z.string(),
+      title: z.string(),
+      state: z.enum(["OPEN", "CLOSED", "MERGED"]),
+      headRefName: z.string(),
+      baseRefName: z.string(),
+      isDraft: z.boolean(),
+      mergeable: z.enum(["MERGEABLE", "CONFLICTING", "UNKNOWN"]),
+      reviewDecision: z.enum(["APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED"]).nullable().optional(),
+      checksState: z.enum(["SUCCESS", "FAILURE", "PENDING"]).nullable().optional(),
+      checksUrl: z.string().optional(),
+      checksSummary: z
+        .object({
+          total: z.number(),
+          passed: z.number(),
+          failed: z.number(),
+          pending: z.number(),
+          skipped: z.number(),
+        })
+        .optional(),
+      unresolvedCommentCount: z.number().optional(),
+    })
+    .meta({ ref: "PrInfo" })
+  export type PrInfo = z.infer<typeof PrInfo>
+
+  export const GithubCapability = z
+    .object({
+      available: z.boolean(),
+      authenticated: z.boolean(),
+      repo: z.object({ owner: z.string(), name: z.string() }).optional(),
+      host: z.string().optional(),
+    })
+    .meta({ ref: "GithubCapability" })
+  export type GithubCapability = z.infer<typeof GithubCapability>
 
   export const Event = {
     BranchUpdated: BusEvent.define(
@@ -19,93 +53,445 @@ export namespace Vcs {
         branch: z.string().optional(),
       }),
     ),
+    Updated: BusEvent.define(
+      "vcs.updated",
+      z.object({
+        branch: z.string().optional(),
+        defaultBranch: z.string().optional(),
+        branches: z.array(z.string()).optional(),
+        dirty: z.number().optional(),
+        pr: PrInfo.optional(),
+        github: GithubCapability.optional(),
+      }),
+    ),
   }
 
   export const Info = z
     .object({
       branch: z.string(),
+      defaultBranch: z.string().optional(),
+      branches: z.array(z.string()).optional(),
+      dirty: z.number().optional(),
+      pr: PrInfo.optional(),
+      github: GithubCapability.optional(),
     })
     .meta({
       ref: "VcsInfo",
     })
   export type Info = z.infer<typeof Info>
 
-  export interface Interface {
-    readonly init: () => Effect.Effect<void>
-    readonly branch: () => Effect.Effect<string | undefined>
+  async function currentBranch() {
+    return $`git rev-parse --abbrev-ref HEAD`
+      .quiet()
+      .nothrow()
+      .cwd(Instance.worktree)
+      .text()
+      .then((x) => x.trim())
+      .catch(() => undefined)
   }
 
-  interface State {
-    current: string | undefined
+  export async function detectGithubCapability(): Promise<GithubCapability> {
+    const cwd = Instance.worktree
+    const authCmd = await $`gh auth status`
+      .quiet()
+      .nothrow()
+      .cwd(cwd)
+      .catch((e) => ({ exitCode: 1, stdout: Buffer.from(""), stderr: Buffer.from(String(e)) }))
+    const authText =
+      typeof authCmd === "string" ? authCmd : (authCmd.stdout?.toString() ?? "") + (authCmd.stderr?.toString() ?? "")
+    const available = !authText.includes("not found") && !authText.includes("command not found")
+    if (!available) {
+      return { available: false, authenticated: false }
+    }
+    const authenticated = authText.includes("Logged in") || (typeof authCmd !== "string" && authCmd.exitCode === 0)
+    if (!authenticated) {
+      return { available: true, authenticated: false }
+    }
+    const repoCmd = await $`gh repo view --json owner,name,url`
+      .quiet()
+      .nothrow()
+      .cwd(cwd)
+      .catch((e) => ({ exitCode: 1, stdout: Buffer.from(""), stderr: Buffer.from(String(e)) }))
+
+    let repo: { owner: string; name: string } | undefined
+    let host: string | undefined
+    if (repoCmd.exitCode !== 0) {
+      log.warn("gh repo view failed", { error: repoCmd.stderr.toString() })
+    } else {
+      try {
+        const parsed = JSON.parse(repoCmd.stdout.toString())
+        const ownerLogin = typeof parsed.owner === "string" ? parsed.owner : parsed.owner?.login
+        if (ownerLogin && parsed.name) {
+          repo = { owner: ownerLogin, name: parsed.name }
+        }
+        if (parsed.url) {
+          host = new URL(parsed.url).hostname
+        }
+      } catch (e) {
+        log.warn("gh repo view json parse failed", { error: String(e) })
+      }
+    }
+
+    return { available: true, authenticated: true, repo, host }
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Vcs") {}
+  export async function fetchDefaultBranch(): Promise<string | undefined> {
+    const cwd = Instance.worktree
+    const result = await $`git rev-parse --abbrev-ref origin/HEAD`
+      .quiet()
+      .nothrow()
+      .cwd(cwd)
+      .text()
+      .catch(() => "")
+    const trimmed = result.trim()
+    if (trimmed && !trimmed.includes("fatal") && trimmed !== "origin/HEAD") {
+      return trimmed.replace("origin/", "")
+    }
+    const ghResult = await $`gh repo view --json defaultBranchRef --jq .defaultBranchRef.name`
+      .quiet()
+      .nothrow()
+      .cwd(cwd)
+      .text()
+      .catch(() => "")
+    const ghTrimmed = ghResult.trim()
+    if (ghTrimmed && !ghTrimmed.includes("error")) {
+      return ghTrimmed
+    }
+    return undefined
+  }
 
-  export const layer = Layer.effect(
-    Service,
-    Effect.gen(function* () {
-      const state = yield* InstanceState.make<State>(
-        Effect.fn("Vcs.state")((ctx) =>
-          Effect.gen(function* () {
-            if (ctx.project.vcs !== "git") {
-              return { current: undefined }
+  export async function fetchBranches(): Promise<string[]> {
+    const cwd = Instance.worktree
+    const result = await $`git branch -r --format=${"%(refname:short)"}`
+      .quiet()
+      .nothrow()
+      .cwd(cwd)
+      .text()
+      .catch(() => "")
+    const branches = result
+      .split("\n")
+      .map((b) => b.trim())
+      .filter((b) => b && !b.includes("->"))
+      .map((b) => b.replace(/^origin\//, ""))
+      .filter((b, i, arr) => arr.indexOf(b) === i)
+    branches.sort((a, b) => a.localeCompare(b))
+    return branches
+  }
+
+  async function fetchUnresolvedCommentCount(
+    owner: string,
+    name: string,
+    prNumber: number,
+  ): Promise<number | undefined> {
+    const cwd = Instance.worktree
+    const query = `query($owner: String!, $name: String!, $prNumber: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $prNumber) { reviewThreads(first: 100) { nodes { isResolved } } } } }`
+    const result = await $`gh api graphql -f query=${query} -f owner=${owner} -f name=${name} -F prNumber=${prNumber}`
+      .quiet()
+      .nothrow()
+      .cwd(cwd)
+      .text()
+      .catch(() => "")
+    try {
+      const parsed = JSON.parse(result)
+      const threads = parsed?.data?.repository?.pullRequest?.reviewThreads?.nodes
+      if (!Array.isArray(threads)) return undefined
+      return threads.filter((t: { isResolved: boolean }) => !t.isResolved).length
+    } catch {
+      return undefined
+    }
+  }
+
+  export async function fetchPrForBranch(repo?: { owner: string; name: string }): Promise<PrInfo | undefined> {
+    const cwd = Instance.worktree
+    const result =
+      await $`gh pr view --json number,url,title,state,headRefName,baseRefName,isDraft,mergeable,reviewDecision,statusCheckRollup`
+        .quiet()
+        .nothrow()
+        .cwd(cwd)
+        .text()
+        .catch(() => "")
+    if (!result.trim() || result.includes("no pull requests found")) {
+      return undefined
+    }
+    try {
+      const parsed = JSON.parse(result)
+      if (!parsed.number) return undefined
+
+      let checksState: "SUCCESS" | "FAILURE" | "PENDING" | null = null
+      let checksUrl: string | undefined
+      let checksSummary: { total: number; passed: number; failed: number; pending: number; skipped: number } | undefined
+      if (parsed.statusCheckRollup && Array.isArray(parsed.statusCheckRollup)) {
+        const checks = parsed.statusCheckRollup as Array<{
+          __typename?: string
+          conclusion?: string
+          status?: string
+          state?: string
+          detailsUrl?: string
+        }>
+        if (checks.length > 0) {
+          checksUrl = parsed.url ? `${parsed.url}/checks` : checks[0]?.detailsUrl?.replace(/\/runs\/.*/, "")
+          // StatusContext entries (e.g. CodeRabbit) use `state` instead of `conclusion`/`status`
+          const isSuccess = (c: (typeof checks)[0]) =>
+            c.conclusion === "SUCCESS" || c.conclusion === "success" || c.state === "SUCCESS" || c.state === "success"
+          const isFailure = (c: (typeof checks)[0]) =>
+            c.conclusion === "FAILURE" ||
+            c.conclusion === "failure" ||
+            c.state === "FAILURE" ||
+            c.state === "failure" ||
+            c.state === "ERROR" ||
+            c.state === "error"
+          const isSkipped = (c: (typeof checks)[0]) =>
+            c.conclusion === "SKIPPED" ||
+            c.conclusion === "skipped" ||
+            c.conclusion === "NEUTRAL" ||
+            c.conclusion === "neutral"
+          const failed = checks.filter(isFailure).length
+          const passed = checks.filter(isSuccess).length
+          const skipped = checks.filter(isSkipped).length
+          const total = checks.length
+          const pending = total - passed - failed - skipped
+          checksSummary = { total, passed, failed, pending, skipped }
+          if (failed > 0) checksState = "FAILURE"
+          else if (pending === 0) checksState = "SUCCESS"
+          else checksState = "PENDING"
+        }
+      }
+
+      const stateMap: Record<string, "OPEN" | "CLOSED" | "MERGED"> = {
+        OPEN: "OPEN",
+        CLOSED: "CLOSED",
+        MERGED: "MERGED",
+      }
+
+      const mergeableMap: Record<string, "MERGEABLE" | "CONFLICTING" | "UNKNOWN"> = {
+        MERGEABLE: "MERGEABLE",
+        CONFLICTING: "CONFLICTING",
+        UNKNOWN: "UNKNOWN",
+      }
+
+      const pr: PrInfo = {
+        number: parsed.number,
+        url: parsed.url,
+        title: parsed.title,
+        state: stateMap[parsed.state] ?? "OPEN",
+        headRefName: parsed.headRefName,
+        baseRefName: parsed.baseRefName,
+        isDraft: parsed.isDraft ?? false,
+        mergeable: mergeableMap[parsed.mergeable] ?? "UNKNOWN",
+        reviewDecision: parsed.reviewDecision || null,
+        checksState,
+        checksUrl,
+        checksSummary,
+      }
+
+      // Fetch unresolved comment count via lightweight GraphQL query
+      if (repo) {
+        pr.unresolvedCommentCount = await fetchUnresolvedCommentCount(repo.owner, repo.name, pr.number)
+      }
+
+      return pr
+    } catch {
+      return undefined
+    }
+  }
+
+  async function fetchDirtyCount(): Promise<number> {
+    const cwd = Instance.worktree
+    const result = await $`git status --porcelain`
+      .quiet()
+      .nothrow()
+      .cwd(cwd)
+      .text()
+      .catch(() => "")
+    return result.split("\n").filter((l) => l.trim()).length
+  }
+
+  async function fetchLocalInfo(): Promise<Pick<Info, "branch" | "dirty">> {
+    const branch = await currentBranch()
+    return { branch: branch ?? "", dirty: branch ? await fetchDirtyCount() : undefined }
+  }
+
+  async function fetchRemoteInfo(_branch: string): Promise<Omit<Info, "branch" | "dirty">> {
+    const [github, defaultBranch, branches] = await Promise.all([
+      detectGithubCapability(),
+      fetchDefaultBranch(),
+      fetchBranches(),
+    ])
+
+    let pr: PrInfo | undefined
+    if (github.authenticated) {
+      pr = await fetchPrForBranch(github.repo)
+    }
+
+    return {
+      defaultBranch,
+      branches: branches.length > 0 ? branches : undefined,
+      pr,
+      github,
+    }
+  }
+
+  async function fetchFullInfo(): Promise<Info> {
+    const local = await fetchLocalInfo()
+    if (!local.branch) return { branch: "" }
+    const remote = await fetchRemoteInfo(local.branch)
+    return { ...local, ...remote }
+  }
+
+  export async function commit(message: string) {
+    const cwd = Instance.worktree
+    const add = await $`git add -A`.quiet().nothrow().cwd(cwd)
+    if (add.exitCode !== 0) {
+      throw new Error("git add failed: " + add.stderr.toString())
+    }
+    const result = await $`git commit -m ${message}`.quiet().nothrow().cwd(cwd)
+    if (result.exitCode !== 0) {
+      throw new Error("git commit failed: " + result.stderr.toString())
+    }
+    await refresh()
+  }
+
+  export const POLL_INTERVAL_MS = 120_000
+  export const POLL_INTERVAL_NO_PR_MULTIPLIER = 2
+  export const LOCAL_DEBOUNCE_MS = 500
+  export const REF_DEBOUNCE_MS = 2_000
+  export const POLL_JITTER_MS = 10_000
+
+  function isGitRefChange(file: string): boolean {
+    return (
+      file.endsWith("HEAD") ||
+      file.includes(".git/refs/") ||
+      file.endsWith("MERGE_HEAD") ||
+      file.endsWith("COMMIT_EDITMSG") ||
+      file.includes(".git/packed-refs")
+    )
+  }
+
+  const state = Instance.state(
+    async () => {
+      if (Instance.project.vcs !== "git") {
+        return { info: async () => ({ branch: "" }), refresh: async () => {}, unsubscribe: undefined }
+      }
+      let current = await fetchFullInfo()
+      log.info("initialized", { branch: current.branch, pr: current.pr?.number })
+
+      let localDebounce: ReturnType<typeof setTimeout> | undefined
+      let refDebounce: ReturnType<typeof setTimeout> | undefined
+      let pollTimer: ReturnType<typeof setInterval> | undefined
+      let hasActivePr = !!current.pr
+      let pollIntervalMs = hasActivePr ? POLL_INTERVAL_MS : POLL_INTERVAL_MS * POLL_INTERVAL_NO_PR_MULTIPLIER
+
+      const restartPollTimer = () => {
+        if (pollTimer) clearInterval(pollTimer)
+        pollTimer = setInterval(
+          async () => {
+            try {
+              await refreshFull()
+            } catch (e) {
+              log.error("poll refresh failed", { error: e })
             }
+          },
+          pollIntervalMs + Math.random() * POLL_JITTER_MS,
+        )
+      }
 
-            const getCurrentBranch = async () => {
-              const result = await git(["rev-parse", "--abbrev-ref", "HEAD"], {
-                cwd: ctx.worktree,
-              })
-              if (result.exitCode !== 0) return undefined
-              const text = result.text().trim()
-              return text || undefined
-            }
+      const publish = () => {
+        Bus.publish(Event.Updated, {
+          branch: current.branch,
+          defaultBranch: current.defaultBranch,
+          branches: current.branches,
+          dirty: current.dirty,
+          pr: current.pr,
+          github: current.github,
+        })
+      }
 
-            const value = {
-              current: yield* Effect.promise(() => getCurrentBranch()),
-            }
-            log.info("initialized", { branch: value.current })
+      const refreshLocal = async () => {
+        const local = await fetchLocalInfo()
+        const branchChanged = local.branch !== current.branch
+        current = { ...current, ...local }
+        if (branchChanged) {
+          Bus.publish(Event.BranchUpdated, { branch: local.branch })
+          // Branch changed — also refresh remote info
+          if (local.branch) {
+            const remote = await fetchRemoteInfo(local.branch)
+            current = { ...current, ...remote }
+          }
+        }
+        publish()
+      }
 
-            yield* Effect.acquireRelease(
-              Effect.sync(() =>
-                Bus.subscribe(
-                  FileWatcher.Event.Updated,
-                  Instance.bind(async (evt) => {
-                    if (!evt.properties.file.endsWith("HEAD")) return
-                    const next = await getCurrentBranch()
-                    if (next !== value.current) {
-                      log.info("branch changed", { from: value.current, to: next })
-                      value.current = next
-                      Bus.publish(Event.BranchUpdated, { branch: next })
-                    }
-                  }),
-                ),
-              ),
-              (unsubscribe) => Effect.sync(unsubscribe),
-            )
+      const refreshFull = async () => {
+        const next = await fetchFullInfo()
+        const branchChanged = next.branch !== current.branch
+        const prChanged = next.pr?.number !== current.pr?.number
+        current = next
+        if (branchChanged) {
+          Bus.publish(Event.BranchUpdated, { branch: next.branch })
+        }
 
-            return value
-          }),
-        ),
-      )
+        const hasPr = !!next.pr
+        if (hasPr !== hasActivePr || prChanged) {
+          hasActivePr = hasPr
+          pollIntervalMs = hasActivePr ? POLL_INTERVAL_MS : POLL_INTERVAL_MS * POLL_INTERVAL_NO_PR_MULTIPLIER
+          restartPollTimer()
+        }
 
-      return Service.of({
-        init: Effect.fn("Vcs.init")(function* () {
-          yield* InstanceState.get(state)
-        }),
-        branch: Effect.fn("Vcs.branch")(function* () {
-          return yield* InstanceState.use(state, (x) => x.current)
-        }),
+        publish()
+      }
+
+      const unsubscribeWatcher = Bus.subscribe(FileWatcher.Event.Updated, async (evt) => {
+        const file = evt.properties.file
+        if (isGitRefChange(file)) {
+          // Git ref change (branch switch, commit, etc) — debounce a full refresh
+          if (refDebounce) clearTimeout(refDebounce)
+          refDebounce = setTimeout(refreshFull, REF_DEBOUNCE_MS)
+          return
+        }
+        // Regular file change — only refresh local (dirty count, branch)
+        if (localDebounce) clearTimeout(localDebounce)
+        localDebounce = setTimeout(refreshLocal, LOCAL_DEBOUNCE_MS)
       })
-    }),
+
+      restartPollTimer()
+
+      let onFocus: (() => void) | undefined
+      if (typeof window !== "undefined") {
+        onFocus = () => refreshFull()
+        window.addEventListener("focus", onFocus)
+      }
+
+      return {
+        info: async () => current,
+        refresh: refreshFull,
+        unsubscribe: () => {
+          unsubscribeWatcher()
+          if (localDebounce) clearTimeout(localDebounce)
+          if (refDebounce) clearTimeout(refDebounce)
+          if (pollTimer) clearInterval(pollTimer)
+          if (onFocus) window.removeEventListener("focus", onFocus)
+        },
+      }
+    },
+    async (state) => {
+      state.unsubscribe?.()
+    },
   )
 
-  const runPromise = makeRunPromise(Service, layer)
-
-  export function init() {
-    return runPromise((svc) => svc.init())
+  export async function init() {
+    return state()
   }
 
-  export function branch() {
-    return runPromise((svc) => svc.branch())
+  export async function branch() {
+    return await state().then((s) => s.info().then((i) => i.branch))
+  }
+
+  export async function info(): Promise<Info> {
+    return await state().then((s) => s.info())
+  }
+
+  export async function refresh() {
+    const s = await state()
+    await s.refresh()
   }
 }

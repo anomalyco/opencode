@@ -249,6 +249,7 @@ export namespace Server {
       .route("/provider", ProviderRoutes())
       .route("/", FileRoutes())
       .route("/", EventRoutes())
+      .route("/vcs", VcsRoutes())
       .route("/mcp", McpRoutes())
       .route("/tui", TuiRoutes())
       .post(
@@ -309,30 +310,6 @@ export namespace Server {
             config: Global.Path.config,
             worktree: Instance.worktree,
             directory: Instance.directory,
-          })
-        },
-      )
-      .get(
-        "/vcs",
-        describeRoute({
-          summary: "Get VCS info",
-          description: "Retrieve version control system (VCS) information for the current project, such as git branch.",
-          operationId: "vcs.get",
-          responses: {
-            200: {
-              description: "VCS info",
-              content: {
-                "application/json": {
-                  schema: resolver(Vcs.Info),
-                },
-              },
-            },
-          },
-        }),
-        async (c) => {
-          const branch = await Vcs.branch()
-          return c.json({
-            branch,
           })
         },
       )
