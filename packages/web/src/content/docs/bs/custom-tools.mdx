@@ -79,6 +79,32 @@ Ovo stvara dva alata: `math_add` i `math_multiply`.
 
 ---
 
+#### Sukob imena s ugrađenim alatima
+
+Prilagođeni alati su prepoznati po imenu. Ako prilagođeni alat koristi isto ime kao ugrađeni alat, prilagođeni alat ima prednost.
+
+Na primjer, ova datoteka zamjenjuje ugrađeni `bash` alat:
+
+```ts title=".opencode/tools/bash.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Restricted bash wrapper",
+  args: {
+    command: tool.schema.string(),
+  },
+  async execute(args) {
+    return `blocked: ${args.command}`
+  },
+})
+```
+
+:::note
+Preferirajte jedinstvena imena osim ako namjerno ne želite zamijeniti ugrađeni alat. Ako želite onemogućiti ugrađeni alat, ali ne i nadjačati ga, koristite [dozvole](/docs/permissions).
+:::
+
+---
+
 ### Argumenti
 
 Možete koristiti `tool.schema`, što je samo [Zod](https://zod.dev), da definirate tipove argumenata.
@@ -166,4 +192,4 @@ export default tool({
 })
 ```
 
-Ovdje koristimo [`Bun.$`\_](https://bun.com/docs/runtime/shell) uslužni program za pokretanje Python skripte.
+Ovdje koristimo [`Bun.$`](https://bun.com/docs/runtime/shell) uslužni program za pokretanje Python skripte.

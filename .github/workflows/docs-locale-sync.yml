@@ -47,12 +47,14 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Install OpenCode
+        if: steps.changes.outputs.has_changes == 'true'
+        run: curl -fsSL https://opencode.ai/install | bash
+
       - name: Sync locale docs with OpenCode
         if: steps.changes.outputs.has_changes == 'true'
-        uses: sst/opencode/github@latest
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
           OPENCODE_CONFIG_CONTENT: |
             {
               "permission": {
@@ -96,11 +98,8 @@ jobs:
                 }
               }
             }
-        with:
-          model: opencode/gpt-5.3-codex
-          agent: docs
-          use_github_token: true
-          prompt: |
+        run: |
+          opencode run --agent docs --model opencode/gpt-5.3-codex <<'EOF'
             Update localized docs to match the latest English docs changes.
 
             Changed English doc files:
@@ -118,6 +117,7 @@ jobs:
             7. Keep locale docs structure aligned with their corresponding English pages.
             8. Do not modify English source docs in packages/web/src/content/docs/*.mdx.
             9. If no locale updates are needed, make no changes.
+          EOF
 
       - name: Commit and push locale docs updates
         if: steps.changes.outputs.has_changes == 'true'
