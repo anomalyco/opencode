@@ -103,6 +103,8 @@ export namespace ModelsDev {
     return result as Record<string, Provider>
   }
 
+  let refreshing: Promise<void> | undefined
+
   export async function refresh() {
     const result = await fetch(`${url()}/api.json`, {
       headers: {
@@ -119,10 +121,19 @@ export namespace ModelsDev {
       ModelsDev.Data.reset()
     }
   }
+
+  export function startRefresh() {
+    refreshing = refresh()
+    return refreshing
+  }
+
+  export async function ensureFresh() {
+    if (refreshing) await refreshing.catch(() => {})
+  }
 }
 
 if (!Flag.OPENCODE_DISABLE_MODELS_FETCH && !process.argv.includes("--get-yargs-completions")) {
-  ModelsDev.refresh()
+  ModelsDev.startRefresh()
   setInterval(
     async () => {
       await ModelsDev.refresh()
