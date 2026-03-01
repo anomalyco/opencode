@@ -108,6 +108,7 @@ export namespace SessionCompaction {
 
   export async function process(input: {
     parentID: string
+    compactionModel?: { providerID: string; modelID: string }
     messages: MessageV2.WithParts[]
     sessionID: string
     abort: AbortSignal
@@ -175,9 +176,11 @@ export namespace SessionCompaction {
     }
 
     const agent = await Agent.get("compaction")
-    const model = agent.model
-      ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
-      : await Provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
+    const model = input.compactionModel
+      ? await Provider.getModel(input.compactionModel.providerID, input.compactionModel.modelID)
+      : agent.model
+        ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
+        : await Provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
     const msg = (await Session.updateMessage({
       id: Identifier.ascending("message"),
       role: "assistant",
@@ -349,6 +352,12 @@ When constructing the summary, try to stick to this template:
       }),
       auto: z.boolean(),
       overflow: z.boolean().optional(),
+      compactionModel: z
+        .object({
+          providerID: z.string(),
+          modelID: z.string(),
+        })
+        .optional(),
     }),
     async (input) => {
       const msg = await Session.updateMessage({
@@ -368,6 +377,7 @@ When constructing the summary, try to stick to this template:
         type: "compaction",
         auto: input.auto,
         overflow: input.overflow,
+        compactionModel: input.compactionModel,
       })
     },
   )

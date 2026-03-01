@@ -508,6 +508,10 @@ export type CompactionPart = {
   type: "compaction"
   auto: boolean
   overflow?: boolean
+  compactionModel?: {
+    providerID: string
+    modelID: string
+  }
 }
 
 export type Part =
@@ -3281,6 +3285,10 @@ export type SessionSummarizeData = {
     providerID: string
     modelID: string
     auto?: boolean
+    compactionModel?: {
+      providerID: string
+      modelID: string
+    }
   }
   path: {
     /**

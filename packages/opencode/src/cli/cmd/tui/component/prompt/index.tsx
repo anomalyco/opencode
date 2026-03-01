@@ -1012,6 +1012,10 @@ export function Prompt(props: PromptProps) {
                       <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
                     </text>
                   </Show>
+                  <Show when={local.model.compaction.current()}>
+                    <text fg={theme.textMuted}>·</text>
+                    <text fg={theme.textMuted}>compact: {local.model.compaction.parsed().model}</text>
+                  </Show>
                 </box>
               </Show>
             </box>

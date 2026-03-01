@@ -184,6 +184,8 @@ Critical rules:
     sessionID: string
     abort: AbortSignal
     auto: boolean
+    compactionModel?: { providerID: string; modelID: string }
+    overflow?: boolean
   }): Promise<"continue" | "stop"> {
     const config = await Config.get()
     const extractRatio = config.compaction?.extractRatio ?? DEFAULTS.extractRatio
@@ -206,9 +208,12 @@ Critical rules:
     // Get the user message to determine which model we'll use
     const originalUserMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
     const agent = await Agent.get("compaction")
-    const model = agent.model
-      ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
-      : await Provider.getModel(originalUserMessage.model.providerID, originalUserMessage.model.modelID)
+    // Model resolution priority: TUI compactionModel override > agent.compaction.model config > session model
+    const model = input.compactionModel
+      ? await Provider.getModel(input.compactionModel.providerID, input.compactionModel.modelID)
+      : agent.model
+        ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
+        : await Provider.getModel(originalUserMessage.model.providerID, originalUserMessage.model.modelID)
 
     // Calculate token counts and role counts
     let messageTokens: number[] = []

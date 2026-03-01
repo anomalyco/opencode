@@ -446,6 +446,20 @@ function App() {
       },
     },
     {
+      title: "Switch compaction model",
+      value: "compaction_model.list",
+      keybind: "compaction_model_list",
+      category: "Agent",
+      slash: {
+        name: "compaction-models",
+        aliases: ["compaction-model"],
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogModel target="compaction" />)
+      },
+    },
+
+    {
       title: "Switch agent",
       value: "agent.list",
       keybind: "agent_list",

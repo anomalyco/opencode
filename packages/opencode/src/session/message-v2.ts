@@ -204,6 +204,12 @@ export namespace MessageV2 {
     type: z.literal("compaction"),
     auto: z.boolean(),
     overflow: z.boolean().optional(),
+    compactionModel: z
+      .object({
+        providerID: z.string(),
+        modelID: z.string(),
+      })
+      .optional(),
   }).meta({
     ref: "CompactionPart",
   })
@@ -875,7 +881,7 @@ export namespace MessageV2 {
       // Upstream guard: do not mark errored summaries as completed breakpoints.
       // Collapse compaction may not set finish, but summary: true is sufficient;
       // however an errored summary must not be treated as a valid breakpoint.
-      if (isAssistantSummary && !msg.info.error) {
+      if (isAssistantSummary && !(msg.info as Assistant).error) {
         const parentID = (msg.info as Assistant).parentID
         log.debug("COLLAPSE filterCompacted found summary", {
           msgId: msg.info.id,
