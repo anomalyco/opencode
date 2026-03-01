@@ -47,6 +47,7 @@ import { Installation } from "../installation"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
+  let _context1mDisabled = false
 
   function isGpt5OrLater(modelID: string): boolean {
     const match = /^gpt-(\d+)/.exec(modelID)
@@ -1075,6 +1076,21 @@ export namespace Provider {
         const fetchFn = customFetch ?? fetch
         const opts = init ?? {}
 
+        if (_context1mDisabled && model.api.npm === "@ai-sdk/anthropic") {
+          const headers = new Headers(opts.headers as HeadersInit)
+          const beta = headers.get("anthropic-beta") ?? ""
+          if (beta.includes("context-1m")) {
+            headers.set(
+              "anthropic-beta",
+              beta
+                .split(",")
+                .filter((h) => !h.includes("context-1m"))
+                .join(","),
+            )
+            opts.headers = headers
+          }
+        }
+
         if (options["timeout"] !== undefined && options["timeout"] !== null) {
           const signals: AbortSignal[] = []
           if (opts.signal) signals.push(opts.signal)
@@ -1103,11 +1119,41 @@ export namespace Provider {
           }
         }
 
-        return fetchFn(input, {
+        const response = await fetchFn(input, {
           ...opts,
           // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
           timeout: false,
         })
+
+        if (!_context1mDisabled && model.api.npm === "@ai-sdk/anthropic" && response.status === 400) {
+          const cloned = response.clone()
+          const body = await cloned.json().catch(() => null)
+          if (
+            body?.error?.type === "invalid_request_error" &&
+            typeof body?.error?.message === "string" &&
+            body.error.message.toLowerCase().includes("long context")
+          ) {
+            log.info("context-1m beta not available, retrying without it")
+            _context1mDisabled = true
+            const headers = new Headers(opts.headers as HeadersInit)
+            const beta = headers.get("anthropic-beta") ?? ""
+            headers.set(
+              "anthropic-beta",
+              beta
+                .split(",")
+                .filter((h) => !h.includes("context-1m"))
+                .join(","),
+            )
+            return fetchFn(input, {
+              ...opts,
+              headers,
+              // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
+              timeout: false,
+            })
+          }
+        }
+
+        return response
       }
 
       const bundledFn = BUNDLED_PROVIDERS[model.api.npm]
