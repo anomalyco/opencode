@@ -3,11 +3,11 @@ title: Atalhos de Teclado
 description: Personalize seus atalhos de teclado.
 ---
 
-O opencode tem uma lista de atalhos de teclado que você pode personalizar através da configuração do opencode.
+O opencode tem uma lista de atalhos de teclado que você pode personalizar através de `tui.json`.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -119,9 +119,9 @@ Você não precisa usar uma tecla líder para seus atalhos, mas recomendamos que
 
 Você pode desativar um atalho adicionando a tecla à sua configuração com um valor de "none".
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "session_compact": "none"
   }

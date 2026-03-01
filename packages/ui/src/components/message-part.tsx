@@ -1037,6 +1037,21 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   )
 }
 
+PART_MAPPING["compaction"] = function CompactionPartDisplay() {
+  const i18n = useI18n()
+  return (
+    <div data-component="compaction-part">
+      <div data-slot="compaction-part-divider">
+        <span data-slot="compaction-part-line" />
+        <span data-slot="compaction-part-label" class="text-12-regular text-text-weak">
+          {i18n.t("ui.messagePart.compaction")}
+        </span>
+        <span data-slot="compaction-part-line" />
+      </div>
+    </div>
+  )
+}
+
 PART_MAPPING["text"] = function TextPartDisplay(props) {
   const data = useData()
   const i18n = useI18n()
