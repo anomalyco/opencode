@@ -944,6 +944,10 @@ export namespace ProviderTransform {
           delete result.required
         }
 
+        // Remove JSON Schema keywords unsupported by Gemini function calling
+        delete result.contentEncoding
+        delete result.contentMediaType
+
         return result
       }
 

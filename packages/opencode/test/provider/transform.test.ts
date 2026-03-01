@@ -620,6 +620,59 @@ describe("ProviderTransform.schema - gemini non-object properties removal", () =
   })
 })
 
+describe("ProviderTransform.schema - gemini contentEncoding removal", () => {
+  const geminiModel = {
+    providerID: "google",
+    api: {
+      id: "gemini-3-pro",
+    },
+  } as any
+
+  test("strips contentEncoding and contentMediaType from schemas", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        data: {
+          type: "string",
+          contentEncoding: "base64",
+          contentMediaType: "image/png",
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.data.contentEncoding).toBeUndefined()
+    expect(result.properties.data.contentMediaType).toBeUndefined()
+    expect(result.properties.data.type).toBe("string")
+  })
+
+  test("strips contentEncoding from nested array items", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        files: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              content: {
+                type: "string",
+                contentEncoding: "base64",
+              },
+            },
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.files.items.properties.content.contentEncoding).toBeUndefined()
+    expect(result.properties.files.items.properties.content.type).toBe("string")
+  })
+})
+
 describe("ProviderTransform.message - DeepSeek reasoning content", () => {
   test("DeepSeek with tool calls includes reasoning_content in providerOptions", () => {
     const msgs = [
