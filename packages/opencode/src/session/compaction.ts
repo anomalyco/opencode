@@ -200,28 +200,61 @@ When constructing the summary, try to stick to this template:
     })
 
     if (result === "continue" && input.auto) {
-      const continueMsg = await Session.updateMessage({
-        id: Identifier.ascending("message"),
-        role: "user",
-        sessionID: input.sessionID,
-        time: {
-          created: Date.now(),
-        },
-        agent: userMessage.agent,
-        model: userMessage.model,
-      })
-      await Session.updatePart({
-        id: Identifier.ascending("part"),
-        messageID: continueMsg.id,
-        sessionID: input.sessionID,
-        type: "text",
-        synthetic: true,
-        text: "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.",
-        time: {
-          start: Date.now(),
-          end: Date.now(),
-        },
-      })
+      // Only inject a synthetic continue when ALL of these conditions are met:
+      // 1. The assistant was in the middle of tool execution (finish === "tool-calls" or "unknown")
+      // 2. A previous compaction cycle hasn't already injected a synthetic continue
+      //
+      // Without check #2, the following infinite loop occurs:
+      //   compaction → "Continue…" → agent responds (tool-calls) → overflow → compaction → "Continue…" → …
+      // By allowing at most one synthetic continue per real user turn, the loop is broken:
+      //   compaction → "Continue…" → agent responds → overflow → compaction → (already continued) → stop
+
+      const lastNonSummaryAssistant = [...input.messages]
+        .reverse()
+        .find((m) => m.info.role === "assistant" && !(m.info as MessageV2.Assistant).summary)?.info as
+        | MessageV2.Assistant
+        | undefined
+
+      const wasUsingTools =
+        !lastNonSummaryAssistant?.finish ||
+        lastNonSummaryAssistant.finish === "tool-calls" ||
+        lastNonSummaryAssistant.finish === "unknown"
+
+      // Check whether a previous compaction cycle already injected a synthetic continue.
+      // Find the last user message that has a text part (skip compaction-trigger messages
+      // which only carry a CompactionPart). If that message is synthetic, we already
+      // continued once since the user's last real input — don't inject another.
+      const lastUserWithText = [...input.messages]
+        .reverse()
+        .find((m) => m.info.role === "user" && m.parts.some((p) => p.type === "text"))
+      const alreadyContinued = lastUserWithText?.parts.some(
+        (p) => p.type === "text" && "synthetic" in p && (p as MessageV2.TextPart).synthetic === true,
+      )
+
+      if (wasUsingTools && !alreadyContinued) {
+        const continueMsg = await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: input.sessionID,
+          time: {
+            created: Date.now(),
+          },
+          agent: userMessage.agent,
+          model: userMessage.model,
+        })
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: continueMsg.id,
+          sessionID: input.sessionID,
+          type: "text",
+          synthetic: true,
+          text: "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.",
+          time: {
+            start: Date.now(),
+            end: Date.now(),
+          },
+        })
+      }
     }
     if (processor.message.error) return "stop"
     Bus.publish(Event.Compacted, { sessionID: input.sessionID })
