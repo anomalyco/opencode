@@ -25,13 +25,16 @@
     top: 0;
     z-index: 20;
     background-color: var(--background-stronger);
-    height: 40px;
+    min-height: 40px;
     padding-bottom: 8px;
     flex-shrink: 0;
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
     align-self: stretch;
+    gap: 4px;
+    overflow: hidden;
   }
 
   [data-slot="session-review-title"] {
@@ -45,7 +48,10 @@
   [data-slot="session-review-actions"] {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     column-gap: 12px;
+    row-gap: 4px;
+    min-width: 0;
   }
 
   [data-slot="session-review-actions"] [data-component="radio-group"] {

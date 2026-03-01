@@ -89,8 +89,8 @@ export const lineCommentStyles = `
 }
 
 [data-component="line-comment"][data-variant="editor"] [data-slot="line-comment-popover"] {
-  width: 380px;
-  max-width: none;
+  width: min(380px, 100%);
+  max-width: 100%;
   padding: 8px;
   border-radius: 14px;
 }
@@ -138,6 +138,9 @@ export const lineCommentStyles = `
   letter-spacing: var(--letter-spacing-normal);
   color: var(--text-weak);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 [data-component="line-comment"] [data-slot="line-comment-editor"] {
@@ -167,6 +170,7 @@ export const lineCommentStyles = `
 [data-component="line-comment"] [data-slot="line-comment-actions"] {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   padding-left: 8px;
 }

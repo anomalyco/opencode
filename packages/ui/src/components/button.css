@@ -10,6 +10,7 @@
   cursor: pointer;
   outline: none;
   white-space: nowrap;
+  flex-shrink: 0;
   font-weight: var(--font-weight-medium, 500);
   letter-spacing: 0.01em;
   transition:
