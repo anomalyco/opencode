@@ -148,6 +148,61 @@ export namespace Project {
       .catch(() => undefined)
   }
 
+  type PermData = (typeof PermissionTable.$inferInsert)["data"]
+
+  function moveSessionsByProject(db: Database.TxOrDb, from: string[], to: string) {
+    db.update(SessionTable)
+      .set({ project_id: to })
+      .where(inArray(SessionTable.project_id, from))
+      .run()
+  }
+
+  function moveSessionsById(db: Database.TxOrDb, ids: string[], to: string) {
+    db.update(SessionTable)
+      .set({ project_id: to })
+      .where(inArray(SessionTable.id, ids))
+      .run()
+  }
+
+  function ensurePermission(
+    db: Database.TxOrDb,
+    input: {
+      target: string
+      now: number
+      data?: PermData
+      sources?: string[]
+    },
+  ) {
+    const existing = db.select().from(PermissionTable).where(eq(PermissionTable.project_id, input.target)).get()
+    if (existing) return
+    const source = input.data
+      ? { data: input.data }
+      : input.sources
+        ? db.select().from(PermissionTable).where(inArray(PermissionTable.project_id, input.sources)).get()
+        : undefined
+    if (!source) return
+    db.insert(PermissionTable)
+      .values({
+        project_id: input.target,
+        data: source.data,
+        time_created: input.now,
+        time_updated: input.now,
+      })
+      .run()
+  }
+
+  function deletePermissions(db: Database.TxOrDb, ids: string[]) {
+    db.delete(PermissionTable)
+      .where(inArray(PermissionTable.project_id, ids))
+      .run()
+  }
+
+  function deleteProjects(db: Database.TxOrDb, ids: string[]) {
+    db.delete(ProjectTable)
+      .where(inArray(ProjectTable.id, ids))
+      .run()
+  }
+
   // One-time migration for legacy git project IDs.
   //
   // Historical behavior: git projects used a root commit hash as the project id. That is stable
@@ -246,22 +301,9 @@ export namespace Project {
             .run()
         }
 
-        db.update(SessionTable)
-          .set({ project_id: id })
-          .where(inArray(SessionTable.id, ids))
-          .run()
+        moveSessionsById(db, ids, id)
 
-        const existing = db.select().from(PermissionTable).where(eq(PermissionTable.project_id, id)).get()
-        if (!existing && perm) {
-          db.insert(PermissionTable)
-            .values({
-              project_id: id,
-              data: perm.data,
-              time_created: now,
-              time_updated: now,
-            })
-            .run()
-        }
+        if (perm) ensurePermission(db, { target: id, now, data: perm.data })
       })
     }
 
@@ -275,13 +317,8 @@ export namespace Project {
 
     if ((remaining ?? 0) === 0) {
       Database.transaction((db) => {
-        db.delete(PermissionTable)
-          .where(inArray(PermissionTable.project_id, olds))
-          .run()
-
-        db.delete(ProjectTable)
-          .where(inArray(ProjectTable.id, olds))
-          .run()
+        deletePermissions(db, olds)
+        deleteProjects(db, olds)
       })
     }
   }
@@ -302,28 +339,9 @@ export namespace Project {
       const ids = dupes.map((d) => d.id)
       const now = Date.now()
 
-      db.update(SessionTable)
-        .set({ project_id: row.id })
-        .where(inArray(SessionTable.project_id, ids))
-        .run()
-
-      const keep = db.select().from(PermissionTable).where(eq(PermissionTable.project_id, row.id)).get()
-      if (!keep) {
-        const first = db.select().from(PermissionTable).where(inArray(PermissionTable.project_id, ids)).get()
-        if (first) {
-          db.insert(PermissionTable)
-            .values({
-              project_id: row.id,
-              data: first.data,
-              time_created: now,
-              time_updated: now,
-            })
-            .run()
-        }
-      }
-      db.delete(PermissionTable)
-        .where(inArray(PermissionTable.project_id, ids))
-        .run()
+      moveSessionsByProject(db, ids, row.id)
+      ensurePermission(db, { target: row.id, now, sources: ids })
+      deletePermissions(db, ids)
 
       db.update(ProjectTable)
         .set({
@@ -337,9 +355,7 @@ export namespace Project {
         .where(eq(ProjectTable.id, row.id))
         .run()
 
-      db.delete(ProjectTable)
-        .where(inArray(ProjectTable.id, ids))
-        .run()
+      deleteProjects(db, ids)
     })
 
     const common = await commonDir(worktree)
