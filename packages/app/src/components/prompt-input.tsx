@@ -1208,9 +1208,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               aria-multiline="true"
               aria-label={placeholder()}
               contenteditable="true"
-              autocapitalize={store.mode === "shell" ? "off" : "sentences"}
-              autocorrect={store.mode === "shell" ? "off" : "on"}
-              spellcheck={store.mode !== "shell"}
+              autocapitalize={store.mode === "normal" ? "sentences" : "off"}
+              autocorrect={store.mode === "normal" ? "on" : "off"}
+              spellcheck={store.mode === "normal"}
               onInput={handleInput}
               onPaste={handlePaste}
               onCompositionStart={() => setComposing(true)}
