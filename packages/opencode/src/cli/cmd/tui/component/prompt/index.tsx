@@ -34,6 +34,8 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { decodeFileUriForDisplay, decodeFileUrisInText } from "@opencode-ai/util/path"
+import { fileURLToPath } from "url"
 
 export type PromptProps = {
   sessionID?: string
@@ -926,19 +928,28 @@ export function Prompt(props: PromptProps) {
                   command.trigger("prompt.paste")
                   return
                 }
+                const decodedPastedContent = decodeFileUrisInText(pastedContent)
 
                 // trim ' from the beginning and end of the pasted content. just
                 // ' and nothing else
-                const filepath = pastedContent.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
+                const filepath = decodedPastedContent.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
+                const localPath = (() => {
+                  if (!filepath.startsWith("file://")) return filepath
+                  try {
+                    return fileURLToPath(filepath)
+                  } catch {
+                    return decodeFileUriForDisplay(filepath).replace(/^file:\/\//, "")
+                  }
+                })()
                 const isUrl = /^(https?):\/\//.test(filepath)
                 if (!isUrl) {
                   try {
-                    const mime = Filesystem.mimeType(filepath)
-                    const filename = path.basename(filepath)
+                    const mime = Filesystem.mimeType(localPath)
+                    const filename = path.basename(localPath)
                     // Handle SVG as raw text content, not as base64 image
                     if (mime === "image/svg+xml") {
                       event.preventDefault()
-                      const content = await Filesystem.readText(filepath).catch(() => {})
+                      const content = await Filesystem.readText(localPath).catch(() => {})
                       if (content) {
                         pasteText(content, `[SVG: ${filename ?? "image"}]`)
                         return
@@ -946,7 +957,7 @@ export function Prompt(props: PromptProps) {
                     }
                     if (mime.startsWith("image/")) {
                       event.preventDefault()
-                      const content = await Filesystem.readArrayBuffer(filepath)
+                      const content = await Filesystem.readArrayBuffer(localPath)
                         .then((buffer) => Buffer.from(buffer).toString("base64"))
                         .catch(() => {})
                       if (content) {
@@ -961,13 +972,19 @@ export function Prompt(props: PromptProps) {
                   } catch {}
                 }
 
-                const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
+                const lineCount = (decodedPastedContent.match(/\n/g)?.length ?? 0) + 1
                 if (
-                  (lineCount >= 3 || pastedContent.length > 150) &&
+                  (lineCount >= 3 || decodedPastedContent.length > 150) &&
                   !sync.data.config.experimental?.disable_paste_summary
                 ) {
                   event.preventDefault()
-                  pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
+                  pasteText(decodedPastedContent, `[Pasted ~${lineCount} lines]`)
+                  return
+                }
+
+                if (decodedPastedContent !== pastedContent) {
+                  event.preventDefault()
+                  input.insertText(decodedPastedContent)
                   return
                 }
 

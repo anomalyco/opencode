@@ -80,14 +80,10 @@ export function Home() {
   onMount(() => {
     if (once) return
     if (route.initialPrompt) {
-      // Keep part positions stable: only decode plain-text prompts.
-      const next =
-        route.initialPrompt.parts.length === 0
-          ? {
-              ...route.initialPrompt,
-              input: decodeFileUrisInText(route.initialPrompt.input),
-            }
-          : route.initialPrompt
+      const next = {
+        ...route.initialPrompt,
+        input: decodeFileUrisInText(route.initialPrompt.input),
+      }
       prompt.set(next)
       once = true
     } else if (args.prompt) {

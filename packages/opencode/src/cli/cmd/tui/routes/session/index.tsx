@@ -161,7 +161,6 @@ export function Session() {
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
 
   const normalizeInitialPrompt = (promptInfo: PromptInfo) => {
-    if (promptInfo.parts.length > 0) return promptInfo
     return {
       ...promptInfo,
       input: decodeFileUrisInText(promptInfo.input),
