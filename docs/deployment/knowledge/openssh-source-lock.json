@@ -1,0 +1,21 @@
+{
+  "repository": "https://github.com/openssh/openssh-portable",
+  "defaultBranch": "master",
+  "pinnedCommit": "acf749756872d7555eca48514e5aca6962116fb2",
+  "pinnedRef": "V_9_7_P1-1065-gacf749756",
+  "latestReleaseTagObserved": "V_10_2_P1",
+  "sourcePath": "C:/P4NTH30N/OP3NF1XER/openssh-source",
+  "devPath": "C:/P4NTH30N/OP3NF1XER/openssh-dev",
+  "runtimeClientVersion": "OpenSSH_for_Windows_9.5p2, LibreSSL 3.8.2",
+  "runtimeBinaryPath": "C:/Windows/System32/OpenSSH/ssh.exe",
+  "runtimeBinaryCandidates": [
+    "C:/Windows/System32/OpenSSH/ssh.exe",
+    "C:/Program Files/Git/usr/bin/ssh.exe"
+  ],
+  "windowsCapability": {
+    "name": "OpenSSH.Client~~~~0.0.1.0",
+    "state": "Installed"
+  },
+  "updatedAtUtc": "2026-02-25T06:21:26Z",
+  "decisionId": "DECISION_149"
+}

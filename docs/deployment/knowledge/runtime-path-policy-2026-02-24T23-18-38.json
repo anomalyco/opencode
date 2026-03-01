@@ -1,0 +1,15 @@
+{
+    "generatedAt":  "2026-02-24T23:18:38.5112961-07:00",
+    "preferredSshDir":  "C:\\Windows\\System32\\OpenSSH",
+    "demotedDirs":  [
+                        "C:\\Program Files\\Git\\usr\\bin",
+                        "C:\\Program Files\\Git\\mingw64\\bin"
+                    ],
+    "persistUserPath":  true,
+    "userPathUpdated":  true,
+    "firstSshCandidate":  "C:\\Windows\\System32\\OpenSSH\\ssh.exe",
+    "allSshCandidates":  [
+                             "C:\\Windows\\System32\\OpenSSH\\ssh.exe",
+                             "C:\\Program Files\\Git\\usr\\bin\\ssh.exe"
+                         ]
+}

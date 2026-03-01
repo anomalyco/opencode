@@ -1,0 +1,56 @@
+{
+    "generatedAt":  "2026-02-24T11:40:56.0526999-07:00",
+    "pruneRequested":  false,
+    "results":  [
+                    {
+                        "name":  "OpenCode",
+                        "id":  "SST.OpenCodeDesktop",
+                        "installedCount":  1,
+                        "duplicateStatus":  "single_or_none",
+                        "pinStatus":  "attempted",
+                        "pinEffective":  false,
+                        "pinOutput":  "Found OpenCode [SST.OpenCodeDesktop]",
+                        "lockVersion":  "1.1.65",
+                        "versionMatchesLock":  false,
+                        "installedRows":  "OpenCode SST.OpenCodeDesktop 1.1.65  1.2.10    winget"
+                    },
+                    {
+                        "name":  "Rancher Desktop",
+                        "id":  "SUSE.RancherDesktop",
+                        "installedCount":  1,
+                        "duplicateStatus":  "single_or_none",
+                        "pinStatus":  "attempted",
+                        "pinEffective":  false,
+                        "pinOutput":  "Found Rancher Desktop [SUSE.RancherDesktop]",
+                        "lockVersion":  "1.22.0",
+                        "versionMatchesLock":  false,
+                        "installedRows":  "Rancher Desktop SUSE.RancherDesktop 1.22.0  winget"
+                    },
+                    {
+                        "name":  "LM Studio",
+                        "id":  "ElementLabs.LMStudio",
+                        "installedCount":  1,
+                        "duplicateStatus":  "single_or_none",
+                        "pinStatus":  "attempted",
+                        "pinEffective":  false,
+                        "pinOutput":  "Found LM Studio [ElementLabs.LMStudio]",
+                        "lockVersion":  "0.4.2+2",
+                        "versionMatchesLock":  false,
+                        "installedRows":  "LM Studio 0.4.2+2 ElementLabs.LMStudio 0.4.2+2 0.4.3+2   winget"
+                    },
+                    {
+                        "name":  "ToolHive",
+                        "id":  "ToolHive",
+                        "installedCount":  1,
+                        "duplicateStatus":  "single_or_none",
+                        "pinStatus":  "skipped",
+                        "pinEffective":  false,
+                        "pinOutput":  [
+
+                                      ],
+                        "lockVersion":  "0.21.0",
+                        "versionMatchesLock":  false,
+                        "installedRows":  "ToolHive ARP\\User\\X64\\ToolHive 0.21.0"
+                    }
+                ]
+}

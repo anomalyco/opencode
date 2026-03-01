@@ -1,0 +1,104 @@
+{
+    "generatedAt":  "2026-02-24T22:59:13.7644146-07:00",
+    "machine":  "CATH3DR4L-01",
+    "commandSources":  {
+                           "opencode":  "C:\\Users\\paulc\\AppData\\Roaming\\npm\\opencode.ps1",
+                           "thv":  "C:\\Users\\paulc\\bin\\thv.ps1",
+                           "lms":  "C:\\Users\\paulc\\bin\\lms.ps1",
+                           "rdctl":  "C:\\Users\\paulc\\bin\\rdctl.ps1",
+                           "ssh":  "C:\\Program Files\\Git\\usr\\bin\\ssh.exe",
+                           "sshd":  null
+                       },
+    "checks":  [
+                   {
+                       "name":  "opencode --version",
+                       "ok":  true,
+                       "output":  [
+                                      "1.2.11"
+                                  ]
+                   },
+                   {
+                       "name":  "powershell opencode --version",
+                       "ok":  true,
+                       "output":  [
+                                      "1.2.11"
+                                  ]
+                   },
+                   {
+                       "name":  "sudo --inline opencode --version",
+                       "ok":  true,
+                       "output":  [
+                                      "1.2.11"
+                                  ]
+                   },
+                   {
+                       "name":  "thv version",
+                       "ok":  true,
+                       "output":  [
+                                      "ToolHive v0.9.4",
+                                      "Commit: d41c8f2f8c391909f8fae251ea752172a4859eed",
+                                      "Built: 2026-02-16 15:22:30 UTC",
+                                      "Go version: go1.25.7",
+                                      "Platform: windows/amd64",
+                                      "A new version of ToolHive is available: v0.10.0",
+                                      "Currently running: v0.9.4"
+                                  ]
+                   },
+                   {
+                       "name":  "lms --help",
+                       "ok":  true,
+                       "output":  [
+                                      "Usage: lms [options] [command]",
+                                      "",
+                                      "Local models",
+                                      "   chat               Start an interactive chat with a model",
+                                      "   get                Search and download local models",
+                                      "   load               Load a model",
+                                      "   unload             Unload a model",
+                                      "   ls                 List the models available on disk",
+                                      "   ps                 List the models currently loaded in memory",
+                                      "   import             Import a model file into LM Studio",
+                                      "",
+                                      "Serve",
+                                      "   server             Commands for managing the local server",
+                                      "   log                Log incoming and outgoing messages",
+                                      "",
+                                      "Runtime",
+                                      "   runtime            Manage and update the inference runtime",
+                                      "",
+                                      "Develop \u0026 Publish (Beta)",
+                                      "   clone              Clone an artifact from LM Studio Hub to a local folder",
+                                      "   push               Uploads the artifact in the current folder to LM Studio Hub",
+                                      "   dev                Starts a plugin dev server in the current folder",
+                                      "   login              Authenticate with LM Studio",
+                                      "   logout             Log out of LM Studio",
+                                      "   whoami             Check the current authentication status",
+                                      "",
+                                      "Learn more:           https://lmstudio.ai/docs/developer",
+                                      "Join our Discord:     https://discord.gg/lmstudio"
+                                  ]
+                   },
+                   {
+                       "name":  "rdctl version",
+                       "ok":  true,
+                       "output":  [
+                                      "rdctl client version: v1.22.0, targeting server version: v1"
+                                  ]
+                   },
+                   {
+                       "name":  "ssh -V",
+                       "ok":  true,
+                       "output":  [
+                                      "OpenSSH_10.2p1, OpenSSL 3.5.4 30 Sep 2025"
+                                  ]
+                   },
+                   {
+                       "name":  "OpenSSH capability state",
+                       "ok":  true,
+                       "output":  [
+                                      "OpenSSH.Client~~~~0.0.1.0:Installed",
+                                      "OpenSSH.Server~~~~0.0.1.0:NotPresent"
+                                  ]
+                   }
+               ]
+}

@@ -1,0 +1,81 @@
+{
+    "generatedAt":  "2026-02-24T11:33:27.9933795-07:00",
+    "machine":  "CATH3DR4L-01",
+    "commandSources":  {
+                           "opencode":  "C:\\Users\\paulc\\AppData\\Roaming\\npm\\opencode.ps1",
+                           "thv":  "C:\\Users\\paulc\\AppData\\Local\\ToolHive\\bin\\thv.exe",
+                           "lms":  "C:\\Users\\paulc\\.lmstudio\\bin\\lms.exe",
+                           "rdctl":  "C:\\Program Files\\Rancher Desktop\\resources\\resources\\win32\\bin\\rdctl.exe"
+                       },
+    "checks":  [
+                   {
+                       "name":  "opencode --version",
+                       "ok":  true,
+                       "output":  [
+                                      "0.0.0-dev-202602241756"
+                                  ]
+                   },
+                   {
+                       "name":  "powershell opencode --version",
+                       "ok":  true,
+                       "output":  [
+                                      "0.0.0-dev-202602241756"
+                                  ]
+                   },
+                   {
+                       "name":  "sudo --inline opencode --version",
+                       "ok":  true,
+                       "output":  [
+                                      "0.0.0-dev-202602241756"
+                                  ]
+                   },
+                   {
+                       "name":  "thv version",
+                       "ok":  false,
+                       "output":  [
+                                      "A new version of ToolHive is available: v0.10.0"
+                                  ]
+                   },
+                   {
+                       "name":  "lms --help",
+                       "ok":  true,
+                       "output":  [
+                                      "Usage: lms [options] [command]",
+                                      "",
+                                      "Local models",
+                                      "   chat               Start an interactive chat with a model",
+                                      "   get                Search and download local models",
+                                      "   load               Load a model",
+                                      "   unload             Unload a model",
+                                      "   ls                 List the models available on disk",
+                                      "   ps                 List the models currently loaded in memory",
+                                      "   import             Import a model file into LM Studio",
+                                      "",
+                                      "Serve",
+                                      "   server             Commands for managing the local server",
+                                      "   log                Log incoming and outgoing messages",
+                                      "",
+                                      "Runtime",
+                                      "   runtime            Manage and update the inference runtime",
+                                      "",
+                                      "Develop \u0026 Publish (Beta)",
+                                      "   clone              Clone an artifact from LM Studio Hub to a local folder",
+                                      "   push               Uploads the artifact in the current folder to LM Studio Hub",
+                                      "   dev                Starts a plugin dev server in the current folder",
+                                      "   login              Authenticate with LM Studio",
+                                      "   logout             Log out of LM Studio",
+                                      "   whoami             Check the current authentication status",
+                                      "",
+                                      "Learn more:           https://lmstudio.ai/docs/developer",
+                                      "Join our Discord:     https://discord.gg/lmstudio"
+                                  ]
+                   },
+                   {
+                       "name":  "rdctl version",
+                       "ok":  true,
+                       "output":  [
+                                      "rdctl client version: v1.22.0, targeting server version: v1"
+                                  ]
+                   }
+               ]
+}

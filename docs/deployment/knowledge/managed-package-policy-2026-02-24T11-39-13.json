@@ -1,0 +1,44 @@
+{
+    "generatedAt":  "2026-02-24T11:39:18.3800190-07:00",
+    "pruneRequested":  false,
+    "results":  [
+                    {
+                        "name":  "OpenCode",
+                        "id":  "SST.OpenCodeDesktop",
+                        "installedCount":  1,
+                        "duplicateStatus":  "single_or_none",
+                        "pinStatus":  "attempted",
+                        "pinOutput":  "Found OpenCode [SST.OpenCodeDesktop]",
+                        "installedRows":  "OpenCode SST.OpenCodeDesktop 1.1.65  1.2.10    winget"
+                    },
+                    {
+                        "name":  "Rancher Desktop",
+                        "id":  "SUSE.RancherDesktop",
+                        "installedCount":  1,
+                        "duplicateStatus":  "single_or_none",
+                        "pinStatus":  "attempted",
+                        "pinOutput":  "Found Rancher Desktop [SUSE.RancherDesktop]",
+                        "installedRows":  "Rancher Desktop SUSE.RancherDesktop 1.22.0  winget"
+                    },
+                    {
+                        "name":  "LM Studio",
+                        "id":  "ElementLabs.LMStudio",
+                        "installedCount":  1,
+                        "duplicateStatus":  "single_or_none",
+                        "pinStatus":  "attempted",
+                        "pinOutput":  "Found LM Studio [ElementLabs.LMStudio]",
+                        "installedRows":  "LM Studio 0.4.2+2 ElementLabs.LMStudio 0.4.2+2 0.4.3+2   winget"
+                    },
+                    {
+                        "name":  "ToolHive",
+                        "id":  "ToolHive",
+                        "installedCount":  1,
+                        "duplicateStatus":  "single_or_none",
+                        "pinStatus":  "skipped",
+                        "pinOutput":  [
+
+                                      ],
+                        "installedRows":  "ToolHive ARP\\User\\X64\\ToolHive 0.21.0"
+                    }
+                ]
+}

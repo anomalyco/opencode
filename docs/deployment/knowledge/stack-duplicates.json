@@ -1,0 +1,30 @@
+[
+    {
+        "Id":  "SUSE.RancherDesktop",
+        "Count":  1,
+        "Rows":  [
+                     "Rancher Desktop SUSE.RancherDesktop 1.22.0  winget"
+                 ]
+    },
+    {
+        "Id":  "ElementLabs.LMStudio",
+        "Count":  1,
+        "Rows":  [
+                     "LM Studio 0.4.2+2 ElementLabs.LMStudio 0.4.2+2 0.4.4+1   winget"
+                 ]
+    },
+    {
+        "Id":  "ToolHive",
+        "Count":  1,
+        "Rows":  [
+                     "ToolHive ARP\\User\\X64\\ToolHive 0.21.0"
+                 ]
+    },
+    {
+        "Id":  "MongoDB.Shell",
+        "Count":  1,
+        "Rows":  [
+                     "MongoDB Shell MongoDB.Shell 2.7.0   winget"
+                 ]
+    }
+]

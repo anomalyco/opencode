@@ -1,0 +1,84 @@
+{
+    "generatedAt":  "2026-02-24T11:20:15.6771293-07:00",
+    "machine":  "CATH3DR4L-01",
+    "os":  {
+               "WindowsProductName":  "Windows 10 Enterprise",
+               "WindowsVersion":  "2009",
+               "OsBuildNumber":  "26100",
+               "OsHardwareAbstractionLayer":  "10.0.26100.1"
+           },
+    "cpu":  {
+                "Name":  "AMD Ryzen 9 3900X 12-Core Processor            ",
+                "NumberOfCores":  12,
+                "NumberOfLogicalProcessors":  24
+            },
+    "memory":  {
+                   "TotalVisibleMemorySize":  134135320,
+                   "FreePhysicalMemory":  91971048
+               },
+    "disk":  [
+                 {
+                     "DeviceID":  "C:",
+                     "Size":  2047541768192,
+                     "FreeSpace":  1406492438528
+                 },
+                 {
+                     "DeviceID":  "D:",
+                     "Size":  4000769372160,
+                     "FreeSpace":  2536817631232
+                 }
+             ],
+    "managedPackages":  [
+                            {
+                                "Id":  "SUSE.RancherDesktop",
+                                "Output":  [
+                                               "",
+                                               "   - ",
+                                               "                                                                                                                        ",
+                                               "",
+                                               "   - ",
+                                               "   \\ ",
+                                               "                                                                                                                        ",
+                                               "Name            Id                  Version Source",
+                                               "---------------------------------------------------",
+                                               "Rancher Desktop SUSE.RancherDesktop 1.22.0  winget"
+                                           ]
+                            },
+                            {
+                                "Id":  "ElementLabs.LMStudio",
+                                "Output":  [
+                                               "",
+                                               "   - ",
+                                               "   \\ ",
+                                               "                                                                                                                        ",
+                                               "Name              Id                   Version Available Source",
+                                               "---------------------------------------------------------------",
+                                               "LM Studio 0.4.2+2 ElementLabs.LMStudio 0.4.2+2 0.4.3+2   winget"
+                                           ]
+                            },
+                            {
+                                "Id":  "ToolHive",
+                                "Output":  [
+                                               "",
+                                               "   - ",
+                                               "   \\ ",
+                                               "                                                                                                                        ",
+                                               "Name     Id                    Version",
+                                               "--------------------------------------",
+                                               "ToolHive ARP\\User\\X64\\ToolHive 0.21.0"
+                                           ]
+                            },
+                            {
+                                "Id":  "SST.OpenCodeDesktop",
+                                "Output":  [
+                                               "",
+                                               "   - ",
+                                               "   \\ ",
+                                               "                                                                                                                        ",
+                                               "Name     Id                  Version Available Source",
+                                               "-----------------------------------------------------",
+                                               "OpenCode SST.OpenCodeDesktop 1.1.65  1.2.10    winget"
+                                           ]
+                            }
+                        ]
+}
