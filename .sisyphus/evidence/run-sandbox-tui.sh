@@ -101,6 +101,7 @@ evidence_dir="/home/choza/projects/opencode-source/.sisyphus/evidence"
 evidence_file="$evidence_dir/task-2-${state}.txt"
 idle_evidence_a="$evidence_dir/task-2-idle-a.txt"
 idle_evidence_b="$evidence_dir/task-2-idle-b.txt"
+skip_final_capture=0
 log_file="$XDG_DATA_HOME/opencode/log/dev.log"
 log_evidence="$evidence_dir/task-2-log.txt"
 
@@ -172,6 +173,7 @@ case "$state" in
     sleep 2
     tmux capture-pane -e -t "$session_name" -p > "$idle_evidence_b"
     evidence_file="$idle_evidence_a"
+    skip_final_capture=1
     ;;
   stream)
     prompt_text="Write a long paragraph about ocean weather."
@@ -210,7 +212,9 @@ case "$state" in
     ;;
 esac
 
-tmux capture-pane -e -t "$session_name" -p > "$evidence_file"
+if [[ "$skip_final_capture" != "1" ]]; then
+  tmux capture-pane -e -t "$session_name" -p > "$evidence_file"
+fi
 tmux kill-session -t "$session_name"
 
 if [[ -f "$log_file" ]]; then

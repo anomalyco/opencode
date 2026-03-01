@@ -14,19 +14,21 @@ if [[ -z "$evidence_file" ]]; then
   evidence_file="$evidence_dir/task-2-${state}.txt"
 fi
 
-if [[ ! -f "$evidence_file" ]]; then
-  echo "Evidence file not found: $evidence_file"
-  exit 1
-fi
+if [[ "$state" != "idle" ]]; then
+  if [[ ! -f "$evidence_file" ]]; then
+    echo "Evidence file not found: $evidence_file"
+    exit 1
+  fi
 
-if [[ ! -s "$evidence_file" ]]; then
-  echo "Evidence file is empty: $evidence_file"
-  exit 1
-fi
+  if [[ ! -s "$evidence_file" ]]; then
+    echo "Evidence file is empty: $evidence_file"
+    exit 1
+  fi
 
-if ! grep -q $'\x1b\[' "$evidence_file"; then
-  echo "ANSI escape sequences not found in: $evidence_file"
-  exit 1
+  if ! grep -q $'\x1b\[' "$evidence_file"; then
+    echo "ANSI escape sequences not found in: $evidence_file"
+    exit 1
+  fi
 fi
 
 strip_ansi() {
@@ -36,6 +38,15 @@ strip_ansi() {
 filter_prompt_line() {
   local prompt_text="$1"
   strip_ansi < "$evidence_file" | rg -vF "$prompt_text"
+}
+
+extract_prompt_line_raw() {
+  rg -m1 "Ask anything|Build" "$1" || true
+}
+
+extract_background_code() {
+  local line="$1"
+  printf '%s' "$line" | rg -o $'\x1b\[48;2;[0-9;]+' -m1 || true
 }
 
 extract_prompt_line() {
@@ -52,17 +63,27 @@ case "$state" in
       exit 1
     fi
 
-    line_a="$(extract_prompt_line "$local_file_a")"
-    line_b="$(extract_prompt_line "$local_file_b")"
+    line_a="$(extract_prompt_line_raw "$local_file_a")"
+    line_b="$(extract_prompt_line_raw "$local_file_b")"
 
     if [[ -z "$line_a" || -z "$line_b" ]]; then
       echo "Missing prompt bar line in idle evidence"
       exit 1
     fi
 
-    if [[ "$line_a" == "$line_b" ]]; then
-      echo "Idle prompt bar line did not change between captures"
-      exit 1
+    bg_a="$(extract_background_code "$line_a")"
+    bg_b="$(extract_background_code "$line_b")"
+
+    if [[ -n "$bg_a" && -n "$bg_b" ]]; then
+      if [[ "$bg_a" == "$bg_b" ]]; then
+        echo "Idle prompt bar background did not change between captures"
+        exit 1
+      fi
+    else
+      if [[ "$line_a" == "$line_b" ]]; then
+        echo "Idle prompt bar line did not change between captures"
+        exit 1
+      fi
     fi
     ;;
   error)
