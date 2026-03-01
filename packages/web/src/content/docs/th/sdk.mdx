@@ -117,6 +117,78 @@ try {
 
 ---
 
+## ผลลัพธ์แบบมีโครงสร้าง
+
+คุณสามารถร้องขอผลลัพธ์ JSON แบบมีโครงสร้างจากโมเดลได้โดยระบุ `format` ด้วย JSON schema โมเดลจะใช้เครื่องมือ `StructuredOutput` เพื่อส่งคืน JSON ที่ผ่านการตรวจสอบความถูกต้องซึ่งตรงกับสคีมาของคุณ
+
+### การใช้งานพื้นฐาน
+
+```typescript
+const result = await client.session.prompt({
+  path: { id: sessionId },
+  body: {
+    parts: [{ type: "text", text: "Research Anthropic and provide company info" }],
+    format: {
+      type: "json_schema",
+      schema: {
+        type: "object",
+        properties: {
+          company: { type: "string", description: "Company name" },
+          founded: { type: "number", description: "Year founded" },
+          products: {
+            type: "array",
+            items: { type: "string" },
+            description: "Main products",
+          },
+        },
+        required: ["company", "founded"],
+      },
+    },
+  },
+})
+
+// Access the structured output
+console.log(result.data.info.structured_output)
+// { company: "Anthropic", founded: 2021, products: ["Claude", "Claude API"] }
+```
+
+### ประเภทรูปแบบผลลัพธ์
+
+| ประเภท        | คำอธิบาย                                                          |
+| ------------- | ----------------------------------------------------------------- |
+| `text`        | ค่าเริ่มต้น การตอบสนองข้อความมาตรฐาน (ไม่มีผลลัพธ์แบบมีโครงสร้าง) |
+| `json_schema` | ส่งคืน JSON ที่ผ่านการตรวจสอบความถูกต้องซึ่งตรงกับสคีมาที่ระบุ    |
+
+### รูปแบบ JSON Schema
+
+เมื่อใช้ `type: 'json_schema'` ให้ระบุ:
+
+| ฟิลด์        | Type            | คำอธิบาย                                                              |
+| ------------ | --------------- | --------------------------------------------------------------------- |
+| `type`       | `'json_schema'` | จำเป็น ระบุโหมด JSON schema                                           |
+| `schema`     | `object`        | จำเป็น วัตถุ JSON Schema ที่กำหนดโครงสร้างผลลัพธ์                     |
+| `retryCount` | `number`        | ไม่จำเป็น จำนวนการลองใหม่สำหรับการตรวจสอบความถูกต้อง (ค่าเริ่มต้น: 2) |
+
+### การจัดการข้อผิดพลาด
+
+หากโมเดลล้มเหลวในการสร้างผลลัพธ์แบบมีโครงสร้างที่ถูกต้องหลังจากลองใหม่ครบทุกครั้ง การตอบสนองจะรวม `StructuredOutputError`:
+
+```typescript
+if (result.data.info.error?.name === "StructuredOutputError") {
+  console.error("Failed to produce structured output:", result.data.info.error.message)
+  console.error("Attempts:", result.data.info.error.retries)
+}
+```
+
+### แนวปฏิบัติที่ดีที่สุด
+
+1. **ระบุคำอธิบายที่ชัดเจน** ในคุณสมบัติสคีมาของคุณเพื่อช่วยให้โมเดลเข้าใจว่าข้อมูลใดที่ต้องดึงออกมา
+2. **ใช้ `required`** เพื่อระบุฟิลด์ที่ต้องมี
+3. **รักษาสคีมาให้โฟกัส** - สคีมาที่ซ้อนกันซับซ้อนอาจยากสำหรับโมเดลในการกรอกให้ถูกต้อง
+4. **ตั้งค่า `retryCount` ที่เหมาะสม** - เพิ่มสำหรับสคีมาที่ซับซ้อน ลดลงสำหรับสคีมาที่เรียบง่าย
+
+---
+
 ## API
 
 SDK เปิดเผย API ของเซิร์ฟเวอร์ทั้งหมดผ่านไคลเอ็นต์ประเภทที่ปลอดภัย
@@ -226,27 +298,27 @@ const { providers, default: defaults } = await client.config.providers()
 
 ### เซสชัน
 
-| Method                                                     | คำอธิบาย                         | หมายเหตุ                                                                                                                                             |
-| ---------------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `session.list()`                                           | แสดงรายการเซสชัน                 | ส่งคืน <a href={typesUrl}><code>เซสชัน[]</code></a>                                                                                                  |
-| `session.get({ path })`                                    | รับเซสชัน                        | ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>                                                                                                    |
-| `session.children({ path })`                               | แสดงรายการเซสชันย่อย             | ส่งคืน <a href={typesUrl}><code>เซสชัน[]</code></a>                                                                                                  |
-| `session.create({ body })`                                 | สร้างเซสชัน                      | ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>                                                                                                    |
-| `session.delete({ path })`                                 | ลบเซสชัน                         | ส่งคืน `boolean`                                                                                                                                     |
-| `session.update({ path, body })`                           | อัปเดตคุณสมบัติเซสชัน            | ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>                                                                                                    |
-| `session.init({ path, body })`                             | วิเคราะห์แอปและสร้าง `AGENTS.md` | ส่งคืน `boolean`                                                                                                                                     |
-| `session.abort({ path })`                                  | ยกเลิกเซสชันที่ทำงานอยู่         | ส่งคืน `boolean`                                                                                                                                     |
-| `session.share({ path })`                                  | แบ่งปันเซสชั่น                   | ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>                                                                                                    |
-| `session.unshare({ path })`                                | เลิกแชร์เซสชัน                   | ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>                                                                                                    |
-| `session.summarize({ path, body })`                        | สรุปเซสชัน                       | ส่งคืน `boolean`                                                                                                                                     |
-| `session.messages({ path })`                               | แสดงรายการข้อความในเซสชัน        | ส่งคืน `{ info: `<a href={typesUrl}><code>ข้อความ</code></a>`, parts: `<a href={typesUrl}><code>ส่วน[]</code></a>`}[]`                               |
-| `session.message({ path })`                                | รับรายละเอียดข้อความ             | ส่งคืน `{ info: `<a href={typesUrl}><code>ข้อความ</code></a>`, parts: `<a href={typesUrl}><code>ส่วน[]</code></a>`}`                                 |
-| `session.prompt({ path, body })`                           | ส่งข้อความแจ้ง                   | `body.noReply: true` ส่งคืน UserMessage (บริบทเท่านั้น) ค่าเริ่มต้นส่งคืน <a href={typesUrl}><code>AssistantMessage</code></a> พร้อมการตอบสนองของ AI |
-| `session.command({ path, body })`                          | ส่งคำสั่งไปยังเซสชั่น            | ส่งคืน `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>ส่วน[]</code></a>`}`                        |
-| `session.shell({ path, body })`                            | รันคำสั่ง shell                  | ส่งคืน <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                          |
-| `session.revert({ path, body })`                           | คืนค่าข้อความ                    | ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>                                                                                                    |
-| `session.unrevert({ path })`                               | คืนค่าข้อความที่เปลี่ยนกลับ      | ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>                                                                                                    |
-| `postSessionByIdPermissionsByPermissionId({ path, body })` | ตอบสนองต่อการร้องขอการอนุญาต     | ส่งคืน `boolean`                                                                                                                                     |
+| Method                                                     | คำอธิบาย                         | หมายเหตุ                                                                                                                                                                                                                               |
+| ---------------------------------------------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session.list()`                                           | แสดงรายการเซสชัน                 | ส่งคืน <a href={typesUrl}><code>เซสชัน[]</code></a>                                                                                                                                                                                    |
+| `session.get({ path })`                                    | รับเซสชัน                        | ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>                                                                                                                                                                                      |
+| `session.children({ path })`                               | แสดงรายการเซสชันย่อย             | ส่งคืน <a href={typesUrl}><code>เซสชัน[]</code></a>                                                                                                                                                                                    |
+| `session.create({ body })`                                 | สร้างเซสชัน                      | ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>                                                                                                                                                                                      |
+| `session.delete({ path })`                                 | ลบเซสชัน                         | ส่งคืน `boolean`                                                                                                                                                                                                                       |
+| `session.update({ path, body })`                           | อัปเดตคุณสมบัติเซสชัน            | ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>                                                                                                                                                                                      |
+| `session.init({ path, body })`                             | วิเคราะห์แอปและสร้าง `AGENTS.md` | ส่งคืน `boolean`                                                                                                                                                                                                                       |
+| `session.abort({ path })`                                  | ยกเลิกเซสชันที่ทำงานอยู่         | ส่งคืน `boolean`                                                                                                                                                                                                                       |
+| `session.share({ path })`                                  | แบ่งปันเซสชั่น                   | ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>                                                                                                                                                                                      |
+| `session.unshare({ path })`                                | เลิกแชร์เซสชัน                   | ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>                                                                                                                                                                                      |
+| `session.summarize({ path, body })`                        | สรุปเซสชัน                       | ส่งคืน `boolean`                                                                                                                                                                                                                       |
+| `session.messages({ path })`                               | แสดงรายการข้อความในเซสชัน        | ส่งคืน `{ info: `<a href={typesUrl}><code>ข้อความ</code></a>`, parts: `<a href={typesUrl}><code>ส่วน[]</code></a>`}[]`                                                                                                                 |
+| `session.message({ path })`                                | รับรายละเอียดข้อความ             | ส่งคืน `{ info: `<a href={typesUrl}><code>ข้อความ</code></a>`, parts: `<a href={typesUrl}><code>ส่วน[]</code></a>`}`                                                                                                                   |
+| `session.prompt({ path, body })`                           | ส่งข้อความแจ้ง                   | `body.noReply: true` ส่งคืน UserMessage (บริบทเท่านั้น) ค่าเริ่มต้นส่งคืน <a href={typesUrl}><code>AssistantMessage</code></a> พร้อมการตอบสนองของ AI รองรับ `body.outputFormat` สำหรับ [ผลลัพธ์แบบมีโครงสร้าง](#ผลลัพธ์แบบมีโครงสร้าง) |
+| `session.command({ path, body })`                          | ส่งคำสั่งไปยังเซสชั่น            | ส่งคืน `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>ส่วน[]</code></a>`}`                                                                                                          |
+| `session.shell({ path, body })`                            | รันคำสั่ง shell                  | ส่งคืน <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                                                                                                            |
+| `session.revert({ path, body })`                           | คืนค่าข้อความ                    | ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>                                                                                                                                                                                      |
+| `session.unrevert({ path })`                               | คืนค่าข้อความที่เปลี่ยนกลับ      | ส่งคืน <a href={typesUrl}><code>เซสชัน</code></a>                                                                                                                                                                                      |
+| `postSessionByIdPermissionsByPermissionId({ path, body })` | ตอบสนองต่อการร้องขอการอนุญาต     | ส่งคืน `boolean`                                                                                                                                                                                                                       |
 
 ---
 
