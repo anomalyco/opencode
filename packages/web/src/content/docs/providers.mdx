@@ -809,11 +809,7 @@ Customize through `opencode.json`:
   "provider": {
     "gitlab": {
       "options": {
-        "instanceUrl": "https://gitlab.com",
-        "featureFlags": {
-          "duo_agent_platform_agentic_chat": true,
-          "duo_agent_platform": true
-        }
+        "instanceUrl": "https://gitlab.com"
       }
     }
   }
@@ -838,32 +834,6 @@ When a `duo-workflow-*` model is selected, OpenCode will:
 
 Available DAP workflow models follow the `duo-workflow-*` naming convention and
 are dynamically discovered from your GitLab instance.
-
-To enable DAP workflow models, ensure the following feature flags are set in your
-`opencode.json`:
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "gitlab": {
-      "options": {
-        "featureFlags": {
-          "duo_agent_platform_agentic_chat": true,
-          "duo_agent_platform": true
-        }
-      }
-    }
-  }
-}
-```
-
-:::note
-Your GitLab administrator must enable the Duo Agent Platform for your user,
-group, or instance. See
-[GitLab Duo setup](https://docs.gitlab.com/user/duo_agent_platform/turn_on_off/) for
-details.
-:::
 
 ##### GitLab API Tools (Optional, but highly recommended)
 
