@@ -555,7 +555,23 @@ export namespace Provider {
       const { createAiGateway } = await import("ai-gateway-provider")
       const { createUnified } = await import("ai-gateway-provider/providers/unified")
 
-      const aigateway = createAiGateway({ accountId, gateway, apiKey: apiToken })
+      // Forward AI Gateway options from provider config (metadata, cache settings, etc.)
+      const { metadata, cacheTtl, cacheKey, skipCache, collectLog } = input.options ?? {}
+      // Also support legacy cf-aig-metadata header (JSON string in options.headers)
+      const resolvedMetadata = metadata ?? (
+        input.options?.headers?.["cf-aig-metadata"]
+          ? (() => { try { return JSON.parse(input.options.headers["cf-aig-metadata"]) } catch { return undefined } })()
+          : undefined
+      )
+      const gatewayOptions = { metadata: resolvedMetadata, cacheTtl, cacheKey, skipCache, collectLog }
+      const hasGatewayOptions = Object.values(gatewayOptions).some(v => v !== undefined)
+
+      const aigateway = createAiGateway({
+        accountId,
+        gateway,
+        apiKey: apiToken,
+        ...(hasGatewayOptions ? { options: gatewayOptions } : {}),
+      })
       const unified = createUnified()
 
       return {
