@@ -487,10 +487,42 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                 ? new URL(CODEX_API_ENDPOINT)
                 : parsed
 
-            return fetch(url, {
+            const response = await fetch(url, {
               ...init,
               headers,
             })
+
+            // Handle non-streaming error responses from the Codex API.
+            // When the API returns an error (e.g. 429 usage_limit_reached),
+            // it responds with application/json instead of text/event-stream.
+            // If we pass this response through to the AI SDK's SSE parser,
+            // it hangs forever waiting for SSE data that never comes.
+            if (!response.ok) {
+              const contentType = response.headers.get("content-type") || ""
+              if (contentType.includes("application/json")) {
+                try {
+                  const body = await response.clone().json()
+                  const errorMsg = body?.error?.message ?? body?.detail ?? JSON.stringify(body)
+                  const errorType = body?.error?.type ?? "unknown"
+                  log.error("codex api error", {
+                    status: response.status,
+                    type: errorType,
+                    message: errorMsg,
+                  })
+                  // Return a synthetic SSE error response so the AI SDK
+                  // can process it cleanly instead of hanging.
+                  throw new Error(
+                    `Codex API error (${response.status}): ${errorType} - ${errorMsg}`,
+                  )
+                } catch (e) {
+                  if (e instanceof Error && e.message.startsWith("Codex API error")) throw e
+                  // If JSON parsing fails, still throw with status
+                  throw new Error(`Codex API error: HTTP ${response.status}`)
+                }
+              }
+            }
+
+            return response
           },
         }
       },
