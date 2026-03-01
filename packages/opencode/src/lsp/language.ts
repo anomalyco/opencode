@@ -118,3 +118,64 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".typ": "typst",
   ".typc": "typst",
 } as const
+
+export const SHEBANG_PATTERNS: Array<{ pattern: RegExp; language: string }> = [
+  { pattern: /\buv\s+run\b/, language: "python" },
+  { pattern: /\bpython[23]?\b/, language: "python" },
+  { pattern: /\bts-node\b/, language: "typescript" },
+  { pattern: /\btsx\b/, language: "typescriptreact" },
+  { pattern: /\bdeno\b/, language: "typescript" },
+  { pattern: /\bnode\b/, language: "javascript" },
+  { pattern: /\bbun\b/, language: "javascript" },
+  { pattern: /\bnpx\b/, language: "javascript" },
+  { pattern: /\byarn\b/, language: "javascript" },
+  { pattern: /\bpnpm\b/, language: "javascript" },
+  { pattern: /\bbash\b/, language: "shellscript" },
+  { pattern: /\bzsh\b/, language: "shellscript" },
+  { pattern: /\bdash\b/, language: "shellscript" },
+  { pattern: /\bfish\b/, language: "shellscript" },
+  { pattern: /(?<![-\w])sh(?![-\w])/, language: "shellscript" },
+  { pattern: /\bruby\b/, language: "ruby" },
+  { pattern: /\bperl[56]?\b/, language: "perl" },
+  { pattern: /\bphp\b/, language: "php" },
+  { pattern: /\blua\b/, language: "lua" },
+  { pattern: /\bRscript\b/, language: "r" },
+  { pattern: /\bjulia\b/, language: "julia" },
+  { pattern: /\belixir\b/, language: "elixir" },
+  { pattern: /\biex\b/, language: "elixir" },
+]
+
+export async function getLanguageFromShebang(filePath: string): Promise<string | undefined> {
+  const file = Bun.file(filePath)
+  if (!(await file.exists())) return undefined
+
+  const stream = file.stream()
+  const reader = stream.getReader()
+
+  try {
+    const { value, done } = await reader.read()
+    if (done || !value) return undefined
+
+    const decoder = new TextDecoder()
+    let text = decoder.decode(value, { stream: true })
+
+    const newlineIndex = text.indexOf("\n")
+    if (newlineIndex !== -1) {
+      text = text.slice(0, newlineIndex)
+    }
+
+    const line = text.trim()
+    if (!line.startsWith("#!")) return undefined
+
+    for (const { pattern, language } of SHEBANG_PATTERNS) {
+      if (pattern.test(line)) {
+        return language
+      }
+    }
+
+    return undefined
+  } finally {
+    reader.releaseLock()
+    await stream.cancel()
+  }
+}

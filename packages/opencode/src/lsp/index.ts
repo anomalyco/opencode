@@ -10,6 +10,7 @@ import { Config } from "../config/config"
 import { spawn } from "child_process"
 import { Instance } from "../project/instance"
 import { Flag } from "@/flag/flag"
+import { getLanguageFromShebang } from "./language"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
@@ -176,7 +177,7 @@ export namespace LSP {
 
   async function getClients(file: string) {
     const s = await state()
-    const extension = path.parse(file).ext || file
+    const extension = path.parse(file).ext
     const result: LSPClient.Info[] = []
 
     async function schedule(server: LSPServer.Info, root: string, key: string) {
@@ -221,8 +222,19 @@ export namespace LSP {
       return client
     }
 
+    let shebangLanguage: string | undefined
+    const extensionMatches = Object.values(s.servers).some(
+      (server) => server.extensions.length && server.extensions.includes(extension),
+    )
+    if (!extensionMatches) {
+      shebangLanguage = await getLanguageFromShebang(file)
+    }
+
     for (const server of Object.values(s.servers)) {
-      if (server.extensions.length && !server.extensions.includes(extension)) continue
+      const extensionMatch = !server.extensions.length || server.extensions.includes(extension)
+      const shebangMatch = shebangLanguage && server.shebangs?.some((regex) => regex.test(shebangLanguage!))
+
+      if (!extensionMatch && !shebangMatch) continue
 
       const root = await server.root(file)
       if (!root) continue
@@ -263,9 +275,22 @@ export namespace LSP {
 
   export async function hasClients(file: string) {
     const s = await state()
-    const extension = path.parse(file).ext || file
+    const extension = path.parse(file).ext
+
+    let shebangLanguage: string | undefined
+    const extensionMatches = Object.values(s.servers).some(
+      (server) => server.extensions.length && server.extensions.includes(extension),
+    )
+    if (!extensionMatches) {
+      shebangLanguage = await getLanguageFromShebang(file)
+    }
+
     for (const server of Object.values(s.servers)) {
-      if (server.extensions.length && !server.extensions.includes(extension)) continue
+      const extensionMatch = !server.extensions.length || server.extensions.includes(extension)
+      const shebangMatch = shebangLanguage && server.shebangs?.some((regex) => regex.test(shebangLanguage!))
+
+      if (!extensionMatch && !shebangMatch) continue
+
       const root = await server.root(file)
       if (!root) continue
       if (s.broken.has(root + server.id)) continue

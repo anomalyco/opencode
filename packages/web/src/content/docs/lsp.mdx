@@ -60,7 +60,31 @@ You can disable automatic LSP server downloads by setting the `OPENCODE_DISABLE_
 When opencode opens a file, it:
 
 1. Checks the file extension against all enabled LSP servers.
-2. Starts the appropriate LSP server if not already running.
+2. If no extension matches, checks the shebang line for supported interpreters.
+3. Starts the appropriate LSP server if not already running.
+
+---
+
+## Shebang Detection
+
+OpenCode can detect the language of extensionless scripts by parsing their shebang line. This is useful for scripts like those using PEP 723 inline metadata.
+
+Supported shebang patterns:
+
+| Pattern      | Language   |
+| ------------ | ---------- |
+| `uv run`     | Python     |
+| `python`     | Python     |
+| `node`       | JavaScript |
+| `bun`        | JavaScript |
+| `deno`       | TypeScript |
+| `bash`, `sh` | Shell      |
+| `ruby`       | Ruby       |
+| `perl`       | Perl       |
+| `php`        | PHP        |
+| `elixir`     | Elixir     |
+
+For example, a script starting with `#!/usr/bin/env -S uv run --script` will be detected as Python and use the pyright LSP server.
 
 ---
 

@@ -5,7 +5,7 @@ import { pathToFileURL, fileURLToPath } from "url"
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter } from "vscode-jsonrpc/node"
 import type { Diagnostic as VSCodeDiagnostic } from "vscode-languageserver-types"
 import { Log } from "../util/log"
-import { LANGUAGE_EXTENSIONS } from "./language"
+import { LANGUAGE_EXTENSIONS, getLanguageFromShebang } from "./language"
 import z from "zod"
 import type { LSPServer } from "./server"
 import { NamedError } from "@opencode-ai/util/error"
@@ -149,7 +149,10 @@ export namespace LSPClient {
           input.path = path.isAbsolute(input.path) ? input.path : path.resolve(Instance.directory, input.path)
           const text = await Filesystem.readText(input.path)
           const extension = path.extname(input.path)
-          const languageId = LANGUAGE_EXTENSIONS[extension] ?? "plaintext"
+          let languageId = LANGUAGE_EXTENSIONS[extension]
+          if (!languageId || languageId === "plaintext") {
+            languageId = (await getLanguageFromShebang(input.path)) ?? "plaintext"
+          }
 
           const version = files[input.path]
           if (version !== undefined) {

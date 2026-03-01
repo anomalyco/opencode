@@ -60,7 +60,31 @@ OpenCode 内置了多种适用于主流语言的 LSP 服务器：
 当 opencode 打开一个文件时，它会：
 
 1. 将文件扩展名与所有已启用的 LSP 服务器进行匹配。
-2. 如果对应的 LSP 服务器尚未运行，则自动启动它。
+2. 如果没有匹配的扩展名，则检查 shebang 行以识别支持的解释器。
+3. 如果对应的 LSP 服务器尚未运行，则自动启动它。
+
+---
+
+## Shebang 检测
+
+OpenCode 可以通过解析 shebang 行来识别无扩展名脚本的语言。这对于使用 PEP 723 内联元数据的脚本非常有用。
+
+支持的 shebang 模式：
+
+| 模式         | 语言       |
+| ------------ | ---------- |
+| `uv run`     | Python     |
+| `python`     | Python     |
+| `node`       | JavaScript |
+| `bun`        | JavaScript |
+| `deno`       | TypeScript |
+| `bash`, `sh` | Shell      |
+| `ruby`       | Ruby       |
+| `perl`       | Perl       |
+| `php`        | PHP        |
+| `elixir`     | Elixir     |
+
+例如，以 `#!/usr/bin/env -S uv run --script` 开头的脚本将被识别为 Python 并使用 pyright LSP 服务器。
 
 ---
 

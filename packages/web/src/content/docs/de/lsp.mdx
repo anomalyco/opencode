@@ -59,7 +59,31 @@ Sie können LSP-Server-Downloads automatisch deaktivieren, indem Sie die Umgebun
 Wenn OpenCode eine Datei öffnet, geschieht Folgendes:
 
 1. Überprüft die Dateierweiterung anhand aller aktivierten LSP-Server.
-2. Startet den entsprechenden LSP-Server, falls er noch nicht ausgeführt wird.
+2. Wenn keine Erweiterung übereinstimmt, wird die Shebang-Zeile auf unterstützte Interpreter überprüft.
+3. Startet den entsprechenden LSP-Server, falls er noch nicht ausgeführt wird.
+
+---
+
+## Shebang-Erkennung
+
+OpenCode kann die Sprache von Skripten ohne Dateierweiterung durch Parsen der Shebang-Zeile erkennen. Dies ist nützlich für Skripte, die PEP 723 Inline-Metadaten verwenden.
+
+Unterstützte Shebang-Muster:
+
+| Muster       | Sprache    |
+| ------------ | ---------- |
+| `uv run`     | Python     |
+| `python`     | Python     |
+| `node`       | JavaScript |
+| `bun`        | JavaScript |
+| `deno`       | TypeScript |
+| `bash`, `sh` | Shell      |
+| `ruby`       | Ruby       |
+| `perl`       | Perl       |
+| `php`        | PHP        |
+| `elixir`     | Elixir     |
+
+Ein Skript, das mit `#!/usr/bin/env -S uv run --script` beginnt, wird beispielsweise als Python erkannt und verwendet den pyright LSP-Server.
 
 ---
 

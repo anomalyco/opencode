@@ -55,6 +55,7 @@ export namespace LSPServer {
   export interface Info {
     id: string
     extensions: string[]
+    shebangs?: RegExp[]
     global?: boolean
     root: RootFunction
     spawn(root: string): Promise<Handle | undefined>
@@ -62,6 +63,7 @@ export namespace LSPServer {
 
   export const Deno: Info = {
     id: "deno",
+    shebangs: [/\bdeno\b/],
     root: async (file) => {
       const files = Filesystem.up({
         targets: ["deno.json", "deno.jsonc"],
@@ -90,6 +92,7 @@ export namespace LSPServer {
 
   export const Typescript: Info = {
     id: "typescript",
+    shebangs: [/\b(node|bun|npx|yarn|pnpm)\b/],
     root: NearestRoot(
       ["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"],
       ["deno.json", "deno.jsonc"],
@@ -402,6 +405,7 @@ export namespace LSPServer {
 
   export const Rubocop: Info = {
     id: "ruby-lsp",
+    shebangs: [/\bruby\b/],
     root: NearestRoot(["Gemfile"]),
     extensions: [".rb", ".rake", ".gemspec", ".ru"],
     async spawn(root) {
@@ -442,6 +446,7 @@ export namespace LSPServer {
 
   export const Ty: Info = {
     id: "ty",
+    shebangs: [/\b(uv\s+run|python[23]?)\b/],
     extensions: [".py", ".pyi"],
     root: NearestRoot([
       "pyproject.toml",
@@ -506,6 +511,7 @@ export namespace LSPServer {
 
   export const Pyright: Info = {
     id: "pyright",
+    shebangs: [/\b(uv\s+run|python[23]?)\b/],
     extensions: [".py", ".pyi"],
     root: NearestRoot(["pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile", "pyrightconfig.json"]),
     async spawn(root) {
@@ -560,6 +566,7 @@ export namespace LSPServer {
 
   export const ElixirLS: Info = {
     id: "elixir-ls",
+    shebangs: [/\b(elixir|iex)\b/],
     extensions: [".ex", ".exs"],
     root: NearestRoot(["mix.exs", "mix.lock"]),
     async spawn(root) {
@@ -1606,6 +1613,7 @@ export namespace LSPServer {
   }
   export const BashLS: Info = {
     id: "bash",
+    shebangs: [/\b(bash|zsh|dash|fish)\b/, /(?<![-\w])sh(?![-\w])/],
     extensions: [".sh", ".bash", ".zsh", ".ksh"],
     root: async () => Instance.directory,
     async spawn(root) {
