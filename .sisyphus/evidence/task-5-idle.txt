@@ -1,0 +1,3 @@
+Sandbox config: /tmp/opencode-sandbox-idle-1772390816/config/opencode/opencode.json
+State: idle
+Idle prompt bar line did not change between captures

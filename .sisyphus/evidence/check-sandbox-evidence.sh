@@ -6,7 +6,7 @@ evidence_file="${2:-}"
 evidence_dir="/home/choza/projects/opencode-source/.sisyphus/evidence"
 
 if [[ -z "$state" ]]; then
-  echo "Usage: $0 <error|final|stream|tool|warning> [evidence-file]"
+  echo "Usage: $0 <error|final|stream|tool|warning|idle> [evidence-file]"
   exit 1
 fi
 
@@ -38,7 +38,33 @@ filter_prompt_line() {
   strip_ansi < "$evidence_file" | rg -vF "$prompt_text"
 }
 
+extract_prompt_line() {
+  strip_ansi < "$1" | rg -m1 "Ask anything|Build"
+}
+
 case "$state" in
+  idle)
+    local_file_a="$evidence_dir/task-2-idle-a.txt"
+    local_file_b="$evidence_dir/task-2-idle-b.txt"
+
+    if [[ ! -f "$local_file_a" || ! -f "$local_file_b" ]]; then
+      echo "Missing idle evidence files: $local_file_a or $local_file_b"
+      exit 1
+    fi
+
+    line_a="$(extract_prompt_line "$local_file_a")"
+    line_b="$(extract_prompt_line "$local_file_b")"
+
+    if [[ -z "$line_a" || -z "$line_b" ]]; then
+      echo "Missing prompt bar line in idle evidence"
+      exit 1
+    fi
+
+    if [[ "$line_a" == "$line_b" ]]; then
+      echo "Idle prompt bar line did not change between captures"
+      exit 1
+    fi
+    ;;
   error)
     rg -q "Incorrect API key provided:" "$evidence_file" || {
       echo "Missing error marker in $evidence_file"

@@ -3,7 +3,7 @@ set -euo pipefail
 
 state="${1:-}"
 if [[ -z "$state" ]]; then
-  echo "Usage: $0 <error|final|stream|tool|warning>"
+  echo "Usage: $0 <error|final|stream|tool|warning|idle>"
   echo "Tip: view ANSI output with: less -R /home/choza/projects/opencode-source/.sisyphus/evidence/task-2-<state>.txt"
   echo "Tip: validate output with: /home/choza/projects/opencode-source/.sisyphus/evidence/check-sandbox-evidence.sh <state>"
   echo "Tip: set OPENCODE_SANDBOX_OPENAI_API_KEY for non-error states"
@@ -99,6 +99,8 @@ else
 fi
 evidence_dir="/home/choza/projects/opencode-source/.sisyphus/evidence"
 evidence_file="$evidence_dir/task-2-${state}.txt"
+idle_evidence_a="$evidence_dir/task-2-idle-a.txt"
+idle_evidence_b="$evidence_dir/task-2-idle-b.txt"
 log_file="$XDG_DATA_HOME/opencode/log/dev.log"
 log_evidence="$evidence_dir/task-2-log.txt"
 
@@ -164,6 +166,13 @@ wait_for_pattern_excluding_prompt() {
 }
 
 case "$state" in
+  idle)
+    sleep 1
+    tmux capture-pane -e -t "$session_name" -p > "$idle_evidence_a"
+    sleep 2
+    tmux capture-pane -e -t "$session_name" -p > "$idle_evidence_b"
+    evidence_file="$idle_evidence_a"
+    ;;
   stream)
     prompt_text="Write a long paragraph about ocean weather."
     tmux send-keys -t "$session_name" "$prompt_text"
