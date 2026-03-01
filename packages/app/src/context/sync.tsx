@@ -151,24 +151,16 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       setMeta("loading", key, true)
       await fetchMessages(input)
         .then((next) => {
-          // Phase 1: set messages + metadata (triggers timeline render)
+          const userCount = next.session.filter((m) => m.role === "user").length
+          console.log(`[sync] loadMessages sessionID=${input.sessionID.slice(0, 12)}… limit=${input.limit} fetched=${next.session.length} userMsgs=${userCount} complete=${next.complete}`)
           batch(() => {
             input.setStore("message", input.sessionID, reconcile(next.session, { key: "id" }))
+            for (const p of next.part) {
+              input.setStore("part", p.id, p.part)
+            }
             setMeta("limit", key, input.limit)
             setMeta("complete", key, next.complete)
           })
-
-          // Phase 2: load parts after a frame so the browser can paint message skeletons first
-          const parts = next.part
-          if (parts.length > 0) {
-            requestAnimationFrame(() => {
-              batch(() => {
-                for (const p of parts) {
-                  input.setStore("part", p.id, p.part)
-                }
-              })
-            })
-          }
         })
         .finally(() => {
           setMeta("loading", key, false)
@@ -237,7 +229,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
           const hasMessages = store.message[sessionID] !== undefined
           const hydrated = meta.limit[key] !== undefined
-          if (hasSession && hasMessages && hydrated) return
+          if (hasSession && hasMessages && hydrated) {
+            console.log(`[sync] sync sessionID=${sessionID.slice(0, 12)}… already hydrated, skipping`)
+            return
+          }
 
           const cached = store.message[sessionID] ?? []
           const count = cached.length
@@ -250,6 +245,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             : warm
               ? Math.max(count, messageInitialSize)
               : messageInitialSize
+
+          console.log(`[sync] sync sessionID=${sessionID.slice(0, 12)}… hasSession=${hasSession} hasMessages=${hasMessages} hydrated=${hydrated} cached=${count} hasParts=${hasParts} warm=${warm} limit=${limit}`)
+
           if (warm) {
             setMeta("limit", key, limit)
             setMeta("complete", key, count < messageInitialSize)
@@ -329,10 +327,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           more(sessionID: string) {
             const store = current()[0]
             const key = keyFor(sdk.directory, sessionID)
-            if (store.message[sessionID] === undefined) return false
-            if (meta.limit[key] === undefined) return false
-            if (meta.complete[key]) return false
-            return true
+            const hasMessages = store.message[sessionID] !== undefined
+            const hasLimit = meta.limit[key] !== undefined
+            const complete = meta.complete[key] ?? false
+            const result = hasMessages && hasLimit && !complete
+            console.log(`[sync] history.more sessionID=${sessionID.slice(0, 12)}… hasMessages=${hasMessages} hasLimit=${hasLimit} complete=${complete} → ${result}`)
+            return result
           },
           loading(sessionID: string) {
             const key = keyFor(sdk.directory, sessionID)
