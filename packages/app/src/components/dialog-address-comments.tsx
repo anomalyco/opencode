@@ -11,6 +11,7 @@ import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { resolveApiErrorMessage } from "@/utils/pr-errors"
 import type { ReviewThread } from "@opencode-ai/sdk/v2"
 
 export function AddressCommentsDialog() {
@@ -51,13 +52,8 @@ export function AddressCommentsDialog() {
         loading: false,
       })
     } catch (e: unknown) {
-      if (import.meta.env.DEV) {
-        console.error("Fetch comments error:", e)
-      }
-      const err = (e as { error?: { code?: string; message?: string } })?.error ?? e
-      const errObj = err as { code?: string; message?: string }
-      const msg = errObj?.message ?? errObj?.code ?? "Failed to fetch review comments"
-      setStore("error", String(msg))
+      if (import.meta.env.DEV) console.error("Fetch comments error:", e)
+      setStore("error", resolveApiErrorMessage(e, "Failed to fetch review comments", (k) => language.t(k as Parameters<typeof language.t>[0])))
       setStore("loading", false)
     }
   })
@@ -212,18 +208,29 @@ export function AddressCommentsDialog() {
                                       </span>
                                     )}
                                   </div>
-                                  <Show when={pr()?.number && github()?.repo}>
-                                    <a
-                                      href={`https://github.com/${github()!.repo!.owner}/${github()!.repo!.name}/pull/${pr()!.number}#discussion_r${comment().id}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      onClick={(e) => e.stopPropagation()}
-                                      class="text-icon-weak hover:text-text-strong transition-colors shrink-0 cursor-pointer"
-                                      title="View on GitHub"
-                                    >
-                                      <Icon name="square-arrow-top-right" size="small" />
-                                    </a>
-                                  </Show>
+                                  {(() => {
+                                    const g = github()
+                                    const p = pr()
+                                    const href = g?.repo && p?.number
+                                      ? `https://github.com/${g.repo.owner}/${g.repo.name}/pull/${p.number}#discussion_r${comment().id}`
+                                      : undefined
+                                    return (
+                                      <Show when={href}>
+                                        {(url) => (
+                                          <a
+                                            href={url()}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            onClick={(e) => e.stopPropagation()}
+                                            class="text-icon-weak hover:text-text-strong transition-colors shrink-0 cursor-pointer"
+                                            title="View on GitHub"
+                                          >
+                                            <Icon name="square-arrow-top-right" size="small" />
+                                          </a>
+                                        )}
+                                      </Show>
+                                    )
+                                  })()}
                                 </div>
                                 <p class="text-12-regular text-text-base m-0 whitespace-pre-wrap break-words line-clamp-4 leading-relaxed mt-0.5">
                                   {comment().body}
@@ -237,7 +244,9 @@ export function AddressCommentsDialog() {
                             <div class="flex items-center gap-1.5 mt-1.5">
                               <span class="text-11-medium text-text-weaker font-mono">↳</span>
                               <span class="text-11-medium text-text-weak">
-                                {replies().length} {replies().length === 1 ? "reply" : "replies"}
+                                {replies().length === 1
+                                  ? language.t("pr.comments.replies.one")
+                                  : language.t("pr.comments.replies.count", { count: String(replies().length) })}
                               </span>
                             </div>
                           </Show>

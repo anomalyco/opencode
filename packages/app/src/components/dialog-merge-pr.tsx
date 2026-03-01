@@ -10,6 +10,7 @@ import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { resolveApiErrorMessage } from "@/utils/pr-errors"
 
 type MergeStrategy = "squash" | "merge" | "rebase"
 
@@ -59,21 +60,8 @@ export function MergePrDialog() {
       })
       dialog.close()
     } catch (e: unknown) {
-      if (import.meta.env.DEV) {
-        console.error("PR merge error:", e)
-      }
-
-      let errorMsg: string
-      const err = (e as { error?: { code?: string; message?: string } })?.error ?? (e as { code?: string; message?: string })
-      if (err?.code) {
-        const errorKey = `pr.error.${err.code.toLowerCase()}`
-        const translated = language.t(errorKey as Parameters<typeof language.t>[0])
-        errorMsg = translated !== errorKey ? translated : err.message || "Failed to merge PR"
-      } else {
-        errorMsg = err?.message ?? (typeof err === "string" ? err : "Failed to merge PR")
-      }
-
-      setStore("error", errorMsg)
+      if (import.meta.env.DEV) console.error("PR merge error:", e)
+      setStore("error", resolveApiErrorMessage(e, "Failed to merge PR", (k) => language.t(k as Parameters<typeof language.t>[0])))
     } finally {
       setStore("submitting", false)
     }

@@ -40,6 +40,35 @@ export namespace PrComments {
     .meta({ ref: "PrCommentsResponse" })
   export type CommentsResponse = z.infer<typeof CommentsResponse>
 
+  interface GqlReviewThreadsResponse {
+    data?: {
+      repository?: {
+        pullRequest?: {
+          reviewThreads?: {
+            pageInfo?: { hasNextPage?: boolean; endCursor?: string }
+            nodes?: Array<{
+              id: string
+              isResolved: boolean
+              path: string
+              line: number | null
+              comments: {
+                nodes: Array<{
+                  databaseId: number
+                  author: { login: string }
+                  body: string
+                  path: string
+                  line: number | null
+                  diffHunk?: string
+                }>
+              }
+            }>
+          }
+        }
+      }
+    }
+    errors?: Array<{ message?: string }>
+  }
+
   function buildQuery(owner: string, name: string, prNumber: number, cursor: string | null): string {
     return `query($owner: String!, $name: String!, $prNumber: Int!, $cursor: String) { repository(owner: $owner, name: $name) { pullRequest(number: $prNumber) { reviewThreads(first: 100, after: $cursor) { pageInfo { hasNextPage endCursor } nodes { id isResolved path line comments(first: 50) { nodes { databaseId author { login } body path line: originalLine diffHunk } } } } } } }`
   }
@@ -104,37 +133,30 @@ export namespace PrComments {
         throw new PR.PrError("COMMENTS_FETCH_FAILED", "GitHub API returned invalid response")
       }
 
-      if (parsed.errors) {
-        const gqlErrors = parsed.errors as Array<{ message?: string }>
-        const msg = gqlErrors.map((e) => e.message).join("; ")
-        log.error("GraphQL errors", { errors: parsed.errors })
+      const response = parsed as GqlReviewThreadsResponse
+
+      if (response.errors) {
+        const msg = response.errors.map((e) => e.message).join("; ")
+        log.error("GraphQL errors", { errors: response.errors })
         throw new PR.PrError("COMMENTS_FETCH_FAILED", msg || "GraphQL query failed")
       }
 
-      const reviewThreads = (parsed.data as Record<string, unknown> | undefined)?.repository as
-        | Record<string, unknown>
-        | undefined
-      const prData = reviewThreads?.pullRequest as Record<string, unknown> | undefined
-      const threads = prData?.reviewThreads as
-        | { pageInfo?: { hasNextPage?: boolean; endCursor?: string }; nodes?: Array<Record<string, unknown>> }
-        | undefined
-
+      const threads = response.data?.repository?.pullRequest?.reviewThreads
       if (!threads) break
 
       for (const node of threads.nodes ?? []) {
-        const commentsNodes = (node.comments as { nodes?: Array<Record<string, unknown>> })?.nodes ?? []
         allThreads.push({
-          id: node.id as string,
-          isResolved: node.isResolved as boolean,
-          path: (node.path as string) ?? "",
-          line: node.line as number | null,
-          comments: commentsNodes.map((c) => ({
-            id: c.databaseId as number,
-            author: (c.author as { login?: string })?.login ?? "unknown",
-            body: (c.body as string) ?? "",
-            path: (c.path as string) ?? "",
-            line: (c.line as number | null) ?? null,
-            diffHunk: c.diffHunk as string | undefined,
+          id: node.id,
+          isResolved: node.isResolved,
+          path: node.path ?? "",
+          line: node.line,
+          comments: (node.comments.nodes ?? []).map((c) => ({
+            id: c.databaseId,
+            author: c.author?.login ?? "unknown",
+            body: c.body ?? "",
+            path: c.path ?? "",
+            line: c.line ?? null,
+            diffHunk: c.diffHunk,
           })),
         })
       }

@@ -11,6 +11,7 @@ import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { resolveApiErrorMessage } from "@/utils/pr-errors"
 
 export function CreatePrDialog() {
   const dialog = useDialog()
@@ -121,23 +122,8 @@ export function CreatePrDialog() {
       })
       dialog.close()
     } catch (e: unknown) {
-      if (import.meta.env.DEV) {
-        console.error("PR creation error:", e)
-      }
-
-      let errorMsg: string
-      const err =
-        (e as { error?: { code?: string; message?: string } })?.error ?? (e as { code?: string; message?: string })
-      if (err?.code) {
-        // Dynamic lookup: pr.error.gh_not_authenticated, pr.error.no_repo, etc.
-        const errorKey = `pr.error.${err.code.toLowerCase()}`
-        const translated = language.t(errorKey as Parameters<typeof language.t>[0])
-        errorMsg = translated !== errorKey ? translated : err.message || "Failed to create PR"
-      } else {
-        errorMsg = err?.message ?? (typeof err === "string" ? err : "Failed to create PR")
-      }
-
-      setStore("error", errorMsg)
+      if (import.meta.env.DEV) console.error("PR creation error:", e)
+      setStore("error", resolveApiErrorMessage(e, "Failed to create PR", (k) => language.t(k as Parameters<typeof language.t>[0])))
     } finally {
       setStore("submitting", false)
     }

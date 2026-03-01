@@ -141,8 +141,7 @@ export const VcsRoutes = lazy(() =>
           if (e instanceof PR.PrError) {
             return c.json({ code: e.code, message: e.message }, { status: 400 })
           }
-          const message = e instanceof Error ? e.message : String(e)
-          return c.json({ code: "COMMENTS_FETCH_FAILED", message }, { status: 400 })
+          throw e
         }
       },
     )
@@ -234,8 +233,11 @@ export const VcsRoutes = lazy(() =>
           const input = c.req.valid("json")
           await Vcs.commit(input.message)
           return c.json({ ok: true })
-        } catch (e: any) {
-          return c.json({ code: "COMMIT_FAILED", message: e?.message ?? "Commit failed" }, { status: 400 })
+        } catch (e) {
+          if (e instanceof Error) {
+            return c.json({ code: "COMMIT_FAILED", message: e.message }, { status: 400 })
+          }
+          throw e
         }
       },
     ),

@@ -128,6 +128,8 @@ export const dict = {
   "pr.comments.instructions": "Additional instructions",
   "pr.comments.instructions.placeholder": "Any additional instructions for the agent...",
   "pr.comments.submit": "Prefill Prompt",
+  "pr.comments.replies.one": "1 reply",
+  "pr.comments.replies.count": "{{count}} replies",
   "pr.comments.select.all": "Select all",
   "pr.comments.select.none": "Deselect all",
   "pr.toast.copied": "PR link copied",

@@ -132,7 +132,9 @@ export function PrButton() {
           description: p.url,
         })
       })
-      .catch(() => {})
+      .catch(() => {
+        // Clipboard write can fail in non-secure contexts; not actionable
+      })
   }
 
   const viewCI = () => {

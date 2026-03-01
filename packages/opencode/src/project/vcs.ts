@@ -97,13 +97,12 @@ export namespace Vcs {
       .nothrow()
       .cwd(cwd)
       .catch((e) => ({ exitCode: 1, stdout: Buffer.from(""), stderr: Buffer.from(String(e)) }))
-    const authText =
-      typeof authCmd === "string" ? authCmd : (authCmd.stdout?.toString() ?? "") + (authCmd.stderr?.toString() ?? "")
+    const authText = (authCmd.stdout?.toString() ?? "") + (authCmd.stderr?.toString() ?? "")
     const available = !authText.includes("not found") && !authText.includes("command not found")
     if (!available) {
       return { available: false, authenticated: false }
     }
-    const authenticated = authText.includes("Logged in") || (typeof authCmd !== "string" && authCmd.exitCode === 0)
+    const authenticated = authText.includes("Logged in") || authCmd.exitCode === 0
     if (!authenticated) {
       return { available: true, authenticated: false }
     }
@@ -178,123 +177,6 @@ export namespace Vcs {
     return branches
   }
 
-  async function fetchUnresolvedCommentCount(
-    owner: string,
-    name: string,
-    prNumber: number,
-  ): Promise<number | undefined> {
-    const cwd = Instance.worktree
-    const query = `query($owner: String!, $name: String!, $prNumber: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $prNumber) { reviewThreads(first: 100) { nodes { isResolved } } } } }`
-    const result = await $`gh api graphql -f query=${query} -f owner=${owner} -f name=${name} -F prNumber=${prNumber}`
-      .quiet()
-      .nothrow()
-      .cwd(cwd)
-      .text()
-      .catch(() => "")
-    try {
-      const parsed = JSON.parse(result)
-      const threads = parsed?.data?.repository?.pullRequest?.reviewThreads?.nodes
-      if (!Array.isArray(threads)) return undefined
-      return threads.filter((t: { isResolved: boolean }) => !t.isResolved).length
-    } catch {
-      return undefined
-    }
-  }
-
-  export async function fetchPrForBranch(repo?: { owner: string; name: string }): Promise<PrInfo | undefined> {
-    const cwd = Instance.worktree
-    const result =
-      await $`gh pr view --json number,url,title,state,headRefName,baseRefName,isDraft,mergeable,reviewDecision,statusCheckRollup`
-        .quiet()
-        .nothrow()
-        .cwd(cwd)
-        .text()
-        .catch(() => "")
-    if (!result.trim() || result.includes("no pull requests found")) {
-      return undefined
-    }
-    try {
-      const parsed = JSON.parse(result)
-      if (!parsed.number) return undefined
-
-      let checksState: "SUCCESS" | "FAILURE" | "PENDING" | null = null
-      let checksUrl: string | undefined
-      let checksSummary: { total: number; passed: number; failed: number; pending: number; skipped: number } | undefined
-      if (parsed.statusCheckRollup && Array.isArray(parsed.statusCheckRollup)) {
-        const checks = parsed.statusCheckRollup as Array<{
-          __typename?: string
-          conclusion?: string
-          status?: string
-          state?: string
-          detailsUrl?: string
-        }>
-        if (checks.length > 0) {
-          checksUrl = parsed.url ? `${parsed.url}/checks` : checks[0]?.detailsUrl?.replace(/\/runs\/.*/, "")
-          // StatusContext entries (e.g. CodeRabbit) use `state` instead of `conclusion`/`status`
-          const isSuccess = (c: (typeof checks)[0]) =>
-            c.conclusion === "SUCCESS" || c.conclusion === "success" || c.state === "SUCCESS" || c.state === "success"
-          const isFailure = (c: (typeof checks)[0]) =>
-            c.conclusion === "FAILURE" ||
-            c.conclusion === "failure" ||
-            c.state === "FAILURE" ||
-            c.state === "failure" ||
-            c.state === "ERROR" ||
-            c.state === "error"
-          const isSkipped = (c: (typeof checks)[0]) =>
-            c.conclusion === "SKIPPED" ||
-            c.conclusion === "skipped" ||
-            c.conclusion === "NEUTRAL" ||
-            c.conclusion === "neutral"
-          const failed = checks.filter(isFailure).length
-          const passed = checks.filter(isSuccess).length
-          const skipped = checks.filter(isSkipped).length
-          const total = checks.length
-          const pending = total - passed - failed - skipped
-          checksSummary = { total, passed, failed, pending, skipped }
-          if (failed > 0) checksState = "FAILURE"
-          else if (pending === 0) checksState = "SUCCESS"
-          else checksState = "PENDING"
-        }
-      }
-
-      const stateMap: Record<string, "OPEN" | "CLOSED" | "MERGED"> = {
-        OPEN: "OPEN",
-        CLOSED: "CLOSED",
-        MERGED: "MERGED",
-      }
-
-      const mergeableMap: Record<string, "MERGEABLE" | "CONFLICTING" | "UNKNOWN"> = {
-        MERGEABLE: "MERGEABLE",
-        CONFLICTING: "CONFLICTING",
-        UNKNOWN: "UNKNOWN",
-      }
-
-      const pr: PrInfo = {
-        number: parsed.number,
-        url: parsed.url,
-        title: parsed.title,
-        state: stateMap[parsed.state] ?? "OPEN",
-        headRefName: parsed.headRefName,
-        baseRefName: parsed.baseRefName,
-        isDraft: parsed.isDraft ?? false,
-        mergeable: mergeableMap[parsed.mergeable] ?? "UNKNOWN",
-        reviewDecision: parsed.reviewDecision || null,
-        checksState,
-        checksUrl,
-        checksSummary,
-      }
-
-      // Fetch unresolved comment count via lightweight GraphQL query
-      if (repo) {
-        pr.unresolvedCommentCount = await fetchUnresolvedCommentCount(repo.owner, repo.name, pr.number)
-      }
-
-      return pr
-    } catch {
-      return undefined
-    }
-  }
-
   async function fetchDirtyCount(): Promise<number> {
     const cwd = Instance.worktree
     const result = await $`git status --porcelain`
@@ -320,7 +202,9 @@ export namespace Vcs {
 
     let pr: PrInfo | undefined
     if (github.authenticated) {
-      pr = await fetchPrForBranch(github.repo)
+      // Dynamic import to avoid circular dependency (pr.ts → vcs.ts)
+      const { PR } = await import("./pr")
+      pr = await PR.fetchForBranch(github.repo)
     }
 
     return {
