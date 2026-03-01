@@ -269,7 +269,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           const directory = sdk.directory
           const client = sdk.client
           const [store, setStore] = globalSync.child(directory)
-          const key = keyFor(directory, sessionID)
           const existing = store.todo[sessionID]
           const cached = globalSync.data.session_todo[sessionID]
           if (existing !== undefined) {
@@ -283,6 +282,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             setStore("todo", sessionID, reconcile(cached, { key: "id" }))
           }
 
+          const key = keyFor(directory, sessionID)
           return runInflight(inflightTodo, key, () =>
             retry(() => client.session.todo({ sessionID })).then((todo) => {
               const list = todo.data ?? []

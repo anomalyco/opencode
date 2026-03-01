@@ -109,6 +109,7 @@ function createTimelineStaging(input: TimelineStageInput) {
 
   const stagedCount = createMemo(() => {
     const total = input.messages().length
+    if (input.turnStart() <= 0) return total
     if (state.completedSession === input.sessionKey()) return total
     const init = Math.min(total, input.config.init)
     if (state.count <= init) return init
@@ -132,17 +133,16 @@ function createTimelineStaging(input: TimelineStageInput) {
 
   createEffect(
     on(
-      () => [input.sessionKey(), input.turnStart() > 0] as const,
-      ([sessionKey, isWindowed]) => {
+      () => [input.sessionKey(), input.turnStart() > 0, input.messages().length] as const,
+      ([sessionKey, isWindowed, total]) => {
         cancel()
-        const total = input.messages().length
         const shouldStage =
           isWindowed &&
           total > input.config.init &&
           state.completedSession !== sessionKey &&
           state.activeSession !== sessionKey
         if (!shouldStage) {
-          setState("count", total)
+          setState({ activeSession: "", count: total })
           return
         }
 
@@ -158,7 +158,7 @@ function createTimelineStaging(input: TimelineStageInput) {
           count = Math.min(currentTotal, count + input.config.batch)
           startTransition(() => setState("count", count))
           if (count >= currentTotal) {
-            setState("completedSession", sessionKey)
+            setState({ completedSession: sessionKey, activeSession: "" })
             frame = undefined
             return
           }
