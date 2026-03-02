@@ -53,27 +53,36 @@ import { ToolStatusTitle } from "./tool-status-title"
 import { animate } from "motion"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
-  let ref: HTMLSpanElement | undefined
   let widthRef: HTMLSpanElement | undefined
+  let valueRef: HTMLSpanElement | undefined
 
   onMount(() => {
-    if (!props.animate) {
-      ref?.setAttribute("data-visible", "")
-      return
-    }
+    if (!props.animate) return
     requestAnimationFrame(() => {
-      ref?.setAttribute("data-visible", "")
       if (widthRef) {
         animate(widthRef, { width: "auto" }, { type: "spring", visualDuration: 0.25, bounce: 0 })
+      }
+      if (valueRef) {
+        animate(valueRef, { opacity: 1, filter: "blur(0px)" }, { duration: 0.32, ease: [0.16, 1, 0.3, 1] })
       }
     })
   })
 
   return (
-    <span ref={ref} data-component="shell-submessage">
-      <span ref={widthRef} data-slot="shell-submessage-width" style={{ width: props.animate ? "0px" : undefined }}>
+    <span data-component="shell-submessage">
+      <span
+        ref={widthRef}
+        data-slot="shell-submessage-width"
+        style={{ width: props.animate ? "0px" : undefined }}
+      >
         <span data-slot="basic-tool-tool-subtitle">
-          <span data-slot="shell-submessage-value">{props.text}</span>
+          <span
+            ref={valueRef}
+            data-slot="shell-submessage-value"
+            style={props.animate ? { opacity: 0, filter: "blur(2px)" } : undefined}
+          >
+            {props.text}
+          </span>
         </span>
       </span>
     </span>
@@ -692,9 +701,7 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
                         <div data-slot="basic-tool-tool-info-structured">
                           <div data-slot="basic-tool-tool-info-main">
                             <span data-slot="basic-tool-tool-title">
-                              <Show when={running} fallback={trigger.title}>
-                                <TextShimmer text={trigger.title} active />
-                              </Show>
+                              <TextShimmer text={trigger.title} active={running} />
                             </span>
                             <Show when={!running && trigger.subtitle}>
                               <span data-slot="basic-tool-tool-subtitle">{trigger.subtitle}</span>
@@ -1331,9 +1338,7 @@ ToolRegistry.register({
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
               <span data-slot="basic-tool-tool-title">
-                <Show when={pending()} fallback={i18n.t("ui.tool.webfetch")}>
-                  <TextShimmer text={i18n.t("ui.tool.webfetch")} />
-                </Show>
+                <TextShimmer text={i18n.t("ui.tool.webfetch")} active={pending()} />
               </span>
               <Show when={!pending() && url()}>
                 <a
@@ -1473,9 +1478,7 @@ ToolRegistry.register({
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
               <span data-slot="basic-tool-tool-title">
-                <Show when={pending()} fallback={i18n.t("ui.tool.shell")}>
-                  <TextShimmer text={i18n.t("ui.tool.shell")} active />
-                </Show>
+                <TextShimmer text={i18n.t("ui.tool.shell")} active={pending()} />
               </span>
               <Show when={!pending() && props.input.description}>
                 <ShellSubmessage text={props.input.description} animate={sawPending} />
@@ -1532,9 +1535,7 @@ ToolRegistry.register({
               <div data-slot="message-part-title-area">
                 <div data-slot="message-part-title">
                   <span data-slot="message-part-title-text">
-                    <Show when={pending()} fallback={i18n.t("ui.messagePart.title.edit")}>
-                      <TextShimmer text={i18n.t("ui.messagePart.title.edit")} />
-                    </Show>
+                    <TextShimmer text={i18n.t("ui.messagePart.title.edit")} active={pending()} />
                   </span>
                   <Show when={!pending()}>
                     <span data-slot="message-part-title-filename">{filename()}</span>
@@ -1604,9 +1605,7 @@ ToolRegistry.register({
               <div data-slot="message-part-title-area">
                 <div data-slot="message-part-title">
                   <span data-slot="message-part-title-text">
-                    <Show when={pending()} fallback={i18n.t("ui.messagePart.title.write")}>
-                      <TextShimmer text={i18n.t("ui.messagePart.title.write")} />
-                    </Show>
+                    <TextShimmer text={i18n.t("ui.messagePart.title.write")} active={pending()} />
                   </span>
                   <Show when={!pending()}>
                     <span data-slot="message-part-title-filename">{filename()}</span>

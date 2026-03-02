@@ -17,20 +17,4 @@
   vertical-align: baseline;
   min-width: 0;
   white-space: nowrap;
-  opacity: 0;
-  filter: blur(2px);
-  transition-property: opacity, filter;
-  transition-duration: 320ms;
-  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-[data-component="shell-submessage"][data-visible] [data-slot="shell-submessage-value"] {
-  opacity: 1;
-  filter: blur(0px);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  [data-component="shell-submessage"] [data-slot="shell-submessage-value"] {
-    transition-duration: 0ms;
-  }
 }
