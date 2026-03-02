@@ -678,6 +678,11 @@ Cloudflare AI Gateway lets you access models from OpenAI, Anthropic, Workers AI,
 
 ### GitLab Duo
 
+:::caution[Experimental]
+GitLab Duo support in OpenCode is experimental. Features, configuration, and
+behavior may change in future releases.
+:::
+
 OpenCode integrates with the [GitLab Duo Agent Platform](https://docs.gitlab.com/user/duo_agent_platform/),
 providing AI-powered agentic chat with native tool calling capabilities.
 
@@ -797,7 +802,7 @@ Then expose application ID as environment variable:
 export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 ```
 
-More documentation on [opencode-gitlab-auth](https://www.npmjs.com/package/@gitlab/opencode-gitlab-auth) homepage.
+More documentation on [opencode-gitlab-auth](https://www.npmjs.com/package/opencode-gitlab-auth) homepage.
 
 ##### Configuration
 
@@ -818,11 +823,6 @@ Customize through `opencode.json`:
 
 ##### GitLab Duo Agent Platform (DAP) Workflow Models
 
-:::caution[Experimental]
-GitLab Duo Agent Platform (DAP) workflow models are an experimental feature.
-The API surface and behavior may change in future releases.
-:::
-
 DAP workflow models provide an alternative execution path that routes tool calls
 through GitLab's Duo Workflow Service (DWS) instead of the standard agentic chat.
 When a `duo-workflow-*` model is selected, OpenCode will:
@@ -842,7 +842,7 @@ To access GitLab tools (merge requests, issues, pipelines, CI/CD, etc.):
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["@gitlab/opencode-gitlab-plugin"]
+  "plugin": ["opencode-gitlab-plugin"]
 }
 ```
 
