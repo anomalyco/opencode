@@ -1258,8 +1258,16 @@ export default function Layout(props: ParentProps) {
     }
   }
 
-  const deleteWorkspace = async (root: string, directory: string) => {
+  const deleteWorkspace = async (root: string, directory: string, leaveDeletedWorkspace = false) => {
     if (directory === root) return
+
+    const current = currentDir()
+    const currentKey = workspaceKey(current)
+    const deletedKey = workspaceKey(directory)
+    const shouldLeave = leaveDeletedWorkspace || (!!params.dir && currentKey === deletedKey)
+    if (!leaveDeletedWorkspace && shouldLeave) {
+      navigateWithSidebarReset(`/${base64Encode(root)}/session`)
+    }
 
     setBusy(directory, true)
 
@@ -1295,21 +1303,17 @@ export default function Layout(props: ParentProps) {
     layout.projects.close(directory)
     layout.projects.open(root)
 
-    const current = currentDir()
-    const currentKey = workspaceKey(current)
-    const deletedKey = workspaceKey(directory)
-    if (params.dir && currentKey === deletedKey) {
-      navigateWithSidebarReset(`/${base64Encode(root)}/session`)
-      return
-    }
+    if (shouldLeave) return
 
+    const nextCurrent = currentDir()
+    const nextKey = workspaceKey(nextCurrent)
     const project = layout.projects.list().find((item) => item.worktree === root)
     const dirs = project
       ? effectiveWorkspaceOrder(root, [root, ...(project.sandboxes ?? [])], store.workspaceOrder[root])
       : [root]
-    const valid = dirs.some((item) => workspaceKey(item) === currentKey)
+    const valid = dirs.some((item) => workspaceKey(item) === nextKey)
 
-    if (params.dir && projectRoot(current) === root && !valid) {
+    if (params.dir && projectRoot(nextCurrent) === root && !valid) {
       navigateWithSidebarReset(`/${base64Encode(root)}/session`)
     }
   }
@@ -1413,8 +1417,12 @@ export default function Layout(props: ParentProps) {
     })
 
     const handleDelete = () => {
+      const leaveDeletedWorkspace = !!params.dir && workspaceKey(currentDir()) === workspaceKey(props.directory)
+      if (leaveDeletedWorkspace) {
+        navigateWithSidebarReset(`/${base64Encode(props.root)}/session`)
+      }
       dialog.close()
-      void deleteWorkspace(props.root, props.directory)
+      void deleteWorkspace(props.root, props.directory, leaveDeletedWorkspace)
     }
 
     const description = () => {
