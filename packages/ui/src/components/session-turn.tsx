@@ -1,10 +1,11 @@
 import {
   AssistantMessage,
   FilePart,
-  Message as MessageType,
-  Part as PartType,
   type PermissionRequest,
   type QuestionRequest,
+  type SessionStatus,
+  Message as MessageType,
+  Part as PartType,
   TextPart,
   ToolPart,
 } from "@opencode-ai/sdk/v2/client"
@@ -192,6 +193,12 @@ export function SessionTurn(
     stepsExpanded?: boolean
     onStepsExpandedToggle?: () => void
     onUserInteracted?: () => void
+    showReasoningSummaries?: boolean
+    shellToolDefaultOpen?: boolean
+    editToolDefaultOpen?: boolean
+    active?: boolean
+    queued?: boolean
+    status?: SessionStatus
     classes?: {
       root?: string
       content?: string
@@ -249,6 +256,43 @@ export function SessionTurn(
   })
 
   const isLastUserMessage = createMemo(() => props.messageID === lastUserMessageID())
+
+  const pending = createMemo(() => {
+    if (typeof props.active === "boolean" && typeof props.queued === "boolean") return
+
+    const messages = allMessages() ?? emptyMessages
+    return messages.findLast(
+      (item): item is AssistantMessage => item.role === "assistant" && typeof item.time.completed !== "number",
+    )
+  })
+
+  const pendingUser = createMemo(() => {
+    const item = pending()
+    if (!item?.parentID) return
+
+    const messages = allMessages() ?? emptyMessages
+    const result = Binary.search(messages, item.parentID, (m) => m.id)
+    const msg = result.found ? messages[result.index] : messages.find((m) => m.id === item.parentID)
+    if (!msg || msg.role !== "user") return
+    return msg
+  })
+
+  const isActive = createMemo(() => {
+    if (typeof props.active === "boolean") return props.active
+    const msg = message()
+    const parent = pendingUser()
+    if (!msg || !parent) return false
+    return parent.id === msg.id
+  })
+
+  const isQueued = createMemo(() => {
+    if (typeof props.queued === "boolean") return props.queued
+    const id = message()?.id
+    if (!id) return false
+    const item = pending()
+    if (!item || !pendingUser()) return false
+    return id > item.id
+  })
 
   const parts = createMemo(() => {
     const msg = message()
@@ -438,11 +482,15 @@ export function SessionTurn(
     return computeStatusFromPart(last, i18n.t)
   })
 
-  const status = createMemo(() => data.store.session_status[props.sessionID] ?? idle)
-  const working = createMemo(() => status().type !== "idle" && isLastUserMessage())
+  const status = createMemo(() => {
+    if (props.status !== undefined) return props.status
+    if (typeof props.active === "boolean" && !isActive()) return idle
+    return data.store.session_status[props.sessionID] ?? idle
+  })
+  const working = createMemo(() => status().type !== "idle" && isActive() && !isQueued())
   const retry = createMemo(() => {
-    // session_status is session-scoped; only show retry on the active (last) turn
-    if (!isLastUserMessage()) return
+    // session_status is session-scoped; only show retry on the active turn
+    if (!isActive()) return
     const s = status()
     if (s.type !== "retry") return
     return s
@@ -521,7 +569,7 @@ export function SessionTurn(
     status: rawStatus(),
     duration: duration(),
     userMessageHovered: false,
-    showReasoning: false,
+    showReasoning: props.showReasoningSummaries ?? true,
   })
 
   createEffect(() => {
