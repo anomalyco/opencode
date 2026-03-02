@@ -547,7 +547,7 @@ export namespace Provider {
       if (!apiToken) {
         throw new Error(
           "CLOUDFLARE_API_TOKEN (or CF_AIG_TOKEN) is required for Cloudflare AI Gateway. " +
-            "Set it via environment variable or run `opencode auth cloudflare-ai-gateway`.",
+          "Set it via environment variable or run `opencode auth cloudflare-ai-gateway`.",
         )
       }
 
@@ -586,6 +586,61 @@ export namespace Provider {
             "X-Title": "opencode",
           },
         },
+      }
+    },
+    lmstudio: async (provider) => {
+      const auth = await Auth.get("lmstudio")
+      const baseURL =
+        (auth?.type === "api" ? auth.baseURL : undefined) ?? "http://127.0.0.1:1234/v1"
+      const apiKey = auth?.type === "api" ? auth.key : undefined
+
+      try {
+        const response = await fetch(`${baseURL}/models`, {
+          headers: apiKey && apiKey !== "sk-nothing" ? { Authorization: `Bearer ${apiKey}` } : {},
+          signal: AbortSignal.timeout(2000),
+        })
+        if (response.ok) {
+          const json = (await response.json()) as { data: { id: string }[] }
+          if (Array.isArray(json.data)) {
+            for (const m of json.data) {
+              if (!provider.models[m.id]) {
+                provider.models[m.id] = {
+                  id: m.id,
+                  name: `${m.id} (local)`,
+                  providerID: "lmstudio",
+                  api: {
+                    id: m.id,
+                    url: baseURL,
+                    npm: "@ai-sdk/openai-compatible",
+                  },
+                  capabilities: {
+                    temperature: true,
+                    reasoning: false,
+                    attachment: true,
+                    toolcall: true,
+                    input: { text: true, audio: false, image: true, video: false, pdf: false },
+                    output: { text: true, audio: false, image: false, video: false, pdf: false },
+                    interleaved: false,
+                  },
+                  cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+                  limit: { context: 32000, output: 4096 },
+                  headers: {},
+                  options: {},
+                  release_date: "",
+                  status: "active",
+                  family: "",
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {
+        log.error("Failed to discover LM Studio models", { error: e })
+      }
+
+      return {
+        autoload: !!auth,
+        options: { baseURL, apiKey },
       }
     },
   }
@@ -699,13 +754,13 @@ export namespace Provider {
         },
         experimentalOver200K: model.cost?.context_over_200k
           ? {
-              cache: {
-                read: model.cost.context_over_200k.cache_read ?? 0,
-                write: model.cost.context_over_200k.cache_write ?? 0,
-              },
-              input: model.cost.context_over_200k.input,
-              output: model.cost.context_over_200k.output,
-            }
+            cache: {
+              read: model.cost.context_over_200k.cache_read ?? 0,
+              write: model.cost.context_over_200k.cache_write ?? 0,
+            },
+            input: model.cost.context_over_200k.input,
+            output: model.cost.context_over_200k.output,
+          }
           : undefined,
       },
       limit: {
