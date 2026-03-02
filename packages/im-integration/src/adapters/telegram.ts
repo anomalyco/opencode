@@ -22,22 +22,34 @@ export class TelegramAdapter implements IMAdapter {
   private commandHandlers = new Map<string, CommandHandler>()
 
   constructor(private config: TelegramConfig) {
+    console.log("🤖 Creating Telegram bot with token:", config.token?.substring(0, 10) + "...")
     this.bot = new TelegramBot(config.token, { polling: true })
+    console.log("🤖 Telegram bot created, waiting for initialization...")
+
+    this.bot.on("polling_error", (error) => {
+      console.error("🤖 Telegram polling error:", error.message)
+    })
   }
 
   async initialize(): Promise<void> {
+    console.log("🤖 Setting up Telegram bot commands...")
     await this.bot.setMyCommands([
       { command: "switch_project", description: "切换到指定项目" },
       { command: "list_projects", description: "列出所有项目" },
+      { command: "new_project", description: "添加新项目" },
+      { command: "list_directories", description: "列出可用目录" },
+      { command: "reset_session", description: "重置当前会话" },
       { command: "session_info", description: "显示当前会话信息" },
       { command: "help", description: "显示帮助" },
     ])
+    console.log("🤖 Telegram commands set up")
 
     this.bot.on("message", this.handleMessage.bind(this))
     this.bot.on("callback_query", this.handleCallbackQuery.bind(this))
   }
 
   async start(): Promise<void> {
+    console.log("🤖 Telegram adapter start() called")
     console.log(`✅ ${this.name} adapter started`)
   }
 
@@ -151,8 +163,12 @@ export class TelegramAdapter implements IMAdapter {
   }
 
   private async handleMessage(msg: TelegramBot.Message): Promise<void> {
+    console.log("📩 Telegram message received:", msg.text, "from:", msg.from?.id, "chat:", msg.chat.id)
+    console.log("📩 Has photo:", !!msg.photo, "document:", !!msg.document)
+
     if (msg.text?.startsWith("/")) {
       const [command, ...args] = msg.text.split(" ")
+      console.log("📩 Command:", command, "args:", args)
       const handler = this.commandHandlers.get(command)
       if (handler) {
         await handler(msg.chat.id.toString(), args, msg)
@@ -167,7 +183,12 @@ export class TelegramAdapter implements IMAdapter {
           chatId: msg.chat.id.toString(),
           text: msg.text || "",
           userId: msg.from?.id.toString(),
-          metadata: msg,
+          photo: msg.photo,
+          document: msg.document,
+          audio: msg.audio,
+          video: msg.video,
+          voice: msg.voice,
+          video_note: msg.video_note,
         })
       }
       return

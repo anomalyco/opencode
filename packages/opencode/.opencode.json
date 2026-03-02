@@ -1,0 +1,17 @@
+{
+  "im": {
+    "type": "telegram",
+    "token": "8793755980:AAFkWAURpJb4hc_D8X40v_ZNXyqVetyjiR0",
+    "maxFileSize": 20971520,
+    "allowedTypes": ["image/*", "application/pdf", "text/*"],
+    "storagePath": "~/.opencode/im-media",
+    "cleanupDays": 15,
+    "allowedUsers": [6773967008]
+  },
+  "projects": {},
+  "providers": {
+    "z-ai": {
+      "apiKey": "YOUR_Z_AI_API_KEY"
+    }
+  }
+}

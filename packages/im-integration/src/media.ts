@@ -12,7 +12,7 @@ export interface MediaInfo {
 export class MediaHandler {
   constructor(
     private adapter: any,
-    private opencode: any,
+    private client: any,
     private sessionManager: any,
     private config: any,
   ) {
@@ -26,7 +26,8 @@ export class MediaHandler {
   }
 
   async handleMedia(msg: any): Promise<void> {
-    const chatId = msg.chat.id
+    const chatId = msg.chatId || msg.chat?.id
+    console.log("📎 [Media] chatId:", chatId, "msg:", JSON.stringify(msg).substring(0, 100))
 
     const mediaInfo = this.extractMediaInfo(msg)
     if (!mediaInfo) return
@@ -48,15 +49,22 @@ export class MediaHandler {
     }
 
     try {
+      console.log("📎 [Media] 开始处理媒体文件...")
       const fileBuffer = await this.downloadFile(mediaInfo)
+      console.log("📎 [Media] 文件下载完成，大小:", fileBuffer.length)
 
       const saved = await this.storage.saveFile(mediaInfo.fileId, mediaInfo.mimeType, fileBuffer)
+      console.log("📎 [Media] 文件保存完成，路径:", saved.path)
 
       await this.sendToOpencode(chatId, mediaInfo, saved.path)
+      console.log("📎 [Media] 发送到 opencode 完成")
 
       this.sessionManager.incrementMediaCount(chatId)
     } catch (error) {
+      console.log("📎 [Media] 错误:", (error as Error).message)
       await this.adapter.sendMessage(chatId, `❌ 处理文件失败: ${(error as Error).message}`)
+    } finally {
+      console.log("📎 [Media] 处理完成，发送结束标记")
     }
   }
 
@@ -135,32 +143,102 @@ export class MediaHandler {
   }
 
   private async sendToOpencode(chatId: string, info: MediaInfo, localPath: string): Promise<void> {
+    console.log("📎 [Media] 获取 session...")
     const session = await this.sessionManager.getOrCreateSession(chatId)
+    console.log("📎 [Media] Session ID:", session.sessionId)
 
-    const opencodeType = info.type === "photo" ? "image" : "file"
+    // 根据文件类型选择合适的模型
+    let modelConfig = undefined
+    if (info.type === "photo") {
+      modelConfig = {
+        providerID: "zai-coding-plan",
+        modelID: "glm-4.6v",
+      }
+      console.log("📎 [Media] 使用图片模型: zai-coding-plan/glm-4.6v")
+    } else if (info.type === "document") {
+      modelConfig = {
+        providerID: "opencode",
+        modelID: "minimax-m2.5-free",
+      }
+      console.log("📎 [Media] 使用文档模型: opencode/minimax-m2.5-free")
+    }
 
     const text = this.formatDescription(info)
+    console.log("📎 [Media] 发送 prompt，文本:", text.substring(0, 50), "文件:", localPath)
 
-    const result = await this.opencode.client.session.prompt({
-      path: { id: session.sessionId },
-      body: {
+    let result: any = null
+    let useFallback = false
+
+    const timeout = 60000 // 60 秒超时
+
+    const promptWithTimeout = async (body: any) => {
+      return Promise.race([
+        this.client.session.prompt({
+          path: { id: session.sessionId },
+          body,
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("处理超时，请稍后重试")), timeout)),
+      ]).catch((error) => {
+        console.log("📎 [Media] 调用失败或超时:", error.message)
+        return { error: { message: error.message } }
+      })
+    }
+
+    // 先尝试使用指定模型
+    try {
+      result = await promptWithTimeout({
+        model: modelConfig,
         parts: [
           { type: "text", text },
           {
-            type: opencodeType,
+            type: "file",
             url: `file://${localPath}`,
             mime: info.mimeType,
-            filename: info.filename,
+            filename: info.filename || "image.jpg",
           },
         ],
-      },
-    })
+      })
 
-    if (result.error) {
+      console.log("📎 [Media] 指定模型 result:", JSON.stringify(result).substring(0, 200))
+
+      if (result.error) {
+        console.log("📎 [Media] 指定模型失败，尝试回退")
+        useFallback = true
+      }
+    } catch (err) {
+      console.log("📎 [Media] 指定模型调用异常:", (err as Error).message)
+      useFallback = true
+    }
+
+    // 回退：使用默认模型
+    if (useFallback || !result?.data) {
+      console.log("📎 [Media] 使用默认模型...")
+      try {
+        result = await promptWithTimeout({
+          parts: [
+            { type: "text", text },
+            {
+              type: "file",
+              url: `file://${localPath}`,
+              mime: info.mimeType,
+              filename: info.filename || "image.jpg",
+            },
+          ],
+        })
+        console.log("📎 [Media] 默认模型 result:", JSON.stringify(result).substring(0, 200))
+      } catch (err) {
+        console.log("📎 [Media] 默认模型也失败:", (err as Error).message)
+        throw new Error("图片处理失败，请稍后重试")
+      }
+    }
+
+    if (result.error && result.error.message) {
       throw new Error(result.error.message)
     }
 
+    console.log("📎 [Media] 发送响应到 Telegram...")
     await this.sendResponse(chatId, result.data)
+    console.log("📎 [Media] 响应发送完成")
   }
 
   private formatDescription(info: MediaInfo): string {
@@ -176,19 +254,35 @@ export class MediaHandler {
     const size = (info.fileSize / 1024 / 1024).toFixed(2)
     const name = info.filename || `${info.type}`
 
-    return `${emoji[info.type]} 用户发送了: ${name} (${size} MB)`
+    if (info.type === "photo") {
+      return `用户发送了一张图片 "${name}" (${size} MB)。请分析这张图片并描述你看到的内容。`
+    }
+    return `${emoji[info.type]} 用户发送了文件: ${name} (${size} MB)`
   }
 
   private async sendResponse(chatId: string, data: any): Promise<void> {
+    console.log("📎 [Media] sendResponse 收到的 data:", data ? JSON.stringify(data).substring(0, 300) : "undefined")
+
+    if (!data) {
+      await this.adapter.sendMessage(chatId, "✅ 图片已收到并分析完成")
+      return
+    }
+
     const textParts = data.parts?.filter((p: any) => p.type === "text") || []
     const mediaParts = data.parts?.filter((p: any) => p.type === "file" || p.type === "image") || []
 
+    let hasContent = false
+
     if (textParts.length > 0) {
       const text = textParts.map((p: any) => p.text).join("\n")
-      await this.adapter.sendMessage(chatId, text)
+      if (text.trim()) {
+        await this.adapter.sendMessage(chatId, text)
+        hasContent = true
+      }
     }
 
     for (const part of mediaParts) {
+      hasContent = true
       if (part.type === "image") {
         if (part.url?.startsWith("file://")) {
           const filePath = part.url.slice(7)
@@ -204,6 +298,11 @@ export class MediaHandler {
           await this.adapter.sendDocument(chatId, part.url, { caption: part.filename })
         }
       }
+    }
+
+    if (!hasContent) {
+      console.log("📎 [Media] 没有收到内容，发送默认结束消息")
+      await this.adapter.sendMessage(chatId, "✅ 图片已收到并分析完成")
     }
   }
 }

@@ -4,19 +4,24 @@
   "type": "module",
   "license": "MIT",
   "exports": {
-    "./*": "./src/*.ts"
+    "./manager": "./src/manager.ts",
+    "./adapter": "./src/adapter.ts"
   },
   "scripts": {
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@opencode-ai/sdk": "workspace:*",
     "node-telegram-bot-api": "^0.66.0",
     "@slack/bolt": "^3.17.1"
   },
+  "peerDependencies": {
+    "@opencode-ai/sdk": "^1.0.0"
+  },
   "devDependencies": {
     "@types/node": "catalog:",
     "typescript": "catalog:",
-    "@tsconfig/bun": "catalog:"
+    "@tsconfig/bun": "catalog:",
+    "@opencode-ai/script": "workspace:*"
   }
 }

@@ -31,7 +31,8 @@ export async function createOpencodeServer(options?: ServerOptions) {
   const args = [`serve`, `--hostname=${options.hostname}`, `--port=${options.port}`]
   if (options.config?.logLevel) args.push(`--log-level=${options.config.logLevel}`)
 
-  const proc = spawn(`opencode`, args, {
+  const opencodeBin = process.env.OPENCODE_BIN || "opencode"
+  const proc = spawn(opencodeBin, args, {
     signal: options.signal,
     env: {
       ...process.env,
@@ -106,7 +107,8 @@ export function createOpencodeTui(options?: TuiOptions) {
     args.push(`--agent=${options.agent}`)
   }
 
-  const proc = spawn(`opencode`, args, {
+  const opencodeBin = process.env.OPENCODE_BIN || "opencode"
+  const proc = spawn(opencodeBin, args, {
     signal: options?.signal,
     stdio: "inherit",
     env: {
