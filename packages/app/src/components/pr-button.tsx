@@ -66,6 +66,13 @@ export function PrButton() {
   const isMerged = createMemo(() => pr()?.state === "MERGED")
   const isClosed = createMemo(() => pr()?.state === "CLOSED")
 
+  const remoteBranchExists = createMemo(() => {
+    const branchName = pr()?.headRefName
+    const branches = vcs()?.branches
+    if (!branchName || !branches) return true
+    return branches.includes(branchName)
+  })
+
   const containerStyle = createMemo(() => getPrButtonContainerStyle(pr()))
   const dividerStyle = createMemo(() => getPrButtonDividerStyle(pr()))
 
@@ -350,8 +357,8 @@ export function PrButton() {
                           </DropdownMenu.Item>
                         </Show>
 
-                        {/* Delete branch — only for merged PRs */}
-                        <Show when={isMerged()}>
+                        {/* Delete branch — only for merged PRs with branch still existing */}
+                        <Show when={isMerged() && remoteBranchExists()}>
                           <DropdownMenu.Item
                             disabled={!canMutate()}
                             onSelect={() => {
