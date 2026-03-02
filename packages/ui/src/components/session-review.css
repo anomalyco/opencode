@@ -3,11 +3,10 @@
   flex-direction: column;
   gap: 0px;
   height: 100%;
-  overflow-y: auto;
-  scrollbar-width: none;
-  contain: strict;
-  &::-webkit-scrollbar {
-    display: none;
+
+  [data-slot="session-review-scroll"] {
+    flex: 1 1 auto;
+    min-height: 0;
   }
 
   .scroll-view__viewport {
@@ -21,8 +20,6 @@
   }
 
   [data-slot="session-review-header"] {
-    position: sticky;
-    top: 0;
     z-index: 120;
     background-color: var(--background-stronger);
     height: 40px;
@@ -63,7 +60,7 @@
   }
 
   [data-component="sticky-accordion-header"] {
-    --sticky-accordion-top: 40px;
+    --sticky-accordion-top: 0px;
   }
 
   [data-slot="session-review-accordion-item"][data-selected]
