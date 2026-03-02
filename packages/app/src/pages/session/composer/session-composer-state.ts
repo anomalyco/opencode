@@ -29,7 +29,11 @@ export function createSessionComposerBlocked() {
   })
 }
 
-export function createSessionComposerState() {
+export function createSessionComposerState(
+  options?: {
+    closeMs?: number | (() => number)
+  },
+) {
   const params = useParams()
   const sdk = useSDK()
   const sync = useSync()
@@ -96,12 +100,19 @@ export function createSessionComposerState() {
   let timer: number | undefined
   let raf: number | undefined
 
+  const closeMs = () => {
+    const value = options?.closeMs
+    if (typeof value === "function") return Math.max(0, value())
+    if (typeof value === "number") return Math.max(0, value)
+    return 400
+  }
+
   const scheduleClose = () => {
     if (timer) window.clearTimeout(timer)
     timer = window.setTimeout(() => {
       setStore({ dock: false, closing: false })
       timer = undefined
-    }, 400)
+    }, closeMs())
   }
 
   createEffect(

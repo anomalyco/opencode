@@ -1,5 +1,6 @@
-import { Show, createEffect, createMemo } from "solid-js"
+import { Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
+import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { PromptInput } from "@/components/prompt-input"
 import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
@@ -18,6 +19,23 @@ export function SessionComposerRegion(props: {
   onSubmit: () => void
   onResponseSubmit: () => void
   setPromptDockRef: (el: HTMLDivElement) => void
+  visualDuration?: number
+  bounce?: number
+  dockOpenVisualDuration?: number
+  dockOpenBounce?: number
+  dockCloseVisualDuration?: number
+  dockCloseBounce?: number
+  drawerExpandVisualDuration?: number
+  drawerExpandBounce?: number
+  drawerCollapseVisualDuration?: number
+  drawerCollapseBounce?: number
+  subtitleDuration?: number
+  subtitleTravel?: number
+  subtitleEdge?: number
+  countDuration?: number
+  countMask?: number
+  countMaskHeight?: number
+  countWidthDuration?: number
 }) {
   const params = useParams()
   const prompt = usePrompt()
@@ -41,6 +59,40 @@ export function SessionComposerRegion(props: {
   createEffect(() => {
     if (!prompt.ready()) return
     setSessionHandoff(sessionKey(), { prompt: previewPrompt() })
+  })
+
+  const open = createMemo(() => props.state.dock() && !props.state.closing())
+  const config = createMemo(() =>
+    open()
+      ? {
+          visualDuration: props.dockOpenVisualDuration ?? props.visualDuration ?? 0.3,
+          bounce: props.dockOpenBounce ?? props.bounce ?? 0,
+        }
+      : {
+          visualDuration: props.dockCloseVisualDuration ?? props.visualDuration ?? 0.3,
+          bounce: props.dockCloseBounce ?? props.bounce ?? 0,
+        },
+  )
+  const progress = useSpring(
+    () => (open() ? 1 : 0),
+    config,
+  )
+  const value = createMemo(() => Math.max(0, Math.min(1, progress())))
+  const [height, setHeight] = createSignal(320)
+  const dock = createMemo(() => props.state.dock() || value() > 0.001)
+  const full = createMemo(() => Math.max(78, height()))
+  const [contentRef, setContentRef] = createSignal<HTMLDivElement>()
+
+  createEffect(() => {
+    const el = contentRef()
+    if (!el) return
+    const update = () => {
+      setHeight(el.getBoundingClientRect().height)
+    }
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(el)
+    onCleanup(() => observer.disconnect())
   })
 
   return (
@@ -87,30 +139,46 @@ export function SessionComposerRegion(props: {
               </div>
             }
           >
-            <Show when={props.state.dock()}>
+            <Show when={dock()}>
               <div
                 classList={{
-                  "transition-[max-height,opacity,transform] duration-[400ms] ease-out overflow-hidden": true,
-                  "max-h-[320px]": !props.state.closing(),
-                  "max-h-0 pointer-events-none": props.state.closing(),
-                  "opacity-0 translate-y-9": props.state.closing() || props.state.opening(),
-                  "opacity-100 translate-y-0": !props.state.closing() && !props.state.opening(),
+                  "overflow-hidden": true,
+                  "pointer-events-none": value() < 0.98,
+                }}
+                style={{
+                  "max-height": `${full() * value()}px`,
                 }}
               >
-                <SessionTodoDock
-                  todos={props.state.todos()}
-                  title={language.t("session.todo.title")}
-                  collapseLabel={language.t("session.todo.collapse")}
-                  expandLabel={language.t("session.todo.expand")}
-                />
+                <div ref={setContentRef}>
+                  <SessionTodoDock
+                    todos={props.state.todos()}
+                    title={language.t("session.todo.title")}
+                    collapseLabel={language.t("session.todo.collapse")}
+                    expandLabel={language.t("session.todo.expand")}
+                    dockProgress={value()}
+                    visualDuration={props.visualDuration}
+                    bounce={props.bounce}
+                    expandVisualDuration={props.drawerExpandVisualDuration}
+                    expandBounce={props.drawerExpandBounce}
+                    collapseVisualDuration={props.drawerCollapseVisualDuration}
+                    collapseBounce={props.drawerCollapseBounce}
+                    subtitleDuration={props.subtitleDuration}
+                    subtitleTravel={props.subtitleTravel}
+                    subtitleEdge={props.subtitleEdge}
+                    countDuration={props.countDuration}
+                    countMask={props.countMask}
+                    countMaskHeight={props.countMaskHeight}
+                    countWidthDuration={props.countWidthDuration}
+                  />
+                </div>
               </div>
             </Show>
             <div
               classList={{
                 "relative z-10": true,
-                "transition-[margin] duration-[400ms] ease-out": true,
-                "-mt-9": props.state.dock() && !props.state.closing(),
-                "mt-0": !props.state.dock() || props.state.closing(),
+              }}
+              style={{
+                "margin-top": `${-36 * value()}px`,
               }}
             >
               <PromptInput
