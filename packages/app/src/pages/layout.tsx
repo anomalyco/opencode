@@ -1298,14 +1298,19 @@ export default function Layout(props: ParentProps) {
     const current = currentDir()
     const currentKey = workspaceKey(current)
     const deletedKey = workspaceKey(directory)
+    if (params.dir && currentKey === deletedKey) {
+      navigateWithSidebarReset(`/${base64Encode(root)}/session`)
+      return
+    }
+
     const project = layout.projects.list().find((item) => item.worktree === root)
     const dirs = project
       ? effectiveWorkspaceOrder(root, [root, ...(project.sandboxes ?? [])], store.workspaceOrder[root])
       : [root]
     const valid = dirs.some((item) => workspaceKey(item) === currentKey)
 
-    if (params.dir && (currentKey === deletedKey || (projectRoot(current) === root && !valid))) {
-      void navigateToProject(root)
+    if (params.dir && projectRoot(current) === root && !valid) {
+      navigateWithSidebarReset(`/${base64Encode(root)}/session`)
     }
   }
 
