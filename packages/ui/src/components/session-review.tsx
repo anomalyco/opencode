@@ -621,279 +621,281 @@ export const SessionReview = (props: SessionReviewProps) => {
 
         <div data-slot="session-review-container" class={props.classes?.container}>
           <Show when={hasDiffs()} fallback={props.empty}>
-            <Accordion multiple value={open()} onChange={handleChange}>
-              <For each={files()}>
-                {(file) => {
-                  let wrapper: HTMLDivElement | undefined
+            <div class="pb-6">
+              <Accordion multiple value={open()} onChange={handleChange}>
+                <For each={files()}>
+                  {(file) => {
+                    let wrapper: HTMLDivElement | undefined
 
-                  const diff = createMemo(() => diffs().get(file))
-                  const item = () => diff()!
+                    const diff = createMemo(() => diffs().get(file))
+                    const item = () => diff()!
 
-                  const expanded = createMemo(() => open().includes(file))
-                  const force = () => !!store.force[file]
+                    const expanded = createMemo(() => open().includes(file))
+                    const force = () => !!store.force[file]
 
-                  const comments = createMemo(() => (props.comments ?? []).filter((c) => c.file === file))
-                  const commentedLines = createMemo(() => comments().map((c) => c.selection))
+                    const comments = createMemo(() => (props.comments ?? []).filter((c) => c.file === file))
+                    const commentedLines = createMemo(() => comments().map((c) => c.selection))
 
-                  const beforeText = () => (typeof item().before === "string" ? item().before : "")
-                  const afterText = () => (typeof item().after === "string" ? item().after : "")
-                  const changedLines = () => item().additions + item().deletions
-                  const mediaKind = createMemo(() => mediaKindFromPath(file))
+                    const beforeText = () => (typeof item().before === "string" ? item().before : "")
+                    const afterText = () => (typeof item().after === "string" ? item().after : "")
+                    const changedLines = () => item().additions + item().deletions
+                    const mediaKind = createMemo(() => mediaKindFromPath(file))
 
-                  const tooLarge = createMemo(() => {
-                    if (!expanded()) return false
-                    if (force()) return false
-                    if (mediaKind()) return false
-                    return changedLines() > MAX_DIFF_CHANGED_LINES
-                  })
+                    const tooLarge = createMemo(() => {
+                      if (!expanded()) return false
+                      if (force()) return false
+                      if (mediaKind()) return false
+                      return changedLines() > MAX_DIFF_CHANGED_LINES
+                    })
 
-                  const isAdded = () =>
-                    item().status === "added" || (beforeText().length === 0 && afterText().length > 0)
-                  const isDeleted = () =>
-                    item().status === "deleted" || (afterText().length === 0 && beforeText().length > 0)
+                    const isAdded = () =>
+                      item().status === "added" || (beforeText().length === 0 && afterText().length > 0)
+                    const isDeleted = () =>
+                      item().status === "deleted" || (afterText().length === 0 && beforeText().length > 0)
 
-                  const selectedLines = createMemo(() => {
-                    const current = selection()
-                    if (!current || current.file !== file) return null
-                    return current.range
-                  })
+                    const selectedLines = createMemo(() => {
+                      const current = selection()
+                      if (!current || current.file !== file) return null
+                      return current.range
+                    })
 
-                  const draftRange = createMemo(() => {
-                    const current = commenting()
-                    if (!current || current.file !== file) return null
-                    return current.range
-                  })
+                    const draftRange = createMemo(() => {
+                      const current = commenting()
+                      if (!current || current.file !== file) return null
+                      return current.range
+                    })
 
-                  const commentsUi = createLineCommentController<SessionReviewComment>({
-                    comments,
-                    label: i18n.t("ui.lineComment.submit"),
-                    draftKey: () => file,
-                    state: {
-                      opened: () => {
-                        const current = opened()
-                        if (!current || current.file !== file) return null
-                        return current.id
+                    const commentsUi = createLineCommentController<SessionReviewComment>({
+                      comments,
+                      label: i18n.t("ui.lineComment.submit"),
+                      draftKey: () => file,
+                      state: {
+                        opened: () => {
+                          const current = opened()
+                          if (!current || current.file !== file) return null
+                          return current.id
+                        },
+                        setOpened: (id) => setOpened(id ? { file, id } : null),
+                        selected: selectedLines,
+                        setSelected: (range) => setSelection(range ? { file, range } : null),
+                        commenting: draftRange,
+                        setCommenting: (range) => setCommenting(range ? { file, range } : null),
                       },
-                      setOpened: (id) => setOpened(id ? { file, id } : null),
-                      selected: selectedLines,
-                      setSelected: (range) => setSelection(range ? { file, range } : null),
-                      commenting: draftRange,
-                      setCommenting: (range) => setCommenting(range ? { file, range } : null),
-                    },
-                    getSide: selectionSide,
-                    clearSelectionOnSelectionEndNull: false,
-                    onSubmit: ({ comment, selection }) => {
-                      props.onLineComment?.({
-                        file,
-                        selection,
-                        comment,
-                        preview: selectionPreview(item(), selection),
-                      })
-                    },
-                    onUpdate: ({ id, comment, selection }) => {
-                      props.onLineCommentUpdate?.({
-                        id,
-                        file,
-                        selection,
-                        comment,
-                        preview: selectionPreview(item(), selection),
-                      })
-                    },
-                    onDelete: (comment) => {
-                      props.onLineCommentDelete?.({
-                        id: comment.id,
-                        file,
-                      })
-                    },
-                    editSubmitLabel: props.lineCommentActions?.saveLabel,
-                    renderCommentActions: props.lineCommentActions
-                      ? (comment, controls) => (
-                          <ReviewCommentMenu
-                            labels={props.lineCommentActions!}
-                            onEdit={controls.edit}
-                            onDelete={controls.remove}
-                          />
-                        )
-                      : undefined,
-                  })
+                      getSide: selectionSide,
+                      clearSelectionOnSelectionEndNull: false,
+                      onSubmit: ({ comment, selection }) => {
+                        props.onLineComment?.({
+                          file,
+                          selection,
+                          comment,
+                          preview: selectionPreview(item(), selection),
+                        })
+                      },
+                      onUpdate: ({ id, comment, selection }) => {
+                        props.onLineCommentUpdate?.({
+                          id,
+                          file,
+                          selection,
+                          comment,
+                          preview: selectionPreview(item(), selection),
+                        })
+                      },
+                      onDelete: (comment) => {
+                        props.onLineCommentDelete?.({
+                          id: comment.id,
+                          file,
+                        })
+                      },
+                      editSubmitLabel: props.lineCommentActions?.saveLabel,
+                      renderCommentActions: props.lineCommentActions
+                        ? (comment, controls) => (
+                            <ReviewCommentMenu
+                              labels={props.lineCommentActions!}
+                              onEdit={controls.edit}
+                              onDelete={controls.remove}
+                            />
+                          )
+                        : undefined,
+                    })
 
-                  onCleanup(() => {
-                    anchors.delete(file)
-                    readyFiles.delete(file)
-                    searchHandles.delete(file)
-                    if (highlightedFile === file) highlightedFile = undefined
-                  })
+                    onCleanup(() => {
+                      anchors.delete(file)
+                      readyFiles.delete(file)
+                      searchHandles.delete(file)
+                      if (highlightedFile === file) highlightedFile = undefined
+                    })
 
-                  const handleLineSelected = (range: SelectedLineRange | null) => {
-                    if (!props.onLineComment) return
-                    commentsUi.onLineSelected(range)
-                  }
+                    const handleLineSelected = (range: SelectedLineRange | null) => {
+                      if (!props.onLineComment) return
+                      commentsUi.onLineSelected(range)
+                    }
 
-                  const handleLineSelectionEnd = (range: SelectedLineRange | null) => {
-                    if (!props.onLineComment) return
-                    commentsUi.onLineSelectionEnd(range)
-                  }
+                    const handleLineSelectionEnd = (range: SelectedLineRange | null) => {
+                      if (!props.onLineComment) return
+                      commentsUi.onLineSelectionEnd(range)
+                    }
 
-                  return (
-                    <Accordion.Item
-                      value={file}
-                      id={diffId(file)}
-                      data-file={file}
-                      data-slot="session-review-accordion-item"
-                      data-selected={props.focusedFile === file ? "" : undefined}
-                    >
-                      <StickyAccordionHeader>
-                        <Accordion.Trigger>
-                          <div data-slot="session-review-trigger-content">
-                            <div data-slot="session-review-file-info">
-                              <FileIcon node={{ path: file, type: "file" }} />
-                              <div data-slot="session-review-file-name-container">
-                                <Show when={file.includes("/")}>
-                                  <span data-slot="session-review-directory">{`\u202A${getDirectory(file)}\u202C`}</span>
-                                </Show>
-                                <span data-slot="session-review-filename">{getFilename(file)}</span>
-                                <Show when={props.onViewFile}>
-                                  <Tooltip value={openFileLabel()} placement="top" gutter={4}>
-                                    <button
-                                      data-slot="session-review-view-button"
-                                      type="button"
-                                      aria-label={openFileLabel()}
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        props.onViewFile?.(file)
-                                      }}
-                                    >
-                                      <Icon name="open-file" size="small" />
-                                    </button>
-                                  </Tooltip>
-                                </Show>
+                    return (
+                      <Accordion.Item
+                        value={file}
+                        id={diffId(file)}
+                        data-file={file}
+                        data-slot="session-review-accordion-item"
+                        data-selected={props.focusedFile === file ? "" : undefined}
+                      >
+                        <StickyAccordionHeader>
+                          <Accordion.Trigger>
+                            <div data-slot="session-review-trigger-content">
+                              <div data-slot="session-review-file-info">
+                                <FileIcon node={{ path: file, type: "file" }} />
+                                <div data-slot="session-review-file-name-container">
+                                  <Show when={file.includes("/")}>
+                                    <span data-slot="session-review-directory">{`\u202A${getDirectory(file)}\u202C`}</span>
+                                  </Show>
+                                  <span data-slot="session-review-filename">{getFilename(file)}</span>
+                                  <Show when={props.onViewFile}>
+                                    <Tooltip value={openFileLabel()} placement="top" gutter={4}>
+                                      <button
+                                        data-slot="session-review-view-button"
+                                        type="button"
+                                        aria-label={openFileLabel()}
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          props.onViewFile?.(file)
+                                        }}
+                                      >
+                                        <Icon name="open-file" size="small" />
+                                      </button>
+                                    </Tooltip>
+                                  </Show>
+                                </div>
+                              </div>
+                              <div data-slot="session-review-trigger-actions">
+                                <Switch>
+                                  <Match when={isAdded()}>
+                                    <div data-slot="session-review-change-group" data-type="added">
+                                      <span data-slot="session-review-change" data-type="added">
+                                        {i18n.t("ui.sessionReview.change.added")}
+                                      </span>
+                                      <DiffChanges changes={item()} />
+                                    </div>
+                                  </Match>
+                                  <Match when={isDeleted()}>
+                                    <span data-slot="session-review-change" data-type="removed">
+                                      {i18n.t("ui.sessionReview.change.removed")}
+                                    </span>
+                                  </Match>
+                                  <Match when={!!mediaKind()}>
+                                    <span data-slot="session-review-change" data-type="modified">
+                                      {i18n.t("ui.sessionReview.change.modified")}
+                                    </span>
+                                  </Match>
+                                  <Match when={true}>
+                                    <DiffChanges changes={item()} />
+                                  </Match>
+                                </Switch>
+                                <span data-slot="session-review-diff-chevron">
+                                  <Icon name="chevron-down" size="small" />
+                                </span>
                               </div>
                             </div>
-                            <div data-slot="session-review-trigger-actions">
+                          </Accordion.Trigger>
+                        </StickyAccordionHeader>
+                        <Accordion.Content data-slot="session-review-accordion-content">
+                          <div
+                            data-slot="session-review-diff-wrapper"
+                            ref={(el) => {
+                              wrapper = el
+                              anchors.set(file, el)
+                            }}
+                          >
+                            <Show when={expanded()}>
                               <Switch>
-                                <Match when={isAdded()}>
-                                  <div data-slot="session-review-change-group" data-type="added">
-                                    <span data-slot="session-review-change" data-type="added">
-                                      {i18n.t("ui.sessionReview.change.added")}
-                                    </span>
-                                    <DiffChanges changes={item()} />
+                                <Match when={tooLarge()}>
+                                  <div data-slot="session-review-large-diff">
+                                    <div data-slot="session-review-large-diff-title">
+                                      {i18n.t("ui.sessionReview.largeDiff.title")}
+                                    </div>
+                                    <div data-slot="session-review-large-diff-meta">
+                                      {i18n.t("ui.sessionReview.largeDiff.meta", {
+                                        limit: MAX_DIFF_CHANGED_LINES.toLocaleString(),
+                                        current: changedLines().toLocaleString(),
+                                      })}
+                                    </div>
+                                    <div data-slot="session-review-large-diff-actions">
+                                      <Button
+                                        size="normal"
+                                        variant="secondary"
+                                        onClick={() => setStore("force", file, true)}
+                                      >
+                                        {i18n.t("ui.sessionReview.largeDiff.renderAnyway")}
+                                      </Button>
+                                    </div>
                                   </div>
-                                </Match>
-                                <Match when={isDeleted()}>
-                                  <span data-slot="session-review-change" data-type="removed">
-                                    {i18n.t("ui.sessionReview.change.removed")}
-                                  </span>
-                                </Match>
-                                <Match when={!!mediaKind()}>
-                                  <span data-slot="session-review-change" data-type="modified">
-                                    {i18n.t("ui.sessionReview.change.modified")}
-                                  </span>
                                 </Match>
                                 <Match when={true}>
-                                  <DiffChanges changes={item()} />
+                                  <Dynamic
+                                    component={fileComponent}
+                                    mode="diff"
+                                    preloadedDiff={item().preloaded}
+                                    diffStyle={diffStyle()}
+                                    expansionLineCount={searchExpanded() ? Number.MAX_SAFE_INTEGER : 20}
+                                    onRendered={() => {
+                                      readyFiles.add(file)
+                                      props.onDiffRendered?.()
+                                    }}
+                                    enableLineSelection={props.onLineComment != null}
+                                    enableHoverUtility={props.onLineComment != null}
+                                    onLineSelected={handleLineSelected}
+                                    onLineSelectionEnd={handleLineSelectionEnd}
+                                    onLineNumberSelectionEnd={commentsUi.onLineNumberSelectionEnd}
+                                    annotations={commentsUi.annotations()}
+                                    renderAnnotation={commentsUi.renderAnnotation}
+                                    renderHoverUtility={props.onLineComment ? commentsUi.renderHoverUtility : undefined}
+                                    selectedLines={selectedLines()}
+                                    commentedLines={commentedLines()}
+                                    search={{
+                                      shortcuts: "disabled",
+                                      showBar: false,
+                                      disableVirtualization: searchExpanded(),
+                                      register: (handle: FileSearchHandle | null) => {
+                                        if (!handle) {
+                                          searchHandles.delete(file)
+                                          readyFiles.delete(file)
+                                          if (highlightedFile === file) highlightedFile = undefined
+                                          return
+                                        }
+
+                                        searchHandles.set(file, handle)
+                                      },
+                                    }}
+                                    before={{
+                                      name: file,
+                                      contents: typeof item().before === "string" ? item().before : "",
+                                    }}
+                                    after={{
+                                      name: file,
+                                      contents: typeof item().after === "string" ? item().after : "",
+                                    }}
+                                    media={{
+                                      mode: "auto",
+                                      path: file,
+                                      before: item().before,
+                                      after: item().after,
+                                      readFile: props.readFile,
+                                    }}
+                                  />
                                 </Match>
                               </Switch>
-                              <span data-slot="session-review-diff-chevron">
-                                <Icon name="chevron-down" size="small" />
-                              </span>
-                            </div>
+                            </Show>
                           </div>
-                        </Accordion.Trigger>
-                      </StickyAccordionHeader>
-                      <Accordion.Content data-slot="session-review-accordion-content">
-                        <div
-                          data-slot="session-review-diff-wrapper"
-                          ref={(el) => {
-                            wrapper = el
-                            anchors.set(file, el)
-                          }}
-                        >
-                          <Show when={expanded()}>
-                            <Switch>
-                              <Match when={tooLarge()}>
-                                <div data-slot="session-review-large-diff">
-                                  <div data-slot="session-review-large-diff-title">
-                                    {i18n.t("ui.sessionReview.largeDiff.title")}
-                                  </div>
-                                  <div data-slot="session-review-large-diff-meta">
-                                    {i18n.t("ui.sessionReview.largeDiff.meta", {
-                                      limit: MAX_DIFF_CHANGED_LINES.toLocaleString(),
-                                      current: changedLines().toLocaleString(),
-                                    })}
-                                  </div>
-                                  <div data-slot="session-review-large-diff-actions">
-                                    <Button
-                                      size="normal"
-                                      variant="secondary"
-                                      onClick={() => setStore("force", file, true)}
-                                    >
-                                      {i18n.t("ui.sessionReview.largeDiff.renderAnyway")}
-                                    </Button>
-                                  </div>
-                                </div>
-                              </Match>
-                              <Match when={true}>
-                                <Dynamic
-                                  component={fileComponent}
-                                  mode="diff"
-                                  preloadedDiff={item().preloaded}
-                                  diffStyle={diffStyle()}
-                                  expansionLineCount={searchExpanded() ? Number.MAX_SAFE_INTEGER : 20}
-                                  onRendered={() => {
-                                    readyFiles.add(file)
-                                    props.onDiffRendered?.()
-                                  }}
-                                  enableLineSelection={props.onLineComment != null}
-                                  enableHoverUtility={props.onLineComment != null}
-                                  onLineSelected={handleLineSelected}
-                                  onLineSelectionEnd={handleLineSelectionEnd}
-                                  onLineNumberSelectionEnd={commentsUi.onLineNumberSelectionEnd}
-                                  annotations={commentsUi.annotations()}
-                                  renderAnnotation={commentsUi.renderAnnotation}
-                                  renderHoverUtility={props.onLineComment ? commentsUi.renderHoverUtility : undefined}
-                                  selectedLines={selectedLines()}
-                                  commentedLines={commentedLines()}
-                                  search={{
-                                    shortcuts: "disabled",
-                                    showBar: false,
-                                    disableVirtualization: searchExpanded(),
-                                    register: (handle: FileSearchHandle | null) => {
-                                      if (!handle) {
-                                        searchHandles.delete(file)
-                                        readyFiles.delete(file)
-                                        if (highlightedFile === file) highlightedFile = undefined
-                                        return
-                                      }
-
-                                      searchHandles.set(file, handle)
-                                    },
-                                  }}
-                                  before={{
-                                    name: file,
-                                    contents: typeof item().before === "string" ? item().before : "",
-                                  }}
-                                  after={{
-                                    name: file,
-                                    contents: typeof item().after === "string" ? item().after : "",
-                                  }}
-                                  media={{
-                                    mode: "auto",
-                                    path: file,
-                                    before: item().before,
-                                    after: item().after,
-                                    readFile: props.readFile,
-                                  }}
-                                />
-                              </Match>
-                            </Switch>
-                          </Show>
-                        </div>
-                      </Accordion.Content>
-                    </Accordion.Item>
-                  )
-                }}
-              </For>
-            </Accordion>
+                        </Accordion.Content>
+                      </Accordion.Item>
+                    )
+                  }}
+                </For>
+              </Accordion>
+            </div>
           </Show>
         </div>
       </ScrollView>
