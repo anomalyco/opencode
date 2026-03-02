@@ -53,6 +53,7 @@ export type PromptRef = {
   blur(): void
   focus(): void
   submit(): void
+  command(name: string, args?: string): void
 }
 
 const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
@@ -384,6 +385,22 @@ export function Prompt(props: PromptProps) {
     },
     submit() {
       submit()
+    },
+    async command(name, args) {
+      const selectedModel = local.model.current()
+      const sessionID = await sdk.client.session.create({}).then((x) => x.data!.id)
+      sdk.client.session.command({
+        sessionID,
+        agent: local.agent.current().name,
+        model: selectedModel ? `${selectedModel.providerID}/${selectedModel.modelID}` : undefined,
+        command: name,
+        arguments: args ?? "",
+        variant: local.model.variant.current(),
+      })
+      // same as in submit, temporary workaround to make sure command/message is sent
+      setTimeout(() => {
+        route.navigate({ type: "session", sessionID })
+      }, 50)
     },
   }
 
