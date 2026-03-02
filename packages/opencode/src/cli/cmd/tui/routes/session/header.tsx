@@ -1,4 +1,4 @@
-import { type Accessor, createMemo, createSignal, Match, Show, Switch } from "solid-js"
+import { type Accessor, createMemo, createResource, createSignal, Match, Show, Switch } from "solid-js"
 import { useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { pipe, sumBy } from "remeda"
@@ -8,6 +8,7 @@ import type { AssistantMessage, Session } from "@opencode-ai/sdk/v2"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "../../context/keybind"
 import { useTerminalDimensions } from "@opentui/solid"
+import { loadCodexUsage } from "@/cli/cmd/tui/util/codex-usage"
 
 const Title = (props: { session: Accessor<Session> }) => {
   const { theme } = useTheme()
@@ -18,14 +19,35 @@ const Title = (props: { session: Accessor<Session> }) => {
   )
 }
 
-const ContextInfo = (props: { context: Accessor<string | undefined>; cost: Accessor<string> }) => {
+const ContextInfo = (props: {
+  context: Accessor<string | undefined>
+  cost: Accessor<string>
+  usage: Accessor<{ primary: number; secondary: number } | undefined>
+}) => {
   const { theme } = useTheme()
+  const usageColor = (value: number) => {
+    if (value >= 90) return theme.error
+    if (value >= 70) return theme.warning
+    return theme.textMuted
+  }
+
   return (
-    <Show when={props.context()}>
-      <text fg={theme.textMuted} wrapMode="none" flexShrink={0}>
-        {props.context()} ({props.cost()})
-      </text>
-    </Show>
+    <box flexDirection="row" gap={2}>
+      <Show when={props.context()}>
+        <text fg={theme.textMuted} wrapMode="none" flexShrink={0}>
+          {props.context()} ({props.cost()})
+        </text>
+      </Show>
+      <Show when={props.usage()}>
+        <text fg={theme.textMuted} wrapMode="none" flexShrink={0}>
+          <span>Codex </span>
+          <span>5h </span>
+          <span style={{ fg: usageColor(props.usage()!.primary) }}>{props.usage()!.primary}%</span>
+          <span> · 7d </span>
+          <span style={{ fg: usageColor(props.usage()!.secondary) }}>{props.usage()!.secondary}%</span>
+        </text>
+      </Show>
+    </box>
   )
 }
 
@@ -34,6 +56,7 @@ export function Header() {
   const sync = useSync()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  const [usage] = createResource(loadCodexUsage)
 
   const cost = createMemo(() => {
     const total = pipe(
@@ -57,6 +80,15 @@ export function Header() {
       result += "  " + Math.round((total / model.limit.context) * 100) + "%"
     }
     return result
+  })
+
+  const usageSummary = createMemo(() => {
+    const entries = (usage() ?? []).filter((x) => !x.error)
+    if (!entries.length) return
+    return {
+      primary: Math.max(...entries.map((x) => x.primary)),
+      secondary: Math.max(...entries.map((x) => x.secondary ?? 0)),
+    }
   })
 
   const { theme } = useTheme()
@@ -86,7 +118,7 @@ export function Header() {
                 <text fg={theme.text}>
                   <b>Subagent session</b>
                 </text>
-                <ContextInfo context={context} cost={cost} />
+                <ContextInfo context={context} cost={cost} usage={usageSummary} />
               </box>
               <box flexDirection="row" gap={2}>
                 <box
@@ -125,7 +157,7 @@ export function Header() {
           <Match when={true}>
             <box flexDirection={narrow() ? "column" : "row"} justifyContent="space-between" gap={1}>
               <Title session={session} />
-              <ContextInfo context={context} cost={cost} />
+              <ContextInfo context={context} cost={cost} usage={usageSummary} />
             </box>
           </Match>
         </Switch>

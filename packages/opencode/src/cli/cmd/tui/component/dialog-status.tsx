@@ -3,7 +3,8 @@ import { fileURLToPath } from "bun"
 import { useTheme } from "../context/theme"
 import { useDialog } from "@tui/ui/dialog"
 import { useSync } from "@tui/context/sync"
-import { For, Match, Switch, Show, createMemo } from "solid-js"
+import { For, Match, Switch, Show, createMemo, createResource } from "solid-js"
+import { loadCodexUsage } from "@/cli/cmd/tui/util/codex-usage"
 
 export type DialogStatusProps = {}
 
@@ -11,6 +12,7 @@ export function DialogStatus() {
   const sync = useSync()
   const { theme } = useTheme()
   const dialog = useDialog()
+  const [usage] = createResource(loadCodexUsage)
 
   const enabledFormatters = createMemo(() => sync.data.formatter.filter((f) => f.enabled))
 
@@ -38,6 +40,12 @@ export function DialogStatus() {
     })
     return result.toSorted((a, b) => a.name.localeCompare(b.name))
   })
+
+  const usageColor = (value: number) => {
+    if (value >= 90) return theme.error
+    if (value >= 70) return theme.warning
+    return theme.text
+  }
 
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
@@ -156,6 +164,41 @@ export function DialogStatus() {
                 <text wrapMode="word" fg={theme.text}>
                   <b>{item.name}</b>
                   {item.version && <span style={{ fg: theme.textMuted }}> @{item.version}</span>}
+                </text>
+              </box>
+            )}
+          </For>
+        </box>
+      </Show>
+      <Show when={usage.loading}>
+        <text fg={theme.textMuted}>Loading Codex usage...</text>
+      </Show>
+      <Show
+        when={(usage() ?? []).length > 0}
+        fallback={<Show when={!usage.loading}><text fg={theme.text}>No Codex OAuth profile with account ID found</text></Show>}
+      >
+        <box>
+          <text fg={theme.text}>{usage()!.length} Codex Usage Profiles</text>
+          <For each={usage()}>
+            {(item) => (
+              <box flexDirection="row" gap={1}>
+                <text flexShrink={0} style={{ fg: item.error ? theme.warning : theme.success }}>
+                  •
+                </text>
+                <text fg={theme.text} wrapMode="word">
+                  <b>{item.id}</b>
+                  <Show when={!item.error}>
+                    <span>
+                      {" "}
+                      <span style={{ fg: theme.textMuted }}>5h:</span>{" "}
+                      <span style={{ fg: usageColor(item.primary) }}>{item.primary}%</span>
+                      <span style={{ fg: theme.textMuted }}> · weekly:</span>{" "}
+                      <span style={{ fg: usageColor(item.secondary ?? 0) }}>{item.secondary ?? 0}%</span>
+                    </span>
+                  </Show>
+                  <Show when={item.error}>
+                    <span style={{ fg: theme.textMuted }}> usage unavailable</span>
+                  </Show>
                 </text>
               </box>
             )}

@@ -1,5 +1,5 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, For, Show, Switch, Match } from "solid-js"
+import { createMemo, createResource, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
@@ -11,6 +11,7 @@ import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
+import { loadCodexUsage } from "@/cli/cmd/tui/util/codex-usage"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
@@ -19,6 +20,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
+  const [usage] = createResource(loadCodexUsage)
 
   const [expanded, setExpanded] = createStore({
     mcp: true,
@@ -68,6 +70,12 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   )
   const gettingStartedDismissed = createMemo(() => kv.get("dismissed_getting_started", false))
 
+  const usageColor = (value: number) => {
+    if (value >= 90) return theme.error
+    if (value >= 70) return theme.warning
+    return theme.textMuted
+  }
+
   return (
     <Show when={session()}>
       <box
@@ -106,6 +114,27 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
               <text fg={theme.textMuted}>{cost()} spent</text>
             </box>
+            <Show when={(usage() ?? []).length > 0}>
+              <box>
+                <text fg={theme.text}>
+                  <b>Codex usage</b>
+                </text>
+                <For each={usage()}>
+                  {(item) => (
+                    <text fg={theme.textMuted}>
+                      <span>{item.id.replace("openai-profile-", "")}: </span>
+                      <Show when={!item.error} fallback={<span>unavailable</span>}>
+                        <span>
+                          5h <span style={{ fg: usageColor(item.primary) }}>{item.primary}%</span>
+                          <span> · weekly </span>
+                          <span style={{ fg: usageColor(item.secondary ?? 0) }}>{item.secondary ?? 0}%</span>
+                        </span>
+                      </Show>
+                    </text>
+                  )}
+                </For>
+              </box>
+            </Show>
             <Show when={mcpEntries().length > 0}>
               <box>
                 <box
