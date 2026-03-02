@@ -15,6 +15,7 @@ import { DiffChanges } from "./diff-changes"
 import { Icon } from "./icon"
 import { TextShimmer } from "./text-shimmer"
 import { SessionRetry } from "./session-retry"
+import { TextReveal } from "./text-reveal"
 import { createAutoScroll } from "../hooks"
 import { useI18n } from "../context/i18n"
 
@@ -410,8 +411,13 @@ export function SessionTurn(
                 <Show when={showThinking()}>
                   <div data-slot="session-turn-thinking">
                     <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
-                    <Show when={!showReasoningSummaries() && reasoningHeading()}>
-                      {(text) => <span data-slot="session-turn-thinking-heading">{text()}</span>}
+                    <Show when={!showReasoningSummaries()}>
+                      <TextReveal
+                        text={reasoningHeading()}
+                        class="session-turn-thinking-heading"
+                        travel={25}
+                        duration={700}
+                      />
                     </Show>
                   </div>
                 </Show>
