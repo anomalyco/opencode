@@ -256,10 +256,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     pendingAutoAccept: false,
   })
 
-  const buttonsSpring = useSpring(
-    () => (store.mode === "normal" ? 1 : 0),
-    { visualDuration: 0.2, bounce: 0 },
-  )
+  const buttonsSpring = useSpring(() => (store.mode === "normal" ? 1 : 0), { visualDuration: 0.2, bounce: 0 })
 
   const commentCount = createMemo(() => {
     if (store.mode === "shell") return 0

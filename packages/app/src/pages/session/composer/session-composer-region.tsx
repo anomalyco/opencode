@@ -73,10 +73,7 @@ export function SessionComposerRegion(props: {
           bounce: props.dockCloseBounce ?? props.bounce ?? 0,
         },
   )
-  const progress = useSpring(
-    () => (open() ? 1 : 0),
-    config,
-  )
+  const progress = useSpring(() => (open() ? 1 : 0), config)
   const value = createMemo(() => Math.max(0, Math.min(1, progress())))
   const [height, setHeight] = createSignal(320)
   const dock = createMemo(() => props.state.dock() || value() > 0.001)

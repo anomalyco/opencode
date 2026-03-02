@@ -67,7 +67,10 @@
     -webkit-mask-image: linear-gradient(to top, white 33%, transparent calc(33% + var(--_edge)));
     mask-position: 0 100%;
     -webkit-mask-position: 0 100%;
-    transition-property: mask-position, -webkit-mask-position, transform;
+    transition-property:
+      mask-position,
+      -webkit-mask-position,
+      transform;
     transform: translateY(0);
   }
 
@@ -82,7 +85,10 @@
     -webkit-mask-image: linear-gradient(to bottom, white 33%, transparent calc(33% + var(--_edge)));
     mask-position: 0 100%;
     -webkit-mask-position: 0 100%;
-    transition-property: mask-position, -webkit-mask-position, transform;
+    transition-property:
+      mask-position,
+      -webkit-mask-position,
+      transform;
     transform: translateY(var(--_travel));
   }
 

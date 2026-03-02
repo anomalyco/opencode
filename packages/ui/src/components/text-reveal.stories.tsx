@@ -179,8 +179,12 @@ export const Playground = {
         </div>
 
         <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
-          <button onClick={prev} style={btn()}>Prev</button>
-          <button onClick={next} style={btn()}>Next</button>
+          <button onClick={prev} style={btn()}>
+            Prev
+          </button>
+          <button onClick={next} style={btn()}>
+            Next
+          </button>
           <button onClick={toggleCycle} style={btn(cycling())}>
             {cycling() ? "Stop cycle" : "Auto cycle"}
           </button>
@@ -194,13 +198,29 @@ export const Playground = {
 
           <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
             <span style={sliderLabel}>edge</span>
-            <input type="range" min="1" max="40" step="1" value={hybridEdge()} onInput={(e) => setHybridEdge(e.currentTarget.valueAsNumber)} style={{ flex: 1 }} />
+            <input
+              type="range"
+              min="1"
+              max="40"
+              step="1"
+              value={hybridEdge()}
+              onInput={(e) => setHybridEdge(e.currentTarget.valueAsNumber)}
+              style={{ flex: 1 }}
+            />
             <span style={{ width: "60px", "text-align": "right", "font-size": "12px" }}>{hybridEdge()}%</span>
           </label>
 
           <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
             <span style={sliderLabel}>travel</span>
-            <input type="range" min="0" max="40" step="1" value={hybridTravel()} onInput={(e) => setHybridTravel(e.currentTarget.valueAsNumber)} style={{ flex: 1 }} />
+            <input
+              type="range"
+              min="0"
+              max="40"
+              step="1"
+              value={hybridTravel()}
+              onInput={(e) => setHybridTravel(e.currentTarget.valueAsNumber)}
+              style={{ flex: 1 }}
+            />
             <span style={{ width: "60px", "text-align": "right", "font-size": "12px" }}>{hybridTravel()}px</span>
           </label>
 
@@ -208,33 +228,75 @@ export const Playground = {
 
           <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
             <span style={sliderLabel}>duration</span>
-            <input type="range" min="100" max="1400" step="10" value={duration()} onInput={(e) => setDuration(e.currentTarget.valueAsNumber)} style={{ flex: 1 }} />
+            <input
+              type="range"
+              min="100"
+              max="1400"
+              step="10"
+              value={duration()}
+              onInput={(e) => setDuration(e.currentTarget.valueAsNumber)}
+              style={{ flex: 1 }}
+            />
             <span style={{ width: "60px", "text-align": "right", "font-size": "12px" }}>{duration()}ms</span>
           </label>
 
           <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
             <span style={sliderLabel}>bounce</span>
-            <input type="range" min="1" max="2" step="0.01" value={bounce()} onInput={(e) => setBounce(e.currentTarget.valueAsNumber)} style={{ flex: 1 }} />
+            <input
+              type="range"
+              min="1"
+              max="2"
+              step="0.01"
+              value={bounce()}
+              onInput={(e) => setBounce(e.currentTarget.valueAsNumber)}
+              style={{ flex: 1 }}
+            />
             <span style={{ width: "60px", "text-align": "right", "font-size": "12px" }}>{bounce().toFixed(2)}</span>
           </label>
 
           <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
             <span style={sliderLabel}>bounce soft</span>
-            <input type="range" min="1" max="1.5" step="0.01" value={bounceSoft()} onInput={(e) => setBounceSoft(e.currentTarget.valueAsNumber)} style={{ flex: 1 }} />
+            <input
+              type="range"
+              min="1"
+              max="1.5"
+              step="0.01"
+              value={bounceSoft()}
+              onInput={(e) => setBounceSoft(e.currentTarget.valueAsNumber)}
+              style={{ flex: 1 }}
+            />
             <span style={{ width: "60px", "text-align": "right", "font-size": "12px" }}>{bounceSoft().toFixed(2)}</span>
           </label>
 
-          <div style={{ "font-size": "11px", color: "var(--color-text-weak, #666)", "margin-top": "8px" }}>Wipe only</div>
+          <div style={{ "font-size": "11px", color: "var(--color-text-weak, #666)", "margin-top": "8px" }}>
+            Wipe only
+          </div>
 
           <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
             <span style={sliderLabel}>edge</span>
-            <input type="range" min="1" max="40" step="1" value={edge()} onInput={(e) => setEdge(e.currentTarget.valueAsNumber)} style={{ flex: 1 }} />
+            <input
+              type="range"
+              min="1"
+              max="40"
+              step="1"
+              value={edge()}
+              onInput={(e) => setEdge(e.currentTarget.valueAsNumber)}
+              style={{ flex: 1 }}
+            />
             <span style={{ width: "60px", "text-align": "right", "font-size": "12px" }}>{edge()}%</span>
           </label>
 
           <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
             <span style={sliderLabel}>travel</span>
-            <input type="range" min="0" max="16" step="1" value={revealTravel()} onInput={(e) => setRevealTravel(e.currentTarget.valueAsNumber)} style={{ flex: 1 }} />
+            <input
+              type="range"
+              min="0"
+              max="16"
+              step="1"
+              value={revealTravel()}
+              onInput={(e) => setRevealTravel(e.currentTarget.valueAsNumber)}
+              style={{ flex: 1 }}
+            />
             <span style={{ width: "60px", "text-align": "right", "font-size": "12px" }}>{revealTravel()}px</span>
           </label>
         </div>

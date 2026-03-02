@@ -29,11 +29,7 @@ export function createSessionComposerBlocked() {
   })
 }
 
-export function createSessionComposerState(
-  options?: {
-    closeMs?: number | (() => number)
-  },
-) {
+export function createSessionComposerState(options?: { closeMs?: number | (() => number) }) {
   const params = useParams()
   const sdk = useSDK()
   const sync = useSync()
