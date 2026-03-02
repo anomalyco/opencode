@@ -70,11 +70,7 @@ function ShellSubmessage(props: { text: string; animate?: boolean }) {
 
   return (
     <span data-component="shell-submessage">
-      <span
-        ref={widthRef}
-        data-slot="shell-submessage-width"
-        style={{ width: props.animate ? "0px" : undefined }}
-      >
+      <span ref={widthRef} data-slot="shell-submessage-width" style={{ width: props.animate ? "0px" : undefined }}>
         <span data-slot="basic-tool-tool-subtitle">
           <span
             ref={valueRef}
@@ -313,6 +309,102 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
   return fallback
 }
 
+function same<T>(a: readonly T[] | undefined, b: readonly T[] | undefined) {
+  if (a === b) return true
+  if (!a || !b) return false
+  if (a.length !== b.length) return false
+  return a.every((x, i) => x === b[i])
+}
+
+type PartRef = {
+  messageID: string
+  partID: string
+}
+
+type PartGroup =
+  | {
+      key: string
+      type: "part"
+      ref: PartRef
+    }
+  | {
+      key: string
+      type: "context"
+      refs: PartRef[]
+    }
+
+function sameRef(a: PartRef, b: PartRef) {
+  return a.messageID === b.messageID && a.partID === b.partID
+}
+
+function sameGroup(a: PartGroup, b: PartGroup) {
+  if (a === b) return true
+  if (a.key !== b.key) return false
+  if (a.type !== b.type) return false
+  if (a.type === "part") {
+    if (b.type !== "part") return false
+    return sameRef(a.ref, b.ref)
+  }
+  if (b.type !== "context") return false
+  if (a.refs.length !== b.refs.length) return false
+  return a.refs.every((ref, i) => sameRef(ref, b.refs[i]!))
+}
+
+function sameGroups(a: readonly PartGroup[] | undefined, b: readonly PartGroup[] | undefined) {
+  if (a === b) return true
+  if (!a || !b) return false
+  if (a.length !== b.length) return false
+  return a.every((item, i) => sameGroup(item, b[i]!))
+}
+
+function groupParts(parts: { messageID: string; part: PartType }[]) {
+  const result: PartGroup[] = []
+  let start = -1
+
+  const flush = (end: number) => {
+    if (start < 0) return
+    const first = parts[start]
+    const last = parts[end]
+    if (!first || !last) {
+      start = -1
+      return
+    }
+    result.push({
+      key: `context:${first.part.id}`,
+      type: "context",
+      refs: parts.slice(start, end + 1).map((item) => ({
+        messageID: item.messageID,
+        partID: item.part.id,
+      })),
+    })
+    start = -1
+  }
+
+  parts.forEach((item, index) => {
+    if (isContextGroupTool(item.part)) {
+      if (start < 0) start = index
+      return
+    }
+
+    flush(index - 1)
+    result.push({
+      key: `part:${item.messageID}:${item.part.id}`,
+      type: "part",
+      ref: {
+        messageID: item.messageID,
+        partID: item.part.id,
+      },
+    })
+  })
+
+  flush(parts.length - 1)
+  return result
+}
+
+function partByID(parts: readonly PartType[], partID: string) {
+  return parts.find((part) => part.id === partID)
+}
+
 function renderable(part: PartType, showReasoningSummaries = true) {
   if (part.type === "tool") {
     if (HIDDEN_TOOLS.has(part.tool)) return false
@@ -345,98 +437,68 @@ export function AssistantParts(props: {
 }) {
   const data = useData()
   const emptyParts: PartType[] = []
+  const emptyTools: ToolPart[] = []
 
-  const grouped = createMemo(() => {
-    const keys: string[] = []
-    const items: Record<
-      string,
-      { type: "part"; part: PartType; message: AssistantMessage } | { type: "context"; parts: ToolPart[] }
-    > = {}
-    const push = (
-      key: string,
-      item: { type: "part"; part: PartType; message: AssistantMessage } | { type: "context"; parts: ToolPart[] },
-    ) => {
-      keys.push(key)
-      items[key] = item
-    }
+  const grouped = createMemo(
+    () =>
+      groupParts(
+        props.messages.flatMap((message) =>
+          list(data.store.part?.[message.id], emptyParts)
+            .filter((part) => renderable(part, props.showReasoningSummaries ?? true))
+            .map((part) => ({
+              messageID: message.id,
+              part,
+            })),
+        ),
+      ),
+    [] as PartGroup[],
+    { equals: sameGroups },
+  )
 
-    const parts = props.messages.flatMap((message) =>
-      list(data.store.part?.[message.id], emptyParts)
-        .filter((part) => renderable(part, props.showReasoningSummaries ?? true))
-        .map((part) => ({ message, part })),
-    )
-
-    let start = -1
-
-    const flush = (end: number) => {
-      if (start < 0) return
-      const first = parts[start]
-      const last = parts[end]
-      if (!first || !last) {
-        start = -1
-        return
-      }
-      push(`context:${first.part.id}`, {
-        type: "context",
-        parts: parts
-          .slice(start, end + 1)
-          .map((x) => x.part)
-          .filter((part): part is ToolPart => isContextGroupTool(part)),
-      })
-      start = -1
-    }
-
-    parts.forEach((item, index) => {
-      if (isContextGroupTool(item.part)) {
-        if (start < 0) start = index
-        return
-      }
-
-      flush(index - 1)
-      push(`part:${item.message.id}:${item.part.id}`, { type: "part", part: item.part, message: item.message })
-    })
-
-    flush(parts.length - 1)
-
-    return { keys, items }
-  })
-
-  const last = createMemo(() => grouped().keys.at(-1))
+  const last = createMemo(() => grouped().at(-1)?.key)
 
   return (
-    <For each={grouped().keys}>
-      {(key) => {
-        const item = createMemo(() => grouped().items[key])
-        const ctx = createMemo(() => {
-          const value = item()
-          if (!value) return
-          if (value.type !== "context") return
-          return value
-        })
-        const part = createMemo(() => {
-          const value = item()
-          if (!value) return
-          if (value.type !== "part") return
-          return value
-        })
-        const tail = createMemo(() => last() === key)
+    <For each={grouped()}>
+      {(entry) => {
+        if (entry.type === "context") {
+          const parts = createMemo(
+            () =>
+              entry.refs
+                .map((ref) => partByID(list(data.store.part?.[ref.messageID], emptyParts), ref.partID))
+                .filter((part): part is ToolPart => !!part && isContextGroupTool(part)),
+            emptyTools,
+            { equals: same },
+          )
+          const busy = createMemo(() => props.working && last() === entry.key)
+
+          return (
+            <Show when={parts().length > 0}>
+              <ContextToolGroup parts={parts()} busy={busy()} />
+            </Show>
+          )
+        }
+
+        const message = createMemo(() => props.messages.find((item) => item.id === entry.ref.messageID))
+        const part = createMemo(() =>
+          partByID(list(data.store.part?.[entry.ref.messageID], emptyParts), entry.ref.partID),
+        )
+
         return (
-          <>
-            <Show when={ctx()}>
-              {(entry) => <ContextToolGroup parts={entry().parts} busy={props.working && tail()} />}
-            </Show>
-            <Show when={part()}>
-              {(entry) => (
-                <Part
-                  part={entry().part}
-                  message={entry().message}
-                  showAssistantCopyPartID={props.showAssistantCopyPartID}
-                  turnDurationMs={props.turnDurationMs}
-                  defaultOpen={partDefaultOpen(entry().part, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
-                />
-              )}
-            </Show>
-          </>
+          <Show when={message()}>
+            {(message) => (
+              <Show when={part()}>
+                {(part) => (
+                  <Part
+                    part={part()}
+                    message={message()}
+                    showAssistantCopyPartID={props.showAssistantCopyPartID}
+                    turnDurationMs={props.turnDurationMs}
+                    defaultOpen={partDefaultOpen(part(), props.shellToolDefaultOpen, props.editToolDefaultOpen)}
+                  />
+                )}
+              </Show>
+            )}
+          </Show>
         )
       }}
     </For>
@@ -554,78 +616,49 @@ export function AssistantMessageDisplay(props: {
   showAssistantCopyPartID?: string | null
   showReasoningSummaries?: boolean
 }) {
-  const grouped = createMemo(() => {
-    const keys: string[] = []
-    const items: Record<string, { type: "part"; part: PartType } | { type: "context"; parts: ToolPart[] }> = {}
-    const push = (key: string, item: { type: "part"; part: PartType } | { type: "context"; parts: ToolPart[] }) => {
-      keys.push(key)
-      items[key] = item
-    }
-
-    const parts = props.parts
-    let start = -1
-
-    const flush = (end: number) => {
-      if (start < 0) return
-      const first = parts[start]
-      const last = parts[end]
-      if (!first || !last) {
-        start = -1
-        return
-      }
-      push(`context:${first.id}`, {
-        type: "context",
-        parts: parts.slice(start, end + 1).filter((part): part is ToolPart => isContextGroupTool(part)),
-      })
-      start = -1
-    }
-
-    parts.forEach((part, index) => {
-      if (!renderable(part, props.showReasoningSummaries ?? true)) return
-
-      if (isContextGroupTool(part)) {
-        if (start < 0) start = index
-        return
-      }
-
-      flush(index - 1)
-      push(`part:${part.id}`, { type: "part", part })
-    })
-
-    flush(parts.length - 1)
-
-    return { keys, items }
-  })
+  const emptyTools: ToolPart[] = []
+  const grouped = createMemo(
+    () =>
+      groupParts(
+        props.parts
+          .filter((part) => renderable(part, props.showReasoningSummaries ?? true))
+          .map((part) => ({
+            messageID: props.message.id,
+            part,
+          })),
+      ),
+    [] as PartGroup[],
+    { equals: sameGroups },
+  )
 
   return (
-    <For each={grouped().keys}>
-      {(key) => {
-        const item = createMemo(() => grouped().items[key])
-        const ctx = createMemo(() => {
-          const value = item()
-          if (!value) return
-          if (value.type !== "context") return
-          return value
-        })
-        const part = createMemo(() => {
-          const value = item()
-          if (!value) return
-          if (value.type !== "part") return
-          return value
-        })
-        return (
-          <>
-            <Show when={ctx()}>{(entry) => <ContextToolGroup parts={entry().parts} />}</Show>
-            <Show when={part()}>
-              {(entry) => (
-                <Part
-                  part={entry().part}
-                  message={props.message}
-                  showAssistantCopyPartID={props.showAssistantCopyPartID}
-                />
-              )}
+    <For each={grouped()}>
+      {(entry) => {
+        if (entry.type === "context") {
+          const parts = createMemo(
+            () =>
+              entry.refs
+                .map((ref) => partByID(props.parts, ref.partID))
+                .filter((part): part is ToolPart => !!part && isContextGroupTool(part)),
+            emptyTools,
+            { equals: same },
+          )
+
+          return (
+            <Show when={parts().length > 0}>
+              <ContextToolGroup parts={parts()} />
             </Show>
-          </>
+          )
+        }
+
+        const part = createMemo(() => partByID(props.parts, entry.ref.partID))
+
+        return (
+          <Show when={part()}>
+            {(part) => (
+              <Part part={part()} message={props.message} showAssistantCopyPartID={props.showAssistantCopyPartID} />
+            )}
+          </Show>
         )
       }}
     </For>
