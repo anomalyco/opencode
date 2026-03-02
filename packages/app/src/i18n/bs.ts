@@ -555,6 +555,7 @@ export const dict = {
   "terminal.loading": "Učitavanje terminala...",
   "terminal.title": "Terminal",
   "terminal.title.numbered": "Terminal {{number}}",
+  "terminal.split": "Podijeli terminal",
   "terminal.close": "Zatvori terminal",
   "terminal.connectionLost.title": "Veza prekinuta",
   "terminal.connectionLost.description":

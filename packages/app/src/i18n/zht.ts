@@ -547,6 +547,7 @@ export const dict = {
   "terminal.loading": "正在載入終端機...",
   "terminal.title": "終端機",
   "terminal.title.numbered": "終端機 {{number}}",
+  "terminal.split": "分割終端機",
   "terminal.close": "關閉終端機",
 
   "terminal.connectionLost.title": "連線中斷",

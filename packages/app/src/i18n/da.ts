@@ -552,6 +552,7 @@ export const dict = {
   "terminal.loading": "Indlæser terminal...",
   "terminal.title": "Terminal",
   "terminal.title.numbered": "Terminal {{number}}",
+  "terminal.split": "Opdel terminal",
   "terminal.close": "Luk terminal",
 
   "terminal.connectionLost.title": "Forbindelse mistet",

@@ -491,6 +491,7 @@ export const dict = {
   "terminal.loading": "جارٍ تحميل المحطة الطرفية...",
   "terminal.title": "محطة طرفية",
   "terminal.title.numbered": "محطة طرفية {{number}}",
+  "terminal.split": "تقسيم المحطة الطرفية",
   "terminal.close": "إغلاق المحطة الطرفية",
   "terminal.connectionLost.title": "فقد الاتصال",
   "terminal.connectionLost.description": "انقطع اتصال المحطة الطرفية. يمكن أن يحدث هذا عند إعادة تشغيل الخادم.",

@@ -550,6 +550,7 @@ export const dict = {
   "terminal.loading": "正在加载终端...",
   "terminal.title": "终端",
   "terminal.title.numbered": "终端 {{number}}",
+  "terminal.split": "拆分终端",
   "terminal.close": "关闭终端",
   "terminal.connectionLost.title": "连接已丢失",
   "terminal.connectionLost.description": "终端连接已中断。这可能发生在服务器重启时。",

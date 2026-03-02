@@ -558,6 +558,7 @@ export const dict = {
   "terminal.loading": "Cargando terminal...",
   "terminal.title": "Terminal",
   "terminal.title.numbered": "Terminal {{number}}",
+  "terminal.split": "Dividir terminal",
   "terminal.close": "Cerrar terminal",
   "terminal.connectionLost.title": "Conexión perdida",
   "terminal.connectionLost.description":

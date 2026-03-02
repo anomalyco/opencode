@@ -564,6 +564,7 @@ export const dict = {
   "terminal.loading": "Terminal yükleniyor...",
   "terminal.title": "Terminal",
   "terminal.title.numbered": "Terminal {{number}}",
+  "terminal.split": "Terminali böl",
   "terminal.close": "Terminali kapat",
   "terminal.connectionLost.title": "Bağlantı Kesildi",
   "terminal.connectionLost.description":

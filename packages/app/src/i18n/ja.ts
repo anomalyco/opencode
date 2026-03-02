@@ -494,6 +494,7 @@ export const dict = {
   "terminal.loading": "ターミナルを読み込み中...",
   "terminal.title": "ターミナル",
   "terminal.title.numbered": "ターミナル {{number}}",
+  "terminal.split": "ターミナルを分割",
   "terminal.close": "ターミナルを閉じる",
   "terminal.connectionLost.title": "接続が失われました",
   "terminal.connectionLost.description":

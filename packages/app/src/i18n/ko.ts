@@ -495,6 +495,7 @@ export const dict = {
   "terminal.loading": "터미널 로드 중...",
   "terminal.title": "터미널",
   "terminal.title.numbered": "터미널 {{number}}",
+  "terminal.split": "터미널 분할",
   "terminal.close": "터미널 닫기",
   "terminal.connectionLost.title": "연결 끊김",
   "terminal.connectionLost.description":

@@ -500,6 +500,7 @@ export const dict = {
   "terminal.loading": "Chargement du terminal...",
   "terminal.title": "Terminal",
   "terminal.title.numbered": "Terminal {{number}}",
+  "terminal.split": "Fractionner le terminal",
   "terminal.close": "Fermer le terminal",
   "terminal.connectionLost.title": "Connexion perdue",
   "terminal.connectionLost.description":
