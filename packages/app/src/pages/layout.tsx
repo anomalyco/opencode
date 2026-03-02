@@ -1073,6 +1073,16 @@ export default function Layout(props: ParentProps) {
     return root
   }
 
+  function clearLastProjectSession(root: string) {
+    if (!store.lastProjectSession[root]) return
+    setStore(
+      "lastProjectSession",
+      produce((draft) => {
+        delete draft[root]
+      }),
+    )
+  }
+
   function syncSessionRoute(directory: string, id: string, root = activeProjectRoot(directory)) {
     rememberSessionRoute(directory, id, root)
     notification.session.markViewed(id)
@@ -1092,20 +1102,28 @@ export default function Layout(props: ParentProps) {
     const dirs = project
       ? effectiveWorkspaceOrder(root, [root, ...(project.sandboxes ?? [])], store.workspaceOrder[root])
       : [root]
+    const valid = new Set(dirs.map(workspaceKey))
+    const canOpen = (value: string | undefined) => {
+      if (!value) return false
+      return valid.has(workspaceKey(value))
+    }
     const openSession = async (target: { directory: string; id: string }) => {
+      if (!canOpen(target.directory)) return false
       const resolved = await globalSDK.client.session
         .get({ sessionID: target.id })
         .then((x) => x.data)
         .catch(() => undefined)
-      const next = resolved?.directory ? resolved : target
+      const next = resolved?.directory && canOpen(resolved.directory) ? resolved : target
       setStore("lastProjectSession", root, { directory: next.directory, id: next.id, at: Date.now() })
       navigateWithSidebarReset(`/${base64Encode(next.directory)}/session/${next.id}`)
+      return true
     }
 
     const projectSession = store.lastProjectSession[root]
     if (projectSession?.id) {
-      await openSession(projectSession)
-      return
+      const opened = await openSession(projectSession)
+      if (opened) return
+      clearLastProjectSession(root)
     }
 
     const latest = latestRootSession(
@@ -1251,6 +1269,10 @@ export default function Layout(props: ParentProps) {
     setBusy(directory, false)
 
     if (!result) return
+
+    if (store.lastProjectSession[root]?.directory === directory) {
+      clearLastProjectSession(root)
+    }
 
     globalSync.set(
       "project",
