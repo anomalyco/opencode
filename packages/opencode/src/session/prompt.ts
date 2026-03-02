@@ -49,6 +49,7 @@ import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
+import { stale, reap } from "@/tool/bash"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -287,6 +288,13 @@ export namespace SessionPrompt {
     }
 
     await using _ = defer(() => cancel(sessionID))
+
+    const watchdog = setInterval(() => {
+      for (const id of stale()) {
+        reap(id)
+      }
+    }, 5000)
+    using _watchdog = defer(() => clearInterval(watchdog))
 
     // Structured output state
     // Note: On session resumption, state is reset but outputFormat is preserved

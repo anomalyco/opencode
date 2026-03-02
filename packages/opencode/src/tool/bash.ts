@@ -23,6 +23,40 @@ const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 
 
 export const log = Log.create({ service: "bash-tool" })
 
+// Registry for active bash processes — enables server-level watchdog
+const active = new Map<
+  string,
+  {
+    pid: number
+    timeout: number
+    started: number
+    kill: () => void
+    done: () => void
+  }
+>()
+
+export function stale() {
+  const result: string[] = []
+  const now = Date.now()
+  for (const [id, entry] of active) {
+    if (now - entry.started > entry.timeout + 5000) result.push(id)
+  }
+  return result
+}
+
+export function reap(id: string) {
+  const entry = active.get(id)
+  if (!entry) return
+  log.info("reaping stuck process", {
+    callID: id,
+    pid: entry.pid,
+    age: Date.now() - entry.started,
+  })
+  entry.kill()
+  entry.done()
+  active.delete(id)
+}
+
 const resolveWasm = (asset: string) => {
   if (asset.startsWith("file://")) return fileURLToPath(asset)
   if (asset.startsWith("/") || /^[a-z]:/i.test(asset)) return asset
@@ -176,6 +210,21 @@ export const BashTool = Tool.define("bash", async () => {
         windowsHide: process.platform === "win32",
       })
 
+      if (!proc.pid) {
+        if (proc.exitCode !== null) {
+          log.info("process exited before pid could be read", { exitCode: proc.exitCode })
+        } else {
+          throw new Error(`Failed to spawn process: pid is undefined for command "${params.command}"`)
+        }
+      }
+
+      log.info("spawned process", {
+        pid: proc.pid,
+        command: params.command.slice(0, 100),
+        cwd,
+        timeout,
+      })
+
       let output = ""
 
       // Initialize metadata with empty output
@@ -212,6 +261,7 @@ export const BashTool = Tool.define("bash", async () => {
       }
 
       const abortHandler = () => {
+        log.info("process abort triggered", { pid: proc.pid })
         aborted = true
         void kill()
       }
@@ -219,27 +269,135 @@ export const BashTool = Tool.define("bash", async () => {
       ctx.abort.addEventListener("abort", abortHandler, { once: true })
 
       const timeoutTimer = setTimeout(() => {
+        log.info("process timeout triggered", { pid: proc.pid, timeout })
         timedOut = true
         void kill()
       }, timeout + 100)
 
+      const started = Date.now()
+
+      const callID = ctx.callID
+      if (callID) {
+        active.set(callID, {
+          pid: proc.pid!,
+          timeout,
+          started,
+          kill: () => Shell.killTree(proc, { exited: () => exited }),
+          done: () => {},
+        })
+      }
+
       await new Promise<void>((resolve, reject) => {
+        let resolved = false
+
         const cleanup = () => {
+          if (resolved) return
+          resolved = true
           clearTimeout(timeoutTimer)
+          clearInterval(poll)
           ctx.abort.removeEventListener("abort", abortHandler)
+          proc.stdout?.removeListener("end", check)
+          proc.stderr?.removeListener("end", check)
         }
 
-        proc.once("exit", () => {
+        const done = () => {
+          if (resolved) return
           exited = true
           cleanup()
           resolve()
-        })
+        }
 
-        proc.once("error", (error) => {
+        // Update the active entry with the real done callback
+        if (callID) {
+          const entry = active.get(callID)
+          if (entry) {
+            entry.done = () => {
+              if (resolved) return
+              exited = true
+              cleanup()
+              resolve()
+            }
+          }
+        }
+
+        const fail = (error: Error) => {
+          if (resolved) return
           exited = true
           cleanup()
           reject(error)
+        }
+
+        proc.once("exit", () => {
+          log.info("process exit detected via 'exit' event", { pid: proc.pid, exitCode: proc.exitCode })
+          done()
         })
+        proc.once("close", () => {
+          log.info("process exit detected via 'close' event", { pid: proc.pid, exitCode: proc.exitCode })
+          done()
+        })
+        proc.once("error", fail)
+
+        // Redundancy: stdio end events fire when pipe file descriptors close
+        // independent of process exit monitoring — catches missed exit events
+        let streams = 0
+        const total = (proc.stdout ? 1 : 0) + (proc.stderr ? 1 : 0)
+        const check = () => {
+          streams++
+          if (streams < total) return
+          if (proc.exitCode !== null || proc.signalCode !== null) {
+            log.info("stdio end detected exit (exitCode already set)", {
+              pid: proc.pid,
+              exitCode: proc.exitCode,
+            })
+            done()
+            return
+          }
+          setTimeout(() => {
+            log.info("stdio end deferred check", {
+              pid: proc.pid,
+              exitCode: proc.exitCode,
+            })
+            done()
+          }, 50)
+        }
+        proc.stdout?.once("end", check)
+        proc.stderr?.once("end", check)
+
+        // Polling watchdog: detect process exit when Bun's event loop
+        // fails to deliver the "exit" event (confirmed Bun bug in containers)
+        const poll = setInterval(() => {
+          if (proc.exitCode !== null || proc.signalCode !== null) {
+            log.info("polling watchdog detected exit via exitCode/signalCode", {
+              exitCode: proc.exitCode,
+              signalCode: proc.signalCode,
+            })
+            done()
+            return
+          }
+
+          // Check 2: process.kill(pid, 0) throws ESRCH if process is dead
+          if (proc.pid && process.platform !== "win32") {
+            try {
+              process.kill(proc.pid, 0)
+            } catch {
+              log.info("polling watchdog detected exit via kill(0) ESRCH", {
+                pid: proc.pid,
+              })
+              done()
+              return
+            }
+          }
+        }, 1000)
+      })
+
+      if (callID) active.delete(callID)
+
+      log.info("process completed", {
+        pid: proc.pid,
+        exitCode: proc.exitCode,
+        duration: Date.now() - started,
+        timedOut,
+        aborted,
       })
 
       const resultMetadata: string[] = []
