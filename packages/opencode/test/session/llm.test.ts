@@ -134,7 +134,7 @@ beforeAll(() => {
       }
 
       const url = new URL(req.url)
-      const body = (await req.json()) as Record<string, unknown>
+      const body = req.method === "GET" ? {} : ((await req.json()) as Record<string, unknown>)
       next.resolve({ url, headers: req.headers, body })
 
       if (!url.pathname.endsWith(next.path)) {
@@ -250,6 +250,7 @@ describe("session.llm.stream", () => {
             enabled_providers: [providerID],
             provider: {
               [providerID]: {
+                shouldFetchModels: false,
                 options: {
                   apiKey: "test-key",
                   baseURL: `${server.url.origin}/v1`,
@@ -374,6 +375,7 @@ describe("session.llm.stream", () => {
             provider: {
               openai: {
                 name: "OpenAI",
+                shouldFetchModels: false,
                 env: ["OPENAI_API_KEY"],
                 npm: "@ai-sdk/openai",
                 api: "https://api.openai.com/v1",
@@ -502,6 +504,7 @@ describe("session.llm.stream", () => {
             enabled_providers: [providerID],
             provider: {
               [providerID]: {
+                shouldFetchModels: false,
                 options: {
                   apiKey: "test-anthropic-key",
                   baseURL: `${server.url.origin}/v1`,
@@ -603,6 +606,7 @@ describe("session.llm.stream", () => {
             enabled_providers: [providerID],
             provider: {
               [providerID]: {
+                shouldFetchModels: false,
                 options: {
                   apiKey: "test-google-key",
                   baseURL: `${server.url.origin}/v1beta`,
