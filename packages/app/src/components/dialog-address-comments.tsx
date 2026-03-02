@@ -4,7 +4,6 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Spinner } from "@opencode-ai/ui/spinner"
-import { TextField } from "@opencode-ai/ui/text-field"
 import { createMemo, For, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
@@ -30,7 +29,6 @@ export function AddressCommentsDialog() {
     error: undefined as string | undefined,
     threads: [] as ReviewThread[],
     selected: {} as Record<string, boolean>,
-    instructions: "",
   })
 
   onMount(async () => {
@@ -113,10 +111,6 @@ export function AddressCommentsDialog() {
     text += `   - Reply on GitHub explaining the design rationale:\n`
     text += `     \`gh api repos/${owner}/${repoName}/pulls/${prNumber}/comments --method POST -f body="<rationale>" -F in_reply_to=<comment ID>\`\n`
     text += `4. Do NOT merge, rebase, or force-push\n`
-
-    if (store.instructions.trim()) {
-      text += `\n${store.instructions.trim()}\n`
-    }
 
     dialog.close()
     requestAnimationFrame(() => {
@@ -279,16 +273,6 @@ export function AddressCommentsDialog() {
                 </For>
               </div>
 
-              {/* Additional instructions */}
-              <div class="flex flex-col gap-1.5 shrink-0 pt-5 pb-2">
-                <label class="text-12-medium text-text-strong">{language.t("pr.comments.instructions")}</label>
-                <TextField
-                  multiline
-                  value={store.instructions}
-                  onInput={(e) => setStore("instructions", e.currentTarget.value)}
-                  placeholder={language.t("pr.comments.instructions.placeholder")}
-                />
-              </div>
             </Show>
           </Show>
         </Show>
