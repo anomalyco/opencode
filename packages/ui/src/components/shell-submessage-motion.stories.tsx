@@ -61,21 +61,24 @@ const shellCss = `
 [data-component="shell-submessage"] {
   min-width: 0;
   max-width: 100%;
-  display: inline-block;
+  display: inline-flex;
+  align-items: baseline;
   vertical-align: baseline;
 }
 
 [data-component="shell-submessage"] [data-slot="shell-submessage-width"] {
   min-width: 0;
   max-width: 100%;
-  display: inline-block;
-  overflow: clip;
+  display: inline-flex;
+  align-items: baseline;
+  overflow: hidden;
 }
 
 [data-component="shell-submessage"] [data-slot="shell-submessage-value"] {
   display: inline-block;
   vertical-align: baseline;
   min-width: 0;
+  line-height: inherit;
   white-space: nowrap;
   opacity: 0;
   filter: blur(var(--shell-sub-blur, 2px));
@@ -97,12 +100,7 @@ const ease = {
   linear: "linear",
 }
 
-function SpringSubmessage(props: {
-  text: string
-  visible: boolean
-  visualDuration: number
-  bounce: number
-}) {
+function SpringSubmessage(props: { text: string; visible: boolean; visualDuration: number; bounce: number }) {
   let ref: HTMLSpanElement | undefined
   let widthRef: HTMLSpanElement | undefined
 
@@ -201,12 +199,7 @@ export const Playground = {
             <div data-slot="basic-tool-tool-info-structured">
               <div data-slot="basic-tool-tool-info-main">
                 <span data-slot="basic-tool-tool-title">Shell</span>
-                <SpringSubmessage
-                  text={text()}
-                  visible={show()}
-                  visualDuration={visualDuration()}
-                  bounce={bounce()}
-                />
+                <SpringSubmessage text={text()} visible={show()} visualDuration={visualDuration()} bounce={bounce()} />
               </div>
             </div>
           }
