@@ -109,6 +109,8 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".zig": "zig",
   ".zon": "zig",
   ".astro": "astro",
+  ".bicep": "bicep",
+  ".bicepparam": "bicepparam",
   ".ml": "ocaml",
   ".mli": "ocaml",
   ".tf": "terraform",
