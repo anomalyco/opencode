@@ -15,6 +15,7 @@ import { useSync } from "@/context/sync"
 import { getPrButtonContainerStyle, getPrButtonDividerStyle } from "@/utils/pr-style"
 import { CreatePrDialog } from "./dialog-create-pr"
 import { MergePrDialog } from "./dialog-merge-pr"
+import { DeleteBranchDialog } from "./dialog-delete-branch"
 import { AddressCommentsDialog } from "./dialog-address-comments"
 
 export function PrButton() {
@@ -163,26 +164,8 @@ export function PrButton() {
     dialog.show(() => <MergePrDialog />)
   }
 
-  const handleDeleteBranch = async () => {
-    const p = pr()
-    if (!p?.headRefName) return
-    try {
-      await sdk.client.vcs.pr.deleteBranch({
-        directory: sdk.directory,
-        prDeleteBranchInput: { branch: p.headRefName },
-      })
-      showToast({
-        variant: "success",
-        icon: "circle-check",
-        title: language.t("pr.toast.branch_deleted"),
-      })
-    } catch {
-      showToast({
-        variant: "error",
-        icon: "circle-x",
-        title: language.t("pr.error.delete_branch_failed"),
-      })
-    }
+  const openDeleteDialog = () => {
+    dialog.show(() => <DeleteBranchDialog />)
   }
 
   const handleMarkReady = () => {
@@ -363,7 +346,7 @@ export function PrButton() {
                             disabled={!canMutate()}
                             onSelect={() => {
                               setMenu("open", false)
-                              handleDeleteBranch()
+                              openDeleteDialog()
                             }}
                           >
                             <Icon name="trash" size="small" class="text-icon-weak" />
