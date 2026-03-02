@@ -3,11 +3,11 @@ title: 키바인드
 description: 키바인드를 커스터마이즈하세요.
 ---
 
-OpenCode에는 OpenCode config를 통해 커스터마이즈할 수 있는 keybinds 목록이 있습니다.
+OpenCode에는 `tui.json`을 통해 커스터마이즈할 수 있는 키바인드 목록이 있습니다.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -117,11 +117,11 @@ keybinds에 리더 키를 꼭 사용할 필요는 없지만, 사용하는 것을
 
 ## 키바인드 비활성화
 
-config에 해당 키를 값 `"none"`으로 추가하면 keybind를 비활성화할 수 있습니다.
+`tui.json`에 해당 키를 값 `"none"`으로 추가하면 키바인드를 비활성화할 수 있습니다.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "session_compact": "none"
   }
