@@ -29,6 +29,13 @@ import DirectoryLayout from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
 
+const Login = lazy(() => import("@/pages/login"))
+const LoginRoute = () => (
+  <Suspense fallback={<Loading />}>
+    <Login />
+  </Suspense>
+)
+
 const Home = lazy(() => import("@/pages/home"))
 const Session = lazy(() => import("@/pages/session"))
 const Loading = () => <div class="size-full" />
@@ -140,6 +147,16 @@ function ServerKey(props: ParentProps) {
   )
 }
 
+function AuthenticatedGate(props: ParentProps) {
+  return (
+    <ServerKey>
+      <GlobalSDKProvider>
+        <GlobalSyncProvider>{props.children}</GlobalSyncProvider>
+      </GlobalSDKProvider>
+    </ServerKey>
+  )
+}
+
 export function AppInterface(props: {
   children?: JSX.Element
   defaultServer: ServerConnection.Key
@@ -147,21 +164,18 @@ export function AppInterface(props: {
 }) {
   return (
     <ServerProvider defaultServer={props.defaultServer} servers={props.servers}>
-      <ServerKey>
-        <GlobalSDKProvider>
-          <GlobalSyncProvider>
-            <Router
-              root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
-            >
-              <Route path="/" component={HomeRoute} />
-              <Route path="/:dir" component={DirectoryLayout}>
-                <Route path="/" component={SessionIndexRoute} />
-                <Route path="/session/:id?" component={SessionRoute} />
-              </Route>
-            </Router>
-          </GlobalSyncProvider>
-        </GlobalSDKProvider>
-      </ServerKey>
+      <Router
+        root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
+      >
+        <Route path="/login" component={LoginRoute} />
+        <Route path="/" component={AuthenticatedGate}>
+          <Route path="/" component={HomeRoute} />
+          <Route path="/:dir" component={DirectoryLayout}>
+            <Route path="/" component={SessionIndexRoute} />
+            <Route path="/session/:id?" component={SessionRoute} />
+          </Route>
+        </Route>
+      </Router>
     </ServerProvider>
   )
 }

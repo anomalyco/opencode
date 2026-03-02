@@ -6,7 +6,8 @@ import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { streamSSE } from "hono/streaming"
 import { proxy } from "hono/proxy"
-import { basicAuth } from "hono/basic-auth"
+import { dualAuth, createSessionCookie } from "./auth"
+import { setCookie, deleteCookie } from "hono/cookie"
 import z from "zod"
 import { Provider } from "../provider/provider"
 import { NamedError } from "@opencode-ai/util/error"
@@ -78,13 +79,23 @@ export namespace Server {
           })
         })
         .use((c, next) => {
-          // Allow CORS preflight requests to succeed without auth.
-          // Browser clients sending Authorization headers will preflight with OPTIONS.
           if (c.req.method === "OPTIONS") return next()
           const password = Flag.OPENCODE_SERVER_PASSWORD
           if (!password) return next()
           const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
-          return basicAuth({ username, password })(c, next)
+          const path = new URL(c.req.url).pathname
+          if (
+            path === "/login" ||
+            path === "/api/login" ||
+            path.startsWith("/assets/") ||
+            path.endsWith(".js") ||
+            path.endsWith(".css") ||
+            path.endsWith(".svg") ||
+            path.endsWith(".png") ||
+            path.endsWith(".ico")
+          )
+            return next()
+          return dualAuth(username, password)(c, next)
         })
         .use(async (c, next) => {
           const skipLogging = c.req.path === "/log"
@@ -540,6 +551,25 @@ export namespace Server {
             })
           },
         )
+        .post("/api/login", async (c) => {
+          const password = Flag.OPENCODE_SERVER_PASSWORD
+          if (!password) return c.json({ error: "Auth not configured" }, 400)
+          const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
+          const body = await c.req.json()
+          if (body.username !== username || body.password !== password) return c.json({ error: "Invalid credentials" }, 401)
+          const token = await createSessionCookie(body.username, password)
+          setCookie(c, "opencode_session", token, {
+            httpOnly: true,
+            sameSite: "Lax",
+            path: "/",
+            maxAge: 86400,
+          })
+          return c.json({ ok: true })
+        })
+        .post("/api/logout", (c) => {
+          deleteCookie(c, "opencode_session", { path: "/" })
+          return c.json({ ok: true })
+        })
         .all("/*", async (c) => {
           const path = c.req.path
 
