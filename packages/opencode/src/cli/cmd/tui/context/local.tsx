@@ -13,7 +13,7 @@ import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
 import { Filesystem } from "@/util/filesystem"
-import { isWorkflowModel } from "@gitlab/gitlab-ai-provider"
+import { isWorkflowModel } from "gitlab-ai-provider"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",

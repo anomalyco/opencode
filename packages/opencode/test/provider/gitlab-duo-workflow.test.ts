@@ -4,7 +4,7 @@ import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
 import { Env } from "../../src/env"
-import { isWorkflowModel } from "@gitlab/gitlab-ai-provider"
+import { isWorkflowModel } from "gitlab-ai-provider"
 
 describe("GitLab Duo: workflow model support", () => {
   test("isWorkflowModel identifies workflow model IDs", () => {

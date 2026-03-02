@@ -22,7 +22,7 @@ import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { PermissionNext } from "@/permission/next"
 import { Auth } from "@/auth"
-import { GitLabWorkflowLanguageModel, type AiModel } from "@gitlab/gitlab-ai-provider"
+import { GitLabWorkflowLanguageModel, type AiModel } from "gitlab-ai-provider"
 import { GitLabWorkflowModelSelect } from "@/session/gitlab-workflow-model-select"
 
 export namespace LLM {

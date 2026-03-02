@@ -3,7 +3,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { Env } from "@/env"
 import { Instance } from "@/project/instance"
 import { Log } from "@/util/log"
-import { GitLabModelCache } from "@gitlab/gitlab-ai-provider"
+import { GitLabModelCache } from "gitlab-ai-provider"
 import { randomBytes } from "crypto"
 import z from "zod"
 
