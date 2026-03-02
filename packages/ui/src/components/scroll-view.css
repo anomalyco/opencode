@@ -17,7 +17,7 @@
 
 .scroll-view__thumb {
   position: absolute;
-  right: 1px;
+  right: 0;
   top: 0;
   width: 12px;
   transition: opacity 200ms ease;
@@ -33,7 +33,7 @@
   transform: translateX(-50%);
   top: 0;
   bottom: 0;
-  width: 6px;
+  width: 4px;
   border-radius: 9999px;
   background-color: var(--border-weak-base);
   backdrop-filter: blur(4px);

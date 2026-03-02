@@ -17,7 +17,7 @@
 
   [data-slot="session-review-container"] {
     flex: 1 1 auto;
-    padding-right: 4px;
+    padding-right: 0;
   }
 
   [data-slot="session-review-header"] {
