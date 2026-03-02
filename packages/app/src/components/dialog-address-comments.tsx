@@ -7,6 +7,7 @@ import { Spinner } from "@opencode-ai/ui/spinner"
 import { createMemo, For, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
+import { useLocal } from "@/context/local"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
@@ -17,6 +18,7 @@ export function AddressCommentsDialog() {
   const dialog = useDialog()
   const sdk = useSDK()
   const sync = useSync()
+  const local = useLocal()
   const prompt = usePrompt()
   const language = useLanguage()
 
@@ -115,6 +117,9 @@ export function AddressCommentsDialog() {
     text += `     \`gh api repos/${owner}/${repoName}/pulls/${prNumber}/comments --method POST -f body="<rationale>" -F in_reply_to=<comment ID>\`\n`
     text += `4. Do NOT merge, rebase, or force-push\n`
 
+    if (local.agent.current()?.name !== "build") {
+      local.agent.set("build")
+    }
     dialog.close()
     requestAnimationFrame(() => {
       prompt.set([
@@ -275,7 +280,6 @@ export function AddressCommentsDialog() {
                   }}
                 </For>
               </div>
-
             </Show>
           </Show>
         </Show>
@@ -298,7 +302,9 @@ export function AddressCommentsDialog() {
             </Button>
             <Show when={store.threads.length > 0 && !store.error}>
               <Button variant="primary" disabled={selectedCount() === 0} onClick={handleSubmit}>
-                {language.t("pr.comments.submit")}
+                {local.agent.current()?.name !== "build"
+                  ? language.t("pr.comments.submitWithSwitch")
+                  : language.t("pr.comments.submit")}
               </Button>
             </Show>
           </div>

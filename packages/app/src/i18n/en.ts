@@ -129,6 +129,7 @@ export const dict = {
   "pr.comments.instructions": "Additional instructions",
   "pr.comments.instructions.placeholder": "Any additional instructions for the agent...",
   "pr.comments.submit": "Prefill Prompt",
+  "pr.comments.submitWithSwitch": "Prefill Prompt & Switch to Build",
   "pr.comments.replies.one": "1 reply",
   "pr.comments.replies.count": "{{count}} replies",
   "pr.comments.select.all": "Select all",
