@@ -591,7 +591,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setActive: setSlashActive,
     onInput: slashOnInput,
     onKeyDown: slashOnKeyDown,
-    refetch: slashRefetch,
   } = useFilteredList<SlashCommand>({
     items: slashCommands,
     key: (x) => x?.id,
@@ -647,14 +646,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       editorRef.appendChild(document.createTextNode("\u200B"))
     }
   }
-
-  createEffect(
-    on(
-      () => sync.data.command,
-      () => slashRefetch(),
-      { defer: true },
-    ),
-  )
 
   // Auto-scroll active command into view when navigating with keyboard
   createEffect(() => {
