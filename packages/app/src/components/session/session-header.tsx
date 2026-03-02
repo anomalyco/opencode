@@ -35,6 +35,7 @@ const OPEN_APPS = [
   "terminal",
   "iterm2",
   "ghostty",
+  "warp",
   "xcode",
   "android-studio",
   "powershell",
@@ -63,6 +64,7 @@ const MAC_APPS = [
   { id: "terminal", label: "Terminal", icon: "terminal", openWith: "Terminal" },
   { id: "iterm2", label: "iTerm2", icon: "iterm2", openWith: "iTerm" },
   { id: "ghostty", label: "Ghostty", icon: "ghostty", openWith: "Ghostty" },
+  { id: "warp", label: "Warp", icon: "warp", openWith: "Warp" },
   { id: "xcode", label: "Xcode", icon: "xcode", openWith: "Xcode" },
   {
     id: "android-studio",
@@ -304,11 +306,10 @@ export function SessionHeader() {
   const current = createMemo(() => options().find((o) => o.id === prefs.app) ?? options()[0])
   const opening = createMemo(() => openRequest.app !== undefined)
 
-  createEffect(() => {
-    const value = prefs.app
-    if (options().some((o) => o.id === value)) return
-    setPrefs("app", options()[0]?.id ?? "finder")
-  })
+  const selectApp = (app: OpenApp) => {
+    if (!options().some((item) => item.id === app)) return
+    setPrefs("app", app)
+  }
 
   const openDir = (app: OpenApp) => {
     if (opening() || !canOpen() || !platform.openPath) return
@@ -428,7 +429,7 @@ export function SessionHeader() {
                               <Spinner class="size-3.5 text-icon-base" />
                             </Show>
                           </div>
-                          <span class="text-12-regular text-text-strong">Open</span>
+                          <span class="text-12-regular text-text-strong">{language.t("common.open")}</span>
                         </Button>
                         <div class="self-stretch w-px bg-border-weak-base" />
                         <DropdownMenu
@@ -456,7 +457,7 @@ export function SessionHeader() {
                                   value={current().id}
                                   onChange={(value) => {
                                     if (!OPEN_APPS.includes(value as OpenApp)) return
-                                    setPrefs("app", value as OpenApp)
+                                    selectApp(value as OpenApp)
                                   }}
                                 >
                                   <For each={options()}>

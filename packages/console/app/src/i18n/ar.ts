@@ -15,6 +15,7 @@ export const dict = {
   "nav.home": "الرئيسية",
   "nav.openMenu": "فتح القائمة",
   "nav.getStartedFree": "ابدأ مجانا",
+  "nav.logoAlt": "OpenCode",
 
   "nav.context.copyLogo": "نسخ الشعار كـ SVG",
   "nav.context.copyWordmark": "نسخ اسم العلامة كـ SVG",
@@ -42,8 +43,12 @@ export const dict = {
   "notFound.docs": "الوثائق",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
+  "notFound.logoLightAlt": "شعار opencode الفاتح",
+  "notFound.logoDarkAlt": "شعار opencode الداكن",
 
   "user.logout": "تسجيل الخروج",
+
+  "auth.callback.error.codeMissing": "لم يتم العثور على رمز التفويض.",
 
   "workspace.select": "اختر مساحة العمل",
   "workspace.createNew": "+ إنشاء مساحة عمل جديدة",
@@ -76,6 +81,8 @@ export const dict = {
   "error.reloadAmountMin": "يجب أن يكون مبلغ الشحن ${{amount}} على الأقل",
   "error.reloadTriggerMin": "يجب أن يكون حد الرصيد ${{amount}} على الأقل",
 
+  "app.meta.description": "OpenCode - وكيل البرمجة مفتوح المصدر.",
+
   "home.title": "OpenCode | وكيل برمجة بالذكاء الاصطناعي مفتوح المصدر",
 
   "temp.title": "opencode | وكيل برمجة بالذكاء الاصطناعي مبني للطرفية",
@@ -91,6 +98,8 @@ export const dict = {
   "temp.feature.models.afterLink": "، بما في ذلك النماذج المحلية",
   "temp.screenshot.caption": "واجهة OpenCode الطرفية مع سمة tokyonight",
   "temp.screenshot.alt": "واجهة OpenCode الطرفية بسمة tokyonight",
+  "temp.logoLightAlt": "شعار opencode الفاتح",
+  "temp.logoDarkAlt": "شعار opencode الداكن",
 
   "home.banner.badge": "جديد",
   "home.banner.text": "تطبيق سطح المكتب متاح بنسخة تجريبية",
@@ -237,6 +246,24 @@ export const dict = {
   "zen.privacy.beforeExceptions":
     "تتم استضافة جميع نماذج Zen في الولايات المتحدة. يتبع المزودون سياسة عدم الاحتفاظ بالبيانات ولا يستخدمون بياناتك لتدريب النماذج، مع",
   "zen.privacy.exceptionsLink": "الاستثناءات التالية",
+
+  "zen.api.error.rateLimitExceeded": "تم تجاوز حد الطلبات. يرجى المحاولة مرة أخرى لاحقًا.",
+  "zen.api.error.modelNotSupported": "النموذج {{model}} غير مدعوم",
+  "zen.api.error.modelFormatNotSupported": "النموذج {{model}} غير مدعوم للتنسيق {{format}}",
+  "zen.api.error.noProviderAvailable": "لا يوجد مزود متاح",
+  "zen.api.error.providerNotSupported": "المزود {{provider}} غير مدعوم",
+  "zen.api.error.missingApiKey": "مفتاح API مفقود.",
+  "zen.api.error.invalidApiKey": "مفتاح API غير صالح.",
+  "zen.api.error.subscriptionQuotaExceeded": "تم تجاوز حصة الاشتراك. أعد المحاولة خلال {{retryIn}}.",
+  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
+    "تم تجاوز حصة الاشتراك. يمكنك الاستمرار في استخدام النماذج المجانية.",
+  "zen.api.error.noPaymentMethod": "لا توجد طريقة دفع. أضف طريقة دفع هنا: {{billingUrl}}",
+  "zen.api.error.insufficientBalance": "رصيد غير كاف. إدارة فواتيرك هنا: {{billingUrl}}",
+  "zen.api.error.workspaceMonthlyLimitReached":
+    "وصلت مساحة العمل الخاصة بك إلى حد الإنفاق الشهري البالغ ${{amount}}. إدارة حدودك هنا: {{billingUrl}}",
+  "zen.api.error.userMonthlyLimitReached":
+    "لقد وصلت إلى حد الإنفاق الشهري البالغ ${{amount}}. إدارة حدودك هنا: {{membersUrl}}",
+  "zen.api.error.modelDisabled": "النموذج معطل",
 
   "black.meta.title": "OpenCode Black | الوصول إلى أفضل نماذج البرمجة في العالم",
   "black.meta.description": "احصل على وصول إلى Claude، GPT، Gemini والمزيد مع خطط اشتراك OpenCode Black.",
@@ -446,6 +473,7 @@ export const dict = {
   "workspace.reload.updatePaymentMethod": "يرجى تحديث طريقة الدفع والمحاولة مرة أخرى.",
   "workspace.reload.retrying": "جارٍ إعادة المحاولة...",
   "workspace.reload.retry": "أعد المحاولة",
+  "workspace.reload.error.paymentFailed": "فشلت عملية الدفع.",
 
   "workspace.payments.title": "سجل المدفوعات",
   "workspace.payments.subtitle": "معاملات الدفع الأخيرة.",
@@ -563,6 +591,10 @@ export const dict = {
   "enterprise.form.send": "إرسال",
   "enterprise.form.sending": "جارٍ الإرسال...",
   "enterprise.form.success": "تم إرسال الرسالة، سنتواصل معك قريبًا.",
+  "enterprise.form.success.submitted": "تم إرسال النموذج بنجاح.",
+  "enterprise.form.error.allFieldsRequired": "جميع الحقول مطلوبة.",
+  "enterprise.form.error.invalidEmailFormat": "تنسيق البريد الإلكتروني غير صالح.",
+  "enterprise.form.error.internalServer": "خطأ داخلي في الخادم.",
   "enterprise.faq.title": "الأسئلة الشائعة",
   "enterprise.faq.q1": "ما هو OpenCode Enterprise؟",
   "enterprise.faq.a1":
@@ -595,6 +627,7 @@ export const dict = {
   "bench.list.table.agent": "الوكيل",
   "bench.list.table.model": "النموذج",
   "bench.list.table.score": "الدرجة",
+  "bench.submission.error.allFieldsRequired": "جميع الحقول مطلوبة.",
 
   "bench.detail.title": "المعيار - {{task}}",
   "bench.detail.notFound": "المهمة غير موجودة",

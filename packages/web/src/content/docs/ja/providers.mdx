@@ -57,7 +57,38 @@ OpenCode で適切に動作することがテストおよび検証されてい�
 初めての方は、OpenCode Zen から始めることをお勧めします。
 :::
 
-1. TUI で `/connect` コマンドを実行し、opencode を選択して、[opencode.ai/auth](https://opencode.ai/auth) で認証します。
+1. TUI で `/connect` コマンドを実行し、`OpenCode Zen` を選択して、[opencode.ai/zen](https://opencode.ai/zen) にアクセスします。
+
+   ```txt
+   /connect
+   ```
+
+2. サインインし、お支払いの詳細を追加し、API キーをコピーします。
+
+3. API キーを貼り付けます。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. TUI で `/models` を実行すると、推奨されるモデルのリストが表示されます。
+
+   ```txt
+   /models
+   ```
+
+これは OpenCode の他のプロバイダーと同様に機能し、使用は完全にオプションです。
+
+---
+
+## OpenCode Go
+
+OpenCode Go は、OpenCode チームによって提供される、人気のあるオープンコーディングモデルへの信頼性の高いアクセスを提供する低コストのサブスクリプションプランです。これらは OpenCode でうまく機能することがテストおよび検証されています。
+
+1. TUI で `/connect` コマンドを実行し、`OpenCode Go` を選択して、[opencode.ai/zen](https://opencode.ai/zen) にアクセスします。
 
    ```txt
    /connect
@@ -126,105 +157,111 @@ OpenCode で適切に動作することがテストおよび検証されてい�
 
 OpenCode で Amazon Bedrock を使用するには:
 
-1. Amazon Bedrock コンソールの **モデルカタログ** に移動してリクエストします。
-   必要なモデルにアクセスします。
+1. Amazon Bedrock コンソールの **モデルカタログ** に移動し、必要なモデルへのアクセスをリクエストします。
 
-:::tip
-Amazon Bedrock で必要なモデルにアクセスできる必要があります。
-:::
+   :::tip
+   Amazon Bedrock で必要なモデルにアクセスできる必要があります。
+   :::
 
-2. **次のいずれかの方法を使用して認証を構成します**。
+2. **次のいずれかの方法を使用して認証を構成します**:
+
+   ***
 
    #### 環境変数 (クイックスタート)
 
-opencode の実行中に次の環境変数のいずれかを設定します。
+   opencode の実行中に次の環境変数のいずれかを設定します。
 
-```bash
-   # Option 1: Using AWS access keys
+   ```bash
+   # オプション 1: AWS アクセスキーの使用
    AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
 
-   # Option 2: Using named AWS profile
+   # オプション 2: 名前付き AWS プロファイルの使用
    AWS_PROFILE=my-profile opencode
 
-   # Option 3: Using Bedrock bearer token
+   # オプション 3: Bedrock ベアラートークンの使用
    AWS_BEARER_TOKEN_BEDROCK=XXX opencode
-```
+   ```
 
-または、それらを bash プロファイルに追加します。
+   または、それらを bash プロファイルに追加します。
 
-```bash title="~/.bash_profile"
+   ```bash title="~/.bash_profile"
    export AWS_PROFILE=my-dev-profile
    export AWS_REGION=us-east-1
-```
+   ```
 
-#### 設定ファイル (推奨)
+   ***
 
-プロジェクト固有の設定または永続的な設定の場合は、`opencode.json` を使用します。
+   #### 設定ファイル (推奨)
 
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "amazon-bedrock": {
-      "options": {
-        "region": "us-east-1",
-        "profile": "my-aws-profile"
-      }
-    }
-  }
-}
-```
+   プロジェクト固有の設定または永続的な設定の場合は、`opencode.json` を使用します。
 
-**利用可能なオプション:**
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "amazon-bedrock": {
+         "options": {
+           "region": "us-east-1",
+           "profile": "my-aws-profile"
+         }
+       }
+     }
+   }
+   ```
 
-- `region` - AWS リージョン (例: `us-east-1`、`eu-west-1`)
-- `profile` - `~/.aws/credentials` からの AWS 名前付きプロファイル
-- `endpoint` - VPC エンドポイントのカスタムエンドポイント URL (汎用 `baseURL` オプションのエイリアス)
+   **利用可能なオプション:**
+   - `region` - AWS リージョン (例: `us-east-1`、`eu-west-1`)
+   - `profile` - `~/.aws/credentials` からの AWS 名前付きプロファイル
+   - `endpoint` - VPC エンドポイントのカスタムエンドポイント URL (汎用 `baseURL` オプションのエイリアス)
 
-:::tip
-設定ファイルのオプションは環境変数より優先されます。
-:::
+   :::tip
+   設定ファイルのオプションは環境変数より優先されます。
+   :::
 
-#### 上級: VPC エンドポイント
+   ***
 
-Bedrock の VPC エンドポイントを使用している場合:
+   #### 上級: VPC エンドポイント
 
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "amazon-bedrock": {
-      "options": {
-        "region": "us-east-1",
-        "profile": "production",
-        "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
-      }
-    }
-  }
-}
-```
+   Bedrock の VPC エンドポイントを使用している場合:
 
-:::note
-`endpoint` オプションは、AWS 固有の用語を使用した汎用の `baseURL` オプションのエイリアスです。 `endpoint` と `baseURL` の両方が指定された場合は、`endpoint` が優先されます。
-:::
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "amazon-bedrock": {
+         "options": {
+           "region": "us-east-1",
+           "profile": "production",
+           "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
+         }
+       }
+     }
+   }
+   ```
 
-#### 認証方法
+   :::note
+   `endpoint` オプションは、AWS 固有の用語を使用した汎用の `baseURL` オプションのエイリアスです。 `endpoint` と `baseURL` の両方が指定された場合は、`endpoint` が優先されます。
+   :::
 
-- **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**: IAM ユーザーを作成し、AWS コンソールでアクセスキーを生成します。
-- **`AWS_PROFILE`**: `~/.aws/credentials` の名前付きプロファイルを使用します。最初に `aws configure --profile my-profile` または `aws sso login` を設定します
-- **`AWS_BEARER_TOKEN_BEDROCK`**: Amazon Bedrock コンソールから長期 API キーを生成します
-- **`AWS_WEB_IDENTITY_TOKEN_FILE` / `AWS_ROLE_ARN`**: EKS IRSA (サービスアカウントの IAM ロール) または OIDC フェデレーションを備えた他の Kubernetes 環境の場合。これらの環境変数は、サービスアカウントアノテーションを使用するときに Kubernetes によって自動的に挿入されます。
+   ***
 
-#### 認証の優先順位
+   #### 認証方法
+   - **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**: IAM ユーザーを作成し、AWS コンソールでアクセスキーを生成します
+   - **`AWS_PROFILE`**: `~/.aws/credentials` の名前付きプロファイルを使用します。最初に `aws configure --profile my-profile` または `aws sso login` を設定します
+   - **`AWS_BEARER_TOKEN_BEDROCK`**: Amazon Bedrock コンソールから長期 API キーを生成します
+   - **`AWS_WEB_IDENTITY_TOKEN_FILE` / `AWS_ROLE_ARN`**: EKS IRSA (サービスアカウントの IAM ロール) または OIDC フェデレーションを備えた他の Kubernetes 環境の場合。これらの環境変数は、サービスアカウントアノテーションを使用するときに Kubernetes によって自動的に挿入されます。
 
-Amazon Bedrock は次の認証優先度を使用します。
+   ***
 
-1.  **ベアラー トークン** - `AWS_BEARER_TOKEN_BEDROCK` 環境変数または `/connect` コマンドからのトークン
-2.  **AWS 認証情報チェーン** - プロファイル、アクセスキー、共有認証情報、IAM ロール、Web ID トークン (EKS IRSA)、インスタンスメタデータ
+   #### 認証の優先順位
 
-:::note
-ベアラー トークンが (`/connect` または `AWS_BEARER_TOKEN_BEDROCK` 経由で) 設定されると、設定されたプロファイルを含むすべての AWS 認証情報方法よりも優先されます。
-:::
+   Amazon Bedrock は次の認証優先度を使用します。
+   1. **ベアラー トークン** - `AWS_BEARER_TOKEN_BEDROCK` 環境変数または `/connect` コマンドからのトークン
+   2. **AWS 認証情報チェーン** - プロファイル、アクセスキー、共有認証情報、IAM ロール、Web ID トークン (EKS IRSA)、インスタンスメタデータ
+
+   :::note
+   ベアラー トークンが (`/connect` または `AWS_BEARER_TOKEN_BEDROCK` 経由で) 設定されると、設定されたプロファイルを含むすべての AWS 認証情報方法よりも優先されます。
+   :::
 
 3. `/models` コマンドを実行して、必要なモデルを選択します。
 
@@ -234,6 +271,7 @@ Amazon Bedrock は次の認証優先度を使用します。
 
 :::note
 カスタム推論プロファイルの場合、キーでモデルとプロバイダー名を使用し、`id` プロパティを arn に設定します。これにより、正しいキャッシュが保証されます。
+:::
 
 ```json title="opencode.json"
 {
@@ -250,8 +288,6 @@ Amazon Bedrock は次の認証優先度を使用します。
   }
 }
 ```
-
-:::
 
 ---
 
@@ -672,9 +708,42 @@ GitLab Duo は、GitLab の Anthropic プロキシを介したネイティブツ
 
 6.  `/models` コマンドを実行して、利用可能なモデルを確認します。
 
-    ```txt
-    /models
-    ```
+```txt
+/models
+```
+
+---
+
+### STACKIT
+
+STACKIT AI Model Serving は、Llama、Mistral、Qwen などの LLM に焦点を当て、ヨーロッパのインフラストラクチャでの最大限のデータ主権を備えた、AI モデル用の完全に管理された主権ホスティング環境を提供します。
+
+1. [STACKIT Portal](https://portal.stackit.cloud) に移動し、**AI Model Serving** に移動して、プロジェクトの認証トークンを作成します。
+
+   :::tip
+   認証トークンを作成する前に、STACKIT 顧客アカウント、ユーザーアカウント、およびプロジェクトが必要です。
+   :::
+
+2. `/connect` コマンドを実行し、**STACKIT** を検索します。
+
+   ```txt
+   /connect
+   ```
+
+3. STACKIT AI Model Serving 認証トークンを入力します。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. `/models` コマンドを実行して、_Qwen3-VL 235B_ や _Llama 3.3 70B_ などの利用可能なモデルから選択します。
+
+   ```txt
+   /models
+   ```
 
 3 つの Claude ベースのモデルが利用可能です。
 

@@ -9,7 +9,7 @@ import { same } from "@/utils/same"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
-import { Code } from "@opencode-ai/ui/code"
+import { File } from "@opencode-ai/ui/file"
 import { Markdown } from "@opencode-ai/ui/markdown"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import type { Message, Part, UserMessage } from "@opencode-ai/sdk/v2/client"
@@ -47,7 +47,8 @@ function RawMessageContent(props: { message: Message; getParts: (id: string) => 
   })
 
   return (
-    <Code
+    <File
+      mode="text"
       file={file()}
       overflow="wrap"
       class="select-text"
