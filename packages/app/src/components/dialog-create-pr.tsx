@@ -58,6 +58,12 @@ export function CreatePrDialog() {
   const [baseEdited, setBaseEdited] = createSignal(false)
 
   createEffect(() => {
+    if ((dirty() ?? 0) > 0) {
+      setStore("showCommitInput", true)
+    }
+  })
+
+  createEffect(() => {
     const t = branchTitle()
     if (t && !titleEdited()) {
       setStore("title", t)
@@ -123,7 +129,10 @@ export function CreatePrDialog() {
       dialog.close()
     } catch (e: unknown) {
       if (import.meta.env.DEV) console.error("PR creation error:", e)
-      setStore("error", resolveApiErrorMessage(e, "Failed to create PR", (k) => language.t(k as Parameters<typeof language.t>[0])))
+      setStore(
+        "error",
+        resolveApiErrorMessage(e, "Failed to create PR", (k) => language.t(k as Parameters<typeof language.t>[0])),
+      )
     } finally {
       setStore("submitting", false)
     }
@@ -239,7 +248,11 @@ export function CreatePrDialog() {
           <Button variant="secondary" onClick={() => dialog.close()}>
             {language.t("common.cancel")}
           </Button>
-          <Button variant="primary" onClick={handleSubmit} disabled={!store.title.trim() || store.submitting}>
+          <Button
+            variant="primary"
+            onClick={handleSubmit}
+            disabled={!store.title.trim() || store.submitting || (dirty() ?? 0) > 0}
+          >
             {store.submitting
               ? language.t("pr.create.submitting")
               : isPushed()
@@ -247,6 +260,9 @@ export function CreatePrDialog() {
                 : language.t("pr.create.submitPush")}
           </Button>
         </div>
+        <Show when={(dirty() ?? 0) > 0 && !store.showCommitInput}>
+          <p class="text-12-regular text-text-weak">{language.t("pr.commit.requiredHint")}</p>
+        </Show>
       </div>
     </Dialog>
   )
