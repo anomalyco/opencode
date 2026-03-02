@@ -889,6 +889,32 @@ export type EventVcsBranchUpdated = {
   }
 }
 
+export type Worktree = {
+  name: string
+  branch: string
+  directory: string
+}
+
+export type EventWorktreeCreated = {
+  type: "worktree.created"
+  properties: {
+    info: Worktree
+  }
+}
+
+export type EventWorktreeRemoved = {
+  type: "worktree.removed"
+  properties: {
+    directory: string
+  }
+}
+
+export type EventWorktreeReset = {
+  type: "worktree.reset"
+  properties: {
+    directory: string
+  }
+}
 export type EventWorkspaceReady = {
   type: "workspace.ready"
   properties: {
@@ -995,14 +1021,17 @@ export type Event =
   | EventSessionDiff
   | EventSessionError
   | EventVcsBranchUpdated
+  | EventWorktreeCreated
+  | EventWorktreeReady
+  | EventWorktreeFailed
+  | EventWorktreeRemoved
+  | EventWorktreeReset
   | EventWorkspaceReady
   | EventWorkspaceFailed
   | EventPtyCreated
   | EventPtyUpdated
   | EventPtyExited
   | EventPtyDeleted
-  | EventWorktreeReady
-  | EventWorktreeFailed
 
 export type GlobalEvent = {
   directory: string
@@ -1639,12 +1668,6 @@ export type Workspace = {
   directory: string | null
   extra: unknown | null
   projectID: string
-}
-
-export type Worktree = {
-  name: string
-  branch: string
-  directory: string
 }
 
 export type WorktreeCreateInput = {

@@ -11,13 +11,32 @@ import { Database, eq } from "../storage/db"
 import { ProjectTable } from "../project/project.sql"
 import { fn } from "../util/fn"
 import { Log } from "../util/log"
+import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 
 export namespace Worktree {
   const log = Log.create({ service: "worktree" })
 
+  export const Info = z
+    .object({
+      name: z.string(),
+      branch: z.string(),
+      directory: z.string(),
+    })
+    .meta({
+      ref: "Worktree",
+    })
+
+  export type Info = z.infer<typeof Info>
+
   export const Event = {
+    Created: BusEvent.define(
+      "worktree.created",
+      z.object({
+        info: Info,
+      }),
+    ),
     Ready: BusEvent.define(
       "worktree.ready",
       z.object({
@@ -31,19 +50,19 @@ export namespace Worktree {
         message: z.string(),
       }),
     ),
+    Removed: BusEvent.define(
+      "worktree.removed",
+      z.object({
+        directory: z.string(),
+      }),
+    ),
+    Reset: BusEvent.define(
+      "worktree.reset",
+      z.object({
+        directory: z.string(),
+      }),
+    ),
   }
-
-  export const Info = z
-    .object({
-      name: z.string(),
-      branch: z.string(),
-      directory: z.string(),
-    })
-    .meta({
-      ref: "Worktree",
-    })
-
-  export type Info = z.infer<typeof Info>
 
   export const CreateInput = z
     .object({
@@ -354,6 +373,8 @@ export namespace Worktree {
 
     await Project.addSandbox(Instance.project.id, info.directory).catch(() => undefined)
 
+    await Bus.publish(Event.Created, { info })
+
     const projectID = Instance.project.id
     const extra = startCommand?.trim()
 
@@ -514,6 +535,8 @@ export namespace Worktree {
       }
     }
 
+    await Bus.publish(Event.Removed, { directory })
+
     return true
   })
 
@@ -649,6 +672,8 @@ export namespace Worktree {
 
     const projectID = Instance.project.id
     queueStartScripts(worktreePath, { projectID })
+
+    await Bus.publish(Event.Reset, { directory: worktreePath })
 
     return true
   })
