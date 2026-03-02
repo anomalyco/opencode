@@ -1991,7 +1991,7 @@ function Edit(props: ToolProps<typeof EditTool>) {
     return ctx.width > 120 ? "split" : "unified"
   })
 
-  const ft = createMemo(() => filetype(props.input.filePath))
+  const ft = createMemo(() => diffFiletype(props.input.filePath))
 
   const diffContent = createMemo(() => props.metadata.diff)
 
@@ -2004,6 +2004,7 @@ function Edit(props: ToolProps<typeof EditTool>) {
               diff={diffContent()}
               view={view()}
               filetype={ft()}
+              conceal={false}
               syntaxStyle={syntax()}
               showLineNumbers={true}
               width="100%"
@@ -2050,7 +2051,8 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
         <diff
           diff={p.diff}
           view={view()}
-          filetype={filetype(p.filePath)}
+          filetype={diffFiletype(p.filePath)}
+          conceal={false}
           syntaxStyle={syntax()}
           showLineNumbers={true}
           width="100%"
@@ -2216,4 +2218,11 @@ function filetype(input?: string) {
   const language = LANGUAGE_EXTENSIONS[ext]
   if (["typescriptreact", "javascriptreact", "javascript"].includes(language)) return "typescript"
   return language
+}
+
+function diffFiletype(input?: string) {
+  const type = filetype(input)
+  if (!type) return type
+  if (type.startsWith("markdown")) return undefined
+  return type
 }

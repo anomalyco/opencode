@@ -45,6 +45,13 @@ function filetype(input?: string) {
   return language
 }
 
+function diffFiletype(input?: string) {
+  const type = filetype(input)
+  if (!type) return type
+  if (type.startsWith("markdown")) return undefined
+  return type
+}
+
 function EditBody(props: { request: PermissionRequest }) {
   const themeState = useTheme()
   const theme = themeState.theme
@@ -61,7 +68,7 @@ function EditBody(props: { request: PermissionRequest }) {
     return dimensions().width > 120 ? "split" : "unified"
   })
 
-  const ft = createMemo(() => filetype(filepath()))
+  const ft = createMemo(() => diffFiletype(filepath()))
 
   return (
     <box flexDirection="column" gap={1}>
@@ -79,6 +86,7 @@ function EditBody(props: { request: PermissionRequest }) {
             diff={diff()}
             view={view()}
             filetype={ft()}
+            conceal={false}
             syntaxStyle={syntax()}
             showLineNumbers={true}
             width="100%"
