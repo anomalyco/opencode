@@ -70,7 +70,7 @@ export namespace PrComments {
     errors?: Array<{ message?: string }>
   }
 
-  function buildQuery(owner: string, name: string, prNumber: number, cursor: string | null): string {
+  function buildQuery(): string {
     return `query($owner: String!, $name: String!, $prNumber: Int!, $cursor: String) { repository(owner: $owner, name: $name) { pullRequest(number: $prNumber) { reviewThreads(first: 100, after: $cursor) { pageInfo { hasNextPage endCursor } nodes { id isResolved path line comments(first: 50) { nodes { databaseId author { login __typename } body path line: originalLine diffHunk } } } } } } }`
   }
 
@@ -91,7 +91,7 @@ export namespace PrComments {
     let cursor: string | null = null
 
     do {
-      const query = buildQuery(owner, name, prNumber, cursor)
+      const query = buildQuery()
       const args = [
         "gh",
         "api",

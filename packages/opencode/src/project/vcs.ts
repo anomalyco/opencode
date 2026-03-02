@@ -290,38 +290,46 @@ export namespace Vcs {
         })
       }
 
+      let refreshLock: Promise<void> = Promise.resolve()
+
       const refreshLocal = async () => {
-        const local = await fetchLocalInfo()
-        const branchChanged = local.branch !== current.branch
-        current = { ...current, ...local }
-        if (branchChanged) {
-          Bus.publish(Event.BranchUpdated, { branch: local.branch })
-          // Branch changed — also refresh remote info
-          if (local.branch) {
-            const remote = await fetchRemoteInfo(local.branch)
-            current = { ...current, ...remote }
+        refreshLock = refreshLock.then(async () => {
+          const local = await fetchLocalInfo()
+          const branchChanged = local.branch !== current.branch
+          current = { ...current, ...local }
+          if (branchChanged) {
+            Bus.publish(Event.BranchUpdated, { branch: local.branch })
+            // Branch changed — also refresh remote info
+            if (local.branch) {
+              const remote = await fetchRemoteInfo(local.branch)
+              current = { ...current, ...remote }
+            }
           }
-        }
-        publish()
+          publish()
+        })
+        await refreshLock
       }
 
       const refreshFull = async () => {
-        const next = await fetchFullInfo()
-        const branchChanged = next.branch !== current.branch
-        const prChanged = next.pr?.number !== current.pr?.number
-        current = next
-        if (branchChanged) {
-          Bus.publish(Event.BranchUpdated, { branch: next.branch })
-        }
+        refreshLock = refreshLock.then(async () => {
+          const next = await fetchFullInfo()
+          const branchChanged = next.branch !== current.branch
+          const prChanged = next.pr?.number !== current.pr?.number
+          current = next
+          if (branchChanged) {
+            Bus.publish(Event.BranchUpdated, { branch: next.branch })
+          }
 
-        const hasPr = !!next.pr
-        if (hasPr !== hasActivePr || prChanged) {
-          hasActivePr = hasPr
-          pollIntervalMs = hasActivePr ? POLL_INTERVAL_MS : POLL_INTERVAL_MS * POLL_INTERVAL_NO_PR_MULTIPLIER
-          restartPollTimer()
-        }
+          const hasPr = !!next.pr
+          if (hasPr !== hasActivePr || prChanged) {
+            hasActivePr = hasPr
+            pollIntervalMs = hasActivePr ? POLL_INTERVAL_MS : POLL_INTERVAL_MS * POLL_INTERVAL_NO_PR_MULTIPLIER
+            restartPollTimer()
+          }
 
-        publish()
+          publish()
+        })
+        await refreshLock
       }
 
       const unsubscribeWatcher = Bus.subscribe(FileWatcher.Event.Updated, async (evt) => {

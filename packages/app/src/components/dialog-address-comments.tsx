@@ -78,10 +78,13 @@ export function AddressCommentsDialog() {
   }
 
   const handleSubmit = () => {
-    const prNumber = pr()?.number
+    const currentPr = pr()
     const repo = github()?.repo
-    const owner = repo?.owner ?? ""
-    const repoName = repo?.name ?? ""
+    if (!currentPr || !repo) return
+
+    const prNumber = currentPr.number
+    const owner = repo.owner
+    const repoName = repo.name
 
     const selectedThreads = store.threads.filter((t) => store.selected[t.id])
 

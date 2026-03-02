@@ -12,7 +12,6 @@ export namespace PR {
     "GH_NOT_AUTHENTICATED",
     "NO_REPO",
     "NO_PR",
-    "UPSTREAM_MISSING",
     "CREATE_FAILED",
     "MERGE_FAILED",
     "DELETE_BRANCH_FAILED",
@@ -94,7 +93,7 @@ export namespace PR {
         .cwd(cwd)
         .text()
         .catch(() => "")
-    if (!result.trim() || result.includes("no pull requests found")) {
+    if (!result.trim()) {
       return undefined
     }
     try {
@@ -239,8 +238,11 @@ export namespace PR {
 
     const prUrl = result.trim().split("\n").pop() ?? ""
     const numberMatch = prUrl.match(/\/pull\/(\d+)/)
+    if (!numberMatch) {
+      throw new PrError("CREATE_FAILED", "Pull request was created but could not determine PR number from output")
+    }
     return {
-      number: numberMatch ? parseInt(numberMatch[1], 10) : 0,
+      number: parseInt(numberMatch[1], 10),
       url: prUrl,
       title: input.title,
       state: "OPEN",
@@ -280,10 +282,6 @@ export namespace PR {
       `merge_method=${mergeMethod}`,
     ]
 
-    if (input.deleteBranch !== false) {
-      args.push("-f", "delete_branch=true")
-    }
-
     const cmd = await $`${args}`
       .quiet()
       .nothrow()
@@ -306,6 +304,18 @@ export namespace PR {
     }
 
     await Vcs.refresh()
+
+    if (input.deleteBranch !== false) {
+      const branchToDelete = currentPr.headRefName
+      if (branchToDelete) {
+        try {
+          await deleteBranch({ branch: branchToDelete })
+        } catch (e) {
+          log.warn("post-merge branch deletion failed", { branch: branchToDelete, error: e })
+        }
+      }
+    }
+
     const updated = await Vcs.info()
     return updated.pr ?? { ...currentPr, state: "MERGED" }
   }
