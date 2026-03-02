@@ -225,6 +225,12 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
     event: async ({ event }) => {
       // Send notification on session completion
       if (event.type === "session.idle") {
+        // Filter out notifications from subagents
+        const result = await client.session.get({
+          path: { id: event.properties.sessionID },
+        })
+        if (result.error || result.data.parentID) return
+
         await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
       }
     },
