@@ -600,10 +600,16 @@ export namespace Provider {
           signal: AbortSignal.timeout(2000),
         })
         if (response.ok) {
-          const json = (await response.json()) as { data: { id: string }[] }
+          const json = (await response.json()) as {
+            data: { id: string; max_context_length?: number }[]
+          }
           if (Array.isArray(json.data)) {
             for (const m of json.data) {
               if (!provider.models[m.id]) {
+                const discoveredContext = m.max_context_length ?? 128000
+                const context = Math.max(discoveredContext, 8192) // Floor at 8k for stability
+                const output = Math.min(Math.floor(context / 4), 16384)
+
                 provider.models[m.id] = {
                   id: m.id,
                   name: `${m.id} (local)`,
@@ -623,12 +629,18 @@ export namespace Provider {
                     interleaved: false,
                   },
                   cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-                  limit: { context: 32000, output: 4096 },
+                  limit: { context, output },
                   headers: {},
                   options: {},
                   release_date: "",
                   status: "active",
                   family: "",
+                }
+
+                if (context < 32768) {
+                  log.warn("LM Studio model has a small context limit, which may cause errors with OpenCode's large system prompt. Consider increasing it in LM Studio settings.", { id: m.id, context })
+                } else {
+                  log.info("Discovered LM Studio model", { id: m.id, context })
                 }
               }
             }
