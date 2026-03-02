@@ -9,8 +9,9 @@ import { same } from "@/utils/same"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
-import { Code } from "@opencode-ai/ui/code"
+import { File } from "@opencode-ai/ui/file"
 import { Markdown } from "@opencode-ai/ui/markdown"
+import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import type { Message, Part, UserMessage } from "@opencode-ai/sdk/v2/client"
 import { useLanguage } from "@/context/language"
 import { getSessionContextMetrics } from "./session-context-metrics"
@@ -46,7 +47,8 @@ function RawMessageContent(props: { message: Message; getParts: (id: string) => 
   })
 
   return (
-    <Code
+    <File
+      mode="text"
       file={file()}
       overflow="wrap"
       class="select-text"
@@ -268,9 +270,9 @@ export function SessionContextTab() {
   })
 
   return (
-    <div
-      class="@container h-full overflow-y-auto no-scrollbar pb-10"
-      ref={(el) => {
+    <ScrollView
+      class="@container h-full pb-10"
+      viewportRef={(el) => {
         scroll = el
         restoreScroll()
       }}
@@ -336,6 +338,6 @@ export function SessionContextTab() {
           </Accordion>
         </div>
       </div>
-    </div>
+    </ScrollView>
   )
 }

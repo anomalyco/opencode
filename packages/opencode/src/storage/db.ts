@@ -10,7 +10,7 @@ import { Log } from "../util/log"
 import { NamedError } from "@opencode-ai/util/error"
 import z from "zod"
 import path from "path"
-import { readFileSync, readdirSync } from "fs"
+import { readFileSync, readdirSync, existsSync } from "fs"
 import * as schema from "./schema"
 
 declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number }[] | undefined
@@ -33,6 +33,10 @@ export namespace Database {
 
   type Journal = { sql: string; timestamp: number }[]
 
+  const state = {
+    sqlite: undefined as BunDatabase | undefined,
+  }
+
   function time(tag: string) {
     const match = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/.exec(tag)
     if (!match) return 0
@@ -54,7 +58,7 @@ export namespace Database {
     const sql = dirs
       .map((name) => {
         const file = path.join(dir, name, "migration.sql")
-        if (!Bun.file(file).size) return
+        if (!existsSync(file)) return
         return {
           sql: readFileSync(file, "utf-8"),
           timestamp: time(name),
@@ -69,6 +73,7 @@ export namespace Database {
     log.info("opening database", { path: path.join(Global.Path.data, "opencode.db") })
 
     const sqlite = new BunDatabase(path.join(Global.Path.data, "opencode.db"), { create: true })
+    state.sqlite = sqlite
 
     sqlite.run("PRAGMA journal_mode = WAL")
     sqlite.run("PRAGMA synchronous = NORMAL")
@@ -94,6 +99,14 @@ export namespace Database {
 
     return db
   })
+
+  export function close() {
+    const sqlite = state.sqlite
+    if (!sqlite) return
+    sqlite.close()
+    state.sqlite = undefined
+    Client.reset()
+  }
 
   export type TxOrDb = Transaction | Client
 
