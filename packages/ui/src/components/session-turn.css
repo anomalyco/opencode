@@ -60,16 +60,13 @@
       width: 16px;
       height: 16px;
     }
+  }
 
-    [data-slot="session-turn-thinking-heading"] {
-      flex: 1 1 auto;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      color: var(--text-weaker);
-      font-weight: var(--font-weight-regular);
-    }
+  [data-component="text-reveal"].session-turn-thinking-heading {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--text-weaker);
+    font-weight: var(--font-weight-regular);
   }
 
   .error-card {
