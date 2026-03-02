@@ -15,6 +15,7 @@ export const dict = {
   "nav.home": "首頁",
   "nav.openMenu": "開啟選單",
   "nav.getStartedFree": "免費開始使用",
+  "nav.logoAlt": "OpenCode",
 
   "nav.context.copyLogo": "複製標誌（SVG）",
   "nav.context.copyWordmark": "複製字標（SVG）",
@@ -42,8 +43,12 @@ export const dict = {
   "notFound.docs": "文件",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
+  "notFound.logoLightAlt": "opencode 淺色標誌",
+  "notFound.logoDarkAlt": "opencode 深色標誌",
 
   "user.logout": "登出",
+
+  "auth.callback.error.codeMissing": "找不到授權碼。",
 
   "workspace.select": "選取工作區",
   "workspace.createNew": "+ 建立新工作區",
@@ -76,6 +81,8 @@ export const dict = {
   "error.reloadAmountMin": "儲值金額必須至少為 ${{amount}}",
   "error.reloadTriggerMin": "餘額觸發門檻必須至少為 ${{amount}}",
 
+  "app.meta.description": "OpenCode - 開源編碼代理。",
+
   "home.title": "OpenCode | 開源 AI 編碼代理",
 
   "temp.title": "OpenCode | 專為終端打造的 AI 編碼代理",
@@ -91,6 +98,8 @@ export const dict = {
   "temp.feature.models.afterLink": "支援 75+ 家 LLM 供應商，包括本地模型",
   "temp.screenshot.caption": "使用 tokyonight 主題的 OpenCode TUI",
   "temp.screenshot.alt": "使用 tokyonight 主題的 OpenCode TUI",
+  "temp.logoLightAlt": "opencode 淺色標誌",
+  "temp.logoDarkAlt": "opencode 深色標誌",
 
   "home.banner.badge": "新",
   "home.banner.text": "桌面應用已推出 Beta",
@@ -229,11 +238,28 @@ export const dict = {
   "zen.privacy.beforeExceptions": "所有 Zen 模型均在美國託管。供應商遵循零留存政策，不會將你的資料用於模型訓練，並且有",
   "zen.privacy.exceptionsLink": "以下例外情況",
 
+  "zen.api.error.rateLimitExceeded": "超出頻率限制。請稍後再試。",
+  "zen.api.error.modelNotSupported": "不支援模型 {{model}}",
+  "zen.api.error.modelFormatNotSupported": "模型 {{model}} 不支援格式 {{format}}",
+  "zen.api.error.noProviderAvailable": "無可用的供應商",
+  "zen.api.error.providerNotSupported": "不支援供應商 {{provider}}",
+  "zen.api.error.missingApiKey": "缺少 API 金鑰。",
+  "zen.api.error.invalidApiKey": "無效的 API 金鑰。",
+  "zen.api.error.subscriptionQuotaExceeded": "超出訂閱配額。請在 {{retryIn}} 後重試。",
+  "zen.api.error.subscriptionQuotaExceededUseFreeModels": "超出訂閱配額。你可以繼續使用免費模型。",
+  "zen.api.error.noPaymentMethod": "無付款方式。請在此處新增付款方式：{{billingUrl}}",
+  "zen.api.error.insufficientBalance": "餘額不足。請在此處管理你的帳務：{{billingUrl}}",
+  "zen.api.error.workspaceMonthlyLimitReached":
+    "你的工作區已達到每月支出限額 ${{amount}}。請在此處管理你的限額：{{billingUrl}}",
+  "zen.api.error.userMonthlyLimitReached": "你已達到每月支出限額 ${{amount}}。請在此處管理你的限額：{{membersUrl}}",
+  "zen.api.error.modelDisabled": "模型已停用",
+
   "black.meta.title": "OpenCode Black | 存取全球最佳編碼模型",
   "black.meta.description": "透過 OpenCode Black 訂閱方案存取 Claude、GPT、Gemini 等模型。",
   "black.hero.title": "存取全球最佳編碼模型",
   "black.hero.subtitle": "包括 Claude、GPT、Gemini 等",
   "black.title": "OpenCode Black | 定價",
+  "black.paused": "Black 訂閱暫時暫停註冊。",
   "black.plan.icon20": "Black 20 方案",
   "black.plan.icon100": "Black 100 方案",
   "black.plan.icon200": "Black 200 方案",
@@ -327,12 +353,15 @@ export const dict = {
   "workspace.usage.table.input": "輸入",
   "workspace.usage.table.output": "輸出",
   "workspace.usage.table.cost": "成本",
+  "workspace.usage.table.session": "會話",
   "workspace.usage.breakdown.input": "輸入",
   "workspace.usage.breakdown.cacheRead": "快取讀取",
   "workspace.usage.breakdown.cacheWrite": "快取寫入",
   "workspace.usage.breakdown.output": "輸出",
   "workspace.usage.breakdown.reasoning": "推理",
-  "workspace.usage.subscription": "訂閱 (${{amount}})",
+  "workspace.usage.subscription": "Black (${{amount}})",
+  "workspace.usage.lite": "Go (${{amount}})",
+  "workspace.usage.byok": "BYOK (${{amount}})",
 
   "workspace.cost.title": "成本",
   "workspace.cost.subtitle": "按模型細分的使用成本。",
@@ -341,6 +370,7 @@ export const dict = {
   "workspace.cost.deletedSuffix": "（已刪除）",
   "workspace.cost.empty": "所選期間沒有可用的使用資料。",
   "workspace.cost.subscriptionShort": "訂",
+  "workspace.cost.liteShort": "lite",
 
   "workspace.keys.title": "API 金鑰",
   "workspace.keys.subtitle": "管理你的 API 金鑰以存取 OpenCode 服務。",
@@ -431,6 +461,7 @@ export const dict = {
   "workspace.reload.updatePaymentMethod": "請更新你的付款方式並重試。",
   "workspace.reload.retrying": "重試中...",
   "workspace.reload.retry": "重試",
+  "workspace.reload.error.paymentFailed": "付款失敗。",
 
   "workspace.payments.title": "付款紀錄",
   "workspace.payments.subtitle": "最近的付款交易。",
@@ -467,6 +498,35 @@ export const dict = {
   "workspace.black.waitlist.enrolling": "加入中...",
   "workspace.black.waitlist.enrolled": "已加入",
   "workspace.black.waitlist.enrollNote": "當你點選「加入」後，你的訂閱將立即開始，並且將從你的卡片中扣款。",
+
+  "workspace.lite.loading": "載入中...",
+  "workspace.lite.time.day": "天",
+  "workspace.lite.time.days": "天",
+  "workspace.lite.time.hour": "小時",
+  "workspace.lite.time.hours": "小時",
+  "workspace.lite.time.minute": "分鐘",
+  "workspace.lite.time.minutes": "分鐘",
+  "workspace.lite.time.fewSeconds": "幾秒",
+  "workspace.lite.subscription.title": "Go 訂閱",
+  "workspace.lite.subscription.message": "您已訂閱 OpenCode Go。",
+  "workspace.lite.subscription.manage": "管理訂閱",
+  "workspace.lite.subscription.rollingUsage": "滾動使用量",
+  "workspace.lite.subscription.weeklyUsage": "每週使用量",
+  "workspace.lite.subscription.monthlyUsage": "每月使用量",
+  "workspace.lite.subscription.resetsIn": "重置時間：",
+  "workspace.lite.subscription.useBalance": "達到使用限制後使用您的可用餘額",
+  "workspace.lite.subscription.selectProvider":
+    "在您的 opencode 設定中選擇「OpenCode Go」作為提供商，即可使用 Go 模型。",
+  "workspace.lite.other.title": "Go 訂閱",
+  "workspace.lite.other.message": "此工作區中的另一位成員已訂閱 OpenCode Go。每個工作區只能有一位成員訂閱。",
+  "workspace.lite.promo.title": "OpenCode Go",
+  "workspace.lite.promo.description":
+    "OpenCode Go 是一個每月 $10 的訂閱方案，提供對主流開放原始碼編碼模型的穩定存取，並配備充足的使用額度。",
+  "workspace.lite.promo.modelsTitle": "包含模型",
+  "workspace.lite.promo.footer":
+    "該計畫主要面向國際用戶設計，模型部署在美國、歐盟和新加坡，以確保全球範圍內的穩定存取體驗。定價和使用額度可能會根據早期用戶的使用情況和回饋持續調整與優化。",
+  "workspace.lite.promo.subscribe": "訂閱 Go",
+  "workspace.lite.promo.subscribing": "重新導向中...",
 
   "download.title": "OpenCode | 下載",
   "download.meta.description": "下載適用於 macOS、Windows 與 Linux 的 OpenCode",
@@ -517,6 +577,10 @@ export const dict = {
   "enterprise.form.send": "傳送",
   "enterprise.form.sending": "傳送中...",
   "enterprise.form.success": "訊息已傳送，我們會盡快與你聯絡。",
+  "enterprise.form.success.submitted": "表單已成功送出。",
+  "enterprise.form.error.allFieldsRequired": "所有欄位均為必填。",
+  "enterprise.form.error.invalidEmailFormat": "無效的電子郵件格式。",
+  "enterprise.form.error.internalServer": "內部伺服器錯誤。",
   "enterprise.faq.title": "常見問題",
   "enterprise.faq.q1": "什麼是 OpenCode Enterprise？",
   "enterprise.faq.a1":
@@ -549,6 +613,7 @@ export const dict = {
   "bench.list.table.agent": "代理",
   "bench.list.table.model": "模型",
   "bench.list.table.score": "分數",
+  "bench.submission.error.allFieldsRequired": "所有欄位均為必填。",
 
   "bench.detail.title": "評測 - {{task}}",
   "bench.detail.notFound": "找不到任務",

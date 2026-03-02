@@ -13,9 +13,8 @@
 @import "../components/button.css" layer(components);
 @import "../components/card.css" layer(components);
 @import "../components/checkbox.css" layer(components);
-@import "../components/code.css" layer(components);
+@import "../components/file.css" layer(components);
 @import "../components/collapsible.css" layer(components);
-@import "../components/diff.css" layer(components);
 @import "../components/diff-changes.css" layer(components);
 @import "../components/context-menu.css" layer(components);
 @import "../components/dropdown-menu.css" layer(components);
@@ -28,7 +27,6 @@
 @import "../components/icon-button.css" layer(components);
 @import "../components/image-preview.css" layer(components);
 @import "../components/keybind.css" layer(components);
-@import "../components/line-comment.css" layer(components);
 @import "../components/text-field.css" layer(components);
 @import "../components/inline-input.css" layer(components);
 @import "../components/list.css" layer(components);
