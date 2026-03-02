@@ -142,6 +142,17 @@ test("default dock shows prompt input", async ({ page, sdk, gotoSession }) => {
   })
 })
 
+test("auto-accept toggle works before first submit", async ({ page, gotoSession }) => {
+  await gotoSession()
+
+  const button = page.locator('[data-action="prompt-permissions"]').first()
+  await expect(button).toBeVisible()
+  await expect(button).toHaveAttribute("aria-pressed", "false")
+
+  await setAutoAccept(page, true)
+  await setAutoAccept(page, false)
+})
+
 test("blocked question flow unblocks after submit", async ({ page, sdk, gotoSession }) => {
   await withDockSession(sdk, "e2e composer dock question", async (session) => {
     await withDockSeed(sdk, session.id, async () => {

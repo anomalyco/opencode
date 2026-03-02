@@ -31,13 +31,13 @@ describe("autoRespondsPermission", () => {
     expect(autoRespondsPermission({ root: true }, sessions, permission("child"), "/tmp/project")).toBe(true)
   })
 
-  test("defaults to auto-accept when no lineage override exists", () => {
+  test("defaults to requiring approval when no lineage override exists", () => {
     const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" }), session({ id: "other" })]
     const autoAccept = {
       other: true,
     }
 
-    expect(autoRespondsPermission(autoAccept, sessions, permission("child"), "/tmp/project")).toBe(true)
+    expect(autoRespondsPermission(autoAccept, sessions, permission("child"), "/tmp/project")).toBe(false)
   })
 
   test("inherits a parent session's false override", () => {

@@ -67,6 +67,7 @@ export function FileTabContent(props: { tab: string }) {
 
   let scroll: HTMLDivElement | undefined
   let scrollFrame: number | undefined
+  let restoreFrame: number | undefined
   let pending: { x: number; y: number } | undefined
   let codeScroll: HTMLElement[] = []
   let find: FileSearchHandle | null = null
@@ -349,6 +350,15 @@ export function FileTabContent(props: { tab: string }) {
     if (el.scrollLeft !== s.x) el.scrollLeft = s.x
   }
 
+  const queueRestore = () => {
+    if (restoreFrame !== undefined) return
+
+    restoreFrame = requestAnimationFrame(() => {
+      restoreFrame = undefined
+      restoreScroll()
+    })
+  }
+
   const handleScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
     if (codeScroll.length === 0) syncCodeScroll()
 
@@ -364,46 +374,29 @@ export function FileTabContent(props: { tab: string }) {
     setNote("commenting", null)
   }
 
-  createEffect(
-    on(
-      () => state()?.loaded,
-      (loaded) => {
-        if (!loaded) return
-        requestAnimationFrame(restoreScroll)
-      },
-      { defer: true },
-    ),
-  )
+  let prev = {
+    loaded: false,
+    ready: false,
+    active: false,
+  }
 
-  createEffect(
-    on(
-      () => file.ready(),
-      (ready) => {
-        if (!ready) return
-        requestAnimationFrame(restoreScroll)
-      },
-      { defer: true },
-    ),
-  )
-
-  createEffect(
-    on(
-      () => tabs().active() === props.tab,
-      (active) => {
-        if (!active) return
-        if (!state()?.loaded) return
-        requestAnimationFrame(restoreScroll)
-      },
-    ),
-  )
+  createEffect(() => {
+    const loaded = !!state()?.loaded
+    const ready = file.ready()
+    const active = tabs().active() === props.tab
+    const restore = (loaded && !prev.loaded) || (ready && !prev.ready) || (active && loaded && !prev.active)
+    prev = { loaded, ready, active }
+    if (!restore) return
+    queueRestore()
+  })
 
   onCleanup(() => {
     for (const item of codeScroll) {
       item.removeEventListener("scroll", handleCodeScroll)
     }
 
-    if (scrollFrame === undefined) return
-    cancelAnimationFrame(scrollFrame)
+    if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame)
+    if (restoreFrame !== undefined) cancelAnimationFrame(restoreFrame)
   })
 
   const renderFile = (source: string) => (
@@ -421,7 +414,7 @@ export function FileTabContent(props: { tab: string }) {
         selectedLines={activeSelection()}
         commentedLines={commentedLines()}
         onRendered={() => {
-          requestAnimationFrame(restoreScroll)
+          queueRestore()
         }}
         annotations={commentsUi.annotations()}
         renderAnnotation={commentsUi.renderAnnotation}
@@ -440,7 +433,7 @@ export function FileTabContent(props: { tab: string }) {
           mode: "auto",
           path: path(),
           current: state()?.content,
-          onLoad: () => requestAnimationFrame(restoreScroll),
+          onLoad: queueRestore,
           onError: (args: { kind: "image" | "audio" | "svg" }) => {
             if (args.kind !== "svg") return
             showToast({
