@@ -84,14 +84,12 @@ export function SessionTodoDock(props: {
           bounce: props.expandBounce ?? props.bounce ?? 0,
         },
   )
-  const collapse = useSpring(
-    () => (store.collapsed ? 1 : 0),
-    config,
-  )
+  const collapse = useSpring(() => (store.collapsed ? 1 : 0), config)
   const dock = createMemo(() => Math.max(0, Math.min(1, props.dockProgress ?? 1)))
   const shut = createMemo(() => 1 - dock())
   const value = createMemo(() => Math.max(0, Math.min(1, collapse())))
   const hide = createMemo(() => Math.max(value(), shut()))
+  const off = createMemo(() => hide() > 0.98)
   const turn = createMemo(() => Math.max(0, Math.min(1, value())))
   const [height, setHeight] = createSignal(320)
   const full = createMemo(() => Math.max(78, height()))
@@ -191,11 +189,12 @@ export function SessionTodoDock(props: {
 
         <div
           data-slot="session-todo-list"
-          aria-hidden={store.collapsed}
+          aria-hidden={store.collapsed || off()}
           classList={{
             "pointer-events-none": hide() > 0.1,
           }}
           style={{
+            visibility: off() ? "hidden" : "visible",
             opacity: `${Math.max(0, Math.min(1, 1 - hide()))}`,
             filter: `blur(${Math.max(0, Math.min(1, hide())) * 2}px)`,
           }}
