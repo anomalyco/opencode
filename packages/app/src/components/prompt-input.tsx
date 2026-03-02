@@ -243,6 +243,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: "image" | "@mention" | null
     mode: "normal" | "shell"
     applyingHistory: boolean
+    pendingAutoAccept: boolean
   }>({
     popover: null,
     historyIndex: -1,
@@ -251,6 +252,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: null,
     mode: "normal",
     applyingHistory: false,
+    pendingAutoAccept: false,
   })
 
   const commentCount = createMemo(() => {
@@ -298,6 +300,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       example: suggest() ? language.t(EXAMPLES[store.placeholder]) : "",
       suggest: suggest(),
       t: (key, params) => language.t(key as Parameters<typeof language.t>[0], params as never),
+    }),
+  )
+
+  createEffect(
+    on(sessionKey, () => {
+      setStore("pendingAutoAccept", false)
     }),
   )
 
@@ -947,10 +955,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     readClipboardImage: platform.readClipboardImage,
   })
 
+  const variants = createMemo(() => ["default", ...local.model.variant.list()])
+  const accepting = createMemo(() => {
+    const id = params.id
+    if (!id) return store.pendingAutoAccept
+    return permission.isAutoAccepting(id, sdk.directory)
+  })
+
   const { abort, handleSubmit } = createPromptSubmit({
     info,
     imageAttachments,
     commentCount,
+    autoAccept: () => accepting(),
     mode: () => store.mode,
     working,
     editor: () => editorRef,
@@ -1114,13 +1130,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       handleSubmit(event)
     }
   }
-
-  const variants = createMemo(() => ["default", ...local.model.variant.list()])
-  const accepting = createMemo(() => {
-    const id = params.id
-    if (!id) return false
-    return permission.isAutoAccepting(id, sdk.directory)
-  })
 
   return (
     <div class="relative size-full _max-h-[320px] flex flex-col gap-0">
@@ -1313,9 +1322,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <Button
                   data-action="prompt-permissions"
                   variant="ghost"
-                  disabled={!params.id}
                   onClick={() => {
-                    if (!params.id) return
+                    if (!params.id) {
+                      setStore("pendingAutoAccept", (value) => !value)
+                      return
+                    }
                     permission.toggleAutoAccept(params.id, sdk.directory)
                   }}
                   classList={{
