@@ -1121,9 +1121,10 @@ export default function Layout(props: ParentProps) {
         .get({ sessionID: target.id })
         .then((x) => x.data)
         .catch(() => undefined)
-      const next = resolved?.directory && canOpen(resolved.directory) ? resolved : target
-      setStore("lastProjectSession", root, { directory: next.directory, id: next.id, at: Date.now() })
-      navigateWithSidebarReset(`/${base64Encode(next.directory)}/session/${next.id}`)
+      if (!resolved?.directory) return false
+      if (!canOpen(resolved.directory)) return false
+      setStore("lastProjectSession", root, { directory: resolved.directory, id: resolved.id, at: Date.now() })
+      navigateWithSidebarReset(`/${base64Encode(resolved.directory)}/session/${resolved.id}`)
       return true
     }
 
@@ -1139,8 +1140,7 @@ export default function Layout(props: ParentProps) {
       dirs.map((item) => globalSync.child(item, { bootstrap: false })[0]),
       Date.now(),
     )
-    if (latest) {
-      await openSession(latest)
+    if (latest && (await openSession(latest))) {
       return
     }
 
@@ -1156,8 +1156,7 @@ export default function Layout(props: ParentProps) {
       ),
       Date.now(),
     )
-    if (fetched) {
-      await openSession(fetched)
+    if (fetched && (await openSession(fetched))) {
       return
     }
 
@@ -1279,7 +1278,7 @@ export default function Layout(props: ParentProps) {
 
     if (!result) return
 
-    if (store.lastProjectSession[root]?.directory === directory) {
+    if (workspaceKey(store.lastProjectSession[root]?.directory ?? "") === workspaceKey(directory)) {
       clearLastProjectSession(root)
     }
 
@@ -1296,8 +1295,17 @@ export default function Layout(props: ParentProps) {
     layout.projects.close(directory)
     layout.projects.open(root)
 
-    if (params.dir && currentDir() === directory) {
-      navigateToProject(root)
+    const current = currentDir()
+    const currentKey = workspaceKey(current)
+    const deletedKey = workspaceKey(directory)
+    const project = layout.projects.list().find((item) => item.worktree === root)
+    const dirs = project
+      ? effectiveWorkspaceOrder(root, [root, ...(project.sandboxes ?? [])], store.workspaceOrder[root])
+      : [root]
+    const valid = dirs.some((item) => workspaceKey(item) === currentKey)
+
+    if (params.dir && (currentKey === deletedKey || (projectRoot(current) === root && !valid))) {
+      void navigateToProject(root)
     }
   }
 
