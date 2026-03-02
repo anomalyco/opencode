@@ -22,6 +22,7 @@ import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
 import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
+import { WorkspaceContext } from "../control-plane/workspace-context"
 
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
@@ -63,6 +64,7 @@ export namespace Session {
       id: row.id,
       slug: row.slug,
       projectID: row.project_id,
+      workspaceID: row.workspace_id ?? undefined,
       directory: row.directory,
       parentID: row.parent_id ?? undefined,
       title: row.title,
@@ -84,6 +86,7 @@ export namespace Session {
     return {
       id: info.id,
       project_id: info.projectID,
+      workspace_id: info.workspaceID,
       parent_id: info.parentID,
       slug: info.slug,
       directory: info.directory,
@@ -118,6 +121,7 @@ export namespace Session {
       id: Identifier.schema("session"),
       slug: z.string(),
       projectID: z.string(),
+      workspaceID: z.string().optional(),
       directory: z.string(),
       parentID: Identifier.schema("session").optional(),
       summary: z
@@ -297,6 +301,7 @@ export namespace Session {
       version: Installation.VERSION,
       projectID: Instance.project.id,
       directory: input.directory,
+      workspaceID: WorkspaceContext.workspaceID,
       parentID: input.parentID,
       title: input.title ?? createDefaultTitle(!!input.parentID),
       permission: input.permission,
@@ -527,6 +532,7 @@ export namespace Session {
 
   export function* list(input?: {
     directory?: string
+    workspaceID?: string
     roots?: boolean
     start?: number
     search?: string
@@ -535,6 +541,9 @@ export namespace Session {
     const project = Instance.project
     const conditions = [eq(SessionTable.project_id, project.id)]
 
+    if (WorkspaceContext.workspaceID) {
+      conditions.push(eq(SessionTable.workspace_id, WorkspaceContext.workspaceID))
+    }
     if (input?.directory) {
       conditions.push(eq(SessionTable.directory, input.directory))
     }

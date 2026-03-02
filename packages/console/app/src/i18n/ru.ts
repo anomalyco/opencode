@@ -15,6 +15,7 @@ export const dict = {
   "nav.home": "Главная",
   "nav.openMenu": "Открыть меню",
   "nav.getStartedFree": "Начать бесплатно",
+  "nav.logoAlt": "OpenCode",
 
   "nav.context.copyLogo": "Скопировать логотип как SVG",
   "nav.context.copyWordmark": "Скопировать название как SVG",
@@ -42,8 +43,12 @@ export const dict = {
   "notFound.docs": "Документация",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
+  "notFound.logoLightAlt": "светлый логотип opencode",
+  "notFound.logoDarkAlt": "темный логотип opencode",
 
   "user.logout": "Выйти",
+
+  "auth.callback.error.codeMissing": "Код авторизации не найден.",
 
   "workspace.select": "Выбрать рабочее пространство",
   "workspace.createNew": "+ Создать рабочее пространство",
@@ -76,6 +81,8 @@ export const dict = {
   "error.reloadAmountMin": "Сумма пополнения должна быть не менее ${{amount}}",
   "error.reloadTriggerMin": "Порог баланса должен быть не менее ${{amount}}",
 
+  "app.meta.description": "OpenCode - AI-агент с открытым кодом для программирования.",
+
   "home.title": "OpenCode | AI-агент с открытым кодом для программирования",
 
   "temp.title": "opencode | AI-агент для программирования в терминале",
@@ -91,6 +98,8 @@ export const dict = {
   "temp.feature.models.afterLink": ", включая локальные модели",
   "temp.screenshot.caption": "OpenCode TUI с темой tokyonight",
   "temp.screenshot.alt": "OpenCode TUI с темой tokyonight",
+  "temp.logoLightAlt": "светлый логотип opencode",
+  "temp.logoDarkAlt": "темный логотип opencode",
 
   "home.banner.badge": "Новое",
   "home.banner.text": "Доступно десктопное приложение (бета)",
@@ -243,6 +252,24 @@ export const dict = {
   "zen.privacy.beforeExceptions":
     "Все модели Zen размещены в США. Провайдеры следуют политике нулевого хранения и не используют ваши данные для обучения моделей, за",
   "zen.privacy.exceptionsLink": "следующими исключениями",
+
+  "zen.api.error.rateLimitExceeded": "Превышен лимит запросов. Пожалуйста, попробуйте позже.",
+  "zen.api.error.modelNotSupported": "Модель {{model}} не поддерживается",
+  "zen.api.error.modelFormatNotSupported": "Модель {{model}} не поддерживается для формата {{format}}",
+  "zen.api.error.noProviderAvailable": "Нет доступных провайдеров",
+  "zen.api.error.providerNotSupported": "Провайдер {{provider}} не поддерживается",
+  "zen.api.error.missingApiKey": "Отсутствует API ключ.",
+  "zen.api.error.invalidApiKey": "Неверный API ключ.",
+  "zen.api.error.subscriptionQuotaExceeded": "Квота подписки превышена. Повторите попытку через {{retryIn}}.",
+  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
+    "Квота подписки превышена. Вы можете продолжить использовать бесплатные модели.",
+  "zen.api.error.noPaymentMethod": "Нет способа оплаты. Добавьте способ оплаты здесь: {{billingUrl}}",
+  "zen.api.error.insufficientBalance": "Недостаточно средств. Управляйте оплатой здесь: {{billingUrl}}",
+  "zen.api.error.workspaceMonthlyLimitReached":
+    "Ваше рабочее пространство достигло ежемесячного лимита расходов в ${{amount}}. Управляйте лимитами здесь: {{billingUrl}}",
+  "zen.api.error.userMonthlyLimitReached":
+    "Вы достигли ежемесячного лимита расходов в ${{amount}}. Управляйте лимитами здесь: {{membersUrl}}",
+  "zen.api.error.modelDisabled": "Модель отключена",
 
   "black.meta.title": "OpenCode Black | Доступ к лучшим моделям для кодинга в мире",
   "black.meta.description": "Получите доступ к Claude, GPT, Gemini и другим моделям с подпиской OpenCode Black.",
@@ -455,6 +482,7 @@ export const dict = {
   "workspace.reload.updatePaymentMethod": "Пожалуйста, обновите способ оплаты и попробуйте снова.",
   "workspace.reload.retrying": "Повторная попытка...",
   "workspace.reload.retry": "Повторить",
+  "workspace.reload.error.paymentFailed": "Ошибка оплаты.",
 
   "workspace.payments.title": "История платежей",
   "workspace.payments.subtitle": "Недавние транзакции.",
@@ -574,6 +602,10 @@ export const dict = {
   "enterprise.form.send": "Отправить",
   "enterprise.form.sending": "Отправка...",
   "enterprise.form.success": "Сообщение отправлено, мы скоро свяжемся с вами.",
+  "enterprise.form.success.submitted": "Форма успешно отправлена.",
+  "enterprise.form.error.allFieldsRequired": "Все поля обязательны.",
+  "enterprise.form.error.invalidEmailFormat": "Неверный формат email.",
+  "enterprise.form.error.internalServer": "Внутренняя ошибка сервера.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "Что такое OpenCode Enterprise?",
   "enterprise.faq.a1":
@@ -606,6 +638,7 @@ export const dict = {
   "bench.list.table.agent": "Агент",
   "bench.list.table.model": "Модель",
   "bench.list.table.score": "Оценка",
+  "bench.submission.error.allFieldsRequired": "Все поля обязательны.",
 
   "bench.detail.title": "Бенчмарк - {{task}}",
   "bench.detail.notFound": "Задача не найдена",
