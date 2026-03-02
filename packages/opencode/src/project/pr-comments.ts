@@ -12,6 +12,7 @@ export namespace PrComments {
     .object({
       id: z.number(),
       author: z.string(),
+      authorIsBot: z.boolean(),
       body: z.string(),
       path: z.string(),
       line: z.number().nullable(),
@@ -54,7 +55,7 @@ export namespace PrComments {
               comments: {
                 nodes: Array<{
                   databaseId: number
-                  author: { login: string }
+                  author: { login: string; __typename?: string }
                   body: string
                   path: string
                   line: number | null
@@ -70,7 +71,7 @@ export namespace PrComments {
   }
 
   function buildQuery(owner: string, name: string, prNumber: number, cursor: string | null): string {
-    return `query($owner: String!, $name: String!, $prNumber: Int!, $cursor: String) { repository(owner: $owner, name: $name) { pullRequest(number: $prNumber) { reviewThreads(first: 100, after: $cursor) { pageInfo { hasNextPage endCursor } nodes { id isResolved path line comments(first: 50) { nodes { databaseId author { login } body path line: originalLine diffHunk } } } } } } }`
+    return `query($owner: String!, $name: String!, $prNumber: Int!, $cursor: String) { repository(owner: $owner, name: $name) { pullRequest(number: $prNumber) { reviewThreads(first: 100, after: $cursor) { pageInfo { hasNextPage endCursor } nodes { id isResolved path line comments(first: 50) { nodes { databaseId author { login __typename } body path line: originalLine diffHunk } } } } } } }`
   }
 
   export async function fetch(): Promise<CommentsResponse> {
@@ -153,6 +154,7 @@ export namespace PrComments {
           comments: (node.comments.nodes ?? []).map((c) => ({
             id: c.databaseId,
             author: c.author?.login ?? "unknown",
+            authorIsBot: c.author?.__typename === "Bot",
             body: c.body ?? "",
             path: c.path ?? "",
             line: c.line ?? null,

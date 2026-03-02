@@ -1915,6 +1915,7 @@ export type PrCreateInput = {
 export type ReviewComment = {
   id: number
   author: string
+  authorIsBot: boolean
   body: string
   path: string
   line: number | null
