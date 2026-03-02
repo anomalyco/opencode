@@ -306,11 +306,10 @@ export function SessionHeader() {
   const current = createMemo(() => options().find((o) => o.id === prefs.app) ?? options()[0])
   const opening = createMemo(() => openRequest.app !== undefined)
 
-  createEffect(() => {
-    const value = prefs.app
-    if (options().some((o) => o.id === value)) return
-    setPrefs("app", options()[0]?.id ?? "finder")
-  })
+  const selectApp = (app: OpenApp) => {
+    if (!options().some((item) => item.id === app)) return
+    setPrefs("app", app)
+  }
 
   const openDir = (app: OpenApp) => {
     if (opening() || !canOpen() || !platform.openPath) return
@@ -458,7 +457,7 @@ export function SessionHeader() {
                                   value={current().id}
                                   onChange={(value) => {
                                     if (!OPEN_APPS.includes(value as OpenApp)) return
-                                    setPrefs("app", value as OpenApp)
+                                    selectApp(value as OpenApp)
                                   }}
                                 >
                                   <For each={options()}>
