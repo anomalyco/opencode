@@ -53,7 +53,12 @@ export function AddressCommentsDialog() {
       })
     } catch (e: unknown) {
       if (import.meta.env.DEV) console.error("Fetch comments error:", e)
-      setStore("error", resolveApiErrorMessage(e, "Failed to fetch review comments", (k) => language.t(k as Parameters<typeof language.t>[0])))
+      setStore(
+        "error",
+        resolveApiErrorMessage(e, "Failed to fetch review comments", (k) =>
+          language.t(k as Parameters<typeof language.t>[0]),
+        ),
+      )
       setStore("loading", false)
     }
   })
@@ -170,7 +175,7 @@ export function AddressCommentsDialog() {
               </div>
 
               {/* Comment thread list */}
-              <div class="flex flex-col flex-1 overflow-y-auto min-h-[200px] -mx-5 px-5 py-1">
+              <div class="flex flex-col gap-3 flex-1 overflow-y-auto min-h-[200px] -mx-5 px-5 py-1">
                 <For each={store.threads}>
                   {(thread) => {
                     const firstComment = () => thread.comments[0]
@@ -179,21 +184,27 @@ export function AddressCommentsDialog() {
 
                     return (
                       <div
-                        class={`group flex gap-3.5 py-4 border-b border-border-weak-base last:border-b-0 cursor-pointer transition-colors hover:bg-surface-base px-2 rounded-sm border-l-2 ${
-                          isChecked() ? "opacity-100 border-l-border-interactive-base" : "opacity-60 border-l-transparent"
+                        class={`group flex gap-3.5 p-4 border rounded-lg cursor-pointer transition-colors ${
+                          isChecked()
+                            ? "border-border-weaker-base"
+                            : "border-border-weaker-base hover:border-border-weak-base"
                         }`}
                         onClick={() => toggleThread(thread.id)}
                       >
                         <div class="pt-[3px] shrink-0 pointer-events-none">
-                          <Checkbox checked={isChecked()} hideLabel>
+                          <Checkbox
+                            checked={isChecked()}
+                            hideLabel
+                            class="[&_[data-slot=checkbox-checkbox-control]]:rounded-full [&[data-checked]_[data-slot=checkbox-checkbox-control]]:!bg-icon-interactive-base [&[data-checked]_[data-slot=checkbox-checkbox-control]]:!border-icon-interactive-base [&[data-checked]_[data-slot=checkbox-checkbox-indicator]]:text-text-on-interactive-base"
+                          >
                             &nbsp;
                           </Checkbox>
                         </div>
-                        <div class="flex flex-col gap-1.5 min-w-0 flex-1">
+                        <div class="flex flex-col gap-2 min-w-0 flex-1">
                           {/* File path + line */}
                           <div class="flex items-center gap-1.5">
                             <Icon name="code-lines" size="small" class="text-icon-weak shrink-0" />
-                            <span class="text-12-medium text-text-strong truncate">{thread.path}</span>
+                            <span class="text-12-regular text-text-weak truncate">{thread.path}</span>
                             <Show when={thread.line}>
                               <span class="text-12-regular text-text-weak shrink-0">
                                 <span class="text-text-weaker">:</span>
@@ -204,51 +215,55 @@ export function AddressCommentsDialog() {
 
                           {/* First comment (the review comment) */}
                           <Show when={firstComment()}>
-                            {(comment) => (
-                              <div class="flex flex-col gap-0.5 mt-0.5">
-                                <div class="flex items-center justify-between w-full">
-                                  <div class="flex items-center gap-1.5">
-                                    <span class="text-12-medium text-text-interactive-base">@{comment().author}</span>
-                                    {comment().author.includes("bot") && (
-                                      <span class="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-sm bg-surface-raised-strong text-text-weak">
-                                        Bot
-                                      </span>
-                                    )}
+                            {(comment) => {
+                              const isBot = comment().authorIsBot
+                              return (
+                                <div class="flex flex-col gap-1.5 mt-0.5">
+                                  <div class="flex items-center justify-between w-full">
+                                    <div class="flex items-center gap-1.5">
+                                      <span class="text-12-medium text-text-interactive-base">@{comment().author}</span>
+                                      {isBot && (
+                                        <span class="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-sm bg-surface-raised-strong text-text-weak">
+                                          Bot
+                                        </span>
+                                      )}
+                                    </div>
+                                    {(() => {
+                                      const g = github()
+                                      const p = pr()
+                                      const href =
+                                        g?.repo && p?.number
+                                          ? `https://github.com/${g.repo.owner}/${g.repo.name}/pull/${p.number}#discussion_r${comment().id}`
+                                          : undefined
+                                      return (
+                                        <Show when={href}>
+                                          {(url) => (
+                                            <a
+                                              href={url()}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              onClick={(e) => e.stopPropagation()}
+                                              class="text-icon-weaker hover:text-text-weak transition-colors shrink-0 cursor-pointer"
+                                              title="View on GitHub"
+                                            >
+                                              <Icon name="square-arrow-top-right" size="small" />
+                                            </a>
+                                          )}
+                                        </Show>
+                                      )
+                                    })()}
                                   </div>
-                                  {(() => {
-                                    const g = github()
-                                    const p = pr()
-                                    const href = g?.repo && p?.number
-                                      ? `https://github.com/${g.repo.owner}/${g.repo.name}/pull/${p.number}#discussion_r${comment().id}`
-                                      : undefined
-                                    return (
-                                      <Show when={href}>
-                                        {(url) => (
-                                          <a
-                                            href={url()}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            onClick={(e) => e.stopPropagation()}
-                                            class="text-icon-weak hover:text-text-strong transition-colors shrink-0 cursor-pointer"
-                                            title="View on GitHub"
-                                          >
-                                            <Icon name="square-arrow-top-right" size="small" />
-                                          </a>
-                                        )}
-                                      </Show>
-                                    )
-                                  })()}
+                                  <p class="text-13-regular text-text-strong m-0 whitespace-pre-wrap break-words leading-relaxed">
+                                    {comment().body}
+                                  </p>
                                 </div>
-                                <p class="text-12-regular text-text-base m-0 whitespace-pre-wrap break-words line-clamp-4 leading-relaxed mt-0.5">
-                                  {comment().body}
-                                </p>
-                              </div>
-                            )}
+                              )
+                            }}
                           </Show>
 
                           {/* Reply count */}
                           <Show when={replies().length > 0}>
-                            <div class="flex items-center gap-1.5 mt-1.5">
+                            <div class="flex items-center gap-1.5 mt-0.5">
                               <span class="text-11-medium text-text-weaker font-mono">↳</span>
                               <span class="text-11-medium text-text-weak">
                                 {replies().length === 1
