@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, on } from "solid-js"
+import { For, Show, createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { useParams } from "@solidjs/router"
@@ -15,10 +15,20 @@ import { Terminal } from "@/components/terminal"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
-import { useTerminal, type LocalPTY } from "@/context/terminal"
+import { useTerminal } from "@/context/terminal"
 import { terminalTabLabel } from "@/pages/session/terminal-label"
 import { focusTerminalById } from "@/pages/session/helpers"
 import { getTerminalHandoff, setTerminalHandoff } from "@/pages/session/handoff"
+import {
+  splitAdd,
+  splitEqual,
+  splitHead,
+  splitMembers,
+  splitNormalize,
+  splitRemove,
+  splitSibling,
+  type SplitGroups,
+} from "@/pages/session/terminal-split"
 
 export function TerminalPanel() {
   const params = useParams()
@@ -39,7 +49,57 @@ export function TerminalPanel() {
   const [store, setStore] = createStore({
     autoCreated: false,
     activeDraggable: undefined as string | undefined,
+    splitGroups: {} as SplitGroups,
   })
+  const timers = new Set<number>()
+  const defer = (fn: VoidFunction) => {
+    if (typeof window === "undefined") {
+      fn()
+      return
+    }
+
+    const id = window.setTimeout(() => {
+      timers.delete(id)
+      fn()
+    }, 0)
+    timers.add(id)
+  }
+
+  onCleanup(() => {
+    for (const id of timers) {
+      clearTimeout(id)
+    }
+    timers.clear()
+  })
+
+  createEffect(
+    on(
+      () => ({
+        ids: terminal.all().map((pty) => pty.id),
+        active: terminal.active(),
+      }),
+      (next, prev) => {
+        const groups = store.splitGroups
+        const normalized = splitNormalize(groups, next.ids)
+        if (!splitEqual(groups, normalized)) {
+          setStore("splitGroups", normalized)
+        }
+
+        const removedActive = prev?.active && !next.ids.includes(prev.active) ? prev.active : undefined
+        if (!removedActive) return
+
+        const sibling = splitSibling(groups, removedActive, next.ids)
+        if (!sibling) return
+        if (next.active === sibling) return
+
+        defer(() => {
+          if (!terminal.all().some((pty) => pty.id === sibling)) return
+          if (terminal.active() === sibling) return
+          terminal.open(sibling)
+        })
+      },
+    ),
+  )
 
   createEffect(() => {
     if (!opened()) {
@@ -71,7 +131,7 @@ export function TerminalPanel() {
         if (document.activeElement instanceof HTMLElement) {
           document.activeElement.blur()
         }
-        setTimeout(() => focusTerminalById(activeId), 0)
+        defer(() => focusTerminalById(activeId))
       },
     ),
   )
@@ -103,6 +163,35 @@ export function TerminalPanel() {
   const all = createMemo(() => terminal.all())
   const ids = createMemo(() => all().map((pty) => pty.id))
   const byId = createMemo(() => new Map(all().map((pty) => [pty.id, pty])))
+  const tabIds = createMemo(() => {
+    const used = new Set<string>()
+    return all().flatMap((pty) => {
+      const id = pty.id
+      if (used.has(id)) return []
+
+      const group = splitMembers(store.splitGroups, id)
+      if (!group) {
+        used.add(id)
+        return [id]
+      }
+
+      if (group[0] !== id) return []
+      group.forEach((item) => used.add(item))
+      return [id]
+    })
+  })
+  const tabs = createMemo(() =>
+    tabIds().flatMap((id) => {
+      const pty = byId().get(id)
+      if (!pty) return []
+      return [pty]
+    }),
+  )
+  const activeTab = createMemo(() => {
+    const active = terminal.active()
+    if (!active) return
+    return splitHead(store.splitGroups, active) ?? active
+  })
 
   const handleTerminalDragStart = (event: unknown) => {
     const id = getDraggableId(event)
@@ -114,11 +203,16 @@ export function TerminalPanel() {
     const { draggable, droppable } = event
     if (!draggable || !droppable) return
 
-    const terminals = terminal.all()
-    const fromIndex = terminals.findIndex((t: LocalPTY) => t.id === draggable.id.toString())
-    const toIndex = terminals.findIndex((t: LocalPTY) => t.id === droppable.id.toString())
+    const list = tabIds()
+    const draggableId = draggable.id.toString()
+    const droppableId = droppable.id.toString()
+    const fromIndex = list.findIndex((id) => id === draggableId)
+    const toIndex = list.findIndex((id) => id === droppableId)
+    const allIds = ids()
+    const moveTo = toIndex >= 0 ? allIds.findIndex((id) => id === list[toIndex]) : -1
     if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
-      terminal.move(draggable.id.toString(), toIndex)
+      if (moveTo === -1) return
+      terminal.move(draggableId, moveTo)
     }
   }
 
@@ -127,10 +221,57 @@ export function TerminalPanel() {
 
     const activeId = terminal.active()
     if (!activeId) return
-    setTimeout(() => {
+    defer(() => {
       focusTerminalById(activeId)
-    }, 0)
+    })
   }
+
+  const split = async (id: string) => {
+    const target = (() => {
+      const group = splitMembers(store.splitGroups, id)
+      const active = terminal.active()
+      if (!group || !active || !group.includes(active)) return id
+      return active
+    })()
+    const source = byId().get(target)
+    const created = await terminal.create({ title: source?.title })
+    if (!created) return
+
+    setStore("splitGroups", (groups) => splitAdd(groups, target, created))
+  }
+
+  const closeTerminal = async (id: string) => {
+    const group = splitMembers(store.splitGroups, id)
+    const remove = group ? [...group] : [id]
+
+    setStore("splitGroups", (groups) => remove.reduce((next, item) => splitRemove(next, item), groups))
+    await terminal.closeMany(remove)
+  }
+
+  const panes = createMemo(() => {
+    const active = terminal.active()
+    if (!active) return []
+    const group = splitMembers(store.splitGroups, active)
+    if (!group) return [active]
+    return group
+  })
+
+  const paneCount = createMemo(() => panes().length)
+  const visiblePanes = createMemo(() => panes().filter((id) => byId().has(id)))
+  const paneItems = createMemo(() =>
+    visiblePanes().flatMap((id) => {
+      const pty = byId().get(id)
+      if (!pty) return []
+      return [{ id, pty }]
+    }),
+  )
+  const dragItem = createMemo(() => {
+    const id = store.activeDraggable
+    if (!id) return
+    const pty = byId().get(id)
+    if (!pty) return
+    return { id, pty }
+  })
 
   return (
     <Show when={open()}>
@@ -181,15 +322,12 @@ export function TerminalPanel() {
             <DragDropSensors />
             <ConstrainDragYAxis />
             <div class="flex flex-col h-full">
-              <Tabs
-                variant="alt"
-                value={terminal.active()}
-                onChange={(id) => terminal.open(id)}
-                class="!h-auto !flex-none"
-              >
+              <Tabs variant="alt" value={activeTab()} onChange={(id) => terminal.open(id)} class="!h-auto !flex-none">
                 <Tabs.List class="h-10">
-                  <SortableProvider ids={ids()}>
-                    <For each={all()}>{(pty) => <SortableTerminalTab terminal={pty} onClose={close} />}</For>
+                  <SortableProvider ids={tabIds()}>
+                    <For each={tabs()}>
+                      {(pty) => <SortableTerminalTab terminal={pty} onClose={closeTerminal} onSplit={split} />}
+                    </For>
                   </SortableProvider>
                   <div class="h-full flex items-center justify-center">
                     <TooltipKeybind
@@ -209,35 +347,47 @@ export function TerminalPanel() {
                 </Tabs.List>
               </Tabs>
               <div class="flex-1 min-h-0 relative">
-                <Show when={terminal.active()} keyed>
-                  {(id) => (
-                    <Show when={byId().get(id)}>
-                      {(pty) => (
-                        <div id={`terminal-wrapper-${id}`} class="absolute inset-0">
-                          <Terminal pty={pty()} onCleanup={terminal.update} onConnectError={() => terminal.clone(id)} />
+                <div class="absolute inset-0 flex" classList={{ "divide-x divide-border-weak-base": paneCount() > 1 }}>
+                  <For each={paneItems()}>
+                    {(item) => (
+                      <div
+                        classList={{
+                          "relative min-h-0 min-w-0": true,
+                          "h-full w-full": paneCount() === 1,
+                          "flex-1": paneCount() > 1,
+                        }}
+                        onPointerDown={() => {
+                          if (terminal.active() === item.id) return
+                          terminal.open(item.id)
+                        }}
+                      >
+                        <div id={`terminal-wrapper-${item.id}`} class="absolute inset-0">
+                          <Terminal
+                            pty={item.pty}
+                            onCleanup={terminal.update}
+                            onConnectError={() => terminal.clone(item.id)}
+                          />
                         </div>
-                      )}
-                    </Show>
-                  )}
-                </Show>
+                      </div>
+                    )}
+                  </For>
+                </div>
               </div>
             </div>
             <DragOverlay>
-              <Show when={store.activeDraggable}>
-                {(draggedId) => (
-                  <Show when={byId().get(draggedId())}>
-                    {(t) => (
-                      <div class="relative p-1 h-10 flex items-center bg-background-stronger text-14-regular">
-                        {terminalTabLabel({
-                          title: t().title,
-                          titleNumber: t().titleNumber,
-                          t: language.t as (key: string, vars?: Record<string, string | number | boolean>) => string,
-                        })}
-                      </div>
-                    )}
-                  </Show>
-                )}
-              </Show>
+              {(() => {
+                const item = dragItem()
+                if (!item) return null
+                return (
+                  <div class="relative p-1 h-10 flex items-center bg-background-stronger text-14-regular">
+                    {terminalTabLabel({
+                      title: item.pty.title,
+                      titleNumber: item.pty.titleNumber,
+                      t: language.t as (key: string, vars?: Record<string, string | number | boolean>) => string,
+                    })}
+                  </div>
+                )
+              })()}
             </DragOverlay>
           </DragDropProvider>
         </Show>

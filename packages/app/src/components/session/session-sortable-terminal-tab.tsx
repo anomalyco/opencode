@@ -9,7 +9,11 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLanguage } from "@/context/language"
 
-export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () => void }): JSX.Element {
+export function SortableTerminalTab(props: {
+  terminal: LocalPTY
+  onClose?: (id: string) => void | Promise<void>
+  onSplit?: (id: string) => void | Promise<void>
+}): JSX.Element {
   const terminal = useTerminal()
   const language = useLanguage()
   const sortable = createSortable(props.terminal.id)
@@ -44,11 +48,15 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
   }
 
   const close = () => {
-    const count = terminal.all().length
-    terminal.close(props.terminal.id)
-    if (count === 1) {
-      props.onClose?.()
-    }
+    void Promise.resolve(props.onClose?.(props.terminal.id)).catch((error: unknown) => {
+      console.error("Failed to close terminal tab", error)
+    })
+  }
+
+  const split = () => {
+    void Promise.resolve(props.onSplit?.(props.terminal.id)).catch((error: unknown) => {
+      console.error("Failed to split terminal tab", error)
+    })
   }
 
   const focus = () => {
@@ -187,6 +195,10 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
               <DropdownMenu.Item onSelect={edit}>
                 <Icon name="edit" class="w-4 h-4 mr-2" />
                 {language.t("common.rename")}
+              </DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={split}>
+                <Icon name="layout-right" class="w-4 h-4 mr-2" />
+                {language.t("terminal.split")}
               </DropdownMenu.Item>
               <DropdownMenu.Item onSelect={close}>
                 <Icon name="close" class="w-4 h-4 mr-2" />

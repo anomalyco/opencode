@@ -571,6 +571,7 @@ export const dict = {
   "terminal.loading": "Loading terminal...",
   "terminal.title": "Terminal",
   "terminal.title.numbered": "Terminal {{number}}",
+  "terminal.split": "Split terminal",
   "terminal.close": "Close terminal",
   "terminal.connectionLost.title": "Connection Lost",
   "terminal.connectionLost.description":

@@ -30,6 +30,9 @@ export function getLegacyTerminalStorageKeys(dir: string, legacySessionID?: stri
 }
 
 type TerminalSession = ReturnType<typeof createWorkspaceTerminalSession>
+type CreateTerminalInput = {
+  title?: string
+}
 
 type TerminalCacheEntry = {
   value: TerminalSession
@@ -138,6 +141,66 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
     })
   })
 
+  const create = (input?: CreateTerminalInput) => {
+    const nextNumber = pickNextTerminalNumber()
+    const title = input?.title ?? `Terminal ${nextNumber}`
+
+    return sdk.client.pty
+      .create({ title })
+      .then((pty: { data?: { id?: string; title?: string } }) => {
+        const id = pty.data?.id
+        if (!id) return undefined
+        const newTerminal = {
+          id,
+          title: pty.data?.title ?? "Terminal",
+          titleNumber: nextNumber,
+        }
+        setStore("all", store.all.length, newTerminal)
+        setStore("active", id)
+        return id
+      })
+      .catch((error: unknown) => {
+        console.error("Failed to create terminal", error)
+        return undefined
+      })
+  }
+
+  const closeMany = async (ids: string[]) => {
+    const target = new Set(ids)
+    const remove = store.all.flatMap((pty) => (target.has(pty.id) ? [pty.id] : []))
+    if (remove.length === 0) return
+
+    const drop = new Set(remove)
+    const active = (() => {
+      const current = store.active
+      if (!current || !drop.has(current)) return current
+      const index = store.all.findIndex((pty) => pty.id === current)
+      if (index === -1) return store.all.find((pty) => !drop.has(pty.id))?.id
+      const right = store.all.slice(index + 1).find((pty) => !drop.has(pty.id))?.id
+      if (right) return right
+      return store.all
+        .slice(0, index)
+        .reverse()
+        .find((pty) => !drop.has(pty.id))?.id
+    })()
+
+    batch(() => {
+      setStore("active", active)
+      setStore(
+        "all",
+        store.all.filter((pty) => !drop.has(pty.id)),
+      )
+    })
+
+    await Promise.all(
+      remove.map((id) =>
+        sdk.client.pty.remove({ ptyID: id }).catch((error: unknown) => {
+          console.error("Failed to close terminal", error)
+        }),
+      ),
+    )
+  }
+
   return {
     ready,
     all: createMemo(() => store.all),
@@ -148,25 +211,9 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
         setStore("all", [])
       })
     },
+    create,
     new() {
-      const nextNumber = pickNextTerminalNumber()
-
-      sdk.client.pty
-        .create({ title: `Terminal ${nextNumber}` })
-        .then((pty: { data?: { id?: string; title?: string } }) => {
-          const id = pty.data?.id
-          if (!id) return
-          const newTerminal = {
-            id,
-            title: pty.data?.title ?? "Terminal",
-            titleNumber: nextNumber,
-          }
-          setStore("all", store.all.length, newTerminal)
-          setStore("active", id)
-        })
-        .catch((error: unknown) => {
-          console.error("Failed to create terminal", error)
-        })
+      void create()
     },
     update(pty: Partial<LocalPTY> & { id: string }) {
       const index = store.all.findIndex((x) => x.id === pty.id)
@@ -236,26 +283,9 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
       const prevIndex = index === 0 ? store.all.length - 1 : index - 1
       setStore("active", store.all[prevIndex]?.id)
     },
+    closeMany,
     async close(id: string) {
-      const index = store.all.findIndex((f) => f.id === id)
-      if (index !== -1) {
-        batch(() => {
-          if (store.active === id) {
-            const next = index > 0 ? store.all[index - 1]?.id : store.all[1]?.id
-            setStore("active", next)
-          }
-          setStore(
-            "all",
-            produce((all) => {
-              all.splice(index, 1)
-            }),
-          )
-        })
-      }
-
-      await sdk.client.pty.remove({ ptyID: id }).catch((error: unknown) => {
-        console.error("Failed to close terminal", error)
-      })
+      await closeMany([id])
     },
     move(id: string, to: number) {
       const index = store.all.findIndex((f) => f.id === id)
@@ -326,10 +356,12 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       ready: () => workspace().ready(),
       all: () => workspace().all(),
       active: () => workspace().active(),
+      create: (input?: CreateTerminalInput) => workspace().create(input),
       new: () => workspace().new(),
       update: (pty: Partial<LocalPTY> & { id: string }) => workspace().update(pty),
       clone: (id: string) => workspace().clone(id),
       open: (id: string) => workspace().open(id),
+      closeMany: (ids: string[]) => workspace().closeMany(ids),
       close: (id: string) => workspace().close(id),
       move: (id: string, to: number) => workspace().move(id, to),
       next: () => workspace().next(),
