@@ -59,11 +59,11 @@ import { useLanguage, type Locale } from "@/context/language"
 import {
   childMapByParent,
   displayName,
+  effectiveWorkspaceOrder,
   errorMessage,
   getDraggableId,
   latestRootSession,
   sortedRootSessions,
-  syncWorkspaceOrder,
   workspaceKey,
 } from "./layout/helpers"
 import { collectOpenProjectDeepLinks, deepLinkEvent, drainPendingDeepLinks } from "./layout/deep-links"
@@ -552,31 +552,6 @@ export default function Layout(props: ParentProps) {
     if (!project) return false
     if (project.vcs !== "git") return false
     return layout.sidebar.workspaces(project.worktree)()
-  })
-
-  createEffect(() => {
-    if (!pageReady()) return
-    if (!layoutReady()) return
-    const project = currentProject()
-    if (!project) return
-
-    const local = project.worktree
-    const dirs = [project.worktree, ...(project.sandboxes ?? [])]
-    const existing = store.workspaceOrder[project.worktree]
-    const merged = syncWorkspaceOrder(local, dirs, existing)
-    if (!existing) {
-      setStore("workspaceOrder", project.worktree, merged)
-      return
-    }
-
-    if (merged.length !== existing.length) {
-      setStore("workspaceOrder", project.worktree, merged)
-      return
-    }
-
-    if (merged.some((d, i) => d !== existing[i])) {
-      setStore("workspaceOrder", project.worktree, merged)
-    }
   })
 
   createEffect(() => {
@@ -1099,7 +1074,9 @@ export default function Layout(props: ParentProps) {
     const root = projectRoot(directory)
     server.projects.touch(root)
     const project = layout.projects.list().find((item) => item.worktree === root)
-    const dirs = Array.from(new Set([root, ...(store.workspaceOrder[root] ?? []), ...(project?.sandboxes ?? [])]))
+    const dirs = project
+      ? effectiveWorkspaceOrder(root, [root, ...(project.sandboxes ?? [])], store.workspaceOrder[root])
+      : [root]
     const openSession = async (target: { directory: string; id: string }) => {
       const resolved = await globalSDK.client.session
         .get({ sessionID: target.id })
@@ -1583,14 +1560,11 @@ export default function Layout(props: ParentProps) {
     const extra = directory && directory !== local && !dirs.includes(directory) ? directory : undefined
     const pending = extra ? WorktreeState.get(extra)?.status === "pending" : false
 
-    const existing = store.workspaceOrder[project.worktree]
-    if (!existing) return extra ? [...dirs, extra] : dirs
-
-    const merged = syncWorkspaceOrder(local, dirs, existing)
-    if (pending && extra) return [local, extra, ...merged.filter((directory) => directory !== local)]
-    if (!extra) return merged
-    if (pending) return merged
-    return [...merged, extra]
+    const ordered = effectiveWorkspaceOrder(local, dirs, store.workspaceOrder[project.worktree])
+    if (pending && extra) return [local, extra, ...ordered.filter((item) => item !== local)]
+    if (!extra) return ordered
+    if (pending) return ordered
+    return [...ordered, extra]
   }
 
   const sidebarProject = createMemo(() => {
@@ -1623,7 +1597,11 @@ export default function Layout(props: ParentProps) {
     const [item] = result.splice(fromIndex, 1)
     if (!item) return
     result.splice(toIndex, 0, item)
-    setStore("workspaceOrder", project.worktree, result)
+    setStore(
+      "workspaceOrder",
+      project.worktree,
+      result.filter((directory) => workspaceKey(directory) !== workspaceKey(project.worktree)),
+    )
   }
 
   function handleWorkspaceDragEnd() {
@@ -1661,10 +1639,9 @@ export default function Layout(props: ParentProps) {
       const existing = prev ?? []
       const next = existing.filter((item) => {
         const id = workspaceKey(item)
-        if (id === root) return false
-        return id !== key
+        return id !== root && id !== key
       })
-      return [local, created.directory, ...next]
+      return [created.directory, ...next]
     })
 
     globalSync.child(created.directory)

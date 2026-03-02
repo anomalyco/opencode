@@ -1,4 +1,4 @@
-import { createEffect, on, onCleanup, type JSX } from "solid-js"
+import { createEffect, onCleanup, type JSX } from "solid-js"
 import type { FileDiff } from "@opencode-ai/sdk/v2"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import type {
@@ -119,32 +119,12 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
     })
   }
 
-  createEffect(
-    on(
-      () => props.diffs().length,
-      () => queueRestore(),
-      { defer: true },
-    ),
-  )
-
-  createEffect(
-    on(
-      () => props.diffStyle,
-      () => queueRestore(),
-      { defer: true },
-    ),
-  )
-
-  createEffect(
-    on(
-      () => layout.ready(),
-      (ready) => {
-        if (!ready) return
-        queueRestore()
-      },
-      { defer: true },
-    ),
-  )
+  createEffect(() => {
+    props.diffs().length
+    props.diffStyle
+    if (!layout.ready()) return
+    queueRestore()
+  })
 
   onCleanup(() => {
     if (restoreFrame !== undefined) cancelAnimationFrame(restoreFrame)
