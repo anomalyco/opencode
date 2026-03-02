@@ -1076,10 +1076,11 @@ export namespace Provider {
         const fetchFn = customFetch ?? fetch
         const opts = init ?? {}
 
-        if (_context1mDisabled && model.api.npm === "@ai-sdk/anthropic") {
-          const headers = new Headers(opts.headers as HeadersInit)
+        // Strip context-1m beta header when account doesn't support it
+        function stripContext1m(hdrs: HeadersInit) {
+          const headers = new Headers(hdrs)
           const beta = headers.get("anthropic-beta") ?? ""
-          if (beta.includes("context-1m")) {
+          if (beta.includes("context-1m"))
             headers.set(
               "anthropic-beta",
               beta
@@ -1087,9 +1088,11 @@ export namespace Provider {
                 .filter((h) => !h.includes("context-1m"))
                 .join(","),
             )
-            opts.headers = headers
-          }
+          return headers
         }
+
+        if (_context1mDisabled && model.api.npm === "@ai-sdk/anthropic")
+          opts.headers = stripContext1m(opts.headers as HeadersInit)
 
         if (options["timeout"] !== undefined && options["timeout"] !== null) {
           const signals: AbortSignal[] = []
@@ -1135,21 +1138,12 @@ export namespace Provider {
           ) {
             log.info("context-1m beta not available, retrying without it")
             _context1mDisabled = true
-            const headers = new Headers(opts.headers as HeadersInit)
-            const beta = headers.get("anthropic-beta") ?? ""
-            headers.set(
-              "anthropic-beta",
-              beta
-                .split(",")
-                .filter((h) => !h.includes("context-1m"))
-                .join(","),
-            )
+            const headers = stripContext1m(opts.headers as HeadersInit)
             return fetchFn(input, {
               ...opts,
               headers,
-              // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
               timeout: false,
-            })
+            } as BunFetchRequestInit)
           }
         }
 
