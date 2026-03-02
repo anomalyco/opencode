@@ -1,54 +1,58 @@
 # OpenCode IM Integration
 
-将即时通讯平台（如 Telegram）与 OpenCode AI 助手集成，让你在手机端即可直接控制并与你的本地项目进行对话。
+Integrate instant messaging platforms (such as Telegram) with the OpenCode AI assistant, allowing you to directly control and interact with your local projects from your phone.
 
-## 功能特性
+## Features
 
-- **💬 多项目支持与无缝切换**：支持配置多个本地项目，通过聊天命令快速无缝切换当前 AI 工作区上下文。
-- **📷 图像视觉与媒体支持**：支持发送本地报错截图或结构图让 AI 分析（最大支持 20MB），内置存储清理机制。
-- **🔐 隐私与白名单防刷**：可配置 Telegram 的用户 ID (userId) 白名单，防止陌生人或其他人调用你的本地资源。
-- **⚡ 会话压缩与长效管理**：当聊天变长影响 Token 开销时，会自动压缩历史记录并通知用户减轻资源使用。
+* **💬 Multi-project support with seamless switching**: Configure multiple local projects and quickly switch the AI workspace context using chat commands.
+* **📷 Image and media support**: Send screenshots of local errors or diagrams for AI analysis (up to 20MB), with built-in storage cleanup.
+* **🔐 Privacy and whitelist protection**: Configure Telegram user ID whitelists to prevent strangers or unauthorized users from accessing your local resources.
+* **⚡ Session compression and long-term management**: Automatically compresses long conversations to reduce token usage and notifies users to save resources.
 
-目前优先支持 **Telegram** 🤖，未来计划拓展至 Slack、WhatsApp、Discord 等平台。
+Currently optimized for **Telegram** 🤖, with plans to expand to Slack, WhatsApp, Discord, and more.
 
 ---
 
-## 快速开始 🚀
+## Quick Start 🚀
 
-### 1. 准备你的 Telegram 机器人
+### 1. Prepare your Telegram bot
 
-#### 第一步：获取 Telegram Bot Token
-1. 在 Telegram 中搜索 [@BotFather](https://t.me/botfather) 开始对话。
-2. 发送 `/newbot` 创建一个新的机器人。
-3. 按提示设置好机器人名称。完成后，你会获取到一个类似于 `123456789:ABCDEF-xxxxxxxxx` 的 Token。请妥善保存。
+#### Step 1: Get your Telegram Bot Token
 
-#### 第二步：获取你的获取用户 ID (User ID) 白名单
-1. 在 Telegram 搜索 [@userinfobot](https://t.me/userinfobot) 或者 `@getmyid_bot`。
-2. 点击 Start 或发消息，机器人会返回你的个人数字 ID，如：`123456789`。
-3. 把这个数字记下来，这是你允许自己连接本地项目的唯一白名单凭证。
+1. Search for [@BotFather](https://t.me/botfather) on Telegram and start a conversation.
+2. Send `/newbot` to create a new bot.
+3. Follow the prompts to set the bot name. You’ll receive a token like `123456789:ABCDEF-xxxxxxxxx`. Save it securely.
 
-### 2. 初始化配置文件
+#### Step 2: Get your User ID (Whitelist ID)
 
-配置文件通常放在你启动程序的目录（即当前工作区）或你的根目录下，命名为 ***`.opencode.json`***（如果是旧版本，可能是 `.opencode/opencode.json`）。
+1. Search for [@userinfobot](https://t.me/userinfobot) or `@getmyid_bot` on Telegram.
+2. Click Start or send a message. The bot will return your numeric ID, e.g., `123456789`.
+3. Save this number — it will be used as your whitelist credential to access local projects.
 
-在你的 OpenCode 根目录或者你想存放的项目目录下创建并完善 `.opencode.json`。下面是一个带有**多项目管理**和配置的完整示例：
+---
+
+### 2. Initialize the configuration file
+
+The configuration file is usually placed in the directory where you run the program (current workspace) or your home directory, named ***`.opencode.json`*** (older versions may use `.opencode/opencode.json`).
+
+Create and configure `.opencode.json` in your OpenCode root directory or any project directory you prefer. Below is a complete example with **multi-project support**:
 
 ```json
 {
   "projects": {
     "myproject": {
-      "name": "我的主项目",
+      "name": "My Main Project",
       "directory": "/Users/xxx/projects/myproject"
     },
     "opencode": {
-      "name": "OpenCode 本身",
+      "name": "OpenCode Itself",
       "directory": "/Users/xxx/projects/opencode"
     }
   },
   "model": "zai-coding-plan/glm-4.7",
   "im": {
     "type": "telegram",
-    "token": "你的_TELEGRAM_BOT_TOKEN",
+    "token": "YOUR_TELEGRAM_BOT_TOKEN",
     "allowedUsers": [
       123456789
     ],
@@ -58,22 +62,25 @@
 }
 ```
 
-*🔔 提示：`projects` 内的第一项将默认作为启动时载入的初始目录。`allowedUsers` 数组里需要填入你刚获取的数字类型 Telegram ID。若不写将允许任何找到这个 Bot 的人操作你的终端引擎（非常不推荐）！*
+*🔔 Tip: The first project in `projects` will be used as the default startup directory. The `allowedUsers` array must contain your numeric Telegram ID. If omitted, anyone who finds your bot could control your terminal engine (highly discouraged!).*
 
-### 3. 运行服务
+---
 
-配置完成后，请到你的 OpenCode 源码主程序目录下唤起核心 `serve` 服务，它不仅会启动后端的引擎支持，同时还会自动建立与 Telegram 的双工连接。
+### 3. Run the service
+
+After configuration, go to the OpenCode source directory and start the core `serve` service. This launches the backend engine and establishes a bidirectional connection with Telegram.
 
 ```bash
-# 如果是从源码启动：
+# If running from source:
 cd packages/opencode
 bun install
 
-# 唤起本地服务以及对应的 IM 后台机器人
+# Start local service and IM integration
 bun run src/index.ts serve
 ```
 
-若启动成功，你的终端将输出类似如下日志：
+If successful, your terminal will show logs similar to:
+
 ```text
 opencode server listening on http://127.0.0.1:52562
 📱 Loading IM integration from: @opencode-ai/im-integration/manager
@@ -84,29 +91,31 @@ opencode server listening on http://127.0.0.1:52562
 🚀 IM integration initialized
 ```
 
-### 4. 尽情探索
+---
 
-现在，回到 Telegram，找属于你自己的那个机器人，点击 Start 或向它发送 `hi`，即可让 AI 连接上你的代码库。
+### 4. Start exploring
 
-你也可以利用内置斜杠命令进行多项目管理：
+Now return to Telegram, open your bot, and press Start or send `hi`. The AI will connect to your codebase.
 
-| 可用内置命令                     | 功能说明                 |
-| ------------------------ | -------------------- |
-| `/help`                  | 显示指令帮助菜单             |
-| `/list_projects`         | 列出来自 `.opencode.json` 中配置的所有支持项目 |
-| `/switch_project <name>` | 将机器人的控制权和 AI 环境平滑切换到你指定的其他项目  |
-| `/session_info`          | 显示当前项目所在会话、ID及收发消息数状态栏  |
+You can also use built-in slash commands for multi-project management:
 
-> 💡 **进阶用法**：你可以随时发送一张截图给它，AI 将结合图像结构以及当前本地项目的实际代码，直接在 Telegram 与你对谈，协助查错！
+| Command                  | Description                                                |
+| ------------------------ | ---------------------------------------------------------- |
+| `/help`                  | Show help menu                                             |
+| `/list_projects`         | List all configured projects from `.opencode.json`         |
+| `/switch_project <name>` | Switch the AI environment to another project               |
+| `/session_info`          | Show session info including project, ID, and message stats |
+
+> 💡 **Pro tip**: You can send a screenshot anytime. The AI will combine visual context with your local code and help debug directly within Telegram.
 
 ---
 
-## 更多高阶配置项参考
+## Advanced Configuration Reference
 
-| JSON 字段路径 | 类型 | 说明 | 备注说明 |
-| --- | --- | --- | --- |
-| `im.enabled` | `boolean` | 是否开启机器人 | 默认 `true`（也可通过将其设为 `false` 暂时关闭 IM 模块） |
-| `im.type` | `string` | 使用的即时通讯平台 | 当前默认且需填入 `"telegram"` |
-| `im.token` | `string` | 平台申请的 Bot 凭证 | 就是通过 BotFather 获取的 Token |
-| `im.allowedUsers`| `[number]` | 操作白名单 | 仅包含此数组内 UserId 的人才能命令机器人处理项目，极其重要！ |
-| `im.storagePath` | `string` | 媒体附件暂存处 | 本地用来存储接收到的图片/文件等，默认会自动处理。 |
+| JSON Path         | Type       | Description               | Notes                                                                |
+| ----------------- | ---------- | ------------------------- | -------------------------------------------------------------------- |
+| `im.enabled`      | `boolean`  | Enable or disable the bot | Default `true` (set to `false` to temporarily disable IM)            |
+| `im.type`         | `string`   | IM platform type          | Currently must be `"telegram"`                                       |
+| `im.token`        | `string`   | Bot token                 | Obtained from BotFather                                              |
+| `im.allowedUsers` | `[number]` | Whitelist IDs             | Only users in this list can control the bot — very important!        |
+| `im.storagePath`  | `string`   | Media storage path        | Temporary storage for received files/images, auto-managed by default |
