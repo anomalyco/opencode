@@ -37,6 +37,12 @@
     max-width: 100%;
   }
 
+  [data-slot="session-turn-compaction"] {
+    width: 100%;
+    min-width: 0;
+    align-self: stretch;
+  }
+
   [data-slot="session-turn-thinking"] {
     display: flex;
     align-items: center;
