@@ -5,6 +5,7 @@ import { DockTray } from "@opencode-ai/ui/dock-surface"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
+import { TextStrikethrough } from "@opencode-ai/ui/text-strikethrough"
 import { Index, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 
@@ -49,6 +50,9 @@ export function SessionTodoDock(props: {
   subtitleTravel?: number
   subtitleEdge?: number
   countDuration?: number
+  countMask?: number
+  countMaskHeight?: number
+  countWidthDuration?: number
 }) {
   const [store, setStore] = createStore({
     collapsed: false,
@@ -132,6 +136,9 @@ export function SessionTodoDock(props: {
             aria-label={label()}
             style={{
               "--tool-motion-odometer-ms": `${props.countDuration ?? 600}ms`,
+              "--tool-motion-mask": `${props.countMask ?? 18}%`,
+              "--tool-motion-mask-height": `${props.countMaskHeight ?? 0}px`,
+              "--tool-motion-spring-ms": `${props.countWidthDuration ?? 560}ms`,
               opacity: `${Math.max(0, Math.min(1, 1 - shut()))}`,
               filter: `blur(${Math.max(0, Math.min(1, shut())) * 2}px)`,
             }}
@@ -143,22 +150,22 @@ export function SessionTodoDock(props: {
           </span>
           <div
             data-slot="session-todo-preview"
-            class="ml-1 min-w-0"
+            class="ml-1 min-w-0 overflow-hidden"
             style={{
               flex: "1 1 auto",
               "max-width": "100%",
-              overflow: "visible",
             }}
           >
             <TextReveal
               class="text-14-regular text-text-base cursor-default"
               text={store.collapsed ? preview() : undefined}
-              duration={props.subtitleDuration ?? 700}
+              duration={props.subtitleDuration ?? 600}
               travel={props.subtitleTravel ?? 25}
               edge={props.subtitleEdge ?? 17}
               spring="cubic-bezier(0.34, 1, 0.64, 1)"
               springSoft="cubic-bezier(0.34, 1, 0.64, 1)"
               growOnly
+              truncate
             />
           </div>
           <div class="ml-auto">
@@ -281,25 +288,22 @@ function TodoList(props: { todos: Todo[]; open: boolean }) {
                 filter: todo().status === "pending" ? "blur(0.3px)" : "blur(0px)",
               }}
             >
-              <span
+              <TextStrikethrough
+                active={todo().status === "completed" || todo().status === "cancelled"}
+                text={todo().content}
                 class="text-14-regular min-w-0 break-words"
-                classList={{
-                  "text-text-weak": todo().status === "completed" || todo().status === "cancelled",
-                  "text-text-strong": todo().status !== "completed" && todo().status !== "cancelled",
-                }}
                 style={{
                   "line-height": "var(--line-height-normal)",
                   transition:
-                    "color 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)), text-decoration-color 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)), opacity 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)), filter 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1))",
-                  "text-decoration-line": "line-through",
-                  "text-decoration-color":
-                    todo().status === "completed" || todo().status === "cancelled" ? "currentColor" : "transparent",
+                    "color 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)), opacity 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)), filter 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1))",
+                  color:
+                    todo().status === "completed" || todo().status === "cancelled"
+                      ? "var(--text-weak)"
+                      : "var(--text-strong)",
                   opacity: todo().status === "pending" ? "0.92" : "1",
                   filter: todo().status === "pending" ? "blur(0.3px)" : "blur(0px)",
                 }}
-              >
-                {todo().content}
-              </span>
+              />
             </Checkbox>
           )}
         </Index>

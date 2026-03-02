@@ -33,6 +33,9 @@ export function SessionComposerRegion(props: {
   subtitleTravel?: number
   subtitleEdge?: number
   countDuration?: number
+  countMask?: number
+  countMaskHeight?: number
+  countWidthDuration?: number
 }) {
   const params = useParams()
   const prompt = usePrompt()
@@ -163,6 +166,9 @@ export function SessionComposerRegion(props: {
                     subtitleTravel={props.subtitleTravel}
                     subtitleEdge={props.subtitleEdge}
                     countDuration={props.countDuration}
+                    countMask={props.countMask}
+                    countMaskHeight={props.countMaskHeight}
+                    countWidthDuration={props.countWidthDuration}
                   />
                 </div>
               </div>

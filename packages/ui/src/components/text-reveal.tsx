@@ -28,6 +28,7 @@ export function TextReveal(props: {
   spring?: string
   springSoft?: string
   growOnly?: boolean
+  truncate?: boolean
 }) {
   const [cur, setCur] = createSignal(props.text)
   const [old, setOld] = createSignal<string | undefined>()
@@ -105,6 +106,7 @@ export function TextReveal(props: {
       data-component="text-reveal"
       data-ready={ready() ? "true" : "false"}
       data-swapping={swapping() ? "true" : "false"}
+      data-truncate={props.truncate ? "true" : "false"}
       class={props.class}
       aria-label={props.text ?? ""}
       style={{
@@ -115,7 +117,7 @@ export function TextReveal(props: {
         "--text-reveal-spring-soft": props.springSoft ?? "cubic-bezier(0.34, 1, 0.64, 1)",
       }}
     >
-      <span data-slot="text-reveal-track" style={{ width: width() }}>
+      <span data-slot="text-reveal-track" style={{ width: props.truncate ? "100%" : width() }}>
         <span data-slot="text-reveal-entering" ref={inRef}>
           {cur() ?? "\u00A0"}
         </span>

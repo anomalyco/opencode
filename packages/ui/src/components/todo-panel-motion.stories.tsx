@@ -139,11 +139,14 @@ export const Playground = {
     const [drawerExpandBounce, setDrawerExpandBounce] = createSignal(0)
     const [drawerCollapseDuration, setDrawerCollapseDuration] = createSignal(0.3)
     const [drawerCollapseBounce, setDrawerCollapseBounce] = createSignal(0)
-    const [subtitleDuration, setSubtitleDuration] = createSignal(700)
+    const [subtitleDuration, setSubtitleDuration] = createSignal(600)
     const [subtitleAuto, setSubtitleAuto] = createSignal(true)
     const [subtitleTravel, setSubtitleTravel] = createSignal(25)
     const [subtitleEdge, setSubtitleEdge] = createSignal(17)
     const [countDuration, setCountDuration] = createSignal(600)
+    const [countMask, setCountMask] = createSignal(18)
+    const [countMaskHeight, setCountMaskHeight] = createSignal(0)
+    const [countWidthDuration, setCountWidthDuration] = createSignal(560)
     const state = createSessionComposerState({ closeMs: () => Math.round(dockCloseDuration() * 1000) })
     let frame
     let composerRef
@@ -265,6 +268,9 @@ export const Playground = {
                     subtitleTravel={subtitleAuto() ? undefined : subtitleTravel()}
                     subtitleEdge={subtitleAuto() ? undefined : subtitleEdge()}
                     countDuration={countDuration()}
+                    countMask={countMask()}
+                    countMaskHeight={countMaskHeight()}
+                    countWidthDuration={countWidthDuration()}
                   />
                 </div>
               </div>
@@ -522,6 +528,53 @@ export const Playground = {
             />
             <span style={{ width: "64px", "text-align": "right", "font-size": "13px" }}>
               {Math.round(countDuration())}ms
+            </span>
+          </label>
+          <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
+            <span style={{ width: "110px", "font-size": "13px", color: "var(--color-text-secondary, #a3a3a3)" }}>
+              mask
+            </span>
+            <input
+              type="range"
+              min="4"
+              max="40"
+              step="1"
+              value={countMask()}
+              onInput={(event) => setCountMask(event.currentTarget.valueAsNumber)}
+              style={{ flex: 1 }}
+            />
+            <span style={{ width: "64px", "text-align": "right", "font-size": "13px" }}>{countMask()}%</span>
+          </label>
+          <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
+            <span style={{ width: "110px", "font-size": "13px", color: "var(--color-text-secondary, #a3a3a3)" }}>
+              mask height
+            </span>
+            <input
+              type="range"
+              min="0"
+              max="14"
+              step="1"
+              value={countMaskHeight()}
+              onInput={(event) => setCountMaskHeight(event.currentTarget.valueAsNumber)}
+              style={{ flex: 1 }}
+            />
+            <span style={{ width: "64px", "text-align": "right", "font-size": "13px" }}>{countMaskHeight()}px</span>
+          </label>
+          <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
+            <span style={{ width: "110px", "font-size": "13px", color: "var(--color-text-secondary, #a3a3a3)" }}>
+              width spring
+            </span>
+            <input
+              type="range"
+              min="0"
+              max="1200"
+              step="10"
+              value={countWidthDuration()}
+              onInput={(event) => setCountWidthDuration(event.currentTarget.valueAsNumber)}
+              style={{ flex: 1 }}
+            />
+            <span style={{ width: "64px", "text-align": "right", "font-size": "13px" }}>
+              {Math.round(countWidthDuration())}ms
             </span>
           </label>
         </div>
