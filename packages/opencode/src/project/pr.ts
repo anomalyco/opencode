@@ -16,6 +16,7 @@ export namespace PR {
     "MERGE_FAILED",
     "DELETE_BRANCH_FAILED",
     "COMMENTS_FETCH_FAILED",
+    "READY_FAILED",
   ])
   export type ErrorCode = z.infer<typeof ErrorCode>
 
@@ -53,6 +54,9 @@ export namespace PR {
     })
     .meta({ ref: "PrDeleteBranchInput" })
   export type DeleteBranchInput = z.infer<typeof DeleteBranchInput>
+
+  export const ReadyInput = z.object({}).meta({ ref: "PrReadyInput" })
+  export type ReadyInput = z.infer<typeof ReadyInput>
 
   export const PrErrorResponse = z
     .object({
@@ -253,6 +257,38 @@ export namespace PR {
       reviewDecision: null,
       checksState: null,
     }
+  }
+
+  export async function ready(_input: ReadyInput): Promise<Vcs.PrInfo> {
+    const { info } = await ensureGithub()
+    const cwd = Instance.worktree
+
+    const currentPr = await get()
+    if (!currentPr) {
+      throw new PrError("NO_PR", "No pull request found for the current branch")
+    }
+
+    if (!currentPr.isDraft) {
+      return currentPr
+    }
+
+    const cmd = await $`gh pr ready`
+      .quiet()
+      .nothrow()
+      .cwd(cwd)
+      .catch((e: unknown) => ({ exitCode: 1, stdout: Buffer.from(""), stderr: Buffer.from(String(e)) }))
+
+    const result = cmd.stdout.toString()
+    const errorOut = cmd.stderr.toString()
+
+    if (cmd.exitCode !== 0) {
+      log.error("pr ready failed", { stdout: result, stderr: errorOut, exitCode: cmd.exitCode })
+      throw new PrError("READY_FAILED", errorOut.trim() || result.trim() || "Failed to mark PR as ready")
+    }
+
+    await Vcs.refresh()
+    const updated = await Vcs.info()
+    return updated.pr ?? { ...currentPr, isDraft: false }
   }
 
   export async function merge(input: MergeInput): Promise<Vcs.PrInfo> {

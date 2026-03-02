@@ -1941,6 +1941,10 @@ export type PrMergeInput = {
   deleteBranch?: boolean
 }
 
+export type PrReadyInput = {
+  [key: string]: unknown
+}
+
 export type PrDeleteBranchInput = {
   branch: string
 }
@@ -4482,6 +4486,34 @@ export type VcsPrMergeResponses = {
 }
 
 export type VcsPrMergeResponse = VcsPrMergeResponses[keyof VcsPrMergeResponses]
+
+export type VcsPrReadyData = {
+  body?: PrReadyInput
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/vcs/pr/ready"
+}
+
+export type VcsPrReadyErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type VcsPrReadyError = VcsPrReadyErrors[keyof VcsPrReadyErrors]
+
+export type VcsPrReadyResponses = {
+  /**
+   * PR marked as ready
+   */
+  200: PrInfo
+}
+
+export type VcsPrReadyResponse = VcsPrReadyResponses[keyof VcsPrReadyResponses]
 
 export type VcsPrDeleteBranchData = {
   body?: PrDeleteBranchInput

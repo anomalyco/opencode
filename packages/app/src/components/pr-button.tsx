@@ -5,7 +5,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { createMemo, Show } from "solid-js"
+import { createMemo, createSignal, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
@@ -26,6 +26,7 @@ export function PrButton() {
   const dialog = useDialog()
 
   const [menu, setMenu] = createStore({ open: false })
+  const [readyLoading, setReadyLoading] = createSignal(false)
 
   const vcs = createMemo(() => sync.data.vcs)
   const pr = createMemo(() => vcs()?.pr)
@@ -177,6 +178,29 @@ export function PrButton() {
     }
   }
 
+  const handleMarkReady = () => {
+    setReadyLoading(true)
+    sdk.client.vcs.pr
+      .ready({ directory: sdk.directory })
+      .then(() => {
+        showToast({
+          variant: "success",
+          icon: "circle-check",
+          title: language.t("pr.toast.ready"),
+        })
+      })
+      .catch(() => {
+        showToast({
+          variant: "error",
+          icon: "circle-x",
+          title: language.t("pr.error.ready_failed"),
+        })
+      })
+      .finally(() => {
+        setReadyLoading(false)
+      })
+  }
+
   return (
     <Show when={!hidden()}>
       <div class="flex items-center">
@@ -228,7 +252,12 @@ export function PrButton() {
                       class="rounded-none h-full w-[24px] p-0 border-none shadow-none data-[expanded]:bg-surface-raised-base-active relative group"
                       aria-label={language.t("common.moreOptions")}
                     >
-                      <Icon name="chevron-down" size="small" class="text-icon-base" />
+                      <Show
+                        when={!readyLoading()}
+                        fallback={<Icon name="loader" size="small" class="animate-spin text-icon-base" />}
+                      >
+                        <Icon name="chevron-down" size="small" class="text-icon-base" />
+                      </Show>
                     </DropdownMenu.Trigger>
                     <DropdownMenu.Portal>
                       <DropdownMenu.Content>
@@ -259,6 +288,17 @@ export function PrButton() {
                             />
                             <DropdownMenu.ItemLabel>{ciLabel()}</DropdownMenu.ItemLabel>
                           </DropdownMenu.Item>
+                        </Show>
+
+                        {/* Mark as ready — only for draft PRs */}
+                        <Show when={currentPr().isDraft}>
+                          <DropdownMenu.Separator />
+                          <Tooltip value={tooltipText()} placement="left" gutter={8} disabled={!tooltipText()}>
+                            <DropdownMenu.Item disabled={!canMutate() || readyLoading()} onSelect={handleMarkReady}>
+                              <Icon name="circle-check" size="small" class="text-icon-weak" />
+                              <DropdownMenu.ItemLabel>{language.t("pr.menu.ready")}</DropdownMenu.ItemLabel>
+                            </DropdownMenu.Item>
+                          </Tooltip>
                         </Show>
 
                         {/* Merge — only for open, non-draft PRs */}

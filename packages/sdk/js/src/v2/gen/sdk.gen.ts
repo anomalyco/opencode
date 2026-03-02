@@ -90,6 +90,7 @@ import type {
   ProviderOauthAuthorizeResponses,
   ProviderOauthCallbackErrors,
   ProviderOauthCallbackResponses,
+  PrReadyInput,
   PtyConnectErrors,
   PtyConnectResponses,
   PtyCreateErrors,
@@ -189,6 +190,8 @@ import type {
   VcsPrGetResponses,
   VcsPrMergeErrors,
   VcsPrMergeResponses,
+  VcsPrReadyErrors,
+  VcsPrReadyResponses,
   WorktreeCreateErrors,
   WorktreeCreateInput,
   WorktreeCreateResponses,
@@ -3018,6 +3021,43 @@ export class Pr extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<VcsPrMergeResponses, VcsPrMergeErrors, ThrowOnError>({
       url: "/vcs/pr/merge",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Mark PR as ready
+   *
+   * Mark a draft pull request as ready for review.
+   */
+  public ready<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      prReadyInput?: PrReadyInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "prReadyInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<VcsPrReadyResponses, VcsPrReadyErrors, ThrowOnError>({
+      url: "/vcs/pr/ready",
       ...options,
       ...params,
       headers: {

@@ -178,6 +178,38 @@ export const VcsRoutes = lazy(() =>
       },
     )
     .post(
+      "/pr/ready",
+      describeRoute({
+        summary: "Mark PR as ready",
+        description: "Mark a draft pull request as ready for review.",
+        operationId: "vcs.pr.ready",
+        responses: {
+          200: {
+            description: "PR marked as ready",
+            content: {
+              "application/json": {
+                schema: resolver(Vcs.PrInfo),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", PR.ReadyInput),
+      async (c) => {
+        try {
+          const input = c.req.valid("json")
+          const pr = await PR.ready(input)
+          return c.json(pr)
+        } catch (e) {
+          if (e instanceof PR.PrError) {
+            return c.json({ code: e.code, message: e.message }, { status: 400 })
+          }
+          throw e
+        }
+      },
+    )
+    .post(
       "/pr/delete-branch",
       describeRoute({
         summary: "Delete branch",
