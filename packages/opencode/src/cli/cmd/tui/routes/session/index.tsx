@@ -571,7 +571,7 @@ export function Session() {
     {
       title: showGenericToolOutput() ? "Hide generic tool output" : "Show generic tool output",
       value: "session.toggle.generic_tool_output",
-      category: "Session",
+      category: "System",
       onSelect: (dialog) => {
         setShowGenericToolOutput((prev) => !prev)
         dialog.clear()
