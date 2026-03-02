@@ -103,6 +103,11 @@ export function DialogDiffViewer() {
     }
   }
 
+  function scrollLine(step: number) {
+    if (!preview) return
+    preview.scrollBy(step)
+  }
+
   useKeyboard((evt) => {
     if (evt.defaultPrevented) return
 
@@ -141,6 +146,18 @@ export function DialogDiffViewer() {
     if (keybind.match("variant_cycle", evt)) {
       evt.preventDefault()
       toggleMode()
+      return
+    }
+
+    if (keybind.match("diff_viewer_scroll_up", evt)) {
+      evt.preventDefault()
+      scrollLine(-1)
+      return
+    }
+
+    if (keybind.match("diff_viewer_scroll_down", evt)) {
+      evt.preventDefault()
+      scrollLine(1)
       return
     }
 
@@ -303,7 +320,8 @@ export function DialogDiffViewer() {
           [M] modified [A] added [D] deleted | M:{summary().modified} A:{summary().added} D:{summary().deleted}
         </text>
         <text fg={theme.textMuted}>
-          up/down tab shift+tab {keybind.print("variant_cycle")} view pgup/pgdn
+          files: up/down ctrl+p/n tab | diff: {keybind.print("diff_viewer_scroll_up")}/
+          {keybind.print("diff_viewer_scroll_down")} pgup/pgdn home/end | {keybind.print("variant_cycle")} view
           <Show when={rendering()}> rendering...</Show>
         </text>
       </box>
