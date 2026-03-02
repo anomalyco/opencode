@@ -15,6 +15,7 @@ export const dict = {
   "nav.home": "الرئيسية",
   "nav.openMenu": "فتح القائمة",
   "nav.getStartedFree": "ابدأ مجانا",
+  "nav.logoAlt": "OpenCode",
 
   "nav.context.copyLogo": "نسخ الشعار كـ SVG",
   "nav.context.copyWordmark": "نسخ اسم العلامة كـ SVG",
@@ -42,8 +43,12 @@ export const dict = {
   "notFound.docs": "الوثائق",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
+  "notFound.logoLightAlt": "شعار opencode الفاتح",
+  "notFound.logoDarkAlt": "شعار opencode الداكن",
 
   "user.logout": "تسجيل الخروج",
+
+  "auth.callback.error.codeMissing": "لم يتم العثور على رمز التفويض.",
 
   "workspace.select": "اختر مساحة العمل",
   "workspace.createNew": "+ إنشاء مساحة عمل جديدة",
@@ -76,6 +81,8 @@ export const dict = {
   "error.reloadAmountMin": "يجب أن يكون مبلغ الشحن ${{amount}} على الأقل",
   "error.reloadTriggerMin": "يجب أن يكون حد الرصيد ${{amount}} على الأقل",
 
+  "app.meta.description": "OpenCode - وكيل البرمجة مفتوح المصدر.",
+
   "home.title": "OpenCode | وكيل برمجة بالذكاء الاصطناعي مفتوح المصدر",
 
   "temp.title": "opencode | وكيل برمجة بالذكاء الاصطناعي مبني للطرفية",
@@ -91,6 +98,8 @@ export const dict = {
   "temp.feature.models.afterLink": "، بما في ذلك النماذج المحلية",
   "temp.screenshot.caption": "واجهة OpenCode الطرفية مع سمة tokyonight",
   "temp.screenshot.alt": "واجهة OpenCode الطرفية بسمة tokyonight",
+  "temp.logoLightAlt": "شعار opencode الفاتح",
+  "temp.logoDarkAlt": "شعار opencode الداكن",
 
   "home.banner.badge": "جديد",
   "home.banner.text": "تطبيق سطح المكتب متاح بنسخة تجريبية",
@@ -238,11 +247,30 @@ export const dict = {
     "تتم استضافة جميع نماذج Zen في الولايات المتحدة. يتبع المزودون سياسة عدم الاحتفاظ بالبيانات ولا يستخدمون بياناتك لتدريب النماذج، مع",
   "zen.privacy.exceptionsLink": "الاستثناءات التالية",
 
+  "zen.api.error.rateLimitExceeded": "تم تجاوز حد الطلبات. يرجى المحاولة مرة أخرى لاحقًا.",
+  "zen.api.error.modelNotSupported": "النموذج {{model}} غير مدعوم",
+  "zen.api.error.modelFormatNotSupported": "النموذج {{model}} غير مدعوم للتنسيق {{format}}",
+  "zen.api.error.noProviderAvailable": "لا يوجد مزود متاح",
+  "zen.api.error.providerNotSupported": "المزود {{provider}} غير مدعوم",
+  "zen.api.error.missingApiKey": "مفتاح API مفقود.",
+  "zen.api.error.invalidApiKey": "مفتاح API غير صالح.",
+  "zen.api.error.subscriptionQuotaExceeded": "تم تجاوز حصة الاشتراك. أعد المحاولة خلال {{retryIn}}.",
+  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
+    "تم تجاوز حصة الاشتراك. يمكنك الاستمرار في استخدام النماذج المجانية.",
+  "zen.api.error.noPaymentMethod": "لا توجد طريقة دفع. أضف طريقة دفع هنا: {{billingUrl}}",
+  "zen.api.error.insufficientBalance": "رصيد غير كاف. إدارة فواتيرك هنا: {{billingUrl}}",
+  "zen.api.error.workspaceMonthlyLimitReached":
+    "وصلت مساحة العمل الخاصة بك إلى حد الإنفاق الشهري البالغ ${{amount}}. إدارة حدودك هنا: {{billingUrl}}",
+  "zen.api.error.userMonthlyLimitReached":
+    "لقد وصلت إلى حد الإنفاق الشهري البالغ ${{amount}}. إدارة حدودك هنا: {{membersUrl}}",
+  "zen.api.error.modelDisabled": "النموذج معطل",
+
   "black.meta.title": "OpenCode Black | الوصول إلى أفضل نماذج البرمجة في العالم",
   "black.meta.description": "احصل على وصول إلى Claude، GPT، Gemini والمزيد مع خطط اشتراك OpenCode Black.",
   "black.hero.title": "الوصول إلى أفضل نماذج البرمجة في العالم",
   "black.hero.subtitle": "بما في ذلك Claude، GPT، Gemini والمزيد",
   "black.title": "OpenCode Black | الأسعار",
+  "black.paused": "التسجيل في خطة Black متوقف مؤقتًا.",
   "black.plan.icon20": "خطة Black 20",
   "black.plan.icon100": "خطة Black 100",
   "black.plan.icon200": "خطة Black 200",
@@ -337,12 +365,15 @@ export const dict = {
   "workspace.usage.table.input": "الدخل",
   "workspace.usage.table.output": "الخرج",
   "workspace.usage.table.cost": "التكلفة",
+  "workspace.usage.table.session": "الجلسة",
   "workspace.usage.breakdown.input": "الدخل",
   "workspace.usage.breakdown.cacheRead": "قراءة الكاش",
   "workspace.usage.breakdown.cacheWrite": "كتابة الكاش",
   "workspace.usage.breakdown.output": "الخرج",
   "workspace.usage.breakdown.reasoning": "المنطق",
-  "workspace.usage.subscription": "الاشتراك (${{amount}})",
+  "workspace.usage.subscription": "Black (${{amount}})",
+  "workspace.usage.lite": "Go (${{amount}})",
+  "workspace.usage.byok": "BYOK (${{amount}})",
 
   "workspace.cost.title": "التكلفة",
   "workspace.cost.subtitle": "تكاليف الاستخدام مقسمة حسب النموذج.",
@@ -351,6 +382,7 @@ export const dict = {
   "workspace.cost.deletedSuffix": "(محذوف)",
   "workspace.cost.empty": "لا توجد بيانات استخدام متاحة للفترة المحددة.",
   "workspace.cost.subscriptionShort": "اشتراك",
+  "workspace.cost.liteShort": "lite",
 
   "workspace.keys.title": "مفاتيح API",
   "workspace.keys.subtitle": "إدارة مفاتيح API الخاصة بك للوصول إلى خدمات opencode.",
@@ -441,6 +473,7 @@ export const dict = {
   "workspace.reload.updatePaymentMethod": "يرجى تحديث طريقة الدفع والمحاولة مرة أخرى.",
   "workspace.reload.retrying": "جارٍ إعادة المحاولة...",
   "workspace.reload.retry": "أعد المحاولة",
+  "workspace.reload.error.paymentFailed": "فشلت عملية الدفع.",
 
   "workspace.payments.title": "سجل المدفوعات",
   "workspace.payments.subtitle": "معاملات الدفع الأخيرة.",
@@ -477,6 +510,36 @@ export const dict = {
   "workspace.black.waitlist.enrolling": "جارٍ التسجيل...",
   "workspace.black.waitlist.enrolled": "مسجل",
   "workspace.black.waitlist.enrollNote": 'عند النقر فوق "تسجيل"، يبدأ اشتراكك على الفور وسيتم خصم الرسوم من بطاقتك.',
+
+  "workspace.lite.loading": "جارٍ التحميل...",
+  "workspace.lite.time.day": "يوم",
+  "workspace.lite.time.days": "أيام",
+  "workspace.lite.time.hour": "ساعة",
+  "workspace.lite.time.hours": "ساعات",
+  "workspace.lite.time.minute": "دقيقة",
+  "workspace.lite.time.minutes": "دقائق",
+  "workspace.lite.time.fewSeconds": "بضع ثوان",
+  "workspace.lite.subscription.title": "اشتراك Go",
+  "workspace.lite.subscription.message": "أنت مشترك في OpenCode Go.",
+  "workspace.lite.subscription.manage": "إدارة الاشتراك",
+  "workspace.lite.subscription.rollingUsage": "الاستخدام المتجدد",
+  "workspace.lite.subscription.weeklyUsage": "الاستخدام الأسبوعي",
+  "workspace.lite.subscription.monthlyUsage": "الاستخدام الشهري",
+  "workspace.lite.subscription.resetsIn": "إعادة تعيين في",
+  "workspace.lite.subscription.useBalance": "استخدم رصيدك المتوفر بعد الوصول إلى حدود الاستخدام",
+  "workspace.lite.subscription.selectProvider":
+    'اختر "OpenCode Go" كمزود في إعدادات opencode الخاصة بك لاستخدام نماذج Go.',
+  "workspace.lite.other.title": "اشتراك Go",
+  "workspace.lite.other.message":
+    "عضو آخر في مساحة العمل هذه مشترك بالفعل في OpenCode Go. يمكن لعضو واحد فقط لكل مساحة عمل الاشتراك.",
+  "workspace.lite.promo.title": "OpenCode Go",
+  "workspace.lite.promo.description":
+    "OpenCode Go هو اشتراك بسعر $10 شهريًا يوفر وصولاً موثوقًا إلى نماذج البرمجة المفتوحة الشائعة مع حدود استخدام سخية.",
+  "workspace.lite.promo.modelsTitle": "ما يتضمنه",
+  "workspace.lite.promo.footer":
+    "تم تصميم الخطة بشكل أساسي للمستخدمين الدوليين، مع استضافة النماذج في الولايات المتحدة والاتحاد الأوروبي وسنغافورة للحصول على وصول عالمي مستقر. قد تتغير الأسعار وحدود الاستخدام بناءً على تعلمنا من الاستخدام المبكر والملاحظات.",
+  "workspace.lite.promo.subscribe": "الاشتراك في Go",
+  "workspace.lite.promo.subscribing": "جارٍ إعادة التوجيه...",
 
   "download.title": "OpenCode | تنزيل",
   "download.meta.description": "نزّل OpenCode لـ macOS، Windows، وLinux",
@@ -528,6 +591,10 @@ export const dict = {
   "enterprise.form.send": "إرسال",
   "enterprise.form.sending": "جارٍ الإرسال...",
   "enterprise.form.success": "تم إرسال الرسالة، سنتواصل معك قريبًا.",
+  "enterprise.form.success.submitted": "تم إرسال النموذج بنجاح.",
+  "enterprise.form.error.allFieldsRequired": "جميع الحقول مطلوبة.",
+  "enterprise.form.error.invalidEmailFormat": "تنسيق البريد الإلكتروني غير صالح.",
+  "enterprise.form.error.internalServer": "خطأ داخلي في الخادم.",
   "enterprise.faq.title": "الأسئلة الشائعة",
   "enterprise.faq.q1": "ما هو OpenCode Enterprise؟",
   "enterprise.faq.a1":
@@ -560,6 +627,7 @@ export const dict = {
   "bench.list.table.agent": "الوكيل",
   "bench.list.table.model": "النموذج",
   "bench.list.table.score": "الدرجة",
+  "bench.submission.error.allFieldsRequired": "جميع الحقول مطلوبة.",
 
   "bench.detail.title": "المعيار - {{task}}",
   "bench.detail.notFound": "المهمة غير موجودة",

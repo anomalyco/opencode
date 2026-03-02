@@ -8,40 +8,43 @@ OpenCode se integriše sa vašim Language Server Protocol (LSP) serverima kako b
 ## Ugrađeni
 
 OpenCode dolazi sa nekoliko ugrađenih LSP servera za popularne jezike:
-| LSP server | Ekstenzije | Zahtjevi
-|------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------ |
-| astro | .astro | Automatske instalacije za Astro projekte |
-| bash | .sh, .bash, .zsh, .ksh | Automatski instalira bash-language-server |
-| clangd | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++ | Automatske instalacije za C/C++ projekte |
-| csharp | .cs | `.NET SDK` instaliran |
-| clojure-lsp | .clj, .cljs, .cljc, .edn | `clojure-lsp` komanda dostupna |
-| dart | .dart | `dart` komanda dostupna |
-| deno | .ts, .tsx, .js, .jsx, .mjs | `deno` komanda dostupna (automatski detektuje deno.json/deno.jsonc) |
-| elixir-ls | .ex, .exs | `elixir` komanda dostupna |
-| eslint | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue | `eslint` ovisnost u projektu |
-| fsharp | .fs, .fsi, .fsx, .fsscript | `.NET SDK` instaliran |
-| gleam | .bleam | `gleam` komanda dostupna |
-| gopls | .go | `go` komanda dostupna |
-| hls | .hs, .lhs | `haskell-language-server-wrapper` komanda dostupna |
-| jdtls | .java | `Java SDK (version 21+)` instaliran |
-| kotlin-ls | .kt, .kts | Automatske instalacije za Kotlin projekte |
-| lua-ls | .lua | Automatske instalacije za Lua projekte |
-| nixd | .nix | `nixd` komanda dostupna |
-| ocaml-lsp | .ml, .mli | `ocamllsp` komanda dostupna |
-| oxlint | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | `oxlint` zavisnost u projektu |
-| php intelephense | .php | Automatske instalacije za PHP projekte |
-| prisma | .prisma | `prisma` komanda dostupna |
-| pyright | .py, .pyi | `pyright` ovisnost instalirana |
-| ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru | `ruby` i `gem` komande dostupne |
-| rust | .rs | `rust-analyzer` komanda dostupna |
-| sourcekit-lsp | .swift, .objc, .objcpp | `swift` instaliran (`xcode` na macOS-u) |
-| svelte | .svelte | Automatske instalacije za Svelte projekte |
-| terraform | .tf, .tfvars | Automatske instalacije iz GitHub izdanja |
-| tinymist | .typ, .typc | Automatske instalacije iz GitHub izdanja |
-| typescript | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts | `typescript` zavisnost u projektu |
-| vue | .vue | Automatske instalacije za Vue projekte |
-| yaml-ls | .yaml, .yml | Automatski instalira Red Hat yaml-language-server |
-| zls | .zig, .zon | `zig` komanda dostupna |
+
+| LSP server         | Ekstenzije                                                          | Zahtjevi                                                 |
+| ------------------ | ------------------------------------------------------------------- | -------------------------------------------------------- |
+| astro              | .astro                                                              | Automatske instalacije za Astro projekte                 |
+| bash               | .sh, .bash, .zsh, .ksh                                              | Automatski instalira bash-language-server                |
+| clangd             | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++                | Automatske instalacije za C/C++ projekte                 |
+| csharp             | .cs                                                                 | `.NET SDK` instaliran                                    |
+| clojure-lsp        | .clj, .cljs, .cljc, .edn                                            | `clojure-lsp` komanda dostupna                           |
+| dart               | .dart                                                               | `dart` komanda dostupna                                  |
+| deno               | .ts, .tsx, .js, .jsx, .mjs                                          | `deno` komanda dostupna (automatski detektuje deno.json) |
+| elixir-ls          | .ex, .exs                                                           | `elixir` komanda dostupna                                |
+| eslint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                  | `eslint` ovisnost u projektu                             |
+| fsharp             | .fs, .fsi, .fsx, .fsscript                                          | `.NET SDK` instaliran                                    |
+| gleam              | .gleam                                                              | `gleam` komanda dostupna                                 |
+| gopls              | .go                                                                 | `go` komanda dostupna                                    |
+| hls                | .hs, .lhs                                                           | `haskell-language-server-wrapper` komanda dostupna       |
+| jdtls              | .java                                                               | `Java SDK (version 21+)` instaliran                      |
+| julials            | .jl                                                                 | `julia` i `LanguageServer.jl` instalirani                |
+| kotlin-ls          | .kt, .kts                                                           | Automatske instalacije za Kotlin projekte                |
+| lua-ls             | .lua                                                                | Automatske instalacije za Lua projekte                   |
+| nixd               | .nix                                                                | `nixd` komanda dostupna                                  |
+| ocaml-lsp          | .ml, .mli                                                           | `ocamllsp` komanda dostupna                              |
+| oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | `oxlint` zavisnost u projektu                            |
+| php intelephense   | .php                                                                | Automatske instalacije za PHP projekte                   |
+| prisma             | .prisma                                                             | `prisma` komanda dostupna                                |
+| pyright            | .py, .pyi                                                           | `pyright` ovisnost instalirana                           |
+| ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | `ruby` i `gem` komande dostupne                          |
+| rust               | .rs                                                                 | `rust-analyzer` komanda dostupna                         |
+| sourcekit-lsp      | .swift, .objc, .objcpp                                              | `swift` instaliran (`xcode` na macOS-u)                  |
+| svelte             | .svelte                                                             | Automatske instalacije za Svelte projekte                |
+| terraform          | .tf, .tfvars                                                        | Automatske instalacije iz GitHub izdanja                 |
+| tinymist           | .typ, .typc                                                         | Automatske instalacije iz GitHub izdanja                 |
+| typescript         | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | `typescript` zavisnost u projektu                        |
+| vue                | .vue                                                                | Automatske instalacije za Vue projekte                   |
+| yaml-ls            | .yaml, .yml                                                         | Automatski instalira Red Hat yaml-language-server        |
+| zls                | .zig, .zon                                                          | `zig` komanda dostupna                                   |
+
 LSP serveri su automatski omogućeni kada se otkrije jedna od gore navedenih ekstenzija datoteke i zahtjevi su ispunjeni.
 :::note
 Možete onemogućiti automatska preuzimanja LSP servera tako što ćete postaviti varijablu okruženja `OPENCODE_DISABLE_LSP_DOWNLOAD` na `true`.
@@ -70,13 +73,15 @@ Možete prilagoditi LSP servere kroz `lsp` odjeljak u vašoj opencode konfigurac
 ```
 
 Svaki LSP server podržava sljedeće:
-| Svojstvo | Vrsta | Opis
-|---------------- | -------- | ------------------------------------------------- |
-| `disabled` | boolean | Postavite ovo na `true` da onemogućite LSP server |
-| `command` | string[] | Naredba za pokretanje LSP servera |
-| `extensions` | string[] | Ekstenzije datoteka koje ovaj LSP server treba da rukuje |
-| `env` | objekt | Varijable okruženja koje treba postaviti prilikom pokretanja servera |
-| `initialization` | objekt | Opcije inicijalizacije za slanje na LSP server |
+
+| Svojstvo         | Vrsta    | Opis                                                                 |
+| ---------------- | -------- | -------------------------------------------------------------------- |
+| `disabled`       | boolean  | Postavite ovo na `true` da onemogućite LSP server                    |
+| `command`        | string[] | Naredba za pokretanje LSP servera                                    |
+| `extensions`     | string[] | Ekstenzije datoteka koje ovaj LSP server treba da rukuje             |
+| `env`            | objekt   | Varijable okruženja koje treba postaviti prilikom pokretanja servera |
+| `initialization` | objekt   | Opcije inicijalizacije za slanje na LSP server                       |
+
 Pogledajmo neke primjere.
 
 ---

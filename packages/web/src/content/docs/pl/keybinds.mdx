@@ -3,11 +3,11 @@ title: Skróty klawiszowe
 description: Dostosuj swoje skróty klawiszowe.
 ---
 
-opencode zawiera listę skrótów klawiszowych, które można zastosować poprzez opencode.
+OpenCode zawiera listę skrótów klawiszowych, które można dostosować za pomocą `tui.json`.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -117,11 +117,11 @@ Nie musisz mieć klawisza wiodącego do skrótów klawiszowych, ale zalecamy to 
 
 ## Wyłącz powiązanie klawiszy
 
-Możesz podłączyć powiązanie klawiszy, dodając klucz do swojej konfiguracji z wartością „none”.
+Możesz wyłączyć skrót klawiszowy, dodając klucz do `tui.json` z wartością "none".
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "session_compact": "none"
   }
