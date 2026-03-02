@@ -1,7 +1,7 @@
 import { type HexColor, resolveThemeVariant, useTheme, withAlpha } from "@opencode-ai/ui/theme"
 import { showToast } from "@opencode-ai/ui/toast"
 import type { FitAddon, Ghostty, Terminal as Term } from "ghostty-web"
-import { type ComponentProps, createEffect, createSignal, onCleanup, onMount, splitProps } from "solid-js"
+import { type ComponentProps, createEffect, createMemo, onCleanup, onMount, splitProps } from "solid-js"
 import { SerializeAddon } from "@/addons/serialize"
 import { matchKeybind, parseKeybind } from "@/context/command"
 import { useLanguage } from "@/context/language"
@@ -219,7 +219,7 @@ export const Terminal = (props: TerminalProps) => {
     }
   }
 
-  const [terminalColors, setTerminalColors] = createSignal<TerminalColors>(getTerminalColors())
+  const terminalColors = createMemo(getTerminalColors)
 
   const scheduleFit = () => {
     if (disposed) return
@@ -259,8 +259,7 @@ export const Terminal = (props: TerminalProps) => {
   }
 
   createEffect(() => {
-    const colors = getTerminalColors()
-    setTerminalColors(colors)
+    const colors = terminalColors()
     if (!term) return
     setOptionIfSupported(term, "theme", colors)
   })
