@@ -1101,6 +1101,8 @@ export default function Layout(props: ParentProps) {
     if (!directory) return
     const root = projectRoot(directory)
     server.projects.touch(root)
+    const initialDir = params.dir
+    const stale = () => params.dir !== initialDir
     const project = layout.projects.list().find((item) => item.worktree === root)
     let dirs = project
       ? effectiveWorkspaceOrder(root, [root, ...(project.sandboxes ?? [])], store.workspaceOrder[root])
@@ -1119,11 +1121,13 @@ export default function Layout(props: ParentProps) {
       return canOpen(target)
     }
     const openSession = async (target: { directory: string; id: string }) => {
+      if (stale()) return false
       if (!canOpen(target.directory)) return false
       const resolved = await globalSDK.client.session
         .get({ sessionID: target.id })
         .then((x) => x.data)
         .catch(() => undefined)
+      if (stale()) return false
       if (!resolved?.directory) return false
       if (!canOpen(resolved.directory)) return false
       setStore("lastProjectSession", root, { directory: resolved.directory, id: resolved.id, at: Date.now() })
@@ -1134,6 +1138,7 @@ export default function Layout(props: ParentProps) {
     const projectSession = store.lastProjectSession[root]
     if (projectSession?.id) {
       await refreshDirs(projectSession.directory)
+      if (stale()) return
       const opened = await openSession(projectSession)
       if (opened) return
       clearLastProjectSession(root)
@@ -1146,6 +1151,8 @@ export default function Layout(props: ParentProps) {
     if (latest && (await openSession(latest))) {
       return
     }
+
+    if (stale()) return
 
     const fetched = latestRootSession(
       await Promise.all(
@@ -1163,6 +1170,7 @@ export default function Layout(props: ParentProps) {
       return
     }
 
+    if (stale()) return
     navigateWithSidebarReset(`/${base64Encode(root)}/session`)
   }
 
