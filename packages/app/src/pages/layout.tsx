@@ -483,21 +483,6 @@ export default function Layout(props: ParentProps) {
 
   createEffect(
     on(
-      () => ({ ready: pageReady(), project: currentProject() }),
-      (value) => {
-        if (!value.ready) return
-        const project = value.project
-        if (!project) return
-        const last = server.projects.last()
-        if (last === project.worktree) return
-        server.projects.touch(project.worktree)
-      },
-      { defer: true },
-    ),
-  )
-
-  createEffect(
-    on(
       () => ({ ready: pageReady(), layoutReady: layoutReady(), dir: params.dir, list: layout.projects.list() }),
       (value) => {
         if (!value.ready) return
@@ -554,6 +539,19 @@ export default function Layout(props: ParentProps) {
     return layout.sidebar.workspaces(project.worktree)()
   })
 
+  const visibleSessionDirs = createMemo(() => {
+    const project = currentProject()
+    if (!project) return [] as string[]
+    if (!workspaceSetting()) return [project.worktree]
+
+    const activeDir = currentDir()
+    return workspaceIds(project).filter((directory) => {
+      const expanded = store.workspaceExpanded[directory] ?? directory === project.worktree
+      const active = directory === activeDir
+      return expanded || active
+    })
+  })
+
   createEffect(() => {
     if (!pageReady()) return
     if (!layoutReady()) return
@@ -568,25 +566,17 @@ export default function Layout(props: ParentProps) {
   })
 
   const currentSessions = createMemo(() => {
-    const project = currentProject()
-    if (!project) return [] as Session[]
     const now = Date.now()
-    if (workspaceSetting()) {
-      const dirs = workspaceIds(project)
-      const activeDir = currentDir()
-      const result: Session[] = []
-      for (const dir of dirs) {
-        const expanded = store.workspaceExpanded[dir] ?? dir === project.worktree
-        const active = dir === activeDir
-        if (!expanded && !active) continue
-        const [dirStore] = globalSync.child(dir, { bootstrap: true })
-        const dirSessions = sortedRootSessions(dirStore, now)
-        result.push(...dirSessions)
-      }
-      return result
+    const dirs = visibleSessionDirs()
+    if (dirs.length === 0) return [] as Session[]
+
+    const result: Session[] = []
+    for (const dir of dirs) {
+      const [dirStore] = globalSync.child(dir, { bootstrap: true })
+      const dirSessions = sortedRootSessions(dirStore, now)
+      result.push(...dirSessions)
     }
-    const [projectStore] = globalSync.child(project.worktree)
-    return sortedRootSessions(projectStore, now)
+    return result
   })
 
   type PrefetchQueue = {
@@ -801,7 +791,6 @@ export default function Layout(props: ParentProps) {
     }
 
     navigateToSession(session)
-    queueMicrotask(() => scrollToSession(session.id, `${session.directory}:${session.id}`))
   }
 
   function navigateSessionByUnseen(offset: number) {
@@ -836,7 +825,6 @@ export default function Layout(props: ParentProps) {
       }
 
       navigateToSession(session)
-      queueMicrotask(() => scrollToSession(session.id, `${session.directory}:${session.id}`))
       return
     }
   }
@@ -1067,6 +1055,33 @@ export default function Layout(props: ParentProps) {
 
     const meta = globalSync.data.project.find((item) => item.id === id)
     return meta?.worktree ?? directory
+  }
+
+  function activeProjectRoot(directory: string) {
+    return currentProject()?.worktree ?? projectRoot(directory)
+  }
+
+  function touchProjectRoute() {
+    const root = currentProject()?.worktree
+    if (!root) return
+    if (server.projects.last() !== root) server.projects.touch(root)
+    return root
+  }
+
+  function rememberSessionRoute(directory: string, id: string, root = activeProjectRoot(directory)) {
+    setStore("lastProjectSession", root, { directory, id, at: Date.now() })
+    return root
+  }
+
+  function syncSessionRoute(directory: string, id: string, root = activeProjectRoot(directory)) {
+    rememberSessionRoute(directory, id, root)
+    notification.session.markViewed(id)
+    const expanded = untrack(() => store.workspaceExpanded[directory])
+    if (expanded === false) {
+      setStore("workspaceExpanded", directory, true)
+    }
+    requestAnimationFrame(() => scrollToSession(id, `${directory}:${id}`))
+    return root
   }
 
   async function navigateToProject(directory: string | undefined) {
@@ -1463,26 +1478,42 @@ export default function Layout(props: ParentProps) {
     )
   }
 
+  const activeRoute = {
+    session: "",
+    sessionProject: "",
+  }
+
   createEffect(
     on(
-      () => ({ ready: pageReady(), dir: params.dir, id: params.id }),
-      (value) => {
-        if (!value.ready) return
-        const dir = value.dir
-        const id = value.id
-        if (!dir || !id) return
+      () => [pageReady(), params.dir, params.id, currentProject()?.worktree] as const,
+      ([ready, dir, id]) => {
+        if (!ready || !dir) {
+          activeRoute.session = ""
+          activeRoute.sessionProject = ""
+          return
+        }
+
         const directory = decode64(dir)
         if (!directory) return
-        const at = Date.now()
-        setStore("lastProjectSession", projectRoot(directory), { directory, id, at })
-        notification.session.markViewed(id)
-        const expanded = untrack(() => store.workspaceExpanded[directory])
-        if (expanded === false) {
-          setStore("workspaceExpanded", directory, true)
+
+        const root = touchProjectRoute() ?? activeProjectRoot(directory)
+
+        if (!id) {
+          activeRoute.session = ""
+          activeRoute.sessionProject = ""
+          return
         }
-        requestAnimationFrame(() => scrollToSession(id, `${directory}:${id}`))
+
+        const session = `${dir}/${id}`
+        if (session !== activeRoute.session) {
+          activeRoute.session = session
+          activeRoute.sessionProject = syncSessionRoute(directory, id, root)
+          return
+        }
+
+        if (root === activeRoute.sessionProject) return
+        activeRoute.sessionProject = rememberSessionRoute(directory, id, root)
       },
-      { defer: true },
     ),
   )
 
@@ -1493,40 +1524,29 @@ export default function Layout(props: ParentProps) {
 
   const loadedSessionDirs = new Set<string>()
 
-  createEffect(() => {
-    const project = currentProject()
-    const workspaces = workspaceSetting()
-    const next = new Set<string>()
-    if (!project) {
-      loadedSessionDirs.clear()
-      return
-    }
+  createEffect(
+    on(
+      visibleSessionDirs,
+      (dirs) => {
+        if (dirs.length === 0) {
+          loadedSessionDirs.clear()
+          return
+        }
 
-    if (workspaces) {
-      const activeDir = currentDir()
-      const dirs = [project.worktree, ...(project.sandboxes ?? [])]
-      for (const directory of dirs) {
-        const expanded = store.workspaceExpanded[directory] ?? directory === project.worktree
-        const active = directory === activeDir
-        if (!expanded && !active) continue
-        next.add(directory)
-      }
-    }
+        const next = new Set(dirs)
+        for (const directory of next) {
+          if (loadedSessionDirs.has(directory)) continue
+          globalSync.project.loadSessions(directory)
+        }
 
-    if (!workspaces) {
-      next.add(project.worktree)
-    }
-
-    for (const directory of next) {
-      if (loadedSessionDirs.has(directory)) continue
-      globalSync.project.loadSessions(directory)
-    }
-
-    loadedSessionDirs.clear()
-    for (const directory of next) {
-      loadedSessionDirs.add(directory)
-    }
-  })
+        loadedSessionDirs.clear()
+        for (const directory of next) {
+          loadedSessionDirs.add(directory)
+        }
+      },
+      { defer: true },
+    ),
+  )
 
   function handleDragStart(event: unknown) {
     const id = getDraggableId(event)
