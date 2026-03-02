@@ -61,6 +61,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "พิจารณาขั้นตอนถัดไป",
 
   "ui.messagePart.questions.dismissed": "ละทิ้งคำถามแล้ว",
+  "ui.messagePart.compaction": "ประวัติถูกบีบอัด",
   "ui.messagePart.context.read.one": "อ่าน {{count}} รายการ",
   "ui.messagePart.context.read.other": "อ่าน {{count}} รายการ",
   "ui.messagePart.context.search.one": "ค้นหา {{count}} รายการ",

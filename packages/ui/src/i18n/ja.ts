@@ -59,6 +59,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "次のステップを検討中",
 
   "ui.messagePart.questions.dismissed": "質問をスキップしました",
+  "ui.messagePart.compaction": "履歴を圧縮しました",
   "ui.messagePart.context.read.one": "{{count}} 件の読み取り",
   "ui.messagePart.context.read.other": "{{count}} 件の読み取り",
   "ui.messagePart.context.search.one": "{{count}} 件の検索",
