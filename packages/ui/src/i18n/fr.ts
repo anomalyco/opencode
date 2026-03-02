@@ -40,6 +40,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "nouvelle tentative",
   "ui.sessionTurn.retry.inSeconds": "dans {{seconds}}s",
+  "ui.sessionTurn.retry.attempt": "tentative n°{{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - tentative n°{{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini est en surchauffe",
   "ui.sessionTurn.error.freeUsageExceeded": "Limite d'utilisation gratuite dépassée",
   "ui.sessionTurn.error.addCredits": "Ajouter des crédits",
 
@@ -57,6 +60,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Examen des prochaines étapes",
 
   "ui.messagePart.questions.dismissed": "Questions ignorées",
+  "ui.messagePart.compaction": "Historique compacté",
   "ui.messagePart.context.read.one": "{{count}} lecture",
   "ui.messagePart.context.read.other": "{{count}} lectures",
   "ui.messagePart.context.search.one": "{{count}} recherche",
@@ -122,6 +126,7 @@ export const dict = {
   "ui.message.copyResponse": "Copier la réponse",
   "ui.message.copied": "Copié !",
   "ui.message.interrupted": "Interrompu",
+  "ui.message.queued": "En file",
   "ui.message.attachment.alt": "pièce jointe",
 
   "ui.patch.action.deleted": "Supprimé",
