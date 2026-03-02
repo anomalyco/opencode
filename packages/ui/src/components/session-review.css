@@ -23,7 +23,7 @@
   [data-slot="session-review-header"] {
     position: sticky;
     top: 0;
-    z-index: 20;
+    z-index: 120;
     background-color: var(--background-stronger);
     height: 40px;
     padding-bottom: 8px;
