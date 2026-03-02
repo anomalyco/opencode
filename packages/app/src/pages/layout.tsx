@@ -1099,13 +1099,21 @@ export default function Layout(props: ParentProps) {
     const root = projectRoot(directory)
     server.projects.touch(root)
     const project = layout.projects.list().find((item) => item.worktree === root)
-    const dirs = project
+    let dirs = project
       ? effectiveWorkspaceOrder(root, [root, ...(project.sandboxes ?? [])], store.workspaceOrder[root])
       : [root]
-    const valid = new Set(dirs.map(workspaceKey))
     const canOpen = (value: string | undefined) => {
       if (!value) return false
-      return valid.has(workspaceKey(value))
+      return dirs.some((item) => workspaceKey(item) === workspaceKey(value))
+    }
+    const refreshDirs = async (target?: string) => {
+      if (!target || target === root || canOpen(target)) return canOpen(target)
+      const listed = await globalSDK.client.worktree
+        .list({ directory: root })
+        .then((x) => x.data ?? [])
+        .catch(() => [] as string[])
+      dirs = effectiveWorkspaceOrder(root, [root, ...listed], store.workspaceOrder[root])
+      return canOpen(target)
     }
     const openSession = async (target: { directory: string; id: string }) => {
       if (!canOpen(target.directory)) return false
@@ -1121,6 +1129,7 @@ export default function Layout(props: ParentProps) {
 
     const projectSession = store.lastProjectSession[root]
     if (projectSession?.id) {
+      await refreshDirs(projectSession.directory)
       const opened = await openSession(projectSession)
       if (opened) return
       clearLastProjectSession(root)
