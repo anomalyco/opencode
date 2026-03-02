@@ -1,4 +1,4 @@
-import { createMemo, createSignal, onMount, Show, createEffect } from "solid-js"
+import { createMemo, createSignal, onMount, onCleanup, Show, createEffect } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { map, pipe, sortBy } from "remeda"
 import { DialogSelect } from "@tui/ui/dialog-select"
@@ -402,13 +402,129 @@ function DatabricksApiMethod(props: DatabricksApiMethodProps) {
       )}
       onConfirm={(value) => {
         if (!value) return
-        // Remove trailing slash if present
         const cleanHost = value.replace(/\/$/, "")
         dialog.replace(() => (
-          <DatabricksApiKeyMethod providerID={props.providerID} title={props.title} host={cleanHost} />
+          <DatabricksOAuthLogin providerID={props.providerID} title={props.title} host={cleanHost} />
         ))
       }}
     />
+  )
+}
+
+interface DatabricksOAuthLoginProps {
+  providerID: string
+  title: string
+  host: string
+}
+function DatabricksOAuthLogin(props: DatabricksOAuthLoginProps) {
+  const { theme } = useTheme()
+  const dialog = useDialog()
+  const sdk = useSDK()
+  const sync = useSync()
+  const [status, setStatus] = createSignal<"checking" | "waiting" | "failed">("checking")
+  const [error, setError] = createSignal<string>()
+  const profile = "opencode"
+
+  const connect = async () => {
+    await sdk.client.instance.dispose()
+    await sync.bootstrap()
+    dialog.replace(() => <DialogModel providerID={props.providerID} />)
+  }
+
+  const fallbackToPat = () => {
+    dialog.replace(() => <DatabricksApiKeyMethod providerID={props.providerID} title={props.title} host={props.host} />)
+  }
+
+  useKeyboard((evt) => {
+    if (evt.name === "escape") {
+      fallbackToPat()
+    }
+  })
+
+  // Auto-fallback to PAT prompt after showing error briefly
+  createEffect(() => {
+    if (status() !== "failed") return
+    const timer = setTimeout(fallbackToPat, 2000)
+    onCleanup(() => clearTimeout(timer))
+  })
+
+  onMount(async () => {
+    // Check if the Databricks CLI is available
+    try {
+      const version = Bun.spawn(["databricks", "version"], { stdout: "pipe", stderr: "pipe" })
+      await new Response(version.stdout).text()
+      if ((await version.exited) !== 0) {
+        setError("Databricks CLI not found")
+        setStatus("failed")
+        return
+      }
+    } catch {
+      setError("Databricks CLI not found")
+      setStatus("failed")
+      return
+    }
+
+    setStatus("waiting")
+
+    try {
+      const proc = Bun.spawn(["databricks", "auth", "login", "--host", props.host, "--profile", profile], {
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+      const code = await proc.exited
+      if (code !== 0) {
+        const stderr = await new Response(proc.stderr).text()
+        setError(stderr.trim() || "OAuth login failed")
+        setStatus("failed")
+        return
+      }
+
+      // Store the profile and try to authenticate
+      await sdk.client.auth.set({
+        providerID: props.providerID,
+        auth: { type: "databricks-profile", profile },
+      })
+
+      // Verify it works
+      const { Config: DatabricksConfig } = await import("@databricks/sdk-experimental")
+      const dbConfig = new DatabricksConfig({ env: process.env, profile })
+      await dbConfig.ensureResolved()
+      const headers = new Headers()
+      await dbConfig.authenticate(headers)
+      if (headers.has("Authorization")) return connect()
+
+      setError("OAuth login succeeded but authentication failed")
+      setStatus("failed")
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "OAuth login failed")
+      setStatus("failed")
+    }
+  })
+
+  return (
+    <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
+      <box flexDirection="row" justifyContent="space-between">
+        <text attributes={TextAttributes.BOLD} fg={theme.text}>
+          Databricks OAuth Login
+        </text>
+        <text fg={theme.textMuted} onMouseUp={fallbackToPat}>
+          esc
+        </text>
+      </box>
+      <text fg={theme.textMuted}>Host: {props.host}</text>
+      <Show when={status() === "checking"}>
+        <text fg={theme.textMuted}>Checking for Databricks CLI...</text>
+      </Show>
+      <Show when={status() === "waiting"}>
+        <text fg={theme.text}>Waiting for browser authentication...</text>
+        <text fg={theme.textMuted}>A browser window should have opened. Complete the login there.</text>
+        <text fg={theme.textMuted}>Press esc to skip and enter a Personal Access Token instead.</text>
+      </Show>
+      <Show when={status() === "failed"}>
+        <text fg={theme.error}>{error()}</text>
+        <text fg={theme.textMuted}>Falling back to Personal Access Token...</text>
+      </Show>
+    </box>
   )
 }
 
