@@ -20,7 +20,6 @@
     display: inline-grid;
     overflow: hidden;
     justify-items: start;
-    transition: width var(--tool-motion-spring-ms, 480ms) var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1));
   }
 
   [data-slot="tool-status-active"],

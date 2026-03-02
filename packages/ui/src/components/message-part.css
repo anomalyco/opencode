@@ -27,6 +27,15 @@
     color: var(--text-weak);
   }
 
+  [data-slot="user-message-inner"] {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    width: 100%;
+    gap: 8px;
+  }
+
   [data-slot="user-message-attachments"] {
     display: flex;
     flex-wrap: wrap;
@@ -114,16 +123,20 @@
   }
 
   [data-slot="user-message-copy-wrapper"] {
-    min-height: 24px;
-    margin-top: 4px;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    padding-top: 4px;
     display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: 10px;
-    width: 100%;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.15s ease;
+    transition:
+      opacity 0.15s ease 0.25s,
+      pointer-events 0s 0.25s;
     will-change: opacity;
 
     [data-component="tooltip-trigger"] {
@@ -166,6 +179,7 @@
   &:focus-within [data-slot="user-message-copy-wrapper"] {
     opacity: 1;
     pointer-events: auto;
+    transition: opacity 0.15s ease;
   }
 
   .text-text-strong {
@@ -179,15 +193,25 @@
 
 [data-component="text-part"] {
   width: 100%;
-  margin-top: 24px;
+  margin-top: 0;
+  position: relative;
 
   [data-slot="text-part-body"] {
     margin-top: 0;
   }
 
+  [data-slot="text-part-copy-wrap"] {
+    width: 100%;
+    min-width: 0;
+    display: none;
+  }
+
+  [data-slot="text-part-copy-wrap"][data-visible] {
+    display: block;
+  }
+
   [data-slot="text-part-copy-wrapper"] {
     min-height: 24px;
-    margin-top: 4px;
     display: flex;
     align-items: center;
     justify-content: flex-start;
@@ -372,6 +396,7 @@
   background: transparent;
   position: relative;
   overflow: hidden;
+  will-change: opacity, filter;
 
   [data-slot="bash-copy"] {
     position: absolute;
@@ -598,14 +623,14 @@
 }
 
 [data-component="context-tool-group-list"] {
-  padding: 6px 0 4px 0;
+  margin-top: -4px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0px;
 
   [data-slot="context-tool-group-item"] {
     min-width: 0;
-    padding: 6px 0;
+    padding: 4px 0;
   }
 }
 
@@ -667,6 +692,25 @@
 
 [data-component="tool-part-wrapper"] {
   width: 100%;
+}
+
+[data-slot="assistant-part-grow"] {
+  width: 100%;
+  min-width: 0;
+  overflow: visible;
+}
+
+[data-component="tool-part-wrapper"][data-tool="bash"] {
+  [data-slot="basic-tool-tool-info-main"] {
+    align-items: center;
+  }
+
+  [data-slot="basic-tool-tool-title"],
+  [data-slot="basic-tool-tool-subtitle"] {
+    display: inline-flex;
+    align-items: center;
+    line-height: var(--line-height-large);
+  }
 }
 
 [data-component="dock-prompt"][data-kind="permission"] {

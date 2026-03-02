@@ -4,8 +4,9 @@ import { useFileComponent } from "../context/file"
 
 import { Binary } from "@opencode-ai/util/binary"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { createEffect, createMemo, createSignal, For, on, ParentProps, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, on, onCleanup, ParentProps, Show } from "solid-js"
 import { Dynamic } from "solid-js/web"
+import { animate, type AnimationPlaybackControls, FADE_SPRING, HEIGHT_SPRING } from "./motion"
 import { AssistantParts, Message, Part, PART_MAPPING } from "./message-part"
 import { Card } from "./card"
 import { Accordion } from "./accordion"
@@ -18,6 +19,8 @@ import { TextReveal } from "./text-reveal"
 import { SessionRetry } from "./session-retry"
 import { createAutoScroll } from "../hooks"
 import { useI18n } from "../context/i18n"
+const THINKING_GAP_PX = 12
+const THINKING_HIDE_DELAY_MS = 220
 
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
@@ -140,6 +143,7 @@ export function SessionTurn(
   props: ParentProps<{
     sessionID: string
     messageID: string
+    animate?: boolean
     showReasoningSummaries?: boolean
     shellToolDefaultOpen?: boolean
     editToolDefaultOpen?: boolean
@@ -199,7 +203,6 @@ export function SessionTurn(
     if (!msg || !item) return false
     return item.parentID === msg.id
   })
-
   const parts = createMemo(() => {
     const msg = message()
     if (!msg) return emptyParts
@@ -287,7 +290,20 @@ export function SessionTurn(
   })
 
   const status = createMemo(() => data.store.session_status[props.sessionID] ?? idle)
-  const working = createMemo(() => status().type !== "idle" && active())
+  const latestUserID = createMemo(() => {
+    const messages = allMessages() ?? emptyMessages
+    const latest = messages.findLast((item) => item.role === "user")
+    if (!latest || latest.role !== "user") return undefined
+    return latest.id
+  })
+  const working = createMemo(() => {
+    if (status().type === "idle") return false
+    const msg = message()
+    if (!msg) return false
+    const item = pending()
+    if (item) return item.parentID === msg.id
+    return latestUserID() === msg.id
+  })
   const showReasoningSummaries = createMemo(() => props.showReasoningSummaries ?? true)
 
   const assistantCopyPartID = createMemo(() => {
@@ -340,11 +356,180 @@ export function SessionTurn(
     if (assistantTailVisible() === "text") return false
     return true
   })
+  const hasAssistant = createMemo(() => assistantMessages().length > 0)
+  const [shown, setShown] = createSignal(showThinking())
+  let hideTimer: ReturnType<typeof setTimeout> | undefined
+  const thinking = createMemo(() => shown())
+  const lane = createMemo(() => hasAssistant() || thinking())
+  const entry = createMemo(() => props.animate !== false)
+  const log = (...args: unknown[]) => {
+    if (typeof window === "undefined") return
+    console.debug("[ui:thinking]", ...args)
+  }
+  const initialThinking = thinking()
+  let thinkingRef: HTMLDivElement | undefined
+  let thinkingBodyRef: HTMLDivElement | undefined
+  let thinkingAnim: AnimationPlaybackControls | undefined
+  let thinkingHeightAnim: AnimationPlaybackControls | undefined
+  let thinkingToggleFrame: number | undefined
+  const gap = () => (hasAssistant() ? `${THINKING_GAP_PX}px` : "0px")
+
+  const stopHide = () => {
+    if (!hideTimer) return
+    clearTimeout(hideTimer)
+    hideTimer = undefined
+  }
+
+  const showBox = () => {
+    if (!thinkingRef || !thinkingBodyRef) return
+    thinkingAnim?.stop()
+    thinkingHeightAnim?.stop()
+    const next = Math.max(1, Math.ceil(thinkingBodyRef.getBoundingClientRect().height))
+    const prev = Math.max(0, Math.ceil(thinkingRef.getBoundingClientRect().height))
+    if (!entry()) {
+      thinkingRef.style.overflow = "visible"
+      thinkingRef.style.height = "auto"
+      thinkingRef.style.marginTop = gap()
+      thinkingBodyRef.style.opacity = "1"
+      thinkingBodyRef.style.filter = "blur(0px)"
+      thinkingBodyRef.style.transform = ""
+      log("open-done")
+      return
+    }
+    thinkingRef.style.overflow = "hidden"
+    thinkingRef.style.height = `${prev}px`
+    thinkingRef.style.marginTop = prev > 0 ? gap() : "0px"
+    thinkingHeightAnim = animate(
+      thinkingRef,
+      {
+        height: `${next}px`,
+        marginTop: gap(),
+      },
+      HEIGHT_SPRING,
+    )
+    thinkingHeightAnim.finished.then(() => {
+      if (!thinkingRef || !thinking()) return
+      thinkingRef.style.height = "auto"
+      thinkingRef.style.marginTop = gap()
+      thinkingRef.style.overflow = "visible"
+      log("open-done")
+    })
+    thinkingBodyRef.style.opacity = "0"
+    thinkingBodyRef.style.filter = "blur(2px)"
+    thinkingBodyRef.style.transform = ""
+    thinkingAnim = animate(
+      thinkingBodyRef,
+      {
+        opacity: 1,
+        filter: "blur(0px)",
+      },
+      FADE_SPRING,
+    )
+  }
+
+  const hideBox = () => {
+    if (!thinkingRef || !thinkingBodyRef) return
+    thinkingAnim?.stop()
+    thinkingHeightAnim?.stop()
+    if (!entry()) {
+      thinkingRef.style.height = "0px"
+      thinkingRef.style.marginTop = "0px"
+      thinkingRef.style.overflow = "hidden"
+      thinkingBodyRef.style.opacity = "0"
+      thinkingBodyRef.style.filter = "blur(2px)"
+      thinkingBodyRef.style.transform = ""
+      log("close-done")
+      return
+    }
+    thinkingRef.style.overflow = "hidden"
+    const h = Math.max(1, Math.ceil(thinkingRef.getBoundingClientRect().height))
+    thinkingRef.style.height = `${h}px`
+    thinkingHeightAnim = animate(
+      thinkingRef,
+      {
+        height: "0px",
+        marginTop: "0px",
+      },
+      HEIGHT_SPRING,
+    )
+    thinkingAnim = animate(
+      thinkingBodyRef,
+      {
+        opacity: 0,
+        filter: "blur(2px)",
+      },
+      FADE_SPRING,
+    )
+    thinkingHeightAnim.finished.then(() => {
+      if (!thinkingRef || thinking()) return
+      thinkingRef.style.height = "0px"
+      thinkingRef.style.marginTop = "0px"
+      thinkingRef.style.overflow = "hidden"
+      log("close-done")
+    })
+  }
+
+  createEffect(
+    on(
+      showThinking,
+      (value) => {
+        log("source", {
+          value,
+          working: working(),
+          status: status().type,
+          visible: assistantVisible(),
+          tail: assistantTailVisible(),
+        })
+        stopHide()
+        if (value) {
+          if (!shown()) setShown(true)
+          return
+        }
+        hideTimer = setTimeout(() => {
+          hideTimer = undefined
+          if (showThinking()) return
+          if (!shown()) return
+          setShown(false)
+        }, THINKING_HIDE_DELAY_MS)
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
+      thinking,
+      (value) => {
+        log("toggle", { value })
+        if (thinkingToggleFrame !== undefined) {
+          cancelAnimationFrame(thinkingToggleFrame)
+          thinkingToggleFrame = undefined
+        }
+        if (value) {
+          thinkingToggleFrame = requestAnimationFrame(() => {
+            thinkingToggleFrame = undefined
+            if (!thinking()) return
+            showBox()
+          })
+          return
+        }
+        hideBox()
+      },
+      { defer: true },
+    ),
+  )
 
   const autoScroll = createAutoScroll({
     working,
     onUserInteracted: props.onUserInteracted,
     overflowAnchor: "dynamic",
+  })
+
+  onCleanup(() => {
+    stopHide()
+    if (thinkingToggleFrame !== undefined) cancelAnimationFrame(thinkingToggleFrame)
+    thinkingAnim?.stop()
+    thinkingHeightAnim?.stop()
   })
 
   return (
@@ -365,7 +550,7 @@ export function SessionTurn(
                 class={props.classes?.container}
               >
                 <div data-slot="session-turn-message-content" aria-live="off">
-                  <Message message={msg()} parts={parts()} interrupted={interrupted()} />
+                  <Message message={msg()} parts={parts()} interrupted={interrupted()} animate={props.animate} />
                 </div>
                 <Show when={compaction()}>
                   {(part) => (
@@ -374,27 +559,45 @@ export function SessionTurn(
                     </div>
                   )}
                 </Show>
-                <Show when={assistantMessages().length > 0}>
-                  <div data-slot="session-turn-assistant-content" aria-hidden={working()}>
-                    <AssistantParts
-                      messages={assistantMessages()}
-                      showAssistantCopyPartID={assistantCopyPartID()}
-                      turnDurationMs={turnDurationMs()}
-                      working={working()}
-                      showReasoningSummaries={showReasoningSummaries()}
-                      shellToolDefaultOpen={props.shellToolDefaultOpen}
-                      editToolDefaultOpen={props.editToolDefaultOpen}
-                    />
+                <div data-slot="session-turn-assistant-lane" aria-hidden={!lane()}>
+                  <Show when={hasAssistant()}>
+                    <div data-slot="session-turn-assistant-content" aria-hidden={working()}>
+                      <AssistantParts
+                        messages={assistantMessages()}
+                        showAssistantCopyPartID={assistantCopyPartID()}
+                        turnDurationMs={turnDurationMs()}
+                        working={working()}
+                        animate={props.animate}
+                        showReasoningSummaries={showReasoningSummaries()}
+                        shellToolDefaultOpen={props.shellToolDefaultOpen}
+                        editToolDefaultOpen={props.editToolDefaultOpen}
+                      />
+                    </div>
+                  </Show>
+                  <div
+                    ref={thinkingRef}
+                    data-slot="session-turn-thinking-wrap"
+                    style={{
+                      height: initialThinking ? "auto" : "0px",
+                      "margin-top": initialThinking && hasAssistant() ? `${THINKING_GAP_PX}px` : "0px",
+                      overflow: initialThinking ? "visible" : "hidden",
+                    }}
+                  >
+                    <div
+                      ref={thinkingBodyRef}
+                      data-slot="session-turn-thinking"
+                      style={initialThinking ? undefined : { opacity: 0, filter: "blur(2px)" }}
+                    >
+                      <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
+                      <TextReveal
+                        text={!showReasoningSummaries() ? (reasoningHeading() ?? "") : ""}
+                        class="session-turn-thinking-heading"
+                        travel={25}
+                        duration={700}
+                      />
+                    </div>
                   </div>
-                </Show>
-                <Show when={showThinking()}>
-                  <div data-slot="session-turn-thinking">
-                    <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
-                    <Show when={!showReasoningSummaries()}>
-                      <TextReveal text={reasoningHeading()} class="session-turn-thinking-heading" travel={25} duration={700} />
-                    </Show>
-                  </div>
-                </Show>
+                </div>
                 <SessionRetry status={status()} show={active()} />
                 <Show when={edited() > 0 && !working()}>
                   <div data-slot="session-turn-diffs">

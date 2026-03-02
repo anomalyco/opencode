@@ -1,5 +1,5 @@
-import { createEffect, createSignal, For, Match, on, onCleanup, Show, Switch, type JSX } from "solid-js"
-import { animate, type AnimationPlaybackControls } from "motion"
+import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, type JSX } from "solid-js"
+import { animate, type AnimationPlaybackControls, springValue, HEIGHT_SPRING, FADE_SPRING } from "./motion"
 import { Collapsible } from "./collapsible"
 import type { IconProps } from "./icon"
 import { TextShimmer } from "./text-shimmer"
@@ -25,21 +25,28 @@ export interface BasicToolProps {
   trigger: TriggerTitle | JSX.Element
   children?: JSX.Element
   status?: string
+  debugID?: string
+  animate?: boolean
   hideDetails?: boolean
   defaultOpen?: boolean
   forceOpen?: boolean
   defer?: boolean
   locked?: boolean
+  watchDetails?: boolean
   animated?: boolean
+  animateIn?: boolean
   onSubtitleClick?: () => void
 }
-
-const SPRING = { type: "spring" as const, visualDuration: 0.35, bounce: 0 }
 
 export function BasicTool(props: BasicToolProps) {
   const [open, setOpen] = createSignal(props.defaultOpen ?? false)
   const [ready, setReady] = createSignal(open())
   const pending = () => props.status === "pending" || props.status === "running"
+  const watchDetails = () => props.watchDetails !== false
+  const log = (...args: unknown[]) => {
+    if (!props.debugID || typeof window === "undefined") return
+    console.debug("[ui:tool]", props.debugID, ...args)
+  }
 
   let frame: number | undefined
 
@@ -53,6 +60,10 @@ export function BasicTool(props: BasicToolProps) {
 
   createEffect(() => {
     if (props.forceOpen) setOpen(true)
+  })
+
+  createEffect(() => {
+    log("state", { open: open(), status: props.status, forceOpen: !!props.forceOpen, pending: pending() })
   })
 
   createEffect(
@@ -77,36 +88,119 @@ export function BasicTool(props: BasicToolProps) {
     ),
   )
 
-  // Animated height for collapsible open/close
+  // Animated content height — single springValue drives all height changes
   let contentRef: HTMLDivElement | undefined
-  let heightAnim: AnimationPlaybackControls | undefined
-  const initialOpen = open()
+  let bodyRef: HTMLDivElement | undefined
+  let fadeAnim: AnimationPlaybackControls | undefined
+  let observer: ResizeObserver | undefined
+  let resizeFrame: number | undefined
+  const initialOpen = props.animateIn ? false : open()
+  const heightSpring = springValue<number>(0, HEIGHT_SPRING)
+
+  const read = () => Math.max(0, Math.ceil(bodyRef?.getBoundingClientRect().height ?? 0))
+
+  const doOpen = () => {
+    if (!contentRef || !bodyRef) return
+    contentRef.style.display = ""
+    // Ensure fade starts from 0 if content was hidden (first open or after close cleared styles)
+    if (bodyRef.style.opacity === "") {
+      bodyRef.style.opacity = "0"
+      bodyRef.style.filter = "blur(2px)"
+    }
+    const next = read()
+    log("open", { next })
+    fadeAnim?.stop()
+    fadeAnim = animate(bodyRef, { opacity: 1, filter: "blur(0px)" }, FADE_SPRING)
+    fadeAnim.finished.then(() => {
+      if (!bodyRef) return
+      bodyRef.style.opacity = ""
+      bodyRef.style.filter = ""
+    })
+    heightSpring.set(next)
+  }
+
+  const doClose = () => {
+    if (!contentRef || !bodyRef) return
+    log("close")
+    fadeAnim?.stop()
+    fadeAnim = animate(bodyRef, { opacity: 0, filter: "blur(2px)" }, FADE_SPRING)
+    heightSpring.set(0)
+  }
+
+  const grow = () => {
+    if (!contentRef || !open()) return
+    const next = read()
+    if (Math.abs(next - heightSpring.get()) < 1) return
+    log("grow", { next })
+    heightSpring.set(next)
+  }
+
+  onMount(() => {
+    log("mount", {
+      status: props.status,
+      defaultOpen: props.defaultOpen,
+      forceOpen: props.forceOpen,
+      animated: props.animated,
+      animateIn: props.animateIn,
+    })
+    if (!props.animated || props.animate === false || !contentRef || !bodyRef) return
+
+    const offChange = heightSpring.on("change", (v) => {
+      if (!contentRef) return
+      contentRef.style.height = `${Math.max(0, Math.ceil(v))}px`
+    })
+    const offComplete = heightSpring.on("animationComplete", () => {
+      if (!contentRef || open()) return
+      contentRef.style.display = "none"
+      log("close-done")
+    })
+    onCleanup(() => {
+      offComplete()
+      offChange()
+    })
+
+    if (watchDetails()) {
+      observer = new ResizeObserver(() => {
+        if (resizeFrame !== undefined) return
+        resizeFrame = requestAnimationFrame(() => {
+          resizeFrame = undefined
+          grow()
+        })
+      })
+      observer.observe(bodyRef)
+    }
+
+    if (!open()) return
+    if (contentRef.style.display !== "none") {
+      const next = read()
+      heightSpring.jump(next)
+      contentRef.style.height = `${next}px`
+      return
+    }
+    requestAnimationFrame(() => {
+      if (!open()) return
+      doOpen()
+    })
+  })
 
   createEffect(
     on(
       open,
       (isOpen) => {
-        if (!props.animated || !contentRef) return
-        heightAnim?.stop()
-        if (isOpen) {
-          contentRef.style.overflow = "hidden"
-          heightAnim = animate(contentRef, { height: "auto" }, SPRING)
-          heightAnim.finished.then(() => {
-            if (!contentRef || !open()) return
-            contentRef.style.overflow = "visible"
-            contentRef.style.height = "auto"
-          })
-        } else {
-          contentRef.style.overflow = "hidden"
-          heightAnim = animate(contentRef, { height: "0px" }, SPRING)
-        }
+        if (!props.animated || props.animate === false || !contentRef) return
+        if (isOpen) doOpen()
+        else doClose()
       },
       { defer: true },
     ),
   )
 
   onCleanup(() => {
-    heightAnim?.stop()
+    log("unmount")
+    if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame)
+    observer?.disconnect()
+    fadeAnim?.stop()
+    heightSpring.destroy()
   })
 
   const handleOpenChange = (value: boolean) => {
@@ -181,22 +275,27 @@ export function BasicTool(props: BasicToolProps) {
           </Show>
         </div>
       </Collapsible.Trigger>
-      <Show when={props.animated && props.children && !props.hideDetails}>
+      <Show when={props.animated && props.animate !== false && props.children && !props.hideDetails}>
         <div
           ref={contentRef}
           data-slot="collapsible-content"
           data-animated
           style={{
             height: initialOpen ? "auto" : "0px",
-            overflow: initialOpen ? "visible" : "hidden",
+            overflow: "hidden",
+            display: initialOpen ? undefined : "none",
           }}
         >
-          {props.children}
+          <div ref={bodyRef} data-slot="basic-tool-content-inner">
+            {props.children}
+          </div>
         </div>
       </Show>
-      <Show when={!props.animated && props.children && !props.hideDetails}>
+      <Show when={(!props.animated || props.animate === false) && props.children && !props.hideDetails}>
         <Collapsible.Content>
-          <Show when={!props.defer || ready()}>{props.children}</Show>
+          <Show when={!props.defer || ready()}>
+            <div data-slot="basic-tool-content-inner">{props.children}</div>
+          </Show>
         </Collapsible.Content>
       </Show>
     </Collapsible>

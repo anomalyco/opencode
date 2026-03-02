@@ -90,3 +90,37 @@ export const Inactive = {
     active: false,
   },
 }
+
+export const Sizes = {
+  render: () => {
+    const samples = [
+      "Shell",
+      "Edit",
+      "Read",
+      "Thinking",
+      "Loading...",
+      "Running command",
+      "Searching codebase for matches",
+    ]
+    return (
+      <div style={{ display: "grid", gap: "16px", "justify-items": "start" }}>
+        {samples.map((text) => (
+          <div style={{ display: "flex", "align-items": "baseline", gap: "12px" }}>
+            <span
+              style={{
+                "min-width": "40px",
+                "font-size": "11px",
+                color: "var(--text-weak, #888)",
+                "font-family": "monospace",
+                "text-align": "right",
+              }}
+            >
+              {text.length}ch
+            </span>
+            <mod.TextShimmer text={text} active class="text-14-medium text-text-strong" />
+          </div>
+        ))}
+      </div>
+    )
+  },
+}

@@ -1,4 +1,4 @@
-import { For, createEffect, createMemo, on, onCleanup, Show, startTransition, type JSX } from "solid-js"
+import { For, createEffect, createMemo, createSignal, on, onCleanup, Show, startTransition, type JSX } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { useNavigate, useParams } from "@solidjs/router"
 import { Button } from "@opencode-ai/ui/button"
@@ -101,11 +101,17 @@ type TimelineStageInput = {
  * new messages render immediately.
  */
 function createTimelineStaging(input: TimelineStageInput) {
+  const log = (...args: unknown[]) => {
+    if (typeof window === "undefined") return
+    console.debug("[ui:staging]", ...args)
+  }
   const [state, setState] = createStore({
     activeSession: "",
     completedSession: "",
     count: 0,
   })
+  const [readySession, setReadySession] = createSignal("")
+  let active = ""
 
   const stagedCount = createMemo(() => {
     const total = input.messages().length
@@ -130,19 +136,51 @@ function createTimelineStaging(input: TimelineStageInput) {
     cancelAnimationFrame(frame)
     frame = undefined
   }
+  const scheduleReady = (sessionKey: string) => {
+    if (input.sessionKey() !== sessionKey) return
+    if (readySession() === sessionKey) return
+    setReadySession(sessionKey)
+    log("ready-set", { sessionKey })
+  }
 
   createEffect(
     on(
       () => [input.sessionKey(), input.turnStart() > 0, input.messages().length] as const,
       ([sessionKey, isWindowed, total]) => {
+        log("source", {
+          sessionKey,
+          isWindowed,
+          total,
+          active: state.activeSession,
+          completed: state.completedSession,
+          readySession: readySession(),
+        })
         cancel()
+        const switched = active !== sessionKey
+        if (switched) {
+          active = sessionKey
+          setReadySession("")
+          log("switch", { sessionKey })
+        }
+        const staging = state.activeSession === sessionKey && state.completedSession !== sessionKey
+        if (staging && !switched) return
         const shouldStage =
           isWindowed &&
           total > input.config.init &&
-          state.completedSession !== sessionKey &&
-          state.activeSession !== sessionKey
+          state.completedSession !== sessionKey
+        if (shouldStage) setReadySession("")
         if (!shouldStage) {
-          setState({ activeSession: "", count: total })
+          setState({
+            activeSession: "",
+            completedSession: isWindowed ? sessionKey : state.completedSession,
+            count: total,
+          })
+          if (total <= 0) {
+            setReadySession("")
+            log("ready-clear-empty", { sessionKey })
+            return
+          }
+          if (readySession() !== sessionKey) scheduleReady(sessionKey)
           return
         }
 
@@ -160,6 +198,7 @@ function createTimelineStaging(input: TimelineStageInput) {
           if (count >= currentTotal) {
             setState({ completedSession: sessionKey, activeSession: "" })
             frame = undefined
+            scheduleReady(sessionKey)
             return
           }
           frame = requestAnimationFrame(step)
@@ -173,9 +212,12 @@ function createTimelineStaging(input: TimelineStageInput) {
     const key = input.sessionKey()
     return state.activeSession === key && state.completedSession !== key
   })
+  const ready = createMemo(() => readySession() === input.sessionKey())
 
-  onCleanup(cancel)
-  return { messages: stagedUserMessages, isStaging }
+  onCleanup(() => {
+    cancel()
+  })
+  return { messages: stagedUserMessages, isStaging, ready }
 }
 
 export function MessageTimeline(props: {
@@ -629,7 +671,7 @@ export function MessageTimeline(props: {
           <div
             ref={props.setContentRef}
             role="log"
-            class="flex flex-col gap-12 items-start justify-start pb-16 transition-[margin]"
+            class="flex flex-col gap-0 items-start justify-start pb-16 transition-[margin]"
             classList={{
               "w-full": true,
               "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
@@ -668,7 +710,9 @@ export function MessageTimeline(props: {
                       "min-w-0 w-full max-w-full": true,
                       "md:max-w-200 2xl:max-w-[1000px]": props.centered,
                     }}
-                    style={{ "content-visibility": "auto", "contain-intrinsic-size": "auto 500px" }}
+                    style={
+                      staging.ready() ? undefined : { "content-visibility": "auto", "contain-intrinsic-size": "auto 500px" }
+                    }
                   >
                     <Show when={commentCount() > 0}>
                       <div class="w-full px-4 md:px-5 pb-2">
@@ -703,6 +747,7 @@ export function MessageTimeline(props: {
                     <SessionTurn
                       sessionID={sessionID() ?? ""}
                       messageID={messageID}
+                      animate={staging.ready()}
                       showReasoningSummaries={settings.general.showReasoningSummaries()}
                       shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
                       editToolDefaultOpen={settings.general.editToolPartsExpanded()}

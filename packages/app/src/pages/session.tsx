@@ -1041,7 +1041,7 @@ export default function Page() {
 
   const resumeScroll = () => {
     setStore("messageId", undefined)
-    autoScroll.forceScrollToBottom()
+    autoScroll.smoothScrollToBottom()
     clearMessageHash()
 
     const el = scroller
