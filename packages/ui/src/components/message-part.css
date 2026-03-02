@@ -225,6 +225,33 @@
   }
 }
 
+[data-component="compaction-part"] {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+
+  [data-slot="compaction-part-divider"] {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    width: 100%;
+  }
+
+  [data-slot="compaction-part-line"] {
+    flex: 1 1 auto;
+    height: 1px;
+    background: var(--border-weak-base);
+  }
+
+  [data-slot="compaction-part-label"] {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    text-align: center;
+  }
+}
+
 [data-component="reasoning-part"] {
   width: 100%;
   color: var(--text-base);
