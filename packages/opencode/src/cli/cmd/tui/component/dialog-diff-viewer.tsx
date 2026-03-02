@@ -276,7 +276,14 @@ export function DialogDiffViewer() {
           <box flexGrow={1} height="100%" border={true} borderColor={theme.border} paddingLeft={1} paddingRight={1}>
             <scrollbox
               height="100%"
-              scrollbarOptions={{ visible: false }}
+              verticalScrollbarOptions={{
+                visible: true,
+                trackOptions: {
+                  backgroundColor: theme.background,
+                  foregroundColor: theme.borderActive,
+                },
+              }}
+              horizontalScrollbarOptions={{ visible: false }}
               ref={(r) => {
                 preview = r
               }}
