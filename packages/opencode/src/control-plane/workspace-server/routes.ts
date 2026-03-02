@@ -1,6 +1,7 @@
 import { GlobalBus } from "../../bus/global"
 import { Hono } from "hono"
 import { streamSSE } from "hono/streaming"
+import { withHeartbeat } from "../../server/sse"
 
 export function WorkspaceServerRoutes() {
   return new Hono().get("/event", async (c) => {
@@ -17,17 +18,13 @@ export function WorkspaceServerRoutes() {
       }
       GlobalBus.on("event", handler)
       await send({ type: "server.connected", properties: {} })
-      const heartbeat = setInterval(() => {
-        void send({ type: "server.heartbeat", properties: {} })
-      }, 10_000)
-
-      await new Promise<void>((resolve) => {
-        stream.onAbort(() => {
-          clearInterval(heartbeat)
+      await withHeartbeat(
+        stream,
+        () => send({ type: "server.heartbeat", properties: {} }),
+        () => {
           GlobalBus.off("event", handler)
-          resolve()
-        })
-      })
+        },
+      )
     })
   })
 }

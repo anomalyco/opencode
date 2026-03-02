@@ -1,7 +1,7 @@
 import path from "path"
 import z from "zod"
 import { Global } from "../global"
-import { Filesystem } from "../util/filesystem"
+import { JsonStore } from "../util/json-store"
 
 export namespace McpAuth {
   export const Tokens = z.object({
@@ -29,11 +29,13 @@ export namespace McpAuth {
   })
   export type Entry = z.infer<typeof Entry>
 
-  const filepath = path.join(Global.Path.data, "mcp-auth.json")
+  const store = JsonStore.create<Entry>({
+    path: () => path.join(Global.Path.data, "mcp-auth.json"),
+    mode: 0o600,
+  })
 
   export async function get(mcpName: string): Promise<Entry | undefined> {
-    const data = await all()
-    return data[mcpName]
+    return store.get(mcpName)
   }
 
   /**
@@ -54,22 +56,19 @@ export namespace McpAuth {
   }
 
   export async function all(): Promise<Record<string, Entry>> {
-    return Filesystem.readJson<Record<string, Entry>>(filepath).catch(() => ({}))
+    return store.all()
   }
 
   export async function set(mcpName: string, entry: Entry, serverUrl?: string): Promise<void> {
-    const data = await all()
     // Always update serverUrl if provided
     if (serverUrl) {
       entry.serverUrl = serverUrl
     }
-    await Filesystem.writeJson(filepath, { ...data, [mcpName]: entry }, 0o600)
+    return store.set(mcpName, entry)
   }
 
   export async function remove(mcpName: string): Promise<void> {
-    const data = await all()
-    delete data[mcpName]
-    await Filesystem.writeJson(filepath, data, 0o600)
+    return store.remove(mcpName)
   }
 
   export async function updateTokens(mcpName: string, tokens: Tokens, serverUrl?: string): Promise<void> {

@@ -334,117 +334,92 @@ export namespace Config {
     return ext.length ? file.slice(0, -ext.length) : file
   }
 
-  async function loadCommand(dir: string) {
-    const result: Record<string, Command> = {}
-    for (const item of await Glob.scan("{command,commands}/**/*.md", {
-      cwd: dir,
-      absolute: true,
-      dot: true,
-      symlink: true,
-    })) {
-      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
-        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
-          ? err.data.message
-          : `Failed to parse command ${item}`
-        const { Session } = await import("@/session")
-        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
-        log.error("failed to load command", { command: item, err })
-        return undefined
-      })
-      if (!md) continue
+  async function loadMarkdownEntities<T>(options: {
+    dirs: string[]
+    glob: string
+    schema: z.ZodType<T>
+    contentField: "template" | "prompt"
+    getName: (file: string) => string
+    onError: "throw" | "skip"
+    kind: "command" | "agent" | "mode"
+    postProcess?: (parsed: T) => T
+  }) {
+    const result: Record<string, T> = {}
+    for (const dir of options.dirs) {
+      for (const item of await Glob.scan(options.glob, {
+        cwd: dir,
+        absolute: true,
+        dot: true,
+        symlink: true,
+      })) {
+        const md = await ConfigMarkdown.parse(item).catch(async (err) => {
+          const message = ConfigMarkdown.FrontmatterError.isInstance(err)
+            ? err.data.message
+            : `Failed to parse ${options.kind} ${item}`
+          const { Session } = await import("@/session")
+          Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+          log.error(`failed to load ${options.kind}`, { [options.kind]: item, err })
+          return undefined
+        })
+        if (!md) continue
 
-      const patterns = ["/.opencode/command/", "/.opencode/commands/", "/command/", "/commands/"]
-      const file = rel(item, patterns) ?? path.basename(item)
-      const name = trim(file)
-
-      const config = {
-        name,
-        ...md.data,
-        template: md.content.trim(),
+        const config: { name: string } & Record<string, unknown> = {
+          name: options.getName(item),
+          ...md.data,
+          [options.contentField]: md.content.trim(),
+        }
+        const parsed = options.schema.safeParse(config)
+        if (parsed.success) {
+          result[config.name] = options.postProcess ? options.postProcess(parsed.data) : parsed.data
+          continue
+        }
+        if (options.onError === "skip") continue
+        throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
       }
-      const parsed = Command.safeParse(config)
-      if (parsed.success) {
-        result[config.name] = parsed.data
-        continue
-      }
-      throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
     }
     return result
+  }
+
+  async function loadCommand(dir: string) {
+    const patterns = ["/.opencode/command/", "/.opencode/commands/", "/command/", "/commands/"]
+    return loadMarkdownEntities({
+      dirs: [dir],
+      glob: "{command,commands}/**/*.md",
+      schema: Command,
+      contentField: "template",
+      getName: (file) => trim(rel(file, patterns) ?? path.basename(file)),
+      onError: "throw",
+      kind: "command",
+    })
   }
 
   async function loadAgent(dir: string) {
-    const result: Record<string, Agent> = {}
-
-    for (const item of await Glob.scan("{agent,agents}/**/*.md", {
-      cwd: dir,
-      absolute: true,
-      dot: true,
-      symlink: true,
-    })) {
-      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
-        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
-          ? err.data.message
-          : `Failed to parse agent ${item}`
-        const { Session } = await import("@/session")
-        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
-        log.error("failed to load agent", { agent: item, err })
-        return undefined
-      })
-      if (!md) continue
-
-      const patterns = ["/.opencode/agent/", "/.opencode/agents/", "/agent/", "/agents/"]
-      const file = rel(item, patterns) ?? path.basename(item)
-      const agentName = trim(file)
-
-      const config = {
-        name: agentName,
-        ...md.data,
-        prompt: md.content.trim(),
-      }
-      const parsed = Agent.safeParse(config)
-      if (parsed.success) {
-        result[config.name] = parsed.data
-        continue
-      }
-      throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
-    }
-    return result
+    const patterns = ["/.opencode/agent/", "/.opencode/agents/", "/agent/", "/agents/"]
+    return loadMarkdownEntities({
+      dirs: [dir],
+      glob: "{agent,agents}/**/*.md",
+      schema: Agent,
+      contentField: "prompt",
+      getName: (file) => trim(rel(file, patterns) ?? path.basename(file)),
+      onError: "throw",
+      kind: "agent",
+    })
   }
 
   async function loadMode(dir: string) {
-    const result: Record<string, Agent> = {}
-    for (const item of await Glob.scan("{mode,modes}/*.md", {
-      cwd: dir,
-      absolute: true,
-      dot: true,
-      symlink: true,
-    })) {
-      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
-        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
-          ? err.data.message
-          : `Failed to parse mode ${item}`
-        const { Session } = await import("@/session")
-        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
-        log.error("failed to load mode", { mode: item, err })
-        return undefined
-      })
-      if (!md) continue
-
-      const config = {
-        name: path.basename(item, ".md"),
-        ...md.data,
-        prompt: md.content.trim(),
-      }
-      const parsed = Agent.safeParse(config)
-      if (parsed.success) {
-        result[config.name] = {
-          ...parsed.data,
-          mode: "primary" as const,
-        }
-        continue
-      }
-    }
-    return result
+    return loadMarkdownEntities({
+      dirs: [dir],
+      glob: "{mode,modes}/*.md",
+      schema: Agent,
+      contentField: "prompt",
+      getName: (file) => path.basename(file, ".md"),
+      onError: "skip",
+      kind: "mode",
+      postProcess: (parsed) => ({
+        ...parsed,
+        mode: "primary" as const,
+      }),
+    })
   }
 
   async function loadPlugin(dir: string) {

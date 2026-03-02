@@ -10,6 +10,7 @@ import { Log } from "../../util/log"
 import { lazy } from "../../util/lazy"
 import { Config } from "../../config/config"
 import { errors } from "../error"
+import { withHeartbeat } from "../sse"
 
 const log = Log.create({ service: "server" })
 
@@ -84,26 +85,21 @@ export const GlobalRoutes = lazy(() =>
           }
           GlobalBus.on("event", handler)
 
-          // Send heartbeat every 10s to prevent stalled proxy streams.
-          const heartbeat = setInterval(() => {
-            stream.writeSSE({
+          await withHeartbeat(
+            stream,
+            () => stream.writeSSE({
               data: JSON.stringify({
                 payload: {
                   type: "server.heartbeat",
                   properties: {},
                 },
               }),
-            })
-          }, 10_000)
-
-          await new Promise<void>((resolve) => {
-            stream.onAbort(() => {
-              clearInterval(heartbeat)
+            }),
+            () => {
               GlobalBus.off("event", handler)
-              resolve()
               log.info("global event disconnected")
-            })
-          })
+            },
+          )
         })
       },
     )

@@ -1,7 +1,7 @@
 import path from "path"
 import { Global } from "../global"
 import z from "zod"
-import { Filesystem } from "../util/filesystem"
+import { JsonStore } from "../util/json-store"
 
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
@@ -35,34 +35,28 @@ export namespace Auth {
   export const Info = z.discriminatedUnion("type", [Oauth, Api, WellKnown]).meta({ ref: "Auth" })
   export type Info = z.infer<typeof Info>
 
-  const filepath = path.join(Global.Path.data, "auth.json")
+  const store = JsonStore.create<Info>({
+    path: () => path.join(Global.Path.data, "auth.json"),
+    mode: 0o600,
+    validate: (raw) => {
+      const parsed = Info.safeParse(raw)
+      return parsed.success ? parsed.data : undefined
+    },
+  })
 
   export async function get(providerID: string) {
-    const auth = await all()
-    return auth[providerID]
+    return store.get(providerID)
   }
 
   export async function all(): Promise<Record<string, Info>> {
-    const data = await Filesystem.readJson<Record<string, unknown>>(filepath).catch(() => ({}))
-    return Object.entries(data).reduce(
-      (acc, [key, value]) => {
-        const parsed = Info.safeParse(value)
-        if (!parsed.success) return acc
-        acc[key] = parsed.data
-        return acc
-      },
-      {} as Record<string, Info>,
-    )
+    return store.all()
   }
 
   export async function set(key: string, info: Info) {
-    const data = await all()
-    await Filesystem.writeJson(filepath, { ...data, [key]: info }, 0o600)
+    return store.set(key, info)
   }
 
   export async function remove(key: string) {
-    const data = await all()
-    delete data[key]
-    await Filesystem.writeJson(filepath, data, 0o600)
+    return store.remove(key)
   }
 }
