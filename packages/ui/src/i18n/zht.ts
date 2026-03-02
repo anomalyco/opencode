@@ -7,6 +7,9 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "上一輪變更",
   "ui.sessionReview.diffStyle.unified": "整合",
   "ui.sessionReview.diffStyle.split": "拆分",
+  "ui.sessionReview.openFile": "開啟檔案",
+  "ui.sessionReview.selection.line": "第 {{line}} 行",
+  "ui.sessionReview.selection.lines": "第 {{start}}-{{end}} 行",
   "ui.sessionReview.expandAll": "全部展開",
   "ui.sessionReview.collapseAll": "全部收合",
   "ui.sessionReview.change.added": "已新增",
@@ -17,6 +20,15 @@ export const dict = {
   "ui.sessionReview.largeDiff.title": "差異過大，無法渲染",
   "ui.sessionReview.largeDiff.meta": "限制：{{limit}} 行變更。目前：{{current}} 行變更。",
   "ui.sessionReview.largeDiff.renderAnyway": "仍然渲染",
+  "ui.fileMedia.kind.image": "圖片",
+  "ui.fileMedia.kind.audio": "音訊",
+  "ui.fileMedia.state.removed": "{{kind}}已移除",
+  "ui.fileMedia.state.loading": "正在載入{{kind}}...",
+  "ui.fileMedia.state.error": "載入{{kind}}失敗",
+  "ui.fileMedia.state.unavailable": "{{kind}}無法預覽",
+  "ui.fileMedia.binary.title": "二進位檔案",
+  "ui.fileMedia.binary.description.path": "無法顯示 {{path}}，因為它是二進位檔案。",
+  "ui.fileMedia.binary.description.default": "無法顯示此檔案，因為它是二進位檔案。",
 
   "ui.lineComment.label.prefix": "評論 ",
   "ui.lineComment.label.suffix": "",
@@ -32,6 +44,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "重試中",
   "ui.sessionTurn.retry.inSeconds": "{{seconds}} 秒後",
+  "ui.sessionTurn.retry.attempt": "第 {{attempt}} 次",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - 第 {{attempt}} 次",
+  "ui.sessionTurn.retry.geminiHot": "gemini 目前過載",
   "ui.sessionTurn.error.freeUsageExceeded": "免費使用額度已用完",
   "ui.sessionTurn.error.addCredits": "新增點數",
 
@@ -48,6 +63,14 @@ export const dict = {
   "ui.sessionTurn.status.gatheringThoughts": "正在整理思緒",
   "ui.sessionTurn.status.consideringNextSteps": "正在考慮下一步",
 
+  "ui.messagePart.questions.dismissed": "問題已略過",
+  "ui.messagePart.compaction": "歷史已壓縮",
+  "ui.messagePart.context.read.one": "{{count}} 次讀取",
+  "ui.messagePart.context.read.other": "{{count}} 次讀取",
+  "ui.messagePart.context.search.one": "{{count}} 次搜尋",
+  "ui.messagePart.context.search.other": "{{count}} 次搜尋",
+  "ui.messagePart.context.list.one": "{{count}} 個清單",
+  "ui.messagePart.context.list.other": "{{count}} 個清單",
   "ui.messagePart.diagnostic.error": "錯誤",
   "ui.messagePart.title.edit": "編輯",
   "ui.messagePart.title.write": "寫入",
@@ -67,6 +90,7 @@ export const dict = {
   "ui.textField.copied": "已複製",
 
   "ui.imagePreview.alt": "圖片預覽",
+  "ui.scrollView.ariaLabel": "可捲動內容",
 
   "ui.tool.read": "讀取",
   "ui.tool.loaded": "已載入",

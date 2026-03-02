@@ -6,6 +6,9 @@ export const dict: Record<Keys, string> = {
   "ui.sessionReview.title.lastTurn": "Endringer i siste tur",
   "ui.sessionReview.diffStyle.unified": "Samlet",
   "ui.sessionReview.diffStyle.split": "Delt",
+  "ui.sessionReview.openFile": "Åpne fil",
+  "ui.sessionReview.selection.line": "linje {{line}}",
+  "ui.sessionReview.selection.lines": "linjer {{start}}-{{end}}",
   "ui.sessionReview.expandAll": "Utvid alle",
   "ui.sessionReview.collapseAll": "Fold sammen alle",
   "ui.sessionReview.change.added": "Lagt til",
@@ -16,6 +19,15 @@ export const dict: Record<Keys, string> = {
   "ui.sessionReview.largeDiff.title": "Diff er for stor til å gjengi",
   "ui.sessionReview.largeDiff.meta": "Grense: {{limit}} endrede linjer. Nåværende: {{current}} endrede linjer.",
   "ui.sessionReview.largeDiff.renderAnyway": "Gjengi likevel",
+  "ui.fileMedia.kind.image": "bilde",
+  "ui.fileMedia.kind.audio": "lyd",
+  "ui.fileMedia.state.removed": "Fjernet: {{kind}}",
+  "ui.fileMedia.state.loading": "Laster inn {{kind}}...",
+  "ui.fileMedia.state.error": "Feil ved innlasting: {{kind}}",
+  "ui.fileMedia.state.unavailable": "Ikke tilgjengelig: {{kind}}",
+  "ui.fileMedia.binary.title": "Binærfil",
+  "ui.fileMedia.binary.description.path": "{{path}} kan ikke vises fordi det er en binærfil.",
+  "ui.fileMedia.binary.description.default": "Denne filen kan ikke vises fordi det er en binærfil.",
 
   "ui.lineComment.label.prefix": "Kommenter på ",
   "ui.lineComment.label.suffix": "",
@@ -31,6 +43,9 @@ export const dict: Record<Keys, string> = {
 
   "ui.sessionTurn.retry.retrying": "Prøver igjen",
   "ui.sessionTurn.retry.inSeconds": "om {{seconds}}s",
+  "ui.sessionTurn.retry.attempt": "forsøk #{{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - forsøk #{{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini er veldig overbelastet nå",
   "ui.sessionTurn.error.freeUsageExceeded": "Gratis bruk overskredet",
   "ui.sessionTurn.error.addCredits": "Legg til kreditt",
 
@@ -47,6 +62,14 @@ export const dict: Record<Keys, string> = {
   "ui.sessionTurn.status.gatheringThoughts": "Samler tanker",
   "ui.sessionTurn.status.consideringNextSteps": "Vurderer neste trinn",
 
+  "ui.messagePart.questions.dismissed": "Spørsmål avvist",
+  "ui.messagePart.compaction": "Historikk komprimert",
+  "ui.messagePart.context.read.one": "{{count}} lest",
+  "ui.messagePart.context.read.other": "{{count}} lest",
+  "ui.messagePart.context.search.one": "{{count}} søk",
+  "ui.messagePart.context.search.other": "{{count}} søk",
+  "ui.messagePart.context.list.one": "{{count}} liste",
+  "ui.messagePart.context.list.other": "{{count}} lister",
   "ui.messagePart.diagnostic.error": "Feil",
   "ui.messagePart.title.edit": "Rediger",
   "ui.messagePart.title.write": "Skriv",
@@ -66,6 +89,7 @@ export const dict: Record<Keys, string> = {
   "ui.textField.copied": "Kopiert",
 
   "ui.imagePreview.alt": "Bildeforhåndsvisning",
+  "ui.scrollView.ariaLabel": "rullbart innhold",
 
   "ui.tool.read": "Les",
   "ui.tool.loaded": "Lastet",

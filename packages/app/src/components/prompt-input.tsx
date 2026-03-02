@@ -3,7 +3,7 @@ import { createEffect, on, Component, Show, onCleanup, Switch, Match, createMemo
 import { createStore } from "solid-js/store"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
-import { useFile } from "@/context/file"
+import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
 import {
   ContentPart,
   DEFAULT_PROMPT,
@@ -20,9 +20,9 @@ import { useParams } from "@solidjs/router"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
+import { DockShellForm, DockTray } from "@opencode-ai/ui/dock-surface"
 import { Icon } from "@opencode-ai/ui/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import type { IconName } from "@opencode-ai/ui/icons/provider"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
@@ -42,6 +42,9 @@ import {
   canNavigateHistoryAtCursor,
   navigatePromptHistory,
   prependHistoryEntry,
+  type PromptHistoryComment,
+  type PromptHistoryEntry,
+  type PromptHistoryStoredEntry,
   promptLength,
 } from "./prompt-input/history"
 import { createPromptSubmit } from "./prompt-input/submit"
@@ -87,6 +90,8 @@ const EXAMPLES = [
   "prompt.example.24",
   "prompt.example.25",
 ] as const
+
+const NON_EMPTY_TEXT = /[^\s\u200B]/
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
@@ -167,12 +172,29 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const focus = { file: item.path, id: item.commentID }
     comments.setActive(focus)
 
+    const queueCommentFocus = (attempts = 6) => {
+      const schedule = (left: number) => {
+        requestAnimationFrame(() => {
+          comments.setFocus({ ...focus })
+          if (left <= 0) return
+          requestAnimationFrame(() => {
+            const current = comments.focus()
+            if (!current) return
+            if (current.file !== focus.file || current.id !== focus.id) return
+            schedule(left - 1)
+          })
+        })
+      }
+
+      schedule(attempts)
+    }
+
     const wantsReview = item.commentOrigin === "review" || (item.commentOrigin !== "file" && commentInReview(item.path))
     if (wantsReview) {
       if (!view().reviewPanel.opened()) view().reviewPanel.open()
       layout.fileTree.setTab("changes")
       tabs().setActive("review")
-      requestAnimationFrame(() => comments.setFocus(focus))
+      queueCommentFocus()
       return
     }
 
@@ -180,8 +202,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     layout.fileTree.setTab("all")
     const tab = files.tab(item.path)
     tabs().open(tab)
-    files.load(item.path)
-    requestAnimationFrame(() => comments.setFocus(focus))
+    tabs().setActive(tab)
+    Promise.resolve(files.load(item.path)).finally(() => queueCommentFocus())
   }
 
   const recent = createMemo(() => {
@@ -216,7 +238,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const [store, setStore] = createStore<{
     popover: "at" | "slash" | null
     historyIndex: number
-    savedPrompt: Prompt | null
+    savedPrompt: PromptHistoryEntry | null
     placeholder: number
     draggingType: "image" | "@mention" | null
     mode: "normal" | "shell"
@@ -224,7 +246,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }>({
     popover: null,
     historyIndex: -1,
-    savedPrompt: null,
+    savedPrompt: null as PromptHistoryEntry | null,
     placeholder: Math.floor(Math.random() * EXAMPLES.length),
     draggingType: null,
     mode: "normal",
@@ -253,7 +275,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const [history, setHistory] = persisted(
     Persist.global("prompt-history", ["prompt-history.v1"]),
     createStore<{
-      entries: Prompt[]
+      entries: PromptHistoryStoredEntry[]
     }>({
       entries: [],
     }),
@@ -261,7 +283,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const [shellHistory, setShellHistory] = persisted(
     Persist.global("prompt-history-shell", ["prompt-history-shell.v1"]),
     createStore<{
-      entries: Prompt[]
+      entries: PromptHistoryStoredEntry[]
     }>({
       entries: [],
     }),
@@ -279,9 +301,66 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }),
   )
 
-  const applyHistoryPrompt = (p: Prompt, position: "start" | "end") => {
+  const historyComments = () => {
+    const byID = new Map(comments.all().map((item) => [`${item.file}\n${item.id}`, item] as const))
+    return prompt.context.items().flatMap((item) => {
+      if (item.type !== "file") return []
+      const comment = item.comment?.trim()
+      if (!comment) return []
+
+      const selection = item.commentID ? byID.get(`${item.path}\n${item.commentID}`)?.selection : undefined
+      const nextSelection =
+        selection ??
+        (item.selection
+          ? ({
+              start: item.selection.startLine,
+              end: item.selection.endLine,
+            } satisfies SelectedLineRange)
+          : undefined)
+      if (!nextSelection) return []
+
+      return [
+        {
+          id: item.commentID ?? item.key,
+          path: item.path,
+          selection: { ...nextSelection },
+          comment,
+          time: item.commentID ? (byID.get(`${item.path}\n${item.commentID}`)?.time ?? Date.now()) : Date.now(),
+          origin: item.commentOrigin,
+          preview: item.preview,
+        } satisfies PromptHistoryComment,
+      ]
+    })
+  }
+
+  const applyHistoryComments = (items: PromptHistoryComment[]) => {
+    comments.replace(
+      items.map((item) => ({
+        id: item.id,
+        file: item.path,
+        selection: { ...item.selection },
+        comment: item.comment,
+        time: item.time,
+      })),
+    )
+    prompt.context.replaceComments(
+      items.map((item) => ({
+        type: "file" as const,
+        path: item.path,
+        selection: selectionFromLines(item.selection),
+        comment: item.comment,
+        commentID: item.id,
+        commentOrigin: item.origin,
+        preview: item.preview,
+      })),
+    )
+  }
+
+  const applyHistoryPrompt = (entry: PromptHistoryEntry, position: "start" | "end") => {
+    const p = entry.prompt
     const length = position === "start" ? 0 : promptLength(p)
     setStore("applyingHistory", true)
+    applyHistoryComments(entry.comments)
     prompt.set(p, length)
     requestAnimationFrame(() => {
       editorRef.focus()
@@ -635,7 +714,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     let buffer = ""
 
     const flushText = () => {
-      const content = buffer.replace(/\r\n?/g, "\n").replace(/\u200B/g, "")
+      let content = buffer
+      if (content.includes("\r")) content = content.replace(/\r\n?/g, "\n")
+      if (content.includes("\u200B")) content = content.replace(/\u200B/g, "")
       buffer = ""
       if (!content) return
       parts.push({ type: "text", content, start: position, end: position + content.length })
@@ -713,10 +794,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const rawParts = parseFromDOM()
     const images = imageAttachments()
     const cursorPosition = getCursorPosition(editorRef)
-    const rawText = rawParts.map((p) => ("content" in p ? p.content : "")).join("")
-    const trimmed = rawText.replace(/\u200B/g, "").trim()
+    const rawText =
+      rawParts.length === 1 && rawParts[0]?.type === "text"
+        ? rawParts[0].content
+        : rawParts.map((p) => ("content" in p ? p.content : "")).join("")
     const hasNonText = rawParts.some((part) => part.type !== "text")
-    const shouldReset = trimmed.length === 0 && !hasNonText && images.length === 0
+    const shouldReset = !NON_EMPTY_TEXT.test(rawText) && !hasNonText && images.length === 0
 
     if (shouldReset) {
       closePopover()
@@ -756,19 +839,31 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const addPart = (part: ContentPart) => {
-    const selection = window.getSelection()
-    if (!selection || selection.rangeCount === 0) return
+    if (part.type === "image") return false
 
-    const cursorPosition = getCursorPosition(editorRef)
-    const currentPrompt = prompt.current()
-    const rawText = currentPrompt.map((p) => ("content" in p ? p.content : "")).join("")
-    const textBeforeCursor = rawText.substring(0, cursorPosition)
-    const atMatch = textBeforeCursor.match(/@(\S*)$/)
+    const selection = window.getSelection()
+    if (!selection) return false
+
+    if (selection.rangeCount === 0 || !editorRef.contains(selection.anchorNode)) {
+      editorRef.focus()
+      const cursor = prompt.cursor() ?? promptLength(prompt.current())
+      setCursorPosition(editorRef, cursor)
+    }
+
+    if (selection.rangeCount === 0) return false
+    const range = selection.getRangeAt(0)
+    if (!editorRef.contains(range.startContainer)) return false
 
     if (part.type === "file" || part.type === "agent") {
+      const cursorPosition = getCursorPosition(editorRef)
+      const rawText = prompt
+        .current()
+        .map((p) => ("content" in p ? p.content : ""))
+        .join("")
+      const textBeforeCursor = rawText.substring(0, cursorPosition)
+      const atMatch = textBeforeCursor.match(/@(\S*)$/)
       const pill = createPill(part)
       const gap = document.createTextNode(" ")
-      const range = selection.getRangeAt(0)
 
       if (atMatch) {
         const start = atMatch.index ?? cursorPosition - atMatch[0].length
@@ -783,8 +878,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       range.collapse(true)
       selection.removeAllRanges()
       selection.addRange(range)
-    } else if (part.type === "text") {
-      const range = selection.getRangeAt(0)
+    }
+
+    if (part.type === "text") {
       const fragment = createTextFragment(part.content)
       const last = fragment.lastChild
       range.deleteContents()
@@ -820,12 +916,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     handleInput()
     closePopover()
+    return true
   }
 
   const addToHistory = (prompt: Prompt, mode: "normal" | "shell") => {
     const currentHistory = mode === "shell" ? shellHistory : history
     const setCurrentHistory = mode === "shell" ? setShellHistory : setHistory
-    const next = prependHistoryEntry(currentHistory.entries, prompt)
+    const next = prependHistoryEntry(currentHistory.entries, prompt, mode === "shell" ? [] : historyComments())
     if (next === currentHistory.entries) return
     setCurrentHistory("entries", next)
   }
@@ -836,12 +933,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       entries: store.mode === "shell" ? shellHistory.entries : history.entries,
       historyIndex: store.historyIndex,
       currentPrompt: prompt.current(),
+      currentComments: historyComments(),
       savedPrompt: store.savedPrompt,
     })
     if (!result.handled) return false
     setStore("historyIndex", result.historyIndex)
     setStore("savedPrompt", result.savedPrompt)
-    applyHistoryPrompt(result.prompt, result.cursor)
+    applyHistoryPrompt(result.entry, result.cursor)
     return true
   }
 
@@ -1027,6 +1125,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const variants = createMemo(() => ["default", ...local.model.variant.list()])
+  const accepting = createMemo(() => {
+    const id = params.id
+    if (!id) return false
+    return permission.isAutoAccepting(id, sdk.directory)
+  })
 
   return (
     <div class="relative size-full _max-h-[320px] flex flex-col gap-0">
@@ -1045,12 +1148,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         commandKeybind={command.keybind}
         t={(key) => language.t(key as Parameters<typeof language.t>[0])}
       />
-      <form
+      <DockShellForm
         onSubmit={handleSubmit}
         classList={{
           "group/prompt-input": true,
-          "bg-surface-raised-stronger-non-alpha shadow-xs-border relative z-10": true,
-          "rounded-[12px] overflow-clip focus-within:shadow-xs-border": true,
+          "focus-within:shadow-xs-border": true,
           "border-icon-info-active border-dashed": store.draggingType !== null,
           [props.class ?? ""]: !!props.class,
         }}
@@ -1207,46 +1309,50 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </div>
           </div>
 
-          <Show when={store.mode === "normal" && permission.permissionsEnabled() && params.id}>
-            <div class="pointer-events-none absolute bottom-2 left-2">
-              <div class="pointer-events-auto">
-                <TooltipKeybind
-                  placement="top"
-                  gutter={8}
-                  title={language.t("command.permissions.autoaccept.enable")}
-                  keybind={command.keybind("permissions.autoaccept")}
+          <div class="pointer-events-none absolute bottom-2 left-2">
+            <div class="pointer-events-auto">
+              <TooltipKeybind
+                placement="top"
+                gutter={8}
+                title={language.t(
+                  accepting() ? "command.permissions.autoaccept.disable" : "command.permissions.autoaccept.enable",
+                )}
+                keybind={command.keybind("permissions.autoaccept")}
+              >
+                <Button
+                  data-action="prompt-permissions"
+                  variant="ghost"
+                  disabled={!params.id}
+                  onClick={() => {
+                    if (!params.id) return
+                    permission.toggleAutoAccept(params.id, sdk.directory)
+                  }}
+                  classList={{
+                    "size-6 flex items-center justify-center": true,
+                    "text-text-base": !accepting(),
+                    "hover:bg-surface-success-base": accepting(),
+                  }}
+                  aria-label={
+                    accepting()
+                      ? language.t("command.permissions.autoaccept.disable")
+                      : language.t("command.permissions.autoaccept.enable")
+                  }
+                  aria-pressed={accepting()}
                 >
-                  <Button
-                    data-action="prompt-permissions"
-                    variant="ghost"
-                    onClick={() => permission.toggleAutoAccept(params.id!, sdk.directory)}
-                    classList={{
-                      "_hidden group-hover/prompt-input:flex size-6 items-center justify-center": true,
-                      "text-text-base": !permission.isAutoAccepting(params.id!, sdk.directory),
-                      "hover:bg-surface-success-base": permission.isAutoAccepting(params.id!, sdk.directory),
-                    }}
-                    aria-label={
-                      permission.isAutoAccepting(params.id!, sdk.directory)
-                        ? language.t("command.permissions.autoaccept.disable")
-                        : language.t("command.permissions.autoaccept.enable")
-                    }
-                    aria-pressed={permission.isAutoAccepting(params.id!, sdk.directory)}
-                  >
-                    <Icon
-                      name="chevron-double-right"
-                      size="small"
-                      classList={{ "text-icon-success-base": permission.isAutoAccepting(params.id!, sdk.directory) }}
-                    />
-                  </Button>
-                </TooltipKeybind>
-              </div>
+                  <Icon
+                    name="chevron-double-right"
+                    size="small"
+                    classList={{ "text-icon-success-base": accepting() }}
+                  />
+                </Button>
+              </TooltipKeybind>
             </div>
-          </Show>
+          </div>
         </div>
-      </form>
+      </DockShellForm>
       <Show when={store.mode === "normal" || store.mode === "shell"}>
-        <div class="-mt-3.5 bg-background-base border border-border-weak-base relative z-0 rounded-[12px] rounded-tl-0 rounded-tr-0 overflow-clip">
-          <div class="px-2 pt-5.5 pb-2 flex items-center gap-2 min-w-0">
+        <DockTray attach="top">
+          <div class="px-1.75 pt-5.5 pb-2 flex items-center gap-2 min-w-0">
             <div class="flex items-center gap-1.5 min-w-0 flex-1">
               <Show when={store.mode === "shell"}>
                 <div class="h-7 flex items-center gap-1.5 max-w-[160px] min-w-0" style={{ padding: "0 4px 0 8px" }}>
@@ -1254,7 +1360,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <div class="size-4 shrink-0" />
                 </div>
               </Show>
-
               <Show when={store.mode === "normal"}>
                 <TooltipKeybind
                   placement="top"
@@ -1292,7 +1397,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       >
                         <Show when={local.model.current()?.provider?.id}>
                           <ProviderIcon
-                            id={local.model.current()!.provider.id as IconName}
+                            id={local.model.current()!.provider.id}
                             class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
                             style={{ "will-change": "opacity", transform: "translateZ(0)" }}
                           />
@@ -1322,7 +1427,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     >
                       <Show when={local.model.current()?.provider?.id}>
                         <ProviderIcon
-                          id={local.model.current()!.provider.id as IconName}
+                          id={local.model.current()!.provider.id}
                           class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
                           style={{ "will-change": "opacity", transform: "translateZ(0)" }}
                         />
@@ -1354,7 +1459,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 </TooltipKeybind>
               </Show>
             </div>
-            <div class="shrink-0" data-component="prompt-mode-toggle">
+            <div class="shrink-0">
               <RadioGroup
                 options={["shell", "normal"] as const}
                 current={store.mode}
@@ -1385,7 +1490,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               />
             </div>
           </div>
-        </div>
+        </DockTray>
       </Show>
     </div>
   )

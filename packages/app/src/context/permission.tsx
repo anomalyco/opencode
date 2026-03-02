@@ -6,8 +6,8 @@ import { Persist, persisted } from "@/utils/persist"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "./global-sync"
 import { useParams } from "@solidjs/router"
-import { base64Encode } from "@opencode-ai/util/encode"
 import { decode64 } from "@/utils/base64"
+import { acceptKey, autoRespondsPermission } from "./permission-auto-respond"
 
 type PermissionRespondFn = (input: {
   sessionID: string
@@ -15,10 +15,6 @@ type PermissionRespondFn = (input: {
   response: "once" | "always" | "reject"
   directory?: string
 }) => void
-
-function shouldAutoAccept(perm: PermissionRequest) {
-  return perm.permission === "edit"
-}
 
 function isNonAllowRule(rule: unknown) {
   if (!rule) return false
@@ -40,10 +36,7 @@ function hasPermissionPromptRules(permission: unknown) {
   if (Array.isArray(permission)) return false
 
   const config = permission as Record<string, unknown>
-  if (isNonAllowRule(config.edit)) return true
-  if (isNonAllowRule(config.write)) return true
-
-  return false
+  return Object.values(config).some(isNonAllowRule)
 }
 
 export const { use: usePermission, provider: PermissionProvider } = createSimpleContext({
@@ -61,9 +54,25 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     })
 
     const [store, setStore, _, ready] = persisted(
-      Persist.global("permission", ["permission.v3"]),
+      {
+        ...Persist.global("permission", ["permission.v3"]),
+        migrate(value) {
+          if (!value || typeof value !== "object" || Array.isArray(value)) return value
+
+          const data = value as Record<string, unknown>
+          if (data.autoAccept) return value
+
+          return {
+            ...data,
+            autoAccept:
+              typeof data.autoAcceptEdits === "object" && data.autoAcceptEdits && !Array.isArray(data.autoAcceptEdits)
+                ? data.autoAcceptEdits
+                : {},
+          }
+        },
+      },
       createStore({
-        autoAcceptEdits: {} as Record<string, boolean>,
+        autoAccept: {} as Record<string, boolean>,
       }),
     )
 
@@ -105,14 +114,14 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       })
     }
 
-    function acceptKey(sessionID: string, directory?: string) {
-      if (!directory) return sessionID
-      return `${base64Encode(directory)}/${sessionID}`
+    function isAutoAccepting(sessionID: string, directory?: string) {
+      const session = directory ? globalSync.child(directory, { bootstrap: false })[0].session : []
+      return autoRespondsPermission(store.autoAccept, session, { sessionID }, directory)
     }
 
-    function isAutoAccepting(sessionID: string, directory?: string) {
-      const key = acceptKey(sessionID, directory)
-      return store.autoAcceptEdits[key] ?? store.autoAcceptEdits[sessionID] ?? false
+    function shouldAutoRespond(permission: PermissionRequest, directory?: string) {
+      const session = directory ? globalSync.child(directory, { bootstrap: false })[0].session : []
+      return autoRespondsPermission(store.autoAccept, session, permission, directory)
     }
 
     function bumpEnableVersion(sessionID: string, directory?: string) {
@@ -127,8 +136,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       if (event?.type !== "permission.asked") return
 
       const perm = event.properties
-      if (!isAutoAccepting(perm.sessionID, e.name)) return
-      if (!shouldAutoAccept(perm)) return
+      if (!shouldAutoRespond(perm, e.name)) return
 
       respondOnce(perm, e.name)
     })
@@ -139,8 +147,8 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       const version = bumpEnableVersion(sessionID, directory)
       setStore(
         produce((draft) => {
-          draft.autoAcceptEdits[key] = true
-          delete draft.autoAcceptEdits[sessionID]
+          draft.autoAccept[key] = true
+          delete draft.autoAccept[sessionID]
         }),
       )
 
@@ -151,8 +159,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
           if (!isAutoAccepting(sessionID, directory)) return
           for (const perm of x.data ?? []) {
             if (!perm?.id) continue
-            if (perm.sessionID !== sessionID) continue
-            if (!shouldAutoAccept(perm)) continue
+            if (!shouldAutoRespond(perm, directory)) continue
             respondOnce(perm, directory)
           }
         })
@@ -161,11 +168,12 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
 
     function disable(sessionID: string, directory?: string) {
       bumpEnableVersion(sessionID, directory)
-      const key = directory ? acceptKey(sessionID, directory) : undefined
+      const key = directory ? acceptKey(sessionID, directory) : sessionID
       setStore(
         produce((draft) => {
-          if (key) delete draft.autoAcceptEdits[key]
-          delete draft.autoAcceptEdits[sessionID]
+          draft.autoAccept[key] = false
+          if (!directory) return
+          delete draft.autoAccept[sessionID]
         }),
       )
     }
@@ -174,7 +182,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       ready,
       respond,
       autoResponds(permission: PermissionRequest, directory?: string) {
-        return isAutoAccepting(permission.sessionID, directory) && shouldAutoAccept(permission)
+        return shouldAutoRespond(permission, directory)
       },
       isAutoAccepting,
       toggleAutoAccept(sessionID: string, directory: string) {
