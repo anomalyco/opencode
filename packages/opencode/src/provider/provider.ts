@@ -742,72 +742,82 @@ export namespace Provider {
       }
 
       // Discover models dynamically via Databricks SDK serving endpoints.
+      // Wrapped in a timeout to prevent stalling if the API is slow or unresponsive.
+      const DISCOVERY_TIMEOUT_MS = 10_000
       try {
         const client = new WorkspaceClient(dbConfig)
 
-        {
-          // Known model families that reliably support tool calling
-          const toolCapableFamilies = ["claude", "gpt", "codex", "gemini"]
+        await Promise.race([
+          (async () => {
+            // Known model families that reliably support tool calling
+            const toolCapableFamilies = ["claude", "gpt", "codex", "gemini"]
 
-          // Default context windows and capabilities per model family
-          const familyDefaults: Record<
-            string,
-            { context: number; output: number; reasoning: boolean; attachment: boolean }
-          > = {
-            claude: { context: 200000, output: 64000, reasoning: false, attachment: true },
-            gpt: { context: 400000, output: 128000, reasoning: true, attachment: true },
-            codex: { context: 400000, output: 128000, reasoning: true, attachment: true },
-            gemini: { context: 1000000, output: 65536, reasoning: true, attachment: true },
-          }
-
-          for await (const endpoint of client.servingEndpoints.list()) {
-            const endpointName = endpoint.name
-            if (!endpointName) continue
-            // Skip if already defined in user config
-            if (input.models[endpointName]) continue
-
-            // Only include foundation model endpoints with chat task
-            const foundationModel = endpoint.config?.served_entities?.[0]?.foundation_model
-            if (!foundationModel) continue
-            if (endpoint.task && endpoint.task !== "llm/v1/chat") continue
-
-            // Determine model family from endpoint name
-            const nameLower = endpointName.toLowerCase()
-            const family = toolCapableFamilies.find((f) => nameLower.includes(f))
-
-            // Only include models from known tool-capable families
-            if (!family) continue
-
-            const defaults = familyDefaults[family] ?? {
-              context: 128000,
-              output: 16000,
-              reasoning: false,
-              attachment: false,
+            // Default context windows and capabilities per model family
+            const familyDefaults: Record<
+              string,
+              { context: number; output: number; reasoning: boolean; attachment: boolean }
+            > = {
+              claude: { context: 200000, output: 64000, reasoning: false, attachment: true },
+              gpt: { context: 400000, output: 128000, reasoning: true, attachment: true },
+              codex: { context: 400000, output: 128000, reasoning: true, attachment: true },
+              gemini: { context: 1000000, output: 65536, reasoning: true, attachment: true },
             }
 
-            const discoveredModel: ModelsDev.Model = {
-              id: endpointName,
-              name: foundationModel.display_name ?? endpointName,
-              family,
-              attachment: defaults.attachment,
-              reasoning: defaults.reasoning,
-              tool_call: true,
-              temperature: true,
-              release_date: new Date().toISOString().split("T")[0],
-              modalities: {
-                input: defaults.attachment ? ["text", "image"] : ["text"],
-                output: ["text"],
-              },
-              cost: { input: 0, output: 0 },
-              limit: { context: defaults.context, output: defaults.output },
-              options: {},
-            }
+            for await (const endpoint of client.servingEndpoints.list()) {
+              const endpointName = endpoint.name
+              if (!endpointName) continue
+              // Skip if already defined in user config
+              if (input.models[endpointName]) continue
 
-            input.models[endpointName] = toProviderModel(discoveredModel)
-          }
-        }
+              // Only include foundation model endpoints with chat task
+              const foundationModel = endpoint.config?.served_entities?.[0]?.foundation_model
+              if (!foundationModel) continue
+              if (endpoint.task && endpoint.task !== "llm/v1/chat") continue
+
+              // Determine model family from endpoint name
+              const nameLower = endpointName.toLowerCase()
+              const family = toolCapableFamilies.find((f) => nameLower.includes(f))
+
+              // Only include models from known tool-capable families
+              if (!family) continue
+
+              const defaults = familyDefaults[family] ?? {
+                context: 128000,
+                output: 16000,
+                reasoning: false,
+                attachment: false,
+              }
+
+              const discoveredModel: ModelsDev.Model = {
+                id: endpointName,
+                name: foundationModel.display_name ?? endpointName,
+                family,
+                attachment: defaults.attachment,
+                reasoning: defaults.reasoning,
+                tool_call: true,
+                temperature: true,
+                release_date: new Date().toISOString().split("T")[0],
+                modalities: {
+                  input: defaults.attachment ? ["text", "image"] : ["text"],
+                  output: ["text"],
+                },
+                cost: { input: 0, output: 0 },
+                limit: { context: defaults.context, output: defaults.output },
+                options: {},
+              }
+
+              input.models[endpointName] = toProviderModel(discoveredModel)
+            }
+          })(),
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () => reject(new Error(`Discovery timed out after ${DISCOVERY_TIMEOUT_MS}ms`)),
+              DISCOVERY_TIMEOUT_MS,
+            ),
+          ),
+        ])
       } catch (e) {
-        // API discovery is best-effort; if it fails, no models will be available
+        // API discovery is best-effort; if it fails or times out, no models will be available
         log.warn("Failed to discover Databricks serving endpoints - no models will be available", {
           error: e instanceof Error ? e.message : "Unknown error",
         })
