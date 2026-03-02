@@ -110,7 +110,7 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".zon": "zig",
   ".astro": "astro",
   ".bicep": "bicep",
-  ".bicepparam": "bicepparam",
+  ".bicepparam": "bicep-params",
   ".ml": "ocaml",
   ".mli": "ocaml",
   ".tf": "terraform",
