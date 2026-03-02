@@ -418,7 +418,6 @@ export const AuthLoginCommand = cmd({
 
           const key = await prompts.password({
             message: "Enter LM Studio API key (optional)",
-            placeholder: "Leave empty if not required",
           })
           if (prompts.isCancel(key)) throw new UI.CancelledError()
 
