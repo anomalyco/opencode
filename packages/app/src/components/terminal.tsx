@@ -158,6 +158,7 @@ export const Terminal = (props: TerminalProps) => {
   const server = useServer()
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, ["pty", "class", "classList", "onConnect", "onConnectError"])
+  const pty = local.pty
   let ws: WebSocket | undefined
   let term: Term | undefined
   let ghostty: Ghostty
@@ -170,8 +171,7 @@ export const Terminal = (props: TerminalProps) => {
   let lastSize: { cols: number; rows: number } | undefined
   let disposed = false
   const cleanups: VoidFunction[] = []
-  const start =
-    typeof local.pty.cursor === "number" && Number.isSafeInteger(local.pty.cursor) ? local.pty.cursor : undefined
+  const start = typeof pty.cursor === "number" && Number.isSafeInteger(pty.cursor) ? pty.cursor : undefined
   let cursor = start ?? 0
   let output: ReturnType<typeof terminalWriter> | undefined
 
@@ -190,7 +190,7 @@ export const Terminal = (props: TerminalProps) => {
   const pushSize = (cols: number, rows: number) => {
     return sdk.client.pty
       .update({
-        ptyID: local.pty.id,
+        ptyID: pty.id,
         size: { cols, rows },
       })
       .catch((err) => {
@@ -320,16 +320,16 @@ export const Terminal = (props: TerminalProps) => {
       const mod = loaded.mod
       const g = loaded.ghostty
 
-      const restore = typeof local.pty.buffer === "string" ? local.pty.buffer : ""
+      const restore = typeof pty.buffer === "string" ? pty.buffer : ""
       const restoreSize =
         restore &&
-        typeof local.pty.cols === "number" &&
-        Number.isSafeInteger(local.pty.cols) &&
-        local.pty.cols > 0 &&
-        typeof local.pty.rows === "number" &&
-        Number.isSafeInteger(local.pty.rows) &&
-        local.pty.rows > 0
-          ? { cols: local.pty.cols, rows: local.pty.rows }
+        typeof pty.cols === "number" &&
+        Number.isSafeInteger(pty.cols) &&
+        pty.cols > 0 &&
+        typeof pty.rows === "number" &&
+        Number.isSafeInteger(pty.rows) &&
+        pty.rows > 0
+          ? { cols: pty.cols, rows: pty.rows }
           : undefined
 
       const t = new mod.Terminal({
@@ -428,14 +428,14 @@ export const Terminal = (props: TerminalProps) => {
         await write(restore)
         fit.fit()
         scheduleSize(t.cols, t.rows)
-        if (typeof local.pty.scrollY === "number") t.scrollToLine(local.pty.scrollY)
+        if (typeof pty.scrollY === "number") t.scrollToLine(pty.scrollY)
         startResize()
       } else {
         fit.fit()
         scheduleSize(t.cols, t.rows)
         if (restore) {
           await write(restore)
-          if (typeof local.pty.scrollY === "number") t.scrollToLine(local.pty.scrollY)
+          if (typeof pty.scrollY === "number") t.scrollToLine(pty.scrollY)
         }
         startResize()
       }
@@ -447,9 +447,9 @@ export const Terminal = (props: TerminalProps) => {
       const once = { value: false }
       let closing = false
 
-      const url = new URL(sdk.url + `/pty/${local.pty.id}/connect`)
+      const url = new URL(sdk.url + `/pty/${pty.id}/connect`)
       url.searchParams.set("directory", sdk.directory)
-      url.searchParams.set("cursor", String(start !== undefined ? start : local.pty.buffer ? -1 : 0))
+      url.searchParams.set("cursor", String(start !== undefined ? start : pty.buffer ? -1 : 0))
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
       url.username = server.current?.http.username ?? ""
       url.password = server.current?.http.password ?? ""
@@ -543,7 +543,7 @@ export const Terminal = (props: TerminalProps) => {
     if (ws && ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) ws.close(1000)
 
     const finalize = () => {
-      persistTerminal({ term, addon: serializeAddon, cursor, pty: local.pty, onCleanup: props.onCleanup })
+      persistTerminal({ term, addon: serializeAddon, cursor, pty, onCleanup: props.onCleanup })
       cleanup()
     }
 
