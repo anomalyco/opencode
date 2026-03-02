@@ -1,0 +1,120 @@
+name: jules-evidence
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - chasing-jules
+
+jobs:
+  typecheck:
+    name: evidence typecheck
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Run typecheck
+        run: bun turbo typecheck
+
+  unit:
+    name: evidence unit (${{ matrix.settings.name }})
+    needs: typecheck
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - name: linux
+            host: blacksmith-4vcpu-ubuntu-2404
+          - name: windows
+            host: blacksmith-4vcpu-windows-2025
+    runs-on: ${{ matrix.settings.host }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Run unit tests
+        run: bun turbo test
+
+  e2e:
+    name: evidence e2e (${{ matrix.settings.name }})
+    needs: unit
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - name: linux
+            host: blacksmith-4vcpu-ubuntu-2404
+            playwright: bunx playwright install --with-deps
+          - name: windows
+            host: blacksmith-4vcpu-windows-2025
+            playwright: bunx playwright install
+    runs-on: ${{ matrix.settings.host }}
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: 0
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Install Playwright browsers
+        working-directory: packages/app
+        run: ${{ matrix.settings.playwright }}
+
+      - name: Run app e2e tests
+        run: bun --cwd packages/app test:e2e:local
+        env:
+          CI: true
+        timeout-minutes: 30
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-playwright-${{ matrix.settings.name }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            packages/app/e2e/test-results
+            packages/app/e2e/playwright-report
+
+  evidence:
+    name: evidence summary
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    if: always()
+    needs:
+      - typecheck
+      - unit
+      - e2e
+    steps:
+      - name: Summarize evidence status
+        run: |
+          echo "typecheck=${{ needs.typecheck.result }}"
+          echo "unit=${{ needs.unit.result }}"
+          echo "e2e=${{ needs.e2e.result }}"
+          test "${{ needs.typecheck.result }}" = "success"
+          test "${{ needs.unit.result }}" = "success"
+          test "${{ needs.e2e.result }}" = "success"
