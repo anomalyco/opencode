@@ -1,0 +1,44 @@
+name: nix-bun-version-check
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - "package.json"
+      - "flake.lock"
+      - ".github/workflows/nix-bun-version-check.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Nix
+        uses: nixbuild/nix-quick-install-action@v34
+
+      - name: Check bun version matches nixpkgs
+        run: |
+          set -euo pipefail
+
+          pkg_bun=$(jq -r '.packageManager' package.json | sed 's/bun@//')
+          nix_bun=$(nix eval --inputs-from . --raw nixpkgs#bun.version)
+
+          echo "package.json: bun@${pkg_bun}"
+          echo "nixpkgs:      bun@${nix_bun}"
+
+          if [ "$pkg_bun" != "$nix_bun" ]; then
+            echo "::error::Bun version mismatch: package.json requires ${pkg_bun} but nixpkgs provides ${nix_bun}. Update flake.lock (nix flake update nixpkgs) or align package.json."
+            exit 1
+          fi
+
+          echo "Versions match."
