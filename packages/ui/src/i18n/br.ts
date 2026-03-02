@@ -126,6 +126,7 @@ export const dict = {
   "ui.message.copyResponse": "Copiar resposta",
   "ui.message.copied": "Copiado!",
   "ui.message.interrupted": "Interrompido",
+  "ui.message.queued": "Na fila",
   "ui.message.attachment.alt": "anexo",
 
   "ui.patch.action.deleted": "Excluído",
