@@ -46,9 +46,12 @@
 @import "../components/scroll-view.css" layer(components);
 @import "../components/session-review.css" layer(components);
 @import "../components/session-turn.css" layer(components);
+@import "../components/shell-submessage.css" layer(components);
 @import "../components/sticky-accordion-header.css" layer(components);
 @import "../components/tabs.css" layer(components);
 @import "../components/tag.css" layer(components);
+@import "../components/text-odometer.css" layer(components);
+@import "../components/text-reveal.css" layer(components);
 @import "../components/text-shimmer.css" layer(components);
 @import "../components/tool-count-label.css" layer(components);
 @import "../components/tool-count-summary.css" layer(components);

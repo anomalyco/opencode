@@ -8,6 +8,7 @@
     "build": "storybook build"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "catalog:",
     "@opencode-ai/ui": "workspace:*",
     "@solidjs/meta": "catalog:",
     "@storybook/addon-a11y": "^10.2.13",

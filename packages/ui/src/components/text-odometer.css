@@ -1,0 +1,89 @@
+[data-component="text-odometer"] {
+  display: inline-flex;
+  align-items: baseline;
+  min-width: 0;
+  overflow: visible;
+  line-height: inherit;
+  vertical-align: baseline;
+
+  [data-slot="text-odometer-track"] {
+    --text-odometer-pad-base: 9px;
+    --text-odometer-mask-stop: min(var(--text-odometer-mask-size, 12px), calc(50% - 0.5px));
+    --text-odometer-shift: calc(
+      100% + var(--text-odometer-travel, 4px) + var(--text-odometer-mask-height, 0px) +
+        max(calc(var(--text-odometer-mask-pad, 9px) - var(--text-odometer-pad-base)), 0px)
+    );
+    display: grid;
+    min-height: var(--text-odometer-line, 1em);
+    line-height: var(--text-odometer-line, inherit);
+    justify-items: start;
+    align-items: baseline;
+    overflow: hidden;
+    padding-block: calc(var(--text-odometer-mask-pad, 9px) + var(--text-odometer-mask-height, 0px));
+    margin-block: calc((var(--text-odometer-mask-pad, 9px) + var(--text-odometer-mask-height, 0px)) * -1);
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0px,
+      white var(--text-odometer-mask-stop),
+      white calc(100% - var(--text-odometer-mask-stop)),
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0px,
+      white var(--text-odometer-mask-stop),
+      white calc(100% - var(--text-odometer-mask-stop)),
+      transparent 100%
+    );
+  }
+
+  [data-slot="text-odometer-entering"],
+  [data-slot="text-odometer-leaving"] {
+    grid-area: 1 / 1;
+    line-height: var(--text-odometer-line, inherit);
+    white-space: nowrap;
+    justify-self: start;
+    text-align: start;
+    transition-property: transform;
+    transition-duration: var(--text-odometer-duration, 550ms);
+    transition-timing-function: var(--text-odometer-spring, cubic-bezier(0.34, 1.35, 0.64, 1));
+  }
+
+  [data-slot="text-odometer-entering"] {
+    transform: translateY(0);
+  }
+
+  [data-slot="text-odometer-leaving"] {
+    transform: translateY(var(--text-odometer-shift));
+  }
+
+  &[data-swapping="true"] [data-slot="text-odometer-entering"] {
+    transform: translateY(calc(var(--text-odometer-shift) * -1));
+    transition-duration: 0ms !important;
+  }
+
+  &[data-swapping="true"] [data-slot="text-odometer-leaving"] {
+    transform: translateY(0);
+    transition-duration: 0ms !important;
+  }
+
+  &[data-ready="false"] [data-slot="text-odometer-track"] {
+    transition-duration: 0ms !important;
+  }
+
+  &[data-ready="false"] [data-slot="text-odometer-entering"],
+  &[data-ready="false"] [data-slot="text-odometer-leaving"] {
+    transition-duration: 0ms !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="text-odometer"] [data-slot="text-odometer-track"] {
+    transition-duration: 0ms !important;
+  }
+
+  [data-component="text-odometer"] [data-slot="text-odometer-entering"],
+  [data-component="text-odometer"] [data-slot="text-odometer-leaving"] {
+    transition-duration: 0ms !important;
+  }
+}
