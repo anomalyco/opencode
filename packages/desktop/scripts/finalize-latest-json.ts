@@ -91,7 +91,7 @@ const entries: Record<string, { url: string; signature: string }> = {}
 const add = (key: string, asset: Asset, signature: string) => {
   if (entries[key]) return
   entries[key] = {
-    url: `https://github.com/${repo}/releases/download/${version}/${asset.name}`,
+    url: `https://github.com/${repo}/releases/download/v${version}/${asset.name}`,
     signature,
   }
 }
