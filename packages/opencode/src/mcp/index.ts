@@ -23,6 +23,7 @@ import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import open from "open"
+import { getEffectiveEnvironment } from "../util/environment"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
@@ -445,13 +446,17 @@ export namespace MCP {
     if (mcp.type === "local") {
       const [cmd, ...args] = mcp.command
       const cwd = Instance.directory
+      // Use getEffectiveEnvironment to ensure we inherit the user's shell environment
+      // This fixes issues where tools like bun installed in user directories (e.g., ~/.bun/bin)
+      // are not found when opencode serve is started from contexts without full environment
+      const baseEnv = getEffectiveEnvironment()
       const transport = new StdioClientTransport({
         stderr: "pipe",
         command: cmd,
         args,
         cwd,
         env: {
-          ...process.env,
+          ...baseEnv,
           ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
           ...mcp.environment,
         },
