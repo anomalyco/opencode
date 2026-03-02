@@ -1,3 +1,4 @@
+import appManifest from "./app-manifest"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Log } from "../util/log"
@@ -32,7 +33,7 @@ import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
 import { lazy } from "../util/lazy"
 import { InstanceBootstrap } from "../project/bootstrap"
-import { NotFoundError } from "../storage/db"
+import { Storage } from "../storage/storage"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
 import { websocket } from "hono/bun"
 import { HTTPException } from "hono/http-exception"
@@ -45,11 +46,148 @@ import { MDNS } from "./mdns"
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
 
+declare global {
+  // Injected at compile time by build.ts when web UI assets are embedded
+  const OPENCODE_APP_EMBEDDED: boolean | undefined
+}
+
 export namespace Server {
   const log = Log.create({ service: "server" })
 
   let _url: URL | undefined
   let _corsWhitelist: string[] = []
+
+  // MIME types for static file serving
+  const MIME: Record<string, string> = {
+    html: "text/html; charset=utf-8",
+    js: "application/javascript",
+    mjs: "application/javascript",
+    css: "text/css",
+    json: "application/json",
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    svg: "image/svg+xml",
+    ico: "image/x-icon",
+    woff: "font/woff",
+    woff2: "font/woff2",
+    ttf: "font/ttf",
+    wasm: "application/wasm",
+    txt: "text/plain",
+    webmanifest: "application/manifest+json",
+  }
+
+  const CSP =
+    "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' data:"
+
+  // Resolve the local app directory to serve from. Returns undefined to fall
+  // through to the CDN proxy. Resolution order:
+  //   1. Embedded $bunfs assets (manifest imported at build time)
+  //   2. OPENCODE_APP_DIR env var (explicit override)
+  //   3. Auto-detect packages/app/dist/ relative to this file (monorepo dev)
+  let _appDir: string | false | undefined // undefined = not yet resolved; false = not found
+  function resolveAppDir(): string | undefined {
+    if (_appDir !== undefined) return _appDir || undefined
+
+    // 1. Embedded via Bun compile — manifest is non-empty when assets were embedded
+    if (typeof OPENCODE_APP_EMBEDDED !== "undefined" && OPENCODE_APP_EMBEDDED) {
+      _appDir = "__embedded__"
+      return _appDir
+    }
+
+    // 2. Explicit env var override
+    if (Flag.OPENCODE_APP_DIR) {
+      _appDir = Flag.OPENCODE_APP_DIR
+      return _appDir
+    }
+
+    // 3. Auto-detect: walk up from this file to find packages/app/dist
+    // import.meta.url is a $bunfs URL in compiled binary, file: URL in dev
+    try {
+      const url = new URL("../../../app/dist", import.meta.url)
+      if (url.protocol === "file:") {
+        const { pathname } = url
+        if (Bun.file(pathname + "/index.html").size > 0) {
+          _appDir = pathname
+          return _appDir
+        }
+      }
+    } catch {}
+
+    _appDir = false
+    return undefined
+  }
+
+  // Serve a request from a local directory or embedded manifest. Returns a
+  // Response or undefined (caller falls through to CDN proxy).
+  // Serve an exact static file match (no SPA fallback). Used by the
+  // pre-bootstrap middleware so API routes are not intercepted.
+  function serveStaticFile(reqPath: string, appDir: string): Response | undefined {
+    const filePath = reqPath === "/" ? "/index.html" : reqPath
+
+    if (appDir === "__embedded__") {
+      const bunfsPath = appManifest[filePath]
+      if (bunfsPath) {
+        const file = Bun.file(bunfsPath)
+        if (file.size > 0) {
+          const ext = filePath.split(".").pop() ?? ""
+          return new Response(file, {
+            headers: {
+              "Content-Type": MIME[ext] ?? "application/octet-stream",
+              "Content-Security-Policy": CSP,
+            },
+          })
+        }
+      }
+      return undefined
+    }
+
+    const file = Bun.file(appDir + filePath)
+    if (file.size > 0) {
+      const ext = filePath.split(".").pop() ?? ""
+      return new Response(file, {
+        headers: {
+          "Content-Type": MIME[ext] ?? "application/octet-stream",
+          "Content-Security-Policy": CSP,
+        },
+      })
+    }
+    return undefined
+  }
+
+  // Serve a static file or fall back to index.html (SPA routing).
+  // Used by the catch-all route after all API routes have been checked.
+  function serveLocal(reqPath: string, appDir: string): Response | undefined {
+    const exact = serveStaticFile(reqPath, appDir)
+    if (exact) return exact
+
+    // SPA fallback: return index.html for unmatched paths that look like page
+    // routes (no file extension). Paths with extensions (e.g. .woff2, .js) are
+    // asset requests that should fall through to CDN proxy if not found locally.
+    if (/\.[a-zA-Z0-9]+$/.test(reqPath)) return undefined
+
+    if (appDir === "__embedded__") {
+      const indexPath = appManifest["/index.html"]
+      if (indexPath) {
+        const index = Bun.file(indexPath)
+        if (index.size > 0) {
+          return new Response(index, {
+            headers: { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": CSP },
+          })
+        }
+      }
+      return undefined
+    }
+
+    const index = Bun.file(appDir + "/index.html")
+    if (index.size > 0) {
+      return new Response(index, {
+        headers: { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": CSP },
+      })
+    }
+    return undefined
+  }
 
   export function url(): URL {
     return _url ?? new URL("http://localhost:4096")
@@ -66,7 +204,7 @@ export namespace Server {
           })
           if (err instanceof NamedError) {
             let status: ContentfulStatusCode
-            if (err instanceof NotFoundError) status = 404
+            if (err instanceof Storage.NotFoundError) status = 404
             else if (err instanceof Provider.ModelNotFoundError) status = 400
             else if (err.name.startsWith("Worktree")) status = 400
             else status = 500
@@ -79,9 +217,6 @@ export namespace Server {
           })
         })
         .use((c, next) => {
-          // Allow CORS preflight requests to succeed without auth.
-          // Browser clients sending Authorization headers will preflight with OPTIONS.
-          if (c.req.method === "OPTIONS") return next()
           const password = Flag.OPENCODE_SERVER_PASSWORD
           if (!password) return next()
           const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
@@ -111,12 +246,7 @@ export namespace Server {
 
               if (input.startsWith("http://localhost:")) return input
               if (input.startsWith("http://127.0.0.1:")) return input
-              if (
-                input === "tauri://localhost" ||
-                input === "http://tauri.localhost" ||
-                input === "https://tauri.localhost"
-              )
-                return input
+              if (input === "tauri://localhost" || input === "http://tauri.localhost") return input
 
               // *.opencode.ai (https only, adjust if needed)
               if (/^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) {
@@ -131,68 +261,19 @@ export namespace Server {
           }),
         )
         .route("/global", GlobalRoutes())
-        .put(
-          "/auth/:providerID",
-          describeRoute({
-            summary: "Set auth credentials",
-            description: "Set authentication credentials",
-            operationId: "auth.set",
-            responses: {
-              200: {
-                description: "Successfully set authentication credentials",
-                content: {
-                  "application/json": {
-                    schema: resolver(z.boolean()),
-                  },
-                },
-              },
-              ...errors(400),
-            },
-          }),
-          validator(
-            "param",
-            z.object({
-              providerID: z.string(),
-            }),
-          ),
-          validator("json", Auth.Info),
-          async (c) => {
-            const providerID = c.req.valid("param").providerID
-            const info = c.req.valid("json")
-            await Auth.set(providerID, info)
-            return c.json(true)
-          },
-        )
-        .delete(
-          "/auth/:providerID",
-          describeRoute({
-            summary: "Remove auth credentials",
-            description: "Remove authentication credentials",
-            operationId: "auth.remove",
-            responses: {
-              200: {
-                description: "Successfully removed authentication credentials",
-                content: {
-                  "application/json": {
-                    schema: resolver(z.boolean()),
-                  },
-                },
-              },
-              ...errors(400),
-            },
-          }),
-          validator(
-            "param",
-            z.object({
-              providerID: z.string(),
-            }),
-          ),
-          async (c) => {
-            const providerID = c.req.valid("param").providerID
-            await Auth.remove(providerID)
-            return c.json(true)
-          },
-        )
+        .use(async (c, next) => {
+          // Serve local/embedded web UI assets before any project bootstrap.
+          // This must run before Instance.provide() to avoid the DB migration check.
+          // Only serve *exact* static file matches here (no SPA fallback) — the SPA
+          // fallback lives in the catch-all route at the bottom so it doesn't
+          // intercept API routes like /agent, /health, etc.
+          const appDir = resolveAppDir()
+          if (appDir) {
+            const response = serveStaticFile(c.req.path, appDir)
+            if (response) return response
+          }
+          return next()
+        })
         .use(async (c, next) => {
           if (c.req.path === "/log") return next()
           const workspaceID = c.req.query("workspace") || c.req.header("x-opencode-workspace")
@@ -498,6 +579,68 @@ export namespace Server {
             return c.json(await Format.status())
           },
         )
+        .put(
+          "/auth/:providerID",
+          describeRoute({
+            summary: "Set auth credentials",
+            description: "Set authentication credentials",
+            operationId: "auth.set",
+            responses: {
+              200: {
+                description: "Successfully set authentication credentials",
+                content: {
+                  "application/json": {
+                    schema: resolver(z.boolean()),
+                  },
+                },
+              },
+              ...errors(400),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              providerID: z.string(),
+            }),
+          ),
+          validator("json", Auth.Info),
+          async (c) => {
+            const providerID = c.req.valid("param").providerID
+            const info = c.req.valid("json")
+            await Auth.set(providerID, info)
+            return c.json(true)
+          },
+        )
+        .delete(
+          "/auth/:providerID",
+          describeRoute({
+            summary: "Remove auth credentials",
+            description: "Remove authentication credentials",
+            operationId: "auth.remove",
+            responses: {
+              200: {
+                description: "Successfully removed authentication credentials",
+                content: {
+                  "application/json": {
+                    schema: resolver(z.boolean()),
+                  },
+                },
+              },
+              ...errors(400),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              providerID: z.string(),
+            }),
+          ),
+          async (c) => {
+            const providerID = c.req.valid("param").providerID
+            await Auth.remove(providerID)
+            return c.json(true)
+          },
+        )
         .get(
           "/event",
           describeRoute({
@@ -517,8 +660,6 @@ export namespace Server {
           }),
           async (c) => {
             log.info("event connected")
-            c.header("X-Accel-Buffering", "no")
-            c.header("X-Content-Type-Options", "nosniff")
             return streamSSE(c, async (stream) => {
               stream.writeSSE({
                 data: JSON.stringify({
@@ -535,7 +676,7 @@ export namespace Server {
                 }
               })
 
-              // Send heartbeat every 10s to prevent stalled proxy streams.
+              // Send heartbeat every 30s to prevent WKWebView timeout (60s default)
               const heartbeat = setInterval(() => {
                 stream.writeSSE({
                   data: JSON.stringify({
@@ -543,7 +684,7 @@ export namespace Server {
                     properties: {},
                   }),
                 })
-              }, 10_000)
+              }, 30000)
 
               await new Promise<void>((resolve) => {
                 stream.onAbort(() => {
@@ -557,19 +698,22 @@ export namespace Server {
           },
         )
         .all("/*", async (c) => {
-          const path = c.req.path
+          // Try local/embedded assets with SPA fallback first
+          const appDir = resolveAppDir()
+          if (appDir) {
+            const response = serveLocal(c.req.path, appDir)
+            if (response) return response
+          }
 
-          const response = await proxy(`https://app.opencode.ai${path}`, {
+          // Fall through to CDN proxy when no local assets are available
+          const response = await proxy(`https://app.opencode.ai${c.req.path}`, {
             ...c.req,
             headers: {
               ...c.req.raw.headers,
               host: "app.opencode.ai",
             },
           })
-          response.headers.set(
-            "Content-Security-Policy",
-            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:",
-          )
+          response.headers.set("Content-Security-Policy", CSP)
           return response
         }) as unknown as Hono,
   )
@@ -589,13 +733,7 @@ export namespace Server {
     return result
   }
 
-  export function listen(opts: {
-    port: number
-    hostname: string
-    mdns?: boolean
-    mdnsDomain?: string
-    cors?: string[]
-  }) {
+  export function listen(opts: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
     _corsWhitelist = opts.cors ?? []
 
     const args = {
@@ -623,7 +761,7 @@ export namespace Server {
       opts.hostname !== "localhost" &&
       opts.hostname !== "::1"
     if (shouldPublishMDNS) {
-      MDNS.publish(server.port!, opts.mdnsDomain)
+      MDNS.publish(server.port!)
     } else if (opts.mdns) {
       log.warn("mDNS enabled but hostname is loopback; skipping mDNS publish")
     }
