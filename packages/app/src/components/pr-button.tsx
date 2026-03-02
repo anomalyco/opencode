@@ -182,7 +182,7 @@ export function PrButton() {
       <div class="flex items-center">
         <div class="relative">
           <Show when={(pr()?.unresolvedCommentCount ?? 0) > 0}>
-            <div class="absolute -top-[3px] -right-[3px] z-10 size-2.5 rounded-full bg-icon-warning-base shadow-[0_0_0_2px_var(--background-base)] group-hover:shadow-[0_0_0_2px_var(--surface-base-hover)]" />
+            <div class="absolute -top-px -right-px z-10 size-1.5 rounded-full bg-text-interactive-base" />
           </Show>
           <div
             class={`flex h-[24px] box-border items-center rounded-md border overflow-hidden transition-colors ${containerStyle()}`}
