@@ -105,7 +105,7 @@ export namespace Provider {
     "@ai-sdk/perplexity": createPerplexity,
     "@ai-sdk/vercel": createVercel,
     "@gitlab/gitlab-ai-provider": createGitLab,
-    // @ts-ignore (TODO: kill this code so we dont have to maintain it)
+    // @ts-ignore Legacy: GitHub Copilot provider type mismatch - needed for copilot plugin integration
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
   }
 
@@ -1064,7 +1064,14 @@ export namespace Provider {
           ...model.headers,
         }
 
-      const key = Bun.hash.xxHash32(JSON.stringify({ providerID: model.providerID, npm: model.api.npm, options }))
+      const cacheableOptions = {
+        baseURL: options["baseURL"],
+        apiKey: options["apiKey"],
+        headers: options["headers"],
+        includeUsage: options["includeUsage"],
+        timeout: options["timeout"],
+      }
+      const key = Bun.hash.xxHash32(model.providerID + model.api.npm + JSON.stringify(cacheableOptions))
       const existing = s.sdk.get(key)
       if (existing) return existing
 
@@ -1090,16 +1097,19 @@ export namespace Provider {
         // Message, Reasoning, FunctionCall, LocalShellCall, CustomToolCall, WebSearchCall
         // IDs are only re-attached for Azure with store=true
         if (model.api.npm === "@ai-sdk/openai" && opts.body && opts.method === "POST") {
-          const body = JSON.parse(opts.body as string)
           const isAzure = model.providerID.includes("azure")
-          const keepIds = isAzure && body.store === true
-          if (!keepIds && Array.isArray(body.input)) {
-            for (const item of body.input) {
-              if ("id" in item) {
-                delete item.id
+          if (!isAzure) {
+            const body = JSON.parse(opts.body as string)
+            if (Array.isArray(body.input)) {
+              let modified = false
+              for (const item of body.input) {
+                if ("id" in item) {
+                  delete item.id
+                  modified = true
+                }
               }
+              if (modified) opts.body = JSON.stringify(body)
             }
-            opts.body = JSON.stringify(body)
           }
         }
 

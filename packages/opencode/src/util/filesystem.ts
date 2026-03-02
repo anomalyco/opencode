@@ -135,6 +135,15 @@ export namespace Filesystem {
     return !relative(parent, child).startsWith("..")
   }
 
+  export function containsSafe(parent: string, child: string) {
+    try {
+      const realChild = realpathSync(child)
+      return contains(parent, realChild)
+    } catch {
+      return contains(parent, child)
+    }
+  }
+
   export async function findUp(target: string, start: string, stop?: string) {
     let current = start
     const result = []
