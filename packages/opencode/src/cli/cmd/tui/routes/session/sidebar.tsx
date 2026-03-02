@@ -25,6 +25,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     diff: true,
     todo: true,
     lsp: true,
+    subagents: true,
   })
 
   // Sort MCP servers alphabetically for consistent display order
@@ -62,6 +63,13 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
 
   const directory = useDirectory()
   const kv = useKV()
+
+  const subagents = createMemo(() =>
+    sync.data.session
+      .filter((x) => x.parentID === props.sessionID)
+      .map((x) => x.id)
+      .toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+  )
 
   const hasProviders = createMemo(() =>
     sync.data.provider.some((x) => x.id !== "opencode" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
@@ -226,6 +234,53 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 </box>
                 <Show when={todo().length <= 2 || expanded.todo}>
                   <For each={todo()}>{(todo) => <TodoItem status={todo.status} content={todo.content} />}</For>
+                </Show>
+              </box>
+            </Show>
+            <Show when={subagents().length > 0}>
+              <box>
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  onMouseDown={() => subagents().length > 2 && setExpanded("subagents", !expanded.subagents)}
+                >
+                  <Show when={subagents().length > 2}>
+                    <text fg={theme.text}>{expanded.subagents ? "▼" : "▶"}</text>
+                  </Show>
+                  <text fg={theme.text}>
+                    <b>Subagents</b>
+                    <Show when={!expanded.subagents}>
+                      <span style={{ fg: theme.textMuted }}> ({subagents().length})</span>
+                    </Show>
+                  </text>
+                </box>
+                <Show when={subagents().length <= 2 || expanded.subagents}>
+                  <For each={subagents()}>
+                    {(id) => {
+                      const status = createMemo(() => sync.session.status(id))
+                      const title = createMemo(() => sync.session.get(id)?.title ?? id)
+                      return (
+                        <box flexDirection="row" gap={1}>
+                          <text
+                            flexShrink={0}
+                            style={{
+                              fg: status() === "idle" ? theme.success : theme.warning,
+                            }}
+                          >
+                            •
+                          </text>
+                          <box flexGrow={1}>
+                            <text fg={theme.text} wrapMode="word">
+                              {title()}
+                            </text>
+                            <text fg={theme.textMuted}>
+                              {status() === "idle" ? "idle" : "working"}
+                            </text>
+                          </box>
+                        </box>
+                      )
+                    }}
+                  </For>
                 </Show>
               </box>
             </Show>
