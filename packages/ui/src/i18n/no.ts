@@ -43,6 +43,9 @@ export const dict: Record<Keys, string> = {
 
   "ui.sessionTurn.retry.retrying": "Prøver igjen",
   "ui.sessionTurn.retry.inSeconds": "om {{seconds}}s",
+  "ui.sessionTurn.retry.attempt": "forsøk #{{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - forsøk #{{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini er veldig overbelastet nå",
   "ui.sessionTurn.error.freeUsageExceeded": "Gratis bruk overskredet",
   "ui.sessionTurn.error.addCredits": "Legg til kreditt",
 
@@ -60,6 +63,7 @@ export const dict: Record<Keys, string> = {
   "ui.sessionTurn.status.consideringNextSteps": "Vurderer neste trinn",
 
   "ui.messagePart.questions.dismissed": "Spørsmål avvist",
+  "ui.messagePart.compaction": "Historikk komprimert",
   "ui.messagePart.context.read.one": "{{count}} lest",
   "ui.messagePart.context.read.other": "{{count}} lest",
   "ui.messagePart.context.search.one": "{{count}} søk",
@@ -125,6 +129,7 @@ export const dict: Record<Keys, string> = {
   "ui.message.copyResponse": "Kopier svar",
   "ui.message.copied": "Kopiert!",
   "ui.message.interrupted": "Avbrutt",
+  "ui.message.queued": "I kø",
   "ui.message.attachment.alt": "vedlegg",
 
   "ui.patch.action.deleted": "Slettet",

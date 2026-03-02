@@ -39,6 +39,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "prøver igen",
   "ui.sessionTurn.retry.inSeconds": "om {{seconds}}s",
+  "ui.sessionTurn.retry.attempt": "forsøg #{{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - forsøg #{{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini er meget overbelastet lige nu",
   "ui.sessionTurn.error.freeUsageExceeded": "Gratis forbrug overskredet",
   "ui.sessionTurn.error.addCredits": "Tilføj kreditter",
 
@@ -56,6 +59,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Overvejer næste skridt",
 
   "ui.messagePart.questions.dismissed": "Spørgsmål afvist",
+  "ui.messagePart.compaction": "Historik komprimeret",
   "ui.messagePart.context.read.one": "{{count}} læsning",
   "ui.messagePart.context.read.other": "{{count}} læsninger",
   "ui.messagePart.context.search.one": "{{count}} søgning",
@@ -121,6 +125,7 @@ export const dict = {
   "ui.message.copyResponse": "Kopier svar",
   "ui.message.copied": "Kopieret!",
   "ui.message.interrupted": "Afbrudt",
+  "ui.message.queued": "I kø",
   "ui.message.attachment.alt": "vedhæftning",
 
   "ui.patch.action.deleted": "Slettet",
