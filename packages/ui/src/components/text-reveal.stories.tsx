@@ -1,23 +1,20 @@
 // @ts-nocheck
 import { createSignal, onCleanup } from "solid-js"
-import { TextOdometer } from "./text-odometer"
 import { TextReveal } from "./text-reveal"
 
 export default {
-  title: "UI/TextOdometer",
-  id: "components-text-odometer",
+  title: "UI/TextReveal",
+  id: "components-text-reveal",
   tags: ["autodocs"],
   parameters: {
     docs: {
       description: {
         component: `### Overview
-Playground comparing three text transition styles:
+Playground for the TextReveal text transition component.
 
-**TextOdometer** — slot-machine: text slides vertically through a fixed gradient mask.
+**Hybrid** — mask wipe + vertical slide: gradient sweeps AND text moves downward.
 
-**TextReveal (wipe)** — pure mask wipe: gradient sweeps bottom-to-top, text stays in place.
-
-**TextReveal (hybrid)** — mask wipe + vertical slide: gradient sweeps AND text moves downward.`,
+**Wipe only** — pure mask wipe: gradient sweeps top-to-bottom, text stays in place.`,
       },
     },
   },
@@ -94,36 +91,20 @@ export const Playground = {
     const [cycling, setCycling] = createSignal(false)
     const [growOnly, setGrowOnly] = createSignal(true)
 
-    // shared
     const [duration, setDuration] = createSignal(600)
     const [bounce, setBounce] = createSignal(1.0)
     const [bounceSoft, setBounceSoft] = createSignal(1.0)
 
-    // odometer-specific
-    const [travel, setTravel] = createSignal(4)
-    const [mask, setMask] = createSignal(12)
-    const [pad, setPad] = createSignal(9)
-    const [height, setHeight] = createSignal(0)
-
-    // reveal-specific
-    const [edge, setEdge] = createSignal(17)
-    const [revealTravel, setRevealTravel] = createSignal(0)
-
-    // hybrid-specific
     const [hybridTravel, setHybridTravel] = createSignal(25)
     const [hybridEdge, setHybridEdge] = createSignal(17)
 
+    const [edge, setEdge] = createSignal(17)
+    const [revealTravel, setRevealTravel] = createSignal(0)
+
     let timer: number | undefined
-
     const text = () => TEXTS[index()]
-
-    const next = () => {
-      setIndex((i) => (i + 1) % TEXTS.length)
-    }
-
-    const prev = () => {
-      setIndex((i) => (i - 1 + TEXTS.length) % TEXTS.length)
-    }
+    const next = () => setIndex((i) => (i + 1) % TEXTS.length)
+    const prev = () => setIndex((i) => (i - 1 + TEXTS.length) % TEXTS.length)
 
     const toggleCycle = () => {
       if (cycling()) {
@@ -149,9 +130,7 @@ export const Playground = {
 
     return (
       <div style={{ display: "grid", gap: "24px", padding: "20px", "max-width": "700px" }}>
-        {/* ── preview cards ── */}
         <div style={{ display: "grid", gap: "16px" }}>
-          {/* hybrid card — first */}
           <div style={cardStyle}>
             <span style={cardLabel}>text-reveal (mask wipe + slide)</span>
             <div style={previewRow}>
@@ -171,29 +150,6 @@ export const Playground = {
             </div>
           </div>
 
-          {/* odometer card */}
-          <div style={cardStyle}>
-            <span style={cardLabel}>text-odometer (slide through mask)</span>
-            <div style={previewRow}>
-              <span>Thinking</span>
-              <span style={headingSlot}>
-                <TextOdometer
-                  class="text-14-regular"
-                  text={text()}
-                  duration={duration()}
-                  travel={travel()}
-                  mask={mask()}
-                  pad={pad()}
-                  height={height()}
-                  spring={spring()}
-                  springSoft={springSoft()}
-                  growOnly={growOnly()}
-                />
-              </span>
-            </div>
-          </div>
-
-          {/* reveal card */}
           <div style={cardStyle}>
             <span style={cardLabel}>text-reveal (mask wipe only)</span>
             <div style={previewRow}>
@@ -214,7 +170,6 @@ export const Playground = {
           </div>
         </div>
 
-        {/* ── text selector chips ── */}
         <div style={{ display: "flex", gap: "6px", "flex-wrap": "wrap" }}>
           {TEXTS.map((t, i) => (
             <button onClick={() => setIndex(i)} style={btn(index() === i)}>
@@ -223,7 +178,6 @@ export const Playground = {
           ))}
         </div>
 
-        {/* ── controls ── */}
         <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
           <button onClick={prev} style={btn()}>Prev</button>
           <button onClick={next} style={btn()}>Next</button>
@@ -235,9 +189,7 @@ export const Playground = {
           </button>
         </div>
 
-        {/* ── sliders ── */}
         <div style={{ display: "grid", gap: "8px", "max-width": "480px" }}>
-          {/* ── hybrid sliders — first ── */}
           <div style={{ "font-size": "11px", color: "var(--color-text-weak, #666)" }}>Hybrid (wipe + slide)</div>
 
           <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
@@ -252,7 +204,6 @@ export const Playground = {
             <span style={{ width: "60px", "text-align": "right", "font-size": "12px" }}>{hybridTravel()}px</span>
           </label>
 
-          {/* ── shared sliders ── */}
           <div style={{ "font-size": "11px", color: "var(--color-text-weak, #666)", "margin-top": "8px" }}>Shared</div>
 
           <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
@@ -273,35 +224,7 @@ export const Playground = {
             <span style={{ width: "60px", "text-align": "right", "font-size": "12px" }}>{bounceSoft().toFixed(2)}</span>
           </label>
 
-          {/* ── odometer sliders ── */}
-          <div style={{ "font-size": "11px", color: "var(--color-text-weak, #666)", "margin-top": "8px" }}>Odometer</div>
-
-          <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-            <span style={sliderLabel}>travel</span>
-            <input type="range" min="0" max="30" step="1" value={travel()} onInput={(e) => setTravel(e.currentTarget.valueAsNumber)} style={{ flex: 1 }} />
-            <span style={{ width: "60px", "text-align": "right", "font-size": "12px" }}>{travel()}px</span>
-          </label>
-
-          <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-            <span style={sliderLabel}>mask</span>
-            <input type="range" min="0" max="40" step="1" value={mask()} onInput={(e) => setMask(e.currentTarget.valueAsNumber)} style={{ flex: 1 }} />
-            <span style={{ width: "60px", "text-align": "right", "font-size": "12px" }}>{mask()}px</span>
-          </label>
-
-          <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-            <span style={sliderLabel}>pad</span>
-            <input type="range" min="0" max="40" step="1" value={pad()} onInput={(e) => setPad(e.currentTarget.valueAsNumber)} style={{ flex: 1 }} />
-            <span style={{ width: "60px", "text-align": "right", "font-size": "12px" }}>{pad()}px</span>
-          </label>
-
-          <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-            <span style={sliderLabel}>mask height</span>
-            <input type="range" min="0" max="20" step="1" value={height()} onInput={(e) => setHeight(e.currentTarget.valueAsNumber)} style={{ flex: 1 }} />
-            <span style={{ width: "60px", "text-align": "right", "font-size": "12px" }}>{height()}px</span>
-          </label>
-
-          {/* ── reveal sliders ── */}
-          <div style={{ "font-size": "11px", color: "var(--color-text-weak, #666)", "margin-top": "8px" }}>Reveal (wipe only)</div>
+          <div style={{ "font-size": "11px", color: "var(--color-text-weak, #666)", "margin-top": "8px" }}>Wipe only</div>
 
           <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
             <span style={sliderLabel}>edge</span>
@@ -316,7 +239,6 @@ export const Playground = {
           </label>
         </div>
 
-        {/* debug info */}
         <div style={{ "font-size": "11px", color: "var(--color-text-weak, #888)", "font-family": "monospace" }}>
           text: {text() ?? "(none)"} · growOnly: {growOnly() ? "on" : "off"}
         </div>

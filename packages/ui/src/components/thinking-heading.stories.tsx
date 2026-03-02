@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { createSignal, createEffect, on, onMount, onCleanup } from "solid-js"
 import { TextShimmer } from "./text-shimmer"
+import { TextReveal } from "./text-reveal"
 
 export default {
   title: "UI/ThinkingHeading",
@@ -12,8 +13,8 @@ export default {
         component: `### Overview
 Playground for animating the secondary heading beside "Thinking".
 
-Five spring-animated transition styles shown in a card grid with tunable
-duration, blur, travel, bounce (spring overshoot), and odometer fade controls.`,
+Uses TextReveal for the production heading animation with tunable
+duration, travel, bounce, and fade controls.`,
       },
     },
   },
@@ -543,7 +544,7 @@ const cardStyle = {
 // Variants
 // ---------------------------------------------------------------------------
 
-const VARIANTS = [{ key: "odometer", label: "odometer" }]
+const VARIANTS: { key: string; label: string }[] = []
 
 // ---------------------------------------------------------------------------
 // Story
@@ -632,6 +633,23 @@ export const Playground = {
 
         {/* ── Variant cards ─────────────────────────────────── */}
         <div style={{ display: "grid", "grid-template-columns": "1fr", gap: "16px" }}>
+          <div style={cardStyle}>
+            <span style={cardLabel}>TextReveal (production)</span>
+            <span style={thinkingRow}>
+              <TextShimmer text="Thinking" active={active()} />
+              <span style={headingSlot}>
+                <TextReveal
+                  text={heading()}
+                  duration={duration()}
+                  travel={25}
+                  edge={17}
+                  spring={`cubic-bezier(0.34, ${bounce()}, 0.64, 1)`}
+                  springSoft={`cubic-bezier(0.34, ${Math.max(bounce() * 0.7, 1)}, 0.64, 1)`}
+                  growOnly
+                />
+              </span>
+            </span>
+          </div>
           {VARIANTS.map((v) => (
             <div style={cardStyle}>
               <span style={cardLabel}>{v.label}</span>

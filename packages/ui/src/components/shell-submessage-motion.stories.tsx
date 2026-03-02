@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { createEffect, createSignal, onCleanup } from "solid-js"
 import { BasicTool } from "./basic-tool"
+import { animate } from "motion"
 
 export default {
   title: "UI/Shell Submessage Motion",
@@ -17,7 +18,7 @@ Interactive playground for animating the Shell tool subtitle ("submessage") in t
 - Bash tool subtitle source: \`packages/ui/src/components/message-part.tsx\` (tool: \`bash\`, \`trigger.subtitle\`)
 
 ### What this playground tunes
-- Width reveal (grid 0fr \u2192 1fr, or instant)
+- Width reveal (spring-driven pixel width via \`useSpring\`)
 - Opacity fade
 - Blur settle`,
       },
@@ -67,14 +68,8 @@ const shellCss = `
 [data-component="shell-submessage"] [data-slot="shell-submessage-width"] {
   min-width: 0;
   max-width: 100%;
-  display: grid;
-  grid-template-columns: 0fr;
-  overflow: hidden;
-  transition: grid-template-columns var(--shell-sub-width-ms, 420ms) var(--shell-sub-width-ease, cubic-bezier(0.16, 1, 0.3, 1));
-}
-
-[data-component="shell-submessage"][data-visible="true"] [data-slot="shell-submessage-width"] {
-  grid-template-columns: 1fr;
+  display: inline-block;
+  overflow: clip;
 }
 
 [data-component="shell-submessage"] [data-slot="shell-submessage-value"] {
@@ -83,13 +78,13 @@ const shellCss = `
   min-width: 0;
   white-space: nowrap;
   opacity: 0;
-  filter: blur(var(--shell-sub-blur, 5px));
+  filter: blur(var(--shell-sub-blur, 2px));
   transition-property: opacity, filter;
   transition-duration: var(--shell-sub-fade-ms, 320ms);
   transition-timing-function: var(--shell-sub-fade-ease, cubic-bezier(0.22, 1, 0.36, 1));
 }
 
-[data-component="shell-submessage"][data-visible="true"] [data-slot="shell-submessage-value"] {
+[data-component="shell-submessage"][data-visible] [data-slot="shell-submessage-value"] {
   opacity: 1;
   filter: blur(0px);
 }
@@ -102,15 +97,55 @@ const ease = {
   linear: "linear",
 }
 
+function SpringSubmessage(props: {
+  text: string
+  visible: boolean
+  visualDuration: number
+  bounce: number
+}) {
+  let ref: HTMLSpanElement | undefined
+  let widthRef: HTMLSpanElement | undefined
+
+  createEffect(() => {
+    if (!widthRef) return
+    if (props.visible) {
+      requestAnimationFrame(() => {
+        ref?.setAttribute("data-visible", "")
+        animate(
+          widthRef!,
+          { width: "auto" },
+          { type: "spring", visualDuration: props.visualDuration, bounce: props.bounce },
+        )
+      })
+    } else {
+      ref?.removeAttribute("data-visible")
+      animate(
+        widthRef,
+        { width: "0px" },
+        { type: "spring", visualDuration: props.visualDuration, bounce: props.bounce },
+      )
+    }
+  })
+
+  return (
+    <span ref={ref} data-component="shell-submessage">
+      <span ref={widthRef} data-slot="shell-submessage-width" style={{ width: "0px" }}>
+        <span data-slot="basic-tool-tool-subtitle">
+          <span data-slot="shell-submessage-value">{props.text || "\u00A0"}</span>
+        </span>
+      </span>
+    </span>
+  )
+}
+
 export const Playground = {
   render: () => {
     const [text, setText] = createSignal("Prints five topic blocks between timed commands")
     const [show, setShow] = createSignal(true)
-    const [widthAnim, setWidthAnim] = createSignal(true)
-    const [widthMs, setWidthMs] = createSignal(420)
+    const [visualDuration, setVisualDuration] = createSignal(0.35)
+    const [bounce, setBounce] = createSignal(0)
     const [fadeMs, setFadeMs] = createSignal(320)
-    const [blur, setBlur] = createSignal(5)
-    const [widthEase, setWidthEase] = createSignal<keyof typeof ease>("smooth")
+    const [blur, setBlur] = createSignal(2)
     const [fadeEase, setFadeEase] = createSignal<keyof typeof ease>("snappy")
     const [auto, setAuto] = createSignal(false)
     let replayTimer
@@ -152,10 +187,8 @@ export const Playground = {
           gap: "20px",
           padding: "20px",
           "max-width": "860px",
-          "--shell-sub-width-ms": `${widthAnim() ? widthMs() : 0}ms`,
           "--shell-sub-fade-ms": `${fadeMs()}ms`,
           "--shell-sub-blur": `${blur()}px`,
-          "--shell-sub-width-ease": ease[widthEase()],
           "--shell-sub-fade-ease": ease[fadeEase()],
         }}
       >
@@ -168,16 +201,12 @@ export const Playground = {
             <div data-slot="basic-tool-tool-info-structured">
               <div data-slot="basic-tool-tool-info-main">
                 <span data-slot="basic-tool-tool-title">Shell</span>
-                <span
-                  data-component="shell-submessage"
-                  data-visible={show() ? "true" : "false"}
-                >
-                  <span data-slot="shell-submessage-width">
-                    <span data-slot="basic-tool-tool-subtitle">
-                      <span data-slot="shell-submessage-value">{text() || "\u00A0"}</span>
-                    </span>
-                  </span>
-                </span>
+                <SpringSubmessage
+                  text={text()}
+                  visible={show()}
+                  visualDuration={visualDuration()}
+                  bounce={bounce()}
+                />
               </div>
             </div>
           }
@@ -236,25 +265,29 @@ export const Playground = {
           </div>
 
           <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-            <span style={sliderLabel}>width mode</span>
-            <button onClick={() => setWidthAnim((v) => !v)} style={btn(widthAnim())}>
-              {widthAnim() ? "animate" : "jump"}
-            </button>
-            <span style={sliderValue}>{widthAnim() ? "grid 0fr\u21921fr" : "instant"}</span>
+            <span style={sliderLabel}>visualDuration</span>
+            <input
+              type="range"
+              min={0.05}
+              max={1.5}
+              step={0.01}
+              value={visualDuration()}
+              onInput={(e) => setVisualDuration(Number(e.currentTarget.value))}
+            />
+            <span style={sliderValue}>{visualDuration().toFixed(2)}s</span>
           </div>
 
           <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-            <span style={sliderLabel}>width ease</span>
-            <button
-              onClick={() =>
-                setWidthEase((v) =>
-                  v === "smooth" ? "snappy" : v === "snappy" ? "standard" : v === "standard" ? "linear" : "smooth",
-                )
-              }
-              style={btn()}
-            >
-              {widthEase()}
-            </button>
+            <span style={sliderLabel}>bounce</span>
+            <input
+              type="range"
+              min={0}
+              max={0.5}
+              step={0.01}
+              value={bounce()}
+              onInput={(e) => setBounce(Number(e.currentTarget.value))}
+            />
+            <span style={sliderValue}>{bounce().toFixed(2)}</span>
           </div>
 
           <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
@@ -269,19 +302,6 @@ export const Playground = {
             >
               {fadeEase()}
             </button>
-          </div>
-
-          <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-            <span style={sliderLabel}>width</span>
-            <input
-              type="range"
-              min={0}
-              max={1400}
-              step={10}
-              value={widthMs()}
-              onInput={(e) => setWidthMs(Number(e.currentTarget.value))}
-            />
-            <span style={sliderValue}>{widthMs()}ms</span>
           </div>
 
           <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>

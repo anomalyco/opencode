@@ -50,15 +50,28 @@ import { IconButton } from "./icon-button"
 import { TextShimmer } from "./text-shimmer"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
+import { animate } from "motion"
 
-function ShellSubmessage(props: { text: string }) {
+function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let ref: HTMLSpanElement | undefined
+  let widthRef: HTMLSpanElement | undefined
+
   onMount(() => {
-    requestAnimationFrame(() => ref?.setAttribute("data-visible", ""))
+    if (!props.animate) {
+      ref?.setAttribute("data-visible", "")
+      return
+    }
+    requestAnimationFrame(() => {
+      ref?.setAttribute("data-visible", "")
+      if (widthRef) {
+        animate(widthRef, { width: "auto" }, { type: "spring", visualDuration: 0.25, bounce: 0 })
+      }
+    })
   })
+
   return (
     <span ref={ref} data-component="shell-submessage">
-      <span data-slot="shell-submessage-width">
+      <span ref={widthRef} data-slot="shell-submessage-width" style={{ width: props.animate ? "0px" : undefined }}>
         <span data-slot="basic-tool-tool-subtitle">
           <span data-slot="shell-submessage-value">{props.text}</span>
         </span>
@@ -1436,6 +1449,7 @@ ToolRegistry.register({
   render(props) {
     const i18n = useI18n()
     const pending = () => props.status === "pending" || props.status === "running"
+    const sawPending = pending()
     const text = createMemo(() => {
       const cmd = props.input.command ?? props.metadata.command ?? ""
       const out = stripAnsi(props.output || props.metadata.output || "")
@@ -1464,7 +1478,7 @@ ToolRegistry.register({
                 </Show>
               </span>
               <Show when={!pending() && props.input.description}>
-                <ShellSubmessage text={props.input.description} />
+                <ShellSubmessage text={props.input.description} animate={sawPending} />
               </Show>
             </div>
           </div>
