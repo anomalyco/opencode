@@ -8,14 +8,8 @@
 [data-component="shell-submessage"] [data-slot="shell-submessage-width"] {
   min-width: 0;
   max-width: 100%;
-  display: grid;
-  grid-template-columns: 0fr;
-  overflow: hidden;
-  transition: grid-template-columns 550ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-[data-component="shell-submessage"][data-visible] [data-slot="shell-submessage-width"] {
-  grid-template-columns: 1fr;
+  display: inline-block;
+  overflow: clip;
 }
 
 [data-component="shell-submessage"] [data-slot="shell-submessage-value"] {
@@ -36,7 +30,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-component="shell-submessage"] [data-slot="shell-submessage-width"],
   [data-component="shell-submessage"] [data-slot="shell-submessage-value"] {
     transition-duration: 0ms;
   }
