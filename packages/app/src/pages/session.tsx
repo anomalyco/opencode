@@ -347,24 +347,6 @@ export default function Page() {
     if (path) file.load(path)
   })
 
-  createEffect(() => {
-    const current = tabs().all()
-    if (current.length === 0) return
-
-    const next = normalizeTabs(current)
-    if (same(current, next)) return
-
-    tabs().setAll(next)
-
-    const active = tabs().active()
-    if (!active) return
-    if (!active.startsWith("file://")) return
-
-    const normalized = normalizeTab(active)
-    if (active === normalized) return
-    tabs().setActive(normalized)
-  })
-
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
   const reviewCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
