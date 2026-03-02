@@ -122,6 +122,7 @@ export const dict = {
   "ui.message.copyResponse": "Yanıtı kopyala",
   "ui.message.copied": "Kopyalandı",
   "ui.message.interrupted": "Kesildi",
+  "ui.message.queued": "Sırada",
   "ui.message.attachment.alt": "ek",
 
   "ui.patch.action.deleted": "Silindi",

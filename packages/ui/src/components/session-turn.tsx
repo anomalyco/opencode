@@ -192,11 +192,31 @@ export function SessionTurn(
       (item): item is AssistantMessage => item.role === "assistant" && typeof item.time.completed !== "number",
     )
   })
+
+  const pendingUser = createMemo(() => {
+    const item = pending()
+    if (!item?.parentID) return
+    const messages = allMessages() ?? emptyMessages
+    const result = Binary.search(messages, item.parentID, (m) => m.id)
+    const msg = result.found ? messages[result.index] : messages.find((m) => m.id === item.parentID)
+    if (!msg || msg.role !== "user") return
+    return msg
+  })
+
   const active = createMemo(() => {
     const msg = message()
+    const parent = pendingUser()
+    if (!msg || !parent) return false
+    return parent.id === msg.id
+  })
+
+  const queued = createMemo(() => {
+    const id = message()?.id
+    if (!id) return false
+    if (!pendingUser()) return false
     const item = pending()
-    if (!msg || !item) return false
-    return item.parentID === msg.id
+    if (!item) return false
+    return id > item.id
   })
 
   const parts = createMemo(() => {
@@ -334,6 +354,7 @@ export function SessionTurn(
   )
   const showThinking = createMemo(() => {
     if (!working() || !!error()) return false
+    if (queued()) return false
     if (status().type === "retry") return false
     if (showReasoningSummaries()) return assistantVisible() === 0
     if (assistantTailVisible() === "text") return false
@@ -364,7 +385,7 @@ export function SessionTurn(
                 class={props.classes?.container}
               >
                 <div data-slot="session-turn-message-content" aria-live="off">
-                  <Message message={msg()} parts={parts()} interrupted={interrupted()} />
+                  <Message message={msg()} parts={parts()} interrupted={interrupted()} queued={queued()} />
                 </div>
                 <Show when={compaction()}>
                   {(part) => (
