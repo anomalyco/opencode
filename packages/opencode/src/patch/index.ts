@@ -2,6 +2,7 @@ import z from "zod"
 import * as path from "path"
 import * as fs from "fs/promises"
 import { readFileSync } from "fs"
+import { createTwoFilesPatch } from "diff"
 import { Log } from "../util/log"
 
 export namespace Patch {
@@ -335,7 +336,7 @@ export namespace Patch {
     const newContent = newLines.join("\n")
 
     // Generate unified diff
-    const unifiedDiff = generateUnifiedDiff(originalContent, newContent)
+    const unifiedDiff = generateUnifiedDiff(filePath, originalContent, newContent)
 
     return {
       unified_diff: unifiedDiff,
@@ -487,31 +488,9 @@ export namespace Patch {
     return normalized
   }
 
-  function generateUnifiedDiff(oldContent: string, newContent: string): string {
-    const oldLines = oldContent.split("\n")
-    const newLines = newContent.split("\n")
-
-    // Simple diff generation - in a real implementation you'd use a proper diff algorithm
-    let diff = "@@ -1 +1 @@\n"
-
-    // Find changes (simplified approach)
-    const maxLen = Math.max(oldLines.length, newLines.length)
-    let hasChanges = false
-
-    for (let i = 0; i < maxLen; i++) {
-      const oldLine = oldLines[i] || ""
-      const newLine = newLines[i] || ""
-
-      if (oldLine !== newLine) {
-        if (oldLine) diff += `-${oldLine}\n`
-        if (newLine) diff += `+${newLine}\n`
-        hasChanges = true
-      } else if (oldLine) {
-        diff += ` ${oldLine}\n`
-      }
-    }
-
-    return hasChanges ? diff : ""
+  function generateUnifiedDiff(filePath: string, oldContent: string, newContent: string): string {
+    if (oldContent === newContent) return ""
+    return createTwoFilesPatch(filePath, filePath, oldContent, newContent)
   }
 
   // Apply hunks to filesystem
