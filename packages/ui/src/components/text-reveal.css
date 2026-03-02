@@ -112,6 +112,24 @@
   &[data-ready="false"] [data-slot="text-reveal-leaving"] {
     transition-duration: 0ms !important;
   }
+
+  &[data-truncate="true"] {
+    width: 100%;
+  }
+
+  &[data-truncate="true"] [data-slot="text-reveal-track"] {
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  &[data-truncate="true"] [data-slot="text-reveal-entering"],
+  &[data-truncate="true"] [data-slot="text-reveal-leaving"] {
+    min-width: 0;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
