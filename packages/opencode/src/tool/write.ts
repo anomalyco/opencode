@@ -71,6 +71,15 @@ export const WriteTool = Tool.define("write", {
       output += `\n\nLSP errors detected in other files:\n<diagnostics file="${file}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
     }
 
+    // Send metadata update to signal tool completion (fixes issue #15675)
+    ctx.metadata({
+      metadata: {
+        diagnostics,
+        filepath,
+        exists: exists,
+      },
+    })
+
     return {
       title: path.relative(Instance.worktree, filepath),
       metadata: {

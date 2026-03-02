@@ -5,16 +5,19 @@ import { WriteTool } from "../../src/tool/write"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 
-const ctx = {
+const createCtx = (metadataSpy: (args?: any) => void = () => {}) => ({
   sessionID: "test-write-session",
   messageID: "",
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
   messages: [],
-  metadata: () => {},
+  metadata: metadataSpy,
   ask: async () => {},
-}
+})
+
+// Default context for tests that don't need to spy on metadata
+const ctx = createCtx()
 
 describe("tool.write", () => {
   describe("new file creation", () => {
@@ -31,7 +34,7 @@ describe("tool.write", () => {
               filePath: filepath,
               content: "Hello, World!",
             },
-            ctx,
+            createCtx(),
           )
 
           expect(result.output).toContain("Wrote file successfully")
@@ -39,6 +42,42 @@ describe("tool.write", () => {
 
           const content = await fs.readFile(filepath, "utf-8")
           expect(content).toBe("Hello, World!")
+        },
+      })
+    })
+
+    test("calls ctx.metadata to signal tool completion (issue #15675)", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "newfile.txt")
+      let metadataCalled = false
+      let metadataArgs: any = null
+
+      const ctx = createCtx((args: any) => {
+        metadataCalled = true
+        metadataArgs = args
+      })
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const write = await WriteTool.init()
+          const result = await write.execute(
+            {
+              filePath: filepath,
+              content: "Hello, World!",
+            },
+            ctx,
+          )
+
+          expect(metadataCalled).toBe(true)
+          expect(metadataArgs).toHaveProperty("metadata")
+          expect(metadataArgs.metadata).toHaveProperty("filepath", filepath)
+          expect(metadataArgs.metadata).toHaveProperty("exists", false)
+          // Verify metadata contains expected fields (truncated is auto-added by Tool.define)
+          expect(result.metadata).toMatchObject({
+            filepath,
+            exists: false,
+          })
         },
       })
     })
@@ -56,7 +95,7 @@ describe("tool.write", () => {
               filePath: filepath,
               content: "nested content",
             },
-            ctx,
+            createCtx(),
           )
 
           const content = await fs.readFile(filepath, "utf-8")
@@ -77,7 +116,7 @@ describe("tool.write", () => {
               filePath: "relative.txt",
               content: "relative content",
             },
-            ctx,
+            createCtx(),
           )
 
           const content = await fs.readFile(path.join(tmp.path, "relative.txt"), "utf-8")
@@ -106,7 +145,7 @@ describe("tool.write", () => {
               filePath: filepath,
               content: "new content",
             },
-            ctx,
+            createCtx(),
           )
 
           expect(result.output).toContain("Wrote file successfully")
@@ -135,7 +174,7 @@ describe("tool.write", () => {
               filePath: filepath,
               content: "new",
             },
-            ctx,
+            createCtx(),
           )
 
           // Diff should be in metadata
@@ -160,7 +199,7 @@ describe("tool.write", () => {
               filePath: filepath,
               content: JSON.stringify({ secret: "data" }),
             },
-            ctx,
+            createCtx(),
           )
 
           // On Unix systems, check permissions
@@ -188,7 +227,7 @@ describe("tool.write", () => {
               filePath: filepath,
               content: JSON.stringify(data, null, 2),
             },
-            ctx,
+            createCtx(),
           )
 
           const content = await fs.readFile(filepath, "utf-8")
@@ -211,7 +250,7 @@ describe("tool.write", () => {
               filePath: filepath,
               content,
             },
-            ctx,
+            createCtx(),
           )
 
           const buf = await fs.readFile(filepath)
@@ -233,7 +272,7 @@ describe("tool.write", () => {
               filePath: filepath,
               content: "",
             },
-            ctx,
+            createCtx(),
           )
 
           const content = await fs.readFile(filepath, "utf-8")
@@ -259,7 +298,7 @@ describe("tool.write", () => {
               filePath: filepath,
               content: lines,
             },
-            ctx,
+            createCtx(),
           )
 
           const content = await fs.readFile(filepath, "utf-8")
@@ -282,7 +321,7 @@ describe("tool.write", () => {
               filePath: filepath,
               content,
             },
-            ctx,
+            createCtx(),
           )
 
           const buf = await fs.readFile(filepath)
@@ -314,7 +353,7 @@ describe("tool.write", () => {
                 filePath: readonlyPath,
                 content: "new content",
               },
-              ctx,
+              createCtx(),
             ),
           ).rejects.toThrow()
         },
@@ -337,7 +376,7 @@ describe("tool.write", () => {
               filePath: filepath,
               content: "export const Button = () => {}",
             },
-            ctx,
+            createCtx(),
           )
 
           expect(result.title).toEndWith(path.join("src", "components", "Button.tsx"))
