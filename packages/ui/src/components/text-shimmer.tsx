@@ -1,5 +1,6 @@
-import { createEffect, createMemo, createSignal, onCleanup, type ValidComponent } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onCleanup, type ValidComponent } from "solid-js"
 import { Dynamic } from "solid-js/web"
+import { animate, type AnimationPlaybackControls } from "./motion"
 
 export const TextShimmer = <T extends ValidComponent = "span">(props: {
   text: string
@@ -31,7 +32,28 @@ export const TextShimmer = <T extends ValidComponent = "span">(props: {
     }, swap)
   })
 
+  let baseRef: HTMLSpanElement | undefined
+  let glowAnim: AnimationPlaybackControls | undefined
+
+  // Glow pulse when shimmer deactivates
+  createEffect(
+    on(active, (isActive) => {
+      if (isActive || !baseRef) return
+      glowAnim?.stop()
+      glowAnim = animate(
+        baseRef,
+        { filter: ["brightness(1.5)", "brightness(1)"] },
+        { type: "spring", visualDuration: 0.4, bounce: 0.15 },
+      )
+      glowAnim.finished.then(() => {
+        if (!baseRef) return
+        baseRef.style.filter = ""
+      })
+    }, { defer: true }),
+  )
+
   onCleanup(() => {
+    glowAnim?.stop()
     if (!timer) return
     clearTimeout(timer)
   })
@@ -64,7 +86,7 @@ export const TextShimmer = <T extends ValidComponent = "span">(props: {
       }}
     >
       <span data-slot="text-shimmer-char">
-        <span data-slot="text-shimmer-char-base" aria-hidden="true">
+        <span ref={baseRef} data-slot="text-shimmer-char-base" aria-hidden="true">
           {props.text}
         </span>
         <span data-slot="text-shimmer-char-shimmer" data-run={run() ? "true" : "false"} aria-hidden="true">

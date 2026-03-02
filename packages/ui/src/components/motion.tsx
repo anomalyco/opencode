@@ -1,7 +1,7 @@
 export { animate, springValue } from "motion"
 export type { AnimationPlaybackControls } from "motion"
 
-export const HEIGHT_DURATION = 0.3
+export const HEIGHT_DURATION = 0.45
 export const FADE_DURATION = 0.5
 export const TOGGLE_DURATION = 0.3
 

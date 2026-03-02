@@ -453,7 +453,7 @@
 [data-component="write-trigger"] {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
   width: 100%;
 
@@ -466,7 +466,8 @@
   }
 
   [data-slot="message-part-title"] {
-    flex-shrink: 0;
+    flex-shrink: 1;
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -498,39 +499,37 @@
   [data-slot="message-part-title-text"] {
     text-transform: capitalize;
     color: var(--text-strong);
+    flex-shrink: 0;
+  }
+
+  [data-slot="message-part-meta-line"] {
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: var(--font-weight-regular);
+
+    [data-component="diff-changes"] {
+      flex-shrink: 0;
+      gap: 6px;
+    }
   }
 
   [data-slot="message-part-title-filename"] {
     /* No text-transform - preserve original filename casing */
-    font-weight: var(--font-weight-regular);
+    color: var(--text-strong);
+    flex-shrink: 0;
   }
 
-  [data-slot="message-part-path"] {
-    display: flex;
-    flex-grow: 1;
-    min-width: 0;
-    font-weight: var(--font-weight-regular);
-  }
-
-  [data-slot="message-part-directory"] {
+  [data-slot="message-part-directory-inline"] {
     color: var(--text-weak);
+    min-width: 0;
+    max-width: min(48vw, 36ch);
     text-overflow: ellipsis;
     overflow: hidden;
     white-space: nowrap;
     direction: rtl;
     text-align: left;
-  }
-
-  [data-slot="message-part-filename"] {
-    color: var(--text-strong);
-    flex-shrink: 0;
-  }
-
-  [data-slot="message-part-actions"] {
-    display: flex;
-    gap: 16px;
-    align-items: center;
-    justify-content: flex-end;
   }
 }
 

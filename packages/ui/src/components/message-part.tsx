@@ -1409,24 +1409,79 @@ ToolRegistry.register({
   },
 })
 
-function useToolFade(ref: () => HTMLElement | undefined, delay = 0) {
+const TOOL_WIPE_MASK =
+  "linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 45%, rgba(0,0,0,0) 60%, rgba(0,0,0,0) 100%)"
+
+function useToolFade(ref: () => HTMLElement | undefined, options?: { delay?: number; wipe?: boolean }) {
   let anim: AnimationPlaybackControls | undefined
   let frame: number | undefined
+  const delay = options?.delay ?? 0
+  const wipe = options?.wipe ?? false
 
   onMount(() => {
     const el = ref()
     if (!el || typeof window === "undefined") return
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
 
+    const mask =
+      wipe && typeof CSS !== "undefined" && CSS.supports("mask-image", "linear-gradient(to right, black, transparent)")
+
     el.style.opacity = "0"
-    el.style.filter = "blur(2px)"
-    el.style.transform = "translateY(0.04em)"
+    el.style.filter = wipe ? "blur(3px)" : "blur(2px)"
+    el.style.transform = wipe ? "translateX(-0.06em)" : "translateY(0.04em)"
+
+    if (mask) {
+      el.style.maskImage = TOOL_WIPE_MASK
+      el.style.webkitMaskImage = TOOL_WIPE_MASK
+      el.style.maskSize = "240% 100%"
+      el.style.webkitMaskSize = "240% 100%"
+      el.style.maskRepeat = "no-repeat"
+      el.style.webkitMaskRepeat = "no-repeat"
+      el.style.maskPosition = "100% 0%"
+      el.style.webkitMaskPosition = "100% 0%"
+    }
+
+    if (wipe && !mask) el.style.clipPath = "inset(0 100% 0 0)"
 
     frame = requestAnimationFrame(() => {
       frame = undefined
       const node = ref()
       if (!node) return
-      anim = animate(node, { opacity: 1, filter: "blur(0px)", transform: "translateY(0)" }, { ...FADE_SPRING, delay })
+
+      if (!wipe) {
+        anim = animate(node, { opacity: 1, filter: "blur(0px)", transform: "translateY(0)" }, { ...FADE_SPRING, delay })
+      }
+
+      if (wipe) {
+        anim = mask
+          ? animate(
+              node,
+              { opacity: 1, filter: "blur(0px)", transform: "translateX(0)", maskPosition: "0% 0%" },
+              { ...FADE_SPRING, delay },
+            )
+          : animate(
+              node,
+              { opacity: 1, filter: "blur(0px)", transform: "translateX(0)", clipPath: "inset(0 0% 0 0)" },
+              { ...FADE_SPRING, delay },
+            )
+      }
+
+      anim?.finished.then(() => {
+        const value = ref()
+        if (!value) return
+        value.style.opacity = ""
+        value.style.filter = ""
+        value.style.transform = ""
+        value.style.clipPath = ""
+        value.style.maskImage = ""
+        value.style.webkitMaskImage = ""
+        value.style.maskSize = ""
+        value.style.webkitMaskSize = ""
+        value.style.maskRepeat = ""
+        value.style.webkitMaskRepeat = ""
+        value.style.maskPosition = ""
+        value.style.webkitMaskPosition = ""
+      })
     })
   })
 
@@ -1438,7 +1493,7 @@ function useToolFade(ref: () => HTMLElement | undefined, delay = 0) {
 
 function WebfetchLink(props: { url: string }) {
   let ref: HTMLAnchorElement | undefined
-  useToolFade(() => ref)
+  useToolFade(() => ref, { wipe: true })
 
   return (
     <a
@@ -1457,7 +1512,7 @@ function WebfetchLink(props: { url: string }) {
 
 function WebfetchAction() {
   let ref: HTMLDivElement | undefined
-  useToolFade(() => ref, 0.04)
+  useToolFade(() => ref, { delay: 0.04 })
 
   return (
     <div ref={ref} data-component="tool-action">
@@ -1468,7 +1523,7 @@ function WebfetchAction() {
 
 function TaskLink(props: { href: string; text: string; onClick: (e: MouseEvent) => void }) {
   let ref: HTMLAnchorElement | undefined
-  useToolFade(() => ref)
+  useToolFade(() => ref, { wipe: true })
 
   return (
     <a
@@ -1485,7 +1540,7 @@ function TaskLink(props: { href: string; text: string; onClick: (e: MouseEvent) 
 
 function ToolText(props: { text: string }) {
   let ref: HTMLSpanElement | undefined
-  useToolFade(() => ref)
+  useToolFade(() => ref, { wipe: true })
 
   return (
     <span ref={ref} data-slot="basic-tool-tool-subtitle">
@@ -1496,31 +1551,24 @@ function ToolText(props: { text: string }) {
 
 type DiffValue = { additions: number; deletions: number } | { additions: number; deletions: number }[]
 
-function ToolFilename(props: { text: string }) {
+function ToolMetaLine(props: { filename: string; path?: string; changes?: DiffValue; delay?: number }) {
   let ref: HTMLSpanElement | undefined
-  useToolFade(() => ref)
+  useToolFade(() => ref, { delay: props.delay ?? 0.02, wipe: true })
 
   return (
-    <span ref={ref} data-slot="message-part-title-filename">
-      {props.text}
+    <span ref={ref} data-slot="message-part-meta-line">
+      <span data-slot="message-part-title-filename">{props.filename}</span>
+      <Show when={props.path}>
+        <span data-slot="message-part-directory-inline">{props.path}</span>
+      </Show>
+      <Show when={props.changes}>{(changes) => <DiffChanges changes={changes()} />}</Show>
     </span>
-  )
-}
-
-function ToolPath(props: { text: string }) {
-  let ref: HTMLDivElement | undefined
-  useToolFade(() => ref, 0.02)
-
-  return (
-    <div ref={ref} data-slot="message-part-path">
-      <span data-slot="message-part-directory">{props.text}</span>
-    </div>
   )
 }
 
 function ToolChanges(props: { changes: DiffValue }) {
   let ref: HTMLDivElement | undefined
-  useToolFade(() => ref, 0.04)
+  useToolFade(() => ref, { delay: 0.04 })
 
   return (
     <div ref={ref}>
@@ -1531,7 +1579,7 @@ function ToolChanges(props: { changes: DiffValue }) {
 
 function ShellText(props: { text: string }) {
   let ref: HTMLSpanElement | undefined
-  useToolFade(() => ref)
+  useToolFade(() => ref, { wipe: true })
 
   return (
     <span data-component="shell-submessage">
@@ -1753,17 +1801,13 @@ ToolRegistry.register({
                     <TextShimmer text={i18n.t("ui.messagePart.title.edit")} active={pending()} />
                   </span>
                   <Show when={!pending()}>
-                    <ToolFilename text={filename()} />
+                    <ToolMetaLine
+                      filename={filename()}
+                      path={props.input.filePath?.includes("/") ? getDirectory(props.input.filePath!) : undefined}
+                      changes={props.metadata.filediff}
+                    />
                   </Show>
                 </div>
-                <Show when={!pending() && props.input.filePath?.includes("/")}>
-                  <ToolPath text={getDirectory(props.input.filePath!)} />
-                </Show>
-              </div>
-              <div data-slot="message-part-actions">
-                <Show when={!pending() && props.metadata.filediff}>
-                  {(changes) => <ToolChanges changes={changes()} />}
-                </Show>
               </div>
             </div>
           }
@@ -1821,14 +1865,13 @@ ToolRegistry.register({
                     <TextShimmer text={i18n.t("ui.messagePart.title.write")} active={pending()} />
                   </span>
                   <Show when={!pending()}>
-                    <ToolFilename text={filename()} />
+                    <ToolMetaLine
+                      filename={filename()}
+                      path={props.input.filePath?.includes("/") ? getDirectory(props.input.filePath!) : undefined}
+                    />
                   </Show>
                 </div>
-                <Show when={!pending() && props.input.filePath?.includes("/")}>
-                  <ToolPath text={getDirectory(props.input.filePath!)} />
-                </Show>
               </div>
-              <div data-slot="message-part-actions">{/* <DiffChanges diff={diff} /> */}</div>
             </div>
           }
         >
@@ -2019,17 +2062,13 @@ ToolRegistry.register({
                         <TextShimmer text={i18n.t("ui.tool.patch")} active={pending()} />
                       </span>
                       <Show when={!pending()}>
-                        <ToolFilename text={getFilename(file().relativePath)} />
+                        <ToolMetaLine
+                          filename={getFilename(file().relativePath)}
+                          path={file().relativePath.includes("/") ? getDirectory(file().relativePath) : undefined}
+                          changes={{ additions: file().additions, deletions: file().deletions }}
+                        />
                       </Show>
                     </div>
-                    <Show when={!pending() && file().relativePath.includes("/")}>
-                      <ToolPath text={getDirectory(file().relativePath)} />
-                    </Show>
-                  </div>
-                  <div data-slot="message-part-actions">
-                    <Show when={!pending()}>
-                      <ToolChanges changes={{ additions: file().additions, deletions: file().deletions }} />
-                    </Show>
                   </div>
                 </div>
               }
