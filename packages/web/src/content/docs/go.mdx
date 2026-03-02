@@ -1,0 +1,149 @@
+---
+title: Go
+description: Low cost subscription for open coding models.
+---
+
+import config from "../../../config.mjs"
+export const console = config.console
+export const email = `mailto:${config.email}`
+
+OpenCode Go is a low cost **$10/month** subscription that gives you reliable access to popular open coding models.
+
+:::note
+OpenCode Go is currently in beta.
+:::
+
+Go works like any other provider in OpenCode. You subscribe to OpenCode Go and
+get your API key. It's **completely optional** and you don't need to use it to
+use OpenCode.
+
+It is designed primarily for international users, with models hosted in the US, EU, and Singapore for stable global access.
+
+---
+
+## Background
+
+Open models have gotten really good. They now reach performance close to
+proprietary models for coding tasks. And because many providers can serve them
+competitively, they are usually far cheaper.
+
+However, getting reliable, low latency access to them can be difficult. Providers
+vary in quality and availability.
+
+:::tip
+We tested a select group of models and providers that work well with OpenCode.
+:::
+
+To fix this, we did a couple of things:
+
+1. We tested a select group of open models and talked to their teams about how to
+   best run them.
+2. We then worked with a few providers to make sure these were being served
+   correctly.
+3. Finally, we benchmarked the combination of the model/provider and came up
+   with a list that we feel good recommending.
+
+OpenCode Go gives you access to these models for **$10/month**.
+
+---
+
+## How it works
+
+OpenCode Go works like any other provider in OpenCode.
+
+1. You sign in to **<a href={console}>OpenCode Zen</a>**, subscribe to Go, and
+   copy your API key.
+2. You run the `/connect` command in the TUI, select `OpenCode Go`, and paste
+   your API key.
+3. Run `/models` in the TUI to see the list of models available through Go.
+
+:::note
+Only one member per workspace can subscribe to OpenCode Go.
+:::
+
+The current list of models includes:
+
+- **Kimi K2.5**
+- **GLM-5**
+- **MiniMax M2.5**
+
+The list of models may change as we test and add new ones.
+
+---
+
+## Usage limits
+
+OpenCode Go includes the following limits:
+
+- **5 hour limit** — $4 of usage
+- **Weekly limit** — $10 of usage
+- **Monthly limit** — $20 of usage
+
+In terms of tokens, $20 of usage is roughly equivalent to:
+
+- 69 million GLM-5 tokens
+- 121 million Kimi K2.5 tokens
+- 328 million MiniMax M2.5 tokens
+
+You can view your current usage in the **<a href={console}>console</a>**.
+
+:::tip
+If you reach the usage limit, you can continue using the free models.
+:::
+
+Usage limits may change as we learn from early usage and feedback.
+
+---
+
+### Pricing
+
+OpenCode Go is a **$10/month** subscription plan. Below are the prices **per 1M tokens**.
+
+| Model        | Input | Output | Cached Read |
+| ------------ | ----- | ------ | ----------- |
+| GLM-5        | $1.00 | $3.20  | $0.20       |
+| Kimi K2.5    | $0.60 | $3.00  | $0.10       |
+| MiniMax M2.5 | $0.30 | $1.20  | $0.03       |
+
+---
+
+### Usage beyond limits
+
+If you also have credits on your Zen balance, you can enable the **Use balance**
+option in the console. When enabled, Go will fall back to your Zen balance
+after you've reached your usage limits instead of blocking requests.
+
+---
+
+## Endpoints
+
+You can also access Go models through the following API endpoints.
+
+| Model        | Model ID     | Endpoint                                         | AI SDK Package              |
+| ------------ | ------------ | ------------------------------------------------ | --------------------------- |
+| GLM-5        | glm-5        | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.5    | kimi-k2.5    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M2.5 | minimax-m2.5 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+
+The [model id](/docs/config/#models) in your OpenCode config
+uses the format `opencode-go/<model-id>`. For example, for Kimi K2.5, you would
+use `opencode-go/kimi-k2.5` in your config.
+
+---
+
+## Privacy
+
+The plan is designed primarily for international users, with models hosted in the US, EU, and Singapore for stable global access.
+
+<a href={email}>Contact us</a> if you have any questions.
+
+---
+
+## Goals
+
+We created OpenCode Go to:
+
+1. Make AI coding **accessible** to more people with a low cost subscription.
+2. Provide **reliable** access to the best open coding models.
+3. Curate models that are **tested and benchmarked** for coding agent use.
+4. Have **no lock-in** by allowing you to use any other provider with OpenCode as well.
