@@ -250,6 +250,11 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
         icon: "bubble-5",
         title: i18n.t("ui.tool.questions"),
       }
+    case "skill":
+      return {
+        icon: "brain",
+        title: input.name || "skill",
+      }
     default:
       return {
         icon: "mcp",
@@ -1029,6 +1034,21 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
         </Switch>
       </div>
     </Show>
+  )
+}
+
+PART_MAPPING["compaction"] = function CompactionPartDisplay() {
+  const i18n = useI18n()
+  return (
+    <div data-component="compaction-part">
+      <div data-slot="compaction-part-divider">
+        <span data-slot="compaction-part-line" />
+        <span data-slot="compaction-part-label" class="text-12-regular text-text-weak">
+          {i18n.t("ui.messagePart.compaction")}
+        </span>
+        <span data-slot="compaction-part-line" />
+      </div>
+    </div>
   )
 }
 
@@ -1898,5 +1918,27 @@ ToolRegistry.register({
         </Show>
       </BasicTool>
     )
+  },
+})
+
+ToolRegistry.register({
+  name: "skill",
+  render(props) {
+    const title = createMemo(() => props.input.name || "skill")
+    const running = createMemo(() => props.status === "pending" || props.status === "running")
+
+    const titleContent = () => <TextShimmer text={title()} active={running()} />
+
+    const trigger = () => (
+      <div data-slot="basic-tool-tool-info-structured">
+        <div data-slot="basic-tool-tool-info-main">
+          <span data-slot="basic-tool-tool-title" class="capitalize agent-title">
+            {titleContent()}
+          </span>
+        </div>
+      </div>
+    )
+
+    return <BasicTool icon="brain" status={props.status} trigger={trigger()} hideDetails />
   },
 })

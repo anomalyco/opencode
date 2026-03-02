@@ -15,6 +15,7 @@ export const dict = {
   "nav.home": "ホーム",
   "nav.openMenu": "メニューを開く",
   "nav.getStartedFree": "無料ではじめる",
+  "nav.logoAlt": "OpenCode",
 
   "nav.context.copyLogo": "ロゴをSVGでコピー",
   "nav.context.copyWordmark": "ワードマークをSVGでコピー",
@@ -42,8 +43,12 @@ export const dict = {
   "notFound.docs": "ドキュメント",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
+  "notFound.logoLightAlt": "opencodeのロゴ（ライト）",
+  "notFound.logoDarkAlt": "opencodeのロゴ（ダーク）",
 
   "user.logout": "ログアウト",
+
+  "auth.callback.error.codeMissing": "認証コードが見つかりません。",
 
   "workspace.select": "ワークスペースを選択",
   "workspace.createNew": "+ 新しいワークスペースを作成",
@@ -76,6 +81,8 @@ export const dict = {
   "error.reloadAmountMin": "リロード額は少なくとも ${{amount}} である必要があります",
   "error.reloadTriggerMin": "残高トリガーは少なくとも ${{amount}} である必要があります",
 
+  "app.meta.description": "OpenCode - オープンソースのコーディングエージェント。",
+
   "home.title": "OpenCode | オープンソースのAIコーディングエージェント",
 
   "temp.title": "OpenCode | ターミナル向けに構築されたAIコーディングエージェント",
@@ -91,6 +98,8 @@ export const dict = {
   "temp.feature.models.afterLink": "を通じて75以上のLLMプロバイダーをサポート",
   "temp.screenshot.caption": "tokyonight テーマを使用した OpenCode TUI",
   "temp.screenshot.alt": "tokyonight テーマの OpenCode TUI",
+  "temp.logoLightAlt": "opencodeのロゴ（ライト）",
+  "temp.logoDarkAlt": "opencodeのロゴ（ダーク）",
 
   "home.banner.badge": "新着",
   "home.banner.text": "デスクトップアプリのベータ版が利用可能",
@@ -238,6 +247,25 @@ export const dict = {
   "zen.privacy.beforeExceptions":
     "すべてのZenモデルは米国でホストされています。プロバイダーはゼロ保持ポリシーに従い、モデルのトレーニングにデータを使用しません（",
   "zen.privacy.exceptionsLink": "以下の例外",
+
+  "zen.api.error.rateLimitExceeded": "レート制限を超えました。後でもう一度お試しください。",
+  "zen.api.error.modelNotSupported": "モデル {{model}} はサポートされていません",
+  "zen.api.error.modelFormatNotSupported": "フォーマット {{format}} ではモデル {{model}} はサポートされていません",
+  "zen.api.error.noProviderAvailable": "利用可能なプロバイダーがありません",
+  "zen.api.error.providerNotSupported": "プロバイダー {{provider}} はサポートされていません",
+  "zen.api.error.missingApiKey": "APIキーがありません。",
+  "zen.api.error.invalidApiKey": "無効なAPIキーです。",
+  "zen.api.error.subscriptionQuotaExceeded":
+    "サブスクリプションの制限を超えました。{{retryIn}} 後に再試行してください。",
+  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
+    "サブスクリプションの制限を超えました。無料モデルは引き続きご利用いただけます。",
+  "zen.api.error.noPaymentMethod": "お支払い方法がありません。こちらからお支払い方法を追加してください: {{billingUrl}}",
+  "zen.api.error.insufficientBalance": "残高が不足しています。こちらから請求を管理してください: {{billingUrl}}",
+  "zen.api.error.workspaceMonthlyLimitReached":
+    "ワークスペースが月額の利用上限 ${{amount}} に達しました。こちらから上限を管理してください: {{billingUrl}}",
+  "zen.api.error.userMonthlyLimitReached":
+    "月額の利用上限 ${{amount}} に達しました。こちらから上限を管理してください: {{membersUrl}}",
+  "zen.api.error.modelDisabled": "モデルが無効です",
 
   "black.meta.title": "OpenCode Black | 世界最高峰のコーディングモデルすべてにアクセス",
   "black.meta.description": "OpenCode Black サブスクリプションプランで、Claude、GPT、Gemini などにアクセス。",
@@ -448,6 +476,7 @@ export const dict = {
   "workspace.reload.updatePaymentMethod": "支払い方法を更新して、もう一度お試しください。",
   "workspace.reload.retrying": "再試行中...",
   "workspace.reload.retry": "再試行",
+  "workspace.reload.error.paymentFailed": "支払いに失敗しました。",
 
   "workspace.payments.title": "支払い履歴",
   "workspace.payments.subtitle": "最近の支払い取引。",
@@ -568,6 +597,10 @@ export const dict = {
   "enterprise.form.send": "送信",
   "enterprise.form.sending": "送信中...",
   "enterprise.form.success": "送信しました。まもなくご連絡いたします。",
+  "enterprise.form.success.submitted": "フォームが正常に送信されました。",
+  "enterprise.form.error.allFieldsRequired": "すべての項目は必須です。",
+  "enterprise.form.error.invalidEmailFormat": "無効なメール形式です。",
+  "enterprise.form.error.internalServer": "内部サーバーエラー。",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "OpenCode Enterpriseとは？",
   "enterprise.faq.a1":
@@ -600,6 +633,7 @@ export const dict = {
   "bench.list.table.agent": "エージェント",
   "bench.list.table.model": "モデル",
   "bench.list.table.score": "スコア",
+  "bench.submission.error.allFieldsRequired": "すべての項目は必須です。",
 
   "bench.detail.title": "ベンチマーク - {{task}}",
   "bench.detail.notFound": "タスクが見つかりません",

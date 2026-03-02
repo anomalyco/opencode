@@ -14,10 +14,11 @@ O opencode suporta os formatos **JSON** e **JSONC** (JSON com Comentários).
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  // Theme configuration
-  "theme": "opencode",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
+  "server": {
+    "port": 4096,
+  },
 }
 ```
 
@@ -34,7 +35,7 @@ Os arquivos de configuração são **mesclados**, não substituídos.
 
 Os arquivos de configuração são mesclados, não substituídos. As configurações das seguintes localizações de configuração são combinadas. Configurações posteriores substituem as anteriores apenas para chaves conflitantes. Configurações não conflitantes de todas as configurações são preservadas.
 
-Por exemplo, se sua configuração global define `theme: "opencode"` e `autoupdate: true`, e sua configuração de projeto define `model: "anthropic/claude-sonnet-4-5"`, a configuração final incluirá as três configurações.
+Por exemplo, se sua configuração global define `autoupdate: true` e sua configuração de projeto define `model: "anthropic/claude-sonnet-4-5"`, a configuração final incluirá as duas configurações.
 
 ---
 
@@ -95,7 +96,9 @@ Você pode habilitar servidores específicos em sua configuração local:
 
 ### Global
 
-Coloque sua configuração global do opencode em `~/.config/opencode/opencode.json`. Use a configuração global para preferências de usuário, como temas, provedores ou atalhos de teclado.
+Coloque sua configuração global do opencode em `~/.config/opencode/opencode.json`. Use a configuração global para preferências de todo o usuário, como provedores, modelos e permissões.
+
+Para configurações específicas do TUI, use `~/.config/opencode/tui.json`.
 
 A configuração global substitui os padrões organizacionais remotos.
 
@@ -104,6 +107,8 @@ A configuração global substitui os padrões organizacionais remotos.
 ### Por projeto
 
 Adicione `opencode.json` na raiz do seu projeto. A configuração do projeto tem a maior precedência entre os arquivos de configuração padrão - ela substitui tanto as configurações globais quanto as remotas.
+
+Para configurações específicas do TUI do projeto, adicione `tui.json` junto a ele.
 
 :::tip
 Coloque a configuração específica do projeto na raiz do seu projeto.
@@ -143,7 +148,9 @@ O diretório personalizado é carregado após a configuração global e os diret
 
 ## Esquema
 
-O arquivo de configuração tem um esquema que está definido em [**`opencode.ai/config.json`**](https://opencode.ai/config.json).
+O esquema de configuração do servidor/tempo de execução é definido em [**`opencode.ai/config.json`**](https://opencode.ai/config.json).
+
+A configuração do TUI usa [**`opencode.ai/tui.json`**](https://opencode.ai/tui.json).
 
 Seu editor deve ser capaz de validar e autocompletar com base no esquema.
 
@@ -151,28 +158,24 @@ Seu editor deve ser capaz de validar e autocompletar com base no esquema.
 
 ### TUI
 
-Você pode configurar as configurações específicas do TUI através da opção `tui`.
+Use um arquivo `tui.json` (ou `tui.jsonc`) dedicado para configurações específicas do TUI.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "tui": {
-    "scroll_speed": 3,
-    "scroll_acceleration": {
-      "enabled": true
-    },
-    "diff_style": "auto"
-  }
+  "$schema": "https://opencode.ai/tui.json",
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": true
+  },
+  "diff_style": "auto"
 }
 ```
 
-Opções disponíveis:
+Use `OPENCODE_TUI_CONFIG` para apontar para um arquivo de configuração TUI personalizado.
 
-- `scroll_acceleration.enabled` - Habilitar aceleração de rolagem estilo macOS. **Tem precedência sobre `scroll_speed`.**
-- `scroll_speed` - Multiplicador de velocidade de rolagem personalizada (padrão: `3`, mínimo: `1`). Ignorado se `scroll_acceleration.enabled` for `true`.
-- `diff_style` - Controlar a renderização de diffs. `"auto"` se adapta à largura do terminal, `"stacked"` sempre mostra uma coluna única.
+Chaves legadas `theme`, `keybinds` e `tui` em `opencode.json` estão obsoletas e são migradas automaticamente quando possível.
 
-[Saiba mais sobre o uso do TUI aqui](/docs/tui).
+[Saiba mais sobre a configuração do TUI aqui](/docs/tui#configure).
 
 ---
 
@@ -298,12 +301,12 @@ Tokens Bearer (`AWS_BEARER_TOKEN_BEDROCK` ou `/connect`) têm precedência sobre
 
 ### Temas
 
-Você pode configurar o tema que deseja usar em sua configuração do opencode através da opção `theme`.
+Defina seu tema de interface em `tui.json`.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "theme": ""
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "tokyonight"
 }
 ```
 
@@ -403,11 +406,11 @@ Você também pode definir comandos usando arquivos markdown em `~/.config/openc
 
 ### Atalhos de teclado
 
-Você pode personalizar seus atalhos de teclado através da opção `keybinds`.
+Personalize atalhos de teclado em `tui.json`.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {}
 }
 ```
@@ -487,13 +490,15 @@ Você pode controlar o comportamento de compactação de contexto através da op
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
     "auto": true,
-    "prune": true
+    "prune": true,
+    "reserved": 10000
   }
 }
 ```
 
 - `auto` - Compactar automaticamente a sessão quando o contexto estiver cheio (padrão: `true`).
 - `prune` - Remover saídas antigas de ferramentas para economizar tokens (padrão: `true`).
+- `reserved` - Buffer de tokens para compactação. Deixa janela suficiente para evitar estouro durante a compactação
 
 ---
 
@@ -673,6 +678,7 @@ Os caminhos dos arquivos podem ser:
 
 - Relativos ao diretório do arquivo de configuração
 - Ou caminhos absolutos começando com `/` ou `~`
+-
 
 Esses são úteis para:
 
