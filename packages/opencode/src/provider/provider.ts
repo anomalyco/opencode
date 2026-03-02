@@ -588,7 +588,16 @@ export namespace Provider {
         },
       }
     },
-    asksage: async () => {
+    asksage: async (input) => {
+      const hasKey = await (async () => {
+        const env = Env.all()
+        if (input.env.some((item) => env[item])) return true
+        if (await Auth.get(input.id)) return true
+        const config = await Config.get()
+        if (config.provider?.["asksage"]?.options?.apiKey) return true
+        return false
+      })()
+
       const nativeModels = new Set([
         "google-gemini-2.5-pro",
         "google-gemini-2.5-flash",
@@ -667,8 +676,10 @@ export namespace Provider {
         )
       }
 
+      if (!hasKey) return { autoload: false }
+
       return {
-        autoload: false,
+        autoload: true,
         options: {
           includeUsage: false,
           fetch: async (input: any, init?: any) => {
