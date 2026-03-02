@@ -89,6 +89,7 @@ type ThemeColors = {
   markdownCodeBlock: RGBA
   syntaxComment: RGBA
   syntaxKeyword: RGBA
+  syntaxKeywordType: RGBA
   syntaxFunction: RGBA
   syntaxVariable: RGBA
   syntaxString: RGBA
@@ -131,9 +132,10 @@ type ColorValue = HexColor | RefName | Variant | RGBA
 type ThemeJson = {
   $schema?: string
   defs?: Record<string, HexColor | RefName>
-  theme: Omit<Record<keyof ThemeColors, ColorValue>, "selectedListItemText" | "backgroundMenu"> & {
+  theme: Omit<Record<keyof ThemeColors, ColorValue>, "selectedListItemText" | "backgroundMenu" | "syntaxKeywordType"> & {
     selectedListItemText?: ColorValue
     backgroundMenu?: ColorValue
+    syntaxKeywordType?: ColorValue
     thinkingOpacity?: number
   }
 }
@@ -199,7 +201,7 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
 
   const resolved = Object.fromEntries(
     Object.entries(theme.theme)
-      .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu" && key !== "thinkingOpacity")
+      .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu" && key !== "syntaxKeywordType" && key !== "thinkingOpacity")
       .map(([key, value]) => {
         return [key, resolveColor(value as ColorValue)]
       }),
@@ -220,6 +222,13 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
     resolved.backgroundMenu = resolveColor(theme.theme.backgroundMenu)
   } else {
     resolved.backgroundMenu = resolved.backgroundElement
+  }
+
+  // Handle syntaxKeywordType - optional with fallback to syntaxKeyword
+  if (theme.theme.syntaxKeywordType !== undefined) {
+    resolved.syntaxKeywordType = resolveColor(theme.theme.syntaxKeywordType)
+  } else {
+    resolved.syntaxKeywordType = resolved.syntaxKeyword
   }
 
   // Handle thinkingOpacity - optional with default of 0.6
@@ -725,7 +734,7 @@ function getSyntaxRules(theme: Theme) {
     {
       scope: ["keyword.type"],
       style: {
-        foreground: theme.syntaxType,
+        foreground: theme.syntaxKeywordType,
         bold: true,
         italic: true,
       },

@@ -81,6 +81,7 @@
         "markdownCodeBlock": { "$ref": "#/definitions/colorValue" },
         "syntaxComment": { "$ref": "#/definitions/colorValue" },
         "syntaxKeyword": { "$ref": "#/definitions/colorValue" },
+        "syntaxKeywordType": { "$ref": "#/definitions/colorValue" },
         "syntaxFunction": { "$ref": "#/definitions/colorValue" },
         "syntaxVariable": { "$ref": "#/definitions/colorValue" },
         "syntaxString": { "$ref": "#/definitions/colorValue" },
