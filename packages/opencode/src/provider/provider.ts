@@ -17,6 +17,7 @@ import { iife } from "@/util/iife"
 import { Global } from "../global"
 import path from "path"
 import { Filesystem } from "../util/filesystem"
+import { blackboxModels } from "./blackbox-models"
 
 // Direct imports for bundled providers
 import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
@@ -812,83 +813,7 @@ export namespace Provider {
       source: "custom",
       env: ["BLACKBOX_API_KEY"],
       options: {},
-      models: {
-        "blackbox-ai": {
-          id: "blackbox-ai",
-          providerID: "blackbox",
-          name: "Blackbox AI",
-          api: {
-            id: "blackbox-ai",
-            url: "https://api.blackbox.ai/api/chat/completions",
-            npm: "@ai-sdk/openai-compatible",
-          },
-          status: "active",
-          release_date: "2025-01-01",
-          headers: {},
-          options: {},
-          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-          limit: { context: 128000, input: 128000, output: 16384 },
-          capabilities: {
-            temperature: true,
-            reasoning: false,
-            attachment: false,
-            toolcall: true,
-            interleaved: false,
-            input: { text: true, audio: false, image: false, video: false, pdf: false },
-            output: { text: true, audio: false, image: false, video: false, pdf: false },
-          },
-        },
-        "blackbox-pro": {
-          id: "blackbox-pro",
-          providerID: "blackbox",
-          name: "Blackbox Pro",
-          api: {
-            id: "blackbox-pro",
-            url: "https://api.blackbox.ai/api/chat/completions",
-            npm: "@ai-sdk/openai-compatible",
-          },
-          status: "active",
-          release_date: "2025-01-01",
-          headers: {},
-          options: {},
-          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-          limit: { context: 200000, input: 200000, output: 16384 },
-          capabilities: {
-            temperature: true,
-            reasoning: true,
-            attachment: false,
-            toolcall: true,
-            interleaved: false,
-            input: { text: true, audio: false, image: false, video: false, pdf: false },
-            output: { text: true, audio: false, image: false, video: false, pdf: false },
-          },
-        },
-        "blackbox-search": {
-          id: "blackbox-search",
-          providerID: "blackbox",
-          name: "Blackbox Search",
-          api: {
-            id: "blackbox-search",
-            url: "https://api.blackbox.ai/api/chat/completions",
-            npm: "@ai-sdk/openai-compatible",
-          },
-          status: "active",
-          release_date: "2025-01-01",
-          headers: {},
-          options: {},
-          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-          limit: { context: 32000, input: 32000, output: 8192 },
-          capabilities: {
-            temperature: true,
-            reasoning: false,
-            attachment: false,
-            toolcall: false,
-            interleaved: false,
-            input: { text: true, audio: false, image: false, video: false, pdf: false },
-            output: { text: true, audio: false, image: false, video: false, pdf: false },
-          },
-        },
-      },
+      models: blackboxModels,
     }
 
     function mergeProvider(providerID: string, provider: Partial<Info>) {
