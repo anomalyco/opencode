@@ -235,7 +235,7 @@ Podijelite trenutnu sesiju. [Saznajte više](/docs/share).
 Navedite dostupne teme.
 
 ```bash frame="none"
-/theme
+/themes
 ```
 
 **Tastatura:** `ctrl+x t`
@@ -358,24 +358,34 @@ Nekim uređivačima su potrebni argumenti komandne linije da bi se pokrenuli u n
 
 ## Konfiguracija
 
-Možete prilagoditi TUI ponašanje putem vašeg OpenCode konfiguracionog fajla.
+Možete prilagoditi TUI ponašanje putem `tui.json` (ili `tui.jsonc`).
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "tui": {
-    "scroll_speed": 3,
-    "scroll_acceleration": {
-      "enabled": true
-    }
-  }
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "opencode",
+  "keybinds": {
+    "leader": "ctrl+x"
+  },
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": true
+  },
+  "diff_style": "auto"
 }
 ```
 
+Ovo je odvojeno od `opencode.json`, koji konfiguriše ponašanje servera/izvršavanja.
+
 ### Opcije
 
-- `scroll_acceleration` - ​​Omogućite ubrzanje pomicanja u macOS stilu za glatko, prirodno pomicanje. Kada je omogućeno, brzina pomicanja se povećava brzim pokretima pomicanja i ostaje precizna za sporije pokrete. **Ova postavka ima prednost nad `scroll_speed` i nadjačava je kada je omogućena.**
-- `scroll_speed` - ​​Kontrolira koliko brzo TUI skroluje kada se koriste komande za pomeranje (minimalno: `1`). Podrazumevano je `3`. **Napomena: Ovo se zanemaruje ako je `scroll_acceleration.enabled` postavljeno na `true`.**
+- `theme` - Postavlja vašu UI temu. [Saznajte više](/docs/themes).
+- `keybinds` - Prilagođava prečice na tastaturi. [Saznajte više](/docs/keybinds).
+- `scroll_acceleration.enabled` - ​​Omogućite ubrzanje pomicanja u macOS stilu za glatko, prirodno pomicanje. Kada je omogućeno, brzina pomicanja se povećava brzim pokretima pomicanja i ostaje precizna za sporije pokrete. **Ova postavka ima prednost nad `scroll_speed` i nadjačava je kada je omogućena.**
+- `scroll_speed` - ​​Kontrolira koliko brzo TUI skroluje kada se koriste komande za pomeranje (minimum: `0.001`, podržava decimalne vrijednosti). Podrazumevano je `3`. **Napomena: Ovo se zanemaruje ako je `scroll_acceleration.enabled` postavljeno na `true`.**
+- `diff_style` - Kontrolira prikazivanje razlike. `"auto"` se prilagođava širini terminala, `"stacked"` uvijek prikazuje raspored u jednoj koloni.
+
+Koristite `OPENCODE_TUI_CONFIG` da učitate prilagođenu putanju TUI konfiguracije.
 
 ---
 

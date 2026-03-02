@@ -19,7 +19,6 @@ export const useSessionHashScroll = (input: {
   setPendingMessage: (value: string | undefined) => void
   setActiveMessage: (message: UserMessage | undefined) => void
   setTurnStart: (value: number) => void
-  scheduleTurnBackfill: () => void
   autoScroll: { pause: () => void; forceScrollToBottom: () => void }
   scroller: () => HTMLDivElement | undefined
   anchor: (id: string) => string
@@ -45,7 +44,9 @@ export const useSessionHashScroll = (input: {
 
     const a = el.getBoundingClientRect()
     const b = root.getBoundingClientRect()
-    const top = a.top - b.top + root.scrollTop
+    const sticky = root.querySelector("[data-session-title]")
+    const inset = sticky instanceof HTMLElement ? sticky.offsetHeight : 0
+    const top = Math.max(0, a.top - b.top + root.scrollTop - inset)
     root.scrollTo({ top, behavior })
     return true
   }
@@ -56,7 +57,6 @@ export const useSessionHashScroll = (input: {
     const index = messageIndex().get(message.id) ?? -1
     if (index !== -1 && index < input.turnStart()) {
       input.setTurnStart(index)
-      input.scheduleTurnBackfill()
 
       requestAnimationFrame(() => {
         const el = document.getElementById(input.anchor(message.id))

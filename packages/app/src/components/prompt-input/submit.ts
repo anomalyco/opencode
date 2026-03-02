@@ -1,21 +1,20 @@
-import { Accessor } from "solid-js"
-import { useNavigate, useParams } from "@solidjs/router"
-import { createOpencodeClient, type Message } from "@opencode-ai/sdk/v2/client"
+import type { Message } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
-import { useLocal } from "@/context/local"
-import { usePrompt, type ImageAttachmentPart, type Prompt } from "@/context/prompt"
+import { useNavigate, useParams } from "@solidjs/router"
+import type { Accessor } from "solid-js"
+import type { FileSelection } from "@/context/file"
+import { useGlobalSync } from "@/context/global-sync"
+import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
+import { useLocal } from "@/context/local"
+import { type ImageAttachmentPart, type Prompt, usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import { useGlobalSync } from "@/context/global-sync"
-import { usePlatform } from "@/context/platform"
-import { useLanguage } from "@/context/language"
 import { Identifier } from "@/utils/id"
 import { Worktree as WorktreeState } from "@/utils/worktree"
-import type { FileSelection } from "@/context/file"
-import { setCursorPosition } from "./editor-dom"
 import { buildRequestParts } from "./build-request-parts"
+import { setCursorPosition } from "./editor-dom"
 
 type PendingPrompt = {
   abort: AbortController
@@ -56,7 +55,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const sdk = useSDK()
   const sync = useSync()
   const globalSync = useGlobalSync()
-  const platform = usePlatform()
   const local = useLocal()
   const prompt = usePrompt()
   const layout = useLayout()
@@ -75,12 +73,16 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const abort = async () => {
     const sessionID = params.id
     if (!sessionID) return Promise.resolve()
+
+    globalSync.todo.set(sessionID, [])
+    const [, setStore] = globalSync.child(sdk.directory)
+    setStore("todo", sessionID, [])
+
     const queued = pending.get(sessionID)
     if (queued) {
       queued.abort.abort()
       queued.cleanup()
       pending.delete(sessionID)
-      globalSync.todo.set(sessionID, undefined)
       return Promise.resolve()
     }
     return sdk.client.session
@@ -88,9 +90,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         sessionID,
       })
       .catch(() => {})
-      .finally(() => {
-        globalSync.todo.set(sessionID, undefined)
-      })
   }
 
   const restoreCommentItems = (items: CommentItem[]) => {
@@ -175,9 +174,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       }
 
       if (sessionDirectory !== projectDirectory) {
-        client = createOpencodeClient({
-          baseUrl: sdk.url,
-          fetch: platform.fetch,
+        client = sdk.createClient({
           directory: sessionDirectory,
           throwOnError: true,
         })
@@ -372,7 +369,10 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       const timer = { id: undefined as number | undefined }
       const timeout = new Promise<Awaited<ReturnType<typeof WorktreeState.wait>>>((resolve) => {
         timer.id = window.setTimeout(() => {
-          resolve({ status: "failed", message: language.t("workspace.error.stillPreparing") })
+          resolve({
+            status: "failed",
+            message: language.t("workspace.error.stillPreparing"),
+          })
         }, timeoutMs)
       })
 
