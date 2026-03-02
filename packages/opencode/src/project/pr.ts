@@ -376,23 +376,6 @@ export namespace PR {
       }
     }
 
-    // Clean up local branch if it exists and isn't the current one
-    const currentBranch = await $`git rev-parse --abbrev-ref HEAD`
-      .quiet()
-      .nothrow()
-      .cwd(cwd)
-      .text()
-      .catch((_e: unknown) => "")
-    if (currentBranch.trim() !== input.branch) {
-      await $`git branch -D ${input.branch}`
-        .quiet()
-        .nothrow()
-        .cwd(cwd)
-        .catch(() => {
-          // Local branch cleanup is best-effort
-        })
-    }
-
     await Vcs.refresh()
   }
 }

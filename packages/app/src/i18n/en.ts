@@ -161,6 +161,11 @@ export const dict = {
   "pr.error.merge_failed": "Failed to merge pull request",
   "pr.error.ready_failed": "Failed to mark PR as ready",
   "pr.error.delete_branch_failed": "Failed to delete branch",
+  "pr.delete.title": "Delete Branch",
+  "pr.delete.warning":
+    "This will permanently delete the remote branch. It can be restored from the pull request page on GitHub.",
+  "pr.delete.submit": "Delete Branch",
+  "pr.delete.submitting": "Deleting...",
   "pr.tooltip.not_authenticated": "Run `gh auth login` to enable",
   "pr.tooltip.not_local": "PR actions require local server",
 
