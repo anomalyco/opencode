@@ -96,6 +96,19 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       if (timer) clearTimeout(timer)
     })
 
-    return { client: sdk, event: emitter, url: props.url }
+    const raw = props.fetch ?? fetch
+    const wrapped = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const merged = new Headers(props.headers as HeadersInit)
+      if (init?.headers) {
+        const h = new Headers(init.headers as HeadersInit)
+        h.forEach((v, k) => {
+          merged.set(k, v)
+        })
+      }
+      if (props.directory && !merged.has("x-opencode-directory")) merged.set("x-opencode-directory", props.directory)
+      return raw(input as RequestInfo, { ...init, headers: merged })
+    }) as typeof fetch
+
+    return { client: sdk, event: emitter, url: props.url, fetch: wrapped }
   },
 })

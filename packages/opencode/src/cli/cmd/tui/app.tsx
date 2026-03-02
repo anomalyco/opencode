@@ -261,6 +261,18 @@ function App() {
     console.log(JSON.stringify(route.data))
   })
 
+  // Report active session to server whenever route changes
+  createEffect(() => {
+    const sessionID = route.data.type === "session" ? route.data.sessionID : null
+    sdk
+      .fetch(sdk.url + "/tui/active-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionID }),
+      })
+      .catch(() => {})
+  })
+
   // Update terminal window title based on current route and session
   createEffect(() => {
     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return

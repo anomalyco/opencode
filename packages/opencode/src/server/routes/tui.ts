@@ -8,6 +8,8 @@ import { AsyncQueue } from "../../util/queue"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 
+let activeSessionID: string | undefined
+
 const TuiRequest = z.object({
   path: z.string(),
   body: z.any(),
@@ -372,6 +374,57 @@ export const TuiRoutes = lazy(() =>
         const { sessionID } = c.req.valid("json")
         await Session.get(sessionID)
         await Bus.publish(TuiEvent.SessionSelect, { sessionID })
+        activeSessionID = sessionID
+        return c.json(true)
+      },
+    )
+    .get(
+      "/active-session",
+      describeRoute({
+        summary: "Get active session",
+        description: "Get the session currently being viewed in the TUI.",
+        operationId: "tui.activeSession.get",
+        responses: {
+          200: {
+            description: "Currently active session, or null if on home screen",
+            content: {
+              "application/json": {
+                schema: resolver(Session.Info.nullable()),
+              },
+            },
+          },
+          ...errors(404),
+        },
+      }),
+      async (c) => {
+        if (!activeSessionID) return c.json(null)
+        const session = await Session.get(activeSessionID)
+        return c.json(session)
+      },
+    )
+    .post(
+      "/active-session",
+      describeRoute({
+        summary: "Report active session",
+        description: "Report which session the TUI is currently viewing.",
+        operationId: "tui.activeSession.set",
+        responses: {
+          200: {
+            description: "Active session updated",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("json", z.object({ sessionID: z.string().nullable() })),
+      async (c) => {
+        const { sessionID } = c.req.valid("json")
+        if (sessionID !== null) await Session.get(sessionID)
+        activeSessionID = sessionID ?? undefined
         return c.json(true)
       },
     )
