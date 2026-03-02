@@ -1974,33 +1974,40 @@ function Task(props: ToolProps<typeof TaskTool>) {
   })
 
   return (
-    <InlineTool
-      icon="≡"
-      spinner={isRunning()}
-      complete={props.input.description}
-      pending="Delegating..."
+    <BlockTool
+      title={"# " + (props.input.description || Locale.titlecase(props.input.subagent_type ?? "unknown") + " Task")}
+      onClick={
+        props.metadata.sessionId ? () => navigate({ type: "session", sessionID: props.metadata.sessionId! }) : undefined
+      }
       part={props.part}
+      spinner={isRunning()}
     >
-      {props.input.description}
-      <Show when={isRunning() && tools().length > 0}>
-        {" "}
-        · {tools().length} toolcalls
-        <Show fallback={"\n└ Running..."} when={current()}>
-          {(item) => {
-            const title = createMemo(() => (item().state as any).title)
-            return (
-              <>
-                {"\n"}└ {Locale.titlecase(item().tool)} {title()}
-              </>
-            )
-          }}
+      <box>
+        <Show when={isRunning() && tools().length > 0}>
+          <text style={{ fg: theme.textMuted }}>
+            {tools().length} toolcalls
+            <Show fallback={"\n└ Running..."} when={current()}>
+              {(item) => {
+                const title = createMemo(() => (item().state as any).title)
+                return (
+                  <>
+                    {"\n"}└ {Locale.titlecase(item().tool)} {title()}
+                  </>
+                )
+              }}
+            </Show>
+          </text>
         </Show>
+        <Show when={duration() && props.part.state.status === "completed"}>
+          <text style={{ fg: theme.textMuted }}>
+            {tools().length} toolcalls · {Locale.duration(duration())}
+          </text>
+        </Show>
+      </box>
+      <Show when={props.metadata.sessionId}>
+        <text style={{ fg: theme.textMuted }}>{keybind.print("session_child_first")} view subagents</text>
       </Show>
-      <Show when={duration() && props.part.state.status === "completed"}>
-        {"\n  "}
-        {tools().length} toolcalls · {Locale.duration(duration())}
-      </Show>
-    </InlineTool>
+    </BlockTool>
   )
 }
 
