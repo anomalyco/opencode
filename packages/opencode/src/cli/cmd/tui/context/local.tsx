@@ -223,8 +223,19 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
           const provider = sync.data.provider.find((x) => x.id === value.providerID)
           const info = provider?.models[value.modelID]
+          let name = provider?.name ?? value.providerID
+          const meta = provider?.metadata as { host?: string; profile?: string } | undefined
+          if (meta?.profile) {
+            name += ` (${meta.profile})`
+          } else if (meta?.host) {
+            try {
+              name += ` (${new URL(meta.host).hostname})`
+            } catch {
+              name += ` (${meta.host})`
+            }
+          }
           return {
-            provider: provider?.name ?? value.providerID,
+            provider: name,
             model: info?.name ?? value.modelID,
             reasoning: info?.capabilities?.reasoning ?? false,
           }

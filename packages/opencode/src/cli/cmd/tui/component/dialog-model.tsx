@@ -33,6 +33,20 @@ export function DialogModel(props: { providerID?: string }) {
     const favorites = connected() ? local.model.favorite() : []
     const recents = local.model.recent()
 
+    const providerLabel = (provider: (typeof sync.data.provider)[number]) => {
+      let name = provider.name
+      const meta = provider.metadata as { host?: string; profile?: string } | undefined
+      if (meta?.profile) name += ` (${meta.profile})`
+      else if (meta?.host) {
+        try {
+          name += ` (${new URL(meta.host).hostname})`
+        } catch {
+          name += ` (${meta.host})`
+        }
+      }
+      return name
+    }
+
     function toOptions(items: typeof favorites, category: string) {
       if (!showSections) return []
       return items.flatMap((item) => {
@@ -45,7 +59,7 @@ export function DialogModel(props: { providerID?: string }) {
             key: item,
             value: { providerID: provider.id, modelID: model.id },
             title: model.name ?? item.modelID,
-            description: provider.name,
+            description: providerLabel(provider),
             category,
             disabled: provider.id === "opencode" && model.id.includes("-nano"),
             footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
@@ -84,7 +98,7 @@ export function DialogModel(props: { providerID?: string }) {
             description: favorites.some((item) => item.providerID === provider.id && item.modelID === model)
               ? "(Favorite)"
               : undefined,
-            category: connected() ? provider.name : undefined,
+            category: connected() ? providerLabel(provider) : undefined,
             disabled: provider.id === "opencode" && model.includes("-nano"),
             footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
             onSelect() {
