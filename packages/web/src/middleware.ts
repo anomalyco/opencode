@@ -85,10 +85,14 @@ export const onRequest = defineMiddleware((ctx, next) => {
 
   if (ctx.url.pathname !== "/docs" && ctx.url.pathname !== "/docs/") return next()
 
-  const locale =
-    localeFromCookie(ctx.request.headers.get("cookie")) ??
-    localeFromAcceptLanguage(ctx.request.headers.get("accept-language"))
-  if (!locale || locale === "root") return next()
+  const cookieLocale = localeFromCookie(ctx.request.headers.get("cookie"))
+  if (cookieLocale !== null) {
+    if (cookieLocale === "root") return next()
+    return redirect(ctx.url, `/docs/${cookieLocale}/`)
+  }
 
-  return redirect(ctx.url, `/docs/${locale}/`)
+  const acceptLanguageLocale = localeFromAcceptLanguage(ctx.request.headers.get("accept-language"))
+  if (!acceptLanguageLocale || acceptLanguageLocale === "root") return next()
+
+  return redirect(ctx.url, `/docs/${acceptLanguageLocale}/`)
 })
