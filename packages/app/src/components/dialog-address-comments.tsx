@@ -181,10 +181,10 @@ export function AddressCommentsDialog() {
 
                     return (
                       <div
-                        class={`group flex gap-3.5 p-4 border rounded-lg cursor-pointer transition-colors ${
+                        class={`group flex gap-3.5 p-4 border rounded-lg cursor-pointer transition-all ${
                           isChecked()
                             ? "border-border-weaker-base"
-                            : "border-border-weaker-base hover:border-border-weak-base"
+                            : "opacity-50 border-border-weaker-base hover:border-border-weak-base hover:opacity-70"
                         }`}
                         onClick={() => toggleThread(thread.id)}
                       >
