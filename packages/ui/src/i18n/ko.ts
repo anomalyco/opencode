@@ -3,6 +3,9 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "마지막 턴 변경 사항",
   "ui.sessionReview.diffStyle.unified": "통합 보기",
   "ui.sessionReview.diffStyle.split": "분할 보기",
+  "ui.sessionReview.openFile": "파일 열기",
+  "ui.sessionReview.selection.line": "{{line}}번 줄",
+  "ui.sessionReview.selection.lines": "{{start}}-{{end}}번 줄",
   "ui.sessionReview.expandAll": "모두 펼치기",
   "ui.sessionReview.collapseAll": "모두 접기",
   "ui.sessionReview.change.added": "추가됨",
@@ -37,6 +40,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "재시도 중",
   "ui.sessionTurn.retry.inSeconds": "{{seconds}}초 후",
+  "ui.sessionTurn.retry.attempt": "{{attempt}}번째",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - {{attempt}}번째",
+  "ui.sessionTurn.retry.geminiHot": "gemini가 현재 과부하 상태입니다",
   "ui.sessionTurn.error.freeUsageExceeded": "무료 사용량 초과",
   "ui.sessionTurn.error.addCredits": "크레딧 추가",
 
@@ -53,6 +59,14 @@ export const dict = {
   "ui.sessionTurn.status.gatheringThoughts": "생각 정리 중",
   "ui.sessionTurn.status.consideringNextSteps": "다음 단계 고려 중",
 
+  "ui.messagePart.questions.dismissed": "질문 무시됨",
+  "ui.messagePart.compaction": "기록이 압축됨",
+  "ui.messagePart.context.read.one": "{{count}}개 읽음",
+  "ui.messagePart.context.read.other": "{{count}}개 읽음",
+  "ui.messagePart.context.search.one": "{{count}}개 검색",
+  "ui.messagePart.context.search.other": "{{count}}개 검색",
+  "ui.messagePart.context.list.one": "{{count}}개 목록",
+  "ui.messagePart.context.list.other": "{{count}}개 목록",
   "ui.messagePart.diagnostic.error": "오류",
   "ui.messagePart.title.edit": "편집",
   "ui.messagePart.title.write": "작성",
@@ -72,6 +86,7 @@ export const dict = {
   "ui.textField.copied": "복사됨",
 
   "ui.imagePreview.alt": "이미지 미리보기",
+  "ui.scrollView.ariaLabel": "스크롤 가능한 콘텐츠",
 
   "ui.tool.read": "읽기",
   "ui.tool.loaded": "로드됨",
@@ -111,6 +126,7 @@ export const dict = {
   "ui.message.copyResponse": "응답 복사",
   "ui.message.copied": "복사됨!",
   "ui.message.interrupted": "중단됨",
+  "ui.message.queued": "대기 중",
   "ui.message.attachment.alt": "첨부 파일",
 
   "ui.patch.action.deleted": "삭제됨",

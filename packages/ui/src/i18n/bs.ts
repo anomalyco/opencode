@@ -7,6 +7,9 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "Promjene u posljednjem potezu",
   "ui.sessionReview.diffStyle.unified": "Ujedinjeno",
   "ui.sessionReview.diffStyle.split": "Podijeljeno",
+  "ui.sessionReview.openFile": "Otvori fajl",
+  "ui.sessionReview.selection.line": "linija {{line}}",
+  "ui.sessionReview.selection.lines": "linije {{start}}-{{end}}",
   "ui.sessionReview.expandAll": "Proširi sve",
   "ui.sessionReview.collapseAll": "Sažmi sve",
   "ui.sessionReview.change.added": "Dodano",
@@ -41,6 +44,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "ponovni pokušaj",
   "ui.sessionTurn.retry.inSeconds": "za {{seconds}}s",
+  "ui.sessionTurn.retry.attempt": "pokušaj #{{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - pokušaj #{{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini je trenutno preopterećen",
   "ui.sessionTurn.error.freeUsageExceeded": "Besplatna upotreba premašena",
   "ui.sessionTurn.error.addCredits": "Dodaj kredite",
 
@@ -57,6 +63,14 @@ export const dict = {
   "ui.sessionTurn.status.gatheringThoughts": "Sređivanje misli",
   "ui.sessionTurn.status.consideringNextSteps": "Razmatranje sljedećih koraka",
 
+  "ui.messagePart.questions.dismissed": "Pitanja odbačena",
+  "ui.messagePart.compaction": "Historija sažeta",
+  "ui.messagePart.context.read.one": "{{count}} čitanje",
+  "ui.messagePart.context.read.other": "{{count}} čitanja",
+  "ui.messagePart.context.search.one": "{{count}} pretraga",
+  "ui.messagePart.context.search.other": "{{count}} pretrage",
+  "ui.messagePart.context.list.one": "{{count}} lista",
+  "ui.messagePart.context.list.other": "{{count}} liste",
   "ui.messagePart.diagnostic.error": "Greška",
   "ui.messagePart.title.edit": "Uredi",
   "ui.messagePart.title.write": "Napiši",
@@ -76,6 +90,7 @@ export const dict = {
   "ui.textField.copied": "Kopirano",
 
   "ui.imagePreview.alt": "Pregled slike",
+  "ui.scrollView.ariaLabel": "sadržaj za pomjeranje",
 
   "ui.tool.read": "Čitanje",
   "ui.tool.loaded": "Učitano",
@@ -115,6 +130,7 @@ export const dict = {
   "ui.message.copyResponse": "Kopiraj odgovor",
   "ui.message.copied": "Kopirano!",
   "ui.message.interrupted": "Prekinuto",
+  "ui.message.queued": "U redu",
   "ui.message.attachment.alt": "prilog",
 
   "ui.patch.action.deleted": "Obrisano",

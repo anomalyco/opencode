@@ -3,6 +3,9 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "Modifications du dernier tour",
   "ui.sessionReview.diffStyle.unified": "Unifié",
   "ui.sessionReview.diffStyle.split": "Divisé",
+  "ui.sessionReview.openFile": "Ouvrir le fichier",
+  "ui.sessionReview.selection.line": "ligne {{line}}",
+  "ui.sessionReview.selection.lines": "lignes {{start}}-{{end}}",
   "ui.sessionReview.expandAll": "Tout développer",
   "ui.sessionReview.collapseAll": "Tout réduire",
   "ui.sessionReview.change.added": "Ajouté",
@@ -37,6 +40,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "nouvelle tentative",
   "ui.sessionTurn.retry.inSeconds": "dans {{seconds}}s",
+  "ui.sessionTurn.retry.attempt": "tentative n°{{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - tentative n°{{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini est en surchauffe",
   "ui.sessionTurn.error.freeUsageExceeded": "Limite d'utilisation gratuite dépassée",
   "ui.sessionTurn.error.addCredits": "Ajouter des crédits",
 
@@ -53,6 +59,14 @@ export const dict = {
   "ui.sessionTurn.status.gatheringThoughts": "Rassemblement des idées",
   "ui.sessionTurn.status.consideringNextSteps": "Examen des prochaines étapes",
 
+  "ui.messagePart.questions.dismissed": "Questions ignorées",
+  "ui.messagePart.compaction": "Historique compacté",
+  "ui.messagePart.context.read.one": "{{count}} lecture",
+  "ui.messagePart.context.read.other": "{{count}} lectures",
+  "ui.messagePart.context.search.one": "{{count}} recherche",
+  "ui.messagePart.context.search.other": "{{count}} recherches",
+  "ui.messagePart.context.list.one": "{{count}} liste",
+  "ui.messagePart.context.list.other": "{{count}} listes",
   "ui.messagePart.diagnostic.error": "Erreur",
   "ui.messagePart.title.edit": "Modifier",
   "ui.messagePart.title.write": "Écrire",
@@ -72,6 +86,7 @@ export const dict = {
   "ui.textField.copied": "Copié",
 
   "ui.imagePreview.alt": "Aperçu de l'image",
+  "ui.scrollView.ariaLabel": "contenu défilable",
 
   "ui.tool.read": "Lire",
   "ui.tool.loaded": "Chargé",
@@ -111,6 +126,7 @@ export const dict = {
   "ui.message.copyResponse": "Copier la réponse",
   "ui.message.copied": "Copié !",
   "ui.message.interrupted": "Interrompu",
+  "ui.message.queued": "En file",
   "ui.message.attachment.alt": "pièce jointe",
 
   "ui.patch.action.deleted": "Supprimé",

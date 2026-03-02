@@ -7,6 +7,9 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "Son tur değişiklikleri",
   "ui.sessionReview.diffStyle.unified": "Birleşik",
   "ui.sessionReview.diffStyle.split": "Bölünmüş",
+  "ui.sessionReview.openFile": "Dosyayı aç",
+  "ui.sessionReview.selection.line": "satır {{line}}",
+  "ui.sessionReview.selection.lines": "satırlar {{start}}-{{end}}",
   "ui.sessionReview.expandAll": "Tümünü genişlet",
   "ui.sessionReview.collapseAll": "Tümünü daralt",
 
@@ -33,6 +36,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "yeniden deneniyor",
   "ui.sessionTurn.retry.inSeconds": "{{seconds}}sn içinde",
+  "ui.sessionTurn.retry.attempt": "deneme #{{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - deneme #{{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini şu anda aşırı yoğun",
   "ui.sessionTurn.error.freeUsageExceeded": "Ücretsiz kullanım aşıldı",
   "ui.sessionTurn.error.addCredits": "Kredi ekle",
 
@@ -49,6 +55,14 @@ export const dict = {
   "ui.sessionTurn.status.gatheringThoughts": "Düşünceler toplanıyor",
   "ui.sessionTurn.status.consideringNextSteps": "Sonraki adımlar değerlendiriliyor",
 
+  "ui.messagePart.questions.dismissed": "Sorular reddedildi",
+  "ui.messagePart.compaction": "Geçmiş sıkıştırıldı",
+  "ui.messagePart.context.read.one": "{{count}} okuma",
+  "ui.messagePart.context.read.other": "{{count}} okuma",
+  "ui.messagePart.context.search.one": "{{count}} arama",
+  "ui.messagePart.context.search.other": "{{count}} arama",
+  "ui.messagePart.context.list.one": "{{count}} liste",
+  "ui.messagePart.context.list.other": "{{count}} liste",
   "ui.messagePart.diagnostic.error": "Hata",
   "ui.messagePart.title.edit": "Düzenle",
   "ui.messagePart.title.write": "Yaz",
@@ -68,6 +82,7 @@ export const dict = {
   "ui.textField.copied": "Kopyalandı",
 
   "ui.imagePreview.alt": "Görsel önizleme",
+  "ui.scrollView.ariaLabel": "kaydırılabilir içerik",
 
   "ui.tool.read": "Oku",
   "ui.tool.loaded": "Yüklendi",
@@ -107,6 +122,7 @@ export const dict = {
   "ui.message.copyResponse": "Yanıtı kopyala",
   "ui.message.copied": "Kopyalandı",
   "ui.message.interrupted": "Kesildi",
+  "ui.message.queued": "Sırada",
   "ui.message.attachment.alt": "ek",
 
   "ui.patch.action.deleted": "Silindi",

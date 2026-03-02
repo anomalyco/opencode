@@ -3,6 +3,9 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "Zmiany z ostatniej tury",
   "ui.sessionReview.diffStyle.unified": "Ujednolicony",
   "ui.sessionReview.diffStyle.split": "Podzielony",
+  "ui.sessionReview.openFile": "Otwórz plik",
+  "ui.sessionReview.selection.line": "linia {{line}}",
+  "ui.sessionReview.selection.lines": "linie {{start}}-{{end}}",
   "ui.sessionReview.expandAll": "Rozwiń wszystko",
   "ui.sessionReview.collapseAll": "Zwiń wszystko",
 
@@ -36,6 +39,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "ponawianie",
   "ui.sessionTurn.retry.inSeconds": "za {{seconds}}s",
+  "ui.sessionTurn.retry.attempt": "próba #{{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - próba #{{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini jest teraz mocno przeciążony",
   "ui.sessionTurn.error.freeUsageExceeded": "Przekroczono limit darmowego użytkowania",
   "ui.sessionTurn.error.addCredits": "Dodaj kredyty",
 
@@ -52,6 +58,14 @@ export const dict = {
   "ui.sessionTurn.status.gatheringThoughts": "Zbieranie myśli",
   "ui.sessionTurn.status.consideringNextSteps": "Rozważanie kolejnych kroków",
 
+  "ui.messagePart.questions.dismissed": "Pytania odrzucone",
+  "ui.messagePart.compaction": "Historia skompaktowana",
+  "ui.messagePart.context.read.one": "{{count}} odczyt",
+  "ui.messagePart.context.read.other": "{{count}} odczyty",
+  "ui.messagePart.context.search.one": "{{count}} wyszukiwanie",
+  "ui.messagePart.context.search.other": "{{count}} wyszukiwania",
+  "ui.messagePart.context.list.one": "{{count}} lista",
+  "ui.messagePart.context.list.other": "{{count}} listy",
   "ui.messagePart.diagnostic.error": "Błąd",
   "ui.messagePart.title.edit": "Edycja",
   "ui.messagePart.title.write": "Pisanie",
@@ -71,6 +85,7 @@ export const dict = {
   "ui.textField.copied": "Skopiowano",
 
   "ui.imagePreview.alt": "Podgląd obrazu",
+  "ui.scrollView.ariaLabel": "treść przewijana",
 
   "ui.tool.read": "Odczyt",
   "ui.tool.loaded": "Załadowano",
@@ -110,6 +125,7 @@ export const dict = {
   "ui.message.copyResponse": "Kopiuj odpowiedź",
   "ui.message.copied": "Skopiowano!",
   "ui.message.interrupted": "Przerwano",
+  "ui.message.queued": "W kolejce",
   "ui.message.attachment.alt": "załącznik",
 
   "ui.patch.action.deleted": "Usunięto",
