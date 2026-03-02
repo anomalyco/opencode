@@ -588,6 +588,135 @@ export namespace Provider {
         },
       }
     },
+    asksage: async () => {
+      const nativeModels = new Set([
+        "google-gemini-2.5-pro",
+        "google-gemini-2.5-flash",
+        "xai-grok",
+      ])
+
+      function toNativeRequest(body: any) {
+        const messages: any[] = body.messages ?? []
+        let systemPrompt: string | undefined
+        const history: { user: string; message: string }[] = []
+        for (const msg of messages) {
+          if (msg.role === "system") {
+            systemPrompt = (systemPrompt ? systemPrompt + "\n" : "") + (typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content))
+          } else if (msg.role === "user") {
+            history.push({ user: "me", message: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content) })
+          } else if (msg.role === "assistant") {
+            const text = typeof msg.content === "string" ? msg.content : msg.content?.map((c: any) => c.text ?? "").join("") ?? ""
+            if (text) history.push({ user: "sage", message: text })
+          } else if (msg.role === "tool") {
+            history.push({ user: "me", message: `[Tool result for ${msg.tool_call_id}]: ${typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content)}` })
+          }
+        }
+        const native: Record<string, any> = {
+          model: body.model,
+          message: history.length === 1 ? history[0].message : history,
+        }
+        if (systemPrompt) native.system_prompt = systemPrompt
+        if (body.tools) native.tools = body.tools
+        if (body.temperature !== undefined) native.temperature = body.temperature
+        native.limit_references = 0
+        return native
+      }
+
+      function toOpenAIResponse(data: any, model: string, streaming: boolean) {
+        const id = `chatcmpl-${data.uuid ?? crypto.randomUUID()}`
+        const created = Math.floor(Date.now() / 1000)
+        const content = (data.message ?? "").replace(/^\n+/, "")
+        const toolCalls = (data.tool_calls_unified ?? []).map((tc: any, i: number) => ({
+          index: i,
+          id: tc.id ?? `call_${i}`,
+          type: "function",
+          function: {
+            name: tc.function?.name,
+            arguments: typeof tc.function?.arguments === "string" ? tc.function.arguments : JSON.stringify(tc.function?.arguments ?? {}),
+          },
+        }))
+        const finishReason = toolCalls.length > 0 ? "tool_calls" : "stop"
+        const usage = {
+          prompt_tokens: data.usage?.model_tokens?.prompt_tokens ?? 0,
+          completion_tokens: data.usage?.model_tokens?.completion_tokens ?? 0,
+          total_tokens: data.usage?.model_tokens?.total_tokens ?? 0,
+        }
+
+        if (streaming) {
+          const chunks = [
+            { id, object: "chat.completion.chunk", created: created, model, choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }] },
+            ...(content ? [{ id, object: "chat.completion.chunk", created: created, model, choices: [{ index: 0, delta: { content }, finish_reason: null }] }] : []),
+            ...(toolCalls.length > 0 ? [{ id, object: "chat.completion.chunk", created: created, model, choices: [{ index: 0, delta: { tool_calls: toolCalls }, finish_reason: null }] }] : []),
+            { id, object: "chat.completion.chunk", created: created, model, choices: [{ index: 0, delta: {}, finish_reason: finishReason }] },
+            { id, object: "chat.completion.chunk", created: created, model, choices: [], usage },
+          ]
+          const body = chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join("") + "data: [DONE]\n\n"
+          return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } })
+        }
+
+        return new Response(
+          JSON.stringify({
+            id,
+            object: "chat.completion",
+            created,
+            model,
+            choices: [{ index: 0, message: { role: "assistant", content: content || null, tool_calls: toolCalls.length > 0 ? toolCalls : undefined }, finish_reason: finishReason }],
+            usage,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        )
+      }
+
+      return {
+        autoload: false,
+        options: {
+          includeUsage: false,
+          fetch: async (input: any, init?: any) => {
+            const opts = { ...init }
+            const url = typeof input === "string" ? input : input?.url ?? ""
+            if (opts.body && opts.method === "POST" && url.includes("/openai/")) {
+              try {
+                const body = JSON.parse(opts.body as string)
+                if (nativeModels.has(body.model)) {
+                  // Route Gemini/Grok/o-series through AskSage native API
+                  const baseURL = url.replace(/\/server\/openai\/v1\/.*$/, "")
+                  const hdrs = opts.headers instanceof Headers ? Object.fromEntries(opts.headers.entries()) : (opts.headers ?? {}) as Record<string, string>
+                  const apiKey = (hdrs["Authorization"] ?? hdrs["authorization"] ?? "").replace("Bearer ", "")
+                  const native = toNativeRequest(body)
+                  const resp = await fetch(`${baseURL}/server/query`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "x-access-tokens": apiKey },
+                    body: JSON.stringify(native),
+                  })
+                  const data = await resp.json() as any
+                  if (data.status !== 200) {
+                    return new Response(JSON.stringify({ error: { message: data.message || data.response || "AskSage query failed", type: "api_error" } }), { status: 400, headers: { "content-type": "application/json" } })
+                  }
+                  return toOpenAIResponse(data, body.model, body.stream === true)
+                }
+                // AskSage OpenAI proxy requires max_completion_tokens, not max_tokens
+                if (body.max_tokens !== undefined) {
+                  body.max_completion_tokens = body.max_tokens
+                  delete body.max_tokens
+                }
+                // AskSage requires tool_choice as a string, not an object
+                if (body.tool_choice && typeof body.tool_choice === "object" && body.tool_choice.type) {
+                  body.tool_choice = body.tool_choice.type
+                }
+                // Remove params AskSage's proxy doesn't support
+                delete body.stream_options
+                delete body.reasoningSummary
+                delete body.reasoning_effort
+                opts.body = JSON.stringify(body)
+              } catch {
+                // pass through unchanged
+              }
+            }
+            return fetch(input, opts)
+          },
+        },
+      }
+    },
   }
 
   export const Model = z
@@ -791,6 +920,222 @@ export namespace Provider {
           ...model,
           providerID: "github-copilot-enterprise",
         })),
+      }
+    }
+
+    // Add AskSage provider (FedRAMP High AI service)
+    // Claude models use @ai-sdk/anthropic via /server/anthropic/v1
+    // Other models use @ai-sdk/openai-compatible via /server/openai/v1
+    if (!database["asksage"]) {
+      const anthropicHeaders = {
+        "anthropic-beta":
+          "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+      }
+      const asksageClaudeBase = {
+        providerID: "asksage",
+        api: {
+          url: "https://api.asksage.ai/server/anthropic/v1",
+          npm: "@ai-sdk/anthropic",
+        },
+        status: "active" as const,
+        headers: anthropicHeaders,
+        options: {},
+        capabilities: {
+          temperature: false,
+          reasoning: false,
+          toolcall: true,
+          attachment: true,
+          interleaved: false,
+          input: { text: true, audio: false, image: true, video: false, pdf: true },
+          output: { text: true, audio: false, image: false, video: false, pdf: false },
+        },
+      }
+      const asksageOpenAIBase = {
+        providerID: "asksage",
+        api: {
+          url: "https://api.asksage.ai/server/openai/v1",
+          npm: "@ai-sdk/openai-compatible",
+        },
+        status: "active" as const,
+        headers: {},
+        options: {},
+        capabilities: {
+          temperature: true,
+          reasoning: false,
+          toolcall: true,
+          attachment: true,
+          interleaved: false,
+          input: { text: true, audio: false, image: true, video: false, pdf: false },
+          output: { text: true, audio: false, image: false, video: false, pdf: false },
+        },
+      }
+      const asksageModels: Record<string, Model> = {
+        // --- Claude models (via Anthropic proxy) ---
+        "claude-sonnet-4-6": {
+          ...asksageClaudeBase,
+          id: "claude-sonnet-4-6",
+          name: "Claude Sonnet 4.6 (AskSage)",
+          family: "claude-4.6",
+          api: { ...asksageClaudeBase.api, id: "claude-sonnet-4-6-20250923" },
+          cost: { input: 3, output: 15, cache: { read: 0.3, write: 3.75 } },
+          limit: { context: 200000, output: 16384 },
+          release_date: "2025-09-23",
+          capabilities: { ...asksageClaudeBase.capabilities, reasoning: true },
+          variants: {},
+        },
+        "claude-opus-4-6": {
+          ...asksageClaudeBase,
+          id: "claude-opus-4-6",
+          name: "Claude Opus 4.6 (AskSage)",
+          family: "claude-4.6",
+          api: { ...asksageClaudeBase.api, id: "claude-opus-4-6-20250923" },
+          cost: { input: 15, output: 75, cache: { read: 1.5, write: 18.75 } },
+          limit: { context: 200000, output: 16384 },
+          release_date: "2025-09-23",
+          capabilities: { ...asksageClaudeBase.capabilities, reasoning: true },
+          variants: {},
+        },
+        "claude-sonnet-4-5": {
+          ...asksageClaudeBase,
+          id: "claude-sonnet-4-5",
+          name: "Claude Sonnet 4.5 (AskSage)",
+          family: "claude-4.5",
+          api: { ...asksageClaudeBase.api, id: "claude-sonnet-4-5-20250514" },
+          cost: { input: 3, output: 15, cache: { read: 0.3, write: 3.75 } },
+          limit: { context: 200000, output: 16384 },
+          release_date: "2025-05-14",
+          capabilities: { ...asksageClaudeBase.capabilities, reasoning: true },
+          variants: {},
+        },
+        "claude-opus-4": {
+          ...asksageClaudeBase,
+          id: "claude-opus-4",
+          name: "Claude Opus 4 (AskSage)",
+          family: "claude-4",
+          api: { ...asksageClaudeBase.api, id: "claude-opus-4-20250514" },
+          cost: { input: 15, output: 75, cache: { read: 1.5, write: 18.75 } },
+          limit: { context: 200000, output: 16384 },
+          release_date: "2025-05-14",
+          capabilities: { ...asksageClaudeBase.capabilities, reasoning: true },
+          variants: {},
+        },
+        "claude-sonnet-4": {
+          ...asksageClaudeBase,
+          id: "claude-sonnet-4",
+          name: "Claude Sonnet 4 (AskSage)",
+          family: "claude-4",
+          api: { ...asksageClaudeBase.api, id: "claude-sonnet-4-20250514" },
+          cost: { input: 3, output: 15, cache: { read: 0.3, write: 3.75 } },
+          limit: { context: 200000, output: 16384 },
+          release_date: "2025-05-14",
+          capabilities: { ...asksageClaudeBase.capabilities, reasoning: true },
+          variants: {},
+        },
+        "claude-haiku-4-5": {
+          ...asksageClaudeBase,
+          id: "claude-haiku-4-5",
+          name: "Claude Haiku 4.5 (AskSage)",
+          family: "claude-4.5",
+          api: { ...asksageClaudeBase.api, id: "claude-haiku-4-5-20251001" },
+          cost: { input: 0.8, output: 4, cache: { read: 0.08, write: 1 } },
+          limit: { context: 200000, output: 8192 },
+          release_date: "2024-10-22",
+          capabilities: asksageClaudeBase.capabilities,
+          variants: {},
+        },
+        // --- OpenAI models (via OpenAI-compatible proxy) ---
+        "gpt-5": {
+          ...asksageOpenAIBase,
+          id: "gpt-5",
+          name: "GPT-5 (AskSage)",
+          family: "gpt-5",
+          api: { ...asksageOpenAIBase.api, id: "gpt-5" },
+          cost: { input: 2, output: 8, cache: { read: 0, write: 0 } },
+          limit: { context: 200000, output: 16384 },
+          release_date: "2025-04-14",
+          capabilities: { ...asksageOpenAIBase.capabilities, reasoning: true },
+          variants: {},
+        },
+        "gpt-o4-mini": {
+          ...asksageOpenAIBase,
+          id: "gpt-o4-mini",
+          name: "GPT o4-mini (AskSage)",
+          family: "gpt-o4",
+          api: { ...asksageOpenAIBase.api, id: "gpt-o4-mini" },
+          cost: { input: 1.1, output: 4.4, cache: { read: 0, write: 0 } },
+          limit: { context: 200000, output: 16384 },
+          release_date: "2025-04-16",
+          capabilities: { ...asksageOpenAIBase.capabilities, reasoning: true },
+          variants: {},
+        },
+        "gpt-o3": {
+          ...asksageOpenAIBase,
+          id: "gpt-o3",
+          name: "GPT o3 (AskSage)",
+          family: "gpt-o3",
+          api: { ...asksageOpenAIBase.api, id: "gpt-o3" },
+          cost: { input: 2, output: 8, cache: { read: 0, write: 0 } },
+          limit: { context: 200000, output: 16384 },
+          release_date: "2025-04-16",
+          capabilities: { ...asksageOpenAIBase.capabilities, reasoning: true },
+          variants: {},
+        },
+        "gpt-4o": {
+          ...asksageOpenAIBase,
+          id: "gpt-4o",
+          name: "GPT-4o (AskSage)",
+          family: "gpt-4o",
+          api: { ...asksageOpenAIBase.api, id: "gpt-4o" },
+          cost: { input: 2.5, output: 10, cache: { read: 0, write: 0 } },
+          limit: { context: 128000, output: 16384 },
+          release_date: "2024-05-13",
+          variants: {},
+        },
+        // --- Google Gemini models (via OpenAI-compatible proxy) ---
+        "google-gemini-2.5-pro": {
+          ...asksageOpenAIBase,
+          id: "google-gemini-2.5-pro",
+          name: "Gemini 2.5 Pro (AskSage)",
+          family: "gemini-2.5",
+          api: { ...asksageOpenAIBase.api, id: "google-gemini-2.5-pro" },
+          cost: { input: 1.25, output: 10, cache: { read: 0, write: 0 } },
+          limit: { context: 1048576, output: 65536 },
+          release_date: "2025-03-25",
+          capabilities: { ...asksageOpenAIBase.capabilities, reasoning: true },
+          variants: {},
+        },
+        "google-gemini-2.5-flash": {
+          ...asksageOpenAIBase,
+          id: "google-gemini-2.5-flash",
+          name: "Gemini 2.5 Flash (AskSage)",
+          family: "gemini-2.5",
+          api: { ...asksageOpenAIBase.api, id: "google-gemini-2.5-flash" },
+          cost: { input: 0.15, output: 0.6, cache: { read: 0, write: 0 } },
+          limit: { context: 1048576, output: 65536 },
+          release_date: "2025-03-25",
+          capabilities: { ...asksageOpenAIBase.capabilities, reasoning: true },
+          variants: {},
+        },
+        // --- xAI model (via OpenAI-compatible proxy) ---
+        "xai-grok": {
+          ...asksageOpenAIBase,
+          id: "xai-grok",
+          name: "Grok (AskSage)",
+          family: "grok",
+          api: { ...asksageOpenAIBase.api, id: "xai-grok" },
+          cost: { input: 3, output: 15, cache: { read: 0, write: 0 } },
+          limit: { context: 131072, output: 16384 },
+          release_date: "2025-02-17",
+          variants: {},
+        },
+      }
+      database["asksage"] = {
+        id: "asksage",
+        name: "AskSage",
+        source: "custom",
+        env: ["ASKSAGE_API_KEY"],
+        options: {},
+        models: asksageModels,
       }
     }
 
