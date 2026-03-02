@@ -1774,6 +1774,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicateIDError"
+                }
+              }
+            }
           }
         },
         "requestBody": {
@@ -1782,6 +1792,10 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^ses.*"
+                  },
                   "parentID": {
                     "type": "string",
                     "pattern": "^ses.*"
@@ -11235,6 +11249,25 @@
           }
         },
         "required": ["name", "uri", "client"]
+      },
+      "DuplicateIDError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "const": "DuplicateIDError"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": ["id"]
+          }
+        },
+        "required": ["name", "data"]
       },
       "TextPartInput": {
         "type": "object",

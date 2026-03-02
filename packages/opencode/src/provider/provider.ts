@@ -47,6 +47,7 @@ import { Installation } from "../installation"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
+  let _context1mDisabled = false
 
   function isGpt5OrLater(modelID: string): boolean {
     const match = /^gpt-(\d+)/.exec(modelID)
@@ -123,7 +124,7 @@ export namespace Provider {
         options: {
           headers: {
             "anthropic-beta":
-              "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+              "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14,adaptive-thinking-2026-01-28,context-1m-2025-08-07",
           },
         },
       }
@@ -1096,6 +1097,24 @@ export namespace Provider {
         const fetchFn = customFetch ?? fetch
         const opts = init ?? {}
 
+        // Strip context-1m beta header when account doesn't support it
+        function stripContext1m(hdrs: HeadersInit) {
+          const headers = new Headers(hdrs)
+          const beta = headers.get("anthropic-beta") ?? ""
+          if (beta.includes("context-1m"))
+            headers.set(
+              "anthropic-beta",
+              beta
+                .split(",")
+                .filter((h) => !h.includes("context-1m"))
+                .join(","),
+            )
+          return headers
+        }
+
+        if (_context1mDisabled && model.api.npm === "@ai-sdk/anthropic")
+          opts.headers = stripContext1m(opts.headers as HeadersInit)
+
         if (options["timeout"] !== undefined && options["timeout"] !== null) {
           const signals: AbortSignal[] = []
           if (opts.signal) signals.push(opts.signal)
@@ -1124,11 +1143,32 @@ export namespace Provider {
           }
         }
 
-        return fetchFn(input, {
+        const response = await fetchFn(input, {
           ...opts,
           // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
           timeout: false,
         })
+
+        if (!_context1mDisabled && model.api.npm === "@ai-sdk/anthropic" && response.status === 400) {
+          const cloned = response.clone()
+          const body = await cloned.json().catch(() => null)
+          if (
+            body?.error?.type === "invalid_request_error" &&
+            typeof body?.error?.message === "string" &&
+            body.error.message.toLowerCase().includes("long context")
+          ) {
+            log.info("context-1m beta not available, retrying without it")
+            _context1mDisabled = true
+            const headers = stripContext1m(opts.headers as HeadersInit)
+            return fetchFn(input, {
+              ...opts,
+              headers,
+              timeout: false,
+            } as BunFetchRequestInit)
+          }
+        }
+
+        return response
       }
 
       const bundledFn = BUNDLED_PROVIDERS[model.api.npm]

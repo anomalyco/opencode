@@ -9,6 +9,7 @@ import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
 import { Identifier } from "../id/id"
 import { Installation } from "../installation"
+import { NamedError } from "@opencode-ai/util/error"
 
 import { Database, NotFoundError, eq, and, or, gte, isNull, desc, like, inArray, lt, sql } from "../storage/db"
 import type { SQL } from "../storage/db"
@@ -27,7 +28,7 @@ import { WorkspaceContext } from "../control-plane/workspace-context"
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
 import { Global } from "@/global"
-import type { LanguageModelV2Usage } from "@ai-sdk/provider"
+import type { LanguageModelUsage } from "ai"
 import { iife } from "@/util/iife"
 
 export namespace Session {
@@ -216,13 +217,22 @@ export namespace Session {
   export const create = fn(
     z
       .object({
+        id: Identifier.schema("session").optional(),
         parentID: Identifier.schema("session").optional(),
         title: z.string().optional(),
         permission: Info.shape.permission,
       })
       .optional(),
     async (input) => {
+      if (input?.id) {
+        const existing = await get(input.id).catch((e) => {
+          if (e instanceof NotFoundError) return undefined
+          throw e
+        })
+        if (existing) throw new DuplicateIDError({ id: input.id })
+      }
       return createNext({
+        id: input?.id,
         parentID: input?.parentID,
         directory: Instance.directory,
         title: input?.title,
@@ -800,7 +810,7 @@ export namespace Session {
   export const getUsage = fn(
     z.object({
       model: z.custom<Provider.Model>(),
-      usage: z.custom<LanguageModelV2Usage>(),
+      usage: z.custom<LanguageModelUsage>(),
       metadata: z.custom<ProviderMetadata>().optional(),
     }),
     (input) => {
@@ -812,23 +822,31 @@ export namespace Session {
       const outputTokens = safe(input.usage.outputTokens ?? 0)
       const reasoningTokens = safe(input.usage.reasoningTokens ?? 0)
 
-      const cacheReadInputTokens = safe(input.usage.cachedInputTokens ?? 0)
+      // SDK v6: forward-compat for inputTokenDetails (not yet in @ai-sdk/provider types)
+      const usage = input.usage as LanguageModelUsage & {
+        inputTokenDetails?: { noCacheTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number }
+      }
+
+      const cacheReadInputTokens = safe(
+        usage.inputTokenDetails?.cacheReadTokens ?? input.usage.cachedInputTokens ?? 0,
+      )
       const cacheWriteInputTokens = safe(
-        (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
-          // @ts-expect-error
-          input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
-          // @ts-expect-error
-          input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
-          0) as number,
+        usage.inputTokenDetails?.cacheWriteTokens ??
+          ((input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
+            // @ts-expect-error
+            input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
+            // @ts-expect-error
+            input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
+            0) as number),
       )
 
-      // OpenRouter provides inputTokens as the total count of input tokens (including cached).
-      // AFAIK other providers (OpenRouter/OpenAI/Gemini etc.) do it the same way e.g. vercel/ai#8794 (comment)
-      // Anthropic does it differently though - inputTokens doesn't include cached tokens.
-      // It looks like OpenCode's cost calculation assumes all providers return inputTokens the same way Anthropic does (I'm guessing getUsage logic was originally implemented with anthropic), so it's causing incorrect cost calculation for OpenRouter and others.
-      const excludesCachedTokens = !!(input.metadata?.["anthropic"] || input.metadata?.["bedrock"])
+      // SDK v6: inputTokens is now the TOTAL (including cache). Use noCacheTokens when available.
+      // Fallback: OpenRouter/OpenAI/Gemini include cache in inputTokens, Anthropic/Bedrock don't.
       const adjustedInputTokens = safe(
-        excludesCachedTokens ? inputTokens : inputTokens - cacheReadInputTokens - cacheWriteInputTokens,
+        usage.inputTokenDetails?.noCacheTokens ??
+          (!!(input.metadata?.["anthropic"] || input.metadata?.["bedrock"])
+            ? inputTokens
+            : inputTokens - cacheReadInputTokens - cacheWriteInputTokens),
       )
 
       const total = iife(() => {
@@ -881,6 +899,13 @@ export namespace Session {
       super(`Session ${sessionID} is busy`)
     }
   }
+
+  export const DuplicateIDError = NamedError.create(
+    "DuplicateIDError",
+    z.object({
+      id: z.string(),
+    }),
+  )
 
   export const initialize = fn(
     z.object({
