@@ -20,6 +20,9 @@ if (!repo) throw new Error("GH_REPO is required")
 const releaseId = process.env.OPENCODE_RELEASE
 if (!releaseId) throw new Error("OPENCODE_RELEASE is required")
 
+const version = process.env.OPENCODE_VERSION
+if (!releaseId) throw new Error("OPENCODE_VERSION is required")
+
 const token = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN
 if (!token) throw new Error("GH_TOKEN or GITHUB_TOKEN is required")
 
@@ -39,7 +42,6 @@ if (!releaseRes.ok) {
 type Asset = {
   name: string
   url: string
-  browser_download_url: string
 }
 
 type Release = {
@@ -89,7 +91,7 @@ const entries: Record<string, { url: string; signature: string }> = {}
 const add = (key: string, asset: Asset, signature: string) => {
   if (entries[key]) return
   entries[key] = {
-    url: asset.browser_download_url,
+    url: `https://github.com/${repo}/releases/download/${version}/${asset.name}`,
     signature,
   }
 }
