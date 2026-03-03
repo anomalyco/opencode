@@ -85,7 +85,10 @@ export function createAutoScroll(options: AutoScrollOptions) {
     if (force && store.userScrolled) setStore("userScrolled", false)
 
     const distance = distanceFromBottom(el)
-    if (distance < 2) return
+    if (distance < 2) {
+      markAuto(el)
+      return
+    }
 
     // For auto-following content we prefer immediate updates to avoid
     // visible "catch up" animations while content is still settling.
