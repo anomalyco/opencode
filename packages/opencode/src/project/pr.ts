@@ -50,7 +50,7 @@ export namespace PR {
 
   export const DeleteBranchInput = z
     .object({
-      branch: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._\-/]*$/, "Invalid branch name"),
+      branch: z.string().regex(/^(?![^/]*\.\.)[a-zA-Z0-9][a-zA-Z0-9._\-/]*$/, "Invalid branch name"),
     })
     .meta({ ref: "PrDeleteBranchInput" })
   export type DeleteBranchInput = z.infer<typeof DeleteBranchInput>
