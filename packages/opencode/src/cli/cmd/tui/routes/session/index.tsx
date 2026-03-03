@@ -1434,20 +1434,6 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
     return localLink(raw(), cwd)
   })
   const linked = createMemo(() => content().includes("](file://"))
-  const segments = createMemo(() => {
-    const value = content()
-    const matches = value.matchAll(/\[([^\]]+)\]\((file:\/\/[^\s)]+)\)/g)
-    let offset = 0
-    const output: ({ href: string; label: string } | string)[] = []
-    for (const match of matches) {
-      const index = match.index ?? 0
-      if (index > offset) output.push(value.slice(offset, index))
-      output.push({ href: match[2], label: match[1].replace(/^`(.*)`$/, "$1") })
-      offset = index + match[0].length
-    }
-    if (offset < value.length) output.push(value.slice(offset))
-    return output
-  })
   return (
     <Show when={raw()}>
       <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
@@ -1456,7 +1442,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
             <markdown syntaxStyle={syntax()} streaming={true} content={content()} conceal={ctx.conceal()} />
           </Match>
           <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN && linked()}>
-            <FileLinks parts={segments()} fg={theme.text} />
+            <FileLinks content={content()} fg={theme.text} />
           </Match>
           <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
             <code
