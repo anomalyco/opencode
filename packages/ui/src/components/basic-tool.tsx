@@ -62,7 +62,7 @@ export function BasicTool(props: BasicToolProps) {
     on(
       open,
       (value) => {
-        if (!props.defer) return
+        if (!props.defer || props.animated) return
         if (!value) {
           cancel()
           setReady(false)
