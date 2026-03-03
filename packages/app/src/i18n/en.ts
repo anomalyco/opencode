@@ -643,6 +643,10 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.description":
     "Show edit, write, and patch tool parts expanded by default in the timeline",
 
+  "settings.general.row.planMode.title": "Plan before execute",
+  "settings.general.row.planMode.description":
+    "AI proposes a plan and asks for confirmation before making changes (experimental)",
+
   "settings.general.row.wayland.title": "Use native Wayland",
   "settings.general.row.wayland.description": "Disable X11 fallback on Wayland. Requires restart.",
   "settings.general.row.wayland.tooltip":

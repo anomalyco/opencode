@@ -353,6 +353,18 @@ export const SettingsGeneral: Component = () => {
             />
           </div>
         </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.planMode.title")}
+          description={language.t("settings.general.row.planMode.description")}
+        >
+          <div data-action="settings-plan-mode">
+            <Switch
+              checked={settings.general.planMode()}
+              onChange={(checked) => settings.general.setPlanMode(checked)}
+            />
+          </div>
+        </SettingsRow>
       </div>
     </div>
   )

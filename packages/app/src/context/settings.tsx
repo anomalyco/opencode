@@ -25,6 +25,7 @@ export interface Settings {
     showReasoningSummaries: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
+    planMode: boolean
   }
   updates: {
     startup: boolean
@@ -49,6 +50,7 @@ const defaultSettings: Settings = {
     showReasoningSummaries: false,
     shellToolPartsExpanded: true,
     editToolPartsExpanded: false,
+    planMode: false,
   },
   updates: {
     startup: true,
@@ -156,6 +158,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setEditToolPartsExpanded(value: boolean) {
           setStore("general", "editToolPartsExpanded", value)
+        },
+        planMode: withFallback(() => store.general?.planMode, false),
+        setPlanMode(value: boolean) {
+          setStore("general", "planMode", value)
         },
       },
       updates: {
