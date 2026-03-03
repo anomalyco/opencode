@@ -11,6 +11,7 @@ import { base64Encode } from "@opencode-ai/util/encode"
 import { SettingsPopup } from "./settings-popup"
 import { DialogSelectDirectory } from "./dialog-select-directory"
 import { extractDirectory, buildTokenPersistCommand, buildShellCommand } from "./session-header-actions-helpers"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { previewOpen, setPreviewOpen } from "./preview-panel"
 
 function RunIcon() {
@@ -120,45 +121,51 @@ export function SessionHeaderActions() {
 
   return (
     <div class="flex items-center gap-2">
-        <Button variant="secondary" class="rounded-sm h-[24px] w-[24px] p-0" onClick={run} aria-label="Run" title="Run">
-          <RunIcon />
-        </Button>
-        <Button variant="secondary" class="rounded-sm h-[24px] w-[24px] p-0" onClick={publish} aria-label="Publish" title="Publish">
-          <Icon name="cloud-upload" size="small" class="text-icon-base" />
-        </Button>
-        <Button
-          variant={previewOpen() ? "primary" : "secondary"}
-          class="rounded-sm h-[24px] w-[24px] p-0"
-          onClick={() => setPreviewOpen((prev) => !prev)}
-          aria-label="Preview"
-          title="Preview (press Run first)"
-        >
-          <Icon name="eye" size="small" class={previewOpen() ? "text-on-primary" : "text-icon-base"} />
-        </Button>
+        <Tooltip value="Run" placement="bottom">
+          <Button variant="secondary" class="rounded-sm h-[24px] w-[24px] p-0" onClick={run} aria-label="Run">
+            <RunIcon />
+          </Button>
+        </Tooltip>
+        <Tooltip value="Publish" placement="bottom">
+          <Button variant="secondary" class="rounded-sm h-[24px] w-[24px] p-0" onClick={publish} aria-label="Publish">
+            <Icon name="cloud-upload" size="small" class="text-icon-base" />
+          </Button>
+        </Tooltip>
+        <Tooltip value="Preview" placement="bottom">
+          <Button
+            variant={previewOpen() ? "primary" : "secondary"}
+            class="rounded-sm h-[24px] w-[24px] p-0"
+            onClick={() => setPreviewOpen((prev) => !prev)}
+            aria-label="Preview"
+          >
+            <Icon name="eye" size="small" class={previewOpen() ? "text-on-primary" : "text-icon-base"} />
+          </Button>
+        </Tooltip>
         <SettingsPopup />
-        <Button
-          variant="secondary"
-          class="rounded-sm h-[24px] w-[24px] p-0"
-          onClick={() =>
-            dialog.show(
-              () => (
-                <DialogSelectDirectory
-                  onSelect={(result) => {
-                    const dir = extractDirectory(result)
-                    if (dir) {
-                      layout.projects.open(dir)
-                      navigate(`/${base64Encode(dir)}`)
-                    }
-                  }}
-                />
-              ),
-            )
-          }
-          aria-label="Create"
-          title="Open / create project"
-        >
-          <Icon name="plus-small" size="small" class="text-icon-base" />
-        </Button>
+        <Tooltip value="Open / create project" placement="bottom">
+          <Button
+            variant="secondary"
+            class="rounded-sm h-[24px] w-[24px] p-0"
+            onClick={() =>
+              dialog.show(
+                () => (
+                  <DialogSelectDirectory
+                    onSelect={(result) => {
+                      const dir = extractDirectory(result)
+                      if (dir) {
+                        layout.projects.open(dir)
+                        navigate(`/${base64Encode(dir)}`)
+                      }
+                    }}
+                  />
+                ),
+              )
+            }
+            aria-label="Create"
+          >
+            <Icon name="plus-small" size="small" class="text-icon-base" />
+          </Button>
+        </Tooltip>
     </div>
   )
 }
