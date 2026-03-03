@@ -361,7 +361,10 @@ export function SessionTurn(
   let hideTimer: ReturnType<typeof setTimeout> | undefined
   const thinking = createMemo(() => shown())
   const lane = createMemo(() => hasAssistant() || thinking())
-  const entry = createMemo(() => props.animate !== false)
+  const animateEnabled = createMemo(() => props.animate !== false)
+  const [live, setLive] = createSignal(false)
+  let liveFrame: number | undefined
+  const entry = createMemo(() => live())
   const initialThinking = thinking()
   let thinkingRef: HTMLDivElement | undefined
   let thinkingBodyRef: HTMLDivElement | undefined
@@ -369,6 +372,27 @@ export function SessionTurn(
   let thinkingHeightAnim: AnimationPlaybackControls | undefined
   let thinkingToggleFrame: number | undefined
   const gap = () => (hasAssistant() ? `${THINKING_GAP_PX}px` : "0px")
+
+  createEffect(
+    on(
+      () => [animateEnabled(), working()] as const,
+      ([enabled, isWorking]) => {
+        if (liveFrame !== undefined) {
+          cancelAnimationFrame(liveFrame)
+          liveFrame = undefined
+        }
+        if (!enabled) {
+          setLive(false)
+          return
+        }
+        if (!isWorking || live()) return
+        liveFrame = requestAnimationFrame(() => {
+          liveFrame = undefined
+          setLive(true)
+        })
+      },
+    ),
+  )
 
   const stopHide = () => {
     if (!hideTimer) return
@@ -519,6 +543,7 @@ export function SessionTurn(
 
   onCleanup(() => {
     stopHide()
+    if (liveFrame !== undefined) cancelAnimationFrame(liveFrame)
     if (thinkingToggleFrame !== undefined) cancelAnimationFrame(thinkingToggleFrame)
     thinkingAnim?.stop()
     thinkingHeightAnim?.stop()
@@ -553,13 +578,17 @@ export function SessionTurn(
                 </Show>
                 <div data-slot="session-turn-assistant-lane" aria-hidden={!lane()}>
                   <Show when={hasAssistant()}>
-                    <div data-slot="session-turn-assistant-content" aria-hidden={working()} style={{ contain: "layout paint" }}>
+                    <div
+                      data-slot="session-turn-assistant-content"
+                      aria-hidden={working()}
+                      style={{ contain: "layout paint" }}
+                    >
                       <AssistantParts
                         messages={assistantMessages()}
                         showAssistantCopyPartID={assistantCopyPartID()}
                         turnDurationMs={turnDurationMs()}
                         working={working()}
-                        animate={props.animate}
+                        animate={live()}
                         showReasoningSummaries={showReasoningSummaries()}
                         shellToolDefaultOpen={props.shellToolDefaultOpen}
                         editToolDefaultOpen={props.editToolDefaultOpen}
