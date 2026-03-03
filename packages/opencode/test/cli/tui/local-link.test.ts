@@ -38,4 +38,15 @@ describe("localLink", () => {
     const result = localLink(`Path .agents/ (file://${target})`, tmp.path)
     expect(result).toBe(`Path [.agents/](file://${target})`)
   })
+
+  test("converts concealed file URL format in multiline lists", async () => {
+    await using tmp = await tmpdir()
+    const root = tmp.path
+    const dir = path.join(root, ".agents")
+    await Bun.write(dir, "")
+    const input = `Here are files in ${root} (file://${root}):\n- .agents/ (file://${dir})\n- README.md`
+    const result = localLink(input, root)
+    expect(result).toContain(`[${root}](file://${root})`)
+    expect(result).toContain(`- [.agents/](file://${dir})`)
+  })
 })
