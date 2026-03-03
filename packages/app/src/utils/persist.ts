@@ -201,6 +201,16 @@ function tooLarge(value: string, maxBytes?: number) {
   return value.length * 2 > maxBytes
 }
 
+function writeBoundedSync(storage: SyncStorage, key: string, value: string, maxBytes?: number) {
+  if (tooLarge(value, maxBytes)) return
+  storage.setItem(key, value)
+}
+
+async function writeBoundedAsync(storage: AsyncStorage, key: string, value: string, maxBytes?: number) {
+  if (tooLarge(value, maxBytes)) return
+  await storage.setItem(key, value)
+}
+
 function normalize(defaults: unknown, raw: string, migrate?: (value: unknown) => unknown, maxBytes?: number) {
   if (tooLarge(raw, maxBytes)) return
   const parsed = parse(raw)
@@ -309,6 +319,8 @@ export const PersistTesting = {
   localStorageDirect,
   localStorageWithPrefix,
   normalize,
+  writeBoundedSync,
+  writeBoundedAsync,
 }
 
 export const Persist = {
@@ -401,11 +413,7 @@ export function persisted<T>(
           return null
         },
         setItem: (key, value) => {
-          if (tooLarge(value, config.maxBytes)) {
-            current.removeItem(key)
-            return
-          }
-          current.setItem(key, value)
+          writeBoundedSync(current, key, value, config.maxBytes)
         },
         removeItem: (key) => {
           current.removeItem(key)
@@ -450,11 +458,7 @@ export function persisted<T>(
         return null
       },
       setItem: async (key, value) => {
-        if (tooLarge(value, config.maxBytes)) {
-          await current.removeItem(key).catch(() => undefined)
-          return
-        }
-        await current.setItem(key, value)
+        await writeBoundedAsync(current, key, value, config.maxBytes)
       },
       removeItem: async (key) => {
         await current.removeItem(key)

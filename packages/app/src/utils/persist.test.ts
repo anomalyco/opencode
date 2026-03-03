@@ -110,4 +110,35 @@ describe("persist localStorage resilience", () => {
     const result = persistTesting.normalize({ value: "ok" }, raw, undefined, 1024)
     expect(result).toBeUndefined()
   })
+
+  test("bounded sync writes keep last persisted value when payload is too large", () => {
+    const api = persistTesting.localStorageDirect()
+    api.setItem("oversized", '{"value":"small"}')
+    const before = storage.calls.remove
+
+    persistTesting.writeBoundedSync(api, "oversized", JSON.stringify({ value: "x".repeat(4096) }), 1024)
+
+    expect(storage.getItem("oversized")).toBe('{"value":"small"}')
+    expect(storage.calls.remove).toBe(before)
+  })
+
+  test("bounded async writes skip storage calls when payload is too large", async () => {
+    const calls: string[] = []
+    await persistTesting.writeBoundedAsync(
+      {
+        getItem: async () => null,
+        setItem: async () => {
+          calls.push("set")
+        },
+        removeItem: async () => {
+          calls.push("remove")
+        },
+      },
+      "oversized",
+      JSON.stringify({ value: "x".repeat(4096) }),
+      1024,
+    )
+
+    expect(calls).toEqual([])
+  })
 })
