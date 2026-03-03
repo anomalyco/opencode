@@ -3,11 +3,11 @@ title: キーバインド
 description: キーバインドをカスタマイズします。
 ---
 
-OpenCode には、OpenCode 設定を通じてカスタマイズできるキーバインドのリストがあります。
+OpenCode には、`tui.json` を通じてカスタマイズできるキーバインドのリストがあります。
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -117,11 +117,11 @@ OpenCode は、ほとんどのキーバインドに `leader` キーを使用し�
 
 ## キーバインドを無効にする
 
-キーバインドを無効にするには、値「none」を指定してキーを構成に追加します。
+キーバインドを無効にするには、値「none」を指定してキーを `tui.json` に追加します。
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "session_compact": "none"
   }

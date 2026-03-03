@@ -3,11 +3,11 @@ title: Tastebindinger
 description: Tilpas dine nøglebindinger.
 ---
 
-OpenCode har en liste over nøglebindinger, som du kan tilpasse gennem OpenCode-konfigurationen.
+OpenCode har en liste over nøglebindinger, som du kan tilpasse gennem `tui.json`.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -117,11 +117,11 @@ Du behøver ikke bruge en ledernøgle til dine nøglebindinger, men vi anbefaler
 
 ## Deaktiver tastebinding
 
-Du kan deaktivere en nøglebinding ved at tilføje nøglen til din konfiguration med værdien "ingen".
+Du kan deaktivere en nøglebinding ved at tilføje nøglen til `tui.json` med værdien "none".
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "session_compact": "none"
   }

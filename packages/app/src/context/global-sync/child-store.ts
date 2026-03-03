@@ -1,4 +1,4 @@
-import { createRoot, createEffect, getOwner, onCleanup, runWithOwner, type Accessor, type Owner } from "solid-js"
+import { createRoot, getOwner, onCleanup, runWithOwner, type Owner } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import type { VcsInfo } from "@opencode-ai/sdk/v2/client"
@@ -131,8 +131,7 @@ export function createChildStoreManager(input: {
       )
       if (!vcs) throw new Error("Failed to create persisted cache")
       const vcsStore = vcs[0]
-      const vcsReady = vcs[3]
-      vcsCache.set(directory, { store: vcsStore, setStore: vcs[1], ready: vcsReady })
+      vcsCache.set(directory, { store: vcsStore, setStore: vcs[1], ready: vcs[3] })
 
       const meta = runWithOwner(input.owner, () =>
         persisted(
@@ -154,10 +153,12 @@ export function createChildStoreManager(input: {
 
       const init = () =>
         createRoot((dispose) => {
+          const initialMeta = meta[0].value
+          const initialIcon = icon[0].value
           const child = createStore<State>({
             project: "",
-            projectMeta: meta[0].value,
-            icon: icon[0].value,
+            projectMeta: initialMeta,
+            icon: initialIcon,
             provider: { all: [], connected: [], default: {} },
             config: {},
             path: { state: "", config: "", worktree: "", directory: "", home: "" },
@@ -181,16 +182,27 @@ export function createChildStoreManager(input: {
           children[directory] = child
           disposers.set(directory, dispose)
 
-          createEffect(() => {
-            if (!vcsReady()) return
+          const onPersistedInit = (init: Promise<string> | string | null, run: () => void) => {
+            if (!(init instanceof Promise)) return
+            void init.then(() => {
+              if (children[directory] !== child) return
+              run()
+            })
+          }
+
+          onPersistedInit(vcs[2], () => {
             const cached = vcsStore.value
             if (!cached?.branch) return
             child[1]("vcs", (value) => value ?? cached)
           })
-          createEffect(() => {
+
+          onPersistedInit(meta[2], () => {
+            if (child[0].projectMeta !== initialMeta) return
             child[1]("projectMeta", meta[0].value)
           })
-          createEffect(() => {
+
+          onPersistedInit(icon[2], () => {
+            if (child[0].icon !== initialIcon) return
             child[1]("icon", icon[0].value)
           })
         })

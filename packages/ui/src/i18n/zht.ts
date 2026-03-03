@@ -44,6 +44,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "重試中",
   "ui.sessionTurn.retry.inSeconds": "{{seconds}} 秒後",
+  "ui.sessionTurn.retry.attempt": "第 {{attempt}} 次",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - 第 {{attempt}} 次",
+  "ui.sessionTurn.retry.geminiHot": "gemini 目前過載",
   "ui.sessionTurn.error.freeUsageExceeded": "免費使用額度已用完",
   "ui.sessionTurn.error.addCredits": "新增點數",
 
@@ -61,6 +64,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "正在考慮下一步",
 
   "ui.messagePart.questions.dismissed": "問題已略過",
+  "ui.messagePart.compaction": "歷史已壓縮",
   "ui.messagePart.context.read.one": "{{count}} 次讀取",
   "ui.messagePart.context.read.other": "{{count}} 次讀取",
   "ui.messagePart.context.search.one": "{{count}} 次搜尋",
@@ -126,6 +130,7 @@ export const dict = {
   "ui.message.copyResponse": "複製回覆",
   "ui.message.copied": "已複製！",
   "ui.message.interrupted": "已中斷",
+  "ui.message.queued": "排隊中",
   "ui.message.attachment.alt": "附件",
 
   "ui.patch.action.deleted": "已刪除",
