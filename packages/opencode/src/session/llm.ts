@@ -73,15 +73,35 @@ export namespace LLM {
     return [value, value.slice(start)]
   }
 
-  export function repairToolInput(input: { toolInput: string; errorMessage: string }) {
+  function str(input: unknown) {
+    if (typeof input !== "string") return
+    const value = input.trim()
+    if (!value) return
+    return value
+  }
+
+  function normalize(input: Record<string, unknown>, tool: string) {
+    const lower = tool.toLowerCase()
+    if (!["write", "read", "edit", "multiedit", "lsp"].includes(lower)) return input
+    if (str(input.filePath)) return input
+    const filePath = [input.filepath, input.path, input.file, input.filename].map(str).find((x) => x)
+    if (!filePath) return input
+    return {
+      ...input,
+      filePath,
+    }
+  }
+
+  export function repairToolInput(input: { toolName: string; toolInput: string; errorMessage: string }) {
     const match = input.errorMessage.match(/Text:\s*([\s\S]*)$/)
     const text = match?.[1] ?? ""
     const list = [input.toolInput, text].flatMap(candidates).filter(Boolean)
     for (const item of list) {
       const parsed = object(item)
       if (!parsed) continue
-      if (Object.keys(parsed).length === 0) continue
-      return JSON.stringify(parsed)
+      const fixed = normalize(parsed, input.toolName)
+      if (Object.keys(fixed).length === 0) continue
+      return JSON.stringify(fixed)
     }
   }
 
@@ -227,6 +247,7 @@ export namespace LLM {
           })
         }
         const repaired = repairToolInput({
+          toolName: failed.toolCall.toolName,
           toolInput: InvalidToolInputError.isInstance(failed.error) ? failed.error.toolInput : failed.toolCall.input,
           errorMessage: failed.error.message,
         })

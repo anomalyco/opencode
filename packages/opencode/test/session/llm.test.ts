@@ -102,6 +102,7 @@ describe("session.llm.hasToolCalls", () => {
 describe("session.llm.repairToolInput", () => {
   test("repairs truncated tool input json", () => {
     const repaired = LLM.repairToolInput({
+      toolName: "write",
       toolInput: `{"filePath":"src/app.ts","content":"hello`,
       errorMessage: "Invalid input for tool write",
     })
@@ -114,6 +115,7 @@ describe("session.llm.repairToolInput", () => {
 
   test("repairs from error text when tool input is empty", () => {
     const repaired = LLM.repairToolInput({
+      toolName: "write",
       toolInput: "",
       errorMessage:
         'Invalid input for tool write: JSON parsing failed: Text: {"filePath":"src/app.ts","content":"hello"}',
@@ -125,8 +127,22 @@ describe("session.llm.repairToolInput", () => {
     })
   })
 
+  test("normalizes filepath aliases for write tool", () => {
+    const repaired = LLM.repairToolInput({
+      toolName: "write",
+      toolInput: '{"filepath":"src/app.ts","content":"hello"}',
+      errorMessage:
+        'The write tool was called with invalid arguments: [{"expected":"string","code":"invalid_type","path":["filePath"],"message":"Invalid input: expected string, received undefined"}]',
+    })
+    expect(repaired).toBeDefined()
+    const parsed = JSON.parse(repaired!)
+    expect(parsed.filePath).toBe("src/app.ts")
+    expect(parsed.content).toBe("hello")
+  })
+
   test("returns undefined when input is not json-like", () => {
     const repaired = LLM.repairToolInput({
+      toolName: "write",
       toolInput: "not-json",
       errorMessage: "Invalid input for tool write",
     })

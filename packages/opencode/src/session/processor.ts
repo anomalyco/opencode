@@ -203,15 +203,17 @@ export namespace SessionProcessor {
 
                 case "tool-error": {
                   const match = toolcalls[value.toolCallId]
-                  if (match && match.state.status === "running") {
+                  if (match && (match.state.status === "running" || match.state.status === "pending")) {
+                    const start = match.state.status === "running" ? match.state.time.start : Date.now()
+                    const input = value.input ?? match.state.input
                     await Session.updatePart({
                       ...match,
                       state: {
                         status: "error",
-                        input: value.input ?? match.state.input,
+                        input,
                         error: (value.error as any).toString(),
                         time: {
-                          start: match.state.time.start,
+                          start,
                           end: Date.now(),
                         },
                       },
