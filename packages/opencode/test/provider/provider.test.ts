@@ -2263,6 +2263,14 @@ test("google-vertex-anthropic registers 1M context variants", async () => {
         expect(vertex.models[sourceID].limit.context).not.toBe(1000000)
       }
       expect(testedAtLeastOne).toBe(true)
+
+      // Opus 4.6 already has 1M context in models.dev — verify the beta header
+      // is injected directly without creating a separate variant.
+      if (vertex.models["claude-opus-4-6@default"]) {
+        expect(vertex.models["claude-opus-4-6@default"].headers?.["anthropic-beta"]).toBe(
+          "context-1m-2025-08-07",
+        )
+      }
     },
   })
 })

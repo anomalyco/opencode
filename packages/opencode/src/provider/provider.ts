@@ -791,6 +791,16 @@ export namespace Provider {
             }
           }
         }
+        // Opus 4.6 already has 1M context in models.dev but still requires the beta
+        // header on Vertex. Inject directly into the existing model — no separate
+        // variant needed since the limit is already correct.
+        const opusModel = vertexProvider.models["claude-opus-4-6@default"]
+        if (opusModel && !opusModel.headers?.["anthropic-beta"]) {
+          vertexProvider.models["claude-opus-4-6@default"] = {
+            ...opusModel,
+            headers: { ...opusModel.headers, "anthropic-beta": VERTEX_1M_BETA },
+          }
+        }
       }
     }
 
