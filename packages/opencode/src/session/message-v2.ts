@@ -705,11 +705,18 @@ export namespace MessageV2 {
                   type: "text" as const,
                   text: "Attached image(s) from tool result:",
                 },
-                ...media.map((attachment) => ({
-                  type: "file" as const,
-                  url: attachment.url,
-                  mediaType: attachment.mime,
-                })),
+                ...media.map((attachment) =>
+                  attachment.mime.startsWith("image/")
+                    ? ({
+                        type: "image" as const,
+                        image: attachment.url,
+                      } as const)
+                    : ({
+                        type: "file" as const,
+                        url: attachment.url,
+                        mediaType: attachment.mime,
+                      } as const),
+                ),
               ],
             })
           }
