@@ -1213,11 +1213,28 @@ export default function Layout(props: ParentProps) {
   }
 
   function closeProject(directory: string) {
-    const index = layout.projects.list().findIndex((x) => x.worktree === directory)
-    const next = layout.projects.list()[index + 1]
+    const list = layout.projects.list()
+    const index = list.findIndex((x) => x.worktree === directory)
+    const active = currentProject()?.worktree === directory
+    if (index === -1) return
+    const next = list[index + 1]
+
+    if (!active) {
+      layout.projects.close(directory)
+      return
+    }
+
+    if (!next) {
+      layout.projects.close(directory)
+      navigate("/")
+      return
+    }
+
+    navigateWithSidebarReset(`/${base64Encode(next.worktree)}/session`)
     layout.projects.close(directory)
-    if (next) navigateToProject(next.worktree)
-    else navigate("/")
+    queueMicrotask(() => {
+      void navigateToProject(next.worktree)
+    })
   }
 
   function toggleProjectWorkspaces(project: LocalProject) {
@@ -2064,7 +2081,11 @@ export default function Layout(props: ParentProps) {
               onOpenSettings={openSettings}
               helpLabel={() => language.t("sidebar.help")}
               onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
-              renderPanel={() => <SidebarPanel project={currentProject()} />}
+              renderPanel={() => (
+                <Show when={currentProject()} keyed>
+                  {(project) => <SidebarPanel project={project} />}
+                </Show>
+              )}
             />
           </div>
           <Show when={!layout.sidebar.opened() ? hoverProjectData()?.worktree : undefined} keyed>
