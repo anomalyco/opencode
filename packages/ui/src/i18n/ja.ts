@@ -125,6 +125,7 @@ export const dict = {
   "ui.message.copyResponse": "応答をコピー",
   "ui.message.copied": "コピーしました！",
   "ui.message.interrupted": "中断",
+  "ui.message.queued": "待機中",
   "ui.message.attachment.alt": "添付ファイル",
 
   "ui.patch.action.deleted": "削除済み",
