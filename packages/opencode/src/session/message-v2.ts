@@ -13,7 +13,6 @@ import { STATUS_CODES } from "http"
 import { Storage } from "@/storage/storage"
 import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
-import { type SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 
 export namespace MessageV2 {
@@ -824,7 +823,99 @@ export namespace MessageV2 {
     return result
   }
 
+  const NET_CODE = new Set([
+    "ECONNREFUSED",
+    "ECONNRESET",
+    "ETIMEDOUT",
+    "EHOSTUNREACH",
+    "ENETUNREACH",
+    "ENOTFOUND",
+    "EAI_AGAIN",
+    "UND_ERR_CONNECT_TIMEOUT",
+    "UND_ERR_HEADERS_TIMEOUT",
+    "UND_ERR_BODY_TIMEOUT",
+    "UND_ERR_SOCKET",
+  ])
+
+  const NET_RE = [/unable to connect/i, /connection refused/i, /fetch failed/i, /connect timeout/i]
+
+  type ErrorLike = {
+    name?: string
+    message?: string
+    code?: string
+    syscall?: string
+    cause?: unknown
+  }
+
+  function asError(input: unknown): ErrorLike | undefined {
+    if (typeof input !== "object" || input === null) return
+    return input as ErrorLike
+  }
+
+  function causeChain(input: unknown) {
+    const chain = [] as ErrorLike[]
+    let cur = input
+    for (const _ of Array.from({ length: 8 })) {
+      const parsed = asError(cur)
+      if (!parsed) break
+      chain.push(parsed)
+      if (!parsed.cause || parsed.cause === cur) break
+      cur = parsed.cause
+    }
+    return chain
+  }
+
+  function networkError(input: unknown) {
+    for (const err of causeChain(input)) {
+      const code = err.code ?? ""
+      const name = err.name ?? ""
+      const message = err.message ?? ""
+
+      if (NET_CODE.has(code)) {
+        return {
+          code,
+          name,
+          message,
+          syscall: err.syscall ?? "",
+        }
+      }
+
+      if (NET_RE.some((re) => re.test(message) || re.test(name))) {
+        return {
+          code,
+          name,
+          message,
+          syscall: err.syscall ?? "",
+        }
+      }
+    }
+  }
+
+  function networkMessage(input: ReturnType<typeof networkError>) {
+    if (!input) return
+    if (input.code === "ECONNRESET") return "Connection reset by server"
+    if (input.code === "ETIMEDOUT" || input.code === "UND_ERR_CONNECT_TIMEOUT") return "Connection timed out"
+    if (input.code === "ECONNREFUSED") return "Unable to connect to provider"
+    return input.message || input.name || "Unable to connect to provider"
+  }
+
   export function fromError(e: unknown, ctx: { providerID: string }) {
+    const network = networkError(e)
+    if (network) {
+      return new MessageV2.APIError(
+        {
+          message: networkMessage(network) ?? "Unable to connect to provider",
+          isRetryable: true,
+          metadata: {
+            code: network.code,
+            syscall: network.syscall,
+            message: network.message,
+          },
+        },
+        { cause: e },
+      ).toObject()
+    }
+
     switch (true) {
       case e instanceof DOMException && e.name === "AbortError":
         return new MessageV2.AbortedError(
@@ -840,19 +931,6 @@ export namespace MessageV2 {
           {
             providerID: ctx.providerID,
             message: e.message,
-          },
-          { cause: e },
-        ).toObject()
-      case (e as SystemError)?.code === "ECONNRESET":
-        return new MessageV2.APIError(
-          {
-            message: "Connection reset by server",
-            isRetryable: true,
-            metadata: {
-              code: (e as SystemError).code ?? "",
-              syscall: (e as SystemError).syscall ?? "",
-              message: (e as SystemError).message ?? "",
-            },
           },
           { cause: e },
         ).toObject()

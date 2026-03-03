@@ -172,6 +172,20 @@ describe("session.message-v2.fromError", () => {
     expect(retryable).toBe("Connection reset by server")
   })
 
+  test("converts ECONNREFUSED socket error to retryable APIError", () => {
+    const error = Object.assign(new Error("ConnectionRefused: Unable to connect. Is the computer able to access the url?"), {
+      code: "ECONNREFUSED",
+      syscall: "connect",
+    })
+
+    const result = MessageV2.fromError(error, { providerID: "test" }) as MessageV2.APIError
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect(result.data.isRetryable).toBe(true)
+    expect(result.data.message).toBe("Unable to connect to provider")
+    expect(result.data.metadata?.code).toBe("ECONNREFUSED")
+  })
+
   test("marks OpenAI 404 status codes as retryable", () => {
     const error = new APICallError({
       message: "boom",
