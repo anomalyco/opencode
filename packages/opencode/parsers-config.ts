@@ -1,3 +1,7 @@
+import path from "path"
+
+const vuequery = path.join(import.meta.dirname, "queries/vue/injections.scm")
+
 export default {
   // NOTE: FOR markdown, javascript and typescript, we use the opentui built-in parsers
   // Warn: when taking queries from the nvim-treesitter repo, make sure to include the query dependencies as well
@@ -157,6 +161,23 @@ export default {
       //     css: "css",
       //   },
       // },
+    },
+    {
+      filetype: "vue",
+      wasm: "https://cdn.jsdelivr.net/npm/tree-sitter-wasms@0.1.13/out/tree-sitter-vue.wasm",
+      queries: {
+        highlights: [
+          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/174ba3de59646e263e9c63eaa7829b405e323bfa/queries/html_tags/highlights.scm",
+          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/174ba3de59646e263e9c63eaa7829b405e323bfa/queries/vue/highlights.scm",
+        ],
+        injections: [vuequery],
+      },
+      injectionMapping: {
+        nodeTypes: {
+          script_element: "typescript",
+          style_element: "css",
+        },
+      },
     },
     {
       filetype: "json",

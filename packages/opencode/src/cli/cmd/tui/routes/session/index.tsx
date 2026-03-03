@@ -1437,11 +1437,15 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
   const { theme, syntax } = useTheme()
+  const markdown = createMemo(() => {
+    if (Flag.OPENCODE_EXPERIMENTAL_MARKDOWN) return true
+    return /(^|\n)```[ \t]*vue(?=[ \t]*(?:\n|$))/i.test(props.part.text)
+  })
   return (
     <Show when={props.part.text.trim()}>
       <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
         <Switch>
-          <Match when={Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
+          <Match when={markdown()}>
             <markdown
               syntaxStyle={syntax()}
               streaming={true}
@@ -1449,7 +1453,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
               conceal={ctx.conceal()}
             />
           </Match>
-          <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
+          <Match when={!markdown()}>
             <code
               filetype="markdown"
               drawUnstyledText={false}
