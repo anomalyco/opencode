@@ -117,11 +117,11 @@ export function mergeOptimisticPage(page: MessagePage, items: OptimisticItem[]) 
 
 export function applyOptimisticAdd(draft: OptimisticStore, input: OptimisticAddInput) {
   const messages = draft.message[input.sessionID]
-  if (messages) {
+  if (!messages) {
+    draft.message[input.sessionID] = [input.message]
+  } else if (messages) {
     const result = Binary.search(messages, input.message.id, (m) => m.id)
     messages.splice(result.index, 0, input.message)
-  } else {
-    draft.message[input.sessionID] = [input.message]
   }
   draft.part[input.message.id] = sortParts(input.parts)
 }
