@@ -41,6 +41,15 @@ describe("localLink", () => {
     expect(result).toBe(source)
   })
 
+  test("does not relink code spans inside markdown link labels", async () => {
+    await using tmp = await tmpdir()
+    const target = path.join(tmp.path, "foo/bar")
+    await Bun.write(target, "")
+    const source = "Use [open `foo/bar`](https://example.com)."
+    const result = localLink(source, tmp.path)
+    expect(result).toBe(source)
+  })
+
   test("converts concealed file URL format to markdown link", async () => {
     await using tmp = await tmpdir()
     const target = path.join(tmp.path, ".agents")
