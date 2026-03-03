@@ -183,6 +183,10 @@ export namespace PR {
     }
   }
 
+  function sanitizeOutput(output: string): string {
+    return output.replace(/(ghp_|github_pat_|gho_|ghu_|ghs_|ghr_)[a-zA-Z0-9_]+/g, "<redacted>").slice(0, 500)
+  }
+
   async function ensureGithub() {
     const info = await Vcs.info()
     const github = info.github
@@ -192,7 +196,7 @@ export namespace PR {
     if (!github.authenticated) {
       throw new PrError("GH_NOT_AUTHENTICATED", "Run `gh auth login` to authenticate")
     }
-    return { info, github: github as Required<Vcs.GithubCapability> }
+    return { info, github: github as Vcs.GithubCapability & { available: true; authenticated: true } }
   }
 
   export async function get(): Promise<Vcs.PrInfo | undefined> {
@@ -213,7 +217,7 @@ export namespace PR {
       const errorOutput =
         push.stderr?.toString().trim() || push.stdout?.toString().trim() || "Failed to push branch automatically"
       log.error("push failed", { output: errorOutput })
-      throw new PrError("CREATE_FAILED", errorOutput)
+      throw new PrError("CREATE_FAILED", sanitizeOutput(errorOutput))
     }
 
     const args = ["gh", "pr", "create", "--title", input.title]
@@ -232,7 +236,7 @@ export namespace PR {
 
     if (cmd.exitCode !== 0 || !result.trim()) {
       log.error("pr create failed", { stdout: result, stderr: errorOut, exitCode: cmd.exitCode })
-      throw new PrError("CREATE_FAILED", errorOut.trim() || result.trim() || "Failed to create pull request")
+      throw new PrError("CREATE_FAILED", sanitizeOutput(errorOut.trim() || result.trim() || "Failed to create pull request"))
     }
 
     await Vcs.refresh()
@@ -284,7 +288,7 @@ export namespace PR {
 
     if (cmd.exitCode !== 0) {
       log.error("pr ready failed", { stdout: result, stderr: errorOut, exitCode: cmd.exitCode })
-      throw new PrError("READY_FAILED", errorOut.trim() || result.trim() || "Failed to mark PR as ready")
+      throw new PrError("READY_FAILED", sanitizeOutput(errorOut.trim() || result.trim() || "Failed to mark PR as ready"))
     }
 
     await Vcs.refresh()
@@ -341,7 +345,7 @@ export namespace PR {
         }
       } catch {}
       log.error("pr merge failed", { stderr: errorOut, stdout: responseText, exitCode: cmd.exitCode })
-      throw new PrError("MERGE_FAILED", errorMessage)
+      throw new PrError("MERGE_FAILED", sanitizeOutput(errorMessage))
     }
 
     await Vcs.refresh()
@@ -377,7 +381,7 @@ export namespace PR {
       // Ignore "remote ref does not exist" — branch may already be deleted
       if (!errorOut.includes("remote ref does not exist")) {
         log.error("delete remote branch failed", { stderr: errorOut })
-        throw new PrError("DELETE_BRANCH_FAILED", errorOut || "Failed to delete remote branch")
+        throw new PrError("DELETE_BRANCH_FAILED", sanitizeOutput(errorOut || "Failed to delete remote branch"))
       }
     }
 

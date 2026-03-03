@@ -272,6 +272,7 @@ export function applyDirectoryEvent(input: {
       const props = event.properties as {
         branch?: string
         defaultBranch?: string
+        branches?: string[]
         dirty?: number
         pr?: VcsInfo["pr"]
         github?: VcsInfo["github"]

@@ -360,7 +360,7 @@ export namespace Vcs {
           unsubscribeWatcher()
           if (localDebounce) clearTimeout(localDebounce)
           if (refDebounce) clearTimeout(refDebounce)
-          if (pollTimer) clearInterval(pollTimer)
+          if (pollTimer) clearTimeout(pollTimer)
         },
       }
     },
