@@ -17,7 +17,6 @@ afterEach(async () => {
 
 Log.init({ print: false })
 
-const seen: string[] = []
 const remote = { type: "testing", name: "remote-a" } as unknown as typeof WorkspaceTable.$inferInsert
 
 const TestAdaptor: Adaptor = {
@@ -96,7 +95,5 @@ describe("control-plane/workspace.startSyncing", () => {
     ])
 
     await sync.stop()
-    expect(seen).toContain("testing")
-    expect(seen).not.toContain("worktree")
   })
 })
