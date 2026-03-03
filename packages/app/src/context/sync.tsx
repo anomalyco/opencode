@@ -119,7 +119,7 @@ export function applyOptimisticAdd(draft: OptimisticStore, input: OptimisticAddI
   const messages = draft.message[input.sessionID]
   if (!messages) {
     draft.message[input.sessionID] = [input.message]
-  } else if (messages) {
+  } else {
     const result = Binary.search(messages, input.message.id, (m) => m.id)
     messages.splice(result.index, 0, input.message)
   }
