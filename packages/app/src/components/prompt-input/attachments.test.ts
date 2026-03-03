@@ -31,10 +31,6 @@ beforeAll(async () => {
       toasts.push(value)
     },
   }))
-  mock.module("./editor-dom", () => ({
-    getCursorPosition: () => 0,
-  }))
-
   const mod = await import("./attachments")
   createPromptAttachments = mod.createPromptAttachments
   MAX_ATTACHMENT_BYTES = mod.MAX_ATTACHMENT_BYTES
