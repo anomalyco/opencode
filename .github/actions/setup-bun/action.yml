@@ -22,7 +22,7 @@ runs:
             Linux)   OS=linux ;;
             Windows) OS=windows ;;
           esac
-          echo "url=https://bun.sh/download/${V}/${OS}/x64?avx2=false&profile=false" >> "$GITHUB_OUTPUT"
+          echo "url=https://github.com/oven-sh/bun/releases/download/bun-v${V}/bun-${OS}-x64-baseline.zip" >> "$GITHUB_OUTPUT"
         fi
 
     - name: Setup Bun

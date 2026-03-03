@@ -8,7 +8,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { useNavigate } from "@solidjs/router"
 import { type Accessor, createEffect, createMemo, createSignal, For, type JSXElement, onCleanup, Show } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import { ServerRow } from "@/components/server/server-row"
+import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
@@ -276,10 +276,11 @@ export function StatusPopover() {
                           navigate("/")
                         }}
                       >
+                        <ServerHealthIndicator health={health[key]} />
                         <ServerRow
                           conn={s}
-                          status={health[key]}
                           dimmed={isBlocked()}
+                          status={health[key]}
                           class="flex items-center gap-2 w-full min-w-0"
                           nameClass="text-14-regular text-text-base truncate"
                           versionClass="text-12-regular text-text-weak truncate"
