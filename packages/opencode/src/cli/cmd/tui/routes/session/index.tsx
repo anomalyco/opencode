@@ -1625,9 +1625,11 @@ function InlineTool(props: {
   spinner?: boolean
   children: JSX.Element
   part: ToolPart
+  onClick?: () => void
 }) {
   const [margin, setMargin] = createSignal(0)
   const { theme } = useTheme()
+  const renderer = useRenderer()
   const ctx = use()
   const sync = useSync()
 
@@ -1656,6 +1658,10 @@ function InlineTool(props: {
     <box
       marginTop={margin()}
       paddingLeft={3}
+      onMouseUp={() => {
+        if (renderer.getSelection()?.getSelectedText()) return
+        props.onClick?.()
+      }}
       renderBefore={function () {
         const el = this as BoxRenderable
         const parent = el.parent
@@ -1941,10 +1947,7 @@ function WebSearch(props: ToolProps<any>) {
 }
 
 function Task(props: ToolProps<typeof TaskTool>) {
-  const { theme } = useTheme()
-  const keybind = useKeybind()
   const { navigate } = useRoute()
-  const local = useLocal()
   const sync = useSync()
 
   onMount(() => {
@@ -1991,23 +1994,18 @@ function Task(props: ToolProps<typeof TaskTool>) {
   })
 
   return (
-    <BlockTool
-      title={"# " + (props.input.description || Locale.titlecase(props.input.subagent_type ?? "unknown") + " Task")}
+    <InlineTool
+      icon="│"
+      spinner={isRunning()}
+      complete={props.input.description}
+      pending="Delegating..."
+      part={props.part}
       onClick={
         props.metadata.sessionId ? () => navigate({ type: "session", sessionID: props.metadata.sessionId! }) : undefined
       }
-      part={props.part}
-      spinner={isRunning()}
     >
-      <box>
-        <Show when={content()}>
-          <text style={{ fg: theme.textMuted }}>{content()}</text>
-        </Show>
-        <Show when={props.metadata.sessionId}>
-          <text style={{ fg: theme.textMuted }}>{keybind.print("session_child_first")} view subagents</text>
-        </Show>
-      </box>
-    </BlockTool>
+      {content()}
+    </InlineTool>
   )
 }
 
