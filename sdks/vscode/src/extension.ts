@@ -1,12 +1,31 @@
 import * as vscode from "vscode"
 import { OpenCodeChatParticipant } from "./vscode/participant"
+import { OpenCodeChatSessionProvider, sessionScheme } from "./vscode/chatSession"
 import { ActivationController } from "./vscode/activation"
 
 const TERMINAL_NAME = "opencode"
 
 export function activate(context: vscode.ExtensionContext) {
+  const output = vscode.window.createOutputChannel("OpenCode")
+  context.subscriptions.push(output)
+  output.appendLine("OpenCode extension activate()")
+  output.show(true)
+  const session =
+    typeof (vscode.chat as { registerChatSessionContentProvider?: unknown }).registerChatSessionContentProvider ===
+    "function"
+  const missing = [!session ? "proposed chatSessionsProvider@3 API" : ""].filter((value) => value).join(" and ")
+  if (missing) {
+    output.appendLine(
+      `Warning: ${missing} is required for chat session targets. Launch VS Code with --enable-proposed-api sst-dev.opencode.`,
+    )
+  }
   // Create activation controller for on-demand ACP process management
-  const activationController = new ActivationController(context)
+  const activationController = new ActivationController(context, output)
+
+  const activateDisposable = vscode.commands.registerCommand("opencode.activate", async () => {
+    output.appendLine("OpenCode activation command invoked")
+    await vscode.commands.executeCommand("workbench.action.chat.open")
+  })
 
   // Register terminal commands
   let openNewTerminalDisposable = vscode.commands.registerCommand("opencode.openNewTerminal", async () => {
@@ -31,19 +50,38 @@ export function activate(context: vscode.ExtensionContext) {
     if (!terminal) return
 
     if (terminal.name === TERMINAL_NAME) {
-      const opts = terminal.creationOptions as any
+      const opts = terminal.creationOptions as { env?: Record<string, string> }
       const port = opts?.env?._EXTENSION_OPENCODE_PORT
-      port ? await appendPrompt(parseInt(port), fileRef) : terminal.sendText(fileRef, false)
+      port ? await appendPrompt(parseInt(port, 10), fileRef) : terminal.sendText(fileRef, false)
       terminal.show()
     }
   })
 
-  context.subscriptions.push(openNewTerminalDisposable, openTerminalDisposable, addFilepathDisposable)
+  context.subscriptions.push(
+    activateDisposable,
+    openNewTerminalDisposable,
+    openTerminalDisposable,
+    addFilepathDisposable,
+  )
 
-  // Register OpenCode chat participant with activation controller
   const participant = new OpenCodeChatParticipant(context, activationController)
   participant.register()
+  output.appendLine("OpenCode chat participant registered")
   context.subscriptions.push({ dispose: () => participant.dispose() })
+  if (!session) {
+    output.appendLine("OpenCode chat session provider not registered; proposed API unavailable.")
+  }
+  if (session) {
+    const sessionProvider = new OpenCodeChatSessionProvider(activationController)
+    const sessionRegistration = (vscode.chat as any).registerChatSessionContentProvider(
+      sessionScheme,
+      sessionProvider,
+      participant.id,
+      { supportsInterruptions: true },
+    )
+    output.appendLine("OpenCode chat session provider registered")
+    context.subscriptions.push(sessionRegistration)
+  }
 
   async function openTerminal() {
     // Create a new terminal in split screen
@@ -81,7 +119,7 @@ export function activate(context: vscode.ExtensionContext) {
         await fetch(`http://localhost:${port}/app`)
         connected = true
         break
-      } catch (e) {}
+      } catch {}
 
       tries--
     } while (tries > 0)
@@ -138,3 +176,5 @@ export function activate(context: vscode.ExtensionContext) {
     return filepathWithAt
   }
 }
+
+export function deactivate() {}

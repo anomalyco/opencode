@@ -588,7 +588,7 @@ describe("AcpClient", () => {
     it("emits error events", async () => {
       const errors: Error[] = []
 
-      client.onError((error) => {
+      const dispose = client.onError((error) => {
         errors.push(error)
       })
 
@@ -596,6 +596,8 @@ describe("AcpClient", () => {
       streams.stdout.pushData("invalid json\n")
 
       await new Promise((r) => setTimeout(r, 10))
+
+      dispose()
 
       assert.strictEqual(errors.length, 1)
       assert.ok(errors[0].message.includes("JSON"))
@@ -608,8 +610,9 @@ describe("AcpClient", () => {
         stateChanges.push(state)
       })
 
-      // Already initialized in beforeEach
-      assert.ok(stateChanges.includes(AcpClientState.INITIALIZED))
+      await client.dispose()
+
+      assert.ok(stateChanges.includes(AcpClientState.DISPOSED))
     })
   })
 

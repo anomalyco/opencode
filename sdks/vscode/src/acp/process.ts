@@ -1,4 +1,5 @@
 import { spawn, ChildProcess } from "child_process"
+import { bindMockInput, bindMockOutput, isAcpMockEnabled, startMockAcp } from "./mock"
 import { EventEmitter } from "events"
 
 export enum ProcessState {
@@ -82,14 +83,23 @@ export class AcpProcess {
     this.stopRequested = false
 
     try {
-      this.process = spawn(options.command, options.args, {
-        cwd: this.config.cwd,
-        env: this.config.env,
-        stdio: ["pipe", "pipe", "pipe"],
-      })
+      if (isAcpMockEnabled()) {
+        this.process = startMockAcp()
+      } else {
+        this.process = spawn(options.command, options.args, {
+          cwd: this.config.cwd,
+          env: this.config.env,
+          stdio: ["pipe", "pipe", "pipe"],
+        })
+      }
 
       this.setupProcessHandlers(options)
       this.setupStdioHandlers()
+      if (isAcpMockEnabled()) {
+        const proc = this.process as unknown as import("child_process").ChildProcessWithoutNullStreams
+        bindMockOutput(proc)
+        bindMockInput(proc)
+      }
 
       // Wait for process to be ready
       await new Promise<void>((resolve, reject) => {

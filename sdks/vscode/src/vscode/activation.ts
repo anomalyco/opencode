@@ -13,8 +13,6 @@ export enum ActivationState {
 
 export interface ActivationControllerConfig {
   stopDelayMs?: number
-  restartDelayMs?: number
-  maxRestarts?: number
   spawnOptions?: { command: string; args: string[] }
 }
 
@@ -25,19 +23,18 @@ export class ActivationController {
   private activeSessions = 0
   private state: ActivationState = ActivationState.INACTIVE
   private stopTimer: NodeJS.Timeout | null = null
-  private restartCount = 0
   private disposed = false
   private startPromise: Promise<AcpClient> | null = null
+  private stamp = 0
   private config: Required<ActivationControllerConfig>
 
   constructor(
     private context: vscode.ExtensionContext,
+    private output: vscode.OutputChannel,
     config: ActivationControllerConfig = {},
   ) {
     this.config = {
       stopDelayMs: config.stopDelayMs ?? 30000,
-      restartDelayMs: config.restartDelayMs ?? 1000,
-      maxRestarts: config.maxRestarts ?? 5,
       spawnOptions: config.spawnOptions ?? { command: "opencode", args: ["acp"] },
     }
 
@@ -58,10 +55,6 @@ export class ActivationController {
 
   getActiveSessions(): number {
     return this.activeSessions
-  }
-
-  getRestartCount(): number {
-    return this.restartCount
   }
 
   getStopDelay(): number {
@@ -89,33 +82,50 @@ export class ActivationController {
       return this.startPromise
     }
 
-    this.startPromise = this.activate()
+    const stamp = ++this.stamp
+    this.startPromise = this.activate(stamp)
 
-    try {
-      const client = await this.startPromise
-      return client
-    } finally {
-      this.startPromise = null
-    }
+    this.startPromise = this.startPromise
+      .then((client) => {
+        this.startPromise = null
+        return client
+      })
+      .catch((error) => {
+        this.startPromise = null
+        throw error
+      })
+
+    return this.startPromise
   }
 
-  private async activate(): Promise<AcpClient> {
+  private async activate(stamp: number): Promise<AcpClient> {
+    if (this.isStale(stamp)) {
+      throw new Error("Activation canceled after disposal")
+    }
+
     this.state = ActivationState.STARTING
 
     try {
-      await this.startAcp()
+      await this.startAcp(stamp)
+      if (this.isStale(stamp)) {
+        await this.stopAcp()
+        throw new Error("Activation canceled after disposal")
+      }
       this.state = ActivationState.ACTIVE
-      this.restartCount = 0
       return this.client!
     } catch (error) {
+      if (this.isStale(stamp)) {
+        throw error
+      }
       this.state = ActivationState.ERROR
       this.showStartFailureMessage(error)
       throw error
     }
   }
 
-  private async startAcp(): Promise<void> {
+  private async startAcp(stamp: number): Promise<void> {
     const { spawnOptions } = this.config
+    this.output.appendLine(`OpenCode ACP spawn: ${spawnOptions.command} ${spawnOptions.args.join(" ")}`)
 
     return vscode.window.withProgress(
       {
@@ -128,8 +138,7 @@ export class ActivationController {
 
         this.process = new AcpProcess({
           cwd: this.getWorkspacePath(),
-          maxRestarts: this.config.maxRestarts,
-          restartDelay: this.config.restartDelayMs,
+          maxRestarts: 0,
         })
 
         this.setupProcessEventHandlers()
@@ -139,6 +148,10 @@ export class ActivationController {
             command: spawnOptions.command,
             args: spawnOptions.args,
           })
+          if (this.isStale(stamp)) {
+            throw new Error("Activation canceled after disposal")
+          }
+          this.output.appendLine("OpenCode ACP process started")
 
           progress.report({ message: "Initializing connection...", increment: 50 })
 
@@ -163,9 +176,15 @@ export class ActivationController {
           progress.report({ message: "Initializing client...", increment: 75 })
 
           await this.client.initialize()
+          if (this.isStale(stamp)) {
+            throw new Error("Activation canceled after disposal")
+          }
+          this.output.appendLine("OpenCode ACP client initialized")
 
           progress.report({ message: "Ready", increment: 100 })
         } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          this.output.appendLine(`OpenCode ACP start failure: ${message}`)
           await this.cleanup()
           throw error
         }
@@ -177,7 +196,9 @@ export class ActivationController {
     try {
       const extension = vscode.extensions.getExtension("sst-dev.opencode")
       return extension?.packageJSON?.version ?? "1.0.0"
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.output.appendLine(`OpenCode extension version read failure: ${message}`)
       return "1.0.0"
     }
   }
@@ -199,17 +220,30 @@ export class ActivationController {
       return
     }
 
-    // Treat any crash as a hard failure: move to ERROR and clean up resources.
     this.state = ActivationState.ERROR
-    this.cleanup()
-
+    void this.cleanup().catch((cleanupError) => {
+      const message = cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
+      this.output.appendLine(`OpenCode ACP cleanup failure: ${message}`)
+    })
+    this.output.appendLine("OpenCode ACP process crashed.")
     vscode.window.showWarningMessage("OpenCode process crashed and has been stopped.")
   }
 
   private handleProcessError(error: Error): void {
     if (this.disposed) return
 
-    console.error("ACP process error:", error)
+    if (this.process?.getState() !== ProcessState.FAILED) {
+      this.output.appendLine(`OpenCode ACP process error: ${error.message}`)
+      return
+    }
+
+    this.state = ActivationState.ERROR
+    void this.cleanup().catch((cleanupError) => {
+      const message = cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
+      this.output.appendLine(`OpenCode ACP cleanup failure: ${message}`)
+    })
+    this.output.appendLine(`OpenCode ACP process failed: ${error.message}`)
+    vscode.window.showWarningMessage("OpenCode process failed and has been stopped.")
   }
 
   private showStartFailureMessage(error: unknown): void {
@@ -244,12 +278,20 @@ export class ActivationController {
       clearTimeout(this.stopTimer)
     }
 
-    this.stopTimer = setTimeout(async () => {
-      if (this.activeSessions === 0 && !this.disposed && this.state === ActivationState.ACTIVE) {
-        await this.stopAcp()
-        this.state = ActivationState.INACTIVE
-      }
+    this.stopTimer = setTimeout(() => {
+      if (this.activeSessions !== 0) return
+      if (this.disposed) return
+      if (this.state !== ActivationState.ACTIVE && this.state !== ActivationState.ERROR) return
+
+      void this.stopAcp().catch((error) => {
+        const message = error instanceof Error ? error.message : String(error)
+        this.output.appendLine(`OpenCode ACP scheduled stop failure: ${message}`)
+      })
     }, this.config.stopDelayMs)
+  }
+
+  private isStale(stamp: number): boolean {
+    return this.disposed || this.state === ActivationState.DISPOSED || stamp !== this.stamp
   }
 
   private async stopAcp(): Promise<void> {
@@ -258,19 +300,43 @@ export class ActivationController {
       this.stopTimer = null
     }
 
-    if (this.client) {
-      await this.client.dispose()
-      this.client = null
+    const client = this.client
+    const connection = this.connection
+    const proc = this.process
+
+    this.client = null
+    this.connection = null
+    this.process = null
+
+    if (client) {
+      try {
+        await client.dispose()
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        this.output.appendLine(`OpenCode ACP client teardown failure: ${message}`)
+      }
     }
 
-    if (this.connection) {
-      this.connection.dispose()
-      this.connection = null
+    if (connection) {
+      try {
+        connection.dispose()
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        this.output.appendLine(`OpenCode ACP connection teardown failure: ${message}`)
+      }
     }
 
-    if (this.process) {
-      await this.process.stop()
-      this.process = null
+    if (proc) {
+      try {
+        await proc.stop()
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        this.output.appendLine(`OpenCode ACP process teardown failure: ${message}`)
+      }
+    }
+
+    if (this.state === ActivationState.ACTIVE) {
+      this.state = ActivationState.INACTIVE
     }
   }
 
@@ -297,21 +363,13 @@ export class ActivationController {
 
     this.disposed = true
     this.state = ActivationState.DISPOSED
+    this.stamp++
 
     if (this.startPromise) {
       this.startPromise = null
     }
 
     await this.cleanup()
-  }
-
-  reset(): void {
-    if (this.disposed) return
-
-    if (this.state === ActivationState.ERROR) {
-      this.state = ActivationState.INACTIVE
-      this.restartCount = 0
-    }
   }
 }
 

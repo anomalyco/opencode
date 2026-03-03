@@ -20,12 +20,24 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished",
+    "onChatParticipant:sst-dev.opencode",
+    "onChatSession:sst-dev.opencode",
+    "onCommand:opencode.activate",
+    "onCommand:opencode.openTerminal",
+    "onCommand:opencode.openNewTerminal",
+    "onCommand:opencode.addFilepathToTerminal"
+  ],
+  "enabledApiProposals": [
+    "chatSessionsProvider@3",
+    "chatSessionsProvider"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "chatParticipants": [
       {
-        "id": "opencode",
+        "id": "sst-dev.opencode",
         "name": "opencode",
         "fullName": "OpenCode",
         "description": "AI coding assistant powered by OpenCode",
@@ -42,7 +54,33 @@
         ]
       }
     ],
+    "chatSessions": [
+      {
+        "type": "sst-dev.opencode",
+        "name": "opencode",
+        "displayName": "OpenCode",
+        "description": "AI coding assistant powered by OpenCode",
+        "icon": "images/icon.png",
+        "welcomeTitle": "OpenCode",
+        "welcomeMessage": "Ask OpenCode to help with your code.",
+        "inputPlaceholder": "Ask OpenCode anything...",
+        "commands": [
+          {
+            "name": "new",
+            "description": "Start a new session"
+          },
+          {
+            "name": "clear",
+            "description": "Clear conversation"
+          }
+        ]
+      }
+    ],
     "commands": [
+      {
+        "command": "opencode.activate",
+        "title": "OpenCode: Activate"
+      },
       {
         "command": "opencode.openTerminal",
         "title": "Open opencode",
@@ -107,11 +145,12 @@
     "package": "bun run check-types && bun run lint && node esbuild.js --production",
     "compile-tests": "tsc -p tsconfig.test.json",
     "watch-tests": "tsc -p . -w --outDir out",
-    "pretest": "bun run compile-tests && bun run compile && bun run lint",
+    "pretest": "bun run compile-tests && bun run compile",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "vscode-test",
-    "test:e2e": "playwright test --config=playwright.config.ts"
+    "test": "vscode-test run --config .vscode-test.mjs",
+    "test:e2e:stable": "xvfb-run --auto-servernum --server-args='-screen 0 1280x720x24' vscode-test run --config .vscode-test.mjs --label e2e -- --disable-gpu --headless",
+    "test:e2e:insiders": "xvfb-run --auto-servernum --server-args='-screen 0 1280x720x24' vscode-test run --config .vscode-test.mjs --label e2e --version insiders -- --disable-gpu --headless"
   },
   "devDependencies": {
     "@types/vscode": "^1.94.0",

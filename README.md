@@ -116,6 +116,10 @@ Learn more about [agents](https://opencode.ai/docs/agents).
 
 For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
 
+> [!NOTE]
+> The VS Code extension uses proposed APIs for chat session targets and requires VS Code Insiders with
+> `--enable-proposed-api sst-dev.opencode` when running the extension host.
+
 ### Contributing
 
 If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.

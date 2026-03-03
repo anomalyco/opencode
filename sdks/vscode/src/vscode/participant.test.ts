@@ -86,7 +86,7 @@ describe("OpenCodeChatParticipant", () => {
       participant = new OpenCodeChatParticipant(mockContext, mockActivationController as any)
       participant.register()
 
-      assert.strictEqual(participant.id, "opencode")
+      assert.strictEqual(participant.id, "sst-dev.opencode")
     })
 
     it("has correct metadata", () => {
@@ -152,6 +152,7 @@ describe("OpenCodeChatParticipant", () => {
 
       assert.ok(participant.canHandleMention("@opencode"), "Should handle @opencode mention")
       assert.ok(participant.canHandleMention("opencode"), "Should handle bare opencode mention")
+      assert.ok(participant.canHandleMention("@sst-dev.opencode"), "Should handle extension ID mention")
     })
 
     it("does not handle other mentions", () => {

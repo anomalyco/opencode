@@ -1,0 +1,57 @@
+$ vscode-test run --config .vscode-test.mjs --label integration -- --disable-gpu --headless
+- Resolving version...
+✔ Validated version: 1.109.5
+✔ Found existing install in /home/rrj/.local/share/opencode/worktree/4b0ea68d7af9a6031a7ffda7ad66e0cb83315750/feature/vscode-acp-chat-participant/sdks/vscode/.vscode-test/vscode-linux-x64-1.109.5
+[3739110:0303/195113.645130:ERROR:components/viz/service/main/viz_main_impl.cc:189] Exiting GPU process due to errors during initialization
+[90m[main 2026-03-03T18:51:13.728Z][0m update#setState disabled
+[90m[main 2026-03-03T18:51:13.730Z][0m update#ctor - updates are disabled by the environment
+[3739083:0303/195113.794421:ERROR:dbus/object_proxy.cc:573] Failed to call method: org.freedesktop.login1.Manager.Inhibit: object_path= /org/freedesktop/login1: org.freedesktop.DBus.Error.AccessDenied: Permission denied
+[3739166:0303/195113.867458:ERROR:components/viz/service/main/viz_main_impl.cc:189] Exiting GPU process due to errors during initialization
+[3739150:0303/195113.951051:ERROR:gpu/ipc/client/command_buffer_proxy_impl.cc:128] ContextResult::kTransientFailure: Failed to send GpuControl.CreateCommandBuffer.
+Started local extension host with pid 3739690.
+MCP Registry configured: https://api.mcp.github.com
+Loading development extension at /home/rrj/.local/share/opencode/worktree/4b0ea68d7af9a6031a7ffda7ad66e0cb83315750/feature/vscode-acp-chat-participant/sdks/vscode
+Extension 'sst-dev.opencode' wants API proposal 'chatSessionsProvider@3' but that proposal DOES NOT EXIST. Likely, the proposal has been finalized (check 'vscode.d.ts') or was abandoned.
+Extension 'sst-dev.opencode CANNOT USE these API proposals 'chatSessionsProvider'. You MUST start in extension development mode or use the --enable-proposed-api command line flag
+Settings Sync: Account status changed from uninitialized to unavailable
+
+  Chat Participant (Integration)
+    chat panel interaction
+      ✔ opens chat panel and captures screenshot (1666ms)
+      ✔ types @opencode in chat input and captures screenshot (1144ms)
+      ✔ shows message composing state (1649ms)
+      ✔ shows output channel with extension logs (1451ms)
+    chat API availability
+      ✔ has chat API available
+      ✔ can access chat participant API
+    chat request handling
+      ✔ has vscode APIs available for chat
+    chat participant metadata
+      ✔ has access to extension context
+  Activation (Integration)
+    server lifecycle
+      ✔ starts mock server successfully and shows activated state (1445ms)
+      ✔ accepts connections and shows participant registration (1445ms)
+      ✔ handles initialize request and shows ACP connection (1444ms)
+      ✔ opens chat panel for integration demo (1851ms)
+    extension context
+      ✔ has valid extension context
+      ✔ can create output channel
+Error: Trying to add a disposable to a DisposableStore that has already been disposed of. The added object will be leaked!
+	at yN.add (file:///home/rrj/.local/share/opencode/worktree/4b0ea68d7af9a6031a7ffda7ad66e0cb83315750/feature/vscode-acp-chat-participant/sdks/vscode/.vscode-test/vscode-linux-x64-1.109.5/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:25:1690)
+	at c4.o (file:///home/rrj/.local/share/opencode/worktree/4b0ea68d7af9a6031a7ffda7ad66e0cb83315750/feature/vscode-acp-chat-participant/sdks/vscode/.vscode-test/vscode-linux-x64-1.109.5/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:123:1912)
+      ✔ has workspace available
+    progress API
+      ✔ can run task with progress
+Error: Trying to add a disposable to a DisposableStore that has already been disposed of. The added object will be leaked!
+	at yN.add (file:///home/rrj/.local/share/opencode/worktree/4b0ea68d7af9a6031a7ffda7ad66e0cb83315750/feature/vscode-acp-chat-participant/sdks/vscode/.vscode-test/vscode-linux-x64-1.109.5/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:25:1690)
+	at c4.o (file:///home/rrj/.local/share/opencode/worktree/4b0ea68d7af9a6031a7ffda7ad66e0cb83315750/feature/vscode-acp-chat-participant/sdks/vscode/.vscode-test/vscode-linux-x64-1.109.5/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:123:2067)
+Error: Trying to add a disposable to a DisposableStore that has already been disposed of. The added object will be leaked!
+	at yN.add (file:///home/rrj/.local/share/opencode/worktree/4b0ea68d7af9a6031a7ffda7ad66e0cb83315750/feature/vscode-acp-chat-participant/sdks/vscode/.vscode-test/vscode-linux-x64-1.109.5/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:25:1690)
+	at file:///home/rrj/.local/share/opencode/worktree/4b0ea68d7af9a6031a7ffda7ad66e0cb83315750/feature/vscode-acp-chat-participant/sdks/vscode/.vscode-test/vscode-linux-x64-1.109.5/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:123:1568
+Error: Trying to add a disposable to a DisposableStore that has already been disposed of. The added object will be leaked!
+	at yN.add (file:///home/rrj/.local/share/opencode/worktree/4b0ea68d7af9a6031a7ffda7ad66e0cb83315750/feature/vscode-acp-chat-participant/sdks/vscode/.vscode-test/vscode-linux-x64-1.109.5/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:25:1690)
+	at file:///home/rrj/.local/share/opencode/worktree/4b0ea68d7af9a6031a7ffda7ad66e0cb83315750/feature/vscode-acp-chat-participant/sdks/vscode/.vscode-test/vscode-linux-x64-1.109.5/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:123:2673
+  16 passing (12s)
+[90m[main 2026-03-03T18:51:28.671Z][0m Extension host with pid 3739690 exited with code: 0, signal: unknown.
+Exit code:   0

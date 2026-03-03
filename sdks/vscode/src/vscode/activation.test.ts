@@ -1,6 +1,5 @@
 import { strict as assert } from "assert"
 import { describe, it, beforeEach, afterEach } from "mocha"
-import { EventEmitter } from "events"
 import { Readable, Writable } from "stream"
 import { ActivationController, ActivationState } from "./activation"
 import { AcpClient, AcpClientState } from "../acp/client"
@@ -72,10 +71,21 @@ describe("ActivationController", () => {
   let controller: ActivationController
   let context: InstanceType<typeof mockVscode.ExtensionContext>
   let streams: ReturnType<typeof createMockStreams>
+  let output: any
 
   beforeEach(() => {
     context = new mockVscode.ExtensionContext()
     streams = createMockStreams()
+    output = {
+      name: "OpenCode",
+      append: () => {},
+      appendLine: () => {},
+      replace: () => {},
+      clear: () => {},
+      show: () => {},
+      hide: () => {},
+      dispose: () => {},
+    }
     mockVscode.window.lastErrorMessage = null
     mockVscode.window.lastWarningMessage = null
     mockVscode.workspace.workspaceFolders = [{ uri: { fsPath: "/test/workspace" } }]
@@ -94,7 +104,7 @@ describe("ActivationController", () => {
 
   describe("on-demand activation", () => {
     it("does NOT start ACP on extension load", () => {
-      controller = new ActivationController(context as any)
+      controller = new ActivationController(context as any, output)
 
       assert.strictEqual(controller.getState(), ActivationState.INACTIVE, "Should be INACTIVE initially")
       assert.strictEqual(controller.getActiveSessions(), 0, "Should have zero active sessions")
@@ -102,7 +112,7 @@ describe("ActivationController", () => {
     })
 
     it("transitions to STARTING when ensureActivated is called", async () => {
-      controller = new ActivationController(context as any, {
+      controller = new ActivationController(context as any, output, {
         spawnOptions: { command: "/nonexistent/command", args: [] },
       })
 
@@ -121,7 +131,7 @@ describe("ActivationController", () => {
     })
 
     it("handles concurrent activation requests", async () => {
-      controller = new ActivationController(context as any, {
+      controller = new ActivationController(context as any, output, {
         spawnOptions: { command: "/nonexistent/command", args: [] },
       })
 
@@ -140,7 +150,7 @@ describe("ActivationController", () => {
 
   describe("session management", () => {
     it("increments active session count on session start", () => {
-      controller = new ActivationController(context as any)
+      controller = new ActivationController(context as any, output)
 
       assert.strictEqual(controller.getActiveSessions(), 0, "Initial sessions should be 0")
 
@@ -152,7 +162,7 @@ describe("ActivationController", () => {
     })
 
     it("decrements active session count on session end", () => {
-      controller = new ActivationController(context as any)
+      controller = new ActivationController(context as any, output)
 
       controller.onSessionStarted()
       controller.onSessionStarted()
@@ -166,7 +176,7 @@ describe("ActivationController", () => {
     })
 
     it("prevents negative session count", () => {
-      controller = new ActivationController(context as any)
+      controller = new ActivationController(context as any, output)
 
       controller.onSessionEnded()
       controller.onSessionEnded()
@@ -176,7 +186,7 @@ describe("ActivationController", () => {
 
   describe("VS Code lifecycle", () => {
     it("handles VS Code shutdown gracefully", async () => {
-      controller = new ActivationController(context as any)
+      controller = new ActivationController(context as any, output)
 
       controller.onSessionStarted()
       controller.onSessionStarted()
@@ -190,7 +200,7 @@ describe("ActivationController", () => {
     })
 
     it("stops ACP immediately on dispose regardless of sessions", async () => {
-      controller = new ActivationController(context as any)
+      controller = new ActivationController(context as any, output)
 
       controller.onSessionStarted()
       controller.onSessionStarted()
@@ -202,7 +212,7 @@ describe("ActivationController", () => {
     })
 
     it("can be disposed multiple times safely", async () => {
-      controller = new ActivationController(context as any)
+      controller = new ActivationController(context as any, output)
 
       await controller.dispose()
       await controller.dispose() // Should not throw
@@ -211,14 +221,14 @@ describe("ActivationController", () => {
     })
 
     it("prevents operations when disposed", async () => {
-      controller = new ActivationController(context as any)
+      controller = new ActivationController(context as any, output)
       await controller.dispose()
 
       await assert.rejects(controller.ensureActivated(), /disposed/)
     })
 
     it("registers with VS Code context subscriptions", () => {
-      controller = new ActivationController(context as any)
+      controller = new ActivationController(context as any, output)
 
       // Should have registered a dispose handler
       assert.ok(context.subscriptions.length > 0, "Should register with context.subscriptions")
@@ -227,7 +237,7 @@ describe("ActivationController", () => {
 
   describe("error handling", () => {
     it("handles start failures gracefully", async () => {
-      controller = new ActivationController(context as any, {
+      controller = new ActivationController(context as any, output, {
         spawnOptions: { command: "/nonexistent/command", args: [] },
       })
 
@@ -241,7 +251,7 @@ describe("ActivationController", () => {
     })
 
     it("shows error message on start failure", async () => {
-      controller = new ActivationController(context as any, {
+      controller = new ActivationController(context as any, output, {
         spawnOptions: { command: "/nonexistent/command", args: [] },
       })
 
@@ -254,34 +264,31 @@ describe("ActivationController", () => {
       assert.strictEqual(controller.getState(), ActivationState.ERROR, "Should be in ERROR state after failure")
     })
 
-    it("allows retry after start failure", async () => {
-      controller = new ActivationController(context as any, {
-        spawnOptions: { command: "/nonexistent/command", args: [] },
-      })
+    it("does not set ERROR when disposed during activation", async () => {
+      controller = new ActivationController(context as any, output)
 
-      // First attempt fails
-      try {
-        await controller.ensureActivated()
-      } catch {
-        // Expected
+      let waited = false
+      ;(controller as any).startAcp = async () => {
+        await new Promise<void>((resolve) => {
+          setImmediate(() => {
+            waited = true
+            resolve()
+          })
+        })
       }
 
-      assert.strictEqual(controller.getState(), ActivationState.ERROR)
+      const activationPromise = controller.ensureActivated()
+      await controller.dispose()
 
-      // Reset to allow retry
-      controller.reset()
-      assert.strictEqual(controller.getState(), ActivationState.INACTIVE)
-    })
+      await assert.rejects(activationPromise, /Activation canceled after disposal/)
 
-    it("ignores reset when not in ERROR state", () => {
-      controller = new ActivationController(context as any)
-
-      controller.reset()
-      assert.strictEqual(controller.getState(), ActivationState.INACTIVE, "Should remain INACTIVE")
+      assert.strictEqual(waited, true, "Activation should have awaited start")
+      assert.strictEqual(controller.getState(), ActivationState.DISPOSED, "Should stay DISPOSED")
+      assert.strictEqual(mockVscode.window.lastErrorMessage, null, "Should not show error message")
     })
 
     it("ignores session operations when disposed", async () => {
-      controller = new ActivationController(context as any)
+      controller = new ActivationController(context as any, output)
       await controller.dispose()
 
       // These should not throw
@@ -290,11 +297,35 @@ describe("ActivationController", () => {
 
       assert.strictEqual(controller.getActiveSessions(), 0)
     })
+
+    it("retries ensureActivated after failure without reset", async () => {
+      controller = new ActivationController(context as any, output)
+
+      let attempts = 0
+      const client = {
+        getState: () => AcpClientState.INITIALIZED,
+        dispose: async () => {},
+      }
+
+      ;(controller as any).startAcp = async () => {
+        attempts++
+        if (attempts === 1) {
+          throw new Error("start failed")
+        }
+        ;(controller as any).client = client
+      }
+
+      await assert.rejects(controller.ensureActivated(), /start failed/)
+      const activated = await controller.ensureActivated()
+
+      assert.strictEqual(attempts, 2, "Should retry activation after failure")
+      assert.strictEqual(activated, client as any, "Should return the initialized client")
+    })
   })
 
   describe("state transitions", () => {
     it("follows correct state lifecycle", async () => {
-      controller = new ActivationController(context as any, {
+      controller = new ActivationController(context as any, output, {
         spawnOptions: { command: "/nonexistent/command", args: [] },
       })
 
@@ -313,13 +344,23 @@ describe("ActivationController", () => {
       }
       assert.strictEqual(controller.getState(), ActivationState.ERROR)
 
-      // Reset
-      controller.reset()
-      assert.strictEqual(controller.getState(), ActivationState.INACTIVE)
-
       // Disposed
       await controller.dispose()
       assert.strictEqual(controller.getState(), ActivationState.DISPOSED)
+    })
+
+    it("does not override ACTIVE when scheduleStop races activation", async () => {
+      controller = new ActivationController(context as any, output, { stopDelayMs: 0 })
+      ;(controller as any).stopAcp = async () => {
+        ;(controller as any).state = ActivationState.ACTIVE
+      }
+      ;(controller as any).state = ActivationState.ACTIVE
+      ;(controller as any).scheduleStop()
+
+      await new Promise((resolve) => setImmediate(resolve))
+      await new Promise((resolve) => setImmediate(resolve))
+
+      assert.strictEqual(controller.getState(), ActivationState.ACTIVE, "Should not overwrite ACTIVE")
     })
   })
 
@@ -330,7 +371,7 @@ describe("ActivationController", () => {
         args: ["--arg1", "--arg2"],
       }
 
-      controller = new ActivationController(context as any, {
+      controller = new ActivationController(context as any, output, {
         spawnOptions: customOptions,
       })
 
@@ -338,29 +379,101 @@ describe("ActivationController", () => {
     })
 
     it("uses default stop delay of 30 seconds", () => {
-      controller = new ActivationController(context as any)
+      controller = new ActivationController(context as any, output)
 
       const delay = controller.getStopDelay()
       assert.strictEqual(delay, 30000, "Default stop delay should be 30000ms")
     })
 
     it("allows custom stop delay", () => {
-      controller = new ActivationController(context as any, { stopDelayMs: 5000 })
+      controller = new ActivationController(context as any, output, { stopDelayMs: 5000 })
 
       const delay = controller.getStopDelay()
       assert.strictEqual(delay, 5000, "Custom stop delay should be 5000ms")
     })
 
     it("allows custom max restarts", () => {
-      controller = new ActivationController(context as any, { maxRestarts: 3 })
+      controller = new ActivationController(context as any, output)
 
-      assert.ok(controller, "Should create controller with custom maxRestarts")
+      assert.ok(controller, "Should create controller without maxRestarts configuration")
+    })
+  })
+
+  describe("crash recovery", () => {
+    it("retries ensureActivated after crash with fresh start", async () => {
+      controller = new ActivationController(context as any, output)
+
+      let attempts = 0
+      const client = {
+        getState: () => AcpClientState.INITIALIZED,
+        dispose: async () => {},
+      }
+
+      ;(controller as any).startAcp = async () => {
+        attempts++
+        if (attempts === 1) {
+          ;(controller as any).handleProcessError(new Error("crash"))
+          throw new Error("crash")
+        }
+        ;(controller as any).client = client
+      }
+
+      await assert.rejects(controller.ensureActivated(), /crash/)
+
+      const activated = await controller.ensureActivated()
+
+      assert.strictEqual(attempts, 2, "Should retry activation after crash")
+      assert.strictEqual(activated, client as any, "Should return the initialized client")
     })
 
-    it("allows custom restart delay", () => {
-      controller = new ActivationController(context as any, { restartDelayMs: 2000 })
+    it("handles crash after activation and retries ensureActivated", async () => {
+      controller = new ActivationController(context as any, output)
 
-      assert.ok(controller, "Should create controller with custom restartDelayMs")
+      let attempts = 0
+      let disposed = 0
+      let stopped = 0
+
+      const client1 = {
+        getState: () => AcpClientState.INITIALIZED,
+        dispose: async () => {
+          disposed++
+        },
+      }
+      const client2 = {
+        getState: () => AcpClientState.INITIALIZED,
+        dispose: async () => {
+          disposed++
+        },
+      }
+
+      ;(controller as any).startAcp = async () => {
+        attempts++
+        if (attempts === 1) {
+          ;(controller as any).client = client1
+          ;(controller as any).connection = { dispose: () => {} }
+          ;(controller as any).process = {
+            stop: async () => {
+              stopped++
+            },
+          }
+          return
+        }
+        ;(controller as any).client = client2
+      }
+
+      const activated = await controller.ensureActivated()
+      assert.strictEqual(activated, client1 as any, "Should activate with first client")
+      ;(controller as any).handleProcessCrash()
+      await new Promise((resolve) => setImmediate(resolve))
+
+      assert.strictEqual(controller.getState(), ActivationState.ERROR, "Crash should set ERROR state")
+      assert.strictEqual(disposed, 1, "Crash should dispose client")
+      assert.strictEqual(stopped, 1, "Crash should stop process")
+
+      const restarted = await controller.ensureActivated()
+
+      assert.strictEqual(attempts, 2, "Should retry activation after crash")
+      assert.strictEqual(restarted, client2 as any, "Should activate with new client")
     })
   })
 
@@ -368,7 +481,7 @@ describe("ActivationController", () => {
     it("uses workspace folder when available", () => {
       mockVscode.workspace.workspaceFolders = [{ uri: { fsPath: "/workspace/path" } }]
 
-      controller = new ActivationController(context as any)
+      controller = new ActivationController(context as any, output)
 
       // Just verify it can be created with workspace folder
       assert.ok(controller)
@@ -377,7 +490,7 @@ describe("ActivationController", () => {
     it("falls back to process.cwd when no workspace", () => {
       mockVscode.workspace.workspaceFolders = null
 
-      controller = new ActivationController(context as any)
+      controller = new ActivationController(context as any, output)
 
       assert.ok(controller)
     })

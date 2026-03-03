@@ -375,7 +375,8 @@ describe("OpenCodeRequestHandler", () => {
           result: { stopReason: "end_turn" },
         }) + "\n",
       )
-      await handlePromise1
+      const result1 = await handlePromise1
+      assert.ok("reply" in result1)
 
       // Second request should use same session
       mockStream = createMockChatResponseStream()
@@ -396,7 +397,8 @@ describe("OpenCodeRequestHandler", () => {
           result: { stopReason: "end_turn" },
         }) + "\n",
       )
-      await handlePromise2
+      const result2 = await handlePromise2
+      assert.ok("reply" in result2)
     })
   })
 

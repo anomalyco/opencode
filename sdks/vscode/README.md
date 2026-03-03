@@ -19,11 +19,14 @@ This is an early release. If you encounter issues or have feedback, please creat
 
 ## Development
 
-1. `code sdks/vscode` - Open the `sdks/vscode` directory in VS Code. **Do not open from repo root.**
-2. `bun install` - Run inside the `sdks/vscode` directory.
-3. Press `F5` to start debugging - This launches a new VS Code window with the extension loaded.
+This extension depends on the proposed `chatSessionsProvider@3` API, so VS Code Insiders is required.
 
-#### Making Changes
+1. `code-insiders sdks/vscode` - Open the `sdks/vscode` directory in VS Code Insiders. **Do not open from repo root.**
+2. `bun install` - Run inside the `sdks/vscode` directory.
+3. Ensure a local `opencode` CLI is on your `PATH` if testing CLI changes (the extension runs it as an Agent Client Protocol (ACP) subprocess).
+4. Press `F5` to start debugging - This launch config includes the proposed API flag and opens a new Extension Host window with it enabled.
+
+### Making Changes
 
 `tsc` and `esbuild` watchers run automatically during debugging (visible in the Terminal tab). Changes to the extension are automatically rebuilt in the background.
 
@@ -32,3 +35,13 @@ To test your changes:
 1. In the debug VS Code window, press `Cmd+Shift+P`
 2. Search for `Developer: Reload Window`
 3. Reload to see your changes without restarting the debug session
+
+### Running Locally (Without F5)
+
+If you launch VS Code Insiders another way, you must enable the proposed API for this extension. Use `code-insiders --enable-proposed-api sst-dev.opencode` or set it via **Preferences: Configure Runtime Arguments** (argv.json).
+
+### Testing
+
+1. `bun run test` - Runs pretest (compile-tests + compile + lint, even if lint runs twice) and tests.
+2. `bun run test:e2e` - Runs end-to-end tests.
+3. `bun run watch-tests` - Compiles tests in watch mode (tsc -w).

@@ -51,11 +51,8 @@ export class AcpClient {
   private eventEmitter = new EventEmitter()
   private disposed = false
   private pendingOperations = new Set<{
-    promise: Promise<unknown>
     reject: (reason: Error) => void
   }>()
-  private abortController = new AbortController()
-  private stateHistory: AcpClientState[] = [AcpClientState.CREATED]
 
   constructor(config: AcpClientConfig) {
     if (!config.connection) {
@@ -82,10 +79,9 @@ export class AcpClient {
 
   private handleNotification(notification: { method?: string; params?: unknown }): void {
     if (notification.method === "session/update") {
-      const params = notification.params as { sessionId: string; update: SessionUpdate }
-      if (params.sessionId && params.update) {
-        this.eventEmitter.emit("sessionUpdate", params.sessionId, params.update)
-      }
+      const params = this.getSessionUpdate(notification.params)
+      if (!params) return
+      this.eventEmitter.emit("sessionUpdate", params.sessionId, params.update)
     }
   }
 
@@ -95,11 +91,11 @@ export class AcpClient {
 
   async initialize(): Promise<InitializeResponse> {
     if (this.disposed) {
-      throw new Error("Client disposed")
+      throw new Error("Client disposed before initialization")
     }
 
     if (this.state !== AcpClientState.CREATED) {
-      throw new Error("Client already initialized")
+      throw new Error(`Client already initialized (state: ${this.state})`)
     }
 
     const request: InitializeRequest = {
@@ -108,10 +104,9 @@ export class AcpClient {
     }
 
     const response = await this.sendRequest("initialize", request)
-    const result = response.result as InitializeResponse
+    const result = this.parseInitialize(response.result)
 
     this.state = AcpClientState.INITIALIZED
-    this.stateHistory.push(this.state)
     this.eventEmitter.emit("stateChange", this.state)
 
     return result
@@ -121,21 +116,21 @@ export class AcpClient {
     this.ensureInitialized()
 
     const response = await this.sendRequest("session/new", params)
-    return response.result as NewSessionResponse
+    return this.parseNewSession(response.result)
   }
 
   async loadSession(params: LoadSessionRequest): Promise<LoadSessionResponse> {
     this.ensureInitialized()
 
     const response = await this.sendRequest("session/load", params)
-    return response.result as LoadSessionResponse
+    return this.parseLoadSession(response.result)
   }
 
   async sendPrompt(params: PromptRequest): Promise<PromptResponse> {
     this.ensureInitialized()
 
     const response = await this.sendRequest("session/prompt", params)
-    return response.result as PromptResponse
+    return this.parsePrompt(response.result)
   }
 
   async cancel(params: CancelNotification): Promise<void> {
@@ -159,35 +154,23 @@ export class AcpClient {
       throw new Error("Client disposed")
     }
 
-    let rejectFn: (reason: Error) => void
-
-    const promise = new Promise<JsonRpcResponse>((resolve, reject) => {
-      rejectFn = reject
-
-      this.connection
-        .sendRequest({
-          method,
-          params,
-        })
-        .then((response) => {
-          resolve(response)
-        })
-        .catch((error) => {
-          reject(error)
-        })
-    })
-
-    const operation = { promise, reject: rejectFn! }
+    const request = this.connection.sendRequest({ method, params })
+    const operation = { reject: (_reason: Error) => {} }
     this.pendingOperations.add(operation)
 
     try {
-      const response = await promise
+      const response = await new Promise<JsonRpcResponse>((resolve, reject) => {
+        operation.reject = reject
+        request.then(resolve, reject)
+      })
       return response
     } catch (error) {
       // Check if it's a JSON-RPC error with a code
-      if (error instanceof Error && (error as any).code !== undefined) {
-        const code = (error as any).code as number
-        throw new AcpError(error.message, code, (error as any).data)
+      if (error instanceof Error) {
+        const info = error as { code?: unknown; data?: unknown }
+        if (typeof info.code === "number") {
+          throw new AcpError(error.message, info.code, info.data)
+        }
       }
       throw error
     } finally {
@@ -195,25 +178,102 @@ export class AcpClient {
     }
   }
 
+  private getSessionUpdate(params: unknown): { sessionId: string; update: SessionUpdate } | undefined {
+    if (!params || typeof params !== "object") return
+    if (!("sessionId" in params) || !("update" in params)) return
+    const data = params as { sessionId?: unknown; update?: unknown }
+    if (typeof data.sessionId !== "string") return
+    if (!this.isSessionUpdate(data.update)) return
+    return { sessionId: data.sessionId, update: data.update }
+  }
+
+  private isSessionUpdate(update: unknown): update is SessionUpdate {
+    if (!update || typeof update !== "object") return false
+    if (!("sessionUpdate" in update)) return false
+    const data = update as { sessionUpdate?: unknown }
+    return typeof data.sessionUpdate === "string"
+  }
+
+  private parseInitialize(result: unknown): InitializeResponse {
+    if (!result || typeof result !== "object") {
+      throw new Error("Invalid initialize response")
+    }
+    if (!("protocolVersion" in result)) {
+      throw new Error("Invalid initialize response")
+    }
+    const data = result as { protocolVersion?: unknown }
+    if (typeof data.protocolVersion !== "number") {
+      throw new Error("Invalid initialize response")
+    }
+    return result as InitializeResponse
+  }
+
+  private parseNewSession(result: unknown): NewSessionResponse {
+    if (!result || typeof result !== "object") {
+      throw new Error("Invalid session response")
+    }
+    if (!("sessionId" in result)) {
+      throw new Error("Invalid session response")
+    }
+    const data = result as { sessionId?: unknown }
+    if (typeof data.sessionId !== "string") {
+      throw new Error("Invalid session response")
+    }
+    return result as NewSessionResponse
+  }
+
+  private parseLoadSession(result: unknown): LoadSessionResponse {
+    if (!result || typeof result !== "object") {
+      throw new Error("Invalid session response")
+    }
+    if (!("sessionId" in result)) {
+      throw new Error("Invalid session response")
+    }
+    const data = result as { sessionId?: unknown }
+    if (typeof data.sessionId !== "string") {
+      throw new Error("Invalid session response")
+    }
+    return result as LoadSessionResponse
+  }
+
+  private parsePrompt(result: unknown): PromptResponse {
+    if (!result || typeof result !== "object") {
+      throw new Error("Invalid prompt response")
+    }
+    if (!("stopReason" in result)) {
+      throw new Error("Invalid prompt response")
+    }
+    const data = result as { stopReason?: unknown }
+    if (typeof data.stopReason !== "string") {
+      throw new Error("Invalid prompt response")
+    }
+    return result as PromptResponse
+  }
+
   private async sendNotification(method: string, params?: unknown): Promise<void> {
     await this.connection.sendNotification({ method, params })
   }
 
   // Event handlers
-  onSessionUpdate(callback: (sessionId: string, update: SessionUpdate) => void): void {
+  onSessionUpdate(callback: (sessionId: string, update: SessionUpdate) => void): () => void {
     this.eventEmitter.on("sessionUpdate", callback)
-  }
-
-  onError(callback: (error: Error) => void): void {
-    this.eventEmitter.on("error", callback)
-  }
-
-  onStateChange(callback: (state: AcpClientState) => void): void {
-    // Emit all historical states to new listener
-    for (const state of this.stateHistory) {
-      callback(state)
+    return () => {
+      this.eventEmitter.off("sessionUpdate", callback)
     }
+  }
+
+  onError(callback: (error: Error) => void): () => void {
+    this.eventEmitter.on("error", callback)
+    return () => {
+      this.eventEmitter.off("error", callback)
+    }
+  }
+
+  onStateChange(callback: (state: AcpClientState) => void): () => void {
     this.eventEmitter.on("stateChange", callback)
+    return () => {
+      this.eventEmitter.off("stateChange", callback)
+    }
   }
 
   async dispose(): Promise<void> {
@@ -222,9 +282,7 @@ export class AcpClient {
     }
 
     this.disposed = true
-    this.abortController.abort()
     this.state = AcpClientState.DISPOSED
-    this.stateHistory.push(this.state)
     this.eventEmitter.emit("stateChange", this.state)
 
     // Reject all pending operations

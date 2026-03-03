@@ -1,46 +1,47 @@
 import * as vscode from "vscode"
-import { AcpClient, PromptPart, SessionUpdate, AcpError } from "../acp/client"
+import { AcpClient, PromptPart, SessionUpdate, AcpError, AcpErrorCode } from "../acp/client"
 
-export interface HandlerResult {
-  metadata: {
-    stopReason: string
-    usage?: {
-      totalTokens?: number
-      inputTokens?: number
-      outputTokens?: number
-      thoughtTokens?: number
-    }
-  }
+const limit = 10
+
+export type ChatInput = {
+  prompt: string
+  references: readonly vscode.ChatPromptReference[]
+  command?: string
 }
 
 export class OpenCodeRequestHandler {
   private client: AcpClient
   private sessionId: string | undefined
-  private messageBuffer: string[] = []
 
   constructor(client: AcpClient) {
     this.client = client
   }
 
   async handle(
-    request: vscode.ChatRequest,
+    request: ChatInput,
     context: vscode.ChatContext,
     stream: vscode.ChatResponseStream,
     token: vscode.CancellationToken,
-  ): Promise<vscode.ChatResult> {
+  ): Promise<vscode.ChatResult & { reply: string }> {
     // Get or create session
     const sessionId = await this.getOrCreateSession()
+    const state = { buffer: [] as string[], reply: "" }
 
     // Build prompt from history + current request
     const prompt = this.buildPrompt(context.history, request)
 
     // Set up cancellation handling
-    token.onCancellationRequested(() => {
-      this.client.cancel({ sessionId })
+    const drops: Array<() => void> = []
+    const cancelDispose = token.onCancellationRequested(() => {
+      void this.client.cancel({ sessionId }).catch(() => {
+        // Ignore cancellation failures to avoid noisy user-facing errors.
+      })
     })
+    drops.push(() => cancelDispose.dispose())
 
     // Set up streaming handler - returns a disposable
-    const streamingDispose = this.setupStreaming(sessionId, stream)
+    const streamingDispose = this.setupStreaming(sessionId, stream, state)
+    drops.push(() => streamingDispose())
 
     // Show initial progress
     stream.progress("OpenCode is thinking...")
@@ -53,10 +54,7 @@ export class OpenCodeRequestHandler {
       })
 
       // Flush any remaining buffered content
-      this.flushBuffer(stream)
-
-      // Clean up streaming listener
-      streamingDispose()
+      this.flushBuffer(state, stream)
 
       // Return result with metadata
       return {
@@ -64,12 +62,24 @@ export class OpenCodeRequestHandler {
           stopReason: response.stopReason,
           usage: response.usage,
         },
+        reply: state.reply,
       }
     } catch (error) {
-      this.flushBuffer(stream)
-      streamingDispose()
       throw this.handleError(error)
+    } finally {
+      this.flushBuffer(state, stream)
+      for (const drop of drops) {
+        try {
+          drop()
+        } catch {
+          // Ignore cleanup failures.
+        }
+      }
     }
+  }
+
+  reset(): void {
+    this.sessionId = undefined
   }
 
   private async getOrCreateSession(): Promise<string> {
@@ -86,13 +96,13 @@ export class OpenCodeRequestHandler {
 
   private buildPrompt(
     history: readonly (vscode.ChatRequestTurn | vscode.ChatResponseTurn)[],
-    currentRequest: vscode.ChatRequest,
+    currentRequest: ChatInput,
   ): PromptPart[] {
     const prompt: PromptPart[] = []
 
     // Add previous messages from history
     for (const turn of history) {
-      if ("prompt" in turn && typeof turn.prompt === "string") {
+      if (this.isRequestTurn(turn)) {
         // ChatRequestTurn - user message
         prompt.push({
           type: "text",
@@ -112,7 +122,9 @@ export class OpenCodeRequestHandler {
             }
           }
         }
-      } else if ("response" in turn && Array.isArray(turn.response)) {
+      }
+
+      if (this.isResponseTurn(turn)) {
         // ChatResponseTurn - assistant message
         // Extract text content from response parts
         const textContent = this.extractTextFromResponse(turn.response)
@@ -145,6 +157,14 @@ export class OpenCodeRequestHandler {
     }
 
     return prompt
+  }
+
+  private isRequestTurn(turn: vscode.ChatRequestTurn | vscode.ChatResponseTurn): turn is vscode.ChatRequestTurn {
+    return "prompt" in turn && typeof turn.prompt === "string"
+  }
+
+  private isResponseTurn(turn: vscode.ChatRequestTurn | vscode.ChatResponseTurn): turn is vscode.ChatResponseTurn {
+    return "response" in turn && Array.isArray(turn.response)
   }
 
   private extractUriFromReference(ref: vscode.ChatPromptReference): vscode.Uri | undefined {
@@ -185,30 +205,34 @@ export class OpenCodeRequestHandler {
       .join("\n")
   }
 
-  private setupStreaming(sessionId: string, stream: vscode.ChatResponseStream): () => void {
+  private setupStreaming(
+    sessionId: string,
+    stream: vscode.ChatResponseStream,
+    state: { buffer: string[]; reply: string },
+  ): () => void {
     const handler = (updateSessionId: string, update: SessionUpdate) => {
       if (updateSessionId !== sessionId) {
         return
       }
 
-      this.handleSessionUpdate(update, stream)
+      this.handleSessionUpdate(update, stream, state)
     }
-    this.client.onSessionUpdate(handler)
-    return () => {
-      // The client doesn't have a way to remove listeners, so we return an empty dispose
-      // In a real implementation, we'd want the client to return a disposable
-    }
+    return this.client.onSessionUpdate(handler)
   }
 
-  private handleSessionUpdate(update: SessionUpdate, stream: vscode.ChatResponseStream): void {
+  private handleSessionUpdate(
+    update: SessionUpdate,
+    stream: vscode.ChatResponseStream,
+    state: { buffer: string[]; reply: string },
+  ): void {
     switch (update.sessionUpdate) {
       case "agent_message_chunk":
-        this.bufferMessage(update.content.text, stream)
+        this.bufferMessage(state, update.content.text, stream, true)
         break
 
       case "agent_thought_chunk":
         // Buffer thought content as well (may be displayed differently in future)
-        this.bufferMessage(update.content.text, stream)
+        this.bufferMessage(state, update.content.text, stream, false)
         break
 
       case "user_message_chunk":
@@ -249,22 +273,30 @@ export class OpenCodeRequestHandler {
     }
   }
 
-  private bufferMessage(text: string, stream: vscode.ChatResponseStream): void {
-    this.messageBuffer.push(text)
+  private bufferMessage(
+    state: { buffer: string[]; reply: string },
+    text: string,
+    stream: vscode.ChatResponseStream,
+    record: boolean,
+  ): void {
+    if (record) {
+      state.reply += text
+    }
+    state.buffer.push(text)
 
     // Flush buffer periodically to avoid long delays
-    if (this.messageBuffer.length > 10) {
-      this.flushBuffer(stream)
+    if (state.buffer.length > limit) {
+      this.flushBuffer(state, stream)
     }
   }
 
-  private flushBuffer(stream: vscode.ChatResponseStream): void {
-    if (this.messageBuffer.length === 0) {
+  private flushBuffer(state: { buffer: string[] }, stream: vscode.ChatResponseStream): void {
+    if (state.buffer.length === 0) {
       return
     }
 
-    const content = this.messageBuffer.join("")
-    this.messageBuffer = []
+    const content = state.buffer.join("")
+    state.buffer = []
 
     stream.markdown(content)
   }
@@ -272,13 +304,15 @@ export class OpenCodeRequestHandler {
   private handleError(error: unknown): Error {
     if (error instanceof AcpError) {
       switch (error.code) {
-        case -32001:
+        case AcpErrorCode.AuthRequired:
           return new Error("Authentication required. Please authenticate with OpenCode.")
-        case -32002:
+        case AcpErrorCode.SessionNotFound:
+          this.sessionId = undefined
           return new Error("Session not found. Starting a new session...")
-        case -32003:
+        case AcpErrorCode.SessionExpired:
+          this.sessionId = undefined
           return new Error("Session expired. Please start a new conversation.")
-        case -32004:
+        case AcpErrorCode.RateLimitExceeded:
           return new Error("Rate limit exceeded. Please wait a moment and try again.")
         default:
           return new Error(`OpenCode error: ${error.message}`)

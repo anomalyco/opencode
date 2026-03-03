@@ -10,7 +10,8 @@ export interface ChatParticipantMetadata {
 }
 
 export class OpenCodeChatParticipant {
-  id = "opencode"
+  id = "sst-dev.opencode"
+  aliases = ["opencode"]
   metadata: ChatParticipantMetadata = {
     name: "opencode",
     fullName: "OpenCode",
@@ -29,6 +30,7 @@ export class OpenCodeChatParticipant {
   private participant: vscode.ChatParticipant | undefined
   private context: vscode.ExtensionContext
   private activationController: ActivationController
+  private runner?: import("./handler").OpenCodeRequestHandler
 
   constructor(context: vscode.ExtensionContext, activationController: ActivationController) {
     this.context = context
@@ -37,12 +39,15 @@ export class OpenCodeChatParticipant {
   }
 
   register(): void {
+    if (this.participant) {
+      this.participant.dispose()
+    }
+
     const iconPath = vscode.Uri.file(this.context.asAbsolutePath("images/icon.png"))
     const followupProvider = this.createFollowupProvider()
 
     this.iconPath = iconPath
     this.followupProvider = followupProvider
-
     this.participant = vscode.chat.createChatParticipant(this.id, this.handler)
     this.participant.iconPath = iconPath
     this.participant.followupProvider = followupProvider
@@ -50,7 +55,7 @@ export class OpenCodeChatParticipant {
 
   canHandleMention(mention: string): boolean {
     const cleanMention = mention.replace(/^@/, "")
-    return cleanMention === this.id
+    return cleanMention === this.metadata.name || cleanMention === this.id || this.aliases.includes(cleanMention)
   }
 
   private async handleChatRequest(
@@ -59,33 +64,29 @@ export class OpenCodeChatParticipant {
     response: vscode.ChatResponseStream,
     token: vscode.CancellationToken,
   ): Promise<void> {
-    // Track session lifecycle
+    if (request.command === "new") {
+      this.runner?.reset()
+      response.markdown("Starting a new session...")
+      return
+    }
+
+    if (request.command === "clear") {
+      this.runner?.reset()
+      response.markdown("Clearing conversation...")
+      return
+    }
+
     this.activationController.onSessionStarted()
 
     try {
-      // Ensure ACP is activated on first message
       const client = await this.activationController.ensureActivated()
-
-      // Handle slash commands
-      if (request.command === "new") {
-        response.markdown("Starting a new session...")
-        return
-      }
-
-      if (request.command === "clear") {
-        response.markdown("Clearing conversation...")
-        return
-      }
-
-      // Delegate to the request handler for actual processing
       const { OpenCodeRequestHandler } = await import("./handler.js")
-      const handler = new OpenCodeRequestHandler(client)
-      await handler.handle(request, context, response, token)
+      if (!this.runner) this.runner = new OpenCodeRequestHandler(client)
+      await this.runner.handle(request, context, response, token)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       response.markdown(`Sorry, I couldn't connect to OpenCode: ${message}`)
     } finally {
-      // Signal session end
       this.activationController.onSessionEnded()
     }
   }

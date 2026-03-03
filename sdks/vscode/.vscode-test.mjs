@@ -1,24 +1,40 @@
 import { defineConfig } from "@vscode/test-cli"
 
-/**
- * VS Code Test CLI configuration.
- * Supports multiple test configurations:
- * - unit: Unit tests with mocked VS Code APIs
- * - integration: Integration tests requiring Extension Host
- */
 export default defineConfig([
-  // Unit tests (default)
   {
-    label: "unit",
-    files: "out/acp/*.test.js",
+    label: "e2e-stable",
+    files: "out/test/e2e/**/*.test.js",
+    version: "stable",
+    launchArgs: ["--enable-proposed-api=sst-dev.opencode"],
+    mocha: {
+      ui: "tdd",
+      timeout: 60000,
+      reporter: "mochawesome",
+      reporterOptions: {
+        reportDir: "test-results",
+        reportFilename: "e2e-report",
+        overwrite: true,
+        html: true,
+        json: true,
+      },
+    },
   },
   {
-    label: "unit",
-    files: "out/vscode/*.test.js",
-  },
-  // Integration tests (requires Extension Host)
-  {
-    label: "integration",
-    files: "out/integration/*.test.js",
+    label: "e2e-insiders",
+    files: "out/test/e2e/**/*.test.js",
+    version: "insiders",
+    launchArgs: ["--enable-proposed-api=sst-dev.opencode"],
+    mocha: {
+      ui: "tdd",
+      timeout: 60000,
+      reporter: "mochawesome",
+      reporterOptions: {
+        reportDir: "test-results",
+        reportFilename: "e2e-report",
+        overwrite: true,
+        html: true,
+        json: true,
+      },
+    },
   },
 ])
