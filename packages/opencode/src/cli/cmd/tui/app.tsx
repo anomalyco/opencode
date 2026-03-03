@@ -264,6 +264,7 @@ function App() {
   // Update terminal window title based on current route and session
   createEffect(() => {
     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
+    const format = sync.data.config.terminal_title
 
     if (route.data.type === "home") {
       renderer.setTerminalTitle("OpenCode")
@@ -278,8 +279,21 @@ function App() {
       }
 
       // Truncate title to 40 chars max
-      const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
-      renderer.setTerminalTitle(`OC | ${title}`)
+      const name = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
+
+      if (!format) {
+        renderer.setTerminalTitle(`OC | ${name}`)
+        return
+      }
+
+      const status = sync.session.status(route.data.sessionID) === "idle" ? "IDLE" : "BUSY"
+      const model = local.model.current()
+      const title = format
+        .replace(/%n/g, name)
+        .replace(/%s/g, status)
+        .replace(/%m/g, model ? `${model.providerID}/${model.modelID}` : "")
+        .replace(/%a/g, local.agent.current().name)
+      renderer.setTerminalTitle(title)
     }
   })
 
