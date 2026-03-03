@@ -7,6 +7,7 @@ import {
   For,
   Match,
   on,
+  onMount,
   Show,
   Switch,
   useContext,
@@ -16,7 +17,8 @@ import path from "path"
 import { useRoute, useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { SplitBorder } from "@tui/component/border"
-import { useTheme } from "@tui/context/theme"
+import { Spinner } from "@tui/component/spinner"
+import { selectedForeground, useTheme } from "@tui/context/theme"
 import {
   BoxRenderable,
   ScrollBoxRenderable,
@@ -39,13 +41,15 @@ import { TodoWriteTool } from "@/tool/todo"
 import type { GrepTool } from "@/tool/grep"
 import type { ListTool } from "@/tool/ls"
 import type { EditTool } from "@/tool/edit"
-import type { PatchTool } from "@/tool/patch"
+import type { ApplyPatchTool } from "@/tool/apply_patch"
 import type { WebFetchTool } from "@/tool/webfetch"
 import type { TaskTool } from "@/tool/task"
 import type { QuestionTool } from "@/tool/question"
+import type { SkillTool } from "@/tool/skill"
 import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "@tui/context/sdk"
 import { useCommandDialog } from "@tui/component/dialog-command"
+import type { DialogContext } from "@tui/ui/dialog"
 import { useKeybind } from "@tui/context/keybind"
 import { Header } from "./header"
 import { parsePatch } from "diff"
@@ -58,6 +62,7 @@ import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
+import { Flag } from "@/flag/flag"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
 import { Clipboard } from "../../util/clipboard"
@@ -74,6 +79,8 @@ import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
+import { UI } from "@/cli/ui.ts"
+import { useTuiConfig } from "../../context/tui-config"
 
 addDefaultParsers(parsers.parsers)
 
@@ -94,8 +101,10 @@ const context = createContext<{
   showThinking: () => boolean
   showTimestamps: () => boolean
   showDetails: () => boolean
+  showGenericToolOutput: () => boolean
   diffWrapMode: () => "word" | "none"
   sync: ReturnType<typeof useSync>
+  tui: ReturnType<typeof useTuiConfig>
 }>()
 
 function use() {
@@ -108,6 +117,7 @@ export function Session() {
   const route = useRouteData("session")
   const { navigate } = useRoute()
   const sync = useSync()
+  const tuiConfig = useTuiConfig()
   const kv = useKV()
   const { theme } = useTheme()
   const promptRef = usePromptRef()
@@ -137,7 +147,7 @@ export function Session() {
   })
 
   const dimensions = useTerminalDimensions()
-  const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "hide")
+  const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
   const [conceal, setConceal] = createSignal(true)
   const [showThinking, setShowThinking] = kv.signal("thinking_visibility", true)
@@ -145,8 +155,10 @@ export function Session() {
   const [showDetails, setShowDetails] = kv.signal("tool_details_visibility", true)
   const [showAssistantMetadata, setShowAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
   const [showScrollbar, setShowScrollbar] = kv.signal("scrollbar_visible", false)
-  const [diffWrapMode, setDiffWrapMode] = createSignal<"word" | "none">("word")
+  const [showHeader, setShowHeader] = kv.signal("header_visible", true)
+  const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
+  const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -159,7 +171,7 @@ export function Session() {
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
 
   const scrollAcceleration = createMemo(() => {
-    const tui = sync.data.config.tui
+    const tui = tuiConfig
     if (tui?.scroll_acceleration?.enabled) {
       return new MacOSScrollAccel()
     }
@@ -216,9 +228,32 @@ export function Session() {
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef
   const keybind = useKeybind()
+  const dialog = useDialog()
+  const renderer = useRenderer()
 
   // Allow exit when in child session (prompt is hidden)
   const exit = useExit()
+
+  createEffect(() => {
+    const title = Locale.truncate(session()?.title ?? "", 50)
+    const pad = (text: string) => text.padEnd(10, " ")
+    const weak = (text: string) => UI.Style.TEXT_DIM + pad(text) + UI.Style.TEXT_NORMAL
+    const logo = UI.logo("  ").split(/\r?\n/)
+    return exit.message.set(
+      [
+        ``,
+        `${logo[0] ?? ""}`,
+        `${logo[1] ?? ""}`,
+        `${logo[2] ?? ""}`,
+        `${logo[3] ?? ""}`,
+        ``,
+        `  ${weak("Session")}${UI.Style.TEXT_NORMAL_BOLD}${title}${UI.Style.TEXT_NORMAL}`,
+        `  ${weak("Continue")}${UI.Style.TEXT_NORMAL_BOLD}opencode -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
+        ``,
+      ].join("\n"),
+    )
+  })
+
   useKeyboard((evt) => {
     if (!session()?.parentID) return
     if (keybind.match("app_exit", evt)) {
@@ -274,58 +309,87 @@ export function Session() {
 
   function toBottom() {
     setTimeout(() => {
-      if (scroll) scroll.scrollTo(scroll.scrollHeight)
+      if (!scroll || scroll.isDestroyed) return
+      scroll.scrollTo(scroll.scrollHeight)
     }, 50)
   }
 
   const local = useLocal()
 
-  function moveChild(direction: number) {
+  function moveFirstChild() {
     if (children().length === 1) return
-    let next = children().findIndex((x) => x.id === session()?.id) + direction
-    if (next >= children().length) next = 0
-    if (next < 0) next = children().length - 1
-    if (children()[next]) {
+    const next = children().find((x) => !!x.parentID)
+    if (next) {
       navigate({
         type: "session",
-        sessionID: children()[next].id,
+        sessionID: next.id,
       })
+    }
+  }
+
+  function moveChild(direction: number) {
+    if (children().length === 1) return
+
+    const sessions = children().filter((x) => !!x.parentID)
+    let next = sessions.findIndex((x) => x.id === session()?.id) + direction
+
+    if (next >= sessions.length) next = 0
+    if (next < 0) next = sessions.length - 1
+    if (sessions[next]) {
+      navigate({
+        type: "session",
+        sessionID: sessions[next].id,
+      })
+    }
+  }
+
+  function childSessionHandler(func: (dialog: DialogContext) => void) {
+    return (dialog: DialogContext) => {
+      if (!session()?.parentID || dialog.stack.length > 0) return
+      func(dialog)
     }
   }
 
   const command = useCommandDialog()
   command.register(() => [
-    ...(sync.data.config.share !== "disabled"
-      ? [
-          {
-            title: "Share session",
-            value: "session.share",
-            suggested: route.type === "session",
-            keybind: "session_share" as const,
-            disabled: !!session()?.share?.url,
-            category: "Session",
-            onSelect: async (dialog: any) => {
-              await sdk.client.session
-                .share({
-                  sessionID: route.sessionID,
-                })
-                .then((res) =>
-                  Clipboard.copy(res.data!.share!.url).catch(() =>
-                    toast.show({ message: "Failed to copy URL to clipboard", variant: "error" }),
-                  ),
-                )
-                .then(() => toast.show({ message: "Share URL copied to clipboard!", variant: "success" }))
-                .catch(() => toast.show({ message: "Failed to share session", variant: "error" }))
-              dialog.clear()
-            },
-          },
-        ]
-      : []),
+    {
+      title: session()?.share?.url ? "Copy share link" : "Share session",
+      value: "session.share",
+      suggested: route.type === "session",
+      keybind: "session_share",
+      category: "Session",
+      enabled: sync.data.config.share !== "disabled",
+      slash: {
+        name: "share",
+      },
+      onSelect: async (dialog) => {
+        const copy = (url: string) =>
+          Clipboard.copy(url)
+            .then(() => toast.show({ message: "Share URL copied to clipboard!", variant: "success" }))
+            .catch(() => toast.show({ message: "Failed to copy URL to clipboard", variant: "error" }))
+        const url = session()?.share?.url
+        if (url) {
+          await copy(url)
+          dialog.clear()
+          return
+        }
+        await sdk.client.session
+          .share({
+            sessionID: route.sessionID,
+          })
+          .then((res) => copy(res.data!.share!.url))
+          .catch(() => toast.show({ message: "Failed to share session", variant: "error" }))
+        dialog.clear()
+      },
+    },
     {
       title: "Rename session",
       value: "session.rename",
       keybind: "session_rename",
       category: "Session",
+      slash: {
+        name: "rename",
+      },
       onSelect: (dialog) => {
         dialog.replace(() => <DialogSessionRename session={route.sessionID} />)
       },
@@ -335,6 +399,9 @@ export function Session() {
       value: "session.timeline",
       keybind: "session_timeline",
       category: "Session",
+      slash: {
+        name: "timeline",
+      },
       onSelect: (dialog) => {
         dialog.replace(() => (
           <DialogTimeline
@@ -355,6 +422,9 @@ export function Session() {
       value: "session.fork",
       keybind: "session_fork",
       category: "Session",
+      slash: {
+        name: "fork",
+      },
       onSelect: (dialog) => {
         dialog.replace(() => (
           <DialogForkFromTimeline
@@ -374,6 +444,10 @@ export function Session() {
       value: "session.compact",
       keybind: "session_compact",
       category: "Session",
+      slash: {
+        name: "compact",
+        aliases: ["summarize"],
+      },
       onSelect: (dialog) => {
         const selectedModel = local.model.current()
         if (!selectedModel) {
@@ -396,8 +470,11 @@ export function Session() {
       title: "Unshare session",
       value: "session.unshare",
       keybind: "session_unshare",
-      disabled: !session()?.share?.url,
       category: "Session",
+      enabled: !!session()?.share?.url,
+      slash: {
+        name: "unshare",
+      },
       onSelect: async (dialog) => {
         await sdk.client.session
           .unshare({
@@ -413,6 +490,9 @@ export function Session() {
       value: "session.undo",
       keybind: "messages_undo",
       category: "Session",
+      slash: {
+        name: "undo",
+      },
       onSelect: async (dialog) => {
         const status = sync.data.session_status?.[route.sessionID]
         if (status?.type !== "idle") await sdk.client.session.abort({ sessionID: route.sessionID }).catch(() => {})
@@ -447,8 +527,11 @@ export function Session() {
       title: "Redo",
       value: "session.redo",
       keybind: "messages_redo",
-      disabled: !session()?.revert?.messageID,
       category: "Session",
+      enabled: !!session()?.revert?.messageID,
+      slash: {
+        name: "redo",
+      },
       onSelect: (dialog) => {
         dialog.clear()
         const messageID = session()?.revert?.messageID
@@ -482,7 +565,7 @@ export function Session() {
       },
     },
     {
-      title: "Toggle code concealment",
+      title: conceal() ? "Disable code concealment" : "Enable code concealment",
       value: "session.toggle.conceal",
       keybind: "messages_toggle_conceal" as any,
       category: "Session",
@@ -495,6 +578,10 @@ export function Session() {
       title: showTimestamps() ? "Hide timestamps" : "Show timestamps",
       value: "session.toggle.timestamps",
       category: "Session",
+      slash: {
+        name: "timestamps",
+        aliases: ["toggle-timestamps"],
+      },
       onSelect: (dialog) => {
         setTimestamps((prev) => (prev === "show" ? "hide" : "show"))
         dialog.clear()
@@ -503,18 +590,14 @@ export function Session() {
     {
       title: showThinking() ? "Hide thinking" : "Show thinking",
       value: "session.toggle.thinking",
+      keybind: "display_thinking",
       category: "Session",
+      slash: {
+        name: "thinking",
+        aliases: ["toggle-thinking"],
+      },
       onSelect: (dialog) => {
         setShowThinking((prev) => !prev)
-        dialog.clear()
-      },
-    },
-    {
-      title: "Toggle diff wrapping",
-      value: "session.toggle.diffwrap",
-      category: "Session",
-      onSelect: (dialog) => {
-        setDiffWrapMode((prev) => (prev === "word" ? "none" : "word"))
         dialog.clear()
       },
     },
@@ -539,11 +622,20 @@ export function Session() {
       },
     },
     {
-      title: animationsEnabled() ? "Disable animations" : "Enable animations",
-      value: "session.toggle.animations",
+      title: showHeader() ? "Hide header" : "Show header",
+      value: "session.toggle.header",
       category: "Session",
       onSelect: (dialog) => {
-        setAnimationsEnabled((prev) => !prev)
+        setShowHeader((prev) => !prev)
+        dialog.clear()
+      },
+    },
+    {
+      title: showGenericToolOutput() ? "Hide generic tool output" : "Show generic tool output",
+      value: "session.toggle.generic_tool_output",
+      category: "Session",
+      onSelect: (dialog) => {
+        setShowGenericToolOutput((prev) => !prev)
         dialog.clear()
       },
     },
@@ -552,7 +644,7 @@ export function Session() {
       value: "session.page.up",
       keybind: "messages_page_up",
       category: "Session",
-      disabled: true,
+      hidden: true,
       onSelect: (dialog) => {
         scroll.scrollBy(-scroll.height / 2)
         dialog.clear()
@@ -563,9 +655,31 @@ export function Session() {
       value: "session.page.down",
       keybind: "messages_page_down",
       category: "Session",
-      disabled: true,
+      hidden: true,
       onSelect: (dialog) => {
         scroll.scrollBy(scroll.height / 2)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Line up",
+      value: "session.line.up",
+      keybind: "messages_line_up",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => {
+        scroll.scrollBy(-1)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Line down",
+      value: "session.line.down",
+      keybind: "messages_line_down",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => {
+        scroll.scrollBy(1)
         dialog.clear()
       },
     },
@@ -574,7 +688,7 @@ export function Session() {
       value: "session.half.page.up",
       keybind: "messages_half_page_up",
       category: "Session",
-      disabled: true,
+      hidden: true,
       onSelect: (dialog) => {
         scroll.scrollBy(-scroll.height / 4)
         dialog.clear()
@@ -585,7 +699,7 @@ export function Session() {
       value: "session.half.page.down",
       keybind: "messages_half_page_down",
       category: "Session",
-      disabled: true,
+      hidden: true,
       onSelect: (dialog) => {
         scroll.scrollBy(scroll.height / 4)
         dialog.clear()
@@ -596,7 +710,7 @@ export function Session() {
       value: "session.first",
       keybind: "messages_first",
       category: "Session",
-      disabled: true,
+      hidden: true,
       onSelect: (dialog) => {
         scroll.scrollTo(0)
         dialog.clear()
@@ -607,7 +721,7 @@ export function Session() {
       value: "session.last",
       keybind: "messages_last",
       category: "Session",
-      disabled: true,
+      hidden: true,
       onSelect: (dialog) => {
         scroll.scrollTo(scroll.scrollHeight)
         dialog.clear()
@@ -618,6 +732,7 @@ export function Session() {
       value: "session.messages_last_user",
       keybind: "messages_last_user",
       category: "Session",
+      hidden: true,
       onSelect: () => {
         const messages = sync.data.message[route.sessionID]
         if (!messages || !messages.length) return
@@ -649,7 +764,7 @@ export function Session() {
       value: "session.message.next",
       keybind: "messages_next",
       category: "Session",
-      disabled: true,
+      hidden: true,
       onSelect: (dialog) => scrollToMessage("next", dialog),
     },
     {
@@ -657,7 +772,7 @@ export function Session() {
       value: "session.message.previous",
       keybind: "messages_previous",
       category: "Session",
-      disabled: true,
+      hidden: true,
       onSelect: (dialog) => scrollToMessage("prev", dialog),
     },
     {
@@ -697,11 +812,6 @@ export function Session() {
           return
         }
 
-        const base64 = Buffer.from(text).toString("base64")
-        const osc52 = `\x1b]52;c;${base64}\x07`
-        const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
-        /* @ts-expect-error */
-        renderer.writeOut(finalOsc52)
         Clipboard.copy(text)
           .then(() => toast.show({ message: "Message copied to clipboard!", variant: "success" }))
           .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))
@@ -711,8 +821,10 @@ export function Session() {
     {
       title: "Copy session transcript",
       value: "session.copy",
-      keybind: "session_copy",
       category: "Session",
+      slash: {
+        name: "copy",
+      },
       onSelect: async (dialog) => {
         try {
           const sessionData = session()
@@ -740,6 +852,9 @@ export function Session() {
       value: "session.export",
       keybind: "session_export",
       category: "Session",
+      slash: {
+        name: "export",
+      },
       onSelect: async (dialog) => {
         try {
           const sessionData = session()
@@ -794,24 +909,13 @@ export function Session() {
       },
     },
     {
-      title: "Next child session",
-      value: "session.child.next",
-      keybind: "session_child_cycle",
+      title: "Go to child session",
+      value: "session.child.first",
+      keybind: "session_child_first",
       category: "Session",
-      disabled: true,
+      hidden: true,
       onSelect: (dialog) => {
-        moveChild(1)
-        dialog.clear()
-      },
-    },
-    {
-      title: "Previous child session",
-      value: "session.child.previous",
-      keybind: "session_child_cycle_reverse",
-      category: "Session",
-      disabled: true,
-      onSelect: (dialog) => {
-        moveChild(-1)
+        moveFirstChild()
         dialog.clear()
       },
     },
@@ -820,8 +924,9 @@ export function Session() {
       value: "session.parent",
       keybind: "session_parent",
       category: "Session",
-      disabled: true,
-      onSelect: (dialog) => {
+      hidden: true,
+      enabled: !!session()?.parentID,
+      onSelect: childSessionHandler((dialog) => {
         const parentID = session()?.parentID
         if (parentID) {
           navigate({
@@ -830,7 +935,31 @@ export function Session() {
           })
         }
         dialog.clear()
-      },
+      }),
+    },
+    {
+      title: "Next child session",
+      value: "session.child.next",
+      keybind: "session_child_cycle",
+      category: "Session",
+      hidden: true,
+      enabled: !!session()?.parentID,
+      onSelect: childSessionHandler((dialog) => {
+        moveChild(1)
+        dialog.clear()
+      }),
+    },
+    {
+      title: "Previous child session",
+      value: "session.child.previous",
+      keybind: "session_child_cycle_reverse",
+      category: "Session",
+      hidden: true,
+      enabled: !!session()?.parentID,
+      onSelect: childSessionHandler((dialog) => {
+        moveChild(-1)
+        dialog.clear()
+      }),
     },
   ])
 
@@ -881,9 +1010,6 @@ export function Session() {
     }
   })
 
-  const dialog = useDialog()
-  const renderer = useRenderer()
-
   // snap to bottom when session changes
   createEffect(on(() => route.sessionID, toBottom))
 
@@ -898,14 +1024,16 @@ export function Session() {
         showThinking,
         showTimestamps,
         showDetails,
+        showGenericToolOutput,
         diffWrapMode,
         sync,
+        tui: tuiConfig,
       }}
     >
       <box flexDirection="row">
         <box flexGrow={1} paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={1}>
           <Show when={session()}>
-            <Show when={!sidebarVisible() || !wide()}>
+            <Show when={showHeader() && (!sidebarVisible() || !wide())}>
               <Header />
             </Show>
             <scrollbox
@@ -1099,7 +1227,8 @@ function UserMessage(props: {
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
-  const color = createMemo(() => (queued() ? theme.accent : local.agent.color(props.message.agent)))
+  const color = createMemo(() => local.agent.color(props.message.agent))
+  const queuedFg = createMemo(() => selectedForeground(theme, color()))
   const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
 
   const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
@@ -1161,7 +1290,7 @@ function UserMessage(props: {
               }
             >
               <text fg={theme.textMuted}>
-                <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
+                <span style={{ bg: color(), fg: queuedFg(), bold: true }}> QUEUED </span>
               </text>
             </Show>
           </box>
@@ -1198,6 +1327,8 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     return props.message.time.completed - user.time.created
   })
 
+  const keybind = useKeybind()
+
   return (
     <>
       <For each={props.parts}>
@@ -1215,6 +1346,14 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           )
         }}
       </For>
+      <Show when={props.parts.some((x) => x.type === "tool" && x.tool === "task")}>
+        <box paddingTop={1} paddingLeft={3}>
+          <text fg={theme.text}>
+            {keybind.print("session_child_first")}
+            <span style={{ fg: theme.textMuted }}> view subagents</span>
+          </text>
+        </box>
+      </Show>
       <Show when={props.message.error && props.message.error.name !== "MessageAbortedError"}>
         <box
           border={["left"]}
@@ -1304,15 +1443,27 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
   return (
     <Show when={props.part.text.trim()}>
       <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
-        <code
-          filetype="markdown"
-          drawUnstyledText={false}
-          streaming={true}
-          syntaxStyle={syntax()}
-          content={props.part.text.trim()}
-          conceal={ctx.conceal()}
-          fg={theme.text}
-        />
+        <Switch>
+          <Match when={Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
+            <markdown
+              syntaxStyle={syntax()}
+              streaming={true}
+              content={props.part.text.trim()}
+              conceal={ctx.conceal()}
+            />
+          </Match>
+          <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
+            <code
+              filetype="markdown"
+              drawUnstyledText={false}
+              streaming={true}
+              syntaxStyle={syntax()}
+              content={props.part.text.trim()}
+              conceal={ctx.conceal()}
+              fg={theme.text}
+            />
+          </Match>
+        </Switch>
       </box>
     </Show>
   )
@@ -1390,14 +1541,17 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         <Match when={props.part.tool === "task"}>
           <Task {...toolprops} />
         </Match>
-        <Match when={props.part.tool === "patch"}>
-          <Patch {...toolprops} />
+        <Match when={props.part.tool === "apply_patch"}>
+          <ApplyPatch {...toolprops} />
         </Match>
         <Match when={props.part.tool === "todowrite"}>
           <TodoWrite {...toolprops} />
         </Match>
         <Match when={props.part.tool === "question"}>
           <Question {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "skill"}>
+          <Skill {...toolprops} />
         </Match>
         <Match when={true}>
           <GenericTool {...toolprops} />
@@ -1416,10 +1570,40 @@ type ToolProps<T extends Tool.Info> = {
   part: ToolPart
 }
 function GenericTool(props: ToolProps<any>) {
+  const { theme } = useTheme()
+  const ctx = use()
+  const output = createMemo(() => props.output?.trim() ?? "")
+  const [expanded, setExpanded] = createSignal(false)
+  const lines = createMemo(() => output().split("\n"))
+  const maxLines = 3
+  const overflow = createMemo(() => lines().length > maxLines)
+  const limited = createMemo(() => {
+    if (expanded() || !overflow()) return output()
+    return [...lines().slice(0, maxLines), "…"].join("\n")
+  })
+
   return (
-    <InlineTool icon="⚙" pending="Writing command..." complete={true} part={props.part}>
-      {props.tool} {input(props.input)}
-    </InlineTool>
+    <Show
+      when={props.output && ctx.showGenericToolOutput()}
+      fallback={
+        <InlineTool icon="⚙" pending="Writing command..." complete={true} part={props.part}>
+          {props.tool} {input(props.input)}
+        </InlineTool>
+      }
+    >
+      <BlockTool
+        title={`# ${props.tool} ${input(props.input)}`}
+        part={props.part}
+        onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
+      >
+        <box gap={1}>
+          <text fg={theme.text}>{limited()}</text>
+          <Show when={overflow()}>
+            <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
+          </Show>
+        </box>
+      </BlockTool>
+    </Show>
   )
 }
 
@@ -1439,6 +1623,7 @@ function InlineTool(props: {
   iconColor?: RGBA
   complete: any
   pending: string
+  spinner?: boolean
   children: JSX.Element
   part: ToolPart
 }) {
@@ -1495,11 +1680,18 @@ function InlineTool(props: {
         }
       }}
     >
-      <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
-        <Show fallback={<>~ {props.pending}</>} when={props.complete}>
-          <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
-        </Show>
-      </text>
+      <Switch>
+        <Match when={props.spinner}>
+          <Spinner color={fg()} children={props.children} />
+        </Match>
+        <Match when={true}>
+          <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
+            <Show fallback={<>~ {props.pending}</>} when={props.complete}>
+              <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
+            </Show>
+          </text>
+        </Match>
+      </Switch>
       <Show when={error() && !denied()}>
         <text fg={theme.error}>{error()}</text>
       </Show>
@@ -1507,7 +1699,13 @@ function InlineTool(props: {
   )
 }
 
-function BlockTool(props: { title: string; children: JSX.Element; onClick?: () => void; part?: ToolPart }) {
+function BlockTool(props: {
+  title: string
+  children: JSX.Element
+  onClick?: () => void
+  part?: ToolPart
+  spinner?: boolean
+}) {
   const { theme } = useTheme()
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
@@ -1530,9 +1728,16 @@ function BlockTool(props: { title: string; children: JSX.Element; onClick?: () =
         props.onClick?.()
       }}
     >
-      <text paddingLeft={3} fg={theme.textMuted}>
-        {props.title}
-      </text>
+      <Show
+        when={props.spinner}
+        fallback={
+          <text paddingLeft={3} fg={theme.textMuted}>
+            {props.title}
+          </text>
+        }
+      >
+        <Spinner color={theme.textMuted}>{props.title.replace(/^# /, "")}</Spinner>
+      </Show>
       {props.children}
       <Show when={error()}>
         <text fg={theme.error}>{error()}</text>
@@ -1544,6 +1749,7 @@ function BlockTool(props: { title: string; children: JSX.Element; onClick?: () =
 function Bash(props: ToolProps<typeof BashTool>) {
   const { theme } = useTheme()
   const sync = useSync()
+  const isRunning = createMemo(() => props.part.state.status === "running")
   const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
   const [expanded, setExpanded] = createSignal(false)
   const lines = createMemo(() => output().split("\n"))
@@ -1584,11 +1790,14 @@ function Bash(props: ToolProps<typeof BashTool>) {
         <BlockTool
           title={title()}
           part={props.part}
+          spinner={isRunning()}
           onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
         >
           <box gap={1}>
             <text fg={theme.text}>$ {props.input.command}</text>
-            <text fg={theme.text}>{limited()}</text>
+            <Show when={output()}>
+              <text fg={theme.text}>{limited()}</text>
+            </Show>
             <Show when={overflow()}>
               <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
             </Show>
@@ -1611,11 +1820,6 @@ function Write(props: ToolProps<typeof WriteTool>) {
     return props.input.content
   })
 
-  const diagnostics = createMemo(() => {
-    const filePath = Filesystem.normalizePath(props.input.filePath ?? "")
-    return props.metadata.diagnostics?.[filePath] ?? []
-  })
-
   return (
     <Switch>
       <Match when={props.metadata.diagnostics !== undefined}>
@@ -1629,15 +1833,7 @@ function Write(props: ToolProps<typeof WriteTool>) {
               content={code()}
             />
           </line_number>
-          <Show when={diagnostics().length}>
-            <For each={diagnostics()}>
-              {(diagnostic) => (
-                <text fg={theme.error}>
-                  Error [{diagnostic.range.start.line}:{diagnostic.range.start.character}]: {diagnostic.message}
-                </text>
-              )}
-            </For>
-          </Show>
+          <Diagnostics diagnostics={props.metadata.diagnostics} filePath={props.input.filePath ?? ""} />
         </BlockTool>
       </Match>
       <Match when={true}>
@@ -1653,16 +1849,44 @@ function Glob(props: ToolProps<typeof GlobTool>) {
   return (
     <InlineTool icon="✱" pending="Finding files..." complete={props.input.pattern} part={props.part}>
       Glob "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
-      <Show when={props.metadata.count}>({props.metadata.count} matches)</Show>
+      <Show when={props.metadata.count}>
+        ({props.metadata.count} {props.metadata.count === 1 ? "match" : "matches"})
+      </Show>
     </InlineTool>
   )
 }
 
 function Read(props: ToolProps<typeof ReadTool>) {
+  const { theme } = useTheme()
+  const isRunning = createMemo(() => props.part.state.status === "running")
+  const loaded = createMemo(() => {
+    if (props.part.state.status !== "completed") return []
+    if (props.part.state.time.compacted) return []
+    const value = props.metadata.loaded
+    if (!value || !Array.isArray(value)) return []
+    return value.filter((p): p is string => typeof p === "string")
+  })
   return (
-    <InlineTool icon="→" pending="Reading file..." complete={props.input.filePath} part={props.part}>
-      Read {normalizePath(props.input.filePath!)} {input(props.input, ["filePath"])}
-    </InlineTool>
+    <>
+      <InlineTool
+        icon="→"
+        pending="Reading file..."
+        complete={props.input.filePath}
+        spinner={isRunning()}
+        part={props.part}
+      >
+        Read {normalizePath(props.input.filePath!)} {input(props.input, ["filePath"])}
+      </InlineTool>
+      <For each={loaded()}>
+        {(filepath) => (
+          <box paddingLeft={3}>
+            <text paddingLeft={3} fg={theme.textMuted}>
+              ↳ Loaded {normalizePath(filepath)}
+            </text>
+          </box>
+        )}
+      </For>
+    </>
   )
 }
 
@@ -1670,7 +1894,9 @@ function Grep(props: ToolProps<typeof GrepTool>) {
   return (
     <InlineTool icon="✱" pending="Searching content..." complete={props.input.pattern} part={props.part}>
       Grep "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
-      <Show when={props.metadata.matches}>({props.metadata.matches} matches)</Show>
+      <Show when={props.metadata.matches}>
+        ({props.metadata.matches} {props.metadata.matches === 1 ? "match" : "matches"})
+      </Show>
     </InlineTool>
   )
 }
@@ -1722,52 +1948,62 @@ function Task(props: ToolProps<typeof TaskTool>) {
   const keybind = useKeybind()
   const { navigate } = useRoute()
   const local = useLocal()
+  const sync = useSync()
 
-  const current = createMemo(() => props.metadata.summary?.findLast((x) => x.state.status !== "pending"))
-  const color = createMemo(() => local.agent.color(props.input.subagent_type ?? "unknown"))
+  onMount(() => {
+    if (props.metadata.sessionId && !sync.data.message[props.metadata.sessionId]?.length)
+      sync.session.sync(props.metadata.sessionId)
+  })
+
+  const messages = createMemo(() => sync.data.message[props.metadata.sessionId ?? ""] ?? [])
+
+  const tools = createMemo(() => {
+    return messages().flatMap((msg) =>
+      (sync.data.part[msg.id] ?? [])
+        .filter((part): part is ToolPart => part.type === "tool")
+        .map((part) => ({ tool: part.tool, state: part.state })),
+    )
+  })
+
+  const current = createMemo(() => tools().findLast((x) => (x.state as any).title))
+
+  const isRunning = createMemo(() => props.part.state.status === "running")
+
+  const duration = createMemo(() => {
+    const first = messages().find((x) => x.role === "user")?.time.created
+    const assistant = messages().findLast((x) => x.role === "assistant")?.time.completed
+    if (!first || !assistant) return 0
+    return assistant - first
+  })
 
   return (
-    <Switch>
-      <Match when={props.metadata.summary?.length}>
-        <BlockTool
-          title={"# " + Locale.titlecase(props.input.subagent_type ?? "unknown") + " Task"}
-          onClick={
-            props.metadata.sessionId
-              ? () => navigate({ type: "session", sessionID: props.metadata.sessionId! })
-              : undefined
-          }
-          part={props.part}
-        >
-          <box>
-            <text style={{ fg: theme.textMuted }}>
-              {props.input.description} ({props.metadata.summary?.length} toolcalls)
-            </text>
-            <Show when={current()}>
-              <text style={{ fg: current()!.state.status === "error" ? theme.error : theme.textMuted }}>
-                └ {Locale.titlecase(current()!.tool)}{" "}
-                {current()!.state.status === "completed" ? current()!.state.title : ""}
-              </text>
-            </Show>
-          </box>
-          <text fg={theme.text}>
-            {keybind.print("session_child_cycle")}
-            <span style={{ fg: theme.textMuted }}> view subagents</span>
-          </text>
-        </BlockTool>
-      </Match>
-      <Match when={true}>
-        <InlineTool
-          icon="◉"
-          iconColor={color()}
-          pending="Delegating..."
-          complete={props.input.subagent_type ?? props.input.description}
-          part={props.part}
-        >
-          <span style={{ fg: theme.text }}>{Locale.titlecase(props.input.subagent_type ?? "unknown")}</span> Task "
-          {props.input.description}"
-        </InlineTool>
-      </Match>
-    </Switch>
+    <InlineTool
+      icon="≡"
+      spinner={isRunning()}
+      complete={props.input.description}
+      pending="Delegating..."
+      part={props.part}
+    >
+      {props.input.description}
+      <Show when={isRunning() && tools().length > 0}>
+        {" "}
+        · {tools().length} toolcalls
+        <Show fallback={"\n└ Running..."} when={current()}>
+          {(item) => {
+            const title = createMemo(() => (item().state as any).title)
+            return (
+              <>
+                {"\n"}└ {Locale.titlecase(item().tool)} {title()}
+              </>
+            )
+          }}
+        </Show>
+      </Show>
+      <Show when={duration() && props.part.state.status === "completed"}>
+        {"\n  "}
+        {tools().length} toolcalls · {Locale.duration(duration())}
+      </Show>
+    </InlineTool>
   )
 }
 
@@ -1776,7 +2012,7 @@ function Edit(props: ToolProps<typeof EditTool>) {
   const { theme, syntax } = useTheme()
 
   const view = createMemo(() => {
-    const diffStyle = ctx.sync.data.config.tui?.diff_style
+    const diffStyle = ctx.tui.diff_style
     if (diffStyle === "stacked") return "unified"
     // Default to "auto" behavior
     return ctx.width > 120 ? "split" : "unified"
@@ -1785,12 +2021,6 @@ function Edit(props: ToolProps<typeof EditTool>) {
   const ft = createMemo(() => filetype(props.input.filePath))
 
   const diffContent = createMemo(() => props.metadata.diff)
-
-  const diagnostics = createMemo(() => {
-    const filePath = Filesystem.normalizePath(props.input.filePath ?? "")
-    const arr = props.metadata.diagnostics?.[filePath] ?? []
-    return arr.filter((x) => x.severity === 1).slice(0, 3)
-  })
 
   return (
     <Switch>
@@ -1817,18 +2047,7 @@ function Edit(props: ToolProps<typeof EditTool>) {
               removedLineNumberBg={theme.diffRemovedLineNumberBg}
             />
           </box>
-          <Show when={diagnostics().length}>
-            <box>
-              <For each={diagnostics()}>
-                {(diagnostic) => (
-                  <text fg={theme.error}>
-                    Error [{diagnostic.range.start.line + 1}:{diagnostic.range.start.character + 1}]{" "}
-                    {diagnostic.message}
-                  </text>
-                )}
-              </For>
-            </box>
-          </Show>
+          <Diagnostics diagnostics={props.metadata.diagnostics} filePath={props.input.filePath ?? ""} />
         </BlockTool>
       </Match>
       <Match when={true}>
@@ -1840,16 +2059,71 @@ function Edit(props: ToolProps<typeof EditTool>) {
   )
 }
 
-function Patch(props: ToolProps<typeof PatchTool>) {
-  const { theme } = useTheme()
+function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
+  const ctx = use()
+  const { theme, syntax } = useTheme()
+
+  const files = createMemo(() => props.metadata.files ?? [])
+
+  const view = createMemo(() => {
+    const diffStyle = ctx.tui.diff_style
+    if (diffStyle === "stacked") return "unified"
+    return ctx.width > 120 ? "split" : "unified"
+  })
+
+  function Diff(p: { diff: string; filePath: string }) {
+    return (
+      <box paddingLeft={1}>
+        <diff
+          diff={p.diff}
+          view={view()}
+          filetype={filetype(p.filePath)}
+          syntaxStyle={syntax()}
+          showLineNumbers={true}
+          width="100%"
+          wrapMode={ctx.diffWrapMode()}
+          fg={theme.text}
+          addedBg={theme.diffAddedBg}
+          removedBg={theme.diffRemovedBg}
+          contextBg={theme.diffContextBg}
+          addedSignColor={theme.diffHighlightAdded}
+          removedSignColor={theme.diffHighlightRemoved}
+          lineNumberFg={theme.diffLineNumber}
+          lineNumberBg={theme.diffContextBg}
+          addedLineNumberBg={theme.diffAddedLineNumberBg}
+          removedLineNumberBg={theme.diffRemovedLineNumberBg}
+        />
+      </box>
+    )
+  }
+
+  function title(file: { type: string; relativePath: string; filePath: string; deletions: number }) {
+    if (file.type === "delete") return "# Deleted " + file.relativePath
+    if (file.type === "add") return "# Created " + file.relativePath
+    if (file.type === "move") return "# Moved " + normalizePath(file.filePath) + " → " + file.relativePath
+    return "← Patched " + file.relativePath
+  }
+
   return (
     <Switch>
-      <Match when={props.output !== undefined}>
-        <BlockTool title="# Patch" part={props.part}>
-          <box>
-            <text fg={theme.text}>{props.output?.trim()}</text>
-          </box>
-        </BlockTool>
+      <Match when={files().length > 0}>
+        <For each={files()}>
+          {(file) => (
+            <BlockTool title={title(file)} part={props.part}>
+              <Show
+                when={file.type !== "delete"}
+                fallback={
+                  <text fg={theme.diffRemoved}>
+                    -{file.deletions} line{file.deletions !== 1 ? "s" : ""}
+                  </text>
+                }
+              >
+                <Diff diff={file.diff} filePath={file.filePath} />
+                <Diagnostics diagnostics={props.metadata.diagnostics} filePath={file.movePath ?? file.filePath} />
+              </Show>
+            </BlockTool>
+          )}
+        </For>
       </Match>
       <Match when={true}>
         <InlineTool icon="%" pending="Preparing patch..." complete={false} part={props.part}>
@@ -1912,6 +2186,37 @@ function Question(props: ToolProps<typeof QuestionTool>) {
         </InlineTool>
       </Match>
     </Switch>
+  )
+}
+
+function Skill(props: ToolProps<typeof SkillTool>) {
+  return (
+    <InlineTool icon="→" pending="Loading skill..." complete={props.input.name} part={props.part}>
+      Skill "{props.input.name}"
+    </InlineTool>
+  )
+}
+
+function Diagnostics(props: { diagnostics?: Record<string, Record<string, any>[]>; filePath: string }) {
+  const { theme } = useTheme()
+  const errors = createMemo(() => {
+    const normalized = Filesystem.normalizePath(props.filePath)
+    const arr = props.diagnostics?.[normalized] ?? []
+    return arr.filter((x) => x.severity === 1).slice(0, 3)
+  })
+
+  return (
+    <Show when={errors().length}>
+      <box>
+        <For each={errors()}>
+          {(diagnostic) => (
+            <text fg={theme.error}>
+              Error [{diagnostic.range.start.line + 1}:{diagnostic.range.start.character + 1}] {diagnostic.message}
+            </text>
+          )}
+        </For>
+      </box>
+    </Show>
   )
 }
 

@@ -1,9 +1,9 @@
 import { createStore } from "solid-js/store"
-import { createMemo, For, Show } from "solid-js"
+import { createMemo, createSignal, For, Show } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
-import { useTheme } from "../../context/theme"
+import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
@@ -19,6 +19,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
   const questions = createMemo(() => props.request.questions)
   const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
   const tabs = createMemo(() => (single() ? 1 : questions().length + 1)) // questions + confirm tab (no confirm for single select)
+  const [tabHover, setTabHover] = createSignal<number | "confirm" | null>(null)
   const [store, setStore] = createStore({
     tab: 0,
     answers: [] as QuestionAnswer[],
@@ -125,7 +126,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     // Skip processing if a dialog (e.g., command palette) is open
     if (dialog.stack.length > 0) return
 
-    // When editing "Other" textarea
+    // When editing custom answer textarea
     if (store.editing && !confirm()) {
       if (evt.name === "escape") {
         evt.preventDefault()
@@ -198,6 +199,12 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
       selectTab((store.tab + 1) % tabs())
     }
 
+    if (evt.name === "tab") {
+      evt.preventDefault()
+      const direction = evt.shift ? -1 : 1
+      selectTab((store.tab + direction + tabs()) % tabs())
+    }
+
     if (confirm()) {
       if (evt.name === "return") {
         evt.preventDefault()
@@ -263,10 +270,26 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                   <box
                     paddingLeft={1}
                     paddingRight={1}
-                    backgroundColor={isActive() ? theme.accent : theme.backgroundElement}
+                    backgroundColor={
+                      isActive()
+                        ? theme.accent
+                        : tabHover() === index()
+                          ? theme.backgroundElement
+                          : theme.backgroundPanel
+                    }
+                    onMouseOver={() => setTabHover(index())}
+                    onMouseOut={() => setTabHover(null)}
                     onMouseUp={() => selectTab(index())}
                   >
-                    <text fg={isActive() ? theme.selectedListItemText : isAnswered() ? theme.text : theme.textMuted}>
+                    <text
+                      fg={
+                        isActive()
+                          ? selectedForeground(theme, theme.accent)
+                          : isAnswered()
+                            ? theme.text
+                            : theme.textMuted
+                      }
+                    >
                       {q.header}
                     </text>
                   </box>
@@ -276,10 +299,14 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
             <box
               paddingLeft={1}
               paddingRight={1}
-              backgroundColor={confirm() ? theme.accent : theme.backgroundElement}
+              backgroundColor={
+                confirm() ? theme.accent : tabHover() === "confirm" ? theme.backgroundElement : theme.backgroundPanel
+              }
+              onMouseOver={() => setTabHover("confirm")}
+              onMouseOut={() => setTabHover(null)}
               onMouseUp={() => selectTab(questions().length)}
             >
-              <text fg={confirm() ? theme.selectedListItemText : theme.textMuted}>Confirm</text>
+              <text fg={confirm() ? selectedForeground(theme, theme.accent) : theme.textMuted}>Confirm</text>
             </box>
           </box>
         </Show>
@@ -298,13 +325,20 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                   const active = () => i() === store.selected
                   const picked = () => store.answers[store.tab]?.includes(opt.label) ?? false
                   return (
-                    <box onMouseOver={() => moveTo(i())} onMouseUp={() => selectOption()}>
-                      <box flexDirection="row" gap={1}>
+                    <box
+                      onMouseOver={() => moveTo(i())}
+                      onMouseDown={() => moveTo(i())}
+                      onMouseUp={() => selectOption()}
+                    >
+                      <box flexDirection="row">
+                        <box backgroundColor={active() ? theme.backgroundElement : undefined} paddingRight={1}>
+                          <text fg={active() ? tint(theme.textMuted, theme.secondary, 0.6) : theme.textMuted}>
+                            {`${i() + 1}.`}
+                          </text>
+                        </box>
                         <box backgroundColor={active() ? theme.backgroundElement : undefined}>
                           <text fg={active() ? theme.secondary : picked() ? theme.success : theme.text}>
-                            {multi()
-                              ? `${i() + 1}. [${picked() ? "✓" : " "}] ${opt.label}`
-                              : `${i() + 1}. ${opt.label}`}
+                            {multi() ? `[${picked() ? "✓" : " "}] ${opt.label}` : opt.label}
                           </text>
                         </box>
                         <Show when={!multi()}>
@@ -320,15 +354,23 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                 }}
               </For>
               <Show when={custom()}>
-                <box onMouseOver={() => moveTo(options().length)} onMouseUp={() => selectOption()}>
-                  <box flexDirection="row" gap={1}>
-                    <box backgroundColor={other() ? theme.backgroundElement : undefined}>
-                      <text fg={other() ? theme.secondary : customPicked() ? theme.success : theme.text}>
-                        {multi()
-                          ? `${options().length + 1}. [${customPicked() ? "✓" : " "}] Type your own answer`
-                          : `${options().length + 1}. Type your own answer`}
+                <box
+                  onMouseOver={() => moveTo(options().length)}
+                  onMouseDown={() => moveTo(options().length)}
+                  onMouseUp={() => selectOption()}
+                >
+                  <box flexDirection="row">
+                    <box backgroundColor={other() ? theme.backgroundElement : undefined} paddingRight={1}>
+                      <text fg={other() ? tint(theme.textMuted, theme.secondary, 0.6) : theme.textMuted}>
+                        {`${options().length + 1}.`}
                       </text>
                     </box>
+                    <box backgroundColor={other() ? theme.backgroundElement : undefined}>
+                      <text fg={other() ? theme.secondary : customPicked() ? theme.success : theme.text}>
+                        {multi() ? `[${customPicked() ? "✓" : " "}] Type your own answer` : "Type your own answer"}
+                      </text>
+                    </box>
+
                     <Show when={!multi()}>
                       <text fg={theme.success}>{customPicked() ? "✓" : ""}</text>
                     </Show>
@@ -345,6 +387,8 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                         }}
                         initialValue={input()}
                         placeholder="Type your own answer"
+                        minHeight={1}
+                        maxHeight={6}
                         textColor={theme.text}
                         focusedTextColor={theme.text}
                         cursorColor={theme.primary}

@@ -1,0 +1,156 @@
+---
+title: ACP-støtte
+description: Bruk opencode i en hvilken som helst ACP-kompatibel editor.
+---
+
+OpenCode støtter [Agent Client Protocol](https://agentclientprotocol.com) eller (ACP), slik at du kan bruke den direkte i kompatible editorer og IDE-er.
+
+:::tip
+For en liste over editorer og verktøy som støtter ACP, sjekk ut [ACP fremdriftsrapport](https://zed.dev/blog/acp-progress-report#available-now).
+:::
+
+ACP er en åpen protokoll som standardiserer kommunikasjon mellom kodeditorer og AI-kodeagenter.
+
+---
+
+## Konfigurasjon
+
+For å bruke OpenCode via ACP, konfigurer redigeringsprogrammet til å kjøre kommandoen `opencode acp`.
+
+Kommandoen starter OpenCode som en ACP-kompatibel underprosess som kommuniserer med editoren din over JSON-RPC via stdio.
+
+Nedenfor er eksempler på populære editorer som støtter ACP.
+
+---
+
+### Zed
+
+Legg til i [Zed](https://zed.dev)-konfigurasjonen (`~/.config/zed/settings.json`):
+
+```json title="~/.config/zed/settings.json"
+{
+  "agent_servers": {
+    "OpenCode": {
+      "command": "opencode",
+      "args": ["acp"]
+    }
+  }
+}
+```
+
+For å åpne den, bruk handlingen `agent: new thread` i **Kommandopaletten**.
+
+Du kan også binde en hurtigtast ved å redigere `keymap.json`:
+
+```json title="keymap.json"
+[
+  {
+    "bindings": {
+      "cmd-alt-o": [
+        "agent::NewExternalAgentThread",
+        {
+          "agent": {
+            "custom": {
+              "name": "OpenCode",
+              "command": {
+                "command": "opencode",
+                "args": ["acp"]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+]
+```
+
+---
+
+### JetBrains IDE-er
+
+Legg til [JetBrains IDE](https://www.jetbrains.com/) acp.json i henhold til [dokumentasjonen](https://www.jetbrains.com/help/ai-assistant/acp.html):
+
+```json title="acp.json"
+{
+  "agent_servers": {
+    "OpenCode": {
+      "command": "/absolute/path/bin/opencode",
+      "args": ["acp"]
+    }
+  }
+}
+```
+
+For å åpne den, bruk den nye 'OpenCode'-agenten i AI Chat-agentvelgeren.
+
+---
+
+### Avante.nvim
+
+Legg til i [Avante.nvim](https://github.com/yetone/avante.nvim)-konfigurasjonen:
+
+```lua
+{
+  acp_providers = {
+    ["opencode"] = {
+      command = "opencode",
+      args = { "acp" }
+    }
+  }
+}
+```
+
+Hvis du trenger å sende miljøvariabler:
+
+```lua {6-8}
+{
+  acp_providers = {
+    ["opencode"] = {
+      command = "opencode",
+      args = { "acp" },
+      env = {
+        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+      }
+    }
+  }
+}
+```
+
+---
+
+### CodeCompanion.nvim
+
+For å bruke OpenCode som en ACP-agent i [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim), legg til følgende i Neovim-konfigurasjonen:
+
+```lua
+require("codecompanion").setup({
+  interactions = {
+    chat = {
+      adapter = {
+        name = "opencode",
+        model = "claude-sonnet-4",
+      },
+    },
+  },
+})
+```
+
+Denne konfigurasjonen setter opp CodeCompanion.nvim til å bruke OpenCode som ACP-agent for chat.
+
+Hvis du trenger å sende miljøvariabler (som `OPENCODE_API_KEY`), se [Konfigurere adaptere: miljøvariabler](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) i CodeCompanion.nvim-dokumentasjonen for fullstendige detaljer.
+
+## Støtte
+
+OpenCode fungerer på samme måte via ACP som i terminalen. Alle funksjoner støttes:
+
+:::note
+Noen innebygde slash-kommandoer som `/undo` og `/redo` støttes for øyeblikket ikke.
+:::
+
+- Innebygde verktøy (filoperasjoner, terminalkommandoer, etc.)
+- Egendefinerte verktøy og slash-kommandoer
+- MCP servere konfigurert i OpenCode-konfigurasjonen
+- Prosjektspesifikke regler fra `AGENTS.md`
+- Tilpassede formatere og linters
+- Agenter og tillatelsessystem

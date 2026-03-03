@@ -1,4 +1,4 @@
-import { usePlatform } from "@/context/platform"
+import { Platform, usePlatform } from "@/context/platform"
 import { makePersisted, type AsyncStorage, type SyncStorage } from "@solid-primitives/storage"
 import { checksum } from "@opencode-ai/util/encode"
 import { createResource, type Accessor } from "solid-js"
@@ -16,6 +16,142 @@ type PersistTarget = {
 
 const LEGACY_STORAGE = "default.dat"
 const GLOBAL_STORAGE = "opencode.global.dat"
+const LOCAL_PREFIX = "opencode."
+const fallback = new Map<string, boolean>()
+
+const CACHE_MAX_ENTRIES = 500
+const CACHE_MAX_BYTES = 8 * 1024 * 1024
+
+type CacheEntry = { value: string; bytes: number }
+const cache = new Map<string, CacheEntry>()
+const cacheTotal = { bytes: 0 }
+
+function cacheDelete(key: string) {
+  const entry = cache.get(key)
+  if (!entry) return
+  cacheTotal.bytes -= entry.bytes
+  cache.delete(key)
+}
+
+function cachePrune() {
+  for (;;) {
+    if (cache.size <= CACHE_MAX_ENTRIES && cacheTotal.bytes <= CACHE_MAX_BYTES) return
+    const oldest = cache.keys().next().value as string | undefined
+    if (!oldest) return
+    cacheDelete(oldest)
+  }
+}
+
+function cacheSet(key: string, value: string) {
+  const bytes = value.length * 2
+  if (bytes > CACHE_MAX_BYTES) {
+    cacheDelete(key)
+    return
+  }
+
+  const entry = cache.get(key)
+  if (entry) cacheTotal.bytes -= entry.bytes
+  cache.delete(key)
+  cache.set(key, { value, bytes })
+  cacheTotal.bytes += bytes
+  cachePrune()
+}
+
+function cacheGet(key: string) {
+  const entry = cache.get(key)
+  if (!entry) return
+  cache.delete(key)
+  cache.set(key, entry)
+  return entry.value
+}
+
+function fallbackDisabled(scope: string) {
+  return fallback.get(scope) === true
+}
+
+function fallbackSet(scope: string) {
+  fallback.set(scope, true)
+}
+
+function quota(error: unknown) {
+  if (error instanceof DOMException) {
+    if (error.name === "QuotaExceededError") return true
+    if (error.name === "NS_ERROR_DOM_QUOTA_REACHED") return true
+    if (error.name === "QUOTA_EXCEEDED_ERR") return true
+    if (error.code === 22 || error.code === 1014) return true
+    return false
+  }
+
+  if (!error || typeof error !== "object") return false
+  const name = (error as { name?: string }).name
+  if (name === "QuotaExceededError" || name === "NS_ERROR_DOM_QUOTA_REACHED") return true
+  if (name && /quota/i.test(name)) return true
+
+  const code = (error as { code?: number }).code
+  if (code === 22 || code === 1014) return true
+
+  const message = (error as { message?: string }).message
+  if (typeof message !== "string") return false
+  if (/quota/i.test(message)) return true
+  return false
+}
+
+type Evict = { key: string; size: number }
+
+function evict(storage: Storage, keep: string, value: string) {
+  const total = storage.length
+  const indexes = Array.from({ length: total }, (_, index) => index)
+  const items: Evict[] = []
+
+  for (const index of indexes) {
+    const name = storage.key(index)
+    if (!name) continue
+    if (!name.startsWith(LOCAL_PREFIX)) continue
+    if (name === keep) continue
+    const stored = storage.getItem(name)
+    items.push({ key: name, size: stored?.length ?? 0 })
+  }
+
+  items.sort((a, b) => b.size - a.size)
+
+  for (const item of items) {
+    storage.removeItem(item.key)
+    cacheDelete(item.key)
+
+    try {
+      storage.setItem(keep, value)
+      cacheSet(keep, value)
+      return true
+    } catch (error) {
+      if (!quota(error)) throw error
+    }
+  }
+
+  return false
+}
+
+function write(storage: Storage, key: string, value: string) {
+  try {
+    storage.setItem(key, value)
+    cacheSet(key, value)
+    return true
+  } catch (error) {
+    if (!quota(error)) throw error
+  }
+
+  try {
+    storage.removeItem(key)
+    cacheDelete(key)
+    storage.setItem(key, value)
+    cacheSet(key, value)
+    return true
+  } catch (error) {
+    if (!quota(error)) throw error
+  }
+
+  const ok = evict(storage, key, value)
+  return ok
+}
 
 function snapshot(value: unknown) {
   return JSON.parse(JSON.stringify(value)) as unknown
@@ -59,6 +195,14 @@ function parse(value: string) {
   }
 }
 
+function normalize(defaults: unknown, raw: string, migrate?: (value: unknown) => unknown) {
+  const parsed = parse(raw)
+  if (parsed === undefined) return
+  const migrated = migrate ? migrate(parsed) : parsed
+  const merged = merge(defaults, migrated)
+  return JSON.stringify(merged)
+}
+
 function workspaceStorage(dir: string) {
   const head = dir.slice(0, 12) || "workspace"
   const sum = checksum(dir) ?? "0"
@@ -67,11 +211,95 @@ function workspaceStorage(dir: string) {
 
 function localStorageWithPrefix(prefix: string): SyncStorage {
   const base = `${prefix}:`
+  const scope = `prefix:${prefix}`
+  const item = (key: string) => base + key
   return {
-    getItem: (key) => localStorage.getItem(base + key),
-    setItem: (key, value) => localStorage.setItem(base + key, value),
-    removeItem: (key) => localStorage.removeItem(base + key),
+    getItem: (key) => {
+      const name = item(key)
+      const cached = cacheGet(name)
+      if (fallbackDisabled(scope)) return cached ?? null
+
+      const stored = (() => {
+        try {
+          return localStorage.getItem(name)
+        } catch {
+          fallbackSet(scope)
+          return null
+        }
+      })()
+      if (stored === null) return cached ?? null
+      cacheSet(name, stored)
+      return stored
+    },
+    setItem: (key, value) => {
+      const name = item(key)
+      if (fallbackDisabled(scope)) return
+      try {
+        if (write(localStorage, name, value)) return
+      } catch {
+        fallbackSet(scope)
+        return
+      }
+      fallbackSet(scope)
+    },
+    removeItem: (key) => {
+      const name = item(key)
+      cacheDelete(name)
+      if (fallbackDisabled(scope)) return
+      try {
+        localStorage.removeItem(name)
+      } catch {
+        fallbackSet(scope)
+      }
+    },
   }
+}
+
+function localStorageDirect(): SyncStorage {
+  const scope = "direct"
+  return {
+    getItem: (key) => {
+      const cached = cacheGet(key)
+      if (fallbackDisabled(scope)) return cached ?? null
+
+      const stored = (() => {
+        try {
+          return localStorage.getItem(key)
+        } catch {
+          fallbackSet(scope)
+          return null
+        }
+      })()
+      if (stored === null) return cached ?? null
+      cacheSet(key, stored)
+      return stored
+    },
+    setItem: (key, value) => {
+      if (fallbackDisabled(scope)) return
+      try {
+        if (write(localStorage, key, value)) return
+      } catch {
+        fallbackSet(scope)
+        return
+      }
+      fallbackSet(scope)
+    },
+    removeItem: (key) => {
+      cacheDelete(key)
+      if (fallbackDisabled(scope)) return
+      try {
+        localStorage.removeItem(key)
+      } catch {
+        fallbackSet(scope)
+      }
+    },
+  }
+}
+
+export const PersistTesting = {
+  localStorageDirect,
+  localStorageWithPrefix,
+  normalize,
 }
 
 export const Persist = {
@@ -90,16 +318,15 @@ export const Persist = {
   },
 }
 
-export function removePersisted(target: { storage?: string; key: string }) {
-  const platform = usePlatform()
-  const isDesktop = platform.platform === "desktop" && !!platform.storage
+export function removePersisted(target: { storage?: string; key: string }, platform?: Platform) {
+  const isDesktop = platform?.platform === "desktop" && !!platform.storage
 
   if (isDesktop) {
     return platform.storage?.(target.storage)?.removeItem(target.key)
   }
 
   if (!target.storage) {
-    localStorage.removeItem(target.key)
+    localStorageDirect().removeItem(target.key)
     return
   }
 
@@ -120,12 +347,12 @@ export function persisted<T>(
 
   const currentStorage = (() => {
     if (isDesktop) return platform.storage?.(config.storage)
-    if (!config.storage) return localStorage
+    if (!config.storage) return localStorageDirect()
     return localStorageWithPrefix(config.storage)
   })()
 
   const legacyStorage = (() => {
-    if (!isDesktop) return localStorage
+    if (!isDesktop) return localStorageDirect()
     if (!config.storage) return platform.storage?.()
     return platform.storage?.(LEGACY_STORAGE)
   })()
@@ -139,12 +366,11 @@ export function persisted<T>(
         getItem: (key) => {
           const raw = current.getItem(key)
           if (raw !== null) {
-            const parsed = parse(raw)
-            if (parsed === undefined) return raw
-
-            const migrated = config.migrate ? config.migrate(parsed) : parsed
-            const merged = merge(defaults, migrated)
-            const next = JSON.stringify(merged)
+            const next = normalize(defaults, raw, config.migrate)
+            if (next === undefined) {
+              current.removeItem(key)
+              return null
+            }
             if (raw !== next) current.setItem(key, next)
             return next
           }
@@ -153,16 +379,13 @@ export function persisted<T>(
             const legacyRaw = legacyStore.getItem(legacyKey)
             if (legacyRaw === null) continue
 
-            current.setItem(key, legacyRaw)
+            const next = normalize(defaults, legacyRaw, config.migrate)
+            if (next === undefined) {
+              legacyStore.removeItem(legacyKey)
+              continue
+            }
+            current.setItem(key, next)
             legacyStore.removeItem(legacyKey)
-
-            const parsed = parse(legacyRaw)
-            if (parsed === undefined) return legacyRaw
-
-            const migrated = config.migrate ? config.migrate(parsed) : parsed
-            const merged = merge(defaults, migrated)
-            const next = JSON.stringify(merged)
-            if (legacyRaw !== next) current.setItem(key, next)
             return next
           }
 
@@ -186,12 +409,11 @@ export function persisted<T>(
       getItem: async (key) => {
         const raw = await current.getItem(key)
         if (raw !== null) {
-          const parsed = parse(raw)
-          if (parsed === undefined) return raw
-
-          const migrated = config.migrate ? config.migrate(parsed) : parsed
-          const merged = merge(defaults, migrated)
-          const next = JSON.stringify(merged)
+          const next = normalize(defaults, raw, config.migrate)
+          if (next === undefined) {
+            await current.removeItem(key).catch(() => undefined)
+            return null
+          }
           if (raw !== next) await current.setItem(key, next)
           return next
         }
@@ -202,16 +424,13 @@ export function persisted<T>(
           const legacyRaw = await legacyStore.getItem(legacyKey)
           if (legacyRaw === null) continue
 
-          await current.setItem(key, legacyRaw)
+          const next = normalize(defaults, legacyRaw, config.migrate)
+          if (next === undefined) {
+            await legacyStore.removeItem(legacyKey).catch(() => undefined)
+            continue
+          }
+          await current.setItem(key, next)
           await legacyStore.removeItem(legacyKey)
-
-          const parsed = parse(legacyRaw)
-          if (parsed === undefined) return legacyRaw
-
-          const migrated = config.migrate ? config.migrate(parsed) : parsed
-          const merged = merge(defaults, migrated)
-          const next = JSON.stringify(merged)
-          if (legacyRaw !== next) await current.setItem(key, next)
           return next
         }
 

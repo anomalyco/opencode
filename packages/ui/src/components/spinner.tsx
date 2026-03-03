@@ -1,6 +1,7 @@
 import { ComponentProps, For } from "solid-js"
 
-const outerIndices = new Set([0, 1, 2, 3, 4, 7, 8, 11, 12, 13, 14, 15])
+const outerIndices = new Set([1, 2, 4, 7, 8, 11, 13, 14])
+const cornerIndices = new Set([0, 3, 12, 15])
 const squares = Array.from({ length: 16 }, (_, i) => ({
   id: i,
   x: (i % 4) * 4,
@@ -8,6 +9,7 @@ const squares = Array.from({ length: 16 }, (_, i) => ({
   delay: Math.random() * 1.5,
   duration: 1 + Math.random() * 1,
   outer: outerIndices.has(i),
+  corner: cornerIndices.has(i),
 }))
 
 export function Spinner(props: {
@@ -35,8 +37,11 @@ export function Spinner(props: {
             height="3"
             rx="1"
             style={{
-              animation: `${square.outer ? "pulse-opacity-dim" : "pulse-opacity"} ${square.duration}s ease-in-out infinite`,
-              "animation-delay": `${square.delay}s`,
+              opacity: square.corner ? 0 : undefined,
+              animation: square.corner
+                ? undefined
+                : `${square.outer ? "pulse-opacity-dim" : "pulse-opacity"} ${square.duration}s ease-in-out infinite`,
+              "animation-delay": square.corner ? undefined : `${square.delay}s`,
             }}
           />
         )}
