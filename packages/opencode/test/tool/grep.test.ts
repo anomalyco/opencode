@@ -55,7 +55,7 @@ describe("tool.grep", () => {
           ctx,
         )
         expect(result.metadata.matches).toBe(0)
-        expect(result.output).toBe("No files found")
+        expect(result.output).toBe("No matches found")
       },
     })
   })
