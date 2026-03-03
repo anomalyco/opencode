@@ -900,8 +900,7 @@ export namespace ProviderTransform {
       const isPlainObject = (node: unknown): node is Record<string, any> =>
         typeof node === "object" && node !== null && !Array.isArray(node)
       const hasCombiner = (node: unknown) =>
-        isPlainObject(node) &&
-        (Array.isArray(node.anyOf) || Array.isArray(node.oneOf) || Array.isArray(node.allOf))
+        isPlainObject(node) && (Array.isArray(node.anyOf) || Array.isArray(node.oneOf) || Array.isArray(node.allOf))
       const hasSchemaIntent = (node: unknown) => {
         if (!isPlainObject(node)) return false
         if (hasCombiner(node)) return true
