@@ -6,6 +6,7 @@ export const dict = {
   "nav.x": "X",
   "nav.enterprise": "Enterprise",
   "nav.zen": "Zen",
+  "nav.go": "Go",
   "nav.login": "Login",
   "nav.free": "Free",
   "nav.home": "Home",

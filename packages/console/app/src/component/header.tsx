@@ -174,6 +174,9 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
               </Match>
             </Switch>
           </li>
+          <li>
+            <A href={language.route("/go")}>{i18n.t("nav.go")}</A>
+          </li>
           <Show when={!props.hideGetStarted}>
             <li>
               <A href={language.route("/download")} data-slot="cta-button">
@@ -269,6 +272,9 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
                       <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
                     </Match>
                   </Switch>
+                </li>
+                <li>
+                  <A href={language.route("/go")}>{i18n.t("nav.go")}</A>
                 </li>
                 <Show when={!props.hideGetStarted}>
                   <li>
