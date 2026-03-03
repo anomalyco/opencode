@@ -85,15 +85,19 @@ export namespace PR {
   export async function fetchForBranch(repo?: { owner: string; name: string }): Promise<Vcs.PrInfo | undefined> {
     const cwd = Instance.worktree
     try {
-      const result = await withTimeout(
+      const cmd = await withTimeout(
         $`gh pr view --json number,url,title,state,headRefName,baseRefName,isDraft,mergeable,reviewDecision,statusCheckRollup`
           .quiet()
           .nothrow()
-          .cwd(cwd)
-          .text(),
+          .cwd(cwd),
         30_000,
       )
-      if (!result.trim()) {
+      if (cmd.exitCode !== 0) {
+        log.warn("gh pr view failed", { stderr: cmd.stderr.toString().trim() })
+        return undefined
+      }
+      const result = cmd.stdout.toString().trim()
+      if (!result) {
         return undefined
       }
       const parsed = JSON.parse(result)

@@ -70,7 +70,7 @@ export function PrButton() {
   const remoteBranchExists = createMemo(() => {
     const branchName = pr()?.headRefName
     const branches = vcs()?.branches
-    if (!branchName || !branches) return true
+    if (!branchName || !branches) return false
     return branches.includes(branchName)
   })
 

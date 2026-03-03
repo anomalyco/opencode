@@ -8,6 +8,7 @@ import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { resolveApiErrorMessage } from "@/utils/pr-errors"
 
 export function DeleteBranchDialog() {
   const dialog = useDialog()
@@ -39,11 +40,13 @@ export function DeleteBranchDialog() {
         title: language.t("pr.toast.branch_deleted"),
       })
       dialog.close()
-    } catch {
+    } catch (e: unknown) {
       showToast({
         variant: "error",
         icon: "circle-x",
-        title: language.t("pr.error.delete_branch_failed"),
+        title: resolveApiErrorMessage(e, language.t("pr.error.delete_branch_failed"), (k) =>
+          language.t(k as Parameters<typeof language.t>[0]),
+        ),
       })
     } finally {
       setStore("submitting", false)

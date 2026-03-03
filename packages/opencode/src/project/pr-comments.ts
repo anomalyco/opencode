@@ -90,8 +90,14 @@ export namespace PrComments {
 
     const allThreads: ReviewThread[] = []
     let cursor: string | null = null
+    const MAX_PAGES = 10
+    let page = 0
 
     do {
+      if (++page > MAX_PAGES) {
+        log.warn("pr-comments: max pages reached, truncating")
+        break
+      }
       const query = buildQuery()
       const args = [
         "gh",
