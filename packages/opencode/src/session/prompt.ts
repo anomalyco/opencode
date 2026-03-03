@@ -1542,9 +1542,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const wrappedCommand = matchingInvocation.wrapCommand(input.command)
     const args = [...matchingInvocation.args, wrappedCommand]
 
-    const cwd = Instance.directory
+    const cwd = getCwd()
     const shellEnv = await Plugin.trigger("shell.env", { cwd }, { env: {} })
     const proc = spawn(shell, args, {
+      cwd,
       detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
       env: {
