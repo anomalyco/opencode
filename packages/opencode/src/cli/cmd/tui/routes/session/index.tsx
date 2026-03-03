@@ -81,6 +81,7 @@ import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
 import { localLink } from "../../util/local-link"
+import { FileLinks } from "../../ui/file-links"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1455,11 +1456,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
             <markdown syntaxStyle={syntax()} streaming={true} content={content()} conceal={ctx.conceal()} />
           </Match>
           <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN && linked()}>
-            <text fg={theme.text}>
-              <For each={segments()}>
-                {(part) => (typeof part === "string" ? part : <a href={part.href}>{part.label}</a>)}
-              </For>
-            </text>
+            <FileLinks parts={segments()} fg={theme.text} />
           </Match>
           <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
             <code
