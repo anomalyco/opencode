@@ -13,6 +13,7 @@ import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
 import { Process } from "../../util/process"
 import { text } from "node:stream/consumers"
+import { Filesystem } from "../../util/filesystem"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
 
@@ -211,6 +212,7 @@ export const AuthListCommand = cmd({
     const homedir = os.homedir()
     const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
     prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
+    const rawAuthData = await Filesystem.readJson<Record<string, any>>(authPath).catch(() => ({}))
     const results = Object.entries(await Auth.all())
     const database = await ModelsDev.get()
 
@@ -220,6 +222,25 @@ export const AuthListCommand = cmd({
     }
 
     prompts.outro(`${results.length} credentials`)
+
+    const metadataFields = ['$schema', 'provider']
+    const hasMetadata = metadataFields.some(key => rawAuthData[key] !== undefined)
+
+    if (hasMetadata) {
+      UI.empty()
+      prompts.intro("Configuration")
+      
+      for (const key of metadataFields) {
+        if (rawAuthData[key] !== undefined) {
+          const value = typeof rawAuthData[key] === 'object' 
+            ? JSON.stringify(rawAuthData[key], null, 2)
+            : String(rawAuthData[key])
+          prompts.log.info(`${key} ${UI.Style.TEXT_DIM}${value}`)
+        }
+      }
+      
+      prompts.outro("metadata fields")
+    }
 
     // Environment variables section
     const activeEnvVars: Array<{ provider: string; envVar: string }> = []
