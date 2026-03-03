@@ -1,15 +1,15 @@
 ---
 title: LSP Sunucuları
-description: opencode, LSP sunucularınızla bütünleşir.
+description: OpenCode, LSP sunucularınızla bütünleşir.
 ---
 
-opencode, LLM'in kod tabanınızla etkileşime girmesine yardımcı olmak için Dil Sunucusu Protokolünüzle (LSP) bütünleşir. LLM'ye geri bildirim sağlamak için tanılamayı kullanır.
+OpenCode, LLM'in kod tabanınızla etkileşime girmesine yardımcı olmak için Dil Sunucusu Protokolünüzle (LSP) bütünleşir. LLM'ye geri bildirim sağlamak için tanılamayı kullanır.
 
 ---
 
 ## Yerleşik
 
-opencode, popüler diller için çeşitli yerleşik LSP sunucularıyla birlikte gelir:
+OpenCode, popüler diller için çeşitli yerleşik LSP sunucularıyla birlikte gelir:
 
 | LSP Sunucu         | Uzantılar                                                           | Gereksinimler                                                         |
 | ------------------ | ------------------------------------------------------------------- | --------------------------------------------------------------------- |
@@ -27,6 +27,7 @@ opencode, popüler diller için çeşitli yerleşik LSP sunucularıyla birlikte 
 | gopls              | .go                                                                 | `go` komutu mevcut                                                    |
 | hls                | .hs, .lhs                                                           | `haskell-language-server-wrapper` komutu mevcut                       |
 | jdtls              | .java                                                               | `Java SDK (version 21+)` kurulu                                       |
+| julials            | .jl                                                                 | `julia` ve `LanguageServer.jl` kurulu                                 |
 | kotlin-ls          | .kt, .kts                                                           | Kotlin projeleri için otomatik kurulumlar                             |
 | lua-ls             | .lua                                                                | Lua projeleri için otomatik kurulumlar                                |
 | nixd               | .nix                                                                | `nixd` komutu mevcut                                                  |
@@ -56,7 +57,7 @@ Yukarıdaki dosya uzantılarından biri tespit edildiğinde ve gereksinimler kar
 
 ## Nasıl Çalışır?
 
-Opencode bir dosyayı açtığında:
+opencode bir dosyayı açtığında:
 
 1. Dosya uzantısını tüm etkin LSP sunucularına göre kontrol eder.
 2. Henüz çalışmıyorsa uygun LSP sunucusunu başlatır.
@@ -182,7 +183,7 @@ Komutu ve dosya uzantılarını belirterek özel LSP sunucuları ekleyebilirsini
 
 PHP Intelephense, bir lisans anahtarı aracılığıyla premium özellikler sunar. Anahtarı (yalnızca) şu adresteki bir metin dosyasına yerleştirerek bir lisans anahtarı sağlayabilirsiniz:
 
-- MacOS/Linux'ta: `$HOME/intelephense/license.txt`
+- macOS/Linux'ta: `$HOME/intelephense/license.txt`
 - Windows'ta: `%USERPROFILE%/intelephense/license.txt`
 
 Dosya, ek içerik olmadan yalnızca lisans anahtarını içermelidir.

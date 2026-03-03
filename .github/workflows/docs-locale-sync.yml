@@ -59,43 +59,10 @@ jobs:
             {
               "permission": {
                 "*": "deny",
-                "read": {
-                  "*": "deny",
-                  "packages/web/src/content/docs": "allow",
-                  "packages/web/src/content/docs/*": "allow",
-                  "packages/web/src/content/docs/*.mdx": "allow",
-                  "packages/web/src/content/docs/*/*.mdx": "allow",
-                  ".opencode": "allow",
-                  ".opencode/agent": "allow",
-                  ".opencode/glossary": "allow",
-                  ".opencode/agent/translator.md": "allow",
-                  ".opencode/glossary/*.md": "allow"
-                },
-                "edit": {
-                  "*": "deny",
-                  "packages/web/src/content/docs/*/*.mdx": "allow"
-                },
-                "glob": {
-                  "*": "deny",
-                  "packages/web/src/content/docs*": "allow",
-                  ".opencode/glossary*": "allow"
-                },
-                "task": {
-                  "*": "deny",
-                  "translator": "allow"
-                }
-              },
-              "agent": {
-                "translator": {
-                  "permission": {
-                    "*": "deny",
-                    "read": {
-                      "*": "deny",
-                      ".opencode/agent/translator.md": "allow",
-                      ".opencode/glossary/*.md": "allow"
-                    }
-                  }
-                }
+                "read": "allow",
+                "edit": "allow",
+                "glob": "allow",
+                "task": "allow"
               }
             }
         run: |
