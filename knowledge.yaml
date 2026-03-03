@@ -1,0 +1,256 @@
+kcp_version: "0.5"
+project: opencode
+version: 0.1.0
+updated: "2026-03-03"
+language: en
+license: MIT
+indexing: open
+
+# Knowledge Context Protocol manifest for the OpenCode monorepo.
+# Helps AI agents (including OpenCode itself) navigate this codebase
+# efficiently — without exhaustive glob/grep exploration.
+# Spec: https://github.com/Cantara/knowledge-context-protocol
+
+hints:
+  load_strategy: on_demand
+  priority: normal
+  density: standard
+
+units:
+
+  # ── Entry points ───────────────────────────────────────────────
+
+  - id: readme
+    path: README.md
+    intent: "What is OpenCode, how to install it, and what makes it different from Claude Code"
+    scope: global
+    audience: [human, agent]
+    kind: guide
+    format: markdown
+    hints:
+      load_strategy: always
+      priority: critical
+    triggers: [overview, install, getting started, features, what is opencode]
+
+  - id: contributing
+    path: CONTRIBUTING.md
+    intent: "How to contribute: PR requirements, development setup, accepted/rejected contribution types, trust system"
+    scope: global
+    audience: [human, developer]
+    kind: guide
+    format: markdown
+    hints:
+      priority: high
+    triggers: [contributing, pull request, PR, development, setup, help wanted]
+
+  - id: agents-md
+    path: AGENTS.md
+    intent: "Coding style conventions, naming rules, and testing practices for this codebase"
+    scope: global
+    audience: [agent, developer]
+    kind: policy
+    format: markdown
+    hints:
+      load_strategy: always
+      priority: critical
+    triggers: [style, naming, conventions, testing, code quality]
+
+  # ── Configuration ──────────────────────────────────────────────
+
+  - id: config-schema
+    path: packages/opencode/src/config/config.ts
+    intent: "Full config schema: providers, MCP servers, agents, skills, permissions, instructions, keybindings, enterprise managed config"
+    scope: global
+    audience: [developer, agent]
+    kind: reference
+    format: typescript
+    hints:
+      priority: high
+      density: high
+    triggers: [config, opencode.json, settings, schema, provider, MCP, permissions, keybindings]
+
+  - id: opencode-jsonc
+    path: .opencode/opencode.jsonc
+    intent: "Project-level OpenCode config for the opencode repo itself — model, instructions, MCP servers in use"
+    scope: project
+    audience: [developer, agent]
+    kind: reference
+    format: json
+    triggers: [project config, self-config, opencode.jsonc, model used]
+
+  # ── Agent system ───────────────────────────────────────────────
+
+  - id: agent-definitions
+    path: packages/opencode/src/agent/agent.ts
+    intent: "How agents (build, plan, explore, general) are defined, configured, permission-gated, and composed"
+    scope: global
+    audience: [developer, agent]
+    kind: reference
+    format: typescript
+    hints:
+      priority: high
+      density: high
+    triggers: [agent, build agent, plan agent, explore agent, subagent, permissions, tools]
+    depends_on: [config-schema]
+
+  - id: explore-prompt
+    path: packages/opencode/src/agent/prompt/explore.txt
+    intent: "System prompt for the explore subagent — how it approaches codebase navigation via glob, grep, and read"
+    scope: module
+    audience: [developer]
+    kind: reference
+    format: text
+    triggers: [explore, codebase navigation, file search, explore agent prompt]
+
+  # ── Session / prompt pipeline ──────────────────────────────────
+
+  - id: session-prompt
+    path: packages/opencode/src/session/prompt.ts
+    intent: "How the full LLM prompt is assembled: message handling, tool registration, structured output, context injection"
+    scope: global
+    audience: [developer]
+    kind: reference
+    format: typescript
+    hints:
+      density: high
+    triggers: [prompt, session, LLM, message, tools, context, prompt assembly]
+    depends_on: [instruction-loading, agent-definitions, plugin-system]
+
+  - id: instruction-loading
+    path: packages/opencode/src/session/instruction.ts
+    intent: "How AGENTS.md, CLAUDE.md, CONTEXT.md, and custom instruction files are discovered and loaded into the prompt"
+    scope: module
+    audience: [developer, agent]
+    kind: reference
+    format: typescript
+    triggers: [instructions, AGENTS.md, CLAUDE.md, custom instructions, rules, instruction discovery]
+
+  - id: system-prompt
+    path: packages/opencode/src/session/system.ts
+    intent: "How the base system prompt is selected and built per model provider (Anthropic, OpenAI, Gemini)"
+    scope: module
+    audience: [developer]
+    kind: reference
+    format: typescript
+    triggers: [system prompt, provider system prompt, Anthropic, OpenAI, Gemini]
+
+  # ── Skill system ───────────────────────────────────────────────
+
+  - id: skill-system
+    path: packages/opencode/src/skill/skill.ts
+    intent: "How skills (SKILL.md files) are discovered from .opencode/skills/, .claude/skills/, .agents/skills/, and remote URLs"
+    scope: module
+    audience: [developer, agent]
+    kind: reference
+    format: typescript
+    triggers: [skills, SKILL.md, skill discovery, on-demand, agent skills, remote skills]
+    depends_on: [skill-discovery]
+
+  - id: skill-discovery
+    path: packages/opencode/src/skill/discovery.ts
+    intent: "Remote skill fetching from URLs via index.json — caching and download logic"
+    scope: module
+    audience: [developer]
+    kind: reference
+    format: typescript
+    triggers: [remote skills, index.json, skill download, skill cache]
+
+  # ── Plugin system ──────────────────────────────────────────────
+
+  - id: plugin-system
+    path: packages/opencode/src/plugin/index.ts
+    intent: "npm-based plugin system: lifecycle hooks, built-in plugins, auth plugins (Codex, Copilot)"
+    scope: global
+    audience: [developer]
+    kind: reference
+    format: typescript
+    triggers: [plugin, hooks, npm, extension, auth plugin, codex, copilot]
+
+  # ── Tool layer ─────────────────────────────────────────────────
+
+  - id: tool-registry
+    path: packages/opencode/src/tool/registry.ts
+    intent: "How tools (read, write, bash, grep, glob, edit, etc.) are registered and made available to agents"
+    scope: module
+    audience: [developer]
+    kind: reference
+    format: typescript
+    triggers: [tools, registry, tool registration, read tool, write tool, bash tool]
+    depends_on: [agent-definitions]
+
+  # ── MCP integration ────────────────────────────────────────────
+
+  - id: mcp-integration
+    path: packages/opencode/src/mcp/index.ts
+    intent: "How OpenCode connects to external MCP (Model Context Protocol) servers and exposes their tools to agents"
+    scope: module
+    audience: [developer]
+    kind: reference
+    format: typescript
+    triggers: [MCP, Model Context Protocol, MCP servers, external tools]
+
+  # ── Project bootstrap ──────────────────────────────────────────
+
+  - id: project-bootstrap
+    path: packages/opencode/src/project/bootstrap.ts
+    intent: "Session startup sequence: plugin init, LSP, file watching, formatter, snapshot initialization"
+    scope: module
+    audience: [developer]
+    kind: reference
+    format: typescript
+    triggers: [bootstrap, startup, init, project start, session init]
+    depends_on: [plugin-system]
+
+  # ── Monorepo layout ────────────────────────────────────────────
+
+  - id: root-package
+    path: package.json
+    intent: "Monorepo workspace layout, dependency catalog, and top-level scripts"
+    scope: global
+    audience: [developer, agent]
+    kind: reference
+    format: json
+    triggers: [dependencies, workspace, packages, monorepo, bun, scripts, version]
+
+  # ── Specs ──────────────────────────────────────────────────────
+
+  - id: project-spec
+    path: specs/project.md
+    intent: "API design spec for multi-project, multi-worktree session management"
+    scope: module
+    audience: [developer, architect]
+    kind: guide
+    format: markdown
+    triggers: [API spec, project API, worktree, session management, design]
+
+relationships:
+  - from: agent-definitions
+    to: session-prompt
+    type: enables
+  - from: instruction-loading
+    to: session-prompt
+    type: enables
+  - from: skill-system
+    to: agent-definitions
+    type: enables
+  - from: skill-discovery
+    to: skill-system
+    type: enables
+  - from: config-schema
+    to: agent-definitions
+    type: enables
+  - from: config-schema
+    to: instruction-loading
+    type: enables
+  - from: plugin-system
+    to: session-prompt
+    type: enables
+  - from: tool-registry
+    to: agent-definitions
+    type: enables
+  - from: project-bootstrap
+    to: plugin-system
+    type: enables
+  - from: mcp-integration
+    to: tool-registry
+    type: enables
