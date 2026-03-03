@@ -7,6 +7,7 @@ import {
   For,
   Match,
   on,
+  onMount,
   Show,
   Switch,
   useContext,
@@ -26,6 +27,7 @@ import {
   type ScrollAcceleration,
   TextAttributes,
   RGBA,
+  type BorderSides,
 } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
@@ -1571,8 +1573,11 @@ function ToolTitle(props: { fallback: string; when: any; icon: string; children:
 function InlineTool(props: {
   icon: string
   iconColor?: RGBA
+  border?: boolean | BorderSides[] | undefined
+  borderColor?: RGBA | undefined
   complete: any
   pending: string
+  spinner?: boolean
   children: JSX.Element
   part: ToolPart
 }) {
@@ -1606,6 +1611,8 @@ function InlineTool(props: {
     <box
       marginTop={margin()}
       paddingLeft={3}
+      border={props.border}
+      borderColor={props.borderColor}
       renderBefore={function () {
         const el = this as BoxRenderable
         const parent = el.parent
@@ -1899,17 +1906,22 @@ function Task(props: ToolProps<typeof TaskTool>) {
   const local = useLocal()
   const sync = useSync()
 
+  onMount(() => {
+    if (props.metadata.sessionId && !sync.data.message[props.metadata.sessionId]?.length)
+      sync.session.sync(props.metadata.sessionId)
+  })
+
+  const messages = createMemo(() => sync.data.message[props.metadata.sessionId ?? ""] ?? [])
+
   const tools = createMemo(() => {
-    const sessionID = props.metadata.sessionId
-    const msgs = sync.data.message[sessionID ?? ""] ?? []
-    return msgs.flatMap((msg) =>
+    return messages().flatMap((msg) =>
       (sync.data.part[msg.id] ?? [])
         .filter((part): part is ToolPart => part.type === "tool")
         .map((part) => ({ tool: part.tool, state: part.state })),
     )
   })
 
-  const current = createMemo(() => tools().findLast((x) => x.state.status !== "pending"))
+  const current = createMemo(() => tools().findLast((x) => (x.state as any).title))
 
   const isRunning = createMemo(() => props.part.state.status === "running")
   const color = createMemo(() => {
@@ -1919,49 +1931,43 @@ function Task(props: ToolProps<typeof TaskTool>) {
     return local.agent.color(name)
   })
 
+  const duration = createMemo(() => {
+    const first = messages().find((x) => x.role === "user")?.time.created
+    const assistant = messages().findLast((x) => x.role === "assistant")?.time.completed
+    if (!first || !assistant) return 0
+    return assistant - first
+  })
+
   return (
-    <Switch>
-      <Match when={props.input.description || props.input.subagent_type}>
-        <BlockTool
-          title={"# " + Locale.titlecase(props.input.subagent_type ?? "unknown") + " Task"}
-          onClick={
-            props.metadata.sessionId
-              ? () => navigate({ type: "session", sessionID: props.metadata.sessionId! })
-              : undefined
-          }
-          part={props.part}
-          spinner={isRunning()}
-          borderColor={color()}
-        >
-          <box>
-            <text style={{ fg: theme.textMuted }}>
-              {props.input.description} ({tools().length} toolcalls)
-            </text>
-            <Show when={current()}>
-              {(item) => {
-                const title = item().state.status === "completed" ? (item().state as any).title : ""
-                return (
-                  <text style={{ fg: item().state.status === "error" ? theme.error : theme.textMuted }}>
-                    └ {Locale.titlecase(item().tool)} {title}
-                  </text>
-                )
-              }}
-            </Show>
-          </box>
-          <Show when={props.metadata.sessionId}>
-            <text fg={theme.text}>
-              {keybind.print("session_child_cycle")}
-              <span style={{ fg: theme.textMuted }}> view subagents</span>
-            </text>
-          </Show>
-        </BlockTool>
-      </Match>
-      <Match when={true}>
-        <InlineTool icon="#" pending="Delegating..." complete={props.input.subagent_type} part={props.part}>
-          {props.input.subagent_type} Task {props.input.description}
-        </InlineTool>
-      </Match>
-    </Switch>
+    <InlineTool
+      icon="≡"
+      spinner={isRunning()}
+      complete={props.input.description}
+      pending="Delegating..."
+      part={props.part}
+      border={["left"]}
+      borderColor={color()}
+    >
+      {props.input.description}
+      <Show when={isRunning() && tools().length > 0}>
+        {" "}
+        · {tools().length} toolcalls
+        <Show fallback={"\n└ Running..."} when={current()}>
+          {(item) => {
+            const title = createMemo(() => (item().state as any).title)
+            return (
+              <>
+                {"\n"}└ {Locale.titlecase(item().tool)} {title()}
+              </>
+            )
+          }}
+        </Show>
+      </Show>
+      <Show when={duration() && props.part.state.status === "completed"}>
+        {"\n  "}
+        {tools().length} toolcalls · {Locale.duration(duration())}
+      </Show>
+    </InlineTool>
   )
 }
 
