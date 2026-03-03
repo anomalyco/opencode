@@ -49,7 +49,7 @@ export default function Home() {
             <div data-slot="hero-copy">
               <img data-slot="zen logo light" src={zenLogoLight} alt="" />
               <img data-slot="zen logo dark" src={zenLogoDark} alt="" />
-              <h1>{i18n.t("zen.hero.title")}</h1>
+              <h1>Low cost coding models for everyone</h1>
               <p>{i18n.t("zen.hero.body")}</p>
               <div data-slot="model-logos">
                 <div>
