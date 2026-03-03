@@ -29,4 +29,13 @@ describe("localLink", () => {
     const result = localLink(source, tmp.path)
     expect(result).toBe(source)
   })
+
+  test("converts concealed file URL format to markdown link", async () => {
+    await using tmp = await tmpdir()
+    const target = path.join(tmp.path, ".agents")
+    await Bun.write(target, "")
+
+    const result = localLink(`Path .agents/ (file://${target})`, tmp.path)
+    expect(result).toBe(`Path [.agents/](file://${target})`)
+  })
 })
