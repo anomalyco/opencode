@@ -367,6 +367,20 @@ export namespace Provider {
         },
       }
     },
+    "perplexity-agent": async () => {
+      return {
+        autoload: false,
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          return sdk.responses(modelID)
+        },
+        options: {
+          headers: {
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "opencode",
+          },
+        },
+      }
+    },
     vercel: async () => {
       return {
         autoload: false,
