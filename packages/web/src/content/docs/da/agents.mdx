@@ -1,5 +1,5 @@
 ---
-title: Agent
+title: Agenter
 description: Konfigurer og brug specialiserede agenter.
 ---
 
@@ -13,13 +13,13 @@ Du kan skifte mellem agenter under en session eller kalde dem med `@`-omtalen.
 
 ---
 
-## Skriver
+## Typer
 
 Der er to typer agenter i OpenCode; primære agenter og subagenter.
 
 ---
 
-### Primære agent
+### Primær agent
 
 Primære agenter er de vigtigste assistenter, du interagerer direkte med. Du kan bladre gennem dem ved at bruge **Tab**-tasten eller din konfigurerede `switch_agent`-tastebinding. Disse agenter håndterer din hovedsamtale. Værktøjsadgang konfigureres via tilladelser - for eksempel har Build alle aktiveret, mens Plan er begrænset.
 
@@ -40,13 +40,13 @@ OpenCode leveres med to indbyggede underagenter, **Generelt** og **Udforsk**. Vi
 
 ---
 
-## Indbygget
+## Indbyggede
 
 OpenCode leveres med to indbyggede primære agenter og to indbyggede subagenter.
 
 ---
 
-### Brug bygge
+### Build-agenten
 
 _Tilstand_: `primary`
 
@@ -54,7 +54,7 @@ Byg er den **standard** primære agent med alle aktiveret. Dette er standardagen
 
 ---
 
-### Brug plan
+### Plan-agenten
 
 _Tilstand_: `primary`
 
@@ -68,7 +68,7 @@ Denne agent er nyttig, når du vil have LLM til at analysere kode, foreslå ænd
 
 ---
 
-### Brug generelt
+### General-agenten
 
 _Tilstand_: `subagent`
 
@@ -76,7 +76,7 @@ En agent til generelt formål at undersøge komplekse spørgsmål og udføre opg
 
 ---
 
-### Brug udforsk
+### Explore-agenten
 
 _Tilstand_: `subagent`
 
@@ -84,7 +84,7 @@ En hurtig, skrivebeskyttet agent til at udforske kodebaser. Kan ikke ændre file
 
 ---
 
-### Brug komprimering
+### Compact-agenten
 
 _Tilstand_: `primary`
 
@@ -92,7 +92,7 @@ Skjult systemagent, der komprimerer lang kontekst til et mindre resumé. Det kø
 
 ---
 
-### Brug titel
+### Title-agenten
 
 _Tilstand_: `primary`
 
@@ -100,7 +100,7 @@ Skjult systemagent, der genererer korte sessionstitler. Den kører automatisk og
 
 ---
 
-### Brug CV
+### Resume-agenten
 
 _Tilstand_: `primary`
 
@@ -108,7 +108,7 @@ Skjult systemagent, der opretter sessionsoversigter. Den kører automatisk og ka
 
 ---
 
-## Brug
+## Anvendelse
 
 1. For primære agenter skal du bruge tasten **Tab** til at bladre gennem dem under en session. Du kan også bruge din konfigurerede `switch_agent` nøglebinding.
 
@@ -128,7 +128,7 @@ Skjult systemagent, der opretter sessionsoversigter. Den kører automatisk og ka
 
 ---
 
-## Konfigurer
+## Konfiguration
 
 Du kan tilpasse de indbyggede agenter eller oprette dine egne gennem konfiguration. Agenter kan konfigureres på følgende måder:
 
@@ -216,7 +216,7 @@ Lad os se nærmere på disse konfigurationsmuligheder.
 
 ---
 
-### Beskrivelse
+### Beskrivelse (`description`)
 
 Brug indstillingen `description` til at give en kort beskrivelse af, hvad agenten gør, og hvornår den skal bruges.
 
@@ -234,7 +234,7 @@ Dette er en **påkrævet** konfigurationsindstilling.
 
 ---
 
-### Temperatur
+### Temperatur (`temperature`)
 
 Styr tilfældigheden og kreativiteten af ​​​​LLMs svar med `temperature`-konfigurationen.
 
@@ -281,7 +281,7 @@ Hvis ingen temperatur er angivet, bruger OpenCode modelspecifikke standardindsti
 
 ---
 
-### Maks. skridt
+### Trin (`steps`)
 
 Kontrollerer det maksimale antal agent-gentagelser, som en agent kan udføre, før han bliver tvunget til kun at svare med tekst. Dette giver brugere, der ønsker at kontrollere, mulighed for at sætte en grænse for agenthandlinger.
 
@@ -307,7 +307,7 @@ Det gamle `maxSteps`-felt er forældet. Brug `steps` i stedet.
 
 ---
 
-### Deaktiver
+### Deaktivering (`disable`)
 
 Indstil til `true` for at deaktivere agenten.
 
@@ -323,7 +323,7 @@ Indstil til `true` for at deaktivere agenten.
 
 ---
 
-### Spørg
+### Prompt (`prompt`)
 
 Angiv en brugerdefineret systempromptfil for denne agent med `prompt`-konfigurationen. Promptfilen skal indeholde instruktioner, der er specifikke for agentens formål.
 
@@ -341,7 +341,7 @@ Denne sti er i forhold til, hvor konfigurationsfilen er placeret. Så dette virk
 
 ---
 
-### Model
+### Model (`model`)
 
 Brug `model`-konfigurationen til at tilsidesætte modeller for denne agent. Nyttigt til brug af forskellige modeller optimeret til forskellige opgaver. For eksempel en hurtigere model til planlægning, en dygtig model til implementering.
 
@@ -363,7 +363,7 @@ Model-id'et i din OpenCode-konfiguration brugerformatet `provider/model-id`. For
 
 ---
 
-### Værktøjer
+### Værktøjer (`tools`)
 
 Kontroller, hvilke værktøjer der er tilgængelige i denne agent med `tools`-konfigurationen. Du kan aktivere eller deaktivere specifikke redskaber ved at indstille dem til `true` eller `false`.
 
@@ -410,7 +410,7 @@ Du kan også bruge jokertegn til at styre flere værktøjer på én gang. For ek
 
 ---
 
-### Tilladelser
+### Tilladelser (`permission`)
 
 Du kan konfigurere tilladelser til at administrere, hvilke handlinger og agenter kan udføre. I øjeblikket kan tilladelserne til værktøjerne `edit`, `bash` og `webfetch` konfigureres til:
 
@@ -522,7 +522,7 @@ Da den sidste matchningsregel har forrang, skal du sætte jokertegnet `*` først
 
 ---
 
-### Tilstand
+### Tilstand (`mode`)
 
 Styr agentens tilstand med `mode`-konfigurationen. Indstillingen `mode` bruges til at bestemme, hvordan agenten kan bruges.
 
@@ -540,7 +540,7 @@ Indstillingen `mode` kan indstilles til `primary`, `subagent` eller `all`. Hvis 
 
 ---
 
-### Skjult
+### Skjult (`hidden`)
 
 Skjul en underagent fra `@` autofuldførelsesmenuen med `hidden: true`. Nyttigt for interne underagenter, der kun bør startes programmatisk af andre agenter via opgaveværktøjet.
 
@@ -563,7 +563,7 @@ Gælder kun for `mode: subagent`-agent.
 
 ---
 
-### Opgavetilladelser
+### Opgavetilladelser (`permission.task`)
 
 Kontroller, hvilke subagenter en agent kan påkalde via opgaveværktøjet med `permission.task`. Bruger glob-mønstre til fleksibel matchning.
 
@@ -596,7 +596,7 @@ Brugere kan altid påkalde enhver underagent direkte via `@` autofuldførelsesme
 
 ---
 
-### Farve
+### Farve (`color`)
 
 Tilpas agentens visuelle udseende i brugergrænsefladen med muligheden `color`. Dette påvirker, hvordan agenter vises i grænsefladen.
 
@@ -662,7 +662,7 @@ Kør `opencode models` for at se en liste over de tilgængelige modeller.
 
 ---
 
-## Opret agent
+## Oprettelse af agent
 
 Du kan oprette nye agenter ved hjælp af følgende kommando:
 
@@ -680,7 +680,7 @@ Denne interaktive kommando vil:
 
 ---
 
-## Use cases
+## Anvendelsesmuligheder
 
 Her er nogle almindelige use cases for forskellige agenter.
 
@@ -702,7 +702,7 @@ Har du en agent, du gerne vil dele? [Send en PR](https://github.com/anomalyco/op
 
 ---
 
-### Dokumentationsagent
+### Dokumentations-agent
 
 ```markdown title="~/.config/opencode/agents/docs-writer.md"
 ---
@@ -724,7 +724,7 @@ Focus on:
 
 ---
 
-### Sikkerhedsrevisor
+### Sikkerheds-agent
 
 ```markdown title="~/.config/opencode/agents/security-auditor.md"
 ---

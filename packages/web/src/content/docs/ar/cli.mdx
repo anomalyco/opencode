@@ -69,10 +69,10 @@ opencode attach [url]
 يتيح ذلك استخدام واجهة TUI مع واجهة خلفية لـ OpenCode تعمل عن بعد. على سبيل المثال:
 
 ```bash
-# Start the backend server for web/mobile access
+# ابدأ خادم الواجهة الخلفية للوصول عبر الويب/الجوال
 opencode web --port 4096 --hostname 0.0.0.0
 
-# In another terminal, attach the TUI to the running backend
+# في محطة طرفية (terminal) أخرى، اربط TUI بالواجهة الخلفية قيد التشغيل
 opencode attach http://10.20.30.40:4096
 ```
 
@@ -326,10 +326,10 @@ opencode run Explain the use of context in Go
 يمكنك أيضا الإرفاق بمثيل `opencode serve` قيد التشغيل لتجنّب زمن الإقلاع البارد لخوادم MCP في كل تشغيل:
 
 ```bash
-# Start a headless server in one terminal
+# ابدأ خادمًا بلا واجهة في محطة طرفية واحدة
 opencode serve
 
-# In another terminal, run commands that attach to it
+# في محطة طرفية أخرى، شغّل الأوامر التي ترتبط به
 opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 

@@ -1,31 +1,33 @@
 ---
-title: Wsparcie AKP
-description: przetwarzanie opencode w procesorze komunikatu z ACP.
+title: ACP
+description: Używanie OpenCode z protokołem Agent Client Protocol (ACP).
 ---
 
-opencode obsługi [Protokół klienta agenta](https://agentclientprotocol.com) lub (ACP), dzięki któremu można przejść do oprogramowania bezpośrednio w zainstalowanych edytorach i środowisku IDE.
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
+OpenCode obsługuje [Agent Client Protocol](https://agentclientprotocol.com) (ACP), który umożliwia korzystanie z OpenCode bezpośrednio w edytorach i środowiskach IDE.
 
 :::tip
-Lista edytorów i narzędzi obsługujących ACP w [raportu sprzętu ACP](https://zed.dev/blog/acp-progress-report#available-now).
+Listę edytorów i narzędzi obsługujących ACP znajdziesz w [raporcie postępu ACP](https://zed.dev/blog/acp-progress-report#available-now).
 :::
 
-ACP do otwierania dokumentów, które standaryzują treść między edytorami kodu a agentem kodującym AI.
+ACP to otwarty standard, który ujednolica komunikację między edytorami kodu a agentami kodującymi AI.
 
 ---
 
-## Skonfiguruj
+## Konfiguracja
 
-Aby wybrać opencode przez ACP, skonfiguruj edytor tak, aby wybrać opcję `opencode acp`.
+Aby używać OpenCode przez ACP, skonfiguruj swój edytor tak, aby uruchamiał polecenie `opencode acp`.
 
-Uruchomienie opencode jako podproces oprogramowania z ACP, który komunikuje się z edytorem poprzez JSON-RPC poprzez stdio.
+Uruchamia to OpenCode jako podproces zgodny z ACP, który komunikuje się z edytorem za pomocą JSON-RPC przez stdio.
 
-Poniżej znajdują się przykłady procesorów obsługujących ACP.
+Poniżej znajdują się przykłady dla edytorów obsługujących ACP.
 
 ---
 
-### Zeda
+### Zed
 
-Dodaj do konstrukcji [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
+Dodaj do konfiguracji [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
 
 ```json title="~/.config/zed/settings.json"
 {
@@ -38,9 +40,9 @@ Dodaj do konstrukcji [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
 }
 ```
 
-Aby przejść do akcji, `agent: new thread` w **Palecie redakcji**.
+Aby użyć, wybierz `agent: new thread` w **Palecie poleceń** (Command Palette).
 
-Można także po skrócie skrótowym, edytując `keymap.json`:
+Możesz także przypisać skrót klawiszowy, edytując `keymap.json`:
 
 ```json title="keymap.json"
 [
@@ -67,9 +69,9 @@ Można także po skrócie skrótowym, edytując `keymap.json`:
 
 ---
 
-### IDE JetBrains
+### JetBrains IDE
 
-Dodaj do swojego [JetBrains IDE](https://www.jetbrains.com/) acp.json zgodnie z [dokumentacją](https://www.jetbrains.com/help/ai-assistant/acp.html):
+Dodaj do swojego [JetBrains IDE](https://www.jetbrains.com/) plik `acp.json` zgodnie z [dokumentacją](https://www.jetbrains.com/help/ai-assistant/acp.html):
 
 ```json title="acp.json"
 {
@@ -82,13 +84,13 @@ Dodaj do swojego [JetBrains IDE](https://www.jetbrains.com/) acp.json zgodnie z 
 }
 ```
 
-Aby przejść do nowego agenta „opencode” w selektorze agenta AI Chat.
+Następnie wybierz „OpenCode” w selektorze agentów AI Chat.
 
 ---
 
 ### Avante.nvim
 
-Dodaj do konstrukcji [Avante.nvim](https://github.com/yetone/avante.nvim):
+Dodaj do konfiguracji [Avante.nvim](https://github.com/yetone/avante.nvim):
 
 ```lua
 {
@@ -101,7 +103,7 @@ Dodaj do konstrukcji [Avante.nvim](https://github.com/yetone/avante.nvim):
 }
 ```
 
-Jeśli chcesz zachować bezpieczeństwo:
+Jeśli potrzebujesz przekazać klucz API:
 
 ```lua {6-8}
 {
@@ -121,7 +123,7 @@ Jeśli chcesz zachować bezpieczeństwo:
 
 ### CodeCompanion.nvim
 
-Aby opencode jako agenta ACP w [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim), dodaj dodatkowe elementy, aby otrzymać konstrukcje Neovim:
+Aby używać OpenCode jako agenta ACP w [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim), dodaj następującą konfigurację do Neovim:
 
 ```lua
 require("codecompanion").setup({
@@ -136,21 +138,21 @@ require("codecompanion").setup({
 })
 ```
 
-Ta konfiguracja CodeCompanion wymaga opencode jako agenta ACP dla czatu.
+Ta konfiguracja sprawia, że CodeCompanion używa OpenCode jako agenta ACP do czatu.
 
-Jeśli jesteś zarejestrowany jako `OPENCODE_API_KEY`, zapoznaj się z sekcją [Konfigurowanie adapterów: Zmienne przebieg](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) w dokumentacji CodeCompanion.nvim, aby uzyskać szczegółowe informacje.
+Jeśli wymagany jest `OPENCODE_API_KEY`, zapoznaj się z sekcją [Konfigurowanie adapterów: Zmienne środowiskowe](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) w dokumentacji CodeCompanion.nvim, aby uzyskać szczegółowe informacje.
 
 ## Wsparcie
 
-opencode działa tak samo przez ACP, jak w terminalu. Obsługiwane są wszystkie funkcje:
+OpenCode działa przez ACP tak samo, jak w terminalu. Obsługiwane są wszystkie główne funkcje:
 
 :::note
-początek źródła ukośnikowego, takie jak `/undo` i `/redo`, nie są aktualne pobierane.
+Niektóre polecenia z ukośnikiem, takie jak `/undo` i `/redo`, nie są obecnie obsługiwane przez ACP.
 :::
 
-- Wbudowane narzędzie (operacje na plikach, rozwiązanie terminala itp.)
-- Niestandardowe narzędzie i polecenie ukośnikowe
-- Serwery MCP skonfigurowane w konfiguracji opencode
-- Zasady dotyczące projektu od `AGENTS.md`
-- Niestandardowe formatory i lintery
-- Agentów systemowych i uprawnień
+- Narzędzia wbudowane (operacje na plikach, terminal itp.)
+- Niestandardowe narzędzia i polecenia z ukośnikiem
+- Serwery MCP zdefiniowane w konfiguracji OpenCode
+- Zasady projektu z `AGENTS.md`
+- Niestandardowe formatery i lintery
+- Agenci systemowi i uprawnienia

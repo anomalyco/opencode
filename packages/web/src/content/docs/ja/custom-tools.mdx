@@ -1,9 +1,9 @@
 ---
 title: カスタムツール
-description: LLM がopencodeで呼び出すことができるツールを作成します。
+description: LLM が OpenCode で呼び出すことができるツールを作成します。
 ---
 
-カスタム ツールは、会話中に LLM が呼び出すことができる作成した関数です。これらは、opencode の[組み込みツール](/docs/tools) (`read`、`write`、`bash` など) と連携して動作します。
+カスタムツールは、会話中に LLM が呼び出すことができる作成した関数です。これらは、OpenCode の[組み込みツール](/docs/tools) (`read`、`write`、`bash` など) と連携して動作します。
 
 ---
 
@@ -13,7 +13,7 @@ description: LLM がopencodeで呼び出すことができるツールを作成�
 
 ---
 
-### 位置
+### 場所
 
 それらは次のように定義できます。
 
@@ -24,7 +24,7 @@ description: LLM がopencodeで呼び出すことができるツールを作成�
 
 ### 構造
 
-ツールを作成する最も簡単な方法は、タイプ セーフティと検証を提供する `tool()` ヘルパーを使用することです。
+ツールを作成する最も簡単な方法は、型安全性と検証を提供する `tool()` ヘルパーを使用することです。
 
 ```ts title=".opencode/tools/database.ts" {1}
 import { tool } from "@opencode-ai/plugin"
@@ -79,6 +79,32 @@ export const multiply = tool({
 
 ---
 
+#### 組み込みツールとの名前の衝突
+
+カスタムツールはツール名でキー設定されます。カスタムツールが組み込みツールと同じ名前を使用する場合、カスタムツールが優先されます。
+
+たとえば、このファイルは組み込みの `bash` ツールを置き換えます。
+
+```ts title=".opencode/tools/bash.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Restricted bash wrapper",
+  args: {
+    command: tool.schema.string(),
+  },
+  async execute(args) {
+    return `blocked: ${args.command}`
+  },
+})
+```
+
+:::note
+組み込みツールを意図的に置き換えたい場合を除き、一意の名前を使用することをお勧めします。組み込みツールを無効にしたいがオーバーライドしたくない場合は、[権限](/docs/permissions) を使用してください。
+:::
+
+---
+
 ### 引数
 
 引数の型を定義するには、`tool.schema` (つまり [Zod](https://zod.dev)) を使用できます。
@@ -89,7 +115,7 @@ args: {
 }
 ```
 
-[Zod](https://zod.dev) を直接インポートしてプレーン オブジェクトを返すこともできます。
+[Zod](https://zod.dev) を直接インポートしてプレーンオブジェクトを返すこともできます。
 
 ```ts {6}
 import { z } from "zod"
@@ -108,7 +134,7 @@ export default {
 
 ---
 
-### Context
+### コンテキスト
 
 ツールは現在のセッションに関するコンテキストを受け取ります。
 
@@ -126,14 +152,14 @@ export default tool({
 })
 ```
 
-セッション作業ディレクトリには `context.directory` を使用します。
-git ワークツリー ルートには `context.worktree` を使用します。
+セッションの作業ディレクトリには `context.directory` を使用します。
+git ワークツリーのルートには `context.worktree` を使用します。
 
 ---
 
 ## 例
 
-### Python でツールを作成する
+### Python でのツールの作成
 
 ツールは任意の言語で作成できます。以下は、Python を使用して 2 つの数値を加算する例です。
 

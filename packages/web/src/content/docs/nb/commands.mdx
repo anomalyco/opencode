@@ -40,7 +40,7 @@ Bruk kommandoen ved å skrive `/` etterfulgt av kommandonavnet.
 
 ---
 
-## Konfigurer
+## Konfigurasjon
 
 Du kan legge til egendefinerte kommandoer gjennom OpenCode-konfigurasjonen eller ved å lage markdown-filer i katalogen `commands/`.
 
@@ -102,7 +102,7 @@ deg kjøre:
 
 ---
 
-## Ledetekst-konfigurasjon
+## Ledetekstkonfigurasjon
 
 Ledetekstene for de egendefinerte kommandoene støtter flere spesielle plassholdere og syntaks.
 
@@ -161,7 +161,7 @@ Dette erstatter:
 
 ---
 
-### Shell-utgang
+### Shell-utdata
 
 Bruk _!`command`_ for å injisere [bash-kommando](/docs/tui#bash-commands)-utdata i ledeteksten.
 
@@ -274,9 +274,9 @@ Denne kommandoen vil veilede deg gjennom å lage en ny agent med en tilpasset sy
 
 ---
 
-### Subtask
+### Underoppgave
 
-Bruk `subtask` boolean for å tvinge kommandoen til å utløse en [subagent](/docs/agents/#subagents) påkalling.
+Bruk `subtask` for å tvinge kommandoen til å utløse en [subagent](/docs/agents/#subagents) påkalling.
 Dette er nyttig hvis du vil at kommandoen ikke skal forurense din primære kontekst og vil **tvinge** agenten til å fungere som en underagent,
 selv om `mode` er satt til `primary` på [agent](/docs/agents) konfigurasjonen.
 

@@ -165,9 +165,7 @@ export namespace SessionPrompt {
     }
     if (permissions.length > 0) {
       session.permission = permissions
-      await Session.update(session.id, (draft) => {
-        draft.permission = permissions
-      })
+      await Session.setPermission({ sessionID: session.id, permission: permissions })
     }
 
     if (input.noReply === true) {
@@ -349,8 +347,8 @@ export namespace SessionPrompt {
           agent: task.agent,
           variant: lastUser.variant,
           path: {
-            cwd: getCwd(),
             root: Instance.worktree,
+            cwd: getCwd(),
           },
           cost: 0,
           tokens: {
@@ -408,7 +406,6 @@ export namespace SessionPrompt {
           sessionID: sessionID,
           abort,
           callID: part.callID,
-          cwd: getCwd(),
           extra: { bypassAgentCheck: true },
           messages: msgs,
           async metadata(input) {
@@ -455,7 +452,7 @@ export namespace SessionPrompt {
               title: result.title,
               metadata: result.metadata,
               output: result.output,
-              attachments: result.attachments,
+              attachments: result.attachments as any,
               time: {
                 ...part.state.time,
                 end: Date.now(),
@@ -554,8 +551,8 @@ export namespace SessionPrompt {
           agent: agent.name,
           variant: lastUser.variant,
           path: {
-            cwd: getCwd(),
             root: Instance.worktree,
+            cwd: getCwd(),
           },
           cost: 0,
           tokens: {
@@ -688,7 +685,6 @@ export namespace SessionPrompt {
       abort: options.abortSignal!,
       messageID: input.processor.message.id,
       callID: options.toolCallId,
-      cwd: getCwd(),
       extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck },
       agent: input.agent.name,
       messages: input.messages,
@@ -1067,13 +1063,13 @@ export namespace SessionPrompt {
                     })
                     if (result.attachments?.length) {
                       pieces.push(
-                        ...result.attachments.map((attachment) => ({
+                        ...(result.attachments.map((attachment) => ({
                           ...attachment,
                           synthetic: true,
                           filename: attachment.filename ?? part.filename,
                           messageID: info.id,
                           sessionID: input.sessionID,
-                        })),
+                        })) as any[]),
                       )
                     } else {
                       pieces.push({
@@ -1443,8 +1439,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       agent: input.agent,
       cost: 0,
       path: {
-        cwd: getCwd(),
         root: Instance.worktree,
+        cwd: getCwd(),
       },
       time: {
         created: Date.now(),
@@ -1549,7 +1545,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const cwd = Instance.directory
     const shellEnv = await Plugin.trigger("shell.env", { cwd }, { env: {} })
     const proc = spawn(shell, args, {
-      cwd: getCwd(),
       detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
       env: {
@@ -1951,21 +1946,16 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       ],
     })
     const text = await result.text.catch((err) => log.error("failed to generate title", { error: err }))
-    if (text)
-      return Session.update(
-        input.session.id,
-        (draft) => {
-          const cleaned = text
-            .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
-            .split("\n")
-            .map((line) => line.trim())
-            .find((line) => line.length > 0)
-          if (!cleaned) return
+    if (text) {
+      const cleaned = text
+        .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+        .split("\n")
+        .map((line) => line.trim())
+        .find((line) => line.length > 0)
+      if (!cleaned) return
 
-          const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
-          draft.title = title
-        },
-        { touch: false },
-      )
+      const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
+      return Session.setTitle({ sessionID: input.session.id, title })
+    }
   }
 }

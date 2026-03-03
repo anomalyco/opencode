@@ -84,6 +84,38 @@ Funciona como cualquier otro proveedor en OpenCode y su uso es completamente opc
 
 ---
 
+## OpenCode Go
+
+OpenCode Go es un plan de suscripción de bajo costo que brinda acceso confiable a modelos de codificación abiertos populares proporcionados por el equipo de OpenCode que han sido
+probado y verificado para funcionar bien con OpenCode.
+
+1. Ejecute el comando `/connect` en TUI, seleccione `OpenCode Go` y diríjase a [opencode.ai/auth](https://opencode.ai/zen).
+
+   ```txt
+   /connect
+   ```
+
+2. Inicie sesión, agregue sus datos de facturación y copie su clave API.
+
+3. Pegue su clave API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Ejecute `/models` en TUI para ver la lista de modelos que recomendamos.
+
+   ```txt
+   /models
+   ```
+
+Funciona como cualquier otro proveedor en OpenCode y su uso es completamente opcional.
+
+---
+
 ## Directorio
 
 Veamos algunos de los proveedores en detalle. Si desea agregar un proveedor a la
@@ -290,7 +322,7 @@ O si ya tienes una clave API, puedes seleccionar **Ingresar manualmente la clave
 
 ---
 
-### Azul OpenAI
+### Azure OpenAI
 
 :::note
 Si encuentra errores del tipo "Lo siento, pero no puedo ayudar con esa solicitud", intente cambiar el filtro de contenido de **DefaultV2** a **Default** en su recurso de Azure.
@@ -527,7 +559,7 @@ Cloudflare AI Gateway le permite acceder a modelos de OpenAI, Anthropic, Workers
 
 ---
 
-### Búsqueda profunda
+### DeepSeek
 
 1. Dirígete a la [consola de DeepSeek](https://platform.deepseek.com/), crea una cuenta y haz clic en **Crear nueva clave API**.
 
@@ -554,7 +586,7 @@ Cloudflare AI Gateway le permite acceder a modelos de OpenAI, Anthropic, Workers
 
 ---
 
-### Infraestructura profunda
+### Deep Infra
 
 1. Dirígete al [panel de Deep Infra](https://deepinfra.com/dash), crea una cuenta y genera una clave API.
 
@@ -608,7 +640,7 @@ Cloudflare AI Gateway le permite acceder a modelos de OpenAI, Anthropic, Workers
 
 ---
 
-### Fuegos artificiales AI
+### Fireworks AI
 
 1. Dirígete a la [Consola de Fireworks AI](https://app.fireworks.ai/), crea una cuenta y haz clic en **Crear clave API**.
 
@@ -635,7 +667,7 @@ Cloudflare AI Gateway le permite acceder a modelos de OpenAI, Anthropic, Workers
 
 ---
 
-### GitLab Dúo
+### GitLab Duo
 
 GitLab Duo proporciona chat agente basado en IA con capacidades de llamada de herramientas nativas a través del proxy Anthropic de GitLab.
 
@@ -652,6 +684,7 @@ GitLab Duo proporciona chat agente basado en IA con capacidades de llamada de he
    │
    │ OAuth (Recommended)
    │ Personal Access Token
+   │
    └
    ```
 
@@ -769,7 +802,7 @@ Personalizar a través de `opencode.json`:
 }
 ```
 
-##### GitLab API Herramientas (opcionales, pero muy recomendables)
+##### Herramientas de API de GitLab (opcionales, pero muy recomendables)
 
 Para acceder a herramientas GitLab (solicitudes de fusión, problemas, canalizaciones, CI/CD, etc.):
 
@@ -784,15 +817,13 @@ Este complemento proporciona capacidades integrales de administración del repos
 
 ---
 
-### GitHub Copiloto
+### GitHub Copilot
 
 Para utilizar su suscripción GitHub Copilot con opencode:
 
 :::note
 Algunos modelos pueden necesitar un [Pro+
 suscripción](https://github.com/features/copilot/plans) para usar.
-
-Algunos modelos deben habilitarse manualmente en su [GitHub configuración del copiloto](https://docs.github.com/en/copilot/how-tos/use-ai-models/configure-access-to-ai-models#setup-for-individual-use).
 :::
 
 1. Ejecute el comando `/connect` y busque GitHub Copilot.
@@ -810,6 +841,7 @@ Algunos modelos deben habilitarse manualmente en su [GitHub configuración del c
    │
    │ Enter code: 8F43-6FCF
    │
+   │
    └ Waiting for authorization...
    ```
 
@@ -821,14 +853,14 @@ Algunos modelos deben habilitarse manualmente en su [GitHub configuración del c
 
 ---
 
-### IA de vértice de Google
+### Google Vertex AI
 
 Para utilizar Google Vertex AI con OpenCode:
 
 1. Dirígete a **Model Garden** en Google Cloud Console y verifica el
    Modelos disponibles en su región.
 
-   :::nota
+   :::note
    Debes tener un proyecto de Google Cloud con Vertex AI API habilitado.
    :::
 
@@ -921,7 +953,7 @@ La región `global` mejora la disponibilidad y reduce los errores sin costo adic
 
 ---
 
-### Helicón
+### Helicone
 
 [Helicone](https://helicone.ai) es una plataforma de observabilidad LLM que proporciona registro, monitoreo y análisis para sus aplicaciones de IA. Helicone AI Gateway enruta sus solicitudes al proveedor apropiado automáticamente según el modelo.
 
@@ -1101,7 +1133,7 @@ IO.NET ofrece 17 modelos optimizados para varios casos de uso:
 
 ---
 
-### Estudio LM
+### LM Studio
 
 Puede configurar opencode para usar modelos locales a través de LM Studio.
 
@@ -1135,7 +1167,7 @@ En este ejemplo:
 
 ---
 
-### IA disparada a la luna
+### Moonshot AI
 
 Para usar Kimi K2 de Moonshot AI:
 
@@ -1164,7 +1196,7 @@ Para usar Kimi K2 de Moonshot AI:
 
 ---
 
-### Minimáx.
+### MiniMax
 
 1. Dirígete a la [Consola MiniMax API](https://platform.minimax.io/login), crea una cuenta y genera una clave API.
 
@@ -1191,7 +1223,7 @@ Para usar Kimi K2 de Moonshot AI:
 
 ---
 
-### Fábrica de tokens Nebius
+### Nebius Token Factory
 
 1. Dirígete a la [consola de Nebius Token Factory](https://tokenfactory.nebius.com/), crea una cuenta y haz clic en **Agregar clave**.
 
@@ -1317,6 +1349,7 @@ Recomendamos registrarse en [ChatGPT Plus o Pro](https://chatgpt.com/pricing).
    │
    │ ChatGPT Plus/Pro
    │ Manually enter API Key
+   │
    └
    ```
 
@@ -1361,7 +1394,7 @@ OpenCode Zen es una lista de modelos probados y verificados proporcionada por el
 
 ---
 
-### Enrutador abierto
+### OpenRouter
 
 1. Dirígete al [panel de OpenRouter](https://openrouter.ai/settings/keys), haz clic en **Crear clave API** y copia la clave.
 
@@ -1425,7 +1458,7 @@ OpenCode Zen es una lista de modelos probados y verificados proporcionada por el
 
 ---
 
-### Núcleo de IA de SAP
+### SAP AI Core
 
 SAP AI Core brinda acceso a más de 40 modelos de OpenAI, Anthropic, Google, Amazon, Meta, Mistral y AI21 a través de una plataforma unificada.
 
@@ -1468,7 +1501,7 @@ SAP AI Core brinda acceso a más de 40 modelos de OpenAI, Anthropic, Google, Ama
    AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group opencode
    ```
 
-   :::nota
+   :::note
    Estas configuraciones son opcionales y deben configurarse de acuerdo con su configuración de SAP AI Core.
    :::
 
@@ -1480,7 +1513,40 @@ SAP AI Core brinda acceso a más de 40 modelos de OpenAI, Anthropic, Google, Ama
 
 ---
 
-### Puntos finales de IA de OVHcloud
+### STACKIT
+
+STACKIT AI Model Serving proporciona un entorno de alojamiento soberano totalmente gestionado para modelos de IA, centrándose en LLM como Llama, Mistral y Qwen, con máxima soberanía de datos en infraestructura europea.
+
+1. Diríjase al [Portal STACKIT](https://portal.stackit.cloud), navegue hasta **AI Model Serving** y cree un token de autenticación para su proyecto.
+
+   :::tip
+   Necesita una cuenta de cliente STACKIT, una cuenta de usuario y un proyecto antes de crear tokens de autenticación.
+   :::
+
+2. Ejecute el comando `/connect` y busque **STACKIT**.
+
+   ```txt
+   /connect
+   ```
+
+3. Ingrese su token de autenticación de STACKIT AI Model Serving.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Ejecute el comando `/models` para seleccionar entre los modelos disponibles como _Qwen3-VL 235B_ o _Llama 3.3 70B_.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### OVHcloud AI Endpoints
 
 1. Dirígete al [panel de OVHcloud](https://ovh.com/manager). Navegue a la sección `Public Cloud`, `AI & Machine Learning` > `AI Endpoints` y en la pestaña `API Keys`, haga clic en **Crear una nueva clave API**.
 
@@ -1507,7 +1573,7 @@ SAP AI Core brinda acceso a más de 40 modelos de OpenAI, Anthropic, Google, Ama
 
 ---
 
-### Escala
+### Scaleway
 
 Para utilizar [API generativas de Scaleway](https://www.scaleway.com/en/docs/generative-apis/) con OpenCode:
 
@@ -1536,7 +1602,7 @@ Para utilizar [API generativas de Scaleway](https://www.scaleway.com/en/docs/gen
 
 ---
 
-### Juntos IA
+### Together AI
 
 1. Dirígete a la [consola de Together AI](https://api.together.ai), crea una cuenta y haz clic en **Agregar clave**.
 
@@ -1563,7 +1629,7 @@ Para utilizar [API generativas de Scaleway](https://www.scaleway.com/en/docs/gen
 
 ---
 
-### Venecia AI
+### Venice AI
 
 1. Dirígete a la [consola de Venice AI](https://venice.ai), crea una cuenta y genera una clave API.
 
@@ -1573,7 +1639,7 @@ Para utilizar [API generativas de Scaleway](https://www.scaleway.com/en/docs/gen
    /connect
    ```
 
-3. Ingrese su clave Venecia AI API.
+3. Ingrese su clave Venice AI API.
 
    ```txt
    ┌ API key
@@ -1777,7 +1843,7 @@ Puede utilizar cualquier proveedor compatible con OpenAI con opencode. La mayor�
    └
    ```
 
-   :::nota
+   :::note
    Elija una identificación memorable, la usará en su archivo de configuración.
    :::
 

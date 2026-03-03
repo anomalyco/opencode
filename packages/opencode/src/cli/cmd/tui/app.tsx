@@ -1,8 +1,10 @@
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
-import { TextAttributes } from "@opentui/core"
+import { Selection } from "@tui/util/selection"
+import { MouseButton, TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
+import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./win32"
 import { Installation } from "@/installation"
 import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -36,6 +38,8 @@ import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
+import { TuiConfigProvider } from "./context/tui-config"
+import { TuiConfig } from "@/config/tui"
 import { ExecutionModeProvider, WorkingDirProvider } from "@tui-integration"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
@@ -103,6 +107,7 @@ import type { EventSource } from "./context/sdk"
 export function tui(input: {
   url: string
   args: Args
+  config: TuiConfig.Info
   directory?: string
   fetch?: typeof fetch
   headers?: RequestInit["headers"]
@@ -111,8 +116,17 @@ export function tui(input: {
 }) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
+    const unguard = win32InstallCtrlCGuard()
+    win32DisableProcessedInput()
+
     const mode = await getTerminalBackgroundColor()
+
+    // Re-clear after getTerminalBackgroundColor() — setRawMode(false) restores
+    // the original console mode which re-enables ENABLE_PROCESSED_INPUT.
+    win32DisableProcessedInput()
+
     const onExit = async () => {
+      unguard?.()
       await input.onExit?.()
       resolve()
     }
@@ -128,39 +142,41 @@ export function tui(input: {
                 <KVProvider>
                   <ToastProvider>
                     <RouteProvider>
-                      <SDKProvider
-                        url={input.url}
-                        directory={input.directory}
-                        fetch={input.fetch}
-                        headers={input.headers}
-                        events={input.events}
-                      >
-                        <SyncProvider>
-                          <ThemeProvider mode={mode}>
-                            <LocalProvider>
-                              <KeybindProvider>
-                                <PromptStashProvider>
-                                  <DialogProvider>
-                                    <CommandProvider>
-                                      <FrecencyProvider>
-                                        <PromptHistoryProvider>
-                                          <PromptRefProvider>
-                                            <ExecutionModeProvider>
-                                              <WorkingDirProvider>
-                                                <App />
-                                              </WorkingDirProvider>
-                                            </ExecutionModeProvider>
-                                          </PromptRefProvider>
-                                        </PromptHistoryProvider>
-                                      </FrecencyProvider>
-                                    </CommandProvider>
-                                  </DialogProvider>
-                                </PromptStashProvider>
-                              </KeybindProvider>
-                            </LocalProvider>
-                          </ThemeProvider>
-                        </SyncProvider>
-                      </SDKProvider>
+                      <TuiConfigProvider config={input.config}>
+                        <SDKProvider
+                          url={input.url}
+                          directory={input.directory}
+                          fetch={input.fetch}
+                          headers={input.headers}
+                          events={input.events}
+                        >
+                          <SyncProvider>
+                            <ThemeProvider mode={mode}>
+                              <LocalProvider>
+                                <KeybindProvider>
+                                  <PromptStashProvider>
+                                    <DialogProvider>
+                                      <CommandProvider>
+                                        <FrecencyProvider>
+                                          <PromptHistoryProvider>
+                                            <PromptRefProvider>
+                                              <ExecutionModeProvider>
+                                                <WorkingDirProvider>
+                                                  <App />
+                                                </WorkingDirProvider>
+                                              </ExecutionModeProvider>
+                                            </PromptRefProvider>
+                                          </PromptHistoryProvider>
+                                        </FrecencyProvider>
+                                      </CommandProvider>
+                                    </DialogProvider>
+                                  </PromptStashProvider>
+                                </KeybindProvider>
+                              </LocalProvider>
+                            </ThemeProvider>
+                          </SyncProvider>
+                        </SDKProvider>
+                      </TuiConfigProvider>
                     </RouteProvider>
                   </ToastProvider>
                 </KVProvider>
@@ -175,6 +191,7 @@ export function tui(input: {
         exitOnCtrlC: false,
         useKittyKeyboard: {},
         autoFocus: false,
+        openConsoleOnError: false,
         consoleOptions: {
           keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
           onCopySelection: (text) => {
@@ -204,6 +221,35 @@ function App() {
   const exit = useExit()
   const promptRef = usePromptRef()
 
+  useKeyboard((evt) => {
+    if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+    if (!renderer.getSelection()) return
+
+    // Windows Terminal-like behavior:
+    // - Ctrl+C copies and dismisses selection
+    // - Esc dismisses selection
+    // - Most other key input dismisses selection and is passed through
+    if (evt.ctrl && evt.name === "c") {
+      if (!Selection.copy(renderer, toast)) {
+        renderer.clearSelection()
+        return
+      }
+
+      evt.preventDefault()
+      evt.stopPropagation()
+      return
+    }
+
+    if (evt.name === "escape") {
+      renderer.clearSelection()
+      evt.preventDefault()
+      evt.stopPropagation()
+      return
+    }
+
+    renderer.clearSelection()
+  })
+
   // Wire up console copy-to-clipboard via opentui's onCopySelection callback
   renderer.console.onCopySelection = async (text: string) => {
     if (!text || text.length === 0) return
@@ -211,6 +257,7 @@ function App() {
     await Clipboard.copy(text)
       .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
       .catch(toast.error)
+
     renderer.clearSelection()
   }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
@@ -518,7 +565,7 @@ function App() {
       title: "Open docs",
       value: "docs.open",
       onSelect: () => {
-        open("https://opencode.ai/docs").catch(() => { })
+        open("https://opencode.ai/docs").catch(() => {})
         dialog.clear()
       },
       category: "System",
@@ -697,19 +744,15 @@ function App() {
       width={dimensions().width}
       height={dimensions().height}
       backgroundColor={theme.background}
-      onMouseUp={async () => {
-        if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) {
-          renderer.clearSelection()
-          return
-        }
-        const text = renderer.getSelection()?.getSelectedText()
-        if (text && text.length > 0) {
-          await Clipboard.copy(text)
-            .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
-            .catch(toast.error)
-          renderer.clearSelection()
-        }
+      onMouseDown={(evt) => {
+        if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+        if (evt.button !== MouseButton.RIGHT) return
+
+        if (!Selection.copy(renderer, toast)) return
+        evt.preventDefault()
+        evt.stopPropagation()
       }}
+      onMouseUp={Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? undefined : () => Selection.copy(renderer, toast)}
     >
       <Switch>
         <Match when={route.data.type === "home"}>
@@ -735,7 +778,8 @@ function ErrorComponent(props: {
   const handleExit = async () => {
     renderer.setTerminalTitle("")
     renderer.destroy()
-    props.onExit()
+    win32FlushInputBuffer()
+    await props.onExit()
   }
 
   useKeyboard((evt) => {

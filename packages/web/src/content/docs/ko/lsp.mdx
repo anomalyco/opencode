@@ -7,7 +7,7 @@ OpenCode는 Language Server Protocol(LSP)과 통합되어 LLM이 코드베이스
 
 ---
 
-## 내장
+## 기본 제공 (Built-in)
 
 OpenCode는 널리 사용되는 언어를 위해 여러 built-in LSP 서버를 제공합니다.
 
@@ -55,12 +55,12 @@ OpenCode는 널리 사용되는 언어를 위해 여러 built-in LSP 서버를 �
 
 ---
 
-## 그것이 작동하는 방법
+## 작동 방식
 
 OpenCode가 파일을 열면 다음과 같이 동작합니다.
 
-1. 모든 활성화된 LSP 서버에 대한 파일 확장을 확인합니다.
-2. 이미 실행되지 않은 경우 적절한 LSP 서버를 시작합니다.
+1. 활성화된 모든 LSP 서버에 대해 파일 확장자를 확인합니다.
+2. 적절한 LSP 서버가 아직 실행 중이지 않다면 시작합니다.
 
 ---
 
@@ -133,7 +133,7 @@ OpenCode config의 `lsp` 섹션에서 LSP 서버를 사용자 정의할 수 있�
 
 ---
 
-### LSP 서버를 해제
+### LSP 서버 비활성화
 
 전역에서 **모든** LSP 서버를 비활성화하려면 `lsp`를 `false`로 설정하세요.
 
@@ -179,11 +179,11 @@ OpenCode config의 `lsp` 섹션에서 LSP 서버를 사용자 정의할 수 있�
 
 ## 추가 정보
 
-### PHP 인텔
+### PHP Intelephense
 
 PHP Intelephense는 라이선스 키를 통해 프리미엄 기능을 제공합니다. 텍스트 파일에 키만 저장해 라이선스 키를 제공할 수 있습니다.
 
-- macOS/리눅스에서: `$HOME/intelephense/license.txt`
-- Windows에서: `%USERPROFILE%/intelephense/license.txt`
+- macOS/Linux: `$HOME/intelephense/license.txt`
+- Windows: `%USERPROFILE%/intelephense/license.txt`
 
 파일에는 추가 내용 없이 라이선스 키만 포함하는 것이 좋습니다.

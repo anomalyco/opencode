@@ -13,7 +13,7 @@ Requirements:
 - Preserve meaning, intent, tone, and formatting (including Markdown/MDX structure).
 - Preserve all technical terms and artifacts exactly: product/company names, API names, identifiers, code, commands/flags, file paths, URLs, versions, error messages, config keys/values, and anything inside inline code or code blocks.
 - Also preserve every term listed in the Do-Not-Translate glossary below.
-- Also apply locale-specific guidance from `.opencode/agent/glossary/<locale>.md` when available (for example, `zh-cn.md`).
+- Also apply locale-specific guidance from `.opencode/glossary/<locale>.md` when available (for example, `zh-cn.md`).
 - Do not modify fenced code blocks.
 - Output ONLY the translation (no commentary).
 
@@ -374,6 +374,7 @@ opencode serve --hostname 0.0.0.0 --port 4096
 opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 opencode session [command]
 opencode session list
+opencode session delete <sessionID>
 opencode stats
 opencode uninstall
 opencode upgrade
@@ -613,6 +614,7 @@ OPENCODE_EXPERIMENTAL_MARKDOWN
 OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX
 OPENCODE_EXPERIMENTAL_OXFMT
 OPENCODE_EXPERIMENTAL_PLAN_MODE
+OPENCODE_ENABLE_QUESTION_TOOL
 OPENCODE_FAKE_VCS
 OPENCODE_GIT_BASH_PATH
 OPENCODE_MODEL

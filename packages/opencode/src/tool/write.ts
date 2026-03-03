@@ -10,9 +10,9 @@ import { FileWatcher } from "../file/watcher"
 import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
+import { getCwd } from "@shell-mode"
 import { trimDiff } from "./edit"
 import { assertExternalDirectory } from "./external-directory"
-import { getCwd } from "@shell-mode"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
@@ -27,9 +27,8 @@ export const WriteTool = Tool.define("write", {
     const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(getCwd(), params.filePath)
     await assertExternalDirectory(ctx, filepath)
 
-    const file = Bun.file(filepath)
-    const exists = await file.exists()
-    const contentOld = exists ? await file.text() : ""
+    const exists = await Filesystem.exists(filepath)
+    const contentOld = exists ? await Filesystem.readText(filepath) : ""
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
 
     const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, params.content))
@@ -43,7 +42,7 @@ export const WriteTool = Tool.define("write", {
       },
     })
 
-    await Bun.write(filepath, params.content)
+    await Filesystem.write(filepath, params.content)
     await Bus.publish(File.Event.Edited, {
       file: filepath,
     })

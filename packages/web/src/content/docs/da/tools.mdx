@@ -1,6 +1,6 @@
 ---
-title: Verktøy
-description: Administrer verktøyene en LLM kan bruge.
+title: Værktøjer
+description: Administrer de værktøjer, en LLM kan bruge.
 ---
 
 Verktøy lar LLM utføre handlinger i kodebasen din. OpenCode kommer med et sett med innebygde verktøy, men du kan utvide det med [egendefinerte verktøy](/docs/custom-tools) eller [MCP servere](/docs/mcp-servers).
@@ -9,7 +9,7 @@ Som standard er alle verktøy **aktivert** og trenger ikke tillatelse for at kj�
 
 ---
 
-## Konfigurer
+## Konfiguration
 
 Brug feltet `permission` for at kontrollere verktøyets oppførsel. Du kan tillate, avslå eller kreve godkjenning for hvert verktøy.
 
@@ -39,7 +39,7 @@ Du kan også bruge jokertegn for at kontrollere flere verktøy samtidig. For eks
 
 ---
 
-## Innebygd
+## Indbyggede
 
 Her er alle de innebygde verktøyene som er tilgængelige i OpenCode.
 
@@ -344,7 +344,7 @@ Hvert spørsmål inkluderer en overskrift, spørsmålsteksten og en liste over a
 
 ---
 
-## Egendefinerte verktøy
+## Brugerdefinerede værktøjer
 
 Egendefinerte verktøy lar deg definere dine egne funksjoner som LLM kan kalle. Disse er definert i konfigurasjonsfilen din og kan kjøre vilkårlig kode.
 
@@ -352,7 +352,7 @@ Egendefinerte verktøy lar deg definere dine egne funksjoner som LLM kan kalle. 
 
 ---
 
-## MCP servere
+## MCP-servere
 
 MCP (Model Context Protocol) servere lar deg integrere eksterne verktøy og tjenester. Dette inkluderer databasetilgang, API-integrasjoner og tredjepartstjenester.
 
@@ -360,13 +360,13 @@ MCP (Model Context Protocol) servere lar deg integrere eksterne verktøy og tjen
 
 ---
 
-## Internaler
+## Interne
 
 Internt bruger verktøy som `grep`, `glob` og `list` [ripgrep](https://github.com/BurntSushi/ripgrep) under panseret. Som standard respekterer ripgrep `.gitignore`-mønstre, noe som betyr at filer og kataloger som er oppført i `.gitignore` vil bli ekskludert fra søk og lister.
 
 ---
 
-### Ignore patterns
+### Ignoreringsmønstre
 
 For at inkludere filer som normalt vil bli ignorert, lag en `.ignore`-fil i prosjektroten. Denne filen kan eksplisitt tillate visse stier.
 

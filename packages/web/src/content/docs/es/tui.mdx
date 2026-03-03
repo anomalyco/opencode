@@ -69,7 +69,7 @@ Aquí están todos los comandos de barra diagonal disponibles:
 
 ---
 
-### conectar
+### connect
 
 Agregue un proveedor a OpenCode. Le permite seleccionar entre proveedores disponibles y agregar sus claves API.
 
@@ -79,7 +79,7 @@ Agregue un proveedor a OpenCode. Le permite seleccionar entre proveedores dispon
 
 ---
 
-### compacto
+### compact
 
 Compacta la sesión actual. _Alias_: `/summarize`
 
@@ -91,7 +91,7 @@ Compacta la sesión actual. _Alias_: `/summarize`
 
 ---
 
-### detalles
+### details
 
 Alternar detalles de ejecución de la herramienta.
 
@@ -115,7 +115,7 @@ Abra un editor externo para redactar mensajes. Utiliza el editor configurado en 
 
 ---
 
-### salida
+### exit
 
 Salga de OpenCode. _Alias_: `/quit`, `/q`
 
@@ -127,7 +127,7 @@ Salga de OpenCode. _Alias_: `/quit`, `/q`
 
 ---
 
-### exportar
+### export
 
 Exporte la conversación actual a Markdown y ábrala en su editor predeterminado. Utiliza el editor configurado en su variable de entorno `EDITOR`. [Más información](#editor-setup).
 
@@ -139,7 +139,7 @@ Exporte la conversación actual a Markdown y ábrala en su editor predeterminado
 
 ---
 
-### ayuda
+### help
 
 Muestra el cuadro de diálogo de ayuda.
 
@@ -151,7 +151,7 @@ Muestra el cuadro de diálogo de ayuda.
 
 ---
 
-### inicio
+### init
 
 Cree o actualice el archivo `AGENTS.md`. [Más información](/docs/rules).
 
@@ -163,7 +163,7 @@ Cree o actualice el archivo `AGENTS.md`. [Más información](/docs/rules).
 
 ---
 
-### modelos
+### models
 
 Listar modelos disponibles.
 
@@ -175,7 +175,7 @@ Listar modelos disponibles.
 
 ---
 
-### nuevo
+### new
 
 Iniciar una nueva sesión. _Alias_: `/clear`
 
@@ -187,7 +187,7 @@ Iniciar una nueva sesión. _Alias_: `/clear`
 
 ---
 
-### rehacer
+### redo
 
 Rehacer un mensaje previamente deshecho. Solo disponible después de usar `/undo`.
 
@@ -206,7 +206,7 @@ ser un repositorio Git**.
 
 ---
 
-### sesiones
+### sessions
 
 Enumere y cambie entre sesiones. _Alias_: `/resume`, `/continue`
 
@@ -218,7 +218,7 @@ Enumere y cambie entre sesiones. _Alias_: `/resume`, `/continue`
 
 ---
 
-### compartir
+### share
 
 Compartir la sesión actual. [Más información](/docs/share).
 
@@ -230,7 +230,7 @@ Compartir la sesión actual. [Más información](/docs/share).
 
 ---
 
-### temas
+### theme
 
 Listar temas disponibles.
 
@@ -242,7 +242,7 @@ Listar temas disponibles.
 
 ---
 
-### pensamiento
+### thinking
 
 Alterna la visibilidad de los bloques de pensamiento/razonamiento en la conversación. Cuando está habilitado, puede ver el proceso de razonamiento del modelo para los modelos que admiten el pensamiento extendido.
 
@@ -256,7 +256,7 @@ Este comando solo controla si se **muestran** los bloques de pensamiento; no hab
 
 ---
 
-### deshacer
+### undo
 
 Deshacer el último mensaje de la conversación. Elimina el mensaje de usuario más reciente, todas las respuestas posteriores y cualquier cambio de archivo.
 
@@ -275,7 +275,7 @@ ser un repositorio Git**.
 
 ---
 
-### dejar de compartir
+### unshare
 
 Dejar de compartir la sesión actual. [Más información](/docs/share#un-sharing).
 
@@ -355,24 +355,34 @@ Algunos editores necesitan argumentos de línea de comandos para ejecutarse en m
 
 ## Configurar
 
-Puede personalizar el comportamiento de TUI a través de su archivo de configuración OpenCode.
+Puede personalizar el comportamiento de TUI a través de `tui.json` (o `tui.jsonc`).
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "tui": {
-    "scroll_speed": 3,
-    "scroll_acceleration": {
-      "enabled": true
-    }
-  }
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "opencode",
+  "keybinds": {
+    "leader": "ctrl+x"
+  },
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": true
+  },
+  "diff_style": "auto"
 }
 ```
 
+Esto es independiente de `opencode.json`, que configura el comportamiento del servidor/tiempo de ejecución.
+
 ### Opciones
 
-- `scroll_acceleration`: habilite la aceleración de desplazamiento estilo macOS para un desplazamiento suave y natural. Cuando está habilitado, la velocidad de desplazamiento aumenta con gestos de desplazamiento rápido y se mantiene precisa para movimientos más lentos. **Esta configuración tiene prioridad sobre `scroll_speed` y la anula cuando está habilitada.**
-- `scroll_speed`: controla la rapidez con la que se desplaza el TUI cuando se utilizan comandos de desplazamiento (mínimo: `1`). El valor predeterminado es `3`. **Nota: Esto se ignora si `scroll_acceleration.enabled` está configurado en `true`.**
+- `theme`: establece su tema de interfaz de usuario. [Más información](/docs/themes).
+- `keybinds`: personaliza los atajos de teclado. [Más información](/docs/keybinds).
+- `scroll_acceleration.enabled`: habilite la aceleración de desplazamiento estilo macOS para un desplazamiento suave y natural. Cuando está habilitado, la velocidad de desplazamiento aumenta con gestos de desplazamiento rápido y se mantiene precisa para movimientos más lentos. **Esta configuración tiene prioridad sobre `scroll_speed` y la anula cuando está habilitada.**
+- `scroll_speed`: controla la rapidez con la que se desplaza el TUI cuando se utilizan comandos de desplazamiento (mínimo: `0.001`, admite valores decimales). El valor predeterminado es `3`. **Nota: Esto se ignora si `scroll_acceleration.enabled` está configurado en `true`.**
+- `diff_style`: controla la representación de diferencias. `"auto"` se adapta al ancho del terminal, `"stacked"` siempre muestra un diseño de una sola columna.
+
+Utilice `OPENCODE_TUI_CONFIG` para cargar una ruta de configuración de TUI personalizada.
 
 ---
 

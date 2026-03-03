@@ -3,11 +3,11 @@ title: Keybinds
 description: Customize your keybinds.
 ---
 
-OpenCode has a list of keybinds that you can customize through the OpenCode config.
+OpenCode has a list of keybinds that you can customize through `tui.json`.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -54,8 +54,8 @@ OpenCode has a list of keybinds that you can customize through the OpenCode conf
     "variant_cycle": "ctrl+t",
     "command_list": "ctrl+p",
     "agent_list": "<leader>a",
-    "agent_cycle": "shift+tab",
-    "agent_cycle_reverse": "none",
+    "agent_cycle": "tab",
+    "agent_cycle_reverse": "shift+tab",
     "input_clear": "ctrl+c",
     "input_paste": "ctrl+v",
     "input_submit": "return",
@@ -117,11 +117,11 @@ You don't need to use a leader key for your keybinds but we recommend doing so.
 
 ## Disable keybind
 
-You can disable a keybind by adding the key to your config with a value of "none".
+You can disable a keybind by adding the key to `tui.json` with a value of "none".
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "session_compact": "none"
   }

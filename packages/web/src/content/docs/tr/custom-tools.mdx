@@ -7,7 +7,7 @@ description: LLM'un opencode'da çağırabileceği araçları birleştirebilir.
 
 ---
 
-## Creating a tool
+## Araç oluşturma
 
 Araçlar **TypeScript** veya **JavaScript** dosyaları olarak tanımlanır. Ancak araç tanımı **herhangi bir dilde** yazılmış komut dosyalarını çağırabilir; TypeScript veya JavaScript yalnızca araç tanımının kendisi için kullanılır.
 
@@ -22,7 +22,7 @@ Bunlar tanımlanabilir:
 
 ---
 
-### Structure
+### Yapı
 
 Araç oluşturmanın en kolay yolu, tür güvenliği ve doğrulama sağlayan `tool()` yardımcısını kullanmaktır.
 
@@ -79,7 +79,33 @@ Bu iki araç oluşturur: `math_add` ve `math_multiply`.
 
 ---
 
-### Arguments
+#### Yerleşik araçlarla ad çakışmaları
+
+Özel araçlar, araç adına göre anahtarlanır. Özel bir araç yerleşik bir araçla aynı adı kullanıyorsa, özel araç önceliklidir.
+
+Örneğin, bu dosya yerleşik `bash` aracının yerini alır:
+
+```ts title=".opencode/tools/bash.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Restricted bash wrapper",
+  args: {
+    command: tool.schema.string(),
+  },
+  async execute(args) {
+    return `blocked: ${args.command}`
+  },
+})
+```
+
+:::note
+Kasıtlı olarak yerleşik bir aracı değiştirmek istemiyorsanız benzersiz adları tercih edin. Yerleşik bir aracı devre dışı bırakmak ancak geçersiz kılmak istemiyorsanız [izinleri](/docs/permissions) kullanın.
+:::
+
+---
+
+### Argümanlar
 
 Bağımsız değişken türlerini tanımlamak için yalnızca [Zod](https://zod.dev) olan `tool.schema` öğesini kullanabilirsiniz.
 
@@ -131,9 +157,9 @@ Git çalışma ağacı kökü için `context.worktree` kullanın.
 
 ---
 
-## Examples
+## Örnekler
 
-### Write a tool in Python
+### Python ile araç yazma
 
 Araçlarınızı dilediğiniz dilde yazabilirsiniz. İşte Python kullanarak iki sayıyı toplayan bir örnek.
 

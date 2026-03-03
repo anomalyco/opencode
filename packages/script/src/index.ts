@@ -26,48 +26,34 @@ const CHANNEL = await (async () => {
   if (env.OPENCODE_CHANNEL) return env.OPENCODE_CHANNEL
   if (env.OPENCODE_BUMP) return "latest"
   if (env.OPENCODE_VERSION && !env.OPENCODE_VERSION.startsWith("0.0.0-")) return "latest"
-  const branch = await $`git branch --show-current`.text().then((x) => x.trim())
-  if (branch === "lash") return "latest"
-  return branch
+  return await $`git branch --show-current`.text().then((x) => x.trim())
 })()
 const IS_PREVIEW = CHANNEL !== "latest"
 
 const VERSION = await (async () => {
   if (env.OPENCODE_VERSION) return env.OPENCODE_VERSION
   if (IS_PREVIEW) return `0.0.0-${CHANNEL}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
-  const version = await fetch("https://registry.npmjs.org/lashcode/latest")
+  const version = await fetch("https://registry.npmjs.org/opencode-ai/latest")
     .then((res) => {
-      if (res.status === 404) return { version: "0.0.0" }
       if (!res.ok) throw new Error(res.statusText)
       return res.json()
     })
     .then((data: any) => data.version)
-  let [major, minor, patch] = version.split(".").map((x: string) => Number(x) || 0)
+  const [major, minor, patch] = version.split(".").map((x: string) => Number(x) || 0)
   const t = env.OPENCODE_BUMP?.toLowerCase()
   if (t === "major") return `${major + 1}.0.0`
   if (t === "minor") return `${major}.${minor + 1}.0`
-  patch++
-
-  // Advance past any existing git tags to avoid conflicts
-  const existingTags = new Set(await $`git tag -l`.text().then((t) => t.trim().split("\n")))
-  while (existingTags.has(`v${major}.${minor}.${patch}`)) {
-    patch++
-  }
-  return `${major}.${minor}.${patch}`
+  return `${major}.${minor}.${patch + 1}`
 })()
 
+const bot = ["actions-user", "opencode", "opencode-agent[bot]"]
+const teamPath = path.resolve(import.meta.dir, "../../../.github/TEAM_MEMBERS")
 const team = [
-  "actions-user",
-  "opencode",
-  "rekram1-node",
-  "thdxr",
-  "kommander",
-  "jayair",
-  "fwang",
-  "adamdotdevin",
-  "iamdavidhill",
-  "opencode-agent[bot]",
-  "R44VC0RP",
+  ...(await Bun.file(teamPath)
+    .text()
+    .then((x) => x.split(/\r?\n/).map((x) => x.trim()))
+    .then((x) => x.filter((x) => x && !x.startsWith("#")))),
+  ...bot,
 ]
 
 export const Script = {
