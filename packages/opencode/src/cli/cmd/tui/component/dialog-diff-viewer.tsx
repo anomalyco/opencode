@@ -56,6 +56,10 @@ export function DialogDiffViewer() {
 
   const cwd = createMemo(() => sync.data.path.directory)
   const current = createMemo(() => files()[selected()])
+  const view = createMemo(() => {
+    if (mode() !== "side-by-side") return "unified"
+    return current()?.status === "modified" ? "split" : "unified"
+  })
   const summary = createMemo(() => {
     return files().reduce(
       (acc, item) => {
@@ -300,7 +304,7 @@ export function DialogDiffViewer() {
               >
                 <diff
                   diff={output()}
-                  view={mode() === "side-by-side" ? "split" : "unified"}
+                  view={view()}
                   syntaxStyle={syntax()}
                   showLineNumbers={true}
                   width="100%"
