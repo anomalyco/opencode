@@ -7,7 +7,7 @@
     </picture>
   </a>
 </p>
-<p align="center">Açık kaynaklı yapay zeka kodlama asistanı.</p>
+<p align="center">Açık kaynaklı bir yapay zeka kodlama asistanı.</p>
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
@@ -60,7 +60,7 @@ nix run nixpkgs#opencode           # veya en güncel geliştirme dalı için git
 ```
 
 > [!TIP]
-> Kurulumdan önce 0.1.x'ten eski sürümleri kaldırın.
+> Kurulumdan önce 0.1.x sürümünden eski sürümleri kaldırın.
 
 ### Masaüstü Uygulaması (BETA)
 
@@ -103,10 +103,10 @@ OpenCode, `Tab` tuşuyla aralarında geçiş yapabileceğiniz iki yerleşik (bui
 - **plan** - Analiz ve kod keşfi için salt okunur ajan
   - Varsayılan olarak dosya düzenlemelerini reddeder
   - Bash komutlarını çalıştırmadan önce izin ister
-  - Tanımadığınız kod tabanlarını keşfetmek veya değişiklikleri planlamak için ideal
+  - Tanımadığınız kod tabanlarını keşfetmek veya değişiklikleri planlamak için idealdir
 
 Ayrıca, karmaşık aramalar ve çok adımlı görevler için bir **genel** alt ajan bulunmaktadır.
-Bu dahili olarak kullanılır ve mesajlarda `@general` ile çağrılabilir.
+Bu ajan dahili olarak kullanılır ve mesajlarda `@general` ile çağrılabilir.
 
 [Ajanlar](https://opencode.ai/docs/agents) hakkında daha fazla bilgi edinin.
 
@@ -120,16 +120,16 @@ OpenCode'a katkıda bulunmak istiyorsanız, lütfen bir pull request göndermede
 
 ### OpenCode Üzerine Geliştirme
 
-OpenCode ile ilgili bir proje üzerinde çalışıyorsanız ve projenizin adının bir parçası olarak "opencode" kullanıyorsanız (örneğin, "opencode-dashboard" veya "opencode-mobile"), lütfen README dosyanıza projenin OpenCode ekibi tarafından geliştirilmediğini ve bizimle hiçbir şekilde bağlantılı olmadığını belirten bir not ekleyin.
+OpenCode ile ilgili bir proje üzerinde çalışıyorsanız ve projenizin adının bir parçası olarak "opencode" ifadesini kullanıyorsanız (örneğin, "opencode-dashboard" veya "opencode-mobile"), lütfen README dosyanıza projenin OpenCode ekibi tarafından geliştirilmediğini ve bizimle hiçbir şekilde bağlantılı olmadığını belirten bir not ekleyin.
 
 ### SSS
 
-#### Bu Claude Code'dan nasıl farklı?
+#### Bu, Claude Code'dan nasıl farklı?
 
-Yetenekler açısından Claude Code'a çok benzer. İşte temel farklar:
+Yetenekler açısından Claude Code'a oldukça benzer. İşte temel farklar:
 
 - %100 açık kaynak
-- Herhangi bir sağlayıcıya bağlı değil. [OpenCode Zen](https://opencode.ai/zen) üzerinden sunduğumuz modelleri önermekle birlikte; OpenCode, Claude, OpenAI, Google veya hatta yerel modellerle kullanılabilir. Modeller geliştikçe aralarındaki farklar kapanacak ve fiyatlar düşecek, bu nedenle sağlayıcıdan bağımsız olmak önemlidir.
+- Herhangi bir sağlayıcıya bağlı değil. [OpenCode Zen](https://opencode.ai/zen) üzerinden sunduğumuz modelleri önermekle birlikte; OpenCode, Claude, OpenAI, Google veya hatta yerel modellerle kullanılabilir. Modeller geliştikçe aralarındaki farklar azalacak ve fiyatlar düşecektir. Bu nedenle sağlayıcıdan bağımsız olmak önemlidir.
 - Kurulum gerektirmeyen hazır LSP desteği
 - TUI odaklı yaklaşım. OpenCode, neovim kullanıcıları ve [terminal.shop](https://terminal.shop)'un geliştiricileri tarafından geliştirilmektedir; terminalde olabileceklerin sınırlarını zorlayacağız.
 - İstemci/sunucu (client/server) mimarisi. Bu, örneğin OpenCode'un bilgisayarınızda çalışması ve siz onu bir mobil uygulamadan uzaktan yönetmenizi sağlar. TUI arayüzü olası istemcilerden sadece biridir.
