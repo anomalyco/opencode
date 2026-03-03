@@ -48,14 +48,14 @@ export function createAutoScroll(options: AutoScrollOptions) {
     autoTimer = setTimeout(() => {
       auto = undefined
       autoTimer = undefined
-    }, 250)
+    }, 1500)
   }
 
   const isAuto = (el: HTMLElement) => {
     const a = auto
     if (!a) return false
 
-    if (Date.now() - a.time > 250) {
+    if (Date.now() - a.time > 1500) {
       auto = undefined
       return false
     }
