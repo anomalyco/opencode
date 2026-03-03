@@ -723,10 +723,12 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean; animate?: 
                           <span data-slot="basic-tool-tool-title">
                             <TextShimmer text={trigger.title} active={running()} />
                           </span>
-                          <Show when={!running() && trigger.subtitle}>{(text) => <ToolText text={text()} />}</Show>
-                          <Show when={!running() && trigger.args?.length}>
+                          <Show when={trigger.subtitle}>
+                            {(text) => <ToolText text={text()} pending={running()} />}
+                          </Show>
+                          <Show when={trigger.args?.length}>
                             <For each={trigger.args}>
-                              {(arg, idx) => <ToolArg text={arg} delay={0.02 * (idx() + 1)} />}
+                              {(arg, idx) => <ToolArg text={arg} delay={0.02 * (idx() + 1)} pending={running()} />}
                             </For>
                           </Show>
                         </div>
@@ -1180,18 +1182,6 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 
   const displayText = () => (part.text ?? "").trim()
   const throttledText = createThrottledValue(displayText)
-  const isLastTextPart = createMemo(() => {
-    const last = (data.store.part?.[props.message.id] ?? [])
-      .filter((item): item is TextPart => item?.type === "text" && !!item.text?.trim())
-      .at(-1)
-    return last?.id === part.id
-  })
-  const showCopy = createMemo(() => {
-    if (props.message.role !== "assistant") return isLastTextPart()
-    if (props.showAssistantCopyPartID === null) return false
-    if (typeof props.showAssistantCopyPartID === "string") return props.showAssistantCopyPartID === part.id
-    return isLastTextPart()
-  })
   const [copied, setCopied] = createSignal(false)
 
   const handleCopy = async () => {
@@ -1389,16 +1379,38 @@ ToolRegistry.register({
 const TOOL_WIPE_MASK =
   "linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 45%, rgba(0,0,0,0) 60%, rgba(0,0,0,0) 100%)"
 
-function useToolFade(ref: () => HTMLElement | undefined, options?: { delay?: number; wipe?: boolean }) {
+function useToolFade(
+  ref: () => HTMLElement | undefined,
+  options?: { delay?: number; wipe?: boolean; hidden?: () => boolean },
+) {
   let anim: AnimationPlaybackControls | undefined
   let frame: number | undefined
   const delay = options?.delay ?? 0
   const wipe = options?.wipe ?? false
+  const hidden = () => options?.hidden?.() ?? false
 
-  onMount(() => {
+  const clearMask = (el: HTMLElement) => {
+    el.style.maskImage = ""
+    el.style.webkitMaskImage = ""
+    el.style.maskSize = ""
+    el.style.webkitMaskSize = ""
+    el.style.maskRepeat = ""
+    el.style.webkitMaskRepeat = ""
+    el.style.maskPosition = ""
+    el.style.webkitMaskPosition = ""
+  }
+
+  const play = () => {
     const el = ref()
     if (!el || typeof window === "undefined") return
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+    if (hidden()) return
+
+    anim?.stop()
+    if (frame !== undefined) {
+      cancelAnimationFrame(frame)
+      frame = undefined
+    }
 
     const mask =
       wipe &&
@@ -1424,7 +1436,7 @@ function useToolFade(ref: () => HTMLElement | undefined, options?: { delay?: num
     frame = requestAnimationFrame(() => {
       frame = undefined
       const node = ref()
-      if (!node) return
+      if (!node || hidden()) return
 
       anim = wipe
         ? mask
@@ -1442,18 +1454,35 @@ function useToolFade(ref: () => HTMLElement | undefined, options?: { delay?: num
         value.style.opacity = ""
         value.style.filter = ""
         value.style.transform = ""
-        if (!mask) return
-        value.style.maskImage = ""
-        value.style.webkitMaskImage = ""
-        value.style.maskSize = ""
-        value.style.webkitMaskSize = ""
-        value.style.maskRepeat = ""
-        value.style.webkitMaskRepeat = ""
-        value.style.maskPosition = ""
-        value.style.webkitMaskPosition = ""
+        if (mask) clearMask(value)
       })
     })
-  })
+  }
+
+  onMount(play)
+
+  createEffect(
+    on(
+      hidden,
+      (next, prev) => {
+        if (prev === undefined) return
+        if (next) {
+          anim?.stop()
+          if (frame !== undefined) {
+            cancelAnimationFrame(frame)
+            frame = undefined
+          }
+          const el = ref()
+          if (!el) return
+          el.style.maskImage = ""
+          el.style.webkitMaskImage = ""
+          return
+        }
+        play()
+      },
+      { defer: true },
+    ),
+  )
 
   onCleanup(() => {
     if (frame !== undefined) cancelAnimationFrame(frame)
@@ -1461,12 +1490,12 @@ function useToolFade(ref: () => HTMLElement | undefined, options?: { delay?: num
   })
 }
 
-function WebfetchMeta(props: { url: string }) {
+function WebfetchMeta(props: { url: string; pending?: boolean }) {
   let ref: HTMLSpanElement | undefined
-  useToolFade(() => ref, { wipe: true })
+  useToolFade(() => ref, { wipe: true, hidden: () => !!props.pending })
 
   return (
-    <span ref={ref} data-slot="webfetch-meta">
+    <span ref={ref} data-slot="webfetch-meta" data-pending={props.pending ? "" : undefined}>
       <a
         data-slot="basic-tool-tool-subtitle"
         class="clickable subagent-link"
@@ -1501,23 +1530,23 @@ function TaskLink(props: { href: string; text: string; onClick: (e: MouseEvent) 
   )
 }
 
-function ToolText(props: { text: string; delay?: number }) {
+function ToolText(props: { text: string; delay?: number; pending?: boolean }) {
   let ref: HTMLSpanElement | undefined
-  useToolFade(() => ref, { delay: props.delay, wipe: true })
+  useToolFade(() => ref, { delay: props.delay, wipe: true, hidden: () => !!props.pending })
 
   return (
-    <span ref={ref} data-slot="basic-tool-tool-subtitle">
+    <span ref={ref} data-slot="basic-tool-tool-subtitle" data-pending={props.pending ? "" : undefined}>
       {props.text}
     </span>
   )
 }
 
-function ToolArg(props: { text: string; delay?: number }) {
+function ToolArg(props: { text: string; delay?: number; pending?: boolean }) {
   let ref: HTMLSpanElement | undefined
-  useToolFade(() => ref, { delay: props.delay, wipe: true })
+  useToolFade(() => ref, { delay: props.delay, wipe: true, hidden: () => !!props.pending })
 
   return (
-    <span ref={ref} data-slot="basic-tool-tool-arg">
+    <span ref={ref} data-slot="basic-tool-tool-arg" data-pending={props.pending ? "" : undefined}>
       {props.text}
     </span>
   )

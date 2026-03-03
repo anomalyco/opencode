@@ -34,6 +34,7 @@ export function GrowBox(props: GrowBoxProps) {
   let mountFrame: number | undefined
   let resizeFrame: number | undefined
   let observer: ResizeObserver | undefined
+  let springTarget = -1
   const height = springValue<number>(0, HEIGHT_SPRING)
 
   const gap = () => Math.max(0, props.gap ?? 0)
@@ -47,7 +48,7 @@ export function GrowBox(props: GrowBoxProps) {
       const n = Number.parseFloat(v)
       if (!Number.isNaN(n)) return n
     }
-    return Math.max(0, Math.ceil(root.getBoundingClientRect().height))
+    return Math.max(0, root.getBoundingClientRect().height)
   }
 
   const targetHeight = () => Math.max(0, Math.ceil(body?.getBoundingClientRect().height ?? 0))
@@ -55,8 +56,10 @@ export function GrowBox(props: GrowBoxProps) {
   const setHeight = () => {
     if (!root) return
     const next = targetHeight()
+    if (next === springTarget) return
     const prev = currentHeight()
     if (Math.abs(next - prev) < 1) {
+      springTarget = next
       if (props.autoHeight === false || watch()) {
         root.style.height = `${next}px`
         root.style.overflow = next > 0 ? "visible" : "hidden"
@@ -64,6 +67,7 @@ export function GrowBox(props: GrowBoxProps) {
       return
     }
     root.style.overflow = "hidden"
+    springTarget = next
     height.set(next)
   }
 
@@ -72,15 +76,20 @@ export function GrowBox(props: GrowBoxProps) {
 
     const offChange = height.on("change", (next) => {
       if (!root) return
-      root.style.height = `${Math.max(0, Math.ceil(next))}px`
+      root.style.height = `${Math.max(0, next)}px`
     })
     const offStart = height.on("animationStart", () => {
       if (!root) return
       root.style.overflow = "hidden"
+      root.style.willChange = "height"
+      root.style.contain = "layout style"
     })
     const offComplete = height.on("animationComplete", () => {
       if (!root) return
+      root.style.willChange = ""
+      root.style.contain = ""
       const next = targetHeight()
+      springTarget = next
       if (props.autoHeight === false || watch()) {
         root.style.height = `${next}px`
         root.style.overflow = next > 0 ? "visible" : "hidden"
