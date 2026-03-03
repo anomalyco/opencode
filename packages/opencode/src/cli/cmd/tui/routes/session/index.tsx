@@ -1412,6 +1412,13 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
     // OpenRouter sends encrypted reasoning data that appears as [REDACTED]
     return props.part.text.replace("[REDACTED]", "").trim()
   })
+  const streaming = createMemo(() => {
+    if (!props.last) return false
+    if (props.part.time.end) return false
+    if (props.message.time.completed) return false
+    if (props.message.error) return false
+    return true
+  })
   return (
     <Show when={content() && ctx.showThinking()}>
       <box
@@ -1426,7 +1433,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
         <code
           filetype="markdown"
           drawUnstyledText={false}
-          streaming={true}
+          streaming={streaming()}
           syntaxStyle={subtleSyntax()}
           content={"_Thinking:_ " + content()}
           conceal={ctx.conceal()}
@@ -1440,6 +1447,13 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
   const { theme, syntax } = useTheme()
+  const streaming = createMemo(() => {
+    if (!props.last) return false
+    if (props.part.time?.end) return false
+    if (props.message.time.completed) return false
+    if (props.message.error) return false
+    return true
+  })
   return (
     <Show when={props.part.text.trim()}>
       <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
@@ -1447,16 +1461,20 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
           <Match when={Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
             <markdown
               syntaxStyle={syntax()}
-              streaming={true}
+              streaming={streaming()}
               content={props.part.text.trim()}
               conceal={ctx.conceal()}
+              tableOptions={{
+                widthMode: "full",
+                columnFitter: "balanced",
+              }}
             />
           </Match>
           <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
             <code
               filetype="markdown"
               drawUnstyledText={false}
-              streaming={true}
+              streaming={streaming()}
               syntaxStyle={syntax()}
               content={props.part.text.trim()}
               conceal={ctx.conceal()}
