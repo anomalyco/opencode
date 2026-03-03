@@ -122,10 +122,37 @@ export function Session() {
   const { theme } = useTheme()
   const promptRef = usePromptRef()
   const session = createMemo(() => sync.session.get(route.sessionID))
+  const root = createMemo(() => {
+    let current = session()
+    while (current?.parentID) {
+      const parent = sync.session.get(current.parentID)
+      if (!parent) break
+      current = parent
+    }
+    return current
+  })
   const children = createMemo(() => {
-    const parentID = session()?.parentID ?? session()?.id
+    const r = root()
+    if (!r) return []
+    // Build parent->children index then collect all descendants
+    const byParent = new Map<string, string[]>()
+    for (const x of sync.data.session) {
+      if (!x.parentID) continue
+      const siblings = byParent.get(x.parentID)
+      if (siblings) siblings.push(x.id)
+      else byParent.set(x.parentID, [x.id])
+    }
+    const ids = new Set([r.id])
+    const queue = [r.id]
+    while (queue.length) {
+      for (const child of byParent.get(queue.pop()!) ?? []) {
+        if (ids.has(child)) continue
+        ids.add(child)
+        queue.push(child)
+      }
+    }
     return sync.data.session
-      .filter((x) => x.parentID === parentID || x.id === parentID)
+      .filter((x) => ids.has(x.id))
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
