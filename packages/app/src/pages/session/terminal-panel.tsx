@@ -56,9 +56,9 @@ export function TerminalPanel() {
     on(
       () => terminal.all().length,
       (count, prevCount) => {
-        if (prevCount !== undefined && prevCount > 0 && count === 0) {
-          if (opened()) view().terminal.toggle()
-        }
+        if (prevCount === undefined || prevCount <= 0 || count !== 0) return
+        if (!opened()) return
+        close()
       },
     ),
   )
