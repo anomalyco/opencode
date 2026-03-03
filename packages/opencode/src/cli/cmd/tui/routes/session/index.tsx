@@ -1628,6 +1628,7 @@ function InlineTool(props: {
   onClick?: () => void
 }) {
   const [margin, setMargin] = createSignal(0)
+  const [hover, setHover] = createSignal(false)
   const { theme } = useTheme()
   const renderer = useRenderer()
   const ctx = use()
@@ -1658,10 +1659,6 @@ function InlineTool(props: {
     <box
       marginTop={margin()}
       paddingLeft={3}
-      onMouseUp={() => {
-        if (renderer.getSelection()?.getSelectedText()) return
-        props.onClick?.()
-      }}
       renderBefore={function () {
         const el = this as BoxRenderable
         const parent = el.parent
@@ -1690,7 +1687,17 @@ function InlineTool(props: {
           <Spinner color={fg()} children={props.children} />
         </Match>
         <Match when={true}>
-          <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
+          <text
+            paddingLeft={3}
+            fg={hover() ? theme.text : fg()}
+            attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}
+            onMouseOver={() => props.onClick && setHover(true)}
+            onMouseOut={() => setHover(false)}
+            onMouseUp={() => {
+              if (renderer.getSelection()?.getSelectedText()) return
+              props.onClick?.()
+            }}
+          >
             <Show fallback={<>~ {props.pending}</>} when={props.complete}>
               <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
             </Show>

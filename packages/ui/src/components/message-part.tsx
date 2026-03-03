@@ -1546,15 +1546,7 @@ ToolRegistry.register({
       </div>
     )
 
-    return (
-      <BasicTool
-        icon="task"
-        status={props.status}
-        trigger={trigger()}
-        hideDetails
-        onClick={href() ? handleLinkClick : undefined}
-      />
-    )
+    return <BasicTool icon="task" status={props.status} trigger={trigger()} hideDetails />
   },
 })
 
