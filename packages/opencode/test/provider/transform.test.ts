@@ -1022,6 +1022,116 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
   })
 })
 
+describe("ProviderTransform.message - bedrock empty content filtering", () => {
+  const bedrockModel = {
+    id: "amazon-bedrock/anthropic.claude-sonnet-4-6",
+    providerID: "amazon-bedrock",
+    api: {
+      id: "anthropic.claude-sonnet-4-6",
+      url: "https://bedrock.aws",
+      npm: "@ai-sdk/amazon-bedrock",
+    },
+    name: "Claude Sonnet 4.6",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: true },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: {
+      input: 0.003,
+      output: 0.015,
+      cache: { read: 0.0003, write: 0.00375 },
+    },
+    limit: {
+      context: 200000,
+      output: 8192,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("filters out messages with empty string content", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: "" },
+      { role: "user", content: "World" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, bedrockModel, {})
+
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toBe("Hello")
+    expect(result[1].content).toBe("World")
+  })
+
+  test("filters out empty text parts from array content", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "" },
+          { type: "text", text: "Hello" },
+          { type: "text", text: "" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, bedrockModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(1)
+    expect(result[0].content[0]).toEqual({ type: "text", text: "Hello" })
+  })
+
+  test("removes entire message when all parts are empty", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "" },
+          { type: "reasoning", text: "" },
+        ],
+      },
+      { role: "user", content: "World" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, bedrockModel, {})
+
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toBe("Hello")
+    expect(result[1].content).toBe("World")
+  })
+
+  test("keeps non-text/reasoning parts even if text parts are empty", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "" },
+          { type: "tool-call", toolCallId: "123", toolName: "bash", input: { command: "ls" } },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, bedrockModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(1)
+    expect(result[0].content[0]).toEqual({
+      type: "tool-call",
+      toolCallId: "123",
+      toolName: "bash",
+      input: { command: "ls" },
+    })
+  })
+})
+
 describe("ProviderTransform.message - strip openai metadata when store=false", () => {
   const openaiModel = {
     id: "openai/gpt-5",
