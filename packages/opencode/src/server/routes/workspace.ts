@@ -1,7 +1,6 @@
 import { Hono } from "hono"
 import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
-import { WorktreeArgs } from "../../control-plane/adaptors/worktree"
 import { Workspace } from "../../control-plane/workspace"
 import { Instance } from "../../project/instance"
 import { errors } from "../error"
@@ -29,19 +28,15 @@ export const WorkspaceRoutes = lazy(() =>
       }),
       validator(
         "json",
-        z
-          .object({
-            branch: Workspace.Info.shape.branch.optional(),
-          })
-          .and(z.discriminatedUnion("type", [WorktreeArgs])),
+        Workspace.create.schema.omit({
+          projectID: true,
+        }),
       ),
       async (c) => {
         const body = c.req.valid("json")
-        const { branch, ...args } = body
         const workspace = await Workspace.create({
           projectID: Instance.project.id,
-          branch: body.branch || null,
-          args: args,
+          ...body,
         })
         return c.json(workspace)
       },

@@ -1,42 +1,39 @@
 import z from "zod"
 import { Worktree } from "@/worktree"
-import type { Adaptor } from "./types"
+import { type Adaptor, WorkspaceInfo } from "../types"
 
-export const WorktreeConfig = z.object({
-  type: z.literal("worktree"),
-  directory: z.string(),
-  name: z.string(),
-  branch: z.string(),
+const Config = WorkspaceInfo.extend({
+  name: WorkspaceInfo.shape.name.unwrap(),
+  branch: WorkspaceInfo.shape.branch.unwrap(),
+  directory: WorkspaceInfo.shape.directory.unwrap(),
 })
-type WorktreeConfig = z.infer<typeof WorktreeConfig>
 
-export const WorktreeArgs = z.object({
-  type: z.literal("worktree"),
-  name: z.string(),
-})
-type WorktreeArgs = z.infer<typeof WorktreeArgs>
+type Config = z.infer<typeof Config>
 
-export const WorktreeAdaptor: Adaptor<WorktreeConfig, WorktreeArgs> = {
-  async getConfig({ args }) {
-    const info = await Worktree.makeWorktreeInfo(args.name)
+export const WorktreeAdaptor: Adaptor = {
+  async configure(info) {
+    const worktree = await Worktree.makeWorktreeInfo(info.name ?? undefined)
     return {
-      type: "worktree",
-      name: info.name,
-      branch: info.branch,
-      directory: info.directory,
+      ...info,
+      name: worktree.name,
+      branch: worktree.branch,
+      directory: worktree.directory,
     }
   },
-  async create({ config }) {
+  async create(info) {
+    const config = Config.parse(info)
     return Worktree.createFromInfo({
       name: config.name,
       directory: config.directory,
       branch: config.branch,
     })
   },
-  async remove(config: WorktreeConfig) {
+  async remove(info) {
+    const config = Config.parse(info)
     await Worktree.remove({ directory: config.directory })
   },
-  async fetch(config: WorktreeConfig, input: RequestInfo | URL, init?: RequestInit) {
+  async fetch(info, input: RequestInfo | URL, init?: RequestInit) {
+    const config = Config.parse(info)
     const { WorkspaceServer } = await import("../workspace-server/server")
     const url = input instanceof Request || input instanceof URL ? input : new URL(input, "http://opencode.internal")
     const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))

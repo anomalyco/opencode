@@ -26,9 +26,9 @@ async function routeRequest(req: Request) {
     })
   }
 
-  const adaptor = getAdaptor(workspace.config.type)
+  const adaptor = await getAdaptor(workspace.type)
 
-  return adaptor.fetch(workspace.config, `${new URL(req.url).pathname}${new URL(req.url).search}`, {
+  return adaptor.fetch(workspace, `${new URL(req.url).pathname}${new URL(req.url).search}`, {
     method: req.method,
     body: req.method === "GET" || req.method === "HEAD" ? undefined : await req.arrayBuffer(),
     signal: req.signal,

@@ -1,13 +1,22 @@
-import z from "zod"
-import { WorktreeAdaptor, WorktreeConfig } from "./worktree"
-import type { Adaptor } from "./types"
+import { lazy } from "@/util/lazy"
+import type { Adaptor } from "../types"
 
-export const Config = z.discriminatedUnion("type", [WorktreeConfig])
-export type Config = z.infer<typeof Config>
+const ADAPTORS: Record<string, () => Promise<Adaptor>> = {
+  worktree: lazy(async () => (await import("./worktree")).WorktreeAdaptor),
+}
 
-export function getAdaptor(type: Config["type"]): Adaptor<Config, unknown> {
-  switch (type) {
-    case "worktree":
-      return WorktreeAdaptor
-  }
+export function getAdaptor(type: string): Promise<Adaptor> {
+  return ADAPTORS[type]()
+}
+
+export function installAdaptor(type: string, adaptor: Adaptor) {
+  // // This is experimental: mostly used for testing right now, but we
+  // // will likely allow this in the future. Need to figure out the
+  // // TypeScript story
+  // if (type in ADAPTORS) {
+  //   throw new Error(`Error installing adaptor: "${type}" already installed`)
+  // }
+  // // @ts-expect-error we force the builtin types right now, but we
+  // // will implement a way to extend the types for custom adaptors
+  // ADAPTORS[type] = adaptor
 }

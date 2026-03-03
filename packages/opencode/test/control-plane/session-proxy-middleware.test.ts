@@ -22,24 +22,24 @@ type State = {
 const remote = { type: "testing", name: "remote-a" } as unknown as typeof WorkspaceTable.$inferInsert.config
 
 async function setup(state: State) {
-  mock.module("../../src/control-plane/adaptors", () => ({
-    getAdaptor: () => ({
-      fetch: async (_config: unknown, input: RequestInfo | URL, init?: RequestInit) => {
-        const url =
-          input instanceof Request || input instanceof URL
-            ? input.toString()
-            : new URL(input, "http://workspace.test").toString()
-        const request = new Request(url, init)
-        const body = request.method === "GET" || request.method === "HEAD" ? undefined : await request.text()
-        state.calls.push({
-          method: request.method,
-          url: `${new URL(request.url).pathname}${new URL(request.url).search}`,
-          body,
-        })
-        return new Response("proxied", { status: 202 })
-      },
-    }),
-  }))
+  // mock.module("../../src/control-plane/adaptors", () => ({
+  //   getAdaptor: () => ({
+  //     fetch: async (_config: unknown, input: RequestInfo | URL, init?: RequestInit) => {
+  //       const url =
+  //         input instanceof Request || input instanceof URL
+  //           ? input.toString()
+  //           : new URL(input, "http://workspace.test").toString()
+  //       const request = new Request(url, init)
+  //       const body = request.method === "GET" || request.method === "HEAD" ? undefined : await request.text()
+  //       state.calls.push({
+  //         method: request.method,
+  //         url: `${new URL(request.url).pathname}${new URL(request.url).search}`,
+  //         body,
+  //       })
+  //       return new Response("proxied", { status: 202 })
+  //     },
+  //   }),
+  // }))
 
   await using tmp = await tmpdir({ git: true })
   const { project } = await Project.fromDirectory(tmp.path)
