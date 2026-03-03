@@ -17,7 +17,7 @@ import { Legal } from "~/component/legal"
 import { Footer } from "~/component/footer"
 import { Header } from "~/component/header"
 import { getLastSeenWorkspaceID } from "../workspace/common"
-import { IconGemini, IconMiniMax, IconZai } from "~/component/icon"
+import { IconMiniMax, IconZai } from "~/component/icon"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { LocaleLinks } from "~/component/locale-links"
@@ -52,6 +52,7 @@ export default function Home() {
               <h1>Low cost coding models for everyone</h1>
               <p>{i18n.t("zen.hero.body")}</p>
               <div data-slot="model-logos">
+                {/*
                 <div>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <mask
@@ -97,6 +98,7 @@ export default function Home() {
                     />
                   </svg>
                 </div>
+                */}
                 <div>
                   <IconMiniMax width="24" height="24" />
                 </div>
@@ -111,6 +113,7 @@ export default function Home() {
                 <div>
                   <IconZai width="24" height="24" />
                 </div>
+                {/*
                 <div>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path
@@ -121,6 +124,7 @@ export default function Home() {
                     />
                   </svg>
                 </div>
+                */}
               </div>
               <a href="/auth">
                 <span>{i18n.t("zen.cta.start")}</span>
