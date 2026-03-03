@@ -277,7 +277,7 @@ export function SessionHeader() {
   }
 
   const openDir = (app: OpenApp) => {
-    if (opening() || !canOpen() || !platform.openPath) return
+    if (!canOpen() || !platform.openPath) return
     const directory = projectDirectory()
     if (!directory) return
     if (!canOpen()) return

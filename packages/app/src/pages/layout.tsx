@@ -82,6 +82,7 @@ import {
   effectiveWorkspaceOrder,
   errorMessage,
   latestRootSession,
+  sortSessions,
   sortedRootSessions,
 } from "./layout/helpers"
 import {
