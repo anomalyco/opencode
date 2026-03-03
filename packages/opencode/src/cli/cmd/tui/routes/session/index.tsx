@@ -1441,19 +1441,23 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
           <Match when={Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
             <markdown syntaxStyle={syntax()} streaming={true} content={content()} conceal={ctx.conceal()} />
           </Match>
-          <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN && linked()}>
-            <FileLinks content={content()} fg={theme.text} />
-          </Match>
           <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
-            <code
-              filetype="markdown"
-              drawUnstyledText={false}
-              streaming={true}
-              syntaxStyle={syntax()}
-              content={content()}
-              conceal={ctx.conceal()}
-              fg={theme.text}
-            />
+            <Show
+              when={linked()}
+              fallback={
+                <code
+                  filetype="markdown"
+                  drawUnstyledText={false}
+                  streaming={true}
+                  syntaxStyle={syntax()}
+                  content={content()}
+                  conceal={ctx.conceal()}
+                  fg={theme.text}
+                />
+              }
+            >
+              <FileLinks content={content()} />
+            </Show>
           </Match>
         </Switch>
       </box>

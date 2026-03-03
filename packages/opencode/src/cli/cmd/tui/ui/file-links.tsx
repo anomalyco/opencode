@@ -1,7 +1,8 @@
 import { For, createMemo } from "solid-js"
-import type { RGBA } from "@opentui/core"
+import { useTheme } from "@tui/context/theme"
 
-export function FileLinks(props: { content: string; fg: RGBA }) {
+export function FileLinks(props: { content: string }) {
+  const { theme } = useTheme()
   const parts = createMemo(() => {
     const matches = props.content.matchAll(/\[([^\]]+)\]\((file:\/\/[^\s)]+)\)/g)
     let offset = 0
@@ -17,7 +18,7 @@ export function FileLinks(props: { content: string; fg: RGBA }) {
   })
 
   return (
-    <text fg={props.fg}>
+    <text fg={theme.text}>
       <For each={parts()}>{(part) => (typeof part === "string" ? part : <a href={part.href}>{part.label}</a>)}</For>
     </text>
   )
