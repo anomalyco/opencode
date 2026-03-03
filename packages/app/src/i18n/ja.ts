@@ -257,6 +257,8 @@ export const dict = {
   "prompt.action.stop": "停止",
   "prompt.toast.pasteUnsupported.title": "サポートされていない貼り付け",
   "prompt.toast.pasteUnsupported.description": "ここでは画像またはPDFのみ貼り付け可能です。",
+  "prompt.toast.attachmentTooLarge.title": "添付ファイルが大きすぎます",
+  "prompt.toast.attachmentTooLarge.description": "添付ファイルは {{limit}} 以下である必要があります。",
   "prompt.toast.modelAgentRequired.title": "エージェントとモデルを選択",
   "prompt.toast.modelAgentRequired.description": "プロンプトを送信する前にエージェントとモデルを選択してください。",
   "prompt.toast.worktreeCreateFailed.title": "ワークツリーの作成に失敗しました",

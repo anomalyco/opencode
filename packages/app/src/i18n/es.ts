@@ -278,6 +278,8 @@ export const dict = {
 
   "prompt.toast.pasteUnsupported.title": "Pegado no soportado",
   "prompt.toast.pasteUnsupported.description": "Solo se pueden pegar imágenes o PDFs aquí.",
+  "prompt.toast.attachmentTooLarge.title": "Archivo adjunto demasiado grande",
+  "prompt.toast.attachmentTooLarge.description": "Los archivos adjuntos deben ser de {{limit}} o menos.",
   "prompt.toast.modelAgentRequired.title": "Selecciona un agente y modelo",
   "prompt.toast.modelAgentRequired.description": "Elige un agente y modelo antes de enviar un prompt.",
   "prompt.toast.worktreeCreateFailed.title": "Fallo al crear el árbol de trabajo",

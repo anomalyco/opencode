@@ -278,6 +278,8 @@ export const dict = {
 
   "prompt.toast.pasteUnsupported.title": "การวางไม่รองรับ",
   "prompt.toast.pasteUnsupported.description": "สามารถวางรูปภาพหรือ PDF เท่านั้น",
+  "prompt.toast.attachmentTooLarge.title": "ไฟล์แนบมีขนาดใหญ่เกินไป",
+  "prompt.toast.attachmentTooLarge.description": "ไฟล์แนบต้องมีขนาด {{limit}} หรือเล็กกว่า",
   "prompt.toast.modelAgentRequired.title": "เลือกเอเจนต์และโมเดล",
   "prompt.toast.modelAgentRequired.description": "เลือกเอเจนต์และโมเดลก่อนส่งพร้อมท์",
   "prompt.toast.worktreeCreateFailed.title": "ไม่สามารถสร้าง worktree",

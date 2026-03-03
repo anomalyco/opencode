@@ -258,6 +258,8 @@ export const dict = {
   "prompt.action.stop": "توقف",
   "prompt.toast.pasteUnsupported.title": "لصق غير مدعوم",
   "prompt.toast.pasteUnsupported.description": "يمكن لصق الصور أو ملفات PDF فقط هنا.",
+  "prompt.toast.attachmentTooLarge.title": "المرفق كبير جداً",
+  "prompt.toast.attachmentTooLarge.description": "يجب أن تكون المرفقات بحجم {{limit}} أو أصغر.",
   "prompt.toast.modelAgentRequired.title": "حدد وكيلاً ونموذجاً",
   "prompt.toast.modelAgentRequired.description": "اختر وكيلاً ونموذجاً قبل إرسال الموجه.",
   "prompt.toast.worktreeCreateFailed.title": "فشل إنشاء شجرة العمل",

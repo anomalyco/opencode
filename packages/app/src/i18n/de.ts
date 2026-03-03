@@ -263,6 +263,8 @@ export const dict = {
   "prompt.action.stop": "Stopp",
   "prompt.toast.pasteUnsupported.title": "Nicht unterstütztes Einfügen",
   "prompt.toast.pasteUnsupported.description": "Hier können nur Bilder oder PDFs eingefügt werden.",
+  "prompt.toast.attachmentTooLarge.title": "Anhang zu groß",
+  "prompt.toast.attachmentTooLarge.description": "Anhänge müssen {{limit}} oder kleiner sein.",
   "prompt.toast.modelAgentRequired.title": "Wählen Sie einen Agenten und ein Modell",
   "prompt.toast.modelAgentRequired.description":
     "Wählen Sie einen Agenten und ein Modell, bevor Sie eine Eingabe senden.",

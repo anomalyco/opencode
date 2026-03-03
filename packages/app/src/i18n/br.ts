@@ -258,6 +258,8 @@ export const dict = {
   "prompt.action.stop": "Parar",
   "prompt.toast.pasteUnsupported.title": "Colagem não suportada",
   "prompt.toast.pasteUnsupported.description": "Somente imagens ou PDFs podem ser colados aqui.",
+  "prompt.toast.attachmentTooLarge.title": "Anexo muito grande",
+  "prompt.toast.attachmentTooLarge.description": "Os anexos devem ter {{limit}} ou menos.",
   "prompt.toast.modelAgentRequired.title": "Selecione um agente e modelo",
   "prompt.toast.modelAgentRequired.description": "Escolha um agente e modelo antes de enviar um prompt.",
   "prompt.toast.worktreeCreateFailed.title": "Falha ao criar worktree",

@@ -278,6 +278,8 @@ export const dict = {
 
   "prompt.toast.pasteUnsupported.title": "Неподдерживаемая вставка",
   "prompt.toast.pasteUnsupported.description": "Сюда можно вставлять только изображения или PDF.",
+  "prompt.toast.attachmentTooLarge.title": "Вложение слишком большое",
+  "prompt.toast.attachmentTooLarge.description": "Размер вложений должен быть {{limit}} или меньше.",
   "prompt.toast.modelAgentRequired.title": "Выберите агента и модель",
   "prompt.toast.modelAgentRequired.description": "Выберите агента и модель перед отправкой запроса.",
   "prompt.toast.worktreeCreateFailed.title": "Не удалось создать worktree",

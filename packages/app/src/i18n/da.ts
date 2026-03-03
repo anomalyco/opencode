@@ -277,6 +277,8 @@ export const dict = {
 
   "prompt.toast.pasteUnsupported.title": "Ikke understøttet indsæt",
   "prompt.toast.pasteUnsupported.description": "Kun billeder eller PDF'er kan indsættes her.",
+  "prompt.toast.attachmentTooLarge.title": "Vedhæftet fil er for stor",
+  "prompt.toast.attachmentTooLarge.description": "Vedhæftede filer skal være {{limit}} eller mindre.",
   "prompt.toast.modelAgentRequired.title": "Vælg en agent og model",
   "prompt.toast.modelAgentRequired.description": "Vælg en agent og model før du sender en forespørgsel.",
   "prompt.toast.worktreeCreateFailed.title": "Kunne ikke oprette worktree",

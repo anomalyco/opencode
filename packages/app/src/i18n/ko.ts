@@ -261,6 +261,8 @@ export const dict = {
   "prompt.action.stop": "중지",
   "prompt.toast.pasteUnsupported.title": "지원되지 않는 붙여넣기",
   "prompt.toast.pasteUnsupported.description": "이미지나 PDF만 붙여넣을 수 있습니다.",
+  "prompt.toast.attachmentTooLarge.title": "첨부 파일이 너무 큽니다",
+  "prompt.toast.attachmentTooLarge.description": "첨부 파일은 {{limit}} 이하여야 합니다.",
   "prompt.toast.modelAgentRequired.title": "에이전트 및 모델 선택",
   "prompt.toast.modelAgentRequired.description": "프롬프트를 보내기 전에 에이전트와 모델을 선택하세요.",
   "prompt.toast.worktreeCreateFailed.title": "작업 트리 생성 실패",

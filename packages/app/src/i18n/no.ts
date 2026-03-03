@@ -281,6 +281,8 @@ export const dict = {
 
   "prompt.toast.pasteUnsupported.title": "Liming ikke støttet",
   "prompt.toast.pasteUnsupported.description": "Kun bilder eller PDF-er kan limes inn her.",
+  "prompt.toast.attachmentTooLarge.title": "Vedlegget er for stort",
+  "prompt.toast.attachmentTooLarge.description": "Vedlegg må være {{limit}} eller mindre.",
   "prompt.toast.modelAgentRequired.title": "Velg en agent og modell",
   "prompt.toast.modelAgentRequired.description": "Velg en agent og modell før du sender en forespørsel.",
   "prompt.toast.worktreeCreateFailed.title": "Kunne ikke opprette worktree",

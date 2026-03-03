@@ -259,6 +259,8 @@ export const dict = {
   "prompt.action.stop": "Zatrzymaj",
   "prompt.toast.pasteUnsupported.title": "Nieobsługiwane wklejanie",
   "prompt.toast.pasteUnsupported.description": "Tylko obrazy lub pliki PDF mogą być tutaj wklejane.",
+  "prompt.toast.attachmentTooLarge.title": "Załącznik jest za duży",
+  "prompt.toast.attachmentTooLarge.description": "Załączniki muszą mieć rozmiar {{limit}} lub mniejszy.",
   "prompt.toast.modelAgentRequired.title": "Wybierz agenta i model",
   "prompt.toast.modelAgentRequired.description": "Wybierz agenta i model przed wysłaniem zapytania.",
   "prompt.toast.worktreeCreateFailed.title": "Nie udało się utworzyć drzewa roboczego",

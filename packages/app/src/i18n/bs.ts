@@ -279,6 +279,8 @@ export const dict = {
 
   "prompt.toast.pasteUnsupported.title": "Nepodržano lijepljenje",
   "prompt.toast.pasteUnsupported.description": "Ovdje se mogu zalijepiti samo slike ili PDF-ovi.",
+  "prompt.toast.attachmentTooLarge.title": "Prilog je prevelik",
+  "prompt.toast.attachmentTooLarge.description": "Prilozi moraju biti {{limit}} ili manji.",
   "prompt.toast.modelAgentRequired.title": "Odaberi agenta i model",
   "prompt.toast.modelAgentRequired.description": "Odaberi agenta i model prije slanja upita.",
   "prompt.toast.worktreeCreateFailed.title": "Neuspješno kreiranje worktree-a",

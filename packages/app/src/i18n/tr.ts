@@ -284,6 +284,8 @@ export const dict = {
 
   "prompt.toast.pasteUnsupported.title": "Desteklenmeyen yapıştırma",
   "prompt.toast.pasteUnsupported.description": "Buraya sadece görsel veya PDF yapıştırılabilir.",
+  "prompt.toast.attachmentTooLarge.title": "Ek çok büyük",
+  "prompt.toast.attachmentTooLarge.description": "Ekler {{limit}} veya daha küçük olmalıdır.",
   "prompt.toast.modelAgentRequired.title": "Bir ajan ve model seçin",
   "prompt.toast.modelAgentRequired.description": "Komut göndermeden önce bir ajan ve model seçin.",
   "prompt.toast.worktreeCreateFailed.title": "Çalışma ağacı oluşturulamadı",
