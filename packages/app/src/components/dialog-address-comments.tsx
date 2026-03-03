@@ -97,7 +97,7 @@ export function AddressCommentsDialog() {
       if (thread.comments.length === 0) continue
       text += `### File: ${thread.path}${thread.line ? ` (line ${thread.line})` : ""}\n`
       for (const comment of thread.comments) {
-        text += `**@${comment.author}** (comment ID: ${comment.id}): ${comment.body}\n`
+        text += `**@${comment.author}** (comment ID: ${comment.id}):\n\`\`\`\n${comment.body}\n\`\`\`\n`
       }
       text += "\n"
     }

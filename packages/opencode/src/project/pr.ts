@@ -204,6 +204,7 @@ export namespace PR {
   }
 
   export async function create(input: CreateInput): Promise<Vcs.PrInfo> {
+    await Vcs.refresh()
     const { info } = await ensureGithub()
     const cwd = Instance.worktree
 
@@ -217,6 +218,13 @@ export namespace PR {
         push.stderr?.toString().trim() || push.stdout?.toString().trim() || "Failed to push branch automatically"
       log.error("push failed", { output: errorOutput })
       throw new PrError({ code: "CREATE_FAILED", message: sanitizeOutput(errorOutput) })
+    }
+
+    if (input.base) {
+      const branches = info.branches ?? (await Vcs.fetchBranches())
+      if (!branches.includes(input.base)) {
+        throw new PrError({ code: "CREATE_FAILED", message: `Base branch '${input.base}' does not exist` })
+      }
     }
 
     const args = ["gh", "pr", "create", "--title", input.title]
@@ -257,8 +265,8 @@ export namespace PR {
       url: prUrl,
       title: input.title,
       state: "OPEN",
-      headRefName: info.branch,
-      baseRefName: input.base ?? info.defaultBranch ?? "main",
+      headRefName: updated.branch || info.branch,
+      baseRefName: input.base ?? updated.defaultBranch ?? info.defaultBranch ?? "main",
       isDraft: input.draft ?? false,
       mergeable: "UNKNOWN",
       reviewDecision: null,
