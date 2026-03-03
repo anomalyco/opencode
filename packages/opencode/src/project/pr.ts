@@ -83,7 +83,8 @@ export namespace PR {
       const threads = parsed?.data?.repository?.pullRequest?.reviewThreads?.nodes
       if (!Array.isArray(threads)) return undefined
       return threads.filter((t: { isResolved: boolean }) => !t.isResolved).length
-    } catch {
+    } catch (e) {
+      log.warn("fetchUnresolvedCommentCount failed", { error: e })
       return undefined
     }
   }
@@ -176,7 +177,8 @@ export namespace PR {
       }
 
       return pr
-    } catch {
+    } catch (e) {
+      log.warn("fetchForBranch failed", { error: e })
       return undefined
     }
   }
