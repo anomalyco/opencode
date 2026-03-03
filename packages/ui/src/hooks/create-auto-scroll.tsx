@@ -48,14 +48,14 @@ export function createAutoScroll(options: AutoScrollOptions) {
     autoTimer = setTimeout(() => {
       auto = undefined
       autoTimer = undefined
-    }, 250)
+    }, 1500)
   }
 
   const isAuto = (el: HTMLElement) => {
     const a = auto
     if (!a) return false
 
-    if (Date.now() - a.time > 250) {
+    if (Date.now() - a.time > 1500) {
       auto = undefined
       return false
     }
@@ -85,7 +85,10 @@ export function createAutoScroll(options: AutoScrollOptions) {
     if (force && store.userScrolled) setStore("userScrolled", false)
 
     const distance = distanceFromBottom(el)
-    if (distance < 2) return
+    if (distance < 2) {
+      markAuto(el)
+      return
+    }
 
     // For auto-following content we prefer immediate updates to avoid
     // visible "catch up" animations while content is still settling.
@@ -142,7 +145,10 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
   const handleInteraction = () => {
     if (!active()) return
-    stop()
+    const selection = window.getSelection()
+    if (selection && selection.toString().length > 0) {
+      stop()
+    }
   }
 
   const updateOverflowAnchor = (el: HTMLElement) => {
