@@ -1464,13 +1464,6 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
     <Show when={raw()}>
       <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
         <Switch>
-          <Match when={linked()}>
-            <text fg={theme.text}>
-              <For each={segments()}>
-                {(part) => (typeof part === "string" ? part : <a href={part.href}>{part.label}</a>)}
-              </For>
-            </text>
-          </Match>
           <Match when={Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
             <markdown
               syntaxStyle={syntax()}
@@ -1479,6 +1472,13 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
               conceal={ctx.conceal()}
               renderNode={renderNode}
             />
+          </Match>
+          <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN && linked()}>
+            <text fg={theme.text}>
+              <For each={segments()}>
+                {(part) => (typeof part === "string" ? part : <a href={part.href}>{part.label}</a>)}
+              </For>
+            </text>
           </Match>
           <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
             <code
