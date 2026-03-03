@@ -241,7 +241,6 @@ export function Session() {
     const logo = UI.logo("  ").split(/\r?\n/)
     return exit.message.set(
       [
-        ``,
         `${logo[0] ?? ""}`,
         `${logo[1] ?? ""}`,
         `${logo[2] ?? ""}`,
@@ -1897,10 +1896,8 @@ function Read(props: ToolProps<typeof ReadTool>) {
       </InlineTool>
       <For each={loaded()}>
         {(filepath) => (
-          <box paddingLeft={3}>
-            <text paddingLeft={3} fg={theme.textMuted}>
-              ↳ Loaded {normalizePath(filepath)}
-            </text>
+          <box paddingLeft={5}>
+            <text fg={theme.textMuted}>⤷ Loaded {normalizePath(filepath)}</text>
           </box>
         )}
       </For>
@@ -1994,33 +1991,32 @@ function Task(props: ToolProps<typeof TaskTool>) {
     return assistant - first
   })
 
+  const content = createMemo(() => {
+    if (!props.input.description) return ""
+    let content = [`Task ${props.input.description}`]
+
+    if (isRunning() && tools().length > 0) {
+      // content[0] += ` · ${tools().length} toolcalls`
+      if (current()) content.push(`└ ${Locale.titlecase(current()!.tool)} ${(current()!.state as any).title}`)
+      else content.push(`└ Running...`)
+    }
+
+    if (props.part.state.status === "completed") {
+      content.push(`└ ${tools().length} toolcalls · ${Locale.duration(duration())}`)
+    }
+
+    return content.join("\n")
+  })
+
   return (
     <InlineTool
-      icon="≡"
+      icon="│"
       spinner={isRunning()}
       complete={props.input.description}
       pending="Delegating..."
       part={props.part}
     >
-      {props.input.description}
-      <Show when={isRunning() && tools().length > 0}>
-        {" "}
-        · {tools().length} toolcalls
-        <Show fallback={"\n└ Running..."} when={current()}>
-          {(item) => {
-            const title = createMemo(() => (item().state as any).title)
-            return (
-              <>
-                {"\n"}└ {Locale.titlecase(item().tool)} {title()}
-              </>
-            )
-          }}
-        </Show>
-      </Show>
-      <Show when={duration() && props.part.state.status === "completed"}>
-        {"\n  "}
-        {tools().length} toolcalls · {Locale.duration(duration())}
-      </Show>
+      {content()}
     </InlineTool>
   )
 }
@@ -2240,10 +2236,16 @@ function Diagnostics(props: { diagnostics?: Record<string, Record<string, any>[]
 
 function normalizePath(input?: string) {
   if (!input) return ""
-  if (path.isAbsolute(input)) {
-    return path.relative(process.cwd(), input) || "."
-  }
-  return input
+
+  const cwd = process.cwd()
+  const absolute = path.isAbsolute(input) ? input : path.resolve(cwd, input)
+  const relative = path.relative(cwd, absolute)
+
+  if (!relative) return "."
+  if (!relative.startsWith("..")) return relative
+
+  // outside cwd - use absolute
+  return absolute
 }
 
 function input(input: Record<string, any>, omit?: string[]): string {
