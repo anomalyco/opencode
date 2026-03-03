@@ -90,17 +90,16 @@ export namespace PR {
 
   export async function fetchForBranch(repo?: { owner: string; name: string }): Promise<Vcs.PrInfo | undefined> {
     const cwd = Instance.worktree
-    const result =
-      await $`gh pr view --json number,url,title,state,headRefName,baseRefName,isDraft,mergeable,reviewDecision,statusCheckRollup`
-        .quiet()
-        .nothrow()
-        .cwd(cwd)
-        .text()
-        .catch(() => "")
-    if (!result.trim()) {
-      return undefined
-    }
     try {
+      const result =
+        await $`gh pr view --json number,url,title,state,headRefName,baseRefName,isDraft,mergeable,reviewDecision,statusCheckRollup`
+          .quiet()
+          .nothrow()
+          .cwd(cwd)
+          .text()
+      if (!result.trim()) {
+        return undefined
+      }
       const parsed = JSON.parse(result)
       if (!parsed.number) return undefined
 
@@ -341,7 +340,7 @@ export namespace PR {
 
     await Vcs.refresh()
 
-    if (input.deleteBranch !== false) {
+    if (input.deleteBranch === true) {
       const branchToDelete = currentPr.headRefName
       if (branchToDelete) {
         try {
