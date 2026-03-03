@@ -727,10 +727,8 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean; animate?: 
                           <span data-slot="basic-tool-tool-title">
                             <TextShimmer text={trigger.title} active={running()} />
                           </span>
-                          <Show when={!running() && trigger.subtitle}>
-                            {(text) => <ToolText text={text()} animate={reveal()} />}
-                          </Show>
-                          <Show when={!running() && trigger.args?.length}>
+                          <Show when={trigger.subtitle}>{(text) => <ToolText text={text()} animate={reveal()} />}</Show>
+                          <Show when={trigger.args?.length}>
                             <For each={trigger.args}>
                               {(arg, idx) => <ToolArg text={arg} delay={0.02 * (idx() + 1)} animate={reveal()} />}
                             </For>

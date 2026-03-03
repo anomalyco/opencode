@@ -1,5 +1,11 @@
 import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, type JSX } from "solid-js"
-import { animate, type AnimationPlaybackControls, springValue, TOOL_HEIGHT_SPRING, FADE_SPRING } from "./motion"
+import {
+  animate,
+  type AnimationPlaybackControls,
+  springValue,
+  COLLAPSIBLE_CONTENT_FADE_SPRING,
+  COLLAPSIBLE_CONTENT_HEIGHT_SPRING,
+} from "./motion"
 import { Collapsible } from "./collapsible"
 import type { IconProps } from "./icon"
 import { TextShimmer } from "./text-shimmer"
@@ -87,7 +93,7 @@ export function BasicTool(props: BasicToolProps) {
   let observer: ResizeObserver | undefined
   let resizeFrame: number | undefined
   const initialOpen = props.animateIn ? false : open()
-  const heightSpring = springValue<number>(0, TOOL_HEIGHT_SPRING)
+  const heightSpring = springValue<number>(0, COLLAPSIBLE_CONTENT_HEIGHT_SPRING)
 
   const read = () => Math.max(0, Math.ceil(bodyRef?.getBoundingClientRect().height ?? 0))
 
@@ -101,7 +107,7 @@ export function BasicTool(props: BasicToolProps) {
     }
     const next = read()
     fadeAnim?.stop()
-    fadeAnim = animate(bodyRef, { opacity: 1, filter: "blur(0px)" }, FADE_SPRING)
+    fadeAnim = animate(bodyRef, { opacity: 1, filter: "blur(0px)" }, COLLAPSIBLE_CONTENT_FADE_SPRING)
     fadeAnim.finished.then(() => {
       if (!bodyRef) return
       bodyRef.style.opacity = ""
@@ -113,7 +119,7 @@ export function BasicTool(props: BasicToolProps) {
   const doClose = () => {
     if (!contentRef || !bodyRef) return
     fadeAnim?.stop()
-    fadeAnim = animate(bodyRef, { opacity: 0, filter: "blur(2px)" }, FADE_SPRING)
+    fadeAnim = animate(bodyRef, { opacity: 0, filter: "blur(2px)" }, COLLAPSIBLE_CONTENT_FADE_SPRING)
     fadeAnim.finished.then(() => {
       if (!contentRef || open()) return
       contentRef.style.display = "none"
