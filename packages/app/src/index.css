@@ -28,13 +28,15 @@ body::before {
 [data-component="user-message"] [data-slot="user-message-text"] {
   border-radius: 14px 2px 14px 14px !important;
   padding: 16px 20px !important;
-  background: color-mix(in srgb, var(--surface-base) 70%, transparent) !important;
-  backdrop-filter: blur(12px) !important;
-  -webkit-backdrop-filter: blur(12px) !important;
-  border: 1px solid color-mix(in srgb, var(--border-base) 50%, transparent) !important;
+  background: color-mix(in srgb, var(--surface-base) 55%, transparent) !important;
+  backdrop-filter: blur(20px) saturate(1.3) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.3) !important;
+  border: 1px solid color-mix(in srgb, var(--border-base) 40%, transparent) !important;
   box-shadow:
-    0px 12px 20px -5px hsl(0 0% 0% / 0.08),
-    0px 4px 8px -4px hsl(0 0% 0% / 0.06) !important;
+    0px 16px 32px -6px hsl(0 0% 0% / 0.12),
+    0px 8px 16px -4px hsl(0 0% 0% / 0.08),
+    0px 2px 4px -1px hsl(0 0% 0% / 0.04),
+    inset 0 1px 0 0 hsl(0 0% 100% / 0.04) !important;
 }
 
 /* ============================================================
@@ -50,10 +52,10 @@ body::before {
 }
 
 [data-slot="session-turn-assistant-content"]::before {
-  content: "⬡  OPENCODE AI";
+  content: "OPENCODE AI";
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   margin-bottom: 14px;
   font-family: var(--font-family-sans);
   font-size: 11px;
@@ -61,6 +63,11 @@ body::before {
   letter-spacing: 1.5px;
   text-transform: uppercase;
   color: var(--icon-agent-plan-base, var(--text-interactive-base));
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none'%3E%3Crect x='3' y='6' width='18' height='13' rx='3' stroke='%239d7cd8' stroke-width='1.5'/%3E%3Ccircle cx='8.5' cy='12.5' r='1.5' fill='%2300d4ff'/%3E%3Ccircle cx='15.5' cy='12.5' r='1.5' fill='%2300d4ff'/%3E%3Cpath d='M9 3V6' stroke='%239d7cd8' stroke-width='1.5' stroke-linecap='round'/%3E%3Cpath d='M15 3V6' stroke='%239d7cd8' stroke-width='1.5' stroke-linecap='round'/%3E%3Cpath d='M10 16h4' stroke='%239d7cd8' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: 20px 20px;
+  background-position: left center;
+  padding-left: 28px;
 }
 
 /* ============================================================
@@ -68,14 +75,21 @@ body::before {
    ============================================================ */
 [data-component="user-message"]::before {
   content: "You";
-  display: block;
-  text-align: right;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
   margin-bottom: 8px;
   font-family: var(--font-family-sans);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.5px;
   color: var(--icon-agent-ask-base, #7dcfff);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none'%3E%3Ccircle cx='12' cy='8' r='4' stroke='%237dcfff' stroke-width='1.5'/%3E%3Cpath d='M5 20c0-3.3 2.7-6 7-6s7 2.7 7 6' stroke='%237dcfff' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: 18px 18px;
+  background-position: right center;
+  padding-right: 24px;
 }
 
 /* ============================================================
@@ -197,12 +211,16 @@ body::before {
    8. PROMPT DOCK — Glass morphism + glow
    ============================================================ */
 [data-dock-surface="shell"] {
-  background: color-mix(in srgb, var(--surface-raised-stronger-non-alpha) 70%, transparent) !important;
-  backdrop-filter: blur(16px) !important;
-  -webkit-backdrop-filter: blur(16px) !important;
-  border: 1px solid color-mix(in srgb, var(--border-base) 50%, transparent) !important;
-  box-shadow: 0px 20px 40px -12px hsl(0 0% 0% / 0.2) !important;
-  border-radius: 18px !important;
+  background: color-mix(in srgb, var(--surface-raised-stronger-non-alpha) 60%, transparent) !important;
+  backdrop-filter: blur(24px) saturate(1.4) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.4) !important;
+  border: 1px solid color-mix(in srgb, var(--border-base) 35%, transparent) !important;
+  box-shadow:
+    0px 24px 48px -12px hsl(0 0% 0% / 0.25),
+    0px 12px 24px -8px hsl(0 0% 0% / 0.15),
+    0px 4px 8px -2px hsl(0 0% 0% / 0.08),
+    inset 0 1px 0 0 hsl(0 0% 100% / 0.06) !important;
+  border-radius: 20px !important;
 }
 
 /* Send button glow */
@@ -257,9 +275,13 @@ body::before {
 [data-component="dialog"] [data-slot="dialog-content"] {
   box-shadow:
     0 0 0 1px var(--border-weaker-base),
-    0 24px 64px -16px hsl(0 0% 0% / 0.25),
-    0 8px 24px -8px hsl(0 0% 0% / 0.15) !important;
-  border-radius: 18px !important;
+    0 32px 80px -16px hsl(0 0% 0% / 0.3),
+    0 16px 40px -8px hsl(0 0% 0% / 0.18),
+    0 4px 12px -2px hsl(0 0% 0% / 0.1),
+    inset 0 1px 0 0 hsl(0 0% 100% / 0.05) !important;
+  border-radius: 20px !important;
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
 }
 
 /* ============================================================
@@ -425,7 +447,17 @@ body::before {
 }
 
 /* ============================================================
-   22. EMPTY STATE — Radial gradient atmosphere
+   22. SETTINGS DIALOG — Immune to user font-size scaling
+   Font-size changes should affect session/content, not settings UI
+   ============================================================ */
+.settings-dialog {
+  --font-size-small: 13px;
+  --font-size-base: 14px;
+  --font-size-large: 16px;
+}
+
+/* ============================================================
+   23. EMPTY STATE — Radial gradient atmosphere
    ============================================================ */
 [data-component="session-turn"] .size-full:has(> .text-20-medium) {
   background: radial-gradient(

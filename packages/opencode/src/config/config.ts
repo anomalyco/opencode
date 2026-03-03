@@ -1159,6 +1159,7 @@ export namespace Config {
             .optional()
             .describe("Tools that should only be available to primary agents."),
           continue_loop_on_deny: z.boolean().optional().describe("Continue the agent loop when a tool call is denied"),
+          plan_mode: z.boolean().optional().describe("Enable plan mode — AI plans before executing, asks for confirmation"),
           mcp_timeout: z
             .number()
             .int()

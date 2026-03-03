@@ -1,4 +1,5 @@
 import { createEffect, createSignal, For, Match, on, onCleanup, Show, Switch, type JSX } from "solid-js"
+import { animate, type AnimationPlaybackControls } from "motion"
 import { Collapsible } from "./collapsible"
 import type { IconProps } from "./icon"
 import { TextShimmer } from "./text-shimmer"
@@ -29,8 +30,11 @@ export interface BasicToolProps {
   forceOpen?: boolean
   defer?: boolean
   locked?: boolean
+  animated?: boolean
   onSubtitleClick?: () => void
 }
+
+const SPRING = { type: "spring" as const, visualDuration: 0.35, bounce: 0 }
 
 export function BasicTool(props: BasicToolProps) {
   const [open, setOpen] = createSignal(props.defaultOpen ?? false)
@@ -73,6 +77,38 @@ export function BasicTool(props: BasicToolProps) {
     ),
   )
 
+  // Animated height for collapsible open/close
+  let contentRef: HTMLDivElement | undefined
+  let heightAnim: AnimationPlaybackControls | undefined
+  const initialOpen = open()
+
+  createEffect(
+    on(
+      open,
+      (isOpen) => {
+        if (!props.animated || !contentRef) return
+        heightAnim?.stop()
+        if (isOpen) {
+          contentRef.style.overflow = "hidden"
+          heightAnim = animate(contentRef, { height: "auto" }, SPRING)
+          heightAnim.finished.then(() => {
+            if (!contentRef || !open()) return
+            contentRef.style.overflow = "visible"
+            contentRef.style.height = "auto"
+          })
+        } else {
+          contentRef.style.overflow = "hidden"
+          heightAnim = animate(contentRef, { height: "0px" }, SPRING)
+        }
+      },
+      { defer: true },
+    ),
+  )
+
+  onCleanup(() => {
+    heightAnim?.stop()
+  })
+
   const handleOpenChange = (value: boolean) => {
     if (pending()) return
     if (props.locked && !value) return
@@ -96,9 +132,7 @@ export function BasicTool(props: BasicToolProps) {
                             [trigger().titleClass ?? ""]: !!trigger().titleClass,
                           }}
                         >
-                          <Show when={pending()} fallback={trigger().title}>
-                            <TextShimmer text={trigger().title} />
-                          </Show>
+                          <TextShimmer text={trigger().title} active={pending()} />
                         </span>
                         <Show when={!pending()}>
                           <Show when={trigger().subtitle}>
@@ -147,7 +181,20 @@ export function BasicTool(props: BasicToolProps) {
           </Show>
         </div>
       </Collapsible.Trigger>
-      <Show when={props.children && !props.hideDetails}>
+      <Show when={props.animated && props.children && !props.hideDetails}>
+        <div
+          ref={contentRef}
+          data-slot="collapsible-content"
+          data-animated
+          style={{
+            height: initialOpen ? "auto" : "0px",
+            overflow: initialOpen ? "visible" : "hidden",
+          }}
+        >
+          {props.children}
+        </div>
+      </Show>
+      <Show when={!props.animated && props.children && !props.hideDetails}>
         <Collapsible.Content>
           <Show when={!props.defer || ready()}>{props.children}</Show>
         </Collapsible.Content>

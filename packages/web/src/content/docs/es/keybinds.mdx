@@ -3,11 +3,11 @@ title: Combinaciones de teclas
 description: Personaliza tus combinaciones de teclas.
 ---
 
-OpenCode tiene una lista de combinaciones de teclas que puede personalizar a través de la configuración OpenCode.
+OpenCode tiene una lista de combinaciones de teclas que puede personalizar a través de `tui.json`.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -117,11 +117,11 @@ No es necesario utilizar una tecla líder para las combinaciones de teclas, pero
 
 ## Desactivar combinación de teclas
 
-Puede deshabilitar una combinación de teclas agregando la clave a su configuración con un valor de "ninguno".
+Puede deshabilitar una combinación de teclas agregando la clave a `tui.json` con un valor de "none".
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "session_compact": "none"
   }

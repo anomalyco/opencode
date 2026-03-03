@@ -290,8 +290,8 @@ export const SettingsGeneral: Component = () => {
             <Button
               size="small"
               variant="secondary"
-              disabled={settings.appearance.fontSize() >= 24}
-              onClick={() => settings.appearance.setFontSize(Math.min(24, settings.appearance.fontSize() + 1))}
+              disabled={settings.appearance.fontSize() >= 32}
+              onClick={() => settings.appearance.setFontSize(Math.min(32, settings.appearance.fontSize() + 1))}
             >
               +
             </Button>
@@ -350,6 +350,18 @@ export const SettingsGeneral: Component = () => {
             <Switch
               checked={settings.general.editToolPartsExpanded()}
               onChange={(checked) => settings.general.setEditToolPartsExpanded(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.planMode.title")}
+          description={language.t("settings.general.row.planMode.description")}
+        >
+          <div data-action="settings-plan-mode">
+            <Switch
+              checked={settings.general.planMode()}
+              onChange={(checked) => settings.general.setPlanMode(checked)}
             />
           </div>
         </SettingsRow>

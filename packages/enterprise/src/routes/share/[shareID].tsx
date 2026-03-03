@@ -23,7 +23,6 @@ import { MessageNav } from "@opencode-ai/ui/message-nav"
 import { preloadMultiFileDiff, PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { FileSSR } from "@opencode-ai/ui/file-ssr"
 import { clientOnly } from "@solidjs/start"
-import { type IconName } from "@opencode-ai/ui/icons/provider"
 import { Meta, Title } from "@solidjs/meta"
 import { Base64 } from "js-base64"
 
@@ -268,10 +267,9 @@ export default function () {
                             </div>
                             <div class="flex gap-4 items-center">
                               <div class="flex gap-2 items-center">
-                                <ProviderIcon
-                                  id={provider() as IconName}
-                                  class="size-3.5 shrink-0 text-icon-strong-base"
-                                />
+                                <Show when={provider()}>
+                                  <ProviderIcon id={provider()!} class="size-3.5 shrink-0 text-icon-strong-base" />
+                                </Show>
                                 <div class="text-12-regular text-text-base">{model()?.name ?? modelID()}</div>
                               </div>
                               <div class="text-12-regular text-text-weaker">

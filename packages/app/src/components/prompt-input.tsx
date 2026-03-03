@@ -1,5 +1,6 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { showToast } from "@opencode-ai/ui/toast"
+import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { createEffect, on, Component, Show, For, onCleanup, Switch, Match, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createFocusSignal } from "@solid-primitives/active-element"
@@ -24,7 +25,6 @@ import { Button } from "@opencode-ai/ui/button"
 import { DockShellForm, DockTray } from "@opencode-ai/ui/dock-surface"
 import { Icon } from "@opencode-ai/ui/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import type { IconName } from "@opencode-ai/ui/icons/provider"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
@@ -117,8 +117,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const mirror = { input: false }
   const inset = 44
-  let lastEscapeAt = 0
-  const DOUBLE_ESCAPE_MS = 500
 
   const scrollCursorIntoView = () => {
     const container = scrollRef
@@ -248,6 +246,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: "image" | "@mention" | null
     mode: "normal" | "shell"
     applyingHistory: boolean
+    pendingAutoAccept: boolean
   }>({
     popover: null,
     historyIndex: -1,
@@ -256,7 +255,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: null,
     mode: "normal",
     applyingHistory: false,
+    pendingAutoAccept: false,
   })
+
+  const buttonsSpring = useSpring(() => (store.mode === "normal" ? 1 : 0), { visualDuration: 0.2, bounce: 0 })
 
   const commentCount = createMemo(() => {
     if (store.mode === "shell") return 0
@@ -303,6 +305,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       example: suggest() ? language.t(EXAMPLES[store.placeholder]) : "",
       suggest: suggest(),
       t: (key, params) => language.t(key as Parameters<typeof language.t>[0], params as never),
+    }),
+  )
+
+  createEffect(
+    on(sessionKey, () => {
+      setStore("pendingAutoAccept", false)
     }),
   )
 
@@ -596,7 +604,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setActive: setSlashActive,
     onInput: slashOnInput,
     onKeyDown: slashOnKeyDown,
-    refetch: slashRefetch,
   } = useFilteredList<SlashCommand>({
     items: slashCommands,
     key: (x) => x?.id,
@@ -652,14 +659,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       editorRef.appendChild(document.createTextNode("\u200B"))
     }
   }
-
-  createEffect(
-    on(
-      () => sync.data.command,
-      () => slashRefetch(),
-      { defer: true },
-    ),
-  )
 
   // Auto-scroll active command into view when navigating with keyboard
   createEffect(() => {
@@ -961,10 +960,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     readClipboardImage: platform.readClipboardImage,
   })
 
+  const variants = createMemo(() => ["default", ...local.model.variant.list()])
+  const accepting = createMemo(() => {
+    const id = params.id
+    if (!id) return store.pendingAutoAccept
+    return permission.isAutoAccepting(id, sdk.directory)
+  })
+
   const { abort, handleSubmit } = createPromptSubmit({
     info,
     imageAttachments,
     commentCount,
+    autoAccept: () => accepting(),
     mode: () => store.mode,
     working,
     editor: () => editorRef,
@@ -1033,17 +1040,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
 
       if (working()) {
-        const now = Date.now()
-        if (now - lastEscapeAt < DOUBLE_ESCAPE_MS) {
-          abort()
-          lastEscapeAt = 0
-        } else {
-          lastEscapeAt = now
-          showToast({
-            title: "Press Escape again to cancel",
-            description: "Press Escape once more to interrupt the response",
-          })
-        }
+        abort()
         event.preventDefault()
         event.stopPropagation()
         return
@@ -1066,155 +1063,27 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
     }
 
-    // Handle Shift+Enter: when working with text, send as "steer" (inject mid-turn)
+    // Handle Shift+Enter BEFORE IME check - Shift+Enter is never used for IME input
     if (event.key === "Enter" && event.shiftKey) {
-      if (working() && params.id && store.mode === "normal") {
-        const text = prompt
-          .current()
-          .map((p) => ("content" in p ? p.content : ""))
-          .join("")
-          .trim()
-        if (text.length > 0) {
-          event.preventDefault()
-          const sessionID = params.id
-          fetch(`${sdk.url}/session/${sessionID}/steer`, {
+      if (working() && params.id) {
+        const text = prompt.current().filter(p => p.type === "text").map(p => p.content).join("").trim()
+        if (text) {
+          fetch(`${sdk.url}/session/${params.id}/steer`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ text, mode: "steer" }),
-          })
-            .then(async (r) => {
-              if (!r.ok) throw new Error(await r.text().catch(() => r.statusText))
-            })
-            .catch((err) => {
-              console.error("[steer] shift+enter failed", err)
-              showToast({
-                title: "Failed to steer",
-                description: err?.message || "Could not inject message into current turn",
-              })
-            })
-          prompt.reset()
-          clearEditor()
-          showToast({
-            title: "Steering",
-            description: "Will be injected at the next step of the current turn",
-          })
-          return
-        }
-      }
-      // Default: insert newline when not working
-      addPart({ type: "text", content: "\n", start: 0, end: 0 })
-      event.preventDefault()
-      return
-    }
-
-    if (event.key === "Enter" && isImeComposing(event)) {
-      return
-    }
-
-    const ctrl = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
-
-    if (store.popover) {
-      if (event.key === "Tab") {
-        selectPopoverActive()
-        event.preventDefault()
-        return
-      }
-      const nav = event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter"
-      const ctrlNav = ctrl && (event.key === "n" || event.key === "p")
-      if (nav || ctrlNav) {
-        if (store.popover === "at") {
-          atOnKeyDown(event)
+          }).then(() => {
+            showToast({ title: "Steering", description: text.slice(0, 60) })
+            prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
+            editorRef.innerHTML = ""
+          }).catch(err => showToast({ title: "Failed to steer", description: err?.message }))
           event.preventDefault()
           return
         }
-        if (store.popover === "slash") {
-          slashOnKeyDown(event)
-        }
-        event.preventDefault()
-        return
-      }
-    }
-
-    if (ctrl && event.code === "KeyG") {
-      if (store.popover) {
-        closePopover()
-        event.preventDefault()
-        return
-      }
-      if (working()) {
-        abort()
-        event.preventDefault()
-      }
-      return
-    }
-
-    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-      if (event.altKey || event.ctrlKey || event.metaKey) return
-      const { collapsed } = getCaretState()
-      if (!collapsed) return
-
-      const cursorPosition = getCursorPosition(editorRef)
-      const textContent = prompt
-        .current()
-        .map((part) => ("content" in part ? part.content : ""))
-        .join("")
-      const direction = event.key === "ArrowUp" ? "up" : "down"
-      if (!canNavigateHistoryAtCursor(direction, textContent, cursorPosition, store.historyIndex >= 0)) return
-      if (navigateHistory(direction)) {
-        event.preventDefault()
-      }
-      return
-    }
-
-    // Note: Shift+Enter is handled earlier, before IME check
-    if (event.key === "Enter" && !event.shiftKey) {
-      // When busy: Enter queues a steer message instead of normal submit
-      if (working() && params.id && store.mode === "normal") {
-        const text = prompt
-          .current()
-          .map((p) => ("content" in p ? p.content : ""))
-          .join("")
-          .trim()
-        if (text.length > 0) {
-          event.preventDefault()
-          const sessionID = params.id
-          fetch(`${sdk.url}/session/${sessionID}/steer`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text, mode: "queue" }),
-          })
-            .then(async (r) => {
-              if (!r.ok) throw new Error(await r.text().catch(() => r.statusText))
-            })
-            .catch((err) => {
-              console.error("[queue] enter key failed", err)
-              showToast({
-                title: "Failed to queue message",
-                description: err?.message || "Could not queue the message",
-              })
-            })
-          prompt.reset()
-          clearEditor()
-          showToast({
-            title: "Message queued",
-            description: "Will be injected when the model finishes its current step",
-          })
-          return
-        }
-        // Empty text while working → abort
-        abort()
-        return
       }
       handleSubmit(event)
     }
   }
-
-  const variants = createMemo(() => ["default", ...local.model.variant.list()])
-  const accepting = createMemo(() => {
-    const id = params.id
-    if (!id) return false
-    return permission.isAutoAccepting(id, sdk.directory)
-  })
 
   return (
     <div class="relative size-full _max-h-[320px] flex flex-col gap-0">
@@ -1364,10 +1233,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
             <div
               aria-hidden={store.mode !== "normal"}
-              class="flex items-center gap-1 transition-all duration-200 ease-out"
-              classList={{
-                "opacity-100 translate-y-0 scale-100 pointer-events-auto": store.mode === "normal",
-                "opacity-0 translate-y-2 scale-95 pointer-events-none": store.mode !== "normal",
+              class="flex items-center gap-1"
+              style={{
+                "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
               }}
             >
               <TooltipKeybind
@@ -1380,6 +1248,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   type="button"
                   variant="ghost"
                   class="size-8 p-0"
+                  style={{
+                    opacity: buttonsSpring(),
+                    transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
+                    filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
+                  }}
                   onClick={pick}
                   disabled={store.mode !== "normal"}
                   tabIndex={store.mode === "normal" ? undefined : -1}
@@ -1389,145 +1262,42 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 </Button>
               </TooltipKeybind>
 
-              <Switch>
-                <Match when={working() && prompt.dirty()}>
-                  <div class="flex items-center gap-1">
-                    <Tooltip
-                      placement="top"
-                      value={
-                        <div class="flex flex-col gap-1">
-                          <div class="flex items-center gap-2">
-                            <span class="font-medium">Queue</span>
-                            <Icon name="enter" size="small" class="text-icon-base" />
-                          </div>
-                          <span class="text-text-weak text-11-regular">Send after current response finishes</span>
-                        </div>
-                      }
-                    >
-                      <IconButton
-                        data-action="prompt-submit"
-                        type="button"
-                        icon="arrow-down-to-line"
-                        variant="primary"
-                        class="size-8"
-                        aria-label="Queue — Send after current response finishes"
-                        onClick={() => {
-                          const text = prompt
-                            .current()
-                            .map((p) => ("content" in p ? p.content : ""))
-                            .join("")
-                            .trim()
-                          if (!text || !params.id) return
-                          fetch(`${sdk.url}/session/${params.id}/steer`, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ text, mode: "queue" }),
-                          })
-                            .then(async (r) => {
-                              if (!r.ok) throw new Error(await r.text().catch(() => r.statusText))
-                            })
-                            .catch((err) => {
-                              console.error("[queue] button failed", err)
-                              showToast({
-                                title: "Failed to queue message",
-                                description: err?.message || "Could not queue the message",
-                              })
-                            })
-                          prompt.reset()
-                          clearEditor()
-                          showToast({
-                            title: "Message queued",
-                            description: "Will be sent when the model finishes its current response",
-                          })
-                        }}
-                      />
-                    </Tooltip>
-                    <Tooltip
-                      placement="top"
-                      value={
-                        <div class="flex flex-col gap-1">
-                          <div class="flex items-center gap-2">
-                            <span class="font-medium">Steer</span>
-                            <span class="text-icon-base text-11-medium">⇧⏎</span>
-                          </div>
-                          <span class="text-text-weak text-11-regular">Inject into current turn at next step</span>
-                        </div>
-                      }
-                    >
-                      <IconButton
-                        data-action="prompt-steer"
-                        type="button"
-                        icon="chevron-double-right"
-                        variant="ghost"
-                        class="size-8"
-                        aria-label="Steer — Inject into current turn at next step"
-                        onClick={() => {
-                          const text = prompt
-                            .current()
-                            .map((p) => ("content" in p ? p.content : ""))
-                            .join("")
-                            .trim()
-                          if (!text || !params.id) return
-                          fetch(`${sdk.url}/session/${params.id}/steer`, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ text, mode: "steer" }),
-                          })
-                            .then(async (r) => {
-                              if (!r.ok) throw new Error(await r.text().catch(() => r.statusText))
-                            })
-                            .catch((err) => {
-                              console.error("[steer] button failed", err)
-                              showToast({
-                                title: "Failed to steer",
-                                description: err?.message || "Could not inject message into current turn",
-                              })
-                            })
-                          prompt.reset()
-                          clearEditor()
-                          showToast({
-                            title: "Steering",
-                            description: "Will be injected at the next step of the current turn",
-                          })
-                        }}
-                      />
-                    </Tooltip>
-                  </div>
-                </Match>
-                <Match when={true}>
-                  <Tooltip
-                    placement="top"
-                    inactive={!prompt.dirty() && !working()}
-                    value={
-                      <Switch>
-                        <Match when={working()}>
-                          <div class="flex items-center gap-2">
-                            <span>{language.t("prompt.action.stop")}</span>
-                            <span class="text-icon-base text-12-medium text-[10px]!">{language.t("common.key.esc")}</span>
-                          </div>
-                        </Match>
-                        <Match when={true}>
-                          <div class="flex items-center gap-2">
-                            <span>{language.t("prompt.action.send")}</span>
-                            <Icon name="enter" size="small" class="text-icon-base" />
-                          </div>
-                        </Match>
-                      </Switch>
-                    }
-                  >
-                    <IconButton
-                      data-action="prompt-submit"
-                      type="submit"
-                      disabled={store.mode !== "normal" || (!prompt.dirty() && !working() && commentCount() === 0)}
-                      tabIndex={store.mode === "normal" ? undefined : -1}
-                      icon={working() ? "stop" : "arrow-up"}
-                      variant="primary"
-                      class="size-8"
-                      aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
-                    />
-                  </Tooltip>
-                </Match>
-              </Switch>
+              <Tooltip
+                placement="top"
+                inactive={!prompt.dirty() && !working()}
+                value={
+                  <Switch>
+                    <Match when={working()}>
+                      <div class="flex items-center gap-2">
+                        <span>{language.t("prompt.action.stop")}</span>
+                        <span class="text-icon-base text-12-medium text-[10px]!">{language.t("common.key.esc")}</span>
+                      </div>
+                    </Match>
+                    <Match when={true}>
+                      <div class="flex items-center gap-2">
+                        <span>{language.t("prompt.action.send")}</span>
+                        <Icon name="enter" size="small" class="text-icon-base" />
+                      </div>
+                    </Match>
+                  </Switch>
+                }
+              >
+                <IconButton
+                  data-action="prompt-submit"
+                  type="submit"
+                  disabled={store.mode !== "normal" || (!prompt.dirty() && !working() && commentCount() === 0)}
+                  tabIndex={store.mode === "normal" ? undefined : -1}
+                  icon={working() ? "stop" : "arrow-up"}
+                  variant="primary"
+                  class="size-8"
+                  style={{
+                    opacity: buttonsSpring(),
+                    transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
+                    filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
+                  }}
+                  aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
+                />
+              </Tooltip>
             </div>
           </div>
 
@@ -1544,9 +1314,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <Button
                   data-action="prompt-permissions"
                   variant="ghost"
-                  disabled={!params.id}
                   onClick={() => {
-                    if (!params.id) return
+                    if (!params.id) {
+                      setStore("pendingAutoAccept", (value) => !value)
+                      return
+                    }
                     permission.toggleAutoAccept(params.id, sdk.directory)
                   }}
                   classList={{
@@ -1575,14 +1347,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       <Show when={store.mode === "normal" || store.mode === "shell"}>
         <DockTray attach="top">
           <div class="px-1.75 pt-5.5 pb-2 flex items-center gap-2 min-w-0">
-            <div class="flex items-center gap-1.5 min-w-0 flex-1">
-              <Show when={store.mode === "shell"}>
-                <div class="h-7 flex items-center gap-1.5 max-w-[160px] min-w-0" style={{ padding: "0 4px 0 8px" }}>
-                  <span class="truncate text-13-medium text-text-strong">{language.t("prompt.mode.shell")}</span>
-                  <div class="size-4 shrink-0" />
-                </div>
-              </Show>
-              <Show when={store.mode === "normal"}>
+            <div class="flex items-center gap-1.5 min-w-0 flex-1 relative">
+              <div
+                class="h-7 flex items-center gap-1.5 max-w-[160px] min-w-0 absolute inset-y-0 left-0"
+                style={{
+                  padding: "0 4px 0 8px",
+                  opacity: 1 - buttonsSpring(),
+                  transform: `scale(${0.95 + (1 - buttonsSpring()) * 0.05})`,
+                  filter: `blur(${buttonsSpring() * 2}px)`,
+                  "pointer-events": buttonsSpring() < 0.5 ? "auto" : "none",
+                }}
+              >
+                <span class="truncate text-13-medium text-text-strong">{language.t("prompt.mode.shell")}</span>
+                <div class="size-4 shrink-0" />
+              </div>
+              <div class="flex items-center gap-1.5 min-w-0 flex-1">
                 <TooltipKeybind
                   placement="top"
                   gutter={4}
@@ -1596,7 +1375,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     onSelect={local.agent.set}
                     class="capitalize max-w-[160px]"
                     valueClass="truncate text-13-regular"
-                    triggerStyle={{ height: "28px" }}
+                    triggerStyle={{
+                      height: "28px",
+                      opacity: buttonsSpring(),
+                      transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
+                      filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
+                      "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
+                    }}
                     variant="ghost"
                   />
                 </TooltipKeybind>
@@ -1614,12 +1399,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         variant="ghost"
                         size="normal"
                         class="min-w-0 max-w-[320px] text-13-regular group"
-                        style={{ height: "28px" }}
+                        style={{
+                          height: "28px",
+                          opacity: buttonsSpring(),
+                          transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
+                          filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
+                          "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
+                        }}
                         onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}
                       >
                         <Show when={local.model.current()?.provider?.id}>
                           <ProviderIcon
-                            id={local.model.current()!.provider.id as IconName}
+                            id={local.model.current()!.provider.id}
                             class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
                             style={{ "will-change": "opacity", transform: "translateZ(0)" }}
                           />
@@ -1643,13 +1434,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       triggerProps={{
                         variant: "ghost",
                         size: "normal",
-                        style: { height: "28px" },
+                        style: {
+                          height: "28px",
+                          opacity: buttonsSpring(),
+                          transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
+                          filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
+                          "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
+                        },
                         class: "min-w-0 max-w-[320px] text-13-regular group",
                       }}
                     >
                       <Show when={local.model.current()?.provider?.id}>
                         <ProviderIcon
-                          id={local.model.current()!.provider.id as IconName}
+                          id={local.model.current()!.provider.id}
                           class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
                           style={{ "will-change": "opacity", transform: "translateZ(0)" }}
                         />
@@ -1675,11 +1472,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     onSelect={(x) => local.model.variant.set(x === "default" ? undefined : x)}
                     class="capitalize max-w-[160px]"
                     valueClass="truncate text-13-regular"
-                    triggerStyle={{ height: "28px" }}
+                    triggerStyle={{
+                      height: "28px",
+                      opacity: buttonsSpring(),
+                      transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
+                      filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
+                      "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
+                    }}
                     variant="ghost"
                   />
                 </TooltipKeybind>
-              </Show>
+              </div>
             </div>
             <div class="shrink-0">
               <RadioGroup

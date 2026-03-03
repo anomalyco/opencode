@@ -211,7 +211,6 @@ export namespace SessionProcessor {
                         status: "error",
                         input: value.input ?? match.state.input,
                         error: (value.error as any).toString(),
-                        metadata: match.state.metadata,
                         time: {
                           start: match.state.time.start,
                           end: Date.now(),
@@ -281,7 +280,10 @@ export namespace SessionProcessor {
                     sessionID: input.sessionID,
                     messageID: input.assistantMessage.parentID,
                   })
-                  if (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model })) {
+                  if (
+                    !input.assistantMessage.summary &&
+                    (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model }))
+                  ) {
                     needsCompaction = true
                   }
                   break
@@ -360,44 +362,48 @@ export namespace SessionProcessor {
                 sessionID: input.sessionID,
               })
               needsCompaction = true
-              break
-            }
-            const retry = SessionRetry.retryable(error)
-            if (retry !== undefined) {
-              attempt++
-              if (attempt >= MAX_RETRIES) {
-                log.error("max retries exceeded", {
-                  sessionID: input.sessionID,
+              Bus.publish(Session.Event.Error, {
+                sessionID: input.sessionID,
+                error,
+              })
+            } else {
+              const retry = SessionRetry.retryable(error)
+              if (retry !== undefined) {
+                attempt++
+                if (attempt >= MAX_RETRIES) {
+                  log.error("max retries exceeded", {
+                    sessionID: input.sessionID,
+                    attempt,
+                    message: retry,
+                  })
+                  input.assistantMessage.error = MessageV2.fromError(
+                    new Error(`Maximum retries (${MAX_RETRIES}) exceeded. Last error: ${retry}`),
+                    { providerID: input.model.providerID },
+                  )
+                  Bus.publish(Session.Event.Error, {
+                    sessionID: input.assistantMessage.sessionID,
+                    error: input.assistantMessage.error,
+                  })
+                  SessionStatus.set(input.sessionID, { type: "idle" })
+                  break
+                }
+                const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
+                SessionStatus.set(input.sessionID, {
+                  type: "retry",
                   attempt,
                   message: retry,
+                  next: Date.now() + delay,
                 })
-                input.assistantMessage.error = MessageV2.fromError(
-                  new Error(`Maximum retries (${MAX_RETRIES}) exceeded. Last error: ${retry}`),
-                  { providerID: input.model.providerID },
-                )
-                Bus.publish(Session.Event.Error, {
-                  sessionID: input.assistantMessage.sessionID,
-                  error: input.assistantMessage.error,
-                })
-                SessionStatus.set(input.sessionID, { type: "idle" })
-                break
+                await SessionRetry.sleep(delay, input.abort).catch(() => {})
+                continue
               }
-              const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
-              SessionStatus.set(input.sessionID, {
-                type: "retry",
-                attempt,
-                message: retry,
-                next: Date.now() + delay,
+              input.assistantMessage.error = error
+              Bus.publish(Session.Event.Error, {
+                sessionID: input.assistantMessage.sessionID,
+                error: input.assistantMessage.error,
               })
-              await SessionRetry.sleep(delay, input.abort).catch(() => {})
-              continue
+              SessionStatus.set(input.sessionID, { type: "idle" })
             }
-            input.assistantMessage.error = error
-            Bus.publish(Session.Event.Error, {
-              sessionID: input.assistantMessage.sessionID,
-              error: input.assistantMessage.error,
-            })
-            SessionStatus.set(input.sessionID, { type: "idle" })
           }
           if (snapshot) {
             const patch = await Snapshot.patch(snapshot)
