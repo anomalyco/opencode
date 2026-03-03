@@ -237,10 +237,8 @@ export class McpOAuthProvider implements OAuthClientProvider {
 
     if (isEntraV2(url)) {
       url.searchParams.delete("resource")
-      const scope = mergeScope(url.searchParams.get("scope") ?? undefined, this.config.scope)
-      if (scope) {
-        url.searchParams.set("scope", mergeScope(scope, "offline_access") ?? scope)
-      }
+      const scope = mergeScope(url.searchParams.get("scope") ?? undefined, this.config.scope, "offline_access")
+      if (scope) url.searchParams.set("scope", scope)
     }
 
     log.info("redirecting to authorization", { mcpName: this.mcpName, url: url.toString() })
