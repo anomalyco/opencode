@@ -148,6 +148,7 @@ function createPromptActions(
 
 const WORKSPACE_KEY = "__workspace__"
 const MAX_PROMPT_SESSIONS = 20
+const PROMPT_PERSIST_MAX_BYTES = 8 * 1024 * 1024
 
 type PromptSession = ReturnType<typeof createPromptSession>
 
@@ -160,7 +161,10 @@ function createPromptSession(dir: string, id: string | undefined) {
   const legacy = `${dir}/prompt${id ? "/" + id : ""}.v2`
 
   const [store, setStore, _, ready] = persisted(
-    Persist.scoped(dir, id, "prompt", [legacy]),
+    {
+      ...Persist.scoped(dir, id, "prompt", [legacy]),
+      maxBytes: PROMPT_PERSIST_MAX_BYTES,
+    },
     createStore<{
       prompt: Prompt
       cursor?: number

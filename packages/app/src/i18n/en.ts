@@ -280,6 +280,8 @@ export const dict = {
 
   "prompt.toast.pasteUnsupported.title": "Unsupported paste",
   "prompt.toast.pasteUnsupported.description": "Only images or PDFs can be pasted here.",
+  "prompt.toast.attachmentTooLarge.title": "Attachment too large",
+  "prompt.toast.attachmentTooLarge.description": "Attachments must be {{limit}} or smaller.",
   "prompt.toast.modelAgentRequired.title": "Select an agent and model",
   "prompt.toast.modelAgentRequired.description": "Choose an agent and model before sending a prompt.",
   "prompt.toast.worktreeCreateFailed.title": "Failed to create worktree",

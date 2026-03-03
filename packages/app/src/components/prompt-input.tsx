@@ -92,6 +92,7 @@ const EXAMPLES = [
 ] as const
 
 const NON_EMPTY_TEXT = /[^\s\u200B]/
+const PROMPT_HISTORY_PERSIST_MAX_BYTES = 8 * 1024 * 1024
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
@@ -273,7 +274,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const [history, setHistory] = persisted(
-    Persist.global("prompt-history", ["prompt-history.v1"]),
+    {
+      ...Persist.global("prompt-history", ["prompt-history.v1"]),
+      maxBytes: PROMPT_HISTORY_PERSIST_MAX_BYTES,
+    },
     createStore<{
       entries: PromptHistoryStoredEntry[]
     }>({
@@ -281,7 +285,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }),
   )
   const [shellHistory, setShellHistory] = persisted(
-    Persist.global("prompt-history-shell", ["prompt-history-shell.v1"]),
+    {
+      ...Persist.global("prompt-history-shell", ["prompt-history-shell.v1"]),
+      maxBytes: PROMPT_HISTORY_PERSIST_MAX_BYTES,
+    },
     createStore<{
       entries: PromptHistoryStoredEntry[]
     }>({

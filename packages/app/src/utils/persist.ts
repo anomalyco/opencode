@@ -12,6 +12,7 @@ type PersistTarget = {
   key: string
   legacy?: string[]
   migrate?: (value: unknown) => unknown
+  maxBytes?: number
 }
 
 const LEGACY_STORAGE = "default.dat"
@@ -195,12 +196,20 @@ function parse(value: string) {
   }
 }
 
-function normalize(defaults: unknown, raw: string, migrate?: (value: unknown) => unknown) {
+function tooLarge(value: string, maxBytes?: number) {
+  if (!maxBytes) return false
+  return value.length * 2 > maxBytes
+}
+
+function normalize(defaults: unknown, raw: string, migrate?: (value: unknown) => unknown, maxBytes?: number) {
+  if (tooLarge(raw, maxBytes)) return
   const parsed = parse(raw)
   if (parsed === undefined) return
   const migrated = migrate ? migrate(parsed) : parsed
   const merged = merge(defaults, migrated)
-  return JSON.stringify(merged)
+  const next = JSON.stringify(merged)
+  if (tooLarge(next, maxBytes)) return
+  return next
 }
 
 function workspaceStorage(dir: string) {
@@ -366,7 +375,7 @@ export function persisted<T>(
         getItem: (key) => {
           const raw = current.getItem(key)
           if (raw !== null) {
-            const next = normalize(defaults, raw, config.migrate)
+            const next = normalize(defaults, raw, config.migrate, config.maxBytes)
             if (next === undefined) {
               current.removeItem(key)
               return null
@@ -379,7 +388,7 @@ export function persisted<T>(
             const legacyRaw = legacyStore.getItem(legacyKey)
             if (legacyRaw === null) continue
 
-            const next = normalize(defaults, legacyRaw, config.migrate)
+            const next = normalize(defaults, legacyRaw, config.migrate, config.maxBytes)
             if (next === undefined) {
               legacyStore.removeItem(legacyKey)
               continue
@@ -392,6 +401,10 @@ export function persisted<T>(
           return null
         },
         setItem: (key, value) => {
+          if (tooLarge(value, config.maxBytes)) {
+            current.removeItem(key)
+            return
+          }
           current.setItem(key, value)
         },
         removeItem: (key) => {
@@ -409,7 +422,7 @@ export function persisted<T>(
       getItem: async (key) => {
         const raw = await current.getItem(key)
         if (raw !== null) {
-          const next = normalize(defaults, raw, config.migrate)
+          const next = normalize(defaults, raw, config.migrate, config.maxBytes)
           if (next === undefined) {
             await current.removeItem(key).catch(() => undefined)
             return null
@@ -424,7 +437,7 @@ export function persisted<T>(
           const legacyRaw = await legacyStore.getItem(legacyKey)
           if (legacyRaw === null) continue
 
-          const next = normalize(defaults, legacyRaw, config.migrate)
+          const next = normalize(defaults, legacyRaw, config.migrate, config.maxBytes)
           if (next === undefined) {
             await legacyStore.removeItem(legacyKey).catch(() => undefined)
             continue
@@ -437,6 +450,10 @@ export function persisted<T>(
         return null
       },
       setItem: async (key, value) => {
+        if (tooLarge(value, config.maxBytes)) {
+          await current.removeItem(key).catch(() => undefined)
+          return
+        }
         await current.setItem(key, value)
       },
       removeItem: async (key) => {

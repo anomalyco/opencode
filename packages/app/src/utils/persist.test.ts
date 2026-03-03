@@ -104,4 +104,10 @@ describe("persist localStorage resilience", () => {
     const result = persistTesting.normalize({ value: "ok" }, '{"value":"\\x"}')
     expect(result).toBeUndefined()
   })
+
+  test("normalizer rejects payloads above byte limit", () => {
+    const raw = JSON.stringify({ value: "x".repeat(2048) })
+    const result = persistTesting.normalize({ value: "ok" }, raw, undefined, 1024)
+    expect(result).toBeUndefined()
+  })
 })

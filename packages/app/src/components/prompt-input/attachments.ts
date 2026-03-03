@@ -7,8 +7,13 @@ import { getCursorPosition } from "./editor-dom"
 
 export const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 export const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
+export const MAX_ATTACHMENT_BYTES = 32 * 1024 * 1024
 const LARGE_PASTE_CHARS = 8000
 const LARGE_PASTE_BREAKS = 120
+
+function formatMiB(bytes: number) {
+  return `${Math.max(1, Math.round(bytes / (1024 * 1024)))} MiB`
+}
 
 function largePaste(text: string) {
   if (text.length >= LARGE_PASTE_CHARS) return true
@@ -37,6 +42,15 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
 
   const addImageAttachment = async (file: File) => {
     if (!ACCEPTED_FILE_TYPES.includes(file.type)) return
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      showToast({
+        title: language.t("prompt.toast.attachmentTooLarge.title"),
+        description: language.t("prompt.toast.attachmentTooLarge.description", {
+          limit: formatMiB(MAX_ATTACHMENT_BYTES),
+        }),
+      })
+      return
+    }
 
     const reader = new FileReader()
     reader.onload = () => {
