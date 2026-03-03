@@ -57,7 +57,10 @@ export namespace Provider {
   }
 
   function shouldUseCopilotResponsesApi(modelID: string): boolean {
-    return isGpt5OrLater(modelID) && !modelID.startsWith("gpt-5-mini")
+    if (!isGpt5OrLater(modelID)) return false
+    // Exclude any 'mini' variants in the gpt-5 family (gpt-5-mini, gpt-5.1-mini, gpt-5.2-mini, etc.)
+    if (modelID.startsWith("gpt-5") && modelID.includes("mini")) return false
+    return true
   }
 
   function googleVertexVars(options: Record<string, any>) {
