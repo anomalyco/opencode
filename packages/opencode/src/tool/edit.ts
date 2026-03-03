@@ -20,7 +20,7 @@ import { assertExternalDirectory } from "./external-directory"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 
-function normalizeLineEndings(text: string): string {
+export function normalizeLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
 }
 

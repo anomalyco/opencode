@@ -8,7 +8,7 @@ import { Instance } from "../project/instance"
 import { Patch } from "../patch"
 import { createTwoFilesPatch, diffLines } from "diff"
 import { assertExternalDirectory } from "./external-directory"
-import { trimDiff } from "./edit"
+import { trimDiff, normalizeLineEndings } from "./edit"
 import { LSP } from "../lsp"
 import { Filesystem } from "../util/filesystem"
 import DESCRIPTION from "./apply_patch.txt"
@@ -159,7 +159,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     }
 
     // Build per-file metadata for UI rendering (used for both permission and result)
-    const files = fileChanges.map((change) => ({
+    let files = fileChanges.map((change) => ({
       filePath: change.filePath,
       relativePath: path.relative(Instance.worktree, change.movePath ?? change.filePath).replaceAll("\\", "/"),
       type: change.type,
@@ -230,6 +230,45 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     for (const update of updates) {
       await Bus.publish(FileWatcher.Event.Updated, update)
     }
+
+    // Re-read files after formatting and recompute diffs.
+    totalDiff = ""
+    for (const change of fileChanges) {
+      if (change.type === "delete") {
+        totalDiff += change.diff + "\n"
+        continue
+      }
+      const target = change.movePath ?? change.filePath
+      change.newContent = await fs.readFile(target, "utf-8")
+      change.diff = trimDiff(
+        createTwoFilesPatch(
+          change.filePath,
+          target,
+          normalizeLineEndings(change.oldContent),
+          normalizeLineEndings(change.newContent),
+        ),
+      )
+      change.additions = 0
+      change.deletions = 0
+      for (const d of diffLines(change.oldContent, change.newContent)) {
+        if (d.added) change.additions += d.count || 0
+        if (d.removed) change.deletions += d.count || 0
+      }
+      totalDiff += change.diff + "\n"
+    }
+
+    // Rebuild per-file metadata with post-format content.
+    files = fileChanges.map((change) => ({
+      filePath: change.filePath,
+      relativePath: path.relative(Instance.worktree, change.movePath ?? change.filePath).replaceAll("\\", "/"),
+      type: change.type,
+      diff: change.diff,
+      before: change.oldContent,
+      after: change.newContent,
+      additions: change.additions,
+      deletions: change.deletions,
+      movePath: change.movePath,
+    }))
 
     // Notify LSP of file changes and collect diagnostics
     for (const change of fileChanges) {
