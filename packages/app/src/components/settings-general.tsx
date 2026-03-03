@@ -290,8 +290,8 @@ export const SettingsGeneral: Component = () => {
             <Button
               size="small"
               variant="secondary"
-              disabled={settings.appearance.fontSize() >= 24}
-              onClick={() => settings.appearance.setFontSize(Math.min(24, settings.appearance.fontSize() + 1))}
+              disabled={settings.appearance.fontSize() >= 32}
+              onClick={() => settings.appearance.setFontSize(Math.min(32, settings.appearance.fontSize() + 1))}
             >
               +
             </Button>

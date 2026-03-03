@@ -1247,7 +1247,7 @@ export default function Page() {
               direction="horizontal"
               size={layout.session.width()}
               min={450}
-              max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.45}
+              max={typeof window === "undefined" ? 1000 : window.innerWidth - 300}
               onResize={layout.session.resize}
             />
           </Show>

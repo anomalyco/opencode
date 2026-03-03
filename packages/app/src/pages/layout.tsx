@@ -149,6 +149,7 @@ export default function Layout(props: ParentProps) {
   const isBusy = (directory: string) => !!state.busyWorkspaces[workspaceKey(directory)]
   const navLeave = { current: undefined as number | undefined }
   const [sortNow, setSortNow] = createSignal(Date.now())
+  const [sidebarCollapsed, setSidebarCollapsed] = createSignal(false)
   let sortNowInterval: ReturnType<typeof setInterval> | undefined
   const sortNowTimeout = setTimeout(
     () => {
@@ -2023,7 +2024,9 @@ export default function Layout(props: ParentProps) {
           }}
           style={{
             width: layout.sidebar.opened()
-              ? `${Math.max(layout.sidebar.width(), 244)}px`
+              ? sidebarCollapsed()
+                ? "48px"
+                : `${Math.max(layout.sidebar.width(), 244)}px`
               : "64px",
           }}
           ref={(el) => {
@@ -2049,6 +2052,8 @@ export default function Layout(props: ParentProps) {
           <div class="@container w-full h-full contain-strict">
             <SidebarContent
               opened={() => layout.sidebar.opened()}
+              collapsed={sidebarCollapsed}
+              onToggleCollapsed={() => setSidebarCollapsed((v) => !v)}
               aimMove={aim.move}
               projects={() => layout.projects.list()}
               renderProject={(project) => (
