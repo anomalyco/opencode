@@ -9,6 +9,7 @@ test("status popover opens and shows tabs", async ({ page, gotoSession }) => {
   await expect(popoverBody.getByRole("tab", { name: /servers/i })).toBeVisible()
   await expect(popoverBody.getByRole("tab", { name: /mcp/i })).toBeVisible()
   await expect(popoverBody.getByRole("tab", { name: /lsp/i })).toBeVisible()
+  await expect(popoverBody.getByRole("tab", { name: /skills/i })).toBeVisible()
   await expect(popoverBody.getByRole("tab", { name: /plugins/i })).toBeVisible()
 
   await page.keyboard.press("Escape")
@@ -70,6 +71,21 @@ test("status popover can switch to plugins tab", async ({ page, gotoSession }) =
 
   const pluginsContent = popoverBody.locator('[role="tabpanel"]:visible').first()
   await expect(pluginsContent).toBeVisible()
+})
+
+test("status popover can switch to skills tab", async ({ page, gotoSession }) => {
+  await gotoSession()
+
+  const { popoverBody } = await openStatusPopover(page)
+
+  const skillsTab = popoverBody.getByRole("tab", { name: /skills/i })
+  await skillsTab.click()
+
+  const ariaSelected = await skillsTab.getAttribute("aria-selected")
+  expect(ariaSelected).toBe("true")
+
+  const skillsContent = popoverBody.locator('[role="tabpanel"]:visible').first()
+  await expect(skillsContent).toBeVisible()
 })
 
 test("status popover closes on escape", async ({ page, gotoSession }) => {
