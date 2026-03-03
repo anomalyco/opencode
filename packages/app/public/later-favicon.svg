@@ -1,4 +1,8 @@
-<svg width="32" height="32" viewBox="0 0 699 717" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M0 463.75V0H210.258L698.298 536.335V716.8H221.422L0 463.75Z" fill="black"/>
-<path d="M448.411 310.231V440.093H25.3018V26.9461H184.956V310.263H448.411V310.231Z" fill="#F8F2EA"/>
+<svg width="32" height="32" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 3D shadow/depth piece (darker orange, right side + bottom) -->
+  <path d="M300 42 L450 42 L480 90 L410 440 L256 480 L240 440 L340 440 L400 90 L300 90 Z" fill="#CC4E1E"/>
+  <!-- Front face outer V (main orange) -->
+  <path d="M50 42 L190 42 L256 310 L322 42 L450 42 L340 440 L240 440 L170 440 Z" fill="#E8602C"/>
+  <!-- Inner V cutout (cream) -->
+  <path d="M135 90 L210 90 L256 270 L302 90 L380 90 L256 400 Z" fill="#F8F2EA"/>
 </svg>
