@@ -213,7 +213,7 @@ export const VcsRoutes = lazy(() =>
       "/pr/delete-branch",
       describeRoute({
         summary: "Delete branch",
-        description: "Delete a remote (and local) branch after a PR has been merged.",
+        description: "Delete the remote branch after a PR has been merged.",
         operationId: "vcs.pr.deleteBranch",
         responses: {
           200: {
