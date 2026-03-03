@@ -10,6 +10,7 @@ import { NamedError } from "@opencode-ai/util/error"
 import { LSP } from "../lsp"
 import { Format } from "../format"
 import { TuiRoutes } from "./routes/tui"
+import { PR } from "../project/pr"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
 import { Skill } from "../skill"
@@ -65,6 +66,7 @@ export namespace Server {
           else if (err instanceof Provider.ModelNotFoundError) status = 400
           else if (err.name === "ProviderAuthValidationFailed") status = 400
           else if (err.name.startsWith("Worktree")) status = 400
+          else if (PR.PrError.isInstance(err)) status = err.data.code === "NO_PR" ? 404 : 400
           else status = 500
           return c.json(err.toObject(), { status })
         }

@@ -3,6 +3,7 @@ import { Bus } from "@/bus"
 import { $ } from "bun"
 import z from "zod"
 import { Log } from "@/util/log"
+import { withTimeout } from "@/util/timeout"
 import { Instance } from "./instance"
 import { FileWatcher } from "@/file/watcher"
 
@@ -32,6 +33,7 @@ export namespace Vcs {
         })
         .optional(),
       unresolvedCommentCount: z.number().optional(),
+      branchDeleteFailed: z.boolean().optional(),
     })
     .meta({ ref: "PrInfo" })
   export type PrInfo = z.infer<typeof PrInfo>
@@ -92,11 +94,14 @@ export namespace Vcs {
 
   export async function detectGithubCapability(): Promise<GithubCapability> {
     const cwd = Instance.worktree
-    const authCmd = await $`gh auth status`
-      .quiet()
-      .nothrow()
-      .cwd(cwd)
-      .catch((e) => ({ exitCode: 1, stdout: Buffer.from(""), stderr: Buffer.from(String(e)) }))
+    const authCmd = await withTimeout(
+      $`gh auth status`
+        .quiet()
+        .nothrow()
+        .cwd(cwd)
+        .catch((e) => ({ exitCode: 1, stdout: Buffer.from(""), stderr: Buffer.from(String(e)) })),
+      30_000,
+    )
     const authText = (authCmd.stdout?.toString() ?? "") + (authCmd.stderr?.toString() ?? "")
     const available = !authText.includes("not found") && !authText.includes("command not found")
     if (!available) {
@@ -106,11 +111,14 @@ export namespace Vcs {
     if (!authenticated) {
       return { available: true, authenticated: false }
     }
-    const repoCmd = await $`gh repo view --json owner,name,url`
-      .quiet()
-      .nothrow()
-      .cwd(cwd)
-      .catch((e) => ({ exitCode: 1, stdout: Buffer.from(""), stderr: Buffer.from(String(e)) }))
+    const repoCmd = await withTimeout(
+      $`gh repo view --json owner,name,url`
+        .quiet()
+        .nothrow()
+        .cwd(cwd)
+        .catch((e) => ({ exitCode: 1, stdout: Buffer.from(""), stderr: Buffer.from(String(e)) })),
+      30_000,
+    )
 
     let repo: { owner: string; name: string } | undefined
     let host: string | undefined
@@ -146,12 +154,15 @@ export namespace Vcs {
     if (trimmed && !trimmed.includes("fatal") && trimmed !== "origin/HEAD") {
       return trimmed.replace("origin/", "")
     }
-    const ghResult = await $`gh repo view --json defaultBranchRef --jq .defaultBranchRef.name`
-      .quiet()
-      .nothrow()
-      .cwd(cwd)
-      .text()
-      .catch(() => "")
+    const ghResult = await withTimeout(
+      $`gh repo view --json defaultBranchRef --jq .defaultBranchRef.name`
+        .quiet()
+        .nothrow()
+        .cwd(cwd)
+        .text()
+        .catch(() => ""),
+      30_000,
+    )
     const ghTrimmed = ghResult.trim()
     if (ghTrimmed && !ghTrimmed.includes("error")) {
       return ghTrimmed

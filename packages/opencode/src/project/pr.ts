@@ -1,6 +1,8 @@
 import { $ } from "bun"
 import z from "zod"
+import { NamedError } from "@opencode-ai/util/error"
 import { Log } from "@/util/log"
+import { withTimeout } from "@/util/timeout"
 import { Instance } from "./instance"
 import { Vcs } from "./vcs"
 
@@ -20,15 +22,8 @@ export namespace PR {
   ])
   export type ErrorCode = z.infer<typeof ErrorCode>
 
-  export class PrError extends Error {
-    constructor(
-      public code: ErrorCode,
-      message: string,
-    ) {
-      super(message)
-      this.name = "PrError"
-    }
-  }
+  export const PrError = NamedError.create("PrError", z.object({ code: ErrorCode, message: z.string() }))
+  export type PrError = InstanceType<typeof PrError>
 
   export const CreateInput = z
     .object({
@@ -58,12 +53,7 @@ export namespace PR {
   export const ReadyInput = z.object({}).meta({ ref: "PrReadyInput" })
   export type ReadyInput = z.infer<typeof ReadyInput>
 
-  export const PrErrorResponse = z
-    .object({
-      code: ErrorCode,
-      message: z.string(),
-    })
-    .meta({ ref: "PrErrorResponse" })
+  export const PrErrorResponse = PrError.Schema
 
   async function fetchUnresolvedCommentCount(
     owner: string,
@@ -72,12 +62,15 @@ export namespace PR {
   ): Promise<number | undefined> {
     const cwd = Instance.worktree
     const query = `query($owner: String!, $name: String!, $prNumber: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $prNumber) { reviewThreads(first: 100) { nodes { isResolved } } } } }`
-    const result = await $`gh api graphql -f query=${query} -f owner=${owner} -f name=${name} -F prNumber=${prNumber}`
-      .quiet()
-      .nothrow()
-      .cwd(cwd)
-      .text()
-      .catch(() => "")
+    const result = await withTimeout(
+      $`gh api graphql -f query=${query} -f owner=${owner} -f name=${name} -F prNumber=${prNumber}`
+        .quiet()
+        .nothrow()
+        .cwd(cwd)
+        .text()
+        .catch(() => ""),
+      30_000,
+    )
     try {
       const parsed = JSON.parse(result)
       const threads = parsed?.data?.repository?.pullRequest?.reviewThreads?.nodes
@@ -92,12 +85,14 @@ export namespace PR {
   export async function fetchForBranch(repo?: { owner: string; name: string }): Promise<Vcs.PrInfo | undefined> {
     const cwd = Instance.worktree
     try {
-      const result =
-        await $`gh pr view --json number,url,title,state,headRefName,baseRefName,isDraft,mergeable,reviewDecision,statusCheckRollup`
+      const result = await withTimeout(
+        $`gh pr view --json number,url,title,state,headRefName,baseRefName,isDraft,mergeable,reviewDecision,statusCheckRollup`
           .quiet()
           .nothrow()
           .cwd(cwd)
-          .text()
+          .text(),
+        30_000,
+      )
       if (!result.trim()) {
         return undefined
       }
@@ -191,10 +186,10 @@ export namespace PR {
     const info = await Vcs.info()
     const github = info.github
     if (!github?.available) {
-      throw new PrError("GH_NOT_INSTALLED", "GitHub CLI (gh) is not installed")
+      throw new PrError({ code: "GH_NOT_INSTALLED", message: "GitHub CLI (gh) is not installed" })
     }
     if (!github.authenticated) {
-      throw new PrError("GH_NOT_AUTHENTICATED", "Run `gh auth login` to authenticate")
+      throw new PrError({ code: "GH_NOT_AUTHENTICATED", message: "Run `gh auth login` to authenticate" })
     }
     return { info, github: github as Vcs.GithubCapability & { available: true; authenticated: true } }
   }
@@ -217,7 +212,7 @@ export namespace PR {
       const errorOutput =
         push.stderr?.toString().trim() || push.stdout?.toString().trim() || "Failed to push branch automatically"
       log.error("push failed", { output: errorOutput })
-      throw new PrError("CREATE_FAILED", sanitizeOutput(errorOutput))
+      throw new PrError({ code: "CREATE_FAILED", message: sanitizeOutput(errorOutput) })
     }
 
     const args = ["gh", "pr", "create", "--title", input.title]
@@ -225,18 +220,21 @@ export namespace PR {
     if (input.base) args.push("--base", input.base)
     if (input.draft) args.push("--draft")
 
-    const cmd = await $`${args}`
-      .quiet()
-      .nothrow()
-      .cwd(cwd)
-      .catch((e: unknown) => ({ exitCode: 1, stdout: Buffer.from(""), stderr: Buffer.from(String(e)) }))
+    const cmd = await withTimeout(
+      $`${args}`
+        .quiet()
+        .nothrow()
+        .cwd(cwd)
+        .catch((e: unknown) => ({ exitCode: 1, stdout: Buffer.from(""), stderr: Buffer.from(String(e)) })),
+      60_000,
+    )
 
     const result = cmd.stdout.toString()
     const errorOut = cmd.stderr.toString()
 
     if (cmd.exitCode !== 0 || !result.trim()) {
       log.error("pr create failed", { stdout: result, stderr: errorOut, exitCode: cmd.exitCode })
-      throw new PrError("CREATE_FAILED", sanitizeOutput(errorOut.trim() || result.trim() || "Failed to create pull request"))
+      throw new PrError({ code: "CREATE_FAILED", message: sanitizeOutput(errorOut.trim() || result.trim() || "Failed to create pull request") })
     }
 
     await Vcs.refresh()
@@ -248,7 +246,7 @@ export namespace PR {
     const prUrl = result.trim().split("\n").pop() ?? ""
     const numberMatch = prUrl.match(/\/pull\/(\d+)/)
     if (!numberMatch) {
-      throw new PrError("CREATE_FAILED", "Pull request was created but could not determine PR number from output")
+      throw new PrError({ code: "CREATE_FAILED", message: "Pull request was created but could not determine PR number from output" })
     }
     return {
       number: parseInt(numberMatch[1], 10),
@@ -270,25 +268,28 @@ export namespace PR {
 
     const currentPr = await get()
     if (!currentPr) {
-      throw new PrError("NO_PR", "No pull request found for the current branch")
+      throw new PrError({ code: "NO_PR", message: "No pull request found for the current branch" })
     }
 
     if (!currentPr.isDraft) {
       return currentPr
     }
 
-    const cmd = await $`gh pr ready`
-      .quiet()
-      .nothrow()
-      .cwd(cwd)
-      .catch((e: unknown) => ({ exitCode: 1, stdout: Buffer.from(""), stderr: Buffer.from(String(e)) }))
+    const cmd = await withTimeout(
+      $`gh pr ready`
+        .quiet()
+        .nothrow()
+        .cwd(cwd)
+        .catch((e: unknown) => ({ exitCode: 1, stdout: Buffer.from(""), stderr: Buffer.from(String(e)) })),
+      30_000,
+    )
 
     const result = cmd.stdout.toString()
     const errorOut = cmd.stderr.toString()
 
     if (cmd.exitCode !== 0) {
       log.error("pr ready failed", { stdout: result, stderr: errorOut, exitCode: cmd.exitCode })
-      throw new PrError("READY_FAILED", sanitizeOutput(errorOut.trim() || result.trim() || "Failed to mark PR as ready"))
+      throw new PrError({ code: "READY_FAILED", message: sanitizeOutput(errorOut.trim() || result.trim() || "Failed to mark PR as ready") })
     }
 
     await Vcs.refresh()
@@ -302,16 +303,16 @@ export namespace PR {
 
     const currentPr = await get()
     if (!currentPr) {
-      throw new PrError("NO_PR", "No pull request found for the current branch")
+      throw new PrError({ code: "NO_PR", message: "No pull request found for the current branch" })
     }
 
     if (currentPr.mergeable === "CONFLICTING") {
-      throw new PrError("MERGE_FAILED", "PR has merge conflicts that must be resolved first")
+      throw new PrError({ code: "MERGE_FAILED", message: "PR has merge conflicts that must be resolved first" })
     }
 
     const github = info.github
     if (!github?.repo) {
-      throw new PrError("MERGE_FAILED", "Unable to determine repository information")
+      throw new PrError({ code: "MERGE_FAILED", message: "Unable to determine repository information" })
     }
 
     const strategy = input.strategy ?? "squash"
@@ -327,11 +328,14 @@ export namespace PR {
       `merge_method=${mergeMethod}`,
     ]
 
-    const cmd = await $`${args}`
-      .quiet()
-      .nothrow()
-      .cwd(cwd)
-      .catch((e: unknown) => ({ exitCode: 1, stdout: Buffer.from(""), stderr: Buffer.from(String(e)) }))
+    const cmd = await withTimeout(
+      $`${args}`
+        .quiet()
+        .nothrow()
+        .cwd(cwd)
+        .catch((e: unknown) => ({ exitCode: 1, stdout: Buffer.from(""), stderr: Buffer.from(String(e)) })),
+      60_000,
+    )
 
     const responseText = cmd.stdout.toString().trim()
     const errorOut = cmd.stderr.toString().trim()
@@ -345,10 +349,12 @@ export namespace PR {
         }
       } catch {}
       log.error("pr merge failed", { stderr: errorOut, stdout: responseText, exitCode: cmd.exitCode })
-      throw new PrError("MERGE_FAILED", sanitizeOutput(errorMessage))
+      throw new PrError({ code: "MERGE_FAILED", message: sanitizeOutput(errorMessage) })
     }
 
     await Vcs.refresh()
+    const updated = await Vcs.info()
+    const result: Vcs.PrInfo = updated.pr ?? { ...currentPr, state: "MERGED" }
 
     if (input.deleteBranch === true) {
       const branchToDelete = currentPr.headRefName
@@ -357,12 +363,12 @@ export namespace PR {
           await deleteBranch({ branch: branchToDelete })
         } catch (e) {
           log.warn("post-merge branch deletion failed", { branch: branchToDelete, error: e })
+          result.branchDeleteFailed = true
         }
       }
     }
 
-    const updated = await Vcs.info()
-    return updated.pr ?? { ...currentPr, state: "MERGED" }
+    return result
   }
 
   export async function deleteBranch(input: DeleteBranchInput): Promise<void> {
@@ -381,7 +387,7 @@ export namespace PR {
       // Ignore "remote ref does not exist" — branch may already be deleted
       if (!errorOut.includes("remote ref does not exist")) {
         log.error("delete remote branch failed", { stderr: errorOut })
-        throw new PrError("DELETE_BRANCH_FAILED", sanitizeOutput(errorOut || "Failed to delete remote branch"))
+        throw new PrError({ code: "DELETE_BRANCH_FAILED", message: sanitizeOutput(errorOut || "Failed to delete remote branch") })
       }
     }
 

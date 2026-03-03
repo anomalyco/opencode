@@ -102,16 +102,9 @@ export const VcsRoutes = lazy(() =>
       }),
       validator("json", PR.CreateInput),
       async (c) => {
-        try {
-          const input = c.req.valid("json")
-          const pr = await PR.create(input)
-          return c.json(pr)
-        } catch (e) {
-          if (e instanceof PR.PrError) {
-            return c.json({ code: e.code, message: e.message }, { status: 400 })
-          }
-          throw e
-        }
+        const input = c.req.valid("json")
+        const pr = await PR.create(input)
+        return c.json(pr)
       },
     )
     .get(
@@ -134,16 +127,8 @@ export const VcsRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        try {
-          const data = await PrComments.fetch()
-          return c.json(data)
-        } catch (e) {
-          if (e instanceof PR.PrError) {
-            const status = e.code === "NO_PR" ? 404 : 400
-            return c.json({ code: e.code, message: e.message }, { status })
-          }
-          throw e
-        }
+        const data = await PrComments.fetch()
+        return c.json(data)
       },
     )
     .post(
@@ -166,17 +151,9 @@ export const VcsRoutes = lazy(() =>
       }),
       validator("json", PR.MergeInput),
       async (c) => {
-        try {
-          const input = c.req.valid("json")
-          const pr = await PR.merge(input)
-          return c.json(pr)
-        } catch (e) {
-          if (e instanceof PR.PrError) {
-            const status = e.code === "NO_PR" ? 404 : 400
-            return c.json({ code: e.code, message: e.message }, { status })
-          }
-          throw e
-        }
+        const input = c.req.valid("json")
+        const pr = await PR.merge(input)
+        return c.json(pr)
       },
     )
     .post(
@@ -199,17 +176,9 @@ export const VcsRoutes = lazy(() =>
       }),
       validator("json", PR.ReadyInput),
       async (c) => {
-        try {
-          const input = c.req.valid("json")
-          const pr = await PR.ready(input)
-          return c.json(pr)
-        } catch (e) {
-          if (e instanceof PR.PrError) {
-            const status = e.code === "NO_PR" ? 404 : 400
-            return c.json({ code: e.code, message: e.message }, { status })
-          }
-          throw e
-        }
+        const input = c.req.valid("json")
+        const pr = await PR.ready(input)
+        return c.json(pr)
       },
     )
     .post(
@@ -232,17 +201,9 @@ export const VcsRoutes = lazy(() =>
       }),
       validator("json", PR.DeleteBranchInput),
       async (c) => {
-        try {
-          const input = c.req.valid("json")
-          await PR.deleteBranch(input)
-          return c.json({ ok: true })
-        } catch (e) {
-          if (e instanceof PR.PrError) {
-            const status = e.code === "NO_PR" ? 404 : 400
-            return c.json({ code: e.code, message: e.message }, { status })
-          }
-          throw e
-        }
+        const input = c.req.valid("json")
+        await PR.deleteBranch(input)
+        return c.json({ ok: true })
       },
     )
     .post(
