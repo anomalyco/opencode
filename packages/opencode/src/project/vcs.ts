@@ -224,7 +224,7 @@ export namespace Vcs {
 
   export async function commit(message: string) {
     const cwd = Instance.worktree
-    const add = await $`git add -A`.quiet().nothrow().cwd(cwd)
+    const add = await $`git add -u`.quiet().nothrow().cwd(cwd)
     if (add.exitCode !== 0) {
       throw new Error("git add failed: " + add.stderr.toString())
     }
