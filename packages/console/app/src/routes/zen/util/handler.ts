@@ -99,6 +99,10 @@ export async function handler(
     const dataDumper = createDataDumper(sessionId, requestId, projectId)
     const trialLimiter = createTrialLimiter(modelInfo.trialProvider, ip)
     const trialProvider = await trialLimiter?.check()
+    // TODO
+    console.log(`modelInfo.trialProvider: ${modelInfo.trialProvider}`)
+    console.log(`IP: ${ip}`)
+    console.log(`trialProvider: ${trialProvider}`)
     const rateLimiter = createRateLimiter(modelInfo.allowAnonymous, ip, input.request)
     await rateLimiter?.check()
     const stickyTracker = createStickyTracker(modelInfo.stickyProvider, sessionId)
@@ -258,6 +262,8 @@ export async function handler(
                 if (usage) {
                   const usageInfo = providerInfo.normalizeUsage(usage)
                   const costInfo = calculateCost(modelInfo, usageInfo)
+                  // TODO
+                  console.log("IN trialLimiter.track")
                   await trialLimiter?.track(usageInfo)
                   await trackUsage(sessionId, billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
                   await reload(billingSource, authInfo, costInfo)
