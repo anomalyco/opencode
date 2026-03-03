@@ -55,6 +55,7 @@ export namespace Flag {
   export const OPENCODE_EXPERIMENTAL_OXFMT = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_OXFMT")
   export const OPENCODE_EXPERIMENTAL_LSP_TY = truthy("OPENCODE_EXPERIMENTAL_LSP_TY")
   export const OPENCODE_EXPERIMENTAL_LSP_TOOL = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_LSP_TOOL")
+  export const OPENCODE_RESPECT_LSP_DIAGNOSTICS = level("OPENCODE_RESPECT_LSP_DIAGNOSTICS")
   export const OPENCODE_DISABLE_FILETIME_CHECK = truthy("OPENCODE_DISABLE_FILETIME_CHECK")
   export const OPENCODE_EXPERIMENTAL_PLAN_MODE = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_PLAN_MODE")
   export const OPENCODE_EXPERIMENTAL_MARKDOWN = !falsy("OPENCODE_EXPERIMENTAL_MARKDOWN")
@@ -66,6 +67,13 @@ export namespace Flag {
     if (!value) return undefined
     const parsed = Number(value)
     return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
+  }
+
+  function level(key: string) {
+    const value = process.env[key]
+    if (!value) return 0
+    const parsed = Number(value)
+    return Number.isInteger(parsed) && parsed >= 0 ? parsed : 0
   }
 }
 
