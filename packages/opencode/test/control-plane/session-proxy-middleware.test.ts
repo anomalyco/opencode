@@ -8,6 +8,8 @@ import { Instance } from "../../src/project/instance"
 import { WorkspaceContext } from "../../src/control-plane/workspace-context"
 import { Database } from "../../src/storage/db"
 import { resetDatabase } from "../fixture/db"
+import * as adaptors from "../../src/control-plane/adaptors"
+import type { Adaptor } from "../../src/control-plane/types"
 
 afterEach(async () => {
   mock.restore()
@@ -19,27 +21,35 @@ type State = {
   calls: Array<{ method: string; url: string; body?: string }>
 }
 
-const remote = { type: "testing", name: "remote-a" } as unknown as typeof WorkspaceTable.$inferInsert.config
+const remote = { type: "testing", name: "remote-a" } as unknown as typeof WorkspaceTable.$inferInsert
 
 async function setup(state: State) {
-  // mock.module("../../src/control-plane/adaptors", () => ({
-  //   getAdaptor: () => ({
-  //     fetch: async (_config: unknown, input: RequestInfo | URL, init?: RequestInit) => {
-  //       const url =
-  //         input instanceof Request || input instanceof URL
-  //           ? input.toString()
-  //           : new URL(input, "http://workspace.test").toString()
-  //       const request = new Request(url, init)
-  //       const body = request.method === "GET" || request.method === "HEAD" ? undefined : await request.text()
-  //       state.calls.push({
-  //         method: request.method,
-  //         url: `${new URL(request.url).pathname}${new URL(request.url).search}`,
-  //         body,
-  //       })
-  //       return new Response("proxied", { status: 202 })
-  //     },
-  //   }),
-  // }))
+  const TestAdaptor: Adaptor = {
+    configure(config) {
+      return config
+    },
+    async create() {
+      throw new Error("not used")
+    },
+    async remove() {},
+
+    async fetch(_config: unknown, input: RequestInfo | URL, init?: RequestInit) {
+      const url =
+        input instanceof Request || input instanceof URL
+          ? input.toString()
+          : new URL(input, "http://workspace.test").toString()
+      const request = new Request(url, init)
+      const body = request.method === "GET" || request.method === "HEAD" ? undefined : await request.text()
+      state.calls.push({
+        method: request.method,
+        url: `${new URL(request.url).pathname}${new URL(request.url).search}`,
+        body,
+      })
+      return new Response("proxied", { status: 202 })
+    },
+  }
+
+  adaptors.installAdaptor("testing", TestAdaptor)
 
   await using tmp = await tmpdir({ git: true })
   const { project } = await Project.fromDirectory(tmp.path)
@@ -55,13 +65,16 @@ async function setup(state: State) {
           id: id1,
           branch: "main",
           project_id: project.id,
-          config: remote,
+          type: remote.type,
+          name: remote.name,
         },
         {
           id: id2,
           branch: "main",
           project_id: project.id,
-          config: { type: "worktree", directory: tmp.path, name: "local", branch: "main" },
+          type: "worktree",
+          directory: tmp.path,
+          name: "local",
         },
       ])
       .run(),
@@ -116,19 +129,21 @@ describe("control-plane/session-proxy-middleware", () => {
     ])
   })
 
-  test("does not forward GET requests", async () => {
-    const state: State = {
-      workspace: "first",
-      calls: [],
-    }
+  // It will behave this way when we have syncing
+  //
+  // test("does not forward GET requests", async () => {
+  //   const state: State = {
+  //     workspace: "first",
+  //     calls: [],
+  //   }
 
-    const ctx = await setup(state)
+  //   const ctx = await setup(state)
 
-    ctx.app.get("/session/foo", (c) => c.text("local", 200))
-    const response = await ctx.request("http://workspace.test/session/foo?x=1")
+  //   ctx.app.get("/session/foo", (c) => c.text("local", 200))
+  //   const response = await ctx.request("http://workspace.test/session/foo?x=1")
 
-    expect(response.status).toBe(200)
-    expect(await response.text()).toBe("local")
-    expect(state.calls).toEqual([])
-  })
+  //   expect(response.status).toBe(200)
+  //   expect(await response.text()).toBe("local")
+  //   expect(state.calls).toEqual([])
+  // })
 })
