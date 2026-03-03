@@ -53,6 +53,15 @@ export namespace MessageV2 {
     "ContextOverflowError",
     z.object({ message: z.string(), responseBody: z.string().optional() }),
   )
+  export const ThinkingLoopError = NamedError.create(
+    "ThinkingLoopError",
+    z.object({
+      message: z.string(),
+      period: z.number(),
+      attempts: z.number(),
+      action: z.literal("abort"),
+    }),
+  )
 
   export const OutputFormatText = z
     .object({
@@ -407,6 +416,7 @@ export namespace MessageV2 {
         AbortedError.Schema,
         StructuredOutputError.Schema,
         ContextOverflowError.Schema,
+        ThinkingLoopError.Schema,
         APIError.Schema,
       ])
       .optional(),

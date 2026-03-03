@@ -5,6 +5,7 @@ import { SessionID, MessageID, PartID } from "./schema"
 import { Instance } from "../project/instance"
 import { Provider } from "../provider/provider"
 import { MessageV2 } from "./message-v2"
+import { isThinkingLoopOutcome } from "./thinking-loop"
 import z from "zod"
 import { Token } from "../util/token"
 import { Log } from "../util/log"
@@ -226,6 +227,18 @@ When constructing the summary, try to stick to this template:
         message: replay
           ? "Conversation history too large to compact - exceeds model context limit"
           : "Session too large to compact - context exceeds model limit even after stripping media",
+      }).toObject()
+      processor.message.finish = "error"
+      await Session.updateMessage(processor.message)
+      return "stop"
+    }
+
+    if (isThinkingLoopOutcome(result)) {
+      processor.message.error = new MessageV2.ThinkingLoopError({
+        message: "Model got stuck in a repeated reasoning loop while compacting context",
+        period: result.period,
+        attempts: 1,
+        action: "abort",
       }).toObject()
       processor.message.finish = "error"
       await Session.updateMessage(processor.message)

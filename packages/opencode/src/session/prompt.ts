@@ -34,6 +34,7 @@ import { Command } from "../command"
 import { $ } from "bun"
 import { pathToFileURL, fileURLToPath } from "url"
 import { ConfigMarkdown } from "../config/markdown"
+import { Config } from "../config/config"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/util/error"
 import { fn } from "@/util/fn"
@@ -46,6 +47,7 @@ import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncation"
+import { getRecoveryAction, isThinkingLoopOutcome } from "./thinking-loop"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -289,6 +291,7 @@ export namespace SessionPrompt {
     // Note: On session resumption, state is reset but outputFormat is preserved
     // on the user message and will be retrieved from lastUser below
     let structuredOutput: unknown | undefined
+    let thinkingLoopAttempt = 0
 
     let step = 0
     const session = await Session.get(sessionID)
@@ -707,6 +710,48 @@ export namespace SessionPrompt {
         }
       }
 
+      if (isThinkingLoopOutcome(result)) {
+        const thinking = (await Config.get()).experimental?.thinking_loop
+        const action = getRecoveryAction(thinkingLoopAttempt, result.period, {
+          max_nudges: thinking?.max_nudges,
+          max_compacts: thinking?.max_compacts,
+          reminder_template: thinking?.reminder_template,
+        })
+        thinkingLoopAttempt++
+
+        if (action.type === "nudge") {
+          await enqueueThinkingLoopReminder({
+            user: lastUser,
+            sessionID,
+            reminder: action.reminder,
+          })
+          continue
+        }
+
+        if (action.type === "compact") {
+          await SessionCompaction.create({
+            sessionID,
+            agent: lastUser.agent,
+            model: lastUser.model,
+            auto: true,
+            overflow: true,
+          })
+          continue
+        }
+
+        processor.message.error = new MessageV2.ThinkingLoopError({
+          message: "Model got stuck in a repeated reasoning loop and automatic remediation exhausted",
+          period: action.period,
+          attempts: action.attempts,
+          action: "abort",
+        }).toObject()
+        processor.message.finish = processor.message.finish ?? "error"
+        await Session.updateMessage(processor.message)
+        break
+      }
+
+      thinkingLoopAttempt = 0
+
       if (result === "stop") break
       if (result === "compact") {
         await SessionCompaction.create({
@@ -736,6 +781,33 @@ export namespace SessionPrompt {
       if (item.info.role === "user" && item.info.model) return item.info.model
     }
     return Provider.defaultModel()
+  }
+
+  async function enqueueThinkingLoopReminder(input: { sessionID: string; user: MessageV2.User; reminder: string }) {
+    const message = await Session.updateMessage({
+      id: Identifier.ascending("message"),
+      role: "user",
+      sessionID: input.sessionID,
+      time: { created: Date.now() },
+      agent: input.user.agent,
+      model: input.user.model,
+      format: input.user.format,
+      tools: input.user.tools,
+      system: input.user.system,
+      variant: input.user.variant,
+    })
+    await Session.updatePart({
+      id: Identifier.ascending("part"),
+      messageID: message.id,
+      sessionID: input.sessionID,
+      type: "text",
+      synthetic: true,
+      text: ["<system-reminder>", input.reminder, "</system-reminder>"].join("\n"),
+      time: {
+        start: Date.now(),
+        end: Date.now(),
+      },
+    })
   }
 
   /** @internal Exported for testing */

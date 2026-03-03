@@ -185,6 +185,16 @@ export type ContextOverflowError = {
   }
 }
 
+export type ThinkingLoopError = {
+  name: "ThinkingLoopError"
+  data: {
+    message: string
+    period: number
+    attempts: number
+    action: "abort"
+  }
+}
+
 export type ApiError = {
   name: "APIError"
   data: {
@@ -216,6 +226,7 @@ export type AssistantMessage = {
     | MessageAbortedError
     | StructuredOutputError
     | ContextOverflowError
+    | ThinkingLoopError
     | ApiError
   parentID: string
   modelID: string
@@ -878,6 +889,7 @@ export type EventSessionError = {
       | MessageAbortedError
       | StructuredOutputError
       | ContextOverflowError
+      | ThinkingLoopError
       | ApiError
   }
 }
@@ -1496,6 +1508,47 @@ export type Config = {
      * Continue the agent loop when a tool call is denied
      */
     continue_loop_on_deny?: boolean
+    /**
+     * Thinking loop detection and automatic remediation settings
+     */
+    thinking_loop?: {
+      /**
+       * Enable thinking loop detection and remediation
+       */
+      enabled?: boolean
+      /**
+       * Minimum repeated block size in chars
+       */
+      min_period?: number
+      /**
+       * Maximum repeated block size in chars
+       */
+      max_period?: number
+      /**
+       * How often to scan reasoning deltas, in chars
+       */
+      check_interval?: number
+      /**
+       * Minimum reasoning chars before loop detection starts
+       */
+      min_chars_before_detection?: number
+      /**
+       * Minimum distinct characters required in a repeated block
+       */
+      min_unique_chars?: number
+      /**
+       * Number of reminder retries before escalating to compaction
+       */
+      max_nudges?: number
+      /**
+       * Number of compaction retries before aborting
+       */
+      max_compacts?: number
+      /**
+       * Template for synthetic loop reminder, supports {period}
+       */
+      reminder_template?: string
+    }
     /**
      * Timeout in milliseconds for model context protocol (MCP) requests
      */

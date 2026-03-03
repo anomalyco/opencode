@@ -14,8 +14,7 @@ import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
-import { PartID } from "./schema"
-import type { SessionID, MessageID } from "./schema"
+import { ThinkingLoopDetector, type ThinkingLoopOutcome } from "./thinking-loop"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -46,11 +45,44 @@ export namespace SessionProcessor {
       async process(streamInput: LLM.StreamInput) {
         log.info("process")
         needsCompaction = false
-        const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
+        const experimental = (await Config.get()).experimental
+        const shouldBreak = experimental?.continue_loop_on_deny !== true
+        const thinking = experimental?.thinking_loop
+        const thinkingEnabled = thinking?.enabled !== false
         while (true) {
           try {
             let currentText: MessageV2.TextPart | undefined
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
+            let thinkingLoop: ThinkingLoopOutcome | undefined
+            const detector = thinkingEnabled
+              ? new ThinkingLoopDetector({
+                  min_period: thinking?.min_period,
+                  max_period: thinking?.max_period,
+                  check_interval: thinking?.check_interval,
+                  min_chars_before_detection: thinking?.min_chars_before_detection,
+                  min_unique_chars: thinking?.min_unique_chars,
+                  on_loop_detected(info) {
+                    log.warn("thinking loop detected", {
+                      sessionID: input.sessionID,
+                      period: info.period,
+                      sample: info.sample,
+                    })
+                  },
+                })
+              : undefined
+
+            const closeReasoning = async () => {
+              const now = Date.now()
+              for (const part of Object.values(reasoningMap)) {
+                part.text = part.text.trimEnd()
+                part.time = {
+                  ...part.time,
+                  end: now,
+                }
+                await Session.updatePart(part)
+              }
+              reasoningMap = {}
+            }
             const stream = await LLM.stream(streamInput)
 
             for await (const value of stream.fullStream) {
@@ -91,6 +123,12 @@ export namespace SessionProcessor {
                       field: "text",
                       delta: value.text,
                     })
+                    const outcome = detector?.feed(value.text)
+                    if (outcome) {
+                      thinkingLoop = outcome
+                      await closeReasoning()
+                      break
+                    }
                   }
                   break
 
@@ -349,7 +387,10 @@ export namespace SessionProcessor {
                   })
                   continue
               }
-              if (needsCompaction) break
+              if (needsCompaction || thinkingLoop) break
+            }
+            if (thinkingLoop) {
+              return thinkingLoop
             }
           } catch (e: any) {
             log.error("process", {

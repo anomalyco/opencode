@@ -1191,6 +1191,47 @@ export namespace Config {
             .optional()
             .describe("Tools that should only be available to primary agents."),
           continue_loop_on_deny: z.boolean().optional().describe("Continue the agent loop when a tool call is denied"),
+          thinking_loop: z
+            .object({
+              enabled: z.boolean().optional().describe("Enable thinking loop detection and remediation"),
+              min_period: z.number().int().positive().optional().describe("Minimum repeated block size in chars"),
+              max_period: z.number().int().positive().optional().describe("Maximum repeated block size in chars"),
+              check_interval: z
+                .number()
+                .int()
+                .positive()
+                .optional()
+                .describe("How often to scan reasoning deltas, in chars"),
+              min_chars_before_detection: z
+                .number()
+                .int()
+                .positive()
+                .optional()
+                .describe("Minimum reasoning chars before loop detection starts"),
+              min_unique_chars: z
+                .number()
+                .int()
+                .positive()
+                .optional()
+                .describe("Minimum distinct characters required in a repeated block"),
+              max_nudges: z
+                .number()
+                .int()
+                .min(0)
+                .optional()
+                .describe("Number of reminder retries before escalating to compaction"),
+              max_compacts: z.number().int().min(0).optional().describe("Number of compaction retries before aborting"),
+              reminder_template: z
+                .string()
+                .optional()
+                .describe("Template for synthetic loop reminder, supports {period}"),
+            })
+            .refine((data) => !data.min_period || !data.max_period || data.min_period <= data.max_period, {
+              message: "min_period must be less than or equal to max_period",
+              path: ["min_period"],
+            })
+            .optional()
+            .describe("Thinking loop detection and automatic remediation settings"),
           mcp_timeout: z
             .number()
             .int()
