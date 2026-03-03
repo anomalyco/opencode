@@ -22,12 +22,10 @@ import {
   BoxRenderable,
   ScrollBoxRenderable,
   addDefaultParsers,
-  StyledText,
   MacOSScrollAccel,
   type ScrollAcceleration,
   TextAttributes,
   RGBA,
-  link as textLink,
 } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
@@ -1449,29 +1447,12 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
     if (offset < value.length) output.push(value.slice(offset))
     return output
   })
-  const renderNode = (token: any, context: any) => {
-    if (token.type !== "link") return
-    if (typeof token.href !== "string") return
-    if (!token.href.startsWith("file://")) return
-    const node = context.defaultRender()
-    if (!node) return
-    if (!("content" in node)) return node
-    const label = typeof token.text === "string" && token.text ? token.text : token.href
-    node.content = new StyledText([textLink(token.href)(label)])
-    return node
-  }
   return (
     <Show when={raw()}>
       <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
         <Switch>
           <Match when={Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
-            <markdown
-              syntaxStyle={syntax()}
-              streaming={true}
-              content={content()}
-              conceal={ctx.conceal()}
-              renderNode={renderNode}
-            />
+            <markdown syntaxStyle={syntax()} streaming={true} content={content()} conceal={ctx.conceal()} />
           </Match>
           <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN && linked()}>
             <text fg={theme.text}>
