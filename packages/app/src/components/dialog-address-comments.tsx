@@ -234,9 +234,7 @@ export function AddressCommentsDialog() {
                                       const g = github()
                                       const p = pr()
                                       const href =
-                                        g?.repo && p?.number
-                                          ? `https://github.com/${g.repo.owner}/${g.repo.name}/pull/${p.number}#discussion_r${comment().id}`
-                                          : undefined
+                                        g?.repo && p?.url ? `${p.url}#discussion_r${comment().id}` : undefined
                                       return (
                                         <Show when={href}>
                                           {(url) => (
