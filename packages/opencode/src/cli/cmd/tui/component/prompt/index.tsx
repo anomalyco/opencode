@@ -817,6 +817,7 @@ export function Prompt(props: PromptProps) {
             flexShrink={0}
             backgroundColor={theme.backgroundElement}
             flexGrow={1}
+            minWidth={20}
           >
             <textarea
               placeholder={placeholderText()}
