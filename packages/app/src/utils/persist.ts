@@ -198,7 +198,8 @@ function parse(value: string) {
 
 function tooLarge(value: string, maxBytes?: number) {
   if (!maxBytes) return false
-  return value.length * 2 > maxBytes
+  const byteLength = new TextEncoder().encode(value).length
+  return byteLength > maxBytes
 }
 
 function writeBoundedSync(storage: SyncStorage, key: string, value: string, maxBytes?: number) {
