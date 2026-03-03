@@ -261,22 +261,28 @@ export namespace Vcs {
 
       let localDebounce: ReturnType<typeof setTimeout> | undefined
       let refDebounce: ReturnType<typeof setTimeout> | undefined
-      let pollTimer: ReturnType<typeof setInterval> | undefined
+      let pollTimer: ReturnType<typeof setTimeout> | undefined
       let hasActivePr = !!current.pr
       let pollIntervalMs = hasActivePr ? POLL_INTERVAL_MS : POLL_INTERVAL_MS * POLL_INTERVAL_NO_PR_MULTIPLIER
 
       const restartPollTimer = () => {
-        if (pollTimer) clearInterval(pollTimer)
-        pollTimer = setInterval(
-          async () => {
-            try {
-              await refreshFull()
-            } catch (e) {
-              log.error("poll refresh failed", { error: e })
-            }
-          },
-          pollIntervalMs + Math.random() * POLL_JITTER_MS,
-        )
+        if (pollTimer) clearTimeout(pollTimer)
+
+        const scheduleNext = () => {
+          pollTimer = setTimeout(
+            async () => {
+              try {
+                await refreshFull()
+              } catch (e) {
+                log.error("poll refresh failed", { error: e })
+              }
+              scheduleNext()
+            },
+            pollIntervalMs + Math.random() * POLL_JITTER_MS,
+          )
+        }
+
+        scheduleNext()
       }
 
       const publish = () => {
