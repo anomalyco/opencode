@@ -294,6 +294,7 @@ export const dict = {
   "dialog.mcp.empty": "No MCPs configured",
 
   "dialog.lsp.empty": "LSPs auto-detected from file types",
+  "dialog.skills.empty": "User or project skills",
   "dialog.plugins.empty": "Plugins configured in opencode.json",
 
   "mcp.status.connected": "connected",
@@ -547,6 +548,7 @@ export const dict = {
   "status.popover.tab.servers": "Servers",
   "status.popover.tab.mcp": "MCP",
   "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.skills": "Skills",
   "status.popover.tab.plugins": "Plugins",
   "status.popover.action.manageServers": "Manage servers",
 

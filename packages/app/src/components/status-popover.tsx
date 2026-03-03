@@ -5,7 +5,7 @@ import { Popover } from "@opencode-ai/ui/popover"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { showToast } from "@opencode-ai/ui/toast"
-import { useNavigate } from "@solidjs/router"
+import { useNavigate, useParams } from "@solidjs/router"
 import { type Accessor, createEffect, createMemo, createSignal, For, type JSXElement, onCleanup, Show } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
@@ -16,6 +16,7 @@ import { normalizeServerUrl, ServerConnection, useServer } from "@/context/serve
 import { useSync } from "@/context/sync"
 import { checkServerHealth, type ServerHealth } from "@/utils/server-health"
 import { DialogSelectServer } from "./dialog-select-server"
+import { type Part } from "@opencode-ai/sdk/v2/client"
 
 const pollMs = 10_000
 
@@ -29,6 +30,18 @@ const pluginEmptyMessage = (value: string, file: string): JSXElement => {
       {parts.slice(1).join(file)}
     </>
   )
+}
+
+const skillName = (part: Part) => {
+  if (part.type !== "tool" || part.tool !== "skill") return
+  if (typeof part.state !== "object" || !part.state) return
+  if (!("input" in part.state)) return
+  if (typeof part.state.input !== "object" || !part.state.input) return
+  const name = "name" in part.state.input ? part.state.input.name : undefined
+  if (typeof name !== "string") return
+  const value = name.trim()
+  if (!value) return
+  return value
 }
 
 const listServersByHealth = (
@@ -167,6 +180,7 @@ export function StatusPopover() {
   const dialog = useDialog()
   const language = useLanguage()
   const navigate = useNavigate()
+  const params = useParams()
 
   const fetcher = platform.fetch ?? globalThis.fetch
   const servers = createMemo(() => {
@@ -185,6 +199,19 @@ export function StatusPopover() {
   const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
   const lspItems = createMemo(() => sync.data.lsp ?? [])
   const lspCount = createMemo(() => lspItems().length)
+  const skills = createMemo(() => {
+    const id = params.id
+    if (!id) return []
+    const seen = new Set<string>()
+    for (const message of sync.data.message[id] ?? []) {
+      for (const part of sync.data.part[message.id] ?? []) {
+        const name = skillName(part)
+        if (name) seen.add(name)
+      }
+    }
+    return [...seen].sort((a, b) => a.localeCompare(b))
+  })
+  const skillCount = createMemo(() => skills().length)
   const plugins = createMemo(() => sync.data.config.plugin ?? [])
   const pluginCount = createMemo(() => plugins().length)
   const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
@@ -247,6 +274,10 @@ export function StatusPopover() {
             <Tabs.Trigger value="lsp" data-slot="tab" class="text-12-regular">
               {lspCount() > 0 ? `${lspCount()} ` : ""}
               {language.t("status.popover.tab.lsp")}
+            </Tabs.Trigger>
+            <Tabs.Trigger value="skills" data-slot="tab" class="text-12-regular">
+              {skillCount() > 0 ? `${skillCount()} ` : ""}
+              {language.t("status.popover.tab.skills")}
             </Tabs.Trigger>
             <Tabs.Trigger value="plugins" data-slot="tab" class="text-12-regular">
               {pluginCount() > 0 ? `${pluginCount()} ` : ""}
@@ -404,6 +435,30 @@ export function StatusPopover() {
                       <div class="flex items-center gap-2 w-full px-2 py-1">
                         <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
                         <span class="text-14-regular text-text-base truncate">{plugin}</span>
+                      </div>
+                    )}
+                  </For>
+                </Show>
+              </div>
+            </div>
+          </Tabs.Content>
+
+          <Tabs.Content value="skills">
+            <div class="flex flex-col px-2 pb-2">
+              <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
+                <Show
+                  when={skills().length > 0}
+                  fallback={
+                    <div class="text-14-regular text-text-base text-center my-auto">
+                      {language.t("dialog.skills.empty")}
+                    </div>
+                  }
+                >
+                  <For each={skills()}>
+                    {(item) => (
+                      <div class="flex items-center gap-2 w-full px-2 py-1">
+                        <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
+                        <span class="text-14-regular text-text-base truncate">{item}</span>
                       </div>
                     )}
                   </For>
