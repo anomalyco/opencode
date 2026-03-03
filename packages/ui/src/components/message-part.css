@@ -194,6 +194,11 @@
     margin-top: 0;
   }
 
+  [data-slot="text-part-turn-summary"] {
+    width: 100%;
+    min-width: 0;
+  }
+
   [data-slot="text-part-copy-wrapper"] {
     min-height: 24px;
     margin-top: 4px;
@@ -381,7 +386,6 @@
   background: transparent;
   position: relative;
   overflow: hidden;
-  will-change: opacity, filter;
 
   [data-slot="bash-copy"] {
     position: absolute;

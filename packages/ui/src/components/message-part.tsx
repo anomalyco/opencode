@@ -106,6 +106,8 @@ export interface MessagePartProps {
   hideDetails?: boolean
   defaultOpen?: boolean
   showAssistantCopyPartID?: string | null
+  showTurnDiffSummary?: boolean
+  turnDiffSummary?: () => JSX.Element
   turnDurationMs?: number
   animate?: boolean
 }
@@ -329,6 +331,8 @@ function PartGrow(props: {
 export function AssistantParts(props: {
   messages: AssistantMessage[]
   showAssistantCopyPartID?: string | null
+  showTurnDiffSummary?: boolean
+  turnDiffSummary?: () => JSX.Element
   turnDurationMs?: number
   working?: boolean
   showReasoningSummaries?: boolean
@@ -421,6 +425,13 @@ export function AssistantParts(props: {
           if (!value) return false
           return value.part.type === "tool"
         })
+        const turnSummary = createMemo(() => {
+          const value = part()
+          if (!value) return false
+          if (value.part.type !== "text") return false
+          if (!props.showTurnDiffSummary) return false
+          return props.showAssistantCopyPartID === value.part.id
+        })
         const fade = createMemo(() => {
           if (ctx()) return true
           return tool()
@@ -432,7 +443,7 @@ export function AssistantParts(props: {
             gap={idx() === 0 ? 0 : 6}
             fade={fade()}
             grow
-            watch={!tool() && tail()}
+            watch={!tool() && tail() && !turnSummary()}
           >
             <Show when={ctx()}>
               {(entry) => (
@@ -445,6 +456,8 @@ export function AssistantParts(props: {
                   part={entry().part}
                   message={entry().message}
                   showAssistantCopyPartID={props.showAssistantCopyPartID}
+                  showTurnDiffSummary={props.showTurnDiffSummary}
+                  turnDiffSummary={props.turnDiffSummary}
                   turnDurationMs={props.turnDurationMs}
                   defaultOpen={partDefaultOpen(entry().part, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
                   animate={props.animate}
@@ -567,6 +580,8 @@ export function AssistantMessageDisplay(props: {
   message: AssistantMessage
   parts: PartType[]
   showAssistantCopyPartID?: string | null
+  showTurnDiffSummary?: boolean
+  turnDiffSummary?: () => JSX.Element
   showReasoningSummaries?: boolean
 }) {
   const grouped = createMemo(() => {
@@ -637,6 +652,8 @@ export function AssistantMessageDisplay(props: {
                   part={entry().part}
                   message={props.message}
                   showAssistantCopyPartID={props.showAssistantCopyPartID}
+                  showTurnDiffSummary={props.showTurnDiffSummary}
+                  turnDiffSummary={props.turnDiffSummary}
                 />
               )}
             </Show>
@@ -956,6 +973,8 @@ export function Part(props: MessagePartProps) {
         hideDetails={props.hideDetails}
         defaultOpen={props.defaultOpen}
         showAssistantCopyPartID={props.showAssistantCopyPartID}
+        showTurnDiffSummary={props.showTurnDiffSummary}
+        turnDiffSummary={props.turnDiffSummary}
         turnDurationMs={props.turnDurationMs}
         animate={props.animate}
       />
@@ -1179,6 +1198,12 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const displayText = () => (part.text ?? "").trim()
   const throttledText = createThrottledValue(displayText)
   const [copied, setCopied] = createSignal(false)
+  const summary = createMemo(() => {
+    if (props.message.role !== "assistant") return
+    if (!props.showTurnDiffSummary) return
+    if (props.showAssistantCopyPartID !== part.id) return
+    return props.turnDiffSummary
+  })
 
   const handleCopy = async () => {
     const content = displayText()
@@ -1194,6 +1219,13 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
         <div data-slot="text-part-body">
           <Markdown text={throttledText()} cacheKey={part.id} />
         </div>
+        <Show when={summary()}>
+          {(render) => (
+            <GrowBox animate={!!props.animate} fade gap={4} class="w-full min-w-0">
+              <div data-slot="text-part-turn-summary">{render()()}</div>
+            </GrowBox>
+          )}
+        </Show>
         <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
           <Tooltip
             value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}

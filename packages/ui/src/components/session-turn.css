@@ -146,6 +146,7 @@
 
   [data-component="session-turn-diffs-trigger"] {
     width: 100%;
+    min-height: 24px;
     display: flex;
     align-items: center;
     justify-content: flex-start;
@@ -155,7 +156,7 @@
 
   [data-slot="session-turn-diffs-title"] {
     display: inline-flex;
-    align-items: baseline;
+    align-items: center;
     gap: 8px;
   }
 
@@ -172,7 +173,7 @@
     font-family: var(--font-family-sans);
     font-size: var(--font-size-base);
     font-weight: var(--font-weight-regular);
-    line-height: var(--line-height-x-large);
+    line-height: var(--line-height-large);
   }
 
   [data-slot="session-turn-diffs-meta"] {
