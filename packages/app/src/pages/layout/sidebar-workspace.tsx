@@ -137,12 +137,18 @@ const WorkspaceHeader = (props: {
     <Show when={props.pr()}>
       {(currentPr) => {
         const pillStyle = () => prPillStyle(currentPr())
+        const hasUnresolvedComments = () => (currentPr().unresolvedCommentCount ?? 0) > 0
         return (
-          <span
-            class={`shrink-0 ml-auto text-11-medium px-1.5 py-0.5 rounded-md border overflow-hidden transition-all duration-200 group-hover/workspace:max-w-0 group-hover/workspace:opacity-0 group-hover/workspace:px-0 group-hover/workspace:border-transparent group-focus-within/workspace:max-w-0 group-focus-within/workspace:opacity-0 group-focus-within/workspace:px-0 group-focus-within/workspace:border-transparent ${pillStyle()}`}
-          >
-            PR #{currentPr().number}
-          </span>
+          <div class="relative shrink-0 ml-auto">
+            <span
+              class={`block text-11-medium px-1.5 py-0.5 rounded-md border overflow-hidden transition-all duration-200 group-hover/workspace:max-w-0 group-hover/workspace:opacity-0 group-hover/workspace:px-0 group-hover/workspace:border-transparent group-focus-within/workspace:max-w-0 group-focus-within/workspace:opacity-0 group-focus-within/workspace:px-0 group-focus-within/workspace:border-transparent ${pillStyle()}`}
+            >
+              PR #{currentPr().number}
+            </span>
+            <Show when={hasUnresolvedComments()}>
+              <div class="absolute -top-px -right-px z-10 size-1.5 rounded-full bg-text-interactive-base" />
+            </Show>
+          </div>
         )
       }}
     </Show>
