@@ -559,7 +559,7 @@ export const RunCommand = cmd({
         // When attaching, validate against the running server instead of local Instance state.
         if (args.attach) {
           const modes = await sdk.app
-            .agents()
+            .agents(undefined, { throwOnError: true })
             .then((x) => x.data ?? [])
             .catch(() => undefined)
 
