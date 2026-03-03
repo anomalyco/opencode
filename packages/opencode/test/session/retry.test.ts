@@ -185,4 +185,74 @@ describe("session.message-v2.fromError", () => {
     const result = MessageV2.fromError(error, { providerID: "openai" }) as MessageV2.APIError
     expect(result.data.isRetryable).toBe(true)
   })
+
+  test("marks 429 rate limit as retryable", () => {
+    const error = new APICallError({
+      message: "Too Many Requests",
+      url: "https://api.example.com/v1/chat/completions",
+      requestBodyValues: {},
+      statusCode: 429,
+      responseHeaders: { "content-type": "application/json" },
+      responseBody: '{"error":"rate limited"}',
+      isRetryable: false,
+    })
+    const result = MessageV2.fromError(error, { providerID: "custom" }) as MessageV2.APIError
+    expect(result.data.isRetryable).toBe(true)
+  })
+
+  test("marks 503 service unavailable as retryable", () => {
+    const error = new APICallError({
+      message: "Service Unavailable",
+      url: "https://api.example.com/v1/chat/completions",
+      requestBodyValues: {},
+      statusCode: 503,
+      responseHeaders: { "content-type": "application/json" },
+      responseBody: '{"error":"overloaded"}',
+      isRetryable: false,
+    })
+    const result = MessageV2.fromError(error, { providerID: "custom" }) as MessageV2.APIError
+    expect(result.data.isRetryable).toBe(true)
+  })
+
+  test("marks Chinese rate limit messages as retryable", () => {
+    const error = new APICallError({
+      message: "您的账户已达到速率限制",
+      url: "https://api.example.com/v1/chat/completions",
+      requestBodyValues: {},
+      statusCode: 400,
+      responseHeaders: { "content-type": "application/json" },
+      responseBody: '{"error":{"code":"1302","message":"您的账户已达到速率限制，请您控制请求频率"}}',
+      isRetryable: false,
+    })
+    const result = MessageV2.fromError(error, { providerID: "glm" }) as MessageV2.APIError
+    expect(result.data.isRetryable).toBe(true)
+  })
+
+  test("marks GLM error code 1302 as retryable", () => {
+    const error = new APICallError({
+      message: "API Error",
+      url: "https://api.example.com/v1/chat/completions",
+      requestBodyValues: {},
+      statusCode: 400,
+      responseHeaders: { "content-type": "application/json" },
+      responseBody: '{"error":{"code":1302,"message":"Rate limit exceeded"}}',
+      isRetryable: false,
+    })
+    const result = MessageV2.fromError(error, { providerID: "glm" }) as MessageV2.APIError
+    expect(result.data.isRetryable).toBe(true)
+  })
+
+  test("marks rate_limit_exceeded error code as retryable", () => {
+    const error = new APICallError({
+      message: "API Error",
+      url: "https://api.example.com/v1/chat/completions",
+      requestBodyValues: {},
+      statusCode: 400,
+      responseHeaders: { "content-type": "application/json" },
+      responseBody: '{"error":{"code":"rate_limit_exceeded","message":"Rate limit exceeded"}}',
+      isRetryable: false,
+    })
+    const result = MessageV2.fromError(error, { providerID: "custom" }) as MessageV2.APIError
+    expect(result.data.isRetryable).toBe(true)
+  })
 })
