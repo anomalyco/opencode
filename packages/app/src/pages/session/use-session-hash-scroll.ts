@@ -168,6 +168,10 @@ export const useSessionHashScroll = (input: {
   })
 
   onMount(() => {
+    if (typeof window !== "undefined" && "scrollRestoration" in window.history) {
+      window.history.scrollRestoration = "manual"
+    }
+
     const handler = () => {
       if (!input.sessionID() || !input.messagesReady()) return
       requestAnimationFrame(() => applyHash("auto"))
