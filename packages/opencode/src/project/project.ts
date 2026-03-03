@@ -95,27 +95,57 @@ export namespace Project {
       const dotgit = await matches.next().then((x) => x.value)
       await matches.return()
       if (dotgit) {
-        let sandbox = path.dirname(dotgit)
+        const raw = path.dirname(dotgit)
 
         const gitBinary = Bun.which("git")
 
-        // cached id calculation
-        let id = await Filesystem.readText(path.join(dotgit, "opencode"))
-          .then((x) => x.trim())
-          .catch(() => undefined)
-
         if (!gitBinary) {
+          const id = await Filesystem.readText(path.join(dotgit, "opencode"))
+            .then((x) => x.trim())
+            .catch(() => undefined)
           return {
             id: id ?? "global",
-            worktree: sandbox,
-            sandbox: sandbox,
+            worktree: raw,
+            sandbox: raw,
             vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
           }
         }
 
-        // generate id from root commit
+        // Resolve the worktree root and git common dir so the project ID
+        // cache is read from and written to the shared .git directory.  This
+        // ensures all worktrees for the same repo resolve the same project ID.
+        const top = await git(["rev-parse", "--show-toplevel"], {
+          cwd: raw,
+        })
+          .then(async (result) => gitpath(raw, await result.text()))
+          .catch(() => undefined)
+
+        const sandbox = top ?? raw
+
+        const common = await git(["rev-parse", "--git-common-dir"], {
+          cwd: sandbox,
+        })
+          .then(async (result) => {
+            const dir = gitpath(sandbox, await result.text())
+            return dir === sandbox ? undefined : dir
+          })
+          .catch(() => undefined)
+
+        const worktree = common ? path.dirname(common) : sandbox
+
+        // Read cached project ID from the git common dir (shared across
+        // worktrees).  Falls back to dotgit for repos where git-common-dir
+        // resolution failed.
+        const cache = common ? path.join(common, "opencode") : path.join(dotgit, "opencode")
+        let id = await Filesystem.readText(cache)
+          .then((x) => x.trim())
+          .catch(() => undefined)
+
+        // Generate id from root commit.  Use HEAD instead of --all to avoid
+        // orphan branches (gh-pages, stash roots) from changing the sorted
+        // first root commit across restarts.
         if (!id) {
-          const roots = await git(["rev-list", "--max-parents=0", "--all"], {
+          const roots = await git(["rev-list", "--max-parents=0", "HEAD"], {
             cwd: sandbox,
           })
             .then(async (result) =>
@@ -127,63 +157,18 @@ export namespace Project {
             )
             .catch(() => undefined)
 
-          if (!roots) {
-            return {
-              id: "global",
-              worktree: sandbox,
-              sandbox: sandbox,
-              vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
-            }
-          }
-
-          id = roots[0]
+          id = roots?.[0]
           if (id) {
-            await Filesystem.write(path.join(dotgit, "opencode"), id).catch(() => undefined)
+            await Filesystem.write(cache, id).catch(() => undefined)
           }
         }
 
         if (!id) {
           return {
             id: "global",
-            worktree: sandbox,
-            sandbox: sandbox,
-            vcs: "git",
-          }
-        }
-
-        const top = await git(["rev-parse", "--show-toplevel"], {
-          cwd: sandbox,
-        })
-          .then(async (result) => gitpath(sandbox, await result.text()))
-          .catch(() => undefined)
-
-        if (!top) {
-          return {
-            id,
+            worktree,
             sandbox,
-            worktree: sandbox,
-            vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
-          }
-        }
-
-        sandbox = top
-
-        const worktree = await git(["rev-parse", "--git-common-dir"], {
-          cwd: sandbox,
-        })
-          .then(async (result) => {
-            const common = gitpath(sandbox, await result.text())
-            // Avoid going to parent of sandbox when git-common-dir is empty.
-            return common === sandbox ? sandbox : path.dirname(common)
-          })
-          .catch(() => undefined)
-
-        if (!worktree) {
-          return {
-            id,
-            sandbox,
-            worktree: sandbox,
-            vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+            vcs: top ? "git" : Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
           }
         }
 
