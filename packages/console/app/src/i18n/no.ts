@@ -15,6 +15,7 @@ export const dict = {
   "nav.home": "Hjem",
   "nav.openMenu": "Åpne meny",
   "nav.getStartedFree": "Kom i gang gratis",
+  "nav.logoAlt": "OpenCode",
 
   "nav.context.copyLogo": "Kopier logo som SVG",
   "nav.context.copyWordmark": "Kopier wordmark som SVG",
@@ -42,8 +43,12 @@ export const dict = {
   "notFound.docs": "Dokumentasjon",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
+  "notFound.logoLightAlt": "opencode logo lys",
+  "notFound.logoDarkAlt": "opencode logo mørk",
 
   "user.logout": "Logg ut",
+
+  "auth.callback.error.codeMissing": "Ingen autorisasjonskode funnet.",
 
   "workspace.select": "Velg arbeidsområde",
   "workspace.createNew": "+ Opprett nytt arbeidsområde",
@@ -76,6 +81,8 @@ export const dict = {
   "error.reloadAmountMin": "Påfyllingsbeløp må være minst ${{amount}}",
   "error.reloadTriggerMin": "Saldo-trigger må være minst ${{amount}}",
 
+  "app.meta.description": "OpenCode - Den åpne kildekode kodingsagenten.",
+
   "home.title": "OpenCode | Den åpne kildekode AI-kodingsagenten",
 
   "temp.title": "opencode | AI-kodingsagent bygget for terminalen",
@@ -91,6 +98,8 @@ export const dict = {
   "temp.feature.models.afterLink": ", inkludert lokale modeller",
   "temp.screenshot.caption": "opencode TUI med tokyonight-tema",
   "temp.screenshot.alt": "opencode TUI med tokyonight-tema",
+  "temp.logoLightAlt": "opencode logo lys",
+  "temp.logoDarkAlt": "opencode logo mørk",
 
   "home.banner.badge": "Ny",
   "home.banner.text": "Desktop-app tilgjengelig i beta",
@@ -240,6 +249,24 @@ export const dict = {
     "Alle Zen-modeller hostes i USA. Leverandører følger en policy om null oppbevaring og bruker ikke dataene dine til modelltrening, med",
   "zen.privacy.exceptionsLink": "følgende unntak",
 
+  "zen.api.error.rateLimitExceeded": "Rate limit overskredet. Vennligst prøv igjen senere.",
+  "zen.api.error.modelNotSupported": "Modell {{model}} støttes ikke",
+  "zen.api.error.modelFormatNotSupported": "Modell {{model}} støttes ikke for format {{format}}",
+  "zen.api.error.noProviderAvailable": "Ingen leverandør tilgjengelig",
+  "zen.api.error.providerNotSupported": "Leverandør {{provider}} støttes ikke",
+  "zen.api.error.missingApiKey": "Mangler API-nøkkel.",
+  "zen.api.error.invalidApiKey": "Ugyldig API-nøkkel.",
+  "zen.api.error.subscriptionQuotaExceeded": "Abonnementskvote overskredet. Prøv igjen om {{retryIn}}.",
+  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
+    "Abonnementskvote overskredet. Du kan fortsette å bruke gratis modeller.",
+  "zen.api.error.noPaymentMethod": "Ingen betalingsmetode. Legg til en betalingsmetode her: {{billingUrl}}",
+  "zen.api.error.insufficientBalance": "Utilstrekkelig saldo. Administrer faktureringen din her: {{billingUrl}}",
+  "zen.api.error.workspaceMonthlyLimitReached":
+    "Arbeidsområdet ditt har nådd sin månedlige utgiftsgrense på ${{amount}}. Administrer grensene dine her: {{billingUrl}}",
+  "zen.api.error.userMonthlyLimitReached":
+    "Du har nådd din månedlige utgiftsgrense på ${{amount}}. Administrer grensene dine her: {{membersUrl}}",
+  "zen.api.error.modelDisabled": "Modellen er deaktivert",
+
   "black.meta.title": "OpenCode Black | Få tilgang til verdens beste kodemodeller",
   "black.meta.description": "Få tilgang til Claude, GPT, Gemini og mer med OpenCode Black-abonnementer.",
   "black.hero.title": "Få tilgang til verdens beste kodemodeller",
@@ -347,8 +374,8 @@ export const dict = {
   "workspace.usage.breakdown.cacheWrite": "Cache Skrevet",
   "workspace.usage.breakdown.output": "Output",
   "workspace.usage.breakdown.reasoning": "Resonnering",
-  "workspace.usage.subscription": "abonnement (${{amount}})",
-  "workspace.usage.lite": "lite (${{amount}})",
+  "workspace.usage.subscription": "Black (${{amount}})",
+  "workspace.usage.lite": "Go (${{amount}})",
   "workspace.usage.byok": "BYOK (${{amount}})",
 
   "workspace.cost.title": "Kostnad",
@@ -449,6 +476,7 @@ export const dict = {
   "workspace.reload.updatePaymentMethod": "Vennligst oppdater betalingsmetoden din og prøv på nytt.",
   "workspace.reload.retrying": "Prøver på nytt...",
   "workspace.reload.retry": "Prøv på nytt",
+  "workspace.reload.error.paymentFailed": "Betaling mislyktes.",
 
   "workspace.payments.title": "Betalingshistorikk",
   "workspace.payments.subtitle": "Nylige betalingstransaksjoner.",
@@ -495,21 +523,26 @@ export const dict = {
   "workspace.lite.time.minute": "minutt",
   "workspace.lite.time.minutes": "minutter",
   "workspace.lite.time.fewSeconds": "noen få sekunder",
-  "workspace.lite.subscription.title": "Lite-abonnement",
-  "workspace.lite.subscription.message": "Du abonnerer på OpenCode Lite.",
+  "workspace.lite.subscription.title": "Go-abonnement",
+  "workspace.lite.subscription.message": "Du abonnerer på OpenCode Go.",
   "workspace.lite.subscription.manage": "Administrer abonnement",
   "workspace.lite.subscription.rollingUsage": "Løpende bruk",
   "workspace.lite.subscription.weeklyUsage": "Ukentlig bruk",
   "workspace.lite.subscription.monthlyUsage": "Månedlig bruk",
   "workspace.lite.subscription.resetsIn": "Nullstilles om",
   "workspace.lite.subscription.useBalance": "Bruk din tilgjengelige saldo etter å ha nådd bruksgrensene",
-  "workspace.lite.other.title": "Lite-abonnement",
+  "workspace.lite.subscription.selectProvider":
+    'Velg "OpenCode Go" som leverandør i opencode-konfigurasjonen din for å bruke Go-modeller.',
+  "workspace.lite.other.title": "Go-abonnement",
   "workspace.lite.other.message":
-    "Et annet medlem i dette arbeidsområdet abonnerer allerede på OpenCode Lite. Kun ett medlem per arbeidsområde kan abonnere.",
-  "workspace.lite.promo.title": "OpenCode Lite",
+    "Et annet medlem i dette arbeidsområdet abonnerer allerede på OpenCode Go. Kun ett medlem per arbeidsområde kan abonnere.",
+  "workspace.lite.promo.title": "OpenCode Go",
   "workspace.lite.promo.description":
-    "Få tilgang til de beste åpne modellene — Kimi K2.5, GLM-5 og MiniMax M2.5 — med generøse bruksgrenser for $10 per måned.",
-  "workspace.lite.promo.subscribe": "Abonner på Lite",
+    "OpenCode Go er et abonnement til $10 per måned som gir pålitelig tilgang til populære åpne kodemodeller med rause bruksgrenser.",
+  "workspace.lite.promo.modelsTitle": "Hva som er inkludert",
+  "workspace.lite.promo.footer":
+    "Planen er primært designet for internasjonale brukere, med modeller driftet i USA, EU og Singapore for stabil global tilgang. Priser og bruksgrenser kan endres etter hvert som vi lærer fra tidlig bruk og tilbakemeldinger.",
+  "workspace.lite.promo.subscribe": "Abonner på Go",
   "workspace.lite.promo.subscribing": "Omdirigerer...",
 
   "download.title": "OpenCode | Last ned",
@@ -562,6 +595,10 @@ export const dict = {
   "enterprise.form.send": "Send",
   "enterprise.form.sending": "Sender...",
   "enterprise.form.success": "Melding sendt, vi tar kontakt snart.",
+  "enterprise.form.success.submitted": "Skjemaet ble sendt inn.",
+  "enterprise.form.error.allFieldsRequired": "Alle felt er obligatoriske.",
+  "enterprise.form.error.invalidEmailFormat": "Ugyldig e-postformat.",
+  "enterprise.form.error.internalServer": "Intern serverfeil.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "Hva er OpenCode Enterprise?",
   "enterprise.faq.a1":
@@ -594,6 +631,7 @@ export const dict = {
   "bench.list.table.agent": "Agent",
   "bench.list.table.model": "Modell",
   "bench.list.table.score": "Poengsum",
+  "bench.submission.error.allFieldsRequired": "Alle felt er obligatoriske.",
 
   "bench.detail.title": "Benchmark - {{task}}",
   "bench.detail.notFound": "Oppgave ikke funnet",

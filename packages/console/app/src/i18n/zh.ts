@@ -15,6 +15,7 @@ export const dict = {
   "nav.home": "首页",
   "nav.openMenu": "打开菜单",
   "nav.getStartedFree": "免费开始",
+  "nav.logoAlt": "OpenCode",
 
   "nav.context.copyLogo": "复制 Logo (SVG)",
   "nav.context.copyWordmark": "复制商标 (SVG)",
@@ -42,8 +43,12 @@ export const dict = {
   "notFound.docs": "文档",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
+  "notFound.logoLightAlt": "opencode logo 亮色",
+  "notFound.logoDarkAlt": "opencode logo 暗色",
 
   "user.logout": "退出登录",
+
+  "auth.callback.error.codeMissing": "未找到授权码。",
 
   "workspace.select": "选择工作区",
   "workspace.createNew": "+ 新建工作区",
@@ -76,6 +81,8 @@ export const dict = {
   "error.reloadAmountMin": "充值金额必须至少为 ${{amount}}",
   "error.reloadTriggerMin": "余额触发阈值必须至少为 ${{amount}}",
 
+  "app.meta.description": "OpenCode - 开源编程代理。",
+
   "home.title": "OpenCode | 开源 AI 编程代理",
 
   "temp.title": "OpenCode | 专为终端打造的 AI 编程代理",
@@ -91,6 +98,8 @@ export const dict = {
   "temp.feature.models.afterLink": "，包括本地模型",
   "temp.screenshot.caption": "使用 Tokyonight 主题的 OpenCode TUI",
   "temp.screenshot.alt": "使用 Tokyonight 主题的 OpenCode TUI",
+  "temp.logoLightAlt": "opencode logo 亮色",
+  "temp.logoDarkAlt": "opencode logo 暗色",
 
   "home.banner.badge": "新",
   "home.banner.text": "桌面应用 Beta 版现已推出",
@@ -229,6 +238,22 @@ export const dict = {
   "zen.privacy.beforeExceptions": "所有 Zen 模型均托管在美国。提供商遵循零留存政策，不使用您的数据进行模型训练，",
   "zen.privacy.exceptionsLink": "以下例外情况除外",
 
+  "zen.api.error.rateLimitExceeded": "超出速率限制。请稍后重试。",
+  "zen.api.error.modelNotSupported": "不支持模型 {{model}}",
+  "zen.api.error.modelFormatNotSupported": "格式 {{format}} 不支持模型 {{model}}",
+  "zen.api.error.noProviderAvailable": "没有可用的提供商",
+  "zen.api.error.providerNotSupported": "不支持提供商 {{provider}}",
+  "zen.api.error.missingApiKey": "缺少 API 密钥。",
+  "zen.api.error.invalidApiKey": "无效的 API 密钥。",
+  "zen.api.error.subscriptionQuotaExceeded": "超出订阅配额。请在 {{retryIn}} 后重试。",
+  "zen.api.error.subscriptionQuotaExceededUseFreeModels": "超出订阅配额。您可以继续使用免费模型。",
+  "zen.api.error.noPaymentMethod": "没有付款方式。请在此处添加付款方式：{{billingUrl}}",
+  "zen.api.error.insufficientBalance": "余额不足。请在此处管理您的计费：{{billingUrl}}",
+  "zen.api.error.workspaceMonthlyLimitReached":
+    "您的工作区已达到每月支出限额 ${{amount}}。请在此处管理您的限额：{{billingUrl}}",
+  "zen.api.error.userMonthlyLimitReached": "您已达到每月支出限额 ${{amount}}。请在此处管理您的限额：{{membersUrl}}",
+  "zen.api.error.modelDisabled": "模型已禁用",
+
   "black.meta.title": "OpenCode Black | 访问全球顶尖编程模型",
   "black.meta.description": "通过 OpenCode Black 订阅计划使用 Claude, GPT, Gemini 等模型。",
   "black.hero.title": "访问全球顶尖编程模型",
@@ -334,8 +359,8 @@ export const dict = {
   "workspace.usage.breakdown.cacheWrite": "缓存写入",
   "workspace.usage.breakdown.output": "输出",
   "workspace.usage.breakdown.reasoning": "推理",
-  "workspace.usage.subscription": "订阅 (${{amount}})",
-  "workspace.usage.lite": "lite (${{amount}})",
+  "workspace.usage.subscription": "Black (${{amount}})",
+  "workspace.usage.lite": "Go (${{amount}})",
   "workspace.usage.byok": "BYOK (${{amount}})",
 
   "workspace.cost.title": "成本",
@@ -436,6 +461,7 @@ export const dict = {
   "workspace.reload.updatePaymentMethod": "请更新您的付款方式并重试。",
   "workspace.reload.retrying": "正在重试...",
   "workspace.reload.retry": "重试",
+  "workspace.reload.error.paymentFailed": "支付失败。",
 
   "workspace.payments.title": "支付历史",
   "workspace.payments.subtitle": "近期支付交易。",
@@ -481,20 +507,25 @@ export const dict = {
   "workspace.lite.time.minute": "分钟",
   "workspace.lite.time.minutes": "分钟",
   "workspace.lite.time.fewSeconds": "几秒钟",
-  "workspace.lite.subscription.title": "Lite 订阅",
-  "workspace.lite.subscription.message": "您已订阅 OpenCode Lite。",
+  "workspace.lite.subscription.title": "Go 订阅",
+  "workspace.lite.subscription.message": "您已订阅 OpenCode Go。",
   "workspace.lite.subscription.manage": "管理订阅",
   "workspace.lite.subscription.rollingUsage": "滚动用量",
   "workspace.lite.subscription.weeklyUsage": "每周用量",
   "workspace.lite.subscription.monthlyUsage": "每月用量",
   "workspace.lite.subscription.resetsIn": "重置于",
   "workspace.lite.subscription.useBalance": "达到使用限额后使用您的可用余额",
-  "workspace.lite.other.title": "Lite 订阅",
-  "workspace.lite.other.message": "此工作区中的另一位成员已经订阅了 OpenCode Lite。每个工作区只有一名成员可以订阅。",
-  "workspace.lite.promo.title": "OpenCode Lite",
+  "workspace.lite.subscription.selectProvider":
+    "在你的 opencode 配置中选择「OpenCode Go」作为提供商，即可使用 Go 模型。",
+  "workspace.lite.other.title": "Go 订阅",
+  "workspace.lite.other.message": "此工作区中的另一位成员已经订阅了 OpenCode Go。每个工作区只有一名成员可以订阅。",
+  "workspace.lite.promo.title": "OpenCode Go",
   "workspace.lite.promo.description":
-    "每月仅需 $10 即可访问最优秀的开源模型 — Kimi K2.5, GLM-5, 和 MiniMax M2.5 — 并享受充裕的使用限额。",
-  "workspace.lite.promo.subscribe": "订阅 Lite",
+    "OpenCode Go 是一个每月 $10 的订阅计划，提供对主流开源编码模型的稳定访问，并配备充足的使用额度。",
+  "workspace.lite.promo.modelsTitle": "包含模型",
+  "workspace.lite.promo.footer":
+    "该计划主要面向国际用户设计，模型部署在美国、欧盟和新加坡，以确保全球范围内的稳定访问体验。定价和使用额度可能会根据早期用户的使用情况和反馈持续调整与优化。",
+  "workspace.lite.promo.subscribe": "订阅 Go",
   "workspace.lite.promo.subscribing": "正在重定向...",
 
   "download.title": "OpenCode | 下载",
@@ -547,6 +578,10 @@ export const dict = {
   "enterprise.form.send": "发送",
   "enterprise.form.sending": "正在发送...",
   "enterprise.form.success": "消息已发送，我们会尽快与您联系。",
+  "enterprise.form.success.submitted": "表单提交成功。",
+  "enterprise.form.error.allFieldsRequired": "所有字段均为必填项。",
+  "enterprise.form.error.invalidEmailFormat": "邮箱格式无效。",
+  "enterprise.form.error.internalServer": "内部服务器错误。",
   "enterprise.faq.title": "常见问题",
   "enterprise.faq.q1": "什么是 OpenCode 企业版？",
   "enterprise.faq.a1":
@@ -579,6 +614,7 @@ export const dict = {
   "bench.list.table.agent": "代理",
   "bench.list.table.model": "模型",
   "bench.list.table.score": "分数",
+  "bench.submission.error.allFieldsRequired": "所有字段均为必填项。",
 
   "bench.detail.title": "基准测试 - {{task}}",
   "bench.detail.notFound": "未找到任务",
