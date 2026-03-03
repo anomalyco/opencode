@@ -14,7 +14,7 @@
     "prepare": "husky",
     "random": "echo 'Random script'",
     "hello": "echo 'Hello World!'",
-    "release": "bun run script/release-lash.ts",
+    "release": "OPENCODE_CHANNEL=latest OPENCODE_BUMP=patch bun run script/release-lash.ts",
     "test": "echo 'do not run tests from root' && exit 1"
   },
   "workspaces": {
