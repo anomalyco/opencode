@@ -269,9 +269,10 @@ export function DialogDiffViewer() {
                       <text fg={theme.text} wrapMode="none">
                         [{style(item)}] {item.path}
                       </text>
-                      <text fg={theme.textMuted}>
-                        +{item.added} -{item.removed}
-                      </text>
+                      <box flexDirection="row" gap={1}>
+                        <text fg={theme.diffHighlightAdded}>+{item.added}</text>
+                        <text fg={theme.diffHighlightRemoved}>-{item.removed}</text>
+                      </box>
                     </box>
                   )}
                 </For>
