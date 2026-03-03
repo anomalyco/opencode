@@ -396,7 +396,8 @@ export async function seedSessionQuestion(
     sdk,
     sessionID: input.sessionID,
     prompt: text,
-    timeout: 30_000,
+    timeout: 60_000,
+    attempts: 4,
     probe: async () => {
       const list = await sdk.question.list().then((x) => x.data ?? [])
       return list.find((item) => item.sessionID === input.sessionID && item.questions[0]?.header === first.header)
