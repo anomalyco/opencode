@@ -3,6 +3,52 @@ import { STATUS_CODES } from "http"
 import { iife } from "@/util/iife"
 
 export namespace ProviderError {
+  // Custom retry patterns for rate limiting and transient errors
+  // These patterns match common rate limit and temporary error messages from various providers
+  const RETRY_PATTERNS = [
+    /rate.?limit/i, // Generic rate limit
+    /too many requests/i, // HTTP 429 equivalent
+    /请求频率/i, // Chinese: request frequency
+    /速率限制/i, // Chinese: rate limit
+    /请稍后重试/i, // Chinese: please retry later
+    /请求人数过多/i, // Chinese: too many requests
+    /overloaded/i, // Server overloaded
+    /temporarily unavailable/i, // Temporary unavailability
+    /service unavailable/i, // HTTP 503 equivalent
+    /please try again/i, // Generic retry request
+    /capacity/i, // Capacity issues
+    /throttl/i, // Throttling (throttle/throttled)
+  ]
+
+  // Custom retry error codes (provider-specific)
+  const RETRY_ERROR_CODES = new Set([
+    1302, // GLM/智谱: rate limit
+    "rate_limit_exceeded",
+    "insufficient_quota", // Though marked non-retryable in stream, may want retry for API calls
+    "overloaded_error",
+  ])
+
+  function isCustomRetryable(e: APICallError): boolean {
+    if (e.statusCode === 429) return true
+    if (e.statusCode === 503) return true
+
+    const msg = e.message.toLowerCase()
+    if (RETRY_PATTERNS.some((p) => p.test(msg))) return true
+
+    if (e.responseBody) {
+      try {
+        const body = JSON.parse(e.responseBody)
+        const errMsg = (body?.error?.message ?? body?.message ?? "").toLowerCase()
+        if (RETRY_PATTERNS.some((p) => p.test(errMsg))) return true
+
+        const errCode = body?.error?.code ?? body?.code
+        if (RETRY_ERROR_CODES.has(errCode) || RETRY_ERROR_CODES.has(Number(errCode))) return true
+      } catch {}
+    }
+
+    return false
+  }
+
   // Adapted from overflow detection patterns in:
   // https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/utils/overflow.ts
   const OVERFLOW_PATTERNS = [
@@ -191,9 +237,10 @@ export namespace ProviderError {
       type: "api_error",
       message: m,
       statusCode: input.error.statusCode,
-      isRetryable: input.providerID.startsWith("openai")
-        ? isOpenAiErrorRetryable(input.error)
-        : input.error.isRetryable,
+      isRetryable: isCustomRetryable(input.error)
+        || (input.providerID.startsWith("openai")
+          ? isOpenAiErrorRetryable(input.error)
+          : input.error.isRetryable),
       responseHeaders: input.error.responseHeaders,
       responseBody: input.error.responseBody,
       metadata,
