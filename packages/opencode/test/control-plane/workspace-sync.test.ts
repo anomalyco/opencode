@@ -26,7 +26,7 @@ mock.module("../../src/control-plane/adaptors", () => ({
         throw new Error("not used")
       },
       async remove() {},
-      async request() {
+      async fetch(_config: unknown, _input: RequestInfo | URL, _init?: RequestInit) {
         const body = new ReadableStream<Uint8Array>({
           start(controller) {
             const encoder = new TextEncoder()
@@ -68,7 +68,7 @@ describe("control-plane/workspace.startSyncing", () => {
             id: id2,
             branch: "main",
             project_id: project.id,
-            config: { type: "worktree", directory: tmp.path },
+            config: { type: "worktree", directory: tmp.path, name: "local", branch: "main" },
           },
         ])
         .run(),

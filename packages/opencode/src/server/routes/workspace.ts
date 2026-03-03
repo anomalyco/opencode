@@ -1,6 +1,7 @@
 import { Hono } from "hono"
 import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
+import { WorktreeArgs } from "../../control-plane/adaptors/worktree"
 import { Workspace } from "../../control-plane/workspace"
 import { Instance } from "../../project/instance"
 import { errors } from "../error"
@@ -9,7 +10,7 @@ import { lazy } from "../../util/lazy"
 export const WorkspaceRoutes = lazy(() =>
   new Hono()
     .post(
-      "/:id",
+      "/",
       describeRoute({
         summary: "Create workspace",
         description: "Create a workspace for the current project.",
@@ -27,26 +28,20 @@ export const WorkspaceRoutes = lazy(() =>
         },
       }),
       validator(
-        "param",
-        z.object({
-          id: Workspace.Info.shape.id,
-        }),
-      ),
-      validator(
         "json",
-        z.object({
-          branch: Workspace.Info.shape.branch,
-          config: Workspace.Info.shape.config,
-        }),
+        z
+          .object({
+            branch: Workspace.Info.shape.branch.optional(),
+          })
+          .and(z.discriminatedUnion("type", [WorktreeArgs])),
       ),
       async (c) => {
-        const { id } = c.req.valid("param")
         const body = c.req.valid("json")
+        const { branch, ...args } = body
         const workspace = await Workspace.create({
-          id,
           projectID: Instance.project.id,
-          branch: body.branch,
-          config: body.config,
+          branch: body.branch || null,
+          args: args,
         })
         return c.json(workspace)
       },

@@ -7,8 +7,8 @@ import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { Log } from "@/util/log"
 import { WorkspaceTable } from "./workspace.sql"
-import { Config } from "./config"
-import { getAdaptor } from "./adaptors"
+import { Config, getAdaptor } from "./adaptors"
+import { WorktreeArgs } from "./adaptors/worktree"
 import { parseSSE } from "./sse"
 
 export namespace Workspace {
@@ -48,51 +48,44 @@ export namespace Workspace {
     }
   }
 
-  export const create = fn(
-    z.object({
-      id: Identifier.schema("workspace").optional(),
-      projectID: Info.shape.projectID,
-      branch: Info.shape.branch,
-      config: Info.shape.config,
-    }),
-    async (input) => {
-      const id = Identifier.ascending("workspace", input.id)
+  const CreateInput = z.object({
+    id: Identifier.schema("workspace").optional(),
+    projectID: Info.shape.projectID,
+    branch: Info.shape.branch,
+    args: z.discriminatedUnion("type", [WorktreeArgs]),
+  })
 
-      const { config, init } = await getAdaptor(input.config).create(input.config, input.branch)
+  export const create = fn(CreateInput, async (input) => {
+    const id = Identifier.ascending("workspace", input.id)
+    const adaptor = getAdaptor(input.args.type)
 
-      const info: Info = {
-        id,
-        projectID: input.projectID,
-        branch: input.branch,
-        config,
-      }
+    const config = await adaptor.getConfig({ workspaceID: id, branch: input.branch, args: input.args })
 
-      setTimeout(async () => {
-        await init()
+    const info: Info = {
+      id,
+      projectID: input.projectID,
+      branch: input.branch,
+      config,
+    }
 
-        Database.use((db) => {
-          db.insert(WorkspaceTable)
-            .values({
-              id: info.id,
-              branch: info.branch,
-              project_id: info.projectID,
-              config: info.config,
-            })
-            .run()
+    Database.use((db) => {
+      db.insert(WorkspaceTable)
+        .values({
+          id: info.id,
+          branch: info.branch,
+          project_id: info.projectID,
+          config: info.config,
         })
+        .run()
+    })
 
-        GlobalBus.emit("event", {
-          directory: id,
-          payload: {
-            type: Event.Ready.type,
-            properties: {},
-          },
-        })
-      }, 0)
-
-      return info
-    },
-  )
+    await adaptor.create({
+      workspaceID: id,
+      branch: input.branch,
+      config,
+    })
+    return info
+  })
 
   export function list(project: Project.Info) {
     const rows = Database.use((db) =>
@@ -111,7 +104,7 @@ export namespace Workspace {
     const row = Database.use((db) => db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).get())
     if (row) {
       const info = fromRow(row)
-      await getAdaptor(info.config).remove(info.config)
+      await getAdaptor(row.config.type).remove(info.config)
       Database.use((db) => db.delete(WorkspaceTable).where(eq(WorkspaceTable.id, id)).run())
       return info
     }
@@ -120,8 +113,8 @@ export namespace Workspace {
 
   async function workspaceEventLoop(space: Info, stop: AbortSignal) {
     while (!stop.aborted) {
-      const res = await getAdaptor(space.config)
-        .request(space.config, "GET", "/event", undefined, stop)
+      const res = await getAdaptor(space.config.type)
+        .fetch(space.config, "/event", { method: "GET", signal: stop })
         .catch(() => undefined)
       if (!res || !res.ok || !res.body) {
         await Bun.sleep(1000)
@@ -140,7 +133,7 @@ export namespace Workspace {
 
   export function startSyncing(project: Project.Info) {
     const stop = new AbortController()
-    const spaces = list(project).filter((space) => space.config.type !== "worktree")
+    const spaces = list().filter((space) => space.projectID === project.id && space.config.type !== "worktree")
 
     spaces.forEach((space) => {
       void workspaceEventLoop(space, stop.signal).catch((error) => {

@@ -1,9 +1,12 @@
-import { WorktreeAdaptor } from "./worktree"
-import type { Config } from "../config"
+import z from "zod"
+import { WorktreeAdaptor, WorktreeConfig } from "./worktree"
 import type { Adaptor } from "./types"
 
-export function getAdaptor(config: Config): Adaptor {
-  switch (config.type) {
+export const Config = z.discriminatedUnion("type", [WorktreeConfig])
+export type Config = z.infer<typeof Config>
+
+export function getAdaptor(type: Config["type"]): Adaptor<Config, unknown> {
+  switch (type) {
     case "worktree":
       return WorktreeAdaptor
   }
