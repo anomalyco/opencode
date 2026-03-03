@@ -20,8 +20,8 @@ Başlayalım.
 opencode'u terminalinizde kullanmak için ihtiyacınız olacak:
 
 1. Şu gibi modern bir terminal emülatörü:
-   - [WezTerm](https://wezterm.org), cross-platform
-   - [Alacritty](https://alacritty.org), cross-platform
+   - [WezTerm](https://wezterm.org), cross-platform (tüm platformlarda)
+   - [Alacritty](https://alacritty.org), cross-platform (tüm platformlarda)
    - [Ghostty](https://ghostty.org), Linux ve macOS
    - [Kitty](https://sw.kovidgoyal.net/kitty/), Linux ve macOS
 
@@ -160,8 +160,7 @@ Alternatif olarak diğer sağlayıcılardan birini seçebilirsiniz. [Daha fazla 
 
 ## Başlatma
 
-Artık bir sağlayıcı yapılandırdığınıza göre, bir projeye gidebilirsiniz.
-üzerinde çalışmak istiyorsun.
+Artık bir sağlayıcı yapılandırdığınıza göre, üzerinde çalışmak istediğiniz bir projeye gidebilirsiniz.
 
 ```bash
 cd /path/to/project
@@ -179,8 +178,7 @@ Daha sonra aşağıdaki komutu çalıştırarak proje için opencode'u başlatı
 /init
 ```
 
-Bu, opencode'un projenizi analiz etmesini ve bir `AGENTS.md` dosyası oluşturmasını sağlayacaktır.
-proje kökü.
+Bu, opencode'un projenizi analiz etmesini ve bir `AGENTS.md` proje kökünde dosyası oluşturmasını sağlayacaktır.
 
 :::tip
 Projenizin `AGENTS.md` dosyasını Git'e göndermelisiniz.
@@ -220,10 +218,10 @@ opencode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de ön
 
 1. **Bir plan oluşturun**
 
-   opencode, değişiklik yapma özelliğini kapatan bir \_Plan modu_na sahiptir.
+   opencode, değişiklik yapma özelliğini kapatan bir \_Plan modu_\na sahiptir.
    Bu modda, özelliğin nasıl uygulanacağını önerir.
 
-   **Sekme** tuşunu kullanarak buna geçin. Bunun için sağ alt köşede bir gösterge göreceksiniz.
+   **Tab** tuşunu kullanarak buna geçin. Bunun için sağ alt köşede bir gösterge göreceksiniz.
 
    ```bash frame="none" title="Plan moduna geç"
    <TAB>
@@ -241,11 +239,8 @@ opencode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de ön
    Ekibinizdeki junior bir geliştiriciyle konuşur gibi yazmak genelde iyi sonuç verir.
 
    :::tip
-   opencode'a bol bağlam ve örnek verin.
+   OpenCode'a ne istediğinizi anlamasına yardımcı olacak bol miktarda bağlam ve örnek verin.
    :::
-
-   opencode verdiğiniz görselleri tarayıp prompt'a ekleyebilir.
-   Bunu bir görseli terminale sürükleyip bırakarak yapabilirsiniz.
 
 2. **Planı yineleyin**
 
@@ -260,12 +255,12 @@ opencode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de ön
    İsteme eklemek için görüntüleri terminale sürükleyip bırakın.
    :::
 
-   opencode verdiğiniz görselleri tarayıp prompt'a ekleyebilir.
+   OpenCode verdiğiniz görselleri tarayıp prompt'a ekleyebilir.
    Bunu bir görseli terminale sürükleyip bırakarak yapabilirsiniz.
 
 3. **Özelliği oluşturun**
 
-   Planı yeterli bulduğunuzda **Sekme** tuşuna tekrar basarak \_Build modu_na dönün.
+   Planı yeterli bulduğunuzda **Tab** tuşuna tekrar basarak \_Build modu_\na dönün.
 
    ```bash frame="none"
    <TAB>
@@ -281,7 +276,7 @@ opencode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de ön
 
 ### Değişiklik Yapma
 
-Daha basit değişikliklerde, önce planı incelemeden opencode'dan doğrudan değişiklik yapmasını isteyebilirsiniz.
+Daha basit değişikliklerde, önce planı incelemeden OpenCode'dan doğrudan değişiklik yapmasını isteyebilirsiniz.
 
 ```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
 We need to add authentication to the /settings route. Take a look at how this is
@@ -289,7 +284,7 @@ handled in the /notes route in @packages/functions/src/notes.ts and implement
 the same logic in @packages/functions/src/settings.ts
 ```
 
-opencode'un doğru değişiklikleri yapması için yeterli ayrıntı verdiğinizden emin olun.
+OpenCode'un doğru değişiklikleri yapması için yeterli ayrıntı verdiğinizden emin olun.
 
 ---
 
@@ -301,20 +296,19 @@ Diyelim ki opencode'dan bazı değişiklikler yapmasını istediniz.
 Can you refactor the function in @packages/functions/src/api/index.ts?
 ```
 
-Ama istediğinin bu olmadığını anlıyorsun. Değişiklikleri **geri alabilirsiniz**
-`/undo` komutunu kullanarak.
+Ama istediğinin bu olmadığını anlıyorsun. `/undo` komutunu kullanarak değişiklikleri **geri alabilirsiniz**.
 
 ```bash frame="none"
 /undo
 ```
 
-opencode değişiklikleri geri alır ve orijinal mesajınızı tekrar gösterir.
+OpenCode değişiklikleri geri alır ve orijinal mesajınızı tekrar gösterir.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
 ```
 
-Buradan komut isteminde ince ayar yapabilir ve opencode'dan tekrar denemesini isteyebilirsiniz.
+Buradan komut isteminde ince ayar yapabilir ve OpenCode'dan tekrar denemesini isteyebilirsiniz.
 
 :::tip
 Birden çok değişikliği geri almak için `/undo` komutunu birden çok kez çalıştırabilirsiniz.
@@ -330,7 +324,7 @@ Veya `/redo` komutunu kullanarak değişiklikleri **yeniden yapabilirsiniz**.
 
 ## Paylaşma
 
-opencode ile yaptığınız görüşmeleri [ekibinizle paylaşabilirsiniz](/docs/share).
+OpenCode ile yaptığınız görüşmeleri [ekibinizle paylaşabilirsiniz](/docs/share).
 
 ```bash frame="none"
 /share
@@ -342,7 +336,7 @@ Bu, mevcut konuşmaya bir bağlantı oluşturacak ve bunu panonuza kopyalayacakt
 Konuşmalar varsayılan olarak paylaşılmaz.
 :::
 
-İşte opencode'lu bir [örnek konuşma](https://opencode.ai/s/4XP1fce5).
+İşte OpenCode ile bir [örnek konuşma](https://opencode.ai/s/4XP1fce5).
 
 ---
 
@@ -350,4 +344,4 @@ Konuşmalar varsayılan olarak paylaşılmaz.
 
 İşte bu kadar! Artık opencode'u kullanma konusunda profesyonelsiniz.
 
-Kendinize göre uyarlamak için [tema seçebilir](/docs/themes), [tuş atamalarını özelleştirebilir](/docs/keybinds), [kod biçimlendirici ayarlayabilir](/docs/formatters), [özel komutlar oluşturabilir](/docs/commands) veya [opencode config](/docs/config) ile oynayabilirsiniz.
+Kendinize göre uyarlamak için [tema seçebilir](/docs/themes), [tuş atamalarını özelleştirebilir](/docs/keybinds), [kod biçimlendirici ayarlayabilir](/docs/formatters), [özel komutlar oluşturabilir](/docs/commands) veya [OpenCode config](/docs/config) ile oynayabilirsiniz.
