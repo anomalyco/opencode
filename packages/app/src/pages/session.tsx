@@ -1018,7 +1018,9 @@ export default function Page() {
   const updateScrollState = (el: HTMLDivElement) => {
     const max = el.scrollHeight - el.clientHeight
     const overflow = max > 1
-    const bottom = !overflow || el.scrollTop >= max - 2
+    // If auto-scroll is tracking the bottom, always report bottom: true
+    // to prevent the scroll-down arrow from flashing during height animations
+    const bottom = !overflow || el.scrollTop >= max - 2 || !autoScroll.userScrolled()
 
     if (ui.scroll.overflow === overflow && ui.scroll.bottom === bottom) return
     setUi("scroll", { overflow, bottom })

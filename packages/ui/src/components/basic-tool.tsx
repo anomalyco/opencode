@@ -43,10 +43,6 @@ export function BasicTool(props: BasicToolProps) {
   const [ready, setReady] = createSignal(open())
   const pending = () => props.status === "pending" || props.status === "running"
   const watchDetails = () => props.watchDetails !== false
-  const log = (...args: unknown[]) => {
-    if (!props.debugID || typeof window === "undefined") return
-    console.debug("[ui:tool]", props.debugID, ...args)
-  }
 
   let frame: number | undefined
 
@@ -60,10 +56,6 @@ export function BasicTool(props: BasicToolProps) {
 
   createEffect(() => {
     if (props.forceOpen) setOpen(true)
-  })
-
-  createEffect(() => {
-    log("state", { open: open(), status: props.status, forceOpen: !!props.forceOpen, pending: pending() })
   })
 
   createEffect(
@@ -108,7 +100,6 @@ export function BasicTool(props: BasicToolProps) {
       bodyRef.style.filter = "blur(2px)"
     }
     const next = read()
-    log("open", { next })
     fadeAnim?.stop()
     fadeAnim = animate(bodyRef, { opacity: 1, filter: "blur(0px)" }, FADE_SPRING)
     fadeAnim.finished.then(() => {
@@ -121,9 +112,12 @@ export function BasicTool(props: BasicToolProps) {
 
   const doClose = () => {
     if (!contentRef || !bodyRef) return
-    log("close")
     fadeAnim?.stop()
     fadeAnim = animate(bodyRef, { opacity: 0, filter: "blur(2px)" }, FADE_SPRING)
+    fadeAnim.finished.then(() => {
+      if (!contentRef || open()) return
+      contentRef.style.display = "none"
+    })
     heightSpring.set(0)
   }
 
@@ -131,31 +125,17 @@ export function BasicTool(props: BasicToolProps) {
     if (!contentRef || !open()) return
     const next = read()
     if (Math.abs(next - heightSpring.get()) < 1) return
-    log("grow", { next })
     heightSpring.set(next)
   }
 
   onMount(() => {
-    log("mount", {
-      status: props.status,
-      defaultOpen: props.defaultOpen,
-      forceOpen: props.forceOpen,
-      animated: props.animated,
-      animateIn: props.animateIn,
-    })
     if (!props.animated || props.animate === false || !contentRef || !bodyRef) return
 
     const offChange = heightSpring.on("change", (v) => {
       if (!contentRef) return
       contentRef.style.height = `${Math.max(0, Math.ceil(v))}px`
     })
-    const offComplete = heightSpring.on("animationComplete", () => {
-      if (!contentRef || open()) return
-      contentRef.style.display = "none"
-      log("close-done")
-    })
     onCleanup(() => {
-      offComplete()
       offChange()
     })
 
@@ -196,7 +176,6 @@ export function BasicTool(props: BasicToolProps) {
   )
 
   onCleanup(() => {
-    log("unmount")
     if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame)
     observer?.disconnect()
     fadeAnim?.stop()

@@ -40,12 +40,6 @@ export function GrowBox(props: GrowBoxProps) {
   const grow = () => props.grow !== false
   const watch = () => props.watch === true
 
-  const log = (...args: unknown[]) => {
-    if (typeof window === "undefined") return
-    const id = props.slot || props.class || "?"
-    console.debug("[ui:grow-box]", id, ...args)
-  }
-
   const currentHeight = () => {
     if (!root) return 0
     const v = root.style.height
@@ -62,18 +56,15 @@ export function GrowBox(props: GrowBoxProps) {
     if (!root) return
     const next = targetHeight()
     const prev = currentHeight()
-    log("open", { prev, next, grow: grow(), watch: watch() })
     if (Math.abs(next - prev) < 1) {
       if (props.autoHeight === false || watch()) {
         root.style.height = `${next}px`
         root.style.overflow = next > 0 ? "visible" : "hidden"
       }
-      log("open-skip", { next })
       return
     }
     root.style.overflow = "hidden"
     height.set(next)
-    log("open-animate", { prev, next })
   }
 
   onMount(() => {
@@ -93,12 +84,10 @@ export function GrowBox(props: GrowBoxProps) {
       if (props.autoHeight === false || watch()) {
         root.style.height = `${next}px`
         root.style.overflow = next > 0 ? "visible" : "hidden"
-        log("open-done-fixed", { next })
         return
       }
       root.style.height = "auto"
       root.style.overflow = "visible"
-      log("open-done-auto")
     })
 
     onCleanup(() => {
@@ -107,15 +96,14 @@ export function GrowBox(props: GrowBoxProps) {
       offChange()
     })
 
-    log("mount", { animate: props.animate, grow: grow(), watch: watch(), fade: props.fade !== false })
     if (!props.animate) {
       root.style.height = ""
       root.style.overflow = ""
       body.style.opacity = ""
       body.style.filter = ""
-      log("mount-skip-no-animate")
       return
     }
+
     if (grow()) {
       root.style.height = "0px"
       root.style.overflow = "hidden"
@@ -123,13 +111,14 @@ export function GrowBox(props: GrowBoxProps) {
       root.style.height = "auto"
       root.style.overflow = "visible"
     }
+
     if (props.fade !== false) {
       body.style.opacity = "0"
       body.style.filter = "blur(2px)"
     }
+
     mountFrame = requestAnimationFrame(() => {
       mountFrame = undefined
-      log("mount-raf", { grow: grow(), bodyHeight: targetHeight() })
       if (props.fade !== false && body) {
         fadeAnim?.stop()
         fadeAnim = animate(body, { opacity: 1, filter: "blur(0px)" }, FADE_SPRING)
@@ -142,12 +131,10 @@ export function GrowBox(props: GrowBoxProps) {
       if (grow()) setHeight()
     })
     if (watch()) {
-      log("mount-observer-setup")
       observer = new ResizeObserver(() => {
         if (resizeFrame !== undefined) return
         resizeFrame = requestAnimationFrame(() => {
           resizeFrame = undefined
-          log("resize-observer-fire", { bodyHeight: targetHeight(), rootHeight: currentHeight() })
           setHeight()
         })
       })

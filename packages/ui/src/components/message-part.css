@@ -200,18 +200,9 @@
     margin-top: 0;
   }
 
-  [data-slot="text-part-copy-wrap"] {
-    width: 100%;
-    min-width: 0;
-    display: none;
-  }
-
-  [data-slot="text-part-copy-wrap"][data-visible] {
-    display: block;
-  }
-
   [data-slot="text-part-copy-wrapper"] {
     min-height: 24px;
+    margin-top: 4px;
     display: flex;
     align-items: center;
     justify-content: flex-start;
@@ -579,6 +570,17 @@
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+[data-slot="webfetch-meta"] {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+
+  [data-component="tool-action"] {
+    flex-shrink: 0;
+  }
 }
 
 [data-component="todos"] {

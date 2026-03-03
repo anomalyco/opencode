@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, on, onCleanup, type ValidComponent } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import { animate, type AnimationPlaybackControls } from "./motion"
+import { animate, type AnimationPlaybackControls, GLOW_SPRING } from "./motion"
 
 export const TextShimmer = <T extends ValidComponent = "span">(props: {
   text: string
@@ -43,7 +43,7 @@ export const TextShimmer = <T extends ValidComponent = "span">(props: {
       glowAnim = animate(
         baseRef,
         { filter: ["brightness(1.5)", "brightness(1)"] },
-        { type: "spring", visualDuration: 0.4, bounce: 0.15 },
+        GLOW_SPRING,
       )
       glowAnim.finished.then(() => {
         if (!baseRef) return

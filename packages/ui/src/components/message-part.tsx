@@ -306,6 +306,7 @@ function PartGrow(props: {
   gap?: number
   fade?: boolean
   grow?: boolean
+  watch?: boolean
 }) {
   return (
     <GrowBox
@@ -313,6 +314,7 @@ function PartGrow(props: {
       fade={props.fade}
       gap={props.gap}
       grow={props.grow}
+      watch={props.watch}
       slot="assistant-part-grow"
     >
       {props.children}
@@ -332,10 +334,6 @@ export function AssistantParts(props: {
 }) {
   const data = useData()
   const emptyParts: PartType[] = []
-  const log = (...args: unknown[]) => {
-    if (typeof window === "undefined") return
-    console.debug("[ui:assistant-parts]", ...args)
-  }
 
   const grouped = createMemo(() => {
     const keys: string[] = []
@@ -396,16 +394,6 @@ export function AssistantParts(props: {
   })
 
   const last = createMemo(() => grouped().keys.at(-1))
-  createEffect(
-    on(
-      () => grouped().keys.join("|"),
-      () => {
-        const value = grouped()
-        log("keys", { count: value.keys.length, keys: value.keys })
-      },
-      { defer: true },
-    ),
-  )
 
   return (
     <For each={grouped().keys}>
@@ -434,7 +422,14 @@ export function AssistantParts(props: {
           return tool()
         })
         return (
-          <PartGrow animate={props.animate} debugID={key} gap={idx() === 0 ? 0 : 6} fade={fade()} grow>
+          <PartGrow
+            animate={props.animate}
+            debugID={key}
+            gap={idx() === 0 ? 0 : 6}
+            fade={fade()}
+            grow
+            watch={!tool() && tail()}
+          >
             <Show when={ctx()}>
               {(entry) => (
                 <ContextToolGroup parts={entry().parts} busy={props.working && tail()} animate={props.animate} />
@@ -728,11 +723,11 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean; animate?: 
                           <span data-slot="basic-tool-tool-title">
                             <TextShimmer text={trigger.title} active={running()} />
                           </span>
-                          <Show when={!running() && trigger.subtitle}>
-                            <span data-slot="basic-tool-tool-subtitle">{trigger.subtitle}</span>
-                          </Show>
+                          <Show when={!running() && trigger.subtitle}>{(text) => <ToolText text={text()} />}</Show>
                           <Show when={!running() && trigger.args?.length}>
-                            <For each={trigger.args}>{(arg) => <span data-slot="basic-tool-tool-arg">{arg}</span>}</For>
+                            <For each={trigger.args}>
+                              {(arg, idx) => <ToolArg text={arg} delay={0.02 * (idx() + 1)} />}
+                            </For>
                           </Show>
                         </div>
                       </div>
@@ -1048,36 +1043,6 @@ function ToolFileAccordion(props: { path: string; actions?: JSX.Element; childre
 PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const i18n = useI18n()
   const part = props.part as ToolPart
-  const log = (...args: unknown[]) => {
-    if (typeof window === "undefined") return
-    console.debug("[ui:tool-part]", part.callID, ...args)
-  }
-  const out = createMemo(() => {
-    const value = (part.state as Record<string, unknown>).output
-    if (typeof value !== "string") return 0
-    return value.length
-  })
-  onMount(() => {
-    log("mount", { tool: part.tool, partID: part.id, status: part.state.status })
-  })
-  onCleanup(() => log("unmount", { tool: part.tool, partID: part.id }))
-  createEffect(
-    on(
-      () => part.state.status,
-      (status, prev) => log("status", { prev: prev ?? null, next: status }),
-      { defer: true },
-    ),
-  )
-  createEffect(
-    on(
-      out,
-      (next, prev) => {
-        if (!next && !prev) return
-        log("output", { prev: prev ?? 0, next })
-      },
-      { defer: true },
-    ),
-  )
   if (part.tool === "todowrite" || part.tool === "todoread") return null
 
   const hideQuestion = createMemo(
@@ -1243,33 +1208,26 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
         <div data-slot="text-part-body">
           <Markdown text={throttledText()} cacheKey={part.id} />
         </div>
-        <div data-slot="text-part-copy-wrap" data-visible={showCopy() ? "" : undefined}>
-          <div
-            data-slot="text-part-copy-wrapper"
-            data-interrupted={interrupted() ? "" : undefined}
-            aria-hidden={showCopy() ? undefined : true}
+        <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
+          <Tooltip
+            value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+            placement="top"
+            gutter={4}
           >
-            <Tooltip
-              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
-              placement="top"
-              gutter={4}
-            >
-              <IconButton
-                icon={copied() ? "check" : "copy"}
-                size="normal"
-                variant="ghost"
-                disabled={!showCopy()}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={handleCopy}
-                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
-              />
-            </Tooltip>
-            <Show when={meta()}>
-              <span data-slot="text-part-meta" class="text-12-regular text-text-weak cursor-default">
-                {meta()}
-              </span>
-            </Show>
-          </div>
+            <IconButton
+              icon={copied() ? "check" : "copy"}
+              size="normal"
+              variant="ghost"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={handleCopy}
+              aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+            />
+          </Tooltip>
+          <Show when={meta()}>
+            <span data-slot="text-part-meta" class="text-12-regular text-text-weak cursor-default">
+              {meta()}
+            </span>
+          </Show>
         </div>
       </div>
     </Show>
@@ -1306,16 +1264,20 @@ ToolRegistry.register({
       if (!value || !Array.isArray(value)) return []
       return value.filter((p): p is string => typeof p === "string")
     })
+    const pending = createMemo(() => props.status === "pending" || props.status === "running")
     return (
       <>
         <BasicTool
           {...props}
           icon="glasses"
-          trigger={{
-            title: i18n.t("ui.tool.read"),
-            subtitle: props.input.filePath ? getFilename(props.input.filePath) : "",
-            args,
-          }}
+          trigger={
+            <ToolTriggerRow
+              title={i18n.t("ui.tool.read")}
+              pending={pending()}
+              subtitle={props.input.filePath ? getFilename(props.input.filePath) : ""}
+              args={args}
+            />
+          }
         />
         <For each={loaded()}>
           {(filepath) => (
@@ -1336,11 +1298,18 @@ ToolRegistry.register({
   name: "list",
   render(props) {
     const i18n = useI18n()
+    const pending = createMemo(() => props.status === "pending" || props.status === "running")
     return (
       <BasicTool
         {...props}
         icon="bullet-list"
-        trigger={{ title: i18n.t("ui.tool.list"), subtitle: getDirectory(props.input.path || "/") }}
+        trigger={
+          <ToolTriggerRow
+            title={i18n.t("ui.tool.list")}
+            pending={pending()}
+            subtitle={getDirectory(props.input.path || "/")}
+          />
+        }
       >
         <Show when={props.output}>
           {(output) => (
@@ -1358,15 +1327,19 @@ ToolRegistry.register({
   name: "glob",
   render(props) {
     const i18n = useI18n()
+    const pending = createMemo(() => props.status === "pending" || props.status === "running")
     return (
       <BasicTool
         {...props}
         icon="magnifying-glass-menu"
-        trigger={{
-          title: i18n.t("ui.tool.glob"),
-          subtitle: getDirectory(props.input.path || "/"),
-          args: props.input.pattern ? ["pattern=" + props.input.pattern] : [],
-        }}
+        trigger={
+          <ToolTriggerRow
+            title={i18n.t("ui.tool.glob")}
+            pending={pending()}
+            subtitle={getDirectory(props.input.path || "/")}
+            args={props.input.pattern ? ["pattern=" + props.input.pattern] : []}
+          />
+        }
       >
         <Show when={props.output}>
           {(output) => (
@@ -1387,15 +1360,19 @@ ToolRegistry.register({
     const args: string[] = []
     if (props.input.pattern) args.push("pattern=" + props.input.pattern)
     if (props.input.include) args.push("include=" + props.input.include)
+    const pending = createMemo(() => props.status === "pending" || props.status === "running")
     return (
       <BasicTool
         {...props}
         icon="magnifying-glass-menu"
-        trigger={{
-          title: i18n.t("ui.tool.grep"),
-          subtitle: getDirectory(props.input.path || "/"),
-          args,
-        }}
+        trigger={
+          <ToolTriggerRow
+            title={i18n.t("ui.tool.grep")}
+            pending={pending()}
+            subtitle={getDirectory(props.input.path || "/")}
+            args={args}
+          />
+        }
       >
         <Show when={props.output}>
           {(output) => (
@@ -1424,7 +1401,10 @@ function useToolFade(ref: () => HTMLElement | undefined, options?: { delay?: num
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
 
     const mask =
-      wipe && typeof CSS !== "undefined" && CSS.supports("mask-image", "linear-gradient(to right, black, transparent)")
+      wipe &&
+      typeof CSS !== "undefined" &&
+      (CSS.supports("mask-image", "linear-gradient(to right, black, transparent)") ||
+        CSS.supports("-webkit-mask-image", "linear-gradient(to right, black, transparent)"))
 
     el.style.opacity = "0"
     el.style.filter = wipe ? "blur(3px)" : "blur(2px)"
@@ -1441,30 +1421,20 @@ function useToolFade(ref: () => HTMLElement | undefined, options?: { delay?: num
       el.style.webkitMaskPosition = "100% 0%"
     }
 
-    if (wipe && !mask) el.style.clipPath = "inset(0 100% 0 0)"
-
     frame = requestAnimationFrame(() => {
       frame = undefined
       const node = ref()
       if (!node) return
 
-      if (!wipe) {
-        anim = animate(node, { opacity: 1, filter: "blur(0px)", transform: "translateY(0)" }, { ...FADE_SPRING, delay })
-      }
-
-      if (wipe) {
-        anim = mask
+      anim = wipe
+        ? mask
           ? animate(
               node,
               { opacity: 1, filter: "blur(0px)", transform: "translateX(0)", maskPosition: "0% 0%" },
               { ...FADE_SPRING, delay },
             )
-          : animate(
-              node,
-              { opacity: 1, filter: "blur(0px)", transform: "translateX(0)", clipPath: "inset(0 0% 0 0)" },
-              { ...FADE_SPRING, delay },
-            )
-      }
+          : animate(node, { opacity: 1, filter: "blur(0px)", transform: "translateX(0)" }, { ...FADE_SPRING, delay })
+        : animate(node, { opacity: 1, filter: "blur(0px)", transform: "translateY(0)" }, { ...FADE_SPRING, delay })
 
       anim?.finished.then(() => {
         const value = ref()
@@ -1472,7 +1442,7 @@ function useToolFade(ref: () => HTMLElement | undefined, options?: { delay?: num
         value.style.opacity = ""
         value.style.filter = ""
         value.style.transform = ""
-        value.style.clipPath = ""
+        if (!mask) return
         value.style.maskImage = ""
         value.style.webkitMaskImage = ""
         value.style.maskSize = ""
@@ -1491,33 +1461,26 @@ function useToolFade(ref: () => HTMLElement | undefined, options?: { delay?: num
   })
 }
 
-function WebfetchLink(props: { url: string }) {
-  let ref: HTMLAnchorElement | undefined
+function WebfetchMeta(props: { url: string }) {
+  let ref: HTMLSpanElement | undefined
   useToolFade(() => ref, { wipe: true })
 
   return (
-    <a
-      ref={ref}
-      data-slot="basic-tool-tool-subtitle"
-      class="clickable subagent-link"
-      href={props.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={(event) => event.stopPropagation()}
-    >
-      {props.url}
-    </a>
-  )
-}
-
-function WebfetchAction() {
-  let ref: HTMLDivElement | undefined
-  useToolFade(() => ref, { delay: 0.04 })
-
-  return (
-    <div ref={ref} data-component="tool-action">
-      <Icon name="square-arrow-top-right" size="small" />
-    </div>
+    <span ref={ref} data-slot="webfetch-meta">
+      <a
+        data-slot="basic-tool-tool-subtitle"
+        class="clickable subagent-link"
+        href={props.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(event) => event.stopPropagation()}
+      >
+        {props.url}
+      </a>
+      <div data-component="tool-action">
+        <Icon name="square-arrow-top-right" size="small" />
+      </div>
+    </span>
   )
 }
 
@@ -1538,14 +1501,48 @@ function TaskLink(props: { href: string; text: string; onClick: (e: MouseEvent) 
   )
 }
 
-function ToolText(props: { text: string }) {
+function ToolText(props: { text: string; delay?: number }) {
   let ref: HTMLSpanElement | undefined
-  useToolFade(() => ref, { wipe: true })
+  useToolFade(() => ref, { delay: props.delay, wipe: true })
 
   return (
     <span ref={ref} data-slot="basic-tool-tool-subtitle">
       {props.text}
     </span>
+  )
+}
+
+function ToolArg(props: { text: string; delay?: number }) {
+  let ref: HTMLSpanElement | undefined
+  useToolFade(() => ref, { delay: props.delay, wipe: true })
+
+  return (
+    <span ref={ref} data-slot="basic-tool-tool-arg">
+      {props.text}
+    </span>
+  )
+}
+
+function ToolTriggerRow(props: {
+  title: string
+  pending: boolean
+  subtitle?: string
+  args?: string[]
+  action?: JSX.Element
+}) {
+  return (
+    <div data-slot="basic-tool-tool-info-structured">
+      <div data-slot="basic-tool-tool-info-main">
+        <span data-slot="basic-tool-tool-title">
+          <TextShimmer text={props.title} active={props.pending} />
+        </span>
+        <Show when={!props.pending && props.subtitle}>{(text) => <ToolText text={text()} />}</Show>
+        <Show when={!props.pending && props.args?.length}>
+          <For each={props.args}>{(arg, idx) => <ToolArg text={arg} delay={0.02 * (idx() + 1)} />}</For>
+        </Show>
+      </div>
+      <Show when={!props.pending && props.action}>{props.action}</Show>
+    </div>
   )
 }
 
@@ -1613,11 +1610,8 @@ ToolRegistry.register({
               <span data-slot="basic-tool-tool-title">
                 <TextShimmer text={i18n.t("ui.tool.webfetch")} active={pending()} />
               </span>
-              <Show when={!pending() && url()}>{(value) => <WebfetchLink url={value()} />}</Show>
+              <Show when={!pending() && url()}>{(value) => <WebfetchMeta url={value()} />}</Show>
             </div>
-            <Show when={!pending() && url()}>
-              <WebfetchAction />
-            </Show>
           </div>
         }
       />
@@ -2128,6 +2122,7 @@ ToolRegistry.register({
 
       return []
     })
+    const pending = createMemo(() => props.status === "pending" || props.status === "running")
 
     const subtitle = createMemo(() => {
       const list = todos()
@@ -2140,10 +2135,7 @@ ToolRegistry.register({
         {...props}
         defaultOpen
         icon="checklist"
-        trigger={{
-          title: i18n.t("ui.tool.todos"),
-          subtitle: subtitle(),
-        }}
+        trigger={<ToolTriggerRow title={i18n.t("ui.tool.todos")} pending={pending()} subtitle={subtitle()} />}
       >
         <Show when={todos().length}>
           <div data-component="todos">
@@ -2173,6 +2165,7 @@ ToolRegistry.register({
     const questions = createMemo(() => (props.input.questions ?? []) as QuestionInfo[])
     const answers = createMemo(() => (props.metadata.answers ?? []) as QuestionAnswer[])
     const completed = createMemo(() => answers().length > 0)
+    const pending = createMemo(() => props.status === "pending" || props.status === "running")
 
     const subtitle = createMemo(() => {
       const count = questions().length
@@ -2186,10 +2179,7 @@ ToolRegistry.register({
         {...props}
         defaultOpen={false}
         icon="bubble-5"
-        trigger={{
-          title: i18n.t("ui.tool.questions"),
-          subtitle: subtitle(),
-        }}
+        trigger={<ToolTriggerRow title={i18n.t("ui.tool.questions")} pending={pending()} subtitle={subtitle()} />}
       >
         <Show when={completed()}>
           <div data-component="question-answers">
