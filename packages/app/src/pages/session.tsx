@@ -416,15 +416,15 @@ export default function Page() {
     mobileTab: "session" as "session" | "changes",
     changes: "session" as "session" | "turn",
     newSessionWorktree: "main",
+    deferRender: false,
   })
 
-  const [deferRender, setDeferRender] = createSignal(false)
   createComputed((prev) => {
     const key = sessionKey()
     if (key !== prev) {
-      setDeferRender(true)
+      setStore("deferRender", true)
       requestAnimationFrame(() => {
-        setTimeout(() => setDeferRender(false), 0)
+        setTimeout(() => setStore("deferRender", false), 0)
       })
     }
     return key
@@ -736,10 +736,7 @@ export default function Page() {
     loadingClass: string
     emptyClass: string
   }) => (
-    <Show
-      when={!deferRender()}
-      fallback={<div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>}
-    >
+    <Show when={!store.deferRender}>
       <Switch>
         <Match when={store.changes === "turn" && !!params.id}>
           <SessionReviewTab
