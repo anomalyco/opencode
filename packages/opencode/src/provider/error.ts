@@ -19,6 +19,7 @@ export namespace ProviderError {
     /context window exceeds limit/i, // MiniMax
     /exceeded model token limit/i, // Kimi For Coding, Moonshot
     /context[_ ]length[_ ]exceeded/i, // Generic fallback
+    /request entity too large/i, // HTTP 413
   ]
 
   function isOpenAiErrorRetryable(e: APICallError) {
@@ -177,7 +178,7 @@ export namespace ProviderError {
 
   export function parseAPICallError(input: { providerID: string; error: APICallError }): ParsedAPICallError {
     const m = message(input.providerID, input.error)
-    if (isOverflow(m)) {
+    if (isOverflow(m) || input.error.statusCode === 413) {
       return {
         type: "context_overflow",
         message: m,
