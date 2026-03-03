@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { createEffect, createSignal, onCleanup } from "solid-js"
-import { BasicTool } from "./basic-tool"
+import { ToolCall } from "./basic-tool"
 import { animate } from "motion"
 
 export default {
@@ -97,12 +97,7 @@ const ease = {
   linear: "linear",
 }
 
-function SpringSubmessage(props: {
-  text: string
-  visible: boolean
-  visualDuration: number
-  bounce: number
-}) {
+function SpringSubmessage(props: { text: string; visible: boolean; visualDuration: number; bounce: number }) {
   let ref: HTMLSpanElement | undefined
   let widthRef: HTMLSpanElement | undefined
 
@@ -194,19 +189,15 @@ export const Playground = {
       >
         <style>{shellCss}</style>
 
-        <BasicTool
+        <ToolCall
+          variant="panel"
           icon="console"
           defaultOpen
           trigger={
             <div data-slot="basic-tool-tool-info-structured">
               <div data-slot="basic-tool-tool-info-main">
                 <span data-slot="basic-tool-tool-title">Shell</span>
-                <SpringSubmessage
-                  text={text()}
-                  visible={show()}
-                  visualDuration={visualDuration()}
-                  bounce={bounce()}
-                />
+                <SpringSubmessage text={text()} visible={show()} visualDuration={visualDuration()} bounce={bounce()} />
               </div>
             </div>
           }
@@ -225,7 +216,7 @@ export const Playground = {
           >
             {"$ cat <<'TOPIC1'"}
           </div>
-        </BasicTool>
+        </ToolCall>
 
         <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
           <button onClick={replay} style={btn()}>

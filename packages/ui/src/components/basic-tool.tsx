@@ -1,4 +1,16 @@
-import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, type JSX } from "solid-js"
+import {
+  createEffect,
+  createSignal,
+  For,
+  Match,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  splitProps,
+  Switch,
+  type JSX,
+} from "solid-js"
 import {
   animate,
   type AnimationPlaybackControls,
@@ -26,7 +38,7 @@ const isTriggerTitle = (val: any): val is TriggerTitle => {
   )
 }
 
-export interface BasicToolProps {
+interface ToolCallPanelBaseProps {
   icon: IconProps["name"]
   trigger: TriggerTitle | JSX.Element
   children?: JSX.Element
@@ -44,7 +56,78 @@ export interface BasicToolProps {
   onSubtitleClick?: () => void
 }
 
-export function BasicTool(props: BasicToolProps) {
+function ToolCallTriggerBody(props: {
+  trigger: TriggerTitle | JSX.Element
+  pending: boolean
+  onSubtitleClick?: () => void
+  arrow?: boolean
+}) {
+  return (
+    <div data-component="tool-trigger">
+      <div data-slot="basic-tool-tool-trigger-content">
+        <div data-slot="basic-tool-tool-info">
+          <Switch>
+            <Match when={isTriggerTitle(props.trigger) && props.trigger}>
+              {(trigger) => (
+                <div data-slot="basic-tool-tool-info-structured">
+                  <div data-slot="basic-tool-tool-info-main">
+                    <span
+                      data-slot="basic-tool-tool-title"
+                      classList={{
+                        [trigger().titleClass ?? ""]: !!trigger().titleClass,
+                      }}
+                    >
+                      <TextShimmer text={trigger().title} active={props.pending} />
+                    </span>
+                    <Show when={!props.pending}>
+                      <Show when={trigger().subtitle}>
+                        <span
+                          data-slot="basic-tool-tool-subtitle"
+                          classList={{
+                            [trigger().subtitleClass ?? ""]: !!trigger().subtitleClass,
+                            clickable: !!props.onSubtitleClick,
+                          }}
+                          onClick={(e) => {
+                            if (!props.onSubtitleClick) return
+                            e.stopPropagation()
+                            props.onSubtitleClick()
+                          }}
+                        >
+                          {trigger().subtitle}
+                        </span>
+                      </Show>
+                      <Show when={trigger().args?.length}>
+                        <For each={trigger().args}>
+                          {(arg) => (
+                            <span
+                              data-slot="basic-tool-tool-arg"
+                              classList={{
+                                [trigger().argsClass ?? ""]: !!trigger().argsClass,
+                              }}
+                            >
+                              {arg}
+                            </span>
+                          )}
+                        </For>
+                      </Show>
+                    </Show>
+                  </div>
+                  <Show when={!props.pending && trigger().action}>{trigger().action}</Show>
+                </div>
+              )}
+            </Match>
+            <Match when={true}>{props.trigger as JSX.Element}</Match>
+          </Switch>
+        </div>
+      </div>
+      <Show when={props.arrow}>
+        <Collapsible.Arrow />
+      </Show>
+    </div>
+  )
+}
+
+function ToolCallPanel(props: ToolCallPanelBaseProps) {
   const [open, setOpen] = createSignal(props.defaultOpen ?? false)
   const [ready, setReady] = createSignal(open())
   const pending = () => props.status === "pending" || props.status === "running"
@@ -197,68 +280,12 @@ export function BasicTool(props: BasicToolProps) {
   return (
     <Collapsible open={open()} onOpenChange={handleOpenChange} class="tool-collapsible">
       <Collapsible.Trigger>
-        <div data-component="tool-trigger">
-          <div data-slot="basic-tool-tool-trigger-content">
-            <div data-slot="basic-tool-tool-info">
-              <Switch>
-                <Match when={isTriggerTitle(props.trigger) && props.trigger}>
-                  {(trigger) => (
-                    <div data-slot="basic-tool-tool-info-structured">
-                      <div data-slot="basic-tool-tool-info-main">
-                        <span
-                          data-slot="basic-tool-tool-title"
-                          classList={{
-                            [trigger().titleClass ?? ""]: !!trigger().titleClass,
-                          }}
-                        >
-                          <TextShimmer text={trigger().title} active={pending()} />
-                        </span>
-                        <Show when={!pending()}>
-                          <Show when={trigger().subtitle}>
-                            <span
-                              data-slot="basic-tool-tool-subtitle"
-                              classList={{
-                                [trigger().subtitleClass ?? ""]: !!trigger().subtitleClass,
-                                clickable: !!props.onSubtitleClick,
-                              }}
-                              onClick={(e) => {
-                                if (props.onSubtitleClick) {
-                                  e.stopPropagation()
-                                  props.onSubtitleClick()
-                                }
-                              }}
-                            >
-                              {trigger().subtitle}
-                            </span>
-                          </Show>
-                          <Show when={trigger().args?.length}>
-                            <For each={trigger().args}>
-                              {(arg) => (
-                                <span
-                                  data-slot="basic-tool-tool-arg"
-                                  classList={{
-                                    [trigger().argsClass ?? ""]: !!trigger().argsClass,
-                                  }}
-                                >
-                                  {arg}
-                                </span>
-                              )}
-                            </For>
-                          </Show>
-                        </Show>
-                      </div>
-                      <Show when={!pending() && trigger().action}>{trigger().action}</Show>
-                    </div>
-                  )}
-                </Match>
-                <Match when={true}>{props.trigger as JSX.Element}</Match>
-              </Switch>
-            </div>
-          </div>
-          <Show when={props.children && !props.hideDetails && !props.locked && !pending()}>
-            <Collapsible.Arrow />
-          </Show>
-        </div>
+        <ToolCallTriggerBody
+          trigger={props.trigger}
+          pending={pending()}
+          onSubtitleClick={props.onSubtitleClick}
+          arrow={!!props.children && !props.hideDetails && !props.locked && !pending()}
+        />
       </Collapsible.Trigger>
       <Show when={props.animated && props.animate !== false && props.children && !props.hideDetails}>
         <div
@@ -287,6 +314,67 @@ export function BasicTool(props: BasicToolProps) {
   )
 }
 
+export interface ToolCallRowProps {
+  variant: "row"
+  icon: IconProps["name"]
+  trigger: TriggerTitle | JSX.Element
+  status?: string
+  animate?: boolean
+  onSubtitleClick?: () => void
+}
+
+// `group` currently shares the same behavior as `panel`; the separate variant is semantic so grouped call sites can stay explicit.
+export interface ToolCallPanelProps extends Omit<ToolCallPanelBaseProps, "hideDetails"> {
+  variant: "panel" | "group"
+}
+
+export type ToolCallProps = ToolCallRowProps | ToolCallPanelProps
+function ToolCallRoot(props: ToolCallProps) {
+  const [local, rest] = splitProps(props, ["variant", "trigger", "status", "onSubtitleClick"])
+  const pending = () => local.status === "pending" || local.status === "running"
+  if (local.variant === "row") {
+    return (
+      <div data-component="collapsible" data-variant="normal" class="tool-collapsible">
+        <div data-slot="collapsible-trigger">
+          <ToolCallTriggerBody trigger={local.trigger} pending={pending()} onSubtitleClick={local.onSubtitleClick} />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <ToolCallPanel {...rest} trigger={local.trigger} status={local.status} onSubtitleClick={local.onSubtitleClick} />
+  )
+}
+
+function ToolCallList(props: { children?: JSX.Element }) {
+  return <div data-component="tool-call-list">{props.children}</div>
+}
+
+function ToolCallRow(props: { children: JSX.Element }) {
+  return (
+    <div data-slot="tool-call-item">
+      <div data-component="tool-trigger">
+        <div data-slot="basic-tool-tool-trigger-content">
+          <div data-slot="basic-tool-tool-info">{props.children}</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export const ToolCall = Object.assign(ToolCallRoot, {
+  List: ToolCallList,
+  Row: ToolCallRow,
+})
+
 export function GenericTool(props: { tool: string; status?: string; hideDetails?: boolean }) {
-  return <BasicTool icon="mcp" status={props.status} trigger={{ title: props.tool }} hideDetails={props.hideDetails} />
+  return (
+    <ToolCall
+      variant={props.hideDetails ? "row" : "panel"}
+      icon="mcp"
+      status={props.status}
+      trigger={{ title: props.tool }}
+    />
+  )
 }

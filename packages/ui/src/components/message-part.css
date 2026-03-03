@@ -617,16 +617,18 @@
   }
 }
 
-[data-component="context-tool-group-list"] {
+[data-component="context-tool-group-list"],
+[data-component="tool-call-list"] {
   margin-top: -4px;
   display: flex;
   flex-direction: column;
   gap: 0px;
+}
 
-  [data-slot="context-tool-group-item"] {
-    min-width: 0;
-    padding: 4px 0;
-  }
+[data-component="context-tool-group-list"] [data-slot="context-tool-group-item"],
+[data-component="tool-call-list"] [data-slot="tool-call-item"] {
+  min-width: 0;
+  padding: 4px 0;
 }
 
 [data-component="diagnostics"] {

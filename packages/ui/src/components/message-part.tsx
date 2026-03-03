@@ -32,8 +32,7 @@ import { useData } from "../context"
 import { useFileComponent } from "../context/file"
 import { useDialog } from "../context/dialog"
 import { useI18n } from "../context/i18n"
-import { BasicTool } from "./basic-tool"
-import { GenericTool } from "./basic-tool"
+import { GenericTool, ToolCall } from "./basic-tool"
 import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { Card } from "./card"
@@ -661,7 +660,8 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean; animate?: 
   const summary = createMemo(() => contextToolSummary(props.parts))
 
   return (
-    <BasicTool
+    <ToolCall
+      variant="group"
       icon="magnifying-glass-menu"
       animated
       animate
@@ -711,39 +711,33 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean; animate?: 
         </div>
       }
     >
-      <div data-component="context-tool-group-list">
+      <ToolCall.List>
         <For each={props.parts}>
           {(part) => {
             const trigger = contextToolTrigger(part, i18n)
             const running = createMemo(() => busy(part.state.status))
             const reveal = useToolReveal(running, () => props.animate !== false)
             return (
-              <div data-slot="context-tool-group-item">
-                <div data-component="tool-trigger">
-                  <div data-slot="basic-tool-tool-trigger-content">
-                    <div data-slot="basic-tool-tool-info">
-                      <div data-slot="basic-tool-tool-info-structured">
-                        <div data-slot="basic-tool-tool-info-main">
-                          <span data-slot="basic-tool-tool-title">
-                            <TextShimmer text={trigger.title} active={running()} />
-                          </span>
-                          <Show when={trigger.subtitle}>{(text) => <ToolText text={text()} animate={reveal()} />}</Show>
-                          <Show when={trigger.args?.length}>
-                            <For each={trigger.args}>
-                              {(arg, idx) => <ToolArg text={arg} delay={0.02 * (idx() + 1)} animate={reveal()} />}
-                            </For>
-                          </Show>
-                        </div>
-                      </div>
-                    </div>
+              <ToolCall.Row>
+                <div data-slot="basic-tool-tool-info-structured">
+                  <div data-slot="basic-tool-tool-info-main">
+                    <span data-slot="basic-tool-tool-title">
+                      <TextShimmer text={trigger.title} active={running()} />
+                    </span>
+                    <Show when={trigger.subtitle}>{(text) => <ToolText text={text()} animate={reveal()} />}</Show>
+                    <Show when={trigger.args?.length}>
+                      <For each={trigger.args}>
+                        {(arg, idx) => <ToolArg text={arg} delay={0.02 * (idx() + 1)} animate={reveal()} />}
+                      </For>
+                    </Show>
                   </div>
                 </div>
-              </div>
+              </ToolCall.Row>
             )
           }}
         </For>
-      </div>
-    </BasicTool>
+      </ToolCall.List>
+    </ToolCall>
   )
 }
 
@@ -1259,7 +1253,8 @@ ToolRegistry.register({
     const pending = createMemo(() => busy(props.status))
     return (
       <>
-        <BasicTool
+        <ToolCall
+          variant="row"
           {...props}
           icon="glasses"
           trigger={
@@ -1293,7 +1288,8 @@ ToolRegistry.register({
     const i18n = useI18n()
     const pending = createMemo(() => busy(props.status))
     return (
-      <BasicTool
+      <ToolCall
+        variant="panel"
         {...props}
         icon="bullet-list"
         trigger={
@@ -1312,7 +1308,7 @@ ToolRegistry.register({
             </div>
           )}
         </Show>
-      </BasicTool>
+      </ToolCall>
     )
   },
 })
@@ -1323,7 +1319,8 @@ ToolRegistry.register({
     const i18n = useI18n()
     const pending = createMemo(() => busy(props.status))
     return (
-      <BasicTool
+      <ToolCall
+        variant="panel"
         {...props}
         icon="magnifying-glass-menu"
         trigger={
@@ -1343,7 +1340,7 @@ ToolRegistry.register({
             </div>
           )}
         </Show>
-      </BasicTool>
+      </ToolCall>
     )
   },
 })
@@ -1357,7 +1354,8 @@ ToolRegistry.register({
     if (props.input.include) args.push("include=" + props.input.include)
     const pending = createMemo(() => busy(props.status))
     return (
-      <BasicTool
+      <ToolCall
+        variant="panel"
         {...props}
         icon="magnifying-glass-menu"
         trigger={
@@ -1377,7 +1375,7 @@ ToolRegistry.register({
             </div>
           )}
         </Show>
-      </BasicTool>
+      </ToolCall>
     )
   },
 })
@@ -1631,9 +1629,9 @@ ToolRegistry.register({
       return value
     })
     return (
-      <BasicTool
+      <ToolCall
+        variant="row"
         {...props}
-        hideDetails
         icon="window-cursor"
         trigger={
           <div data-slot="basic-tool-tool-info-structured">
@@ -1724,7 +1722,7 @@ ToolRegistry.register({
       </div>
     )
 
-    return <BasicTool icon="task" status={props.status} trigger={trigger()} hideDetails animate />
+    return <ToolCall variant="row" icon="task" status={props.status} trigger={trigger()} animate />
   },
 })
 
@@ -1761,7 +1759,8 @@ ToolRegistry.register({
     }
 
     return (
-      <BasicTool
+      <ToolCall
+        variant="panel"
         {...props}
         icon="console"
         animate
@@ -1802,7 +1801,7 @@ ToolRegistry.register({
             </pre>
           </div>
         </div>
-      </BasicTool>
+      </ToolCall>
     )
   },
 })
@@ -1819,7 +1818,8 @@ ToolRegistry.register({
     const reveal = useToolReveal(pending, () => props.reveal !== false)
     return (
       <div data-component="edit-tool">
-        <BasicTool
+        <ToolCall
+          variant="panel"
           {...props}
           icon="code-lines"
           animated
@@ -1869,7 +1869,7 @@ ToolRegistry.register({
             </ToolFileAccordion>
           </Show>
           <DiagnosticsDisplay diagnostics={diagnostics()} />
-        </BasicTool>
+        </ToolCall>
       </div>
     )
   },
@@ -1887,7 +1887,8 @@ ToolRegistry.register({
     const reveal = useToolReveal(pending, () => props.reveal !== false)
     return (
       <div data-component="write-tool">
-        <BasicTool
+        <ToolCall
+          variant="panel"
           {...props}
           icon="code-lines"
           animated
@@ -1927,7 +1928,7 @@ ToolRegistry.register({
             </ToolFileAccordion>
           </Show>
           <DiagnosticsDisplay diagnostics={diagnostics()} />
-        </BasicTool>
+        </ToolCall>
       </div>
     )
   },
@@ -1975,7 +1976,8 @@ ToolRegistry.register({
 
     return (
       <div data-component="apply-patch-tool">
-        <BasicTool
+        <ToolCall
+          variant="panel"
           {...props}
           icon="code-lines"
           defer
@@ -2130,7 +2132,7 @@ ToolRegistry.register({
               </ToolFileAccordion>
             )}
           </Show>
-        </BasicTool>
+        </ToolCall>
       </div>
     )
   },
@@ -2158,7 +2160,8 @@ ToolRegistry.register({
     })
 
     return (
-      <BasicTool
+      <ToolCall
+        variant="panel"
         {...props}
         defaultOpen
         icon="checklist"
@@ -2187,7 +2190,7 @@ ToolRegistry.register({
             </For>
           </div>
         </Show>
-      </BasicTool>
+      </ToolCall>
     )
   },
 })
@@ -2209,7 +2212,8 @@ ToolRegistry.register({
     })
 
     return (
-      <BasicTool
+      <ToolCall
+        variant="panel"
         {...props}
         defaultOpen={false}
         icon="bubble-5"
@@ -2237,7 +2241,7 @@ ToolRegistry.register({
             </For>
           </div>
         </Show>
-      </BasicTool>
+      </ToolCall>
     )
   },
 })
@@ -2260,6 +2264,6 @@ ToolRegistry.register({
       </div>
     )
 
-    return <BasicTool icon="brain" status={props.status} trigger={trigger()} hideDetails animate />
+    return <ToolCall variant="row" icon="brain" status={props.status} trigger={trigger()} animate />
   },
 })
