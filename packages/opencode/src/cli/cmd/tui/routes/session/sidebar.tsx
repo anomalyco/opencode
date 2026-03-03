@@ -81,6 +81,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
 
   const directory = useDirectory()
   const kv = useKV()
+  const showSkills = createMemo(() => kv.get("show_skills_section", true))
 
   const hasProviders = createMemo(() =>
     sync.data.provider.some((x) => x.id !== "opencode" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
@@ -229,35 +230,37 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 </For>
               </Show>
             </box>
-            <box>
-              <box
-                flexDirection="row"
-                gap={1}
-                onMouseDown={() => usedSkills().length > 2 && setExpanded("skill", !expanded.skill)}
-              >
-                <Show when={usedSkills().length > 2}>
-                  <text fg={theme.text}>{expanded.skill ? "▼" : "▶"}</text>
+            <Show when={showSkills()}>
+              <box>
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  onMouseDown={() => usedSkills().length > 2 && setExpanded("skill", !expanded.skill)}
+                >
+                  <Show when={usedSkills().length > 2}>
+                    <text fg={theme.text}>{expanded.skill ? "▼" : "▶"}</text>
+                  </Show>
+                  <text fg={theme.text}>
+                    <b>Skills</b>
+                  </text>
+                </box>
+                <Show when={usedSkills().length <= 2 || expanded.skill}>
+                  <Show when={usedSkills().length === 0}>
+                    <text fg={theme.textMuted}>Skills will appear when invoked</text>
+                  </Show>
+                  <For each={usedSkills()}>
+                    {(name) => (
+                      <box flexDirection="row" gap={1}>
+                        <text flexShrink={0} style={{ fg: theme.success }}>
+                          •
+                        </text>
+                        <text fg={theme.textMuted}>{name}</text>
+                      </box>
+                    )}
+                  </For>
                 </Show>
-                <text fg={theme.text}>
-                  <b>Skills</b>
-                </text>
               </box>
-              <Show when={usedSkills().length <= 2 || expanded.skill}>
-                <Show when={usedSkills().length === 0}>
-                  <text fg={theme.textMuted}>Skills will appear when invoked</text>
-                </Show>
-                <For each={usedSkills()}>
-                  {(name) => (
-                    <box flexDirection="row" gap={1}>
-                      <text flexShrink={0} style={{ fg: theme.success }}>
-                        •
-                      </text>
-                      <text fg={theme.textMuted}>{name}</text>
-                    </box>
-                  )}
-                </For>
-              </Show>
-            </box>
+            </Show>
             <Show when={todo().length > 0 && todo().some((t) => t.status !== "completed")}>
               <box>
                 <box

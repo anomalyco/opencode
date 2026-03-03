@@ -657,6 +657,15 @@ function App() {
         dialog.clear()
       },
     },
+    {
+      title: kv.get("show_skills_section", true) ? "Hide skills section" : "Show skills section",
+      value: "app.toggle.skills",
+      category: "System",
+      onSelect: (dialog) => {
+        kv.set("show_skills_section", !kv.get("show_skills_section", true))
+        dialog.clear()
+      },
+    },
   ])
 
   createEffect(() => {
