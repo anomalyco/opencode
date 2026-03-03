@@ -323,6 +323,125 @@ describe("session.llm.stream", () => {
     })
   })
 
+  test("supports non-streaming openai-compatible backends when provider streaming is disabled", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const providerID = "alibaba"
+    const modelID = "qwen-plus"
+    const fixture = await loadFixture(providerID, modelID)
+    const provider = fixture.provider
+    const model = fixture.model
+
+    const request = waitRequest(
+      "/chat/completions",
+      new Response(
+        JSON.stringify({
+          id: "chatcmpl-1",
+          object: "chat.completion",
+          created: Math.floor(Date.now() / 1000),
+          model: model.id,
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "Hello from non-streaming backend",
+              },
+              finish_reason: "stop",
+            },
+          ],
+          usage: {
+            prompt_tokens: 1,
+            completion_tokens: 5,
+            total_tokens: 6,
+          },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    )
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: [providerID],
+            provider: {
+              [providerID]: {
+                options: {
+                  apiKey: "test-key",
+                  baseURL: `${server.url.origin}/v1`,
+                  streaming: false,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await Provider.getModel(providerID, model.id)
+        const sessionID = "session-test-1b"
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          temperature: 0.4,
+          topP: 0.8,
+        } satisfies Agent.Info
+
+        const user = {
+          id: "user-1b",
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID, modelID: resolved.id },
+          variant: "high",
+        } satisfies MessageV2.User
+
+        const stream = await LLM.stream({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          abort: new AbortController().signal,
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        let text = ""
+        for await (const chunk of stream.textStream) {
+          text += chunk
+        }
+
+        const capture = await request
+        const body = capture.body
+        const headers = capture.headers
+        const url = capture.url
+
+        expect(url.pathname.startsWith("/v1/")).toBe(true)
+        expect(url.pathname.endsWith("/chat/completions")).toBe(true)
+        expect(headers.get("Authorization")).toBe("Bearer test-key")
+        expect(body.model).toBe(resolved.api.id)
+        expect(body.stream).not.toBe(true)
+        expect(text).toContain("Hello from non-streaming backend")
+      },
+    })
+  })
+
   test("sends responses API payload for OpenAI models", async () => {
     const server = state.server
     if (!server) {
