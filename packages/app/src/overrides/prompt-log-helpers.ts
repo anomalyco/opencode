@@ -18,5 +18,5 @@ export function trackPrompt(params: TrackPromptParams): void {
       modelId: params.modelId,
       agentName: params.agentName,
     }),
-  }).catch(() => {})
+  }).catch((err) => console.warn("[prompt-log] tracking failed:", err))
 }
