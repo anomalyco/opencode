@@ -607,6 +607,8 @@ export const dict = {
   "settings.general.row.theme.description": "ปรับแต่งวิธีการที่ OpenCode มีธีม",
   "settings.general.row.font.title": "ฟอนต์",
   "settings.general.row.font.description": "ปรับแต่งฟอนต์โมโนที่ใช้ในบล็อกโค้ด",
+  "settings.general.row.reasoningSummaries.title": "แสดงสรุปการให้เหตุผล",
+  "settings.general.row.reasoningSummaries.description": "แสดงสรุปการให้เหตุผลของโมเดลในไทม์ไลน์",
 
   "settings.general.row.shellToolPartsExpanded.title": "ขยายส่วนเครื่องมือ shell",
   "settings.general.row.shellToolPartsExpanded.description": "แสดงส่วนเครื่องมือ shell แบบขยายตามค่าเริ่มต้นในไทม์ไลน์",

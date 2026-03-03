@@ -545,6 +545,8 @@ export const dict = {
   "settings.general.row.theme.description": "OpenCodeのテーマをカスタマイズします。",
   "settings.general.row.font.title": "フォント",
   "settings.general.row.font.description": "コードブロックで使用する等幅フォントをカスタマイズします",
+  "settings.general.row.reasoningSummaries.title": "推論サマリーを表示",
+  "settings.general.row.reasoningSummaries.description": "タイムラインにモデルの推論サマリーを表示します",
   "settings.general.row.shellToolPartsExpanded.title": "shell ツールパーツを展開",
   "settings.general.row.shellToolPartsExpanded.description":
     "タイムラインで shell ツールパーツをデフォルトで展開して表示します",

@@ -607,6 +607,8 @@ export const dict = {
   "settings.general.row.theme.description": "Tilpas hvordan OpenCode er temabestemt.",
   "settings.general.row.font.title": "Skrifttype",
   "settings.general.row.font.description": "Tilpas mono-skrifttypen brugt i kodeblokke",
+  "settings.general.row.reasoningSummaries.title": "Vis ræsonnement-opsummeringer",
+  "settings.general.row.reasoningSummaries.description": "Vis modellens ræsonnement-opsummeringer i tidslinjen",
 
   "settings.general.row.shellToolPartsExpanded.title": "Udvid shell-værktøjsdele",
   "settings.general.row.shellToolPartsExpanded.description": "Vis shell-værktøjsdele udvidet som standard i tidslinjen",

@@ -541,6 +541,8 @@ export const dict = {
   "settings.general.row.theme.description": "تخصيص سمة OpenCode.",
   "settings.general.row.font.title": "الخط",
   "settings.general.row.font.description": "تخصيص الخط الأحادي المستخدم في كتل التعليمات البرمجية",
+  "settings.general.row.reasoningSummaries.title": "إظهار ملخصات الاستدلال",
+  "settings.general.row.reasoningSummaries.description": "عرض ملخصات استدلال النموذج في المخطط الزمني",
   "settings.general.row.shellToolPartsExpanded.title": "توسيع أجزاء أداة shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "إظهار أجزاء أداة shell موسعة بشكل افتراضي في الشريط الزمني",

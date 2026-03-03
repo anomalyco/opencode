@@ -607,6 +607,8 @@ export const dict = {
   "settings.general.row.theme.description": "自定义 OpenCode 的主题。",
   "settings.general.row.font.title": "字体",
   "settings.general.row.font.description": "自定义代码块使用的等宽字体",
+  "settings.general.row.reasoningSummaries.title": "显示推理摘要",
+  "settings.general.row.reasoningSummaries.description": "在时间线中显示模型推理摘要",
   "settings.general.row.shellToolPartsExpanded.title": "展开 shell 工具部分",
   "settings.general.row.shellToolPartsExpanded.description": "默认在时间线中展开 shell 工具部分",
   "settings.general.row.editToolPartsExpanded.title": "展开编辑工具部分",

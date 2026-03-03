@@ -613,6 +613,8 @@ export const dict = {
   "settings.general.row.theme.description": "Настройте оформление OpenCode.",
   "settings.general.row.font.title": "Шрифт",
   "settings.general.row.font.description": "Настройте моноширинный шрифт для блоков кода",
+  "settings.general.row.reasoningSummaries.title": "Показывать сводки рассуждений",
+  "settings.general.row.reasoningSummaries.description": "Показывать сводки рассуждений модели в ленте",
 
   "settings.general.row.shellToolPartsExpanded.title": "Разворачивать элементы инструмента shell",
   "settings.general.row.shellToolPartsExpanded.description":
