@@ -32,7 +32,7 @@ export namespace PR {
 
   export const CreateInput = z
     .object({
-      title: z.string(),
+      title: z.string().min(1),
       body: z.string(),
       base: z.string().optional(),
       draft: z.boolean().optional(),
@@ -50,7 +50,7 @@ export namespace PR {
 
   export const DeleteBranchInput = z
     .object({
-      branch: z.string().regex(/^(?![^/]*\.\.)[a-zA-Z0-9][a-zA-Z0-9._\-/]*$/, "Invalid branch name"),
+      branch: z.string().regex(/^(?!.*\.\.)[a-zA-Z0-9][a-zA-Z0-9._\-/]*$/, "Invalid branch name"),
     })
     .meta({ ref: "PrDeleteBranchInput" })
   export type DeleteBranchInput = z.infer<typeof DeleteBranchInput>
@@ -299,6 +299,10 @@ export namespace PR {
     const currentPr = await get()
     if (!currentPr) {
       throw new PrError("NO_PR", "No pull request found for the current branch")
+    }
+
+    if (currentPr.mergeable === "CONFLICTING") {
+      throw new PrError("MERGE_FAILED", "PR has merge conflicts that must be resolved first")
     }
 
     const github = info.github

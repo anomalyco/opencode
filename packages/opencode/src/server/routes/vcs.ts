@@ -130,7 +130,7 @@ export const VcsRoutes = lazy(() =>
               },
             },
           },
-          ...errors(400),
+          ...errors(400, 404),
         },
       }),
       async (c) => {
@@ -139,7 +139,8 @@ export const VcsRoutes = lazy(() =>
           return c.json(data)
         } catch (e) {
           if (e instanceof PR.PrError) {
-            return c.json({ code: e.code, message: e.message }, { status: 400 })
+            const status = e.code === "NO_PR" ? 404 : 400
+            return c.json({ code: e.code, message: e.message }, { status })
           }
           throw e
         }
@@ -160,7 +161,7 @@ export const VcsRoutes = lazy(() =>
               },
             },
           },
-          ...errors(400),
+          ...errors(400, 404),
         },
       }),
       validator("json", PR.MergeInput),
@@ -171,7 +172,8 @@ export const VcsRoutes = lazy(() =>
           return c.json(pr)
         } catch (e) {
           if (e instanceof PR.PrError) {
-            return c.json({ code: e.code, message: e.message }, { status: 400 })
+            const status = e.code === "NO_PR" ? 404 : 400
+            return c.json({ code: e.code, message: e.message }, { status })
           }
           throw e
         }
@@ -192,7 +194,7 @@ export const VcsRoutes = lazy(() =>
               },
             },
           },
-          ...errors(400),
+          ...errors(400, 404),
         },
       }),
       validator("json", PR.ReadyInput),
@@ -203,7 +205,8 @@ export const VcsRoutes = lazy(() =>
           return c.json(pr)
         } catch (e) {
           if (e instanceof PR.PrError) {
-            return c.json({ code: e.code, message: e.message }, { status: 400 })
+            const status = e.code === "NO_PR" ? 404 : 400
+            return c.json({ code: e.code, message: e.message }, { status })
           }
           throw e
         }
@@ -224,7 +227,7 @@ export const VcsRoutes = lazy(() =>
               },
             },
           },
-          ...errors(400),
+          ...errors(400, 404),
         },
       }),
       validator("json", PR.DeleteBranchInput),
@@ -235,7 +238,8 @@ export const VcsRoutes = lazy(() =>
           return c.json({ ok: true })
         } catch (e) {
           if (e instanceof PR.PrError) {
-            return c.json({ code: e.code, message: e.message }, { status: 400 })
+            const status = e.code === "NO_PR" ? 404 : 400
+            return c.json({ code: e.code, message: e.message }, { status })
           }
           throw e
         }
