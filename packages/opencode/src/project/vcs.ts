@@ -347,12 +347,6 @@ export namespace Vcs {
 
       restartPollTimer()
 
-      let onFocus: (() => void) | undefined
-      if (typeof window !== "undefined") {
-        onFocus = () => refreshFull()
-        window.addEventListener("focus", onFocus)
-      }
-
       return {
         info: async () => current,
         refresh: refreshFull,
@@ -361,7 +355,6 @@ export namespace Vcs {
           if (localDebounce) clearTimeout(localDebounce)
           if (refDebounce) clearTimeout(refDebounce)
           if (pollTimer) clearInterval(pollTimer)
-          if (onFocus) window.removeEventListener("focus", onFocus)
         },
       }
     },
