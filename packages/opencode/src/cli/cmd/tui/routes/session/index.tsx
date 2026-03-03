@@ -926,6 +926,7 @@ export function Session() {
       keybind: "session_parent",
       category: "Session",
       hidden: true,
+      enabled: !!session()?.parentID,
       onSelect: childSessionHandler((dialog) => {
         const parentID = session()?.parentID
         if (parentID) {
@@ -943,6 +944,7 @@ export function Session() {
       keybind: "session_child_cycle",
       category: "Session",
       hidden: true,
+      enabled: !!session()?.parentID,
       onSelect: childSessionHandler((dialog) => {
         moveChild(1)
         dialog.clear()
@@ -954,6 +956,7 @@ export function Session() {
       keybind: "session_child_cycle_reverse",
       category: "Session",
       hidden: true,
+      enabled: !!session()?.parentID,
       onSelect: childSessionHandler((dialog) => {
         moveChild(-1)
         dialog.clear()
@@ -1325,6 +1328,8 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     return props.message.time.completed - user.time.created
   })
 
+  const keybind = useKeybind()
+
   return (
     <>
       <For each={props.parts}>
@@ -1342,6 +1347,14 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           )
         }}
       </For>
+      <Show when={props.parts.some((x) => x.type === "tool" && x.tool === "task")}>
+        <box paddingTop={1} paddingLeft={3}>
+          <text fg={theme.text}>
+            {keybind.print("session_child_first")}
+            <span style={{ fg: theme.textMuted }}> view subagents</span>
+          </text>
+        </box>
+      </Show>
       <Show when={props.message.error && props.message.error.name !== "MessageAbortedError"}>
         <box
           border={["left"]}
@@ -1672,11 +1685,18 @@ function InlineTool(props: {
         }
       }}
     >
-      <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
-        <Show fallback={<>~ {props.pending}</>} when={props.complete}>
-          <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
-        </Show>
-      </text>
+      <Switch>
+        <Match when={props.spinner}>
+          <Spinner color={fg()} children={props.children} />
+        </Match>
+        <Match when={true}>
+          <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
+            <Show fallback={<>~ {props.pending}</>} when={props.complete}>
+              <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
+            </Show>
+          </text>
+        </Match>
+      </Switch>
       <Show when={error() && !denied()}>
         <text fg={theme.error}>{error()}</text>
       </Show>
@@ -1844,6 +1864,7 @@ function Glob(props: ToolProps<typeof GlobTool>) {
 
 function Read(props: ToolProps<typeof ReadTool>) {
   const { theme } = useTheme()
+  const isRunning = createMemo(() => props.part.state.status === "running")
   const loaded = createMemo(() => {
     if (props.part.state.status !== "completed") return []
     if (props.part.state.time.compacted) return []
@@ -1853,7 +1874,13 @@ function Read(props: ToolProps<typeof ReadTool>) {
   })
   return (
     <>
-      <InlineTool icon="→" pending="Reading file..." complete={props.input.filePath} part={props.part}>
+      <InlineTool
+        icon="→"
+        pending="Reading file..."
+        complete={props.input.filePath}
+        spinner={isRunning()}
+        part={props.part}
+      >
         Read {normalizePath(props.input.filePath!)} {input(props.input, ["filePath"])}
       </InlineTool>
       <For each={loaded()}>
@@ -1959,6 +1986,13 @@ function Task(props: ToolProps<typeof TaskTool>) {
     const assistant = messages().findLast((x) => x.role === "assistant")?.time.completed
     if (!first || !assistant) return 0
     return assistant - first
+  })
+
+  const color = createMemo(() => {
+    const name = props.input.subagent_type
+    if (!name) return
+    if (!sync.data.agent.some((x) => x.name === name && !x.hidden)) return
+    return local.agent.color(name)
   })
 
   return (
