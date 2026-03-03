@@ -63,8 +63,8 @@ Only one member per workspace can subscribe to OpenCode Go.
 
 The current list of models includes:
 
-- **Kimi K2.5**
 - **GLM-5**
+- **Kimi K2.5**
 - **MiniMax M2.5**
 
 The list of models may change as we test and add new ones.
@@ -83,17 +83,17 @@ Limits are defined in dollar value. This means your actual request count depends
 
 The table below provides an estimated request count based on typical Go usage patterns:
 
-| Usage limit   | Dollar | MiniMax M2.5 | Kimi K2.5 | GLM-5 |
-| ------------- | ------ | ------------ | --------- | ----- |
-| 5 hour limit  | $12    | 30,000       | 1,850     | 1,150 |
-| Weekly limit  | $30    | 75,000       | 4,630     | 2,880 |
-| Monthly limit | $60    | 150,000      | 9,250     | 5,750 |
+|                     | GLM-5 | Kimi K2.5 | MiniMax M2.5 |
+| ------------------- | ----- | --------- | ------------ |
+| requests per 5 hour | 1,150 | 1,850     | 30,000       |
+| requests per week   | 2,880 | 4,630     | 75,000       |
+| requests per month  | 5,750 | 9,250     | 150,000      |
 
 Estimates are based on observed average request patterns:
 
-- MiniMax M2.5 — 300 input, 55,000 cached, 125 output tokens per request
-- Kimi K2.5 — 870 input, 55,000 cached, 200 output tokens per request
 - GLM-5 — 700 input, 52,000 cached, 150 output tokens per request
+- Kimi K2.5 — 870 input, 55,000 cached, 200 output tokens per request
+- MiniMax M2.5 — 300 input, 55,000 cached, 125 output tokens per request
 
 You can track your current usage in the **<a href={console}>console</a>**.
 
