@@ -437,7 +437,7 @@
   [data-slot="bash-pre"] code {
     font-family: var(--font-family-mono);
     font-feature-settings: var(--font-family-mono--font-feature-settings);
-    font-size: 13px;
+    font-size: var(--font-size-small);
     line-height: var(--line-height-large);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
