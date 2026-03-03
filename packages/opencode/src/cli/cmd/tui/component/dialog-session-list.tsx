@@ -23,12 +23,28 @@ export function DialogSessionList() {
 
   const [toDelete, setToDelete] = createSignal<string>()
   const [search, setSearch] = createDebouncedSignal("", 150)
+  const [all, setAll] = createSignal(false)
 
-  const [searchResults] = createResource(search, async (query) => {
-    if (!query) return undefined
-    const result = await sdk.client.session.list({ search: query, limit: 30 })
-    return result.data ?? []
-  })
+  const [searchResults] = createResource(
+    () => ({ query: search(), all: all() }),
+    async (input) => {
+      if (!input.query && !input.all) return undefined
+      if (input.all) {
+        const result = await sdk.client.experimental.session.list({
+          roots: true,
+          search: input.query || undefined,
+          limit: 500,
+        })
+        return result.data ?? []
+      }
+      const result = await sdk.client.session.list({
+        roots: true,
+        search: input.query || undefined,
+        limit: 30,
+      })
+      return result.data ?? []
+    },
+  )
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
 
@@ -40,6 +56,9 @@ export function DialogSessionList() {
       .filter((x) => x.parentID === undefined)
       .toSorted((a, b) => b.time.updated - a.time.updated)
       .map((x) => {
+        const worktree = all()
+          ? ((x as { project?: { worktree?: string } | null }).project?.worktree ?? x.directory)
+          : undefined
         const date = new Date(x.time.updated)
         let category = date.toDateString()
         if (category === today) {
@@ -53,6 +72,7 @@ export function DialogSessionList() {
           bg: isDeleting ? theme.error : undefined,
           value: x.id,
           category,
+          description: worktree,
           footer: Locale.time(x.time.updated),
           gutter: isWorking ? <Spinner /> : undefined,
         }
@@ -65,7 +85,7 @@ export function DialogSessionList() {
 
   return (
     <DialogSelect
-      title="Sessions"
+      title={all() ? "Sessions (all projects)" : "Sessions"}
       options={options()}
       skipFilter={true}
       current={currentSessionID()}
@@ -81,6 +101,14 @@ export function DialogSessionList() {
         dialog.clear()
       }}
       keybind={[
+        {
+          keybind: keybind.all.session_list_all?.[0],
+          title: all() ? "project only" : "all projects",
+          onTrigger: async () => {
+            setToDelete(undefined)
+            setAll((value) => !value)
+          },
+        },
         {
           keybind: keybind.all.session_delete?.[0],
           title: "delete",
