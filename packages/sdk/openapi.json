@@ -432,6 +432,26 @@
                         "type": "string"
                       }
                     }
+                  },
+                  "worktreeSettings": {
+                    "type": "object",
+                    "properties": {
+                      "baseBranch": {
+                        "type": "string"
+                      },
+                      "symlinks": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "copies": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
                   }
                 }
               }
@@ -6947,6 +6967,26 @@
               }
             }
           },
+          "worktreeSettings": {
+            "type": "object",
+            "properties": {
+              "baseBranch": {
+                "type": "string"
+              },
+              "symlinks": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "copies": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "time": {
             "type": "object",
             "properties": {
@@ -11020,6 +11060,12 @@
         "type": "object",
         "properties": {
           "name": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "baseBranch": {
             "type": "string"
           },
           "startCommand": {

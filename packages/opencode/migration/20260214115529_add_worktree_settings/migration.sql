@@ -1,0 +1,1 @@
+ALTER TABLE `project` ADD `worktree_settings` text;

@@ -447,6 +447,11 @@ export class Project extends HeyApiClient {
          */
         start?: string
       }
+      worktreeSettings?: {
+        baseBranch?: string
+        symlinks?: Array<string>
+        copies?: Array<string>
+      }
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -461,6 +466,7 @@ export class Project extends HeyApiClient {
             { in: "body", key: "name" },
             { in: "body", key: "icon" },
             { in: "body", key: "commands" },
+            { in: "body", key: "worktreeSettings" },
           ],
         },
       ],

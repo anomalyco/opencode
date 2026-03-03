@@ -53,6 +53,7 @@ import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogEditProject } from "@/components/dialog-edit-project"
+import { DialogCreateWorkspace } from "@/components/dialog-create-workspace"
 import { Titlebar } from "@/components/titlebar"
 import { useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
@@ -938,7 +939,9 @@ export default function Layout(props: ParentProps) {
         onSelect: () => {
           const project = currentProject()
           if (!project) return
-          return createWorkspace(project)
+          dialog.show(() => (
+            <DialogCreateWorkspace project={project} onCreate={(input) => createWorkspace(project, input)} />
+          ))
         },
       },
       {
@@ -1098,6 +1101,8 @@ export default function Layout(props: ParentProps) {
     if (!directory) return
     const root = projectRoot(directory)
     server.projects.touch(root)
+    const initialDir = params.dir
+    const stale = () => params.dir !== initialDir
     const project = layout.projects.list().find((item) => item.worktree === root)
     let dirs = project
       ? effectiveWorkspaceOrder(root, [root, ...(project.sandboxes ?? [])], store.workspaceOrder[root])
@@ -1116,11 +1121,13 @@ export default function Layout(props: ParentProps) {
       return canOpen(target)
     }
     const openSession = async (target: { directory: string; id: string }) => {
+      if (stale()) return false
       if (!canOpen(target.directory)) return false
       const resolved = await globalSDK.client.session
         .get({ sessionID: target.id })
         .then((x) => x.data)
         .catch(() => undefined)
+      if (stale()) return false
       if (!resolved?.directory) return false
       if (!canOpen(resolved.directory)) return false
       setStore("lastProjectSession", root, { directory: resolved.directory, id: resolved.id, at: Date.now() })
@@ -1131,6 +1138,7 @@ export default function Layout(props: ParentProps) {
     const projectSession = store.lastProjectSession[root]
     if (projectSession?.id) {
       await refreshDirs(projectSession.directory)
+      if (stale()) return
       const opened = await openSession(projectSession)
       if (opened) return
       clearLastProjectSession(root)
@@ -1143,6 +1151,8 @@ export default function Layout(props: ParentProps) {
     if (latest && (await openSession(latest))) {
       return
     }
+
+    if (stale()) return
 
     const fetched = latestRootSession(
       await Promise.all(
@@ -1160,6 +1170,7 @@ export default function Layout(props: ParentProps) {
       return
     }
 
+    if (stale()) return
     navigateWithSidebarReset(`/${base64Encode(root)}/session`)
   }
 
@@ -1697,15 +1708,24 @@ export default function Layout(props: ParentProps) {
     setStore("activeWorkspace", undefined)
   }
 
-  const createWorkspace = async (project: LocalProject) => {
+  const createWorkspace = async (
+    project: LocalProject,
+    input?: { name?: string; branch?: string; baseBranch?: string },
+  ) => {
     clearSidebarHoverState()
     const created = await globalSDK.client.worktree
-      .create({ directory: project.worktree })
+      .create({ directory: project.worktree, worktreeCreateInput: input })
       .then((x) => x.data)
       .catch((err) => {
+        let description = errorMessage(err, language.t("common.requestFailed"))
+        const invalidRefMatch = description.match(/invalid reference: (.+)/)
+        if (invalidRefMatch) {
+          description = language.t("workspace.create.failed.invalidReference", { ref: invalidRefMatch[1] })
+        }
+
         showToast({
           title: language.t("workspace.create.failed.title"),
-          description: errorMessage(err, language.t("common.requestFailed")),
+          description,
         })
         return undefined
       })
@@ -1951,7 +1971,16 @@ export default function Layout(props: ParentProps) {
                         keybind={command.keybind("workspace.new")}
                         placement="top"
                       >
-                        <Button size="large" icon="plus-small" class="w-full" onClick={() => createWorkspace(p())}>
+                        <Button
+                          size="large"
+                          icon="plus-small"
+                          class="w-full"
+                          onClick={() =>
+                            dialog.show(() => (
+                              <DialogCreateWorkspace project={p()} onCreate={(input) => createWorkspace(p(), input)} />
+                            ))
+                          }
+                        >
                           {language.t("workspace.new")}
                         </Button>
                       </TooltipKeybind>
