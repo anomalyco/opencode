@@ -1954,7 +1954,7 @@ The examples above use `@ai-sdk/openai-compatible`, which connects to the **Chat
 - **Reasoning summaries** (`reasoningSummary`) are exclusive to the Responses API.
 - **Message phases** (`commentary` / `final_answer`) for Codex models require the Responses API.
 
-If your proxy supports the Responses API (e.g. [LiteLLM](https://docs.litellm.ai), [OpenRouter](https://openrouter.ai)), use `@ai-sdk/openai` instead of `@ai-sdk/openai-compatible`:
+If your server supports the OpenAI Responses API endpoint (`/v1/responses`) (e.g. [LiteLLM](https://docs.litellm.ai), [OpenRouter](https://openrouter.ai)), use `@ai-sdk/openai` instead of `@ai-sdk/openai-compatible`:
 
 ```json title="opencode.json" {5}
 {
