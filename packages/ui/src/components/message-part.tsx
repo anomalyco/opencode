@@ -9,6 +9,7 @@ import {
   Show,
   Switch,
   onCleanup,
+  Index,
   type JSX,
 } from "solid-js"
 import stripAnsi from "strip-ansi"
@@ -458,50 +459,67 @@ export function AssistantParts(props: {
   const last = createMemo(() => grouped().at(-1)?.key)
 
   return (
-    <For each={grouped()}>
-      {(entry) => {
-        if (entry.type === "context") {
-          const parts = createMemo(
-            () =>
-              entry.refs
-                .map((ref) => partByID(list(data.store.part?.[ref.messageID], emptyParts), ref.partID))
-                .filter((part): part is ToolPart => !!part && isContextGroupTool(part)),
-            emptyTools,
-            { equals: same },
-          )
-          const busy = createMemo(() => props.working && last() === entry.key)
-
-          return (
-            <Show when={parts().length > 0}>
-              <ContextToolGroup parts={parts()} busy={busy()} />
-            </Show>
-          )
-        }
-
-        const message = createMemo(() => props.messages.find((item) => item.id === entry.ref.messageID))
-        const part = createMemo(() =>
-          partByID(list(data.store.part?.[entry.ref.messageID], emptyParts), entry.ref.partID),
-        )
+    <Index each={grouped()}>
+      {(entryAccessor) => {
+        const entryType = createMemo(() => entryAccessor().type)
 
         return (
-          <Show when={message()}>
-            {(message) => (
-              <Show when={part()}>
-                {(part) => (
-                  <Part
-                    part={part()}
-                    message={message()}
-                    showAssistantCopyPartID={props.showAssistantCopyPartID}
-                    turnDurationMs={props.turnDurationMs}
-                    defaultOpen={partDefaultOpen(part(), props.shellToolDefaultOpen, props.editToolDefaultOpen)}
-                  />
-                )}
-              </Show>
-            )}
-          </Show>
+          <Switch>
+            <Match when={entryType() === "context"}>
+              {(() => {
+                const parts = createMemo(
+                  () => {
+                    const entry = entryAccessor() as { type: "context"; refs: PartRef[] }
+                    return entry.refs
+                      .map((ref) => partByID(list(data.store.part?.[ref.messageID], emptyParts), ref.partID))
+                      .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
+                  },
+                  emptyTools,
+                  { equals: same },
+                )
+                const busy = createMemo(() => props.working && last() === entryAccessor().key)
+
+                return (
+                  <Show when={parts().length > 0}>
+                    <ContextToolGroup parts={parts()} busy={busy()} />
+                  </Show>
+                )
+              })()}
+            </Match>
+            <Match when={entryType() === "part"}>
+              {(() => {
+                const message = createMemo(() => {
+                  const entry = entryAccessor() as { type: "part"; ref: PartRef }
+                  return props.messages.find((item) => item.id === entry.ref.messageID)
+                })
+                const part = createMemo(() => {
+                  const entry = entryAccessor() as { type: "part"; ref: PartRef }
+                  return partByID(list(data.store.part?.[entry.ref.messageID], emptyParts), entry.ref.partID)
+                })
+
+                return (
+                  <Show when={message()}>
+                    {(msg) => (
+                      <Show when={part()}>
+                        {(p) => (
+                          <Part
+                            part={p()}
+                            message={msg()}
+                            showAssistantCopyPartID={props.showAssistantCopyPartID}
+                            turnDurationMs={props.turnDurationMs}
+                            defaultOpen={partDefaultOpen(p(), props.shellToolDefaultOpen, props.editToolDefaultOpen)}
+                          />
+                        )}
+                      </Show>
+                    )}
+                  </Show>
+                )
+              })()}
+            </Match>
+          </Switch>
         )
       }}
-    </For>
+    </Index>
   )
 }
 
@@ -632,36 +650,56 @@ export function AssistantMessageDisplay(props: {
   )
 
   return (
-    <For each={grouped()}>
-      {(entry) => {
-        if (entry.type === "context") {
-          const parts = createMemo(
-            () =>
-              entry.refs
-                .map((ref) => partByID(props.parts, ref.partID))
-                .filter((part): part is ToolPart => !!part && isContextGroupTool(part)),
-            emptyTools,
-            { equals: same },
-          )
-
-          return (
-            <Show when={parts().length > 0}>
-              <ContextToolGroup parts={parts()} />
-            </Show>
-          )
-        }
-
-        const part = createMemo(() => partByID(props.parts, entry.ref.partID))
+    <Index each={grouped()}>
+      {(entryAccessor) => {
+        const entryType = createMemo(() => entryAccessor().type)
 
         return (
-          <Show when={part()}>
-            {(part) => (
-              <Part part={part()} message={props.message} showAssistantCopyPartID={props.showAssistantCopyPartID} />
-            )}
-          </Show>
+          <Switch>
+            <Match when={entryType() === "context"}>
+              {(() => {
+                const parts = createMemo(
+                  () => {
+                    const entry = entryAccessor() as { type: "context"; refs: PartRef[] }
+                    return entry.refs
+                      .map((ref) => partByID(props.parts, ref.partID))
+                      .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
+                  },
+                  emptyTools,
+                  { equals: same },
+                )
+
+                return (
+                  <Show when={parts().length > 0}>
+                    <ContextToolGroup parts={parts()} />
+                  </Show>
+                )
+              })()}
+            </Match>
+            <Match when={entryType() === "part"}>
+              {(() => {
+                const part = createMemo(() => {
+                  const entry = entryAccessor() as { type: "part"; ref: PartRef }
+                  return partByID(props.parts, entry.ref.partID)
+                })
+
+                return (
+                  <Show when={part()}>
+                    {(p) => (
+                      <Part
+                        part={p()}
+                        message={props.message}
+                        showAssistantCopyPartID={props.showAssistantCopyPartID}
+                      />
+                    )}
+                  </Show>
+                )
+              })()}
+            </Match>
+          </Switch>
         )
       }}
-    </For>
+    </Index>
   )
 }
 

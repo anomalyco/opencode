@@ -689,7 +689,9 @@ export function MessageTimeline(props: {
                   if (!item || active()) return false
                   return messageID > item.id
                 })
-                const comments = createMemo(() => messageComments(sync.data.part[messageID] ?? []))
+                const comments = createMemo(() => messageComments(sync.data.part[messageID] ?? []), [], {
+                  equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+                })
                 const commentCount = createMemo(() => comments().length)
                 return (
                   <div

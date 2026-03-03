@@ -142,7 +142,10 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
   const handleInteraction = () => {
     if (!active()) return
-    stop()
+    const selection = window.getSelection()
+    if (selection && selection.toString().length > 0) {
+      stop()
+    }
   }
 
   const updateOverflowAnchor = (el: HTMLElement) => {
