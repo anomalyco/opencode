@@ -234,7 +234,7 @@ Compartilhe a sessão atual. [Saiba mais](/docs/share).
 Liste os temas disponíveis.
 
 ```bash frame="none"
-/theme
+/themes
 ```
 
 **Atalho:** `ctrl+x t`
@@ -352,24 +352,34 @@ Alguns editores precisam de argumentos de linha de comando para rodar em modo bl
 
 ## Configuração
 
-Você pode personalizar o comportamento do TUI através do seu arquivo de configuração do opencode.
+Você pode personalizar o comportamento do TUI através de `tui.json` (ou `tui.jsonc`).
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "tui": {
-    "scroll_speed": 3,
-    "scroll_acceleration": {
-      "enabled": true
-    }
-  }
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "opencode",
+  "keybinds": {
+    "leader": "ctrl+x"
+  },
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": true
+  },
+  "diff_style": "auto"
 }
 ```
 
+Isso é separado do `opencode.json`, que configura o comportamento do servidor/runtime.
+
 ### Opções
 
-- `scroll_acceleration` - Ative a aceleração de rolagem no estilo macOS para uma rolagem suave e natural. Quando ativado, a velocidade de rolagem aumenta com gestos de rolagem rápidos e permanece precisa para movimentos mais lentos. **Esta configuração tem precedência sobre `scroll_speed` e a substitui quando ativada.**
-- `scroll_speed` - Controla quão rápido o TUI rola ao usar comandos de rolagem (mínimo: `1`). O padrão é `3`. **Nota: Isso é ignorado se `scroll_acceleration.enabled` estiver definido como `true`.**
+- `theme` - Define o tema da sua interface. [Saiba mais](/docs/themes).
+- `keybinds` - Personaliza atalhos de teclado. [Saiba mais](/docs/keybinds).
+- `scroll_acceleration.enabled` - Ative a aceleração de rolagem no estilo macOS para uma rolagem suave e natural. Quando ativado, a velocidade de rolagem aumenta com gestos de rolagem rápidos e permanece precisa para movimentos mais lentos. **Esta configuração tem precedência sobre `scroll_speed` e a substitui quando ativada.**
+- `scroll_speed` - Controla quão rápido o TUI rola ao usar comandos de rolagem (mínimo: `0.001`, suporta valores decimais). O padrão é `3`. **Nota: Isso é ignorado se `scroll_acceleration.enabled` estiver definido como `true`.**
+- `diff_style` - Controla a renderização de diffs. `"auto"` se adapta à largura do terminal, `"stacked"` sempre mostra um layout de coluna única.
+
+Use `OPENCODE_TUI_CONFIG` para carregar um caminho de configuração TUI personalizado.
 
 ---
 

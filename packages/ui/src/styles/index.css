@@ -7,15 +7,15 @@
 @import "katex/dist/katex.min.css" layer(base);
 
 @import "../components/accordion.css" layer(components);
+@import "../components/animated-number.css" layer(components);
 @import "../components/app-icon.css" layer(components);
 @import "../components/avatar.css" layer(components);
 @import "../components/basic-tool.css" layer(components);
 @import "../components/button.css" layer(components);
 @import "../components/card.css" layer(components);
 @import "../components/checkbox.css" layer(components);
-@import "../components/code.css" layer(components);
+@import "../components/file.css" layer(components);
 @import "../components/collapsible.css" layer(components);
-@import "../components/diff.css" layer(components);
 @import "../components/diff-changes.css" layer(components);
 @import "../components/context-menu.css" layer(components);
 @import "../components/dropdown-menu.css" layer(components);
@@ -28,7 +28,6 @@
 @import "../components/icon-button.css" layer(components);
 @import "../components/image-preview.css" layer(components);
 @import "../components/keybind.css" layer(components);
-@import "../components/line-comment.css" layer(components);
 @import "../components/text-field.css" layer(components);
 @import "../components/inline-input.css" layer(components);
 @import "../components/list.css" layer(components);
@@ -47,10 +46,16 @@
 @import "../components/scroll-view.css" layer(components);
 @import "../components/session-review.css" layer(components);
 @import "../components/session-turn.css" layer(components);
+@import "../components/shell-submessage.css" layer(components);
 @import "../components/sticky-accordion-header.css" layer(components);
 @import "../components/tabs.css" layer(components);
 @import "../components/tag.css" layer(components);
+@import "../components/text-reveal.css" layer(components);
+@import "../components/text-strikethrough.css" layer(components);
 @import "../components/text-shimmer.css" layer(components);
+@import "../components/tool-count-label.css" layer(components);
+@import "../components/tool-count-summary.css" layer(components);
+@import "../components/tool-status-title.css" layer(components);
 @import "../components/toast.css" layer(components);
 @import "../components/tooltip.css" layer(components);
 @import "../components/typewriter.css" layer(components);
