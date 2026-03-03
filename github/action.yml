@@ -38,6 +38,14 @@ inputs:
     description: "Base URL for OIDC token exchange API. Only required when running a custom GitHub App install. Defaults to https://api.opencode.ai"
     required: false
 
+  server_url:
+    description: "URL of a remote OpenCode server to connect to (e.g., https://agent.acme.com:4096). Enables remote execution on persistent servers."
+    required: false
+
+  server_password:
+    description: "Password for the remote OpenCode server (should be passed via GitHub secrets). Required if server_url is provided and server is password protected."
+    required: false
+
 runs:
   using: "composite"
   steps:
@@ -77,3 +85,5 @@ runs:
         MENTIONS: ${{ inputs.mentions }}
         VARIANT: ${{ inputs.variant }}
         OIDC_BASE_URL: ${{ inputs.oidc_base_url }}
+        SERVER_URL: ${{ inputs.server_url }}
+        SERVER_PASSWORD: ${{ inputs.server_password }}

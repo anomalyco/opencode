@@ -228,6 +228,33 @@ try {
 process.exit(exitCode)
 
 function createOpencode() {
+  const serverUrl = useEnvServerUrl()
+  const serverPassword = useEnvServerPassword()
+
+  if (serverPassword && !serverUrl) {
+    throw new Error("server_password provided without server_url. Remote authentication requires a target host.")
+  }
+
+  if (serverUrl) {
+    const headers: Record<string, string> = {}
+    if (serverPassword) {
+      headers["Authorization"] = `Bearer ${serverPassword}`
+    }
+
+    const client = createOpencodeClient({
+      baseUrl: serverUrl,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
+    })
+
+    return {
+      server: {
+        url: serverUrl,
+        close: () => {},
+      },
+      client,
+    }
+  }
+
   const host = "127.0.0.1"
   const port = 4096
   const url = `http://${host}:${port}`
@@ -335,6 +362,14 @@ function useEnvMock() {
     mockEvent: process.env["MOCK_EVENT"],
     mockToken: process.env["MOCK_TOKEN"],
   }
+}
+
+function useEnvServerUrl() {
+  return process.env["SERVER_URL"] || undefined
+}
+
+function useEnvServerPassword() {
+  return process.env["SERVER_PASSWORD"] || undefined
 }
 
 function useEnvGithubToken() {
