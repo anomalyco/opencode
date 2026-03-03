@@ -17,6 +17,7 @@ import type { FileSelection } from "@/context/file"
 import { setCursorPosition } from "@/components/prompt-input/editor-dom"
 import { buildRequestParts } from "@/components/prompt-input/build-request-parts"
 import { resolveSession, extractErrorMessage, findReusableSession } from "./prompt-input-submit-helpers"
+import { trackPrompt } from "./prompt-log-helpers"
 
 type PendingPrompt = {
   abort: AbortController
@@ -208,6 +209,14 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     } catch (e) {
       console.error("[submit] onSubmit callback failed:", e)
     }
+
+    trackPrompt({
+      promptText: text,
+      sessionId: session.id,
+      projectName: sessionDirectory.split("/").pop(),
+      modelId: currentModel.id,
+      agentName: currentAgent.name,
+    })
 
     const model = {
       modelID: currentModel.id,
