@@ -226,6 +226,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return paths
   })
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
+  const steerQueue = createMemo(() => sync.data.steer_queue?.[params.id ?? ""] ?? [])
   const status = createMemo(
     () =>
       sync.data.session_status[params.id ?? ""] ?? {
@@ -1063,8 +1064,23 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     // Handle Shift+Enter BEFORE IME check - Shift+Enter is never used for IME input
-    // and should always insert a newline regardless of composition state
     if (event.key === "Enter" && event.shiftKey) {
+      if (working() && params.id) {
+        const text = prompt.current().filter(p => p.type === "text").map(p => p.content).join("").trim()
+        if (text) {
+          fetch(`${sdk.url}/session/${params.id}/steer`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text, mode: "steer" }),
+          }).then(() => {
+            showToast({ title: "Steering", description: text.slice(0, 60) })
+            prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
+            editorRef.innerHTML = ""
+          }).catch(err => showToast({ title: "Failed to steer", description: err?.message }))
+          event.preventDefault()
+          return
+        }
+      }
       addPart({ type: "text", content: "\n", start: 0, end: 0 })
       event.preventDefault()
       return
