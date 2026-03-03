@@ -1,0 +1,166 @@
+---
+title: Empresa
+description: Usando o opencode com segurança em sua organização.
+---
+
+import config from "../../../../config.mjs"
+export const email = `mailto:${config.email}`
+
+O opencode Enterprise é para organizações que desejam garantir que seu código e dados nunca deixem sua infraestrutura. Isso pode ser feito usando uma configuração centralizada que se integra ao seu SSO e gateway de IA interno.
+
+:::note
+O opencode não armazena nenhum de seus códigos ou dados de contexto.
+:::
+
+Para começar com o opencode Enterprise:
+
+1. Faça um teste internamente com sua equipe.
+2. **<a href={email}>Entre em contato conosco</a>** para discutir opções de preços e implementação.
+
+---
+
+## Teste
+
+O opencode é de código aberto e não armazena nenhum de seus códigos ou dados de contexto, então seus desenvolvedores podem simplesmente [começar](/docs/) e realizar um teste.
+
+---
+
+### Manipulação de dados
+
+**O opencode não armazena seu código ou dados de contexto.** Todo o processamento acontece localmente ou através de chamadas diretas de API para seu provedor de IA.
+
+Isso significa que, enquanto você estiver usando um provedor em quem confia, ou um gateway de IA interno, você pode usar o opencode com segurança.
+
+A única ressalva aqui é o recurso opcional `/share`.
+
+---
+
+#### Compartilhando conversas
+
+Se um usuário habilitar o recurso `/share`, a conversa e os dados associados a ela são enviados para o serviço que usamos para hospedar essas páginas de compartilhamento em opencode.ai.
+
+Os dados são atualmente servidos através da rede de borda do nosso CDN e são armazenados em cache na borda perto de seus usuários.
+
+Recomendamos que você desative isso para seu teste.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled"
+}
+```
+
+[Saiba mais sobre compartilhamento](/docs/share).
+
+---
+
+### Propriedade do código
+
+**Você possui todo o código produzido pelo opencode.** Não há restrições de licenciamento ou reivindicações de propriedade.
+
+---
+
+## Preços
+
+Usamos um modelo por assento para o opencode Enterprise. Se você tiver seu próprio gateway LLM, não cobramos pelos tokens usados. Para mais detalhes sobre preços e opções de implementação, **<a href={email}>entre em contato conosco</a>**.
+
+---
+
+## Implantação
+
+Uma vez que você tenha concluído seu teste e esteja pronto para usar o opencode em sua organização, você pode **<a href={email}>entrar em contato conosco</a>** para discutir preços e opções de implementação.
+
+---
+
+### Configuração Central
+
+Podemos configurar o opencode para usar uma única configuração central para toda a sua organização.
+
+Essa configuração centralizada pode se integrar ao seu provedor de SSO e garante que todos os usuários acessem apenas seu gateway de IA interno.
+
+---
+
+### Integração SSO
+
+Através da configuração central, o opencode pode se integrar ao provedor de SSO de sua organização para autenticação.
+
+Isso permite que o opencode obtenha credenciais para seu gateway de IA interno através do seu sistema de gerenciamento de identidade existente.
+
+---
+
+### Gateway de IA Interno
+
+Com a configuração central, o opencode também pode ser configurado para usar apenas seu gateway de IA interno.
+
+Você também pode desativar todos os outros provedores de IA, garantindo que todas as solicitações passem pela infraestrutura aprovada de sua organização.
+
+---
+
+### Auto-hospedagem
+
+Embora recomendemos desativar as páginas de compartilhamento para garantir que seus dados nunca deixem sua organização, também podemos ajudá-lo a auto-hospedá-las em sua infraestrutura.
+
+Isso está atualmente em nosso roadmap. Se você estiver interessado, **<a href={email}>nos avise</a>**.
+
+---
+
+## FAQ
+
+<details>
+<summary>O que é o opencode Enterprise?</summary>
+
+O opencode Enterprise é para organizações que desejam garantir que seu código e dados nunca deixem sua infraestrutura. Isso pode ser feito usando uma configuração centralizada que se integra ao seu SSO e gateway de IA interno.
+
+</details>
+
+<details>
+<summary>Como posso começar com o opencode Enterprise?</summary>
+
+Basta começar com um teste interno com sua equipe. O opencode, por padrão, não armazena seu código ou dados de contexto, facilitando o início.
+
+Depois, **<a href={email}>entre em contato conosco</a>** para discutir opções de preços e implementação.
+
+</details>
+
+<details>
+<summary>Como funciona a precificação empresarial?</summary>
+
+Oferecemos preços empresariais por assento. Se você tiver seu próprio gateway LLM, não cobramos pelos tokens usados. Para mais detalhes, **<a href={email}>entre em contato conosco</a>** para um orçamento personalizado com base nas necessidades de sua organização.
+
+</details>
+
+<details>
+<summary>Meus dados estão seguros com o opencode Enterprise?</summary>
+
+Sim. O opencode não armazena seu código ou dados de contexto. Todo o processamento acontece localmente ou através de chamadas diretas de API para seu provedor de IA. Com a configuração central e a integração SSO, seus dados permanecem seguros dentro da infraestrutura de sua organização.
+
+</details>
+
+<details>
+<summary>Podemos usar nosso próprio registro NPM privado?</summary>
+
+O opencode suporta registros npm privados através do suporte nativo do arquivo `.npmrc` do Bun. Se sua organização usa um registro privado, como JFrog Artifactory, Nexus ou similar, certifique-se de que os desenvolvedores estejam autenticados antes de executar o opencode.
+
+Para configurar a autenticação com seu registro privado:
+
+```bash
+npm login --registry=https://your-company.jfrog.io/api/npm/npm-virtual/
+```
+
+Isso cria `~/.npmrc` com os detalhes de autenticação. O opencode irá automaticamente
+capturar isso.
+
+:::caution
+Você deve estar logado no registro privado antes de executar o opencode.
+:::
+
+Alternativamente, você pode configurar manualmente um arquivo `.npmrc`:
+
+```bash title="~/.npmrc"
+registry=https://your-company.jfrog.io/api/npm/npm-virtual/
+//your-company.jfrog.io/api/npm/npm-virtual/:_authToken=${NPM_AUTH_TOKEN}
+```
+
+Os desenvolvedores devem estar logados no registro privado antes de executar o opencode para garantir que os pacotes possam ser instalados a partir do seu registro empresarial.
+
+</details>

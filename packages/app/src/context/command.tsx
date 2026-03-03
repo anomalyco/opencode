@@ -11,6 +11,7 @@ const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(na
 const PALETTE_ID = "command.palette"
 const DEFAULT_PALETTE_KEYBIND = "mod+shift+p"
 const SUGGESTED_PREFIX = "suggested."
+const EDITABLE_KEYBIND_IDS = new Set(["terminal.toggle", "terminal.new", "file.attach"])
 
 function actionId(id: string) {
   if (!id.startsWith(SUGGESTED_PREFIX)) return id
@@ -31,6 +32,11 @@ function signature(key: string, ctrl: boolean, meta: boolean, shift: boolean, al
 
 function signatureFromEvent(event: KeyboardEvent) {
   return signature(normalizeKey(event.key), event.ctrlKey, event.metaKey, event.shiftKey, event.altKey)
+}
+
+function isAllowedEditableKeybind(id: string | undefined) {
+  if (!id) return false
+  return EDITABLE_KEYBIND_IDS.has(actionId(id))
 }
 
 export type KeybindConfig = string
@@ -56,12 +62,24 @@ export interface CommandOption {
   onHighlight?: () => (() => void) | void
 }
 
+type CommandSource = "palette" | "keybind" | "slash"
+
 export type CommandCatalogItem = {
   title: string
   description?: string
   category?: string
   keybind?: KeybindConfig
   slash?: string
+}
+
+export type CommandRegistration = {
+  key?: string
+  options: Accessor<CommandOption[]>
+}
+
+export function upsertCommandRegistration(registrations: CommandRegistration[], entry: CommandRegistration) {
+  if (entry.key === undefined) return [entry, ...registrations]
+  return [entry, ...registrations.filter((x) => x.key !== entry.key)]
 }
 
 export function parseKeybind(config: string): Keybind[] {
@@ -159,6 +177,14 @@ export function formatKeybind(config: string): string {
   return IS_MAC ? parts.join("") : parts.join("+")
 }
 
+function isEditableTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false
+  if (target.isContentEditable) return true
+  if (target.closest("[contenteditable='true']")) return true
+  if (target.closest("input, textarea, select")) return true
+  return false
+}
+
 export const { use: useCommand, provider: CommandProvider } = createSimpleContext({
   name: "Command",
   init: () => {
@@ -166,9 +192,10 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     const settings = useSettings()
     const language = useLanguage()
     const [store, setStore] = createStore({
-      registrations: [] as Accessor<CommandOption[]>[],
+      registrations: [] as CommandRegistration[],
       suspendCount: 0,
     })
+    const warnedDuplicates = new Set<string>()
 
     const [catalog, setCatalog, _, catalogReady] = persisted(
       Persist.global("command.catalog.v1"),
@@ -187,8 +214,14 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       const all: CommandOption[] = []
 
       for (const reg of store.registrations) {
-        for (const opt of reg()) {
-          if (seen.has(opt.id)) continue
+        for (const opt of reg.options()) {
+          if (seen.has(opt.id)) {
+            if (import.meta.env.DEV && !warnedDuplicates.has(opt.id)) {
+              warnedDuplicates.add(opt.id)
+              console.warn(`[command] duplicate command id \"${opt.id}\" registered; keeping first entry`)
+            }
+            continue
+          }
           seen.add(opt.id)
           all.push(opt)
         }
@@ -258,13 +291,18 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       return map
     })
 
-    const run = (id: string, source?: "palette" | "keybind" | "slash") => {
+    const optionMap = createMemo(() => {
+      const map = new Map<string, CommandOption>()
       for (const option of options()) {
-        if (option.id === id || option.id === "suggested." + id) {
-          option.onSelect?.(source)
-          return
-        }
+        map.set(option.id, option)
+        map.set(actionId(option.id), option)
       }
+      return map
+    })
+
+    const run = (id: string, source?: CommandSource) => {
+      const option = optionMap().get(id)
+      option?.onSelect?.(source)
     }
 
     const showPalette = () => {
@@ -275,14 +313,20 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       if (suspended() || dialog.active) return
 
       const sig = signatureFromEvent(event)
+      const isPalette = palette().has(sig)
+      const option = keymap().get(sig)
+      const modified = event.ctrlKey || event.metaKey || event.altKey
+      const isTab = event.key === "Tab"
 
-      if (palette().has(sig)) {
+      if (isEditableTarget(event.target) && !isPalette && !isAllowedEditableKeybind(option?.id) && !modified && !isTab)
+        return
+
+      if (isPalette) {
         event.preventDefault()
         showPalette()
         return
       }
 
-      const option = keymap().get(sig)
       if (!option) return
       event.preventDefault()
       option.onSelect?.("keybind")
@@ -296,15 +340,26 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       document.removeEventListener("keydown", handleKeyDown)
     })
 
+    function register(cb: () => CommandOption[]): void
+    function register(key: string, cb: () => CommandOption[]): void
+    function register(key: string | (() => CommandOption[]), cb?: () => CommandOption[]) {
+      const id = typeof key === "string" ? key : undefined
+      const next = typeof key === "function" ? key : cb
+      if (!next) return
+      const options = createMemo(next)
+      const entry: CommandRegistration = {
+        key: id,
+        options,
+      }
+      setStore("registrations", (arr) => upsertCommandRegistration(arr, entry))
+      onCleanup(() => {
+        setStore("registrations", (arr) => arr.filter((x) => x !== entry))
+      })
+    }
+
     return {
-      register(cb: () => CommandOption[]) {
-        const results = createMemo(cb)
-        setStore("registrations", (arr) => [results, ...arr])
-        onCleanup(() => {
-          setStore("registrations", (arr) => arr.filter((x) => x !== results))
-        })
-      },
-      trigger(id: string, source?: "palette" | "keybind" | "slash") {
+      register,
+      trigger(id: string, source?: CommandSource) {
         run(id, source)
       },
       keybind(id: string) {
@@ -323,7 +378,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       },
       show: showPalette,
       keybinds(enabled: boolean) {
-        setStore("suspendCount", (count) => count + (enabled ? -1 : 1))
+        setStore("suspendCount", (count) => Math.max(0, count + (enabled ? -1 : 1)))
       },
       suspended,
       get catalog() {

@@ -15,6 +15,7 @@ import { dict as desktopRu } from "./ru"
 import { dict as desktopAr } from "./ar"
 import { dict as desktopNo } from "./no"
 import { dict as desktopBr } from "./br"
+import { dict as desktopBs } from "./bs"
 
 import { dict as appEn } from "../../../app/src/i18n/en"
 import { dict as appZh } from "../../../app/src/i18n/zh"
@@ -30,13 +31,45 @@ import { dict as appRu } from "../../../app/src/i18n/ru"
 import { dict as appAr } from "../../../app/src/i18n/ar"
 import { dict as appNo } from "../../../app/src/i18n/no"
 import { dict as appBr } from "../../../app/src/i18n/br"
+import { dict as appBs } from "../../../app/src/i18n/bs"
 
-export type Locale = "en" | "zh" | "zht" | "ko" | "de" | "es" | "fr" | "da" | "ja" | "pl" | "ru" | "ar" | "no" | "br"
+export type Locale =
+  | "en"
+  | "zh"
+  | "zht"
+  | "ko"
+  | "de"
+  | "es"
+  | "fr"
+  | "da"
+  | "ja"
+  | "pl"
+  | "ru"
+  | "ar"
+  | "no"
+  | "br"
+  | "bs"
 
 type RawDictionary = typeof appEn & typeof desktopEn
 type Dictionary = i18n.Flatten<RawDictionary>
 
-const LOCALES: readonly Locale[] = ["en", "zh", "zht", "ko", "de", "es", "fr", "da", "ja", "pl", "ru", "ar", "no", "br"]
+const LOCALES: readonly Locale[] = [
+  "en",
+  "zh",
+  "zht",
+  "ko",
+  "de",
+  "es",
+  "fr",
+  "da",
+  "ja",
+  "pl",
+  "ru",
+  "bs",
+  "ar",
+  "no",
+  "br",
+]
 
 function detectLocale(): Locale {
   if (typeof navigator !== "object") return "en"
@@ -64,6 +97,7 @@ function detectLocale(): Locale {
     )
       return "no"
     if (language.toLowerCase().startsWith("pt")) return "br"
+    if (language.toLowerCase().startsWith("bs")) return "bs"
   }
 
   return "en"
@@ -80,6 +114,15 @@ function parseRecord(value: unknown) {
   if (!value || typeof value !== "object") return null
   if (Array.isArray(value)) return null
   return value as Record<string, unknown>
+}
+
+function parseStored(value: unknown) {
+  if (typeof value !== "string") return value
+  try {
+    return JSON.parse(value) as unknown
+  } catch {
+    return value
+  }
 }
 
 function pickLocale(value: unknown): Locale | null {
@@ -108,6 +151,7 @@ function build(locale: Locale): Dictionary {
   if (locale === "ar") return { ...base, ...i18n.flatten(appAr), ...i18n.flatten(desktopAr) }
   if (locale === "no") return { ...base, ...i18n.flatten(appNo), ...i18n.flatten(desktopNo) }
   if (locale === "br") return { ...base, ...i18n.flatten(appBr), ...i18n.flatten(desktopBr) }
+  if (locale === "bs") return { ...base, ...i18n.flatten(appBs), ...i18n.flatten(desktopBs) }
   return { ...base, ...i18n.flatten(appKo), ...i18n.flatten(desktopKo) }
 }
 
@@ -134,7 +178,7 @@ export function initI18n(): Promise<Locale> {
     if (!store) return state.locale
 
     const raw = await store.get("language").catch(() => null)
-    const value = typeof raw === "string" ? JSON.parse(raw) : raw
+    const value = parseStored(raw)
     const next = pickLocale(value) ?? state.locale
 
     state.locale = next
