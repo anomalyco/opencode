@@ -1,17 +1,9 @@
 import { batch } from "solid-js"
+import type { AssistantMessage, UserMessage } from "@opencode-ai/sdk/v2"
 
-type SessionMessage = {
-  id: string
-  role: "user" | "assistant"
-  parentID?: string
-  time?: {
-    created?: number
-    completed?: number
-  }
-  error?: {
-    name?: string
-  }
-}
+type SessionMessage =
+  | Pick<UserMessage, "id" | "role" | "time">
+  | Pick<AssistantMessage, "id" | "role" | "parentID" | "time" | "error">
 
 const isAbortedAssistant = (
   message: SessionMessage,

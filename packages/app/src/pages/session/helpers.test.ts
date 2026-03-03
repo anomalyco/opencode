@@ -115,6 +115,9 @@ describe("interruptedMessageIDs", () => {
       ? {
           error: {
             name: "MessageAbortedError" as const,
+            data: {
+              message: "interrupted",
+            },
           },
         }
       : {}),
