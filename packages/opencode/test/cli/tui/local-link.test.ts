@@ -15,6 +15,17 @@ describe("localLink", () => {
     expect(result).toContain("live_jobs_all.csv)")
   })
 
+  test("links existing bare filenames in code spans", async () => {
+    await using tmp = await tmpdir()
+    const target = path.join(tmp.path, "package-lock.json")
+    await Bun.write(target, "{}\n")
+
+    const result = localLink("Use `package-lock.json`.", tmp.path)
+
+    expect(result).toContain("[`package-lock.json`](file://")
+    expect(result).toContain("package-lock.json)")
+  })
+
   test("does not link missing paths", async () => {
     await using tmp = await tmpdir()
     const result = localLink("Use `plan_a/data/live_jobs_all.csv`.", tmp.path)
@@ -48,5 +59,14 @@ describe("localLink", () => {
     const result = localLink(input, root)
     expect(result).toContain(`[${root}](file://${root})`)
     expect(result).toContain(`- [.agents/](file://${dir})`)
+  })
+
+  test("converts concealed file URL format for bare filenames", async () => {
+    await using tmp = await tmpdir()
+    const root = tmp.path
+    const file = path.join(root, "package-lock.json")
+    await Bun.write(file, "{}\n")
+    const result = localLink(`- package-lock.json (file://${file})`, root)
+    expect(result).toBe(`- [package-lock.json](file://${file})`)
   })
 })

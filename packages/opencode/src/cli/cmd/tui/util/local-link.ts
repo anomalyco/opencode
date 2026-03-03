@@ -42,13 +42,17 @@ function resolve(raw: string, cwd: string) {
   }
   if (raw.startsWith("~/")) return path.join(Global.Path.home, raw.slice(2))
   if (path.isAbsolute(raw)) return raw
-  if (!raw.includes("/") && !raw.startsWith("./") && !raw.startsWith("../")) return
   return path.resolve(cwd, raw)
 }
 
 function pathlike(raw: string) {
   if (!raw) return false
   return (
-    raw.startsWith("/") || raw.startsWith("./") || raw.startsWith("../") || raw.startsWith("~/") || raw.includes("/")
+    raw.startsWith("/") ||
+    raw.startsWith("./") ||
+    raw.startsWith("../") ||
+    raw.startsWith("~/") ||
+    raw.includes("/") ||
+    /^[A-Za-z0-9._-]+$/.test(raw)
   )
 }
