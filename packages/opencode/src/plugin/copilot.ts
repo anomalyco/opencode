@@ -17,6 +17,25 @@ function getUrls(domain: string) {
   }
 }
 
+/**
+ * Returns true if the last message in the conversation is a "synthetic" user
+ * message produced by the agent (e.g. tool results, image attachments) rather
+ * than one typed by the human.  Synthetic messages should be billed as agent
+ * traffic even though their `role` is `"user"`.
+ */
+export function isSyntheticUserMessage(msg: any): boolean {
+  if (!msg || msg.role !== "user") return false
+  if (!Array.isArray(msg.content)) return false
+  return msg.content.every(
+    (part: any) =>
+      part?.type === "tool_result" ||
+      part?.type === "attachment" ||
+      part?.type === "input_image" ||
+      part?.type === "image_url" ||
+      part?.type === "image"
+  )
+}
+
 export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
   const sdk = input.client
   return {
@@ -65,6 +84,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
             if (info.type !== "oauth") return fetch(request, init)
 
             const url = request instanceof URL ? request.href : request.toString()
+
             const { isVision, isAgent } = iife(() => {
               try {
                 const body = typeof init?.body === "string" ? JSON.parse(init.body) : init?.body
@@ -77,7 +97,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                       (msg: any) =>
                         Array.isArray(msg.content) && msg.content.some((part: any) => part.type === "image_url"),
                     ),
-                    isAgent: last?.role !== "user",
+                    isAgent: last?.role !== "user" || isSyntheticUserMessage(last),
                   }
                 }
 
@@ -89,15 +109,13 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                       (item: any) =>
                         Array.isArray(item?.content) && item.content.some((part: any) => part.type === "input_image"),
                     ),
-                    isAgent: last?.role !== "user",
+                    isAgent: last?.role !== "user" || isSyntheticUserMessage(last),
                   }
                 }
 
                 // Messages API
                 if (body?.messages) {
                   const last = body.messages[body.messages.length - 1]
-                  const hasNonToolCalls =
-                    Array.isArray(last?.content) && last.content.some((part: any) => part?.type !== "tool_result")
                   return {
                     isVision: body.messages.some(
                       (item: any) =>
@@ -111,7 +129,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                               part.content.some((nested: any) => nested?.type === "image")),
                         ),
                     ),
-                    isAgent: !(last?.role === "user" && hasNonToolCalls),
+                    isAgent: last?.role !== "user" || isSyntheticUserMessage(last),
                   }
                 }
               } catch {}
