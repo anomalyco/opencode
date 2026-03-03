@@ -84,6 +84,7 @@ import {
   errorMessage,
   getDraggableId,
   latestRootSession,
+  sortSessions,
   sortedRootSessions,
   syncWorkspaceOrder,
   workspaceKey,
