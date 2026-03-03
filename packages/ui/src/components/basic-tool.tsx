@@ -31,6 +31,7 @@ export interface BasicToolProps {
   defer?: boolean
   locked?: boolean
   animated?: boolean
+  onClick?: (e: MouseEvent) => void
   onSubtitleClick?: () => void
 }
 
@@ -118,7 +119,17 @@ export function BasicTool(props: BasicToolProps) {
   return (
     <Collapsible open={open()} onOpenChange={handleOpenChange} class="tool-collapsible">
       <Collapsible.Trigger>
-        <div data-component="tool-trigger">
+        <div
+          data-component="tool-trigger"
+          onClick={(e) => {
+            if (props.onClick) {
+              e.stopPropagation()
+              e.preventDefault()
+              props.onClick(e)
+            }
+          }}
+          style={{ cursor: props.onClick ? "pointer" : undefined }}
+        >
           <div data-slot="basic-tool-tool-trigger-content">
             <div data-slot="basic-tool-tool-info">
               <Switch>
