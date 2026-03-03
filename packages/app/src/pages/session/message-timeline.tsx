@@ -230,20 +230,29 @@ export function MessageTimeline(props: {
       (item): item is AssistantMessage => item.role === "assistant" && typeof item.time.completed !== "number",
     ),
   )
-  const activeMessageID = createMemo(() => {
-    const parentID = pending()?.parentID
-    if (!parentID) return
-
-    const messages = sessionMessages()
-    const result = Binary.search(messages, parentID, (message) => message.id)
-    const message = result.found ? messages[result.index] : messages.find((item) => item.id === parentID)
-    if (!message || message.role !== "user") return
-    return message.id
-  })
   const sessionStatus = createMemo(() => {
     const id = sessionID()
     if (!id) return idle
     return sync.data.session_status[id] ?? idle
+  })
+  const activeMessageID = createMemo(() => {
+    const parentID = pending()?.parentID
+    if (parentID) {
+      const messages = sessionMessages()
+      const result = Binary.search(messages, parentID, (message) => message.id)
+      const message = result.found ? messages[result.index] : messages.find((item) => item.id === parentID)
+      if (message && message.role === "user") return message.id
+    }
+
+    const status = sessionStatus()
+    if (status.type !== "idle") {
+      const messages = sessionMessages()
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === "user") return messages[i].id
+      }
+    }
+
+    return undefined
   })
   const info = createMemo(() => {
     const id = sessionID()
@@ -685,9 +694,10 @@ export function MessageTimeline(props: {
               {(messageID) => {
                 const active = createMemo(() => activeMessageID() === messageID)
                 const queued = createMemo(() => {
-                  const item = pending()
-                  if (!item || active()) return false
-                  return messageID > item.id
+                  if (active()) return false
+                  const activeID = activeMessageID()
+                  if (activeID) return messageID > activeID
+                  return false
                 })
                 const comments = createMemo(() => messageComments(sync.data.part[messageID] ?? []), [], {
                   equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
@@ -705,7 +715,6 @@ export function MessageTimeline(props: {
                       "min-w-0 w-full max-w-full": true,
                       "md:max-w-200 2xl:max-w-[1000px]": props.centered,
                     }}
-                    style={{ "content-visibility": "auto", "contain-intrinsic-size": "auto 500px" }}
                   >
                     <Show when={commentCount() > 0}>
                       <div class="w-full px-4 md:px-5 pb-2">
