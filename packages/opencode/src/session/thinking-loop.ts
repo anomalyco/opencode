@@ -3,12 +3,12 @@ import { Log } from "@/util/log"
 const log = Log.create({ service: "session.thinking-loop" })
 
 const DETECTOR_DEFAULTS = {
-  min_period: 80,
-  max_period: 800,
+  min_period: 20,
+  max_period: 1000,
   check_interval: 100,
-  raw_buffer_size: 3000,
+  raw_buffer_size: 4000,
   min_chars_before_detection: 500,
-  min_unique_chars: 20,
+  min_unique_chars: 10,
 } as const
 
 const RECOVERY_DEFAULTS = {

@@ -15,6 +15,7 @@ import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
 import { ThinkingLoopDetector, type ThinkingLoopOutcome } from "./thinking-loop"
+import { SessionID, PartID } from "./schema"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3

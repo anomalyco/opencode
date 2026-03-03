@@ -783,9 +783,9 @@ export namespace SessionPrompt {
     return Provider.defaultModel()
   }
 
-  async function enqueueThinkingLoopReminder(input: { sessionID: string; user: MessageV2.User; reminder: string }) {
+  async function enqueueThinkingLoopReminder(input: { sessionID: SessionID; user: MessageV2.User; reminder: string }) {
     const message = await Session.updateMessage({
-      id: Identifier.ascending("message"),
+      id: MessageID.ascending(),
       role: "user",
       sessionID: input.sessionID,
       time: { created: Date.now() },
@@ -797,7 +797,7 @@ export namespace SessionPrompt {
       variant: input.user.variant,
     })
     await Session.updatePart({
-      id: Identifier.ascending("part"),
+      id: PartID.ascending(),
       messageID: message.id,
       sessionID: input.sessionID,
       type: "text",
