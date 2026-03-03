@@ -1,5 +1,5 @@
 import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, type JSX } from "solid-js"
-import { animate, type AnimationPlaybackControls, springValue, HEIGHT_SPRING, FADE_SPRING } from "./motion"
+import { animate, type AnimationPlaybackControls, springValue, TOOL_HEIGHT_SPRING, FADE_SPRING } from "./motion"
 import { Collapsible } from "./collapsible"
 import type { IconProps } from "./icon"
 import { TextShimmer } from "./text-shimmer"
@@ -87,7 +87,7 @@ export function BasicTool(props: BasicToolProps) {
   let observer: ResizeObserver | undefined
   let resizeFrame: number | undefined
   const initialOpen = props.animateIn ? false : open()
-  const heightSpring = springValue<number>(0, HEIGHT_SPRING)
+  const heightSpring = springValue<number>(0, TOOL_HEIGHT_SPRING)
 
   const read = () => Math.max(0, Math.ceil(bodyRef?.getBoundingClientRect().height ?? 0))
 

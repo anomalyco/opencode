@@ -10,6 +10,14 @@ export const HEIGHT_SPRING = {
   bounce: 0,
 }
 
+export const TOOL_HEIGHT_DURATION = HEIGHT_DURATION
+
+export const TOOL_HEIGHT_SPRING = {
+  type: "spring" as const,
+  visualDuration: TOOL_HEIGHT_DURATION,
+  bounce: 0,
+}
+
 export const FADE_SPRING = {
   type: "spring" as const,
   visualDuration: FADE_DURATION,

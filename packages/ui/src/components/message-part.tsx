@@ -823,7 +823,7 @@ export function UserMessageDisplay(props: {
   }
 
   return (
-    <GrowBox animate={!!props.animate} fade class="w-full min-w-0 self-stretch max-w-full">
+    <GrowBox animate={!!props.animate} fade gap={8} class="w-full min-w-0 self-stretch max-w-full">
       <div data-component="user-message" data-interrupted={props.interrupted ? "" : undefined}>
         <div data-slot="user-message-inner">
           <Show when={attachments().length > 0}>
@@ -1987,7 +1987,6 @@ ToolRegistry.register({
               {...props}
               icon="code-lines"
               defer
-              animated
               trigger={
                 <div data-component="write-trigger">
                   <div data-slot="message-part-title-area">
@@ -2096,7 +2095,6 @@ ToolRegistry.register({
               {...props}
               icon="code-lines"
               defer
-              animated
               trigger={
                 <div data-component="edit-trigger">
                   <div data-slot="message-part-title-area">
