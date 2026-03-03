@@ -557,8 +557,11 @@ export namespace Provider {
 
       const metadata = iife(() => {
         if (input.options?.metadata) return input.options.metadata
-        try { return JSON.parse(input.options?.headers?.["cf-aig-metadata"]) }
-        catch { return undefined }
+        try {
+          return JSON.parse(input.options?.headers?.["cf-aig-metadata"])
+        } catch {
+          return undefined
+        }
       })
       const opts = {
         metadata,
@@ -572,7 +575,7 @@ export namespace Provider {
         accountId,
         gateway,
         apiKey: apiToken,
-        ...(Object.values(opts).some(v => v !== undefined) ? { options: opts } : {}),
+        ...(Object.values(opts).some((v) => v !== undefined) ? { options: opts } : {}),
       })
       const unified = createUnified()
 
