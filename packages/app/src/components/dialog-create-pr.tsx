@@ -64,8 +64,14 @@ export function CreatePrDialog() {
   })
 
   createEffect(() => {
+    if (store.showCommitInput && !titleEdited()) {
+      setStore("title", store.commitMessage)
+    }
+  })
+
+  createEffect(() => {
     const t = branchTitle()
-    if (t && !titleEdited()) {
+    if (t && !titleEdited() && !store.showCommitInput) {
       setStore("title", t)
       setStore("commitMessage", t)
     }
