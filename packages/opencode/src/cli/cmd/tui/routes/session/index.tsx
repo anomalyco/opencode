@@ -1687,21 +1687,21 @@ function InlineTool(props: {
           <Spinner color={fg()} children={props.children} />
         </Match>
         <Match when={true}>
-          <text
-            paddingLeft={3}
-            fg={hover() ? theme.text : fg()}
-            attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}
+          <box
             onMouseOver={() => props.onClick && setHover(true)}
             onMouseOut={() => setHover(false)}
             onMouseUp={() => {
               if (renderer.getSelection()?.getSelectedText()) return
               props.onClick?.()
             }}
+            backgroundColor={hover() ? theme.backgroundElement : undefined}
           >
-            <Show fallback={<>~ {props.pending}</>} when={props.complete}>
-              <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
-            </Show>
-          </text>
+            <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
+              <Show fallback={<>~ {props.pending}</>} when={props.complete}>
+                <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
+              </Show>
+            </text>
+          </box>
         </Match>
       </Switch>
       <Show when={error() && !denied()}>
