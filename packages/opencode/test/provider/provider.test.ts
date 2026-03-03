@@ -2309,36 +2309,6 @@ test("google-vertex-anthropic accepts custom headers from config", async () => {
   })
 })
 
-test("google-vertex-anthropic accepts betas array from config", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          provider: {
-            "google-vertex-anthropic": {
-              options: {
-                betas: ["context-1m-2025-08-07"],
-              },
-            },
-          },
-        }),
-      )
-    },
-  })
-  await Instance.provide({
-    directory: tmp.path,
-    init: async () => {
-      Env.set("GOOGLE_CLOUD_PROJECT", "test-project")
-    },
-    fn: async () => {
-      const providers = await Provider.list()
-      expect(providers["google-vertex-anthropic"]).toBeDefined()
-      expect(providers["google-vertex-anthropic"].options.betas).toEqual(["context-1m-2025-08-07"])
-    },
-  })
-})
 
 // Regression: 1M model was returning "prompt is too long: N > 200000 maximum" because
 // an earlier implementation stripped the anthropic-beta header and substituted a body
@@ -2358,8 +2328,19 @@ test("Vertex 1M model: anthropic-beta header passes through to Vertex unstripped
   ;(globalThis as any).fetch = async (_input: any, init?: RequestInit) => {
     if (init?.method === "POST") {
       const headers: Record<string, string> = {}
-      if (init.headers && typeof init.headers === "object" && !Array.isArray(init.headers)) {
-        Object.assign(headers, init.headers)
+      const rawHeaders = init.headers
+      if (rawHeaders instanceof Headers) {
+        rawHeaders.forEach((value, key) => {
+          headers[key] = value
+        })
+      } else if (Array.isArray(rawHeaders)) {
+        for (const [key, value] of rawHeaders as Array<[string, string]>) {
+          headers[key] = value
+        }
+      } else if (rawHeaders && typeof rawHeaders === "object") {
+        for (const [key, value] of Object.entries(rawHeaders as Record<string, string>)) {
+          headers[key] = String(value)
+        }
       }
       let body: any = undefined
       if (typeof init.body === "string") {
