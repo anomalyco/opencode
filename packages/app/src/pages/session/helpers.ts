@@ -1,5 +1,23 @@
 import { batch } from "solid-js"
 
+type SessionMessage = {
+  id: string
+  role: "user" | "assistant"
+  parentID?: string
+  time?: {
+    created?: number
+    completed?: number
+  }
+  error?: {
+    name?: string
+  }
+}
+
+const isAbortedAssistant = (
+  message: SessionMessage,
+): message is SessionMessage & { role: "assistant"; parentID: string } =>
+  message.role === "assistant" && message.error?.name === "MessageAbortedError"
+
 export const focusTerminalById = (id: string) => {
   const wrapper = document.getElementById(`terminal-wrapper-${id}`)
   const terminal = wrapper?.querySelector('[data-component="terminal"]')
@@ -63,4 +81,26 @@ export const getTabReorderIndex = (tabs: readonly string[], from: string, to: st
   const toIndex = tabs.indexOf(to)
   if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return undefined
   return toIndex
+}
+
+export const interruptedMessageIDs = (messages: SessionMessage[]) => {
+  const users = messages.filter((message): message is SessionMessage & { role: "user" } => message.role === "user")
+  const assisted = new Set(
+    messages.flatMap((message) => (message.role === "assistant" && message.parentID ? [message.parentID] : [])),
+  )
+  const interrupted = new Set(messages.flatMap((message) => (isAbortedAssistant(message) ? [message.parentID] : [])))
+
+  for (const message of messages) {
+    if (!isAbortedAssistant(message)) continue
+    const start = message.time?.created
+    const end = message.time?.completed
+    if (typeof start !== "number" || typeof end !== "number") continue
+
+    users
+      .filter((user) => user.time?.created !== undefined && user.time.created >= start && user.time.created <= end)
+      .filter((user) => !assisted.has(user.id))
+      .forEach((user) => interrupted.add(user.id))
+  }
+
+  return interrupted
 }

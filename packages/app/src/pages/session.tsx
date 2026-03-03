@@ -21,7 +21,7 @@ import { usePrompt } from "@/context/prompt"
 import { useComments } from "@/context/comments"
 import { SessionHeader, NewSessionView } from "@/components/session"
 import { same } from "@/utils/same"
-import { createOpenReviewFile } from "@/pages/session/helpers"
+import { createOpenReviewFile, interruptedMessageIDs } from "@/pages/session/helpers"
 import { createScrollSpy } from "@/pages/session/scroll-spy"
 import { SessionReviewTab, type DiffStyle, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
@@ -353,6 +353,7 @@ export default function Page() {
   const hasReview = createMemo(() => reviewCount() > 0)
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
+  const interruptedMessages = createMemo(() => interruptedMessageIDs(messages()))
   const messagesReady = createMemo(() => {
     const id = params.id
     if (!id) return true
@@ -1198,6 +1199,7 @@ export default function Page() {
                       void historyWindow.loadAndReveal()
                     }}
                     renderedUserMessages={historyWindow.renderedUserMessages()}
+                    interruptedMessages={interruptedMessages()}
                     anchor={anchor}
                     onRegisterMessage={scrollSpy.register}
                     onUnregisterMessage={scrollSpy.unregister}

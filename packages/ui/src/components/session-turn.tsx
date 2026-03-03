@@ -146,6 +146,7 @@ export function SessionTurn(
     editToolDefaultOpen?: boolean
     active?: boolean
     queued?: boolean
+    interrupted?: boolean
     status?: SessionStatus
     onUserInteracted?: () => void
     classes?: {
@@ -285,7 +286,9 @@ export function SessionTurn(
     { equals: same },
   )
 
-  const interrupted = createMemo(() => assistantMessages().some((m) => m.error?.name === "MessageAbortedError"))
+  const interrupted = createMemo(
+    () => !!props.interrupted || assistantMessages().some((m) => m.error?.name === "MessageAbortedError"),
+  )
   const error = createMemo(
     () => assistantMessages().find((m) => m.error && m.error.name !== "MessageAbortedError")?.error,
   )

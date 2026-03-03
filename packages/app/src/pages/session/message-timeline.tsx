@@ -203,6 +203,7 @@ export function MessageTimeline(props: {
   historyLoading: boolean
   onLoadEarlier: () => void
   renderedUserMessages: UserMessage[]
+  interruptedMessages: Set<string>
   anchor: (id: string) => string
   onRegisterMessage: (el: HTMLDivElement, id: string) => void
   onUnregisterMessage: (id: string) => void
@@ -748,6 +749,7 @@ export function MessageTimeline(props: {
                       messageID={messageID}
                       active={active()}
                       queued={queued()}
+                      interrupted={props.interruptedMessages.has(messageID)}
                       status={active() ? sessionStatus() : undefined}
                       showReasoningSummaries={settings.general.showReasoningSummaries()}
                       shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
