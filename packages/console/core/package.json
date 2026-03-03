@@ -34,12 +34,9 @@
     "promote-models-to-prod": "script/promote-models.ts production",
     "pull-models-from-dev": "script/pull-models.ts dev",
     "pull-models-from-prod": "script/pull-models.ts production",
-    "update-black": "script/update-black.ts",
-    "promote-black-to-dev": "script/promote-black.ts dev",
-    "promote-black-to-prod": "script/promote-black.ts production",
-    "update-lite": "script/update-lite.ts",
-    "promote-lite-to-dev": "script/promote-lite.ts dev",
-    "promote-lite-to-prod": "script/promote-lite.ts production",
+    "update-limits": "script/update-limits.ts",
+    "promote-limits-to-dev": "script/promote-limits.ts dev",
+    "promote-limits-to-prod": "script/promote-limits.ts production",
     "typecheck": "tsgo --noEmit"
   },
   "devDependencies": {

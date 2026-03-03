@@ -1,4 +1,5 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
+import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { createEffect, on, Component, Show, onCleanup, Switch, Match, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createFocusSignal } from "@solid-primitives/active-element"
@@ -23,7 +24,6 @@ import { Button } from "@opencode-ai/ui/button"
 import { DockShellForm, DockTray } from "@opencode-ai/ui/dock-surface"
 import { Icon } from "@opencode-ai/ui/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import type { IconName } from "@opencode-ai/ui/icons/provider"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
@@ -244,6 +244,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: "image" | "@mention" | null
     mode: "normal" | "shell"
     applyingHistory: boolean
+    pendingAutoAccept: boolean
   }>({
     popover: null,
     historyIndex: -1,
@@ -252,7 +253,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: null,
     mode: "normal",
     applyingHistory: false,
+    pendingAutoAccept: false,
   })
+
+  const buttonsSpring = useSpring(() => (store.mode === "normal" ? 1 : 0), { visualDuration: 0.2, bounce: 0 })
 
   const commentCount = createMemo(() => {
     if (store.mode === "shell") return 0
@@ -299,6 +303,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       example: suggest() ? language.t(EXAMPLES[store.placeholder]) : "",
       suggest: suggest(),
       t: (key, params) => language.t(key as Parameters<typeof language.t>[0], params as never),
+    }),
+  )
+
+  createEffect(
+    on(sessionKey, () => {
+      setStore("pendingAutoAccept", false)
     }),
   )
 
@@ -592,7 +602,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setActive: setSlashActive,
     onInput: slashOnInput,
     onKeyDown: slashOnKeyDown,
-    refetch: slashRefetch,
   } = useFilteredList<SlashCommand>({
     items: slashCommands,
     key: (x) => x?.id,
@@ -648,14 +657,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       editorRef.appendChild(document.createTextNode("\u200B"))
     }
   }
-
-  createEffect(
-    on(
-      () => sync.data.command,
-      () => slashRefetch(),
-      { defer: true },
-    ),
-  )
 
   // Auto-scroll active command into view when navigating with keyboard
   createEffect(() => {
@@ -957,10 +958,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     readClipboardImage: platform.readClipboardImage,
   })
 
+  const variants = createMemo(() => ["default", ...local.model.variant.list()])
+  const accepting = createMemo(() => {
+    const id = params.id
+    if (!id) return store.pendingAutoAccept
+    return permission.isAutoAccepting(id, sdk.directory)
+  })
+
   const { abort, handleSubmit } = createPromptSubmit({
     info,
     imageAttachments,
     commentCount,
+    autoAccept: () => accepting(),
     mode: () => store.mode,
     working,
     editor: () => editorRef,
@@ -1125,13 +1134,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
   }
 
-  const variants = createMemo(() => ["default", ...local.model.variant.list()])
-  const accepting = createMemo(() => {
-    const id = params.id
-    if (!id) return false
-    return permission.isAutoAccepting(id, sdk.directory)
-  })
-
   return (
     <div class="relative size-full _max-h-[320px] flex flex-col gap-0">
       <PromptPopover
@@ -1251,10 +1253,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
             <div
               aria-hidden={store.mode !== "normal"}
-              class="flex items-center gap-1 transition-all duration-200 ease-out"
-              classList={{
-                "opacity-100 translate-y-0 scale-100 pointer-events-auto": store.mode === "normal",
-                "opacity-0 translate-y-2 scale-95 pointer-events-none": store.mode !== "normal",
+              class="flex items-center gap-1"
+              style={{
+                "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
               }}
             >
               <TooltipKeybind
@@ -1267,6 +1268,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   type="button"
                   variant="ghost"
                   class="size-8 p-0"
+                  style={{
+                    opacity: buttonsSpring(),
+                    transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
+                    filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
+                  }}
                   onClick={pick}
                   disabled={store.mode !== "normal"}
                   tabIndex={store.mode === "normal" ? undefined : -1}
@@ -1304,6 +1310,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   icon={working() ? "stop" : "arrow-up"}
                   variant="primary"
                   class="size-8"
+                  style={{
+                    opacity: buttonsSpring(),
+                    transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
+                    filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
+                  }}
                   aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
                 />
               </Tooltip>
@@ -1323,9 +1334,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <Button
                   data-action="prompt-permissions"
                   variant="ghost"
-                  disabled={!params.id}
                   onClick={() => {
-                    if (!params.id) return
+                    if (!params.id) {
+                      setStore("pendingAutoAccept", (value) => !value)
+                      return
+                    }
                     permission.toggleAutoAccept(params.id, sdk.directory)
                   }}
                   classList={{
@@ -1354,14 +1367,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       <Show when={store.mode === "normal" || store.mode === "shell"}>
         <DockTray attach="top">
           <div class="px-1.75 pt-5.5 pb-2 flex items-center gap-2 min-w-0">
-            <div class="flex items-center gap-1.5 min-w-0 flex-1">
-              <Show when={store.mode === "shell"}>
-                <div class="h-7 flex items-center gap-1.5 max-w-[160px] min-w-0" style={{ padding: "0 4px 0 8px" }}>
-                  <span class="truncate text-13-medium text-text-strong">{language.t("prompt.mode.shell")}</span>
-                  <div class="size-4 shrink-0" />
-                </div>
-              </Show>
-              <Show when={store.mode === "normal"}>
+            <div class="flex items-center gap-1.5 min-w-0 flex-1 relative">
+              <div
+                class="h-7 flex items-center gap-1.5 max-w-[160px] min-w-0 absolute inset-y-0 left-0"
+                style={{
+                  padding: "0 4px 0 8px",
+                  opacity: 1 - buttonsSpring(),
+                  transform: `scale(${0.95 + (1 - buttonsSpring()) * 0.05})`,
+                  filter: `blur(${buttonsSpring() * 2}px)`,
+                  "pointer-events": buttonsSpring() < 0.5 ? "auto" : "none",
+                }}
+              >
+                <span class="truncate text-13-medium text-text-strong">{language.t("prompt.mode.shell")}</span>
+                <div class="size-4 shrink-0" />
+              </div>
+              <div class="flex items-center gap-1.5 min-w-0 flex-1">
                 <TooltipKeybind
                   placement="top"
                   gutter={4}
@@ -1375,7 +1395,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     onSelect={local.agent.set}
                     class="capitalize max-w-[160px]"
                     valueClass="truncate text-13-regular"
-                    triggerStyle={{ height: "28px" }}
+                    triggerStyle={{
+                      height: "28px",
+                      opacity: buttonsSpring(),
+                      transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
+                      filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
+                      "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
+                    }}
                     variant="ghost"
                   />
                 </TooltipKeybind>
@@ -1393,12 +1419,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         variant="ghost"
                         size="normal"
                         class="min-w-0 max-w-[320px] text-13-regular group"
-                        style={{ height: "28px" }}
+                        style={{
+                          height: "28px",
+                          opacity: buttonsSpring(),
+                          transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
+                          filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
+                          "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
+                        }}
                         onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}
                       >
                         <Show when={local.model.current()?.provider?.id}>
                           <ProviderIcon
-                            id={local.model.current()!.provider.id as IconName}
+                            id={local.model.current()!.provider.id}
                             class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
                             style={{ "will-change": "opacity", transform: "translateZ(0)" }}
                           />
@@ -1422,13 +1454,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       triggerProps={{
                         variant: "ghost",
                         size: "normal",
-                        style: { height: "28px" },
+                        style: {
+                          height: "28px",
+                          opacity: buttonsSpring(),
+                          transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
+                          filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
+                          "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
+                        },
                         class: "min-w-0 max-w-[320px] text-13-regular group",
                       }}
                     >
                       <Show when={local.model.current()?.provider?.id}>
                         <ProviderIcon
-                          id={local.model.current()!.provider.id as IconName}
+                          id={local.model.current()!.provider.id}
                           class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
                           style={{ "will-change": "opacity", transform: "translateZ(0)" }}
                         />
@@ -1454,11 +1492,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     onSelect={(x) => local.model.variant.set(x === "default" ? undefined : x)}
                     class="capitalize max-w-[160px]"
                     valueClass="truncate text-13-regular"
-                    triggerStyle={{ height: "28px" }}
+                    triggerStyle={{
+                      height: "28px",
+                      opacity: buttonsSpring(),
+                      transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
+                      filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
+                      "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
+                    }}
                     variant="ghost"
                   />
                 </TooltipKeybind>
-              </Show>
+              </div>
             </div>
             <div class="shrink-0">
               <RadioGroup
