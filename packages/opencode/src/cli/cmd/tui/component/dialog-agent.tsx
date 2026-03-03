@@ -9,10 +9,15 @@ export function DialogAgent() {
 
   const options = createMemo(() =>
     local.agent.list().map((item) => {
+      const displayDesc = item.shortDescription 
+        || (item.description && item.description.length > 100 
+          ? item.description.substring(0, 100) + "..." 
+          : item.description)
+        || ""
       return {
         value: item.name,
         title: item.name,
-        description: item.native ? "native" : item.description,
+        description: item.native ? "native" : displayDesc,
       }
     }),
   )
