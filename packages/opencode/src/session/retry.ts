@@ -3,6 +3,8 @@ import { MessageV2 } from "./message-v2"
 import { iife } from "@/util/iife"
 
 export namespace SessionRetry {
+  const TOOL_CALL_DIFF_RE = /tool[\s_-]?calls?/
+
   export const RETRY_INITIAL_DELAY = 2000
   export const RETRY_BACKOFF_FACTOR = 2
   export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
@@ -66,6 +68,12 @@ export namespace SessionRetry {
       if (error.data.responseBody?.includes("FreeUsageLimitError"))
         return `Free usage exceeded, add credits https://opencode.ai/zen`
       return error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message
+    }
+    if (typeof error.data?.message === "string") {
+      const lower = error.data.message.toLowerCase()
+      if (lower.includes("invalid diff") && TOOL_CALL_DIFF_RE.test(lower)) {
+        return "Provider returned invalid tool call diff"
+      }
     }
 
     const json = iife(() => {

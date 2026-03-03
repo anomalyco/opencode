@@ -108,6 +108,11 @@ describe("session.retry.retryable", () => {
     expect(result).toBeUndefined()
   })
 
+  test("retries invalid tool-call diff stream errors", () => {
+    const error = wrap("Invalid diff: now finding less tool calls!")
+    expect(SessionRetry.retryable(error)).toBe("Provider returned invalid tool call diff")
+  })
+
   test("returns undefined for non-json message", () => {
     const error = wrap("not-json")
     expect(SessionRetry.retryable(error)).toBeUndefined()

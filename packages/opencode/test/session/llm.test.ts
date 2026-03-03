@@ -99,6 +99,41 @@ describe("session.llm.hasToolCalls", () => {
   })
 })
 
+describe("session.llm.repairToolInput", () => {
+  test("repairs truncated tool input json", () => {
+    const repaired = LLM.repairToolInput({
+      toolInput: `{"filePath":"src/app.ts","content":"hello`,
+      errorMessage: "Invalid input for tool write",
+    })
+    expect(repaired).toBeDefined()
+    expect(JSON.parse(repaired!)).toEqual({
+      filePath: "src/app.ts",
+      content: "hello",
+    })
+  })
+
+  test("repairs from error text when tool input is empty", () => {
+    const repaired = LLM.repairToolInput({
+      toolInput: "",
+      errorMessage:
+        'Invalid input for tool write: JSON parsing failed: Text: {"filePath":"src/app.ts","content":"hello"}',
+    })
+    expect(repaired).toBeDefined()
+    expect(JSON.parse(repaired!)).toEqual({
+      filePath: "src/app.ts",
+      content: "hello",
+    })
+  })
+
+  test("returns undefined when input is not json-like", () => {
+    const repaired = LLM.repairToolInput({
+      toolInput: "not-json",
+      errorMessage: "Invalid input for tool write",
+    })
+    expect(repaired).toBeUndefined()
+  })
+})
+
 type Capture = {
   url: URL
   headers: Headers

@@ -10,6 +10,7 @@ import {
   type ToolSet,
   tool,
   jsonSchema,
+  InvalidToolInputError,
 } from "ai"
 import { mergeDeep, pipe } from "remeda"
 import { ProviderTransform } from "@/provider/transform"
@@ -22,6 +23,7 @@ import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { PermissionNext } from "@/permission/next"
 import { Auth } from "@/auth"
+import { parse as partial } from "partial-json"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -42,6 +44,46 @@ export namespace LLM {
   }
 
   export type StreamOutput = StreamTextResult<ToolSet, unknown>
+
+  function object(text: string) {
+    const parsed = (() => {
+      try {
+        return partial(text)
+      } catch {
+        return undefined
+      }
+    })()
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>
+    if (typeof parsed !== "string") return
+    const nested = (() => {
+      try {
+        return partial(parsed)
+      } catch {
+        return undefined
+      }
+    })()
+    if (nested && typeof nested === "object" && !Array.isArray(nested)) return nested as Record<string, unknown>
+  }
+
+  function candidates(text: string) {
+    const value = text.trim()
+    if (!value) return [] as string[]
+    const start = value.search(/[{\[]/)
+    if (start <= 0) return [value]
+    return [value, value.slice(start)]
+  }
+
+  export function repairToolInput(input: { toolInput: string; errorMessage: string }) {
+    const match = input.errorMessage.match(/Text:\s*([\s\S]*)$/)
+    const text = match?.[1] ?? ""
+    const list = [input.toolInput, text].flatMap(candidates).filter(Boolean)
+    for (const item of list) {
+      const parsed = object(item)
+      if (!parsed) continue
+      if (Object.keys(parsed).length === 0) continue
+      return JSON.stringify(parsed)
+    }
+  }
 
   export async function stream(input: StreamInput) {
     const l = log
@@ -177,14 +219,26 @@ export namespace LLM {
       },
       async experimental_repairToolCall(failed) {
         const lower = failed.toolCall.toolName.toLowerCase()
-        if (lower !== failed.toolCall.toolName && tools[lower]) {
+        const name = lower !== failed.toolCall.toolName && tools[lower] ? lower : failed.toolCall.toolName
+        if (name !== failed.toolCall.toolName) {
           l.info("repairing tool call", {
             tool: failed.toolCall.toolName,
-            repaired: lower,
+            repaired: name,
+          })
+        }
+        const repaired = repairToolInput({
+          toolInput: InvalidToolInputError.isInstance(failed.error) ? failed.error.toolInput : failed.toolCall.input,
+          errorMessage: failed.error.message,
+        })
+        if (repaired && tools[name]) {
+          l.info("repairing tool input", {
+            tool: failed.toolCall.toolName,
+            repaired: name,
           })
           return {
             ...failed.toolCall,
-            toolName: lower,
+            toolName: name,
+            input: repaired,
           }
         }
         return {
