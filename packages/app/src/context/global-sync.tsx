@@ -10,6 +10,7 @@ import type {
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/util/path"
 import {
+  batch,
   createContext,
   getOwner,
   Match,
@@ -275,41 +276,49 @@ function createGlobalSync() {
   }
 
   const unsub = globalSDK.event.listen((e) => {
-    const directory = e.name
-    const event = e.details
+    batch(() => {
+      const directory = e.name
+      const event = e.details
 
-    if (directory === "global") {
-      applyGlobalEvent({
-        event,
-        project: globalStore.project,
-        refresh: queue.refresh,
-        setGlobalProject: setProjects,
-      })
-      if (event.type === "server.connected" || event.type === "global.disposed") {
-        for (const directory of Object.keys(children.children)) {
-          queue.push(directory)
+      if (directory === "global") {
+        applyGlobalEvent({
+          event,
+          project: globalStore.project,
+          refresh: queue.refresh,
+          setGlobalProject(next) {
+            if (typeof next === "function") {
+              setGlobalStore("project", produce(next))
+              return
+            }
+            setGlobalStore("project", next)
+          },
+        })
+        if (event.type === "server.connected" || event.type === "global.disposed") {
+          for (const directory of Object.keys(children.children)) {
+            queue.push(directory)
+          }
         }
+        return
       }
-      return
-    }
 
-    const existing = children.children[directory]
-    if (!existing) return
-    children.mark(directory)
-    const [store, setStore] = existing
-    applyDirectoryEvent({
-      event,
-      directory,
-      store,
-      setStore,
-      push: queue.push,
-      setSessionTodo,
-      vcsCache: children.vcsCache.get(directory),
-      loadLsp: () => {
-        sdkFor(directory)
-          .lsp.status()
-          .then((x) => setStore("lsp", x.data ?? []))
-      },
+      const existing = children.children[directory]
+      if (!existing) return
+      children.mark(directory)
+      const [store, setStore] = existing
+      applyDirectoryEvent({
+        event,
+        directory,
+        store,
+        setStore,
+        push: queue.push,
+        setSessionTodo,
+        vcsCache: children.vcsCache.get(directory),
+        loadLsp: () => {
+          sdkFor(directory)
+            .lsp.status()
+            .then((x) => setStore("lsp", x.data ?? []))
+        },
+      })
     })
   })
 

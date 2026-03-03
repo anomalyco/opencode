@@ -62,30 +62,34 @@ export function applyOptimisticRemove(draft: OptimisticStore, input: OptimisticR
 }
 
 function setOptimisticAdd(setStore: (...args: unknown[]) => void, input: OptimisticAddInput) {
-  setStore("message", input.sessionID, (messages: Message[] | undefined) => {
-    if (!messages) return [input.message]
-    const result = Binary.search(messages, input.message.id, (m) => m.id)
-    const next = [...messages]
-    next.splice(result.index, 0, input.message)
-    return next
+  batch(() => {
+    setStore("message", input.sessionID, (messages: Message[] | undefined) => {
+      if (!messages) return [input.message]
+      const result = Binary.search(messages, input.message.id, (m) => m.id)
+      const next = [...messages]
+      next.splice(result.index, 0, input.message)
+      return next
+    })
+    setStore("part", input.message.id, sortParts(input.parts))
   })
-  setStore("part", input.message.id, sortParts(input.parts))
 }
 
 function setOptimisticRemove(setStore: (...args: unknown[]) => void, input: OptimisticRemoveInput) {
-  setStore("message", input.sessionID, (messages: Message[] | undefined) => {
-    if (!messages) return messages
-    const result = Binary.search(messages, input.messageID, (m) => m.id)
-    if (!result.found) return messages
-    const next = [...messages]
-    next.splice(result.index, 1)
-    return next
-  })
-  setStore("part", (part: Record<string, Part[] | undefined>) => {
-    if (!(input.messageID in part)) return part
-    const next = { ...part }
-    delete next[input.messageID]
-    return next
+  batch(() => {
+    setStore("message", input.sessionID, (messages: Message[] | undefined) => {
+      if (!messages) return messages
+      const result = Binary.search(messages, input.messageID, (m) => m.id)
+      if (!result.found) return messages
+      const next = [...messages]
+      next.splice(result.index, 1)
+      return next
+    })
+    setStore("part", (part: Record<string, Part[] | undefined>) => {
+      if (!(input.messageID in part)) return part
+      const next = { ...part }
+      delete next[input.messageID]
+      return next
+    })
   })
 }
 
