@@ -226,7 +226,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return paths
   })
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
-  const steerQueue = createMemo(() => sync.data.steer_queue?.[params.id ?? ""] ?? [])
   const status = createMemo(
     () =>
       sync.data.session_status[params.id ?? ""] ?? {
@@ -234,6 +233,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       },
   )
   const working = createMemo(() => status()?.type !== "idle")
+  const steerQueue = createMemo(() => sync.data.steer_queue[params.id ?? ""] ?? [])
   const imageAttachments = createMemo(() =>
     prompt.current().filter((part): part is ImageAttachmentPart => part.type === "image"),
   )
@@ -1081,89 +1081,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           return
         }
       }
-      addPart({ type: "text", content: "\n", start: 0, end: 0 })
-      event.preventDefault()
-      return
-    }
-
-    if (event.key === "Enter" && isImeComposing(event)) {
-      return
-    }
-
-    const ctrl = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
-
-    if (store.popover) {
-      if (event.key === "Tab") {
-        selectPopoverActive()
-        event.preventDefault()
-        return
-      }
-      const nav = event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter"
-      const ctrlNav = ctrl && (event.key === "n" || event.key === "p")
-      if (nav || ctrlNav) {
-        if (store.popover === "at") {
-          atOnKeyDown(event)
-          event.preventDefault()
-          return
-        }
-        if (store.popover === "slash") {
-          slashOnKeyDown(event)
-        }
-        event.preventDefault()
-        return
-      }
-    }
-
-    if (ctrl && event.code === "KeyG") {
-      if (store.popover) {
-        closePopover()
-        event.preventDefault()
-        return
-      }
-      if (working()) {
-        abort()
-        event.preventDefault()
-      }
-      return
-    }
-
-    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-      if (event.altKey || event.ctrlKey || event.metaKey) return
-      const { collapsed } = getCaretState()
-      if (!collapsed) return
-
-      const cursorPosition = getCursorPosition(editorRef)
-      const textContent = prompt
-        .current()
-        .map((part) => ("content" in part ? part.content : ""))
-        .join("")
-      const direction = event.key === "ArrowUp" ? "up" : "down"
-      if (!canNavigateHistoryAtCursor(direction, textContent, cursorPosition, store.historyIndex >= 0)) return
-      if (navigateHistory(direction)) {
-        event.preventDefault()
-      }
-      return
-    }
-
-    // Note: Shift+Enter is handled earlier, before IME check
-    if (event.key === "Enter" && !event.shiftKey) {
-      if (working() && params.id && prompt.dirty()) {
-        const text = prompt.current().filter(p => p.type === "text").map(p => p.content).join("").trim()
-        if (text) {
-          fetch(`${sdk.url}/session/${params.id}/steer`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text, mode: "queue" }),
-          }).then(res => {
-            if (!res.ok) throw new Error(`HTTP ${res.status}`)
-            showToast({ title: "Message queued", description: text.slice(0, 60) })
-            prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
-            editorRef.innerHTML = ""
-          }).catch(err => showToast({ title: "Failed to queue message", description: err?.message }))
-          event.preventDefault()
-          return
-        }
-      }
       handleSubmit(event)
     }
   }
@@ -1219,6 +1136,35 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           onRemove={removeImageAttachment}
           removeLabel={language.t("prompt.attachment.remove")}
         />
+        <Show when={steerQueue().length > 0}>
+          <div class="flex flex-col gap-1 px-3 pt-2 pb-1">
+            <div class="flex items-center gap-1.5 text-11-medium text-text-weak uppercase tracking-wide">
+              <Icon name="bullet-list" size="small" class="size-3" />
+              <span>Queued ({steerQueue().length})</span>
+            </div>
+            <For each={steerQueue()}>
+              {(item) => (
+                <div class="flex items-center gap-1.5 group/steer">
+                  <span class="text-13-regular text-text-base truncate flex-1">{item.text}</span>
+                  <button
+                    type="button"
+                    class="size-4 shrink-0 flex items-center justify-center opacity-0 group-hover/steer:opacity-100 transition-opacity text-icon-weak hover:text-icon-strong-base"
+                    onClick={() => {
+                      const sessionID = params.id
+                      if (!sessionID) return
+                      fetch(`${sdk.url}/session/${sessionID}/steer/${item.id}`, {
+                        method: "DELETE",
+                      }).catch(() => {})
+                    }}
+                    aria-label="Remove queued message"
+                  >
+                    <Icon name="close" size="small" class="size-3" />
+                  </button>
+                </div>
+              )}
+            </For>
+          </div>
+        </Show>
         <div
           class="relative"
           onMouseDown={(e) => {
