@@ -124,11 +124,6 @@ export async function bootstrapDirectory(input: {
 
   const blockingRequests = {
     project: () => input.sdk.project.current().then((x) => input.setStore("project", x.data!.id)),
-    provider: () =>
-      input.sdk.provider.list().then((x) => {
-        input.setStore("provider", normalizeProviderList(x.data!))
-      }),
-    agent: () => input.sdk.app.agents().then((x) => input.setStore("agent", x.data ?? [])),
     config: () => input.sdk.config.get().then((x) => input.setStore("config", x.data!)),
   }
 
@@ -149,6 +144,10 @@ export async function bootstrapDirectory(input: {
   if (input.store.status !== "complete") input.setStore("status", "partial")
 
   Promise.all([
+    input.sdk.provider.list().then((x) => {
+      input.setStore("provider", normalizeProviderList(x.data!))
+    }),
+    input.sdk.app.agents().then((x) => input.setStore("agent", x.data ?? [])),
     input.sdk.path.get().then((x) => input.setStore("path", x.data!)),
     input.sdk.command.list().then((x) => input.setStore("command", x.data ?? [])),
     input.sdk.session.status().then((x) => input.setStore("session_status", x.data!)),
