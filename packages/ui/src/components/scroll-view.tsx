@@ -57,9 +57,12 @@ export function ScrollView(props: ScrollViewProps) {
     const maxScrollTop = scrollHeight - clientHeight
     const maxThumbTop = trackHeight - height
 
-    const top = maxScrollTop > 0 ? (scrollTop / maxScrollTop) * maxThumbTop : 0
+    // With column-reverse: scrollTop=0 is at bottom, negative = scrolled up
+    // Normalize so 0 = at top, maxScrollTop = at bottom
+    const normalizedScrollTop = maxScrollTop + scrollTop
+    const top = maxScrollTop > 0 ? (normalizedScrollTop / maxScrollTop) * maxThumbTop : 0
 
-    // Ensure thumb stays within bounds (shouldn't be necessary due to math above, but good for safety)
+    // Ensure thumb stays within bounds
     const boundedTop = trackPadding + Math.max(0, Math.min(top, maxThumbTop))
 
     setThumbHeight(height)
@@ -147,11 +150,13 @@ export function ScrollView(props: ScrollViewProps) {
         break
       case "Home":
         e.preventDefault()
-        viewportRef.scrollTo({ top: 0, behavior: "smooth" })
+        // With column-reverse, top of content = -(scrollHeight - clientHeight)
+        viewportRef.scrollTo({ top: -(viewportRef.scrollHeight - viewportRef.clientHeight), behavior: "smooth" })
         break
       case "End":
         e.preventDefault()
-        viewportRef.scrollTo({ top: viewportRef.scrollHeight, behavior: "smooth" })
+        // With column-reverse, bottom of content = 0
+        viewportRef.scrollTo({ top: 0, behavior: "smooth" })
         break
       case "ArrowUp":
         e.preventDefault()

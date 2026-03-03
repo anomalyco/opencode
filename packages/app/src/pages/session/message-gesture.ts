@@ -14,8 +14,9 @@ export const shouldMarkBoundaryGesture = (input: {
   if (max <= 1) return true
   if (!input.delta) return false
 
-  if (input.delta < 0) return input.scrollTop + input.delta <= 0
+  // With column-reverse: scrollTop=0 at bottom, -max at top
+  if (input.delta < 0) return input.scrollTop + input.delta <= -max
 
-  const remaining = max - input.scrollTop
+  const remaining = -input.scrollTop // distance from bottom
   return input.delta > remaining
 }

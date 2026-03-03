@@ -46,7 +46,8 @@ export const useSessionHashScroll = (input: {
     const b = root.getBoundingClientRect()
     const sticky = root.querySelector("[data-session-title]")
     const inset = sticky instanceof HTMLElement ? sticky.offsetHeight : 0
-    const top = Math.max(0, a.top - b.top + root.scrollTop - inset)
+    // With column-reverse, scrollTop is negative — don't clamp to 0
+    const top = a.top - b.top + root.scrollTop - inset
     root.scrollTo({ top, behavior })
     return true
   }

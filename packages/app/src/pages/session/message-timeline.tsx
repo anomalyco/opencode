@@ -536,6 +536,7 @@ export function MessageTimeline(props: {
             "--sticky-accordion-top": showHeader() ? "48px" : "0px",
           }}
         >
+          <div>
           <Show when={showHeader()}>
             <div
               data-session-title
@@ -745,6 +746,7 @@ export function MessageTimeline(props: {
                 )
               }}
             </For>
+          </div>
           </div>
         </ScrollView>
       </div>

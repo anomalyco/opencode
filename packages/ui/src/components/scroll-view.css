@@ -9,6 +9,8 @@
   overflow-y: auto;
   scrollbar-width: none;
   outline: none;
+  display: flex;
+  flex-direction: column-reverse;
 }
 
 .scroll-view__viewport::-webkit-scrollbar {

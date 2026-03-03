@@ -28,10 +28,11 @@ describe("shouldMarkBoundaryGesture", () => {
   })
 
   test("marks when scrolling beyond top boundary", () => {
+    // column-reverse: scrollTop=-590 means 590px from bottom (10px from top, max=600)
     expect(
       shouldMarkBoundaryGesture({
         delta: -40,
-        scrollTop: 10,
+        scrollTop: -590,
         scrollHeight: 1000,
         clientHeight: 400,
       }),
@@ -39,10 +40,11 @@ describe("shouldMarkBoundaryGesture", () => {
   })
 
   test("marks when scrolling beyond bottom boundary", () => {
+    // column-reverse: scrollTop=-20 means 20px from bottom
     expect(
       shouldMarkBoundaryGesture({
         delta: 50,
-        scrollTop: 580,
+        scrollTop: -20,
         scrollHeight: 1000,
         clientHeight: 400,
       }),
@@ -50,10 +52,11 @@ describe("shouldMarkBoundaryGesture", () => {
   })
 
   test("does not mark when nested scroller can consume movement", () => {
+    // column-reverse: scrollTop=-400 means 400px from bottom (middle of scroll)
     expect(
       shouldMarkBoundaryGesture({
         delta: 20,
-        scrollTop: 200,
+        scrollTop: -400,
         scrollHeight: 1000,
         clientHeight: 400,
       }),

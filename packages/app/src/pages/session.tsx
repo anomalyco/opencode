@@ -113,7 +113,10 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
     requestAnimationFrame(() => {
       const delta = el.scrollHeight - beforeHeight
       if (!delta) return
-      el.scrollTop = beforeTop + delta
+      // With column-reverse, adding content at the top doesn't shift the
+      // viewport because scroll origin is at the bottom. Subtract delta
+      // to maintain position (beforeTop is negative or zero).
+      el.scrollTop = beforeTop - delta
     })
   }
 
@@ -197,7 +200,8 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
     if (!input.userScrolled()) return
     const el = input.scroller()
     if (!el) return
-    if (el.scrollTop >= turnScrollThreshold) return
+    // With column-reverse, distance from top = scrollHeight - clientHeight + scrollTop
+    if (el.scrollHeight - el.clientHeight + el.scrollTop >= turnScrollThreshold) return
 
     const start = turnStart()
     if (start > 0) {
@@ -1020,7 +1024,8 @@ export default function Page() {
     const overflow = max > 1
     // If auto-scroll is tracking the bottom, always report bottom: true
     // to prevent the scroll-down arrow from flashing during height animations
-    const bottom = !overflow || el.scrollTop >= max - 2 || !autoScroll.userScrolled()
+    // With column-reverse, scrollTop=0 is at the bottom
+    const bottom = !overflow || Math.abs(el.scrollTop) <= 2 || !autoScroll.userScrolled()
 
     if (ui.scroll.overflow === overflow && ui.scroll.bottom === bottom) return
     setUi("scroll", { overflow, bottom })
@@ -1111,7 +1116,8 @@ export default function Page() {
 
       const el = scroller
       const delta = next - dockHeight
-      const stick = el ? el.scrollHeight - el.clientHeight - el.scrollTop < 10 + Math.max(0, delta) : false
+      // With column-reverse, near bottom = scrollTop near 0
+      const stick = el ? Math.abs(el.scrollTop) < 10 + Math.max(0, delta) : false
 
       dockHeight = next
 
