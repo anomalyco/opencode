@@ -553,7 +553,7 @@ export function SessionTurn(
                 </Show>
                 <div data-slot="session-turn-assistant-lane" aria-hidden={!lane()}>
                   <Show when={hasAssistant()}>
-                    <div data-slot="session-turn-assistant-content" aria-hidden={working()}>
+                    <div data-slot="session-turn-assistant-content" aria-hidden={working()} style={{ contain: "layout paint" }}>
                       <AssistantParts
                         messages={assistantMessages()}
                         showAssistantCopyPartID={assistantCopyPartID()}

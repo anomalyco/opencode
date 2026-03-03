@@ -160,7 +160,7 @@ export function GrowBox(props: GrowBoxProps) {
   })
 
   return (
-    <div ref={root} data-slot={props.slot} class={props.class}>
+    <div ref={root} data-slot={props.slot} class={props.class} style={{ transform: "translateZ(0)" }}>
       <div ref={body} style={{ "padding-top": gap() > 0 ? `${gap()}px` : undefined }}>
         {props.children}
       </div>

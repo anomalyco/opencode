@@ -21,7 +21,6 @@ export function createAutoScroll(options: AutoScrollOptions) {
   let cleanup: (() => void) | undefined
   let programmaticUntil = 0
   let scrollAnim: AnimationPlaybackControls | undefined
-  let resizeFrame: number | undefined
 
   const threshold = () => options.bottomThreshold ?? 10
 
@@ -167,19 +166,15 @@ export function createAutoScroll(options: AutoScrollOptions) {
   createResizeObserver(
     () => store.contentRef,
     () => {
-      if (resizeFrame !== undefined) return
-      resizeFrame = requestAnimationFrame(() => {
-        resizeFrame = undefined
-        const el = scroll
-        if (el && !canScroll(el)) {
-          if (store.userScrolled) setStore("userScrolled", false)
-          markProgrammatic()
-          return
-        }
-        if (!active()) return
-        if (store.userScrolled) return
-        scrollToBottom(false)
-      })
+      const el = scroll
+      if (el && !canScroll(el)) {
+        if (store.userScrolled) setStore("userScrolled", false)
+        markProgrammatic()
+        return
+      }
+      if (!active()) return
+      if (store.userScrolled) return
+      scrollToBottom(false)
     },
   )
 
@@ -210,7 +205,6 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
   onCleanup(() => {
     if (settleTimer) clearTimeout(settleTimer)
-    if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame)
     cancelSmooth()
     if (cleanup) cleanup()
   })
