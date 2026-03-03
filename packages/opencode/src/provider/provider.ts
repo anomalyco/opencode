@@ -92,7 +92,7 @@ export namespace Provider {
     "@ai-sdk/google-vertex": createVertex,
     "@ai-sdk/google-vertex/anthropic": createVertexAnthropic,
     "@ai-sdk/openai": createOpenAI,
-    "@ai-sdk/openai-compatible": createOpenAICompatible,
+    "@ai-sdk/openai-compatible": createGitHubCopilotOpenAICompatible,
     "@openrouter/ai-sdk-provider": createOpenRouter,
     "@ai-sdk/xai": createXai,
     "@ai-sdk/mistral": createMistral,
