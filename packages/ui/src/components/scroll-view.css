@@ -11,6 +11,7 @@
   outline: none;
   display: flex;
   flex-direction: column-reverse;
+  overflow-anchor: none;
 }
 
 .scroll-view__viewport::-webkit-scrollbar {

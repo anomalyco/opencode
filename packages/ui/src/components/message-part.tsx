@@ -1963,7 +1963,6 @@ ToolRegistry.register({
     })
     const [expanded, setExpanded] = createSignal<string[]>([])
     let seeded = false
-
     createEffect(() => {
       const list = files()
       if (list.length === 0) return
@@ -1971,7 +1970,6 @@ ToolRegistry.register({
       seeded = true
       setExpanded(list.filter((f) => f.type !== "delete").map((f) => f.filePath))
     })
-
     const subtitle = createMemo(() => {
       const count = files().length
       if (count === 0) return ""
@@ -1979,29 +1977,39 @@ ToolRegistry.register({
     })
 
     return (
-      <Show
-        when={single()}
-        fallback={
-          <div data-component="apply-patch-tool">
-            <BasicTool
-              {...props}
-              icon="code-lines"
-              defer
-              trigger={
-                <div data-component="write-trigger">
-                  <div data-slot="message-part-title-area">
-                    <div data-slot="message-part-title">
-                      <span data-slot="message-part-title-text">
-                        <TextShimmer text={i18n.t("ui.tool.patch")} active={pending()} />
-                      </span>
-                      <Show when={!pending() && subtitle()}>
-                        {(text) => <ToolText text={text()} animate={reveal()} />}
-                      </Show>
-                    </div>
-                  </div>
+      <div data-component="apply-patch-tool">
+        <BasicTool
+          {...props}
+          icon="code-lines"
+          defer
+          trigger={
+            <div data-component={single() ? "edit-trigger" : "write-trigger"}>
+              <div data-slot="message-part-title-area">
+                <div data-slot="message-part-title">
+                  <span data-slot="message-part-title-text">
+                    <TextShimmer text={i18n.t("ui.tool.patch")} active={pending()} />
+                  </span>
+                  <Show when={!pending() && single()}>
+                    {(file) => (
+                      <ToolMetaLine
+                        filename={getFilename(file().relativePath)}
+                        path={file().relativePath.includes("/") ? getDirectory(file().relativePath) : undefined}
+                        changes={{ additions: file().additions, deletions: file().deletions }}
+                        animate={reveal()}
+                      />
+                    )}
+                  </Show>
+                  <Show when={!pending() && !single() && subtitle()}>
+                    {(text) => <ToolText text={text()} animate={reveal()} />}
+                  </Show>
                 </div>
-              }
-            >
+              </div>
+            </div>
+          }
+        >
+          <Show
+            when={single()}
+            fallback={
               <Show when={files().length > 0}>
                 <Accordion
                   multiple
@@ -2014,13 +2022,11 @@ ToolRegistry.register({
                     {(file) => {
                       const active = createMemo(() => expanded().includes(file.filePath))
                       const [visible, setVisible] = createSignal(false)
-
                       createEffect(() => {
                         if (!active()) {
                           setVisible(false)
                           return
                         }
-
                         requestAnimationFrame(() => {
                           if (!active()) return
                           setVisible(true)
@@ -2085,36 +2091,9 @@ ToolRegistry.register({
                   </For>
                 </Accordion>
               </Show>
-            </BasicTool>
-          </div>
-        }
-      >
-        {(file) => (
-          <div data-component="apply-patch-tool">
-            <BasicTool
-              {...props}
-              icon="code-lines"
-              defer
-              trigger={
-                <div data-component="edit-trigger">
-                  <div data-slot="message-part-title-area">
-                    <div data-slot="message-part-title">
-                      <span data-slot="message-part-title-text">
-                        <TextShimmer text={i18n.t("ui.tool.patch")} active={pending()} />
-                      </span>
-                      <Show when={!pending()}>
-                        <ToolMetaLine
-                          filename={getFilename(file().relativePath)}
-                          path={file().relativePath.includes("/") ? getDirectory(file().relativePath) : undefined}
-                          changes={{ additions: file().additions, deletions: file().deletions }}
-                          animate={reveal()}
-                        />
-                      </Show>
-                    </div>
-                  </div>
-                </div>
-              }
-            >
+            }
+          >
+            {(file) => (
               <ToolFileAccordion
                 path={file().relativePath}
                 actions={
@@ -2152,10 +2131,10 @@ ToolRegistry.register({
                   />
                 </div>
               </ToolFileAccordion>
-            </BasicTool>
-          </div>
-        )}
-      </Show>
+            )}
+          </Show>
+        </BasicTool>
+      </div>
     )
   },
 })

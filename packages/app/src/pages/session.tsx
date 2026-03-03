@@ -108,16 +108,13 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
       return
     }
     const beforeTop = el.scrollTop
-    const beforeHeight = el.scrollHeight
     fn()
-    requestAnimationFrame(() => {
-      const delta = el.scrollHeight - beforeHeight
-      if (!delta) return
-      // With column-reverse, adding content at the top doesn't shift the
-      // viewport because scroll origin is at the bottom. Subtract delta
-      // to maintain position (beforeTop is negative or zero).
-      el.scrollTop = beforeTop - delta
-    })
+    // SolidJS updates the DOM synchronously. Force reflow so the browser
+    // processes the new layout, then restore scrollTop before paint.
+    // With column-reverse + overflow-anchor:none the same scrollTop value
+    // keeps the same distance from the bottom — no delta math needed.
+    void el.scrollHeight
+    el.scrollTop = beforeTop
   }
 
   const backfillTurns = () => {
