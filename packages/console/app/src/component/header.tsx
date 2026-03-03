@@ -162,9 +162,6 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
             <a href={language.route("/docs")}>{i18n.t("nav.docs")}</a>
           </li>
           <li>
-            <A href={language.route("/enterprise")}>{i18n.t("nav.enterprise")}</A>
-          </li>
-          <li>
             <Switch>
               <Match when={props.zen}>
                 <a href="/auth">{i18n.t("nav.login")}</a>
@@ -176,6 +173,9 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
           </li>
           <li>
             <A href={language.route("/go")}>{i18n.t("nav.go")}</A>
+          </li>
+          <li>
+            <A href={language.route("/enterprise")}>{i18n.t("nav.enterprise")}</A>
           </li>
           <Show when={!props.hideGetStarted}>
             <li>
@@ -261,9 +261,6 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
                   <a href={language.route("/docs")}>{i18n.t("nav.docs")}</a>
                 </li>
                 <li>
-                  <A href={language.route("/enterprise")}>{i18n.t("nav.enterprise")}</A>
-                </li>
-                <li>
                   <Switch>
                     <Match when={props.zen}>
                       <a href="/auth">{i18n.t("nav.login")}</a>
@@ -275,6 +272,9 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
                 </li>
                 <li>
                   <A href={language.route("/go")}>{i18n.t("nav.go")}</A>
+                </li>
+                <li>
+                  <A href={language.route("/enterprise")}>{i18n.t("nav.enterprise")}</A>
                 </li>
                 <Show when={!props.hideGetStarted}>
                   <li>
