@@ -7,6 +7,7 @@ import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
 import { useKV } from "@tui/context/kv"
 import { useKeybind } from "@tui/context/keybind"
+import { filetype } from "@tui/util/filetype"
 import { For, Show, createEffect, createMemo, createSignal, onMount } from "solid-js"
 
 type Mode = "unified" | "side-by-side"
@@ -56,6 +57,7 @@ export function DialogDiffViewer() {
 
   const cwd = createMemo(() => sync.data.path.directory)
   const current = createMemo(() => files()[selected()])
+  const ft = createMemo(() => filetype(current()?.path ?? ""))
   const view = createMemo(() => {
     if (mode() !== "side-by-side") return "unified"
     return current()?.status === "modified" ? "split" : "unified"
@@ -305,6 +307,7 @@ export function DialogDiffViewer() {
                 <diff
                   diff={output()}
                   view={view()}
+                  filetype={ft()}
                   syntaxStyle={syntax()}
                   showLineNumbers={true}
                   width="100%"
