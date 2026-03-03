@@ -1,11 +1,14 @@
 // @refresh reload
+
+import { iife } from "@opencode-ai/util/iife"
 import { render } from "solid-js/web"
 import { AppBaseProviders, AppInterface } from "@/app"
-import { Platform, PlatformProvider } from "@/context/platform"
+import { type Platform, PlatformProvider } from "@/context/platform"
 import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
 import { handleNotificationClick } from "@/utils/notification-click"
 import pkg from "../package.json"
+import { ServerConnection } from "./context/server"
 
 const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
 
@@ -103,16 +106,26 @@ const platform: Platform = {
   forward,
   restart,
   notify,
-  getDefaultServerUrl: readDefaultServerUrl,
+  getDefaultServerUrl: async () => readDefaultServerUrl(),
   setDefaultServerUrl: writeDefaultServerUrl,
 }
 
+const defaultUrl = iife(() => {
+  const lsDefault = readDefaultServerUrl()
+  if (lsDefault) return lsDefault
+  if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
+  if (import.meta.env.DEV)
+    return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
+  return location.origin
+})
+
 if (root instanceof HTMLElement) {
+  const server: ServerConnection.Http = { type: "http", http: { url: defaultUrl } }
   render(
     () => (
       <PlatformProvider value={platform}>
         <AppBaseProviders>
-          <AppInterface />
+          <AppInterface defaultServer={ServerConnection.key(server)} servers={[server]} />
         </AppBaseProviders>
       </PlatformProvider>
     ),

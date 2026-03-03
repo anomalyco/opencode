@@ -15,6 +15,7 @@ export const dict = {
   "nav.home": "หน้าหลัก",
   "nav.openMenu": "เปิดเมนู",
   "nav.getStartedFree": "เริ่มต้นฟรี",
+  "nav.logoAlt": "OpenCode",
 
   "nav.context.copyLogo": "คัดลอกโลโก้เป็น SVG",
   "nav.context.copyWordmark": "คัดลอกตัวอักษรแบรนด์เป็น SVG",
@@ -42,8 +43,12 @@ export const dict = {
   "notFound.docs": "เอกสาร",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
+  "notFound.logoLightAlt": "โลโก้ opencode แบบสว่าง",
+  "notFound.logoDarkAlt": "โลโก้ opencode แบบมืด",
 
   "user.logout": "ออกจากระบบ",
+
+  "auth.callback.error.codeMissing": "ไม่พบ authorization code",
 
   "workspace.select": "เลือก Workspace",
   "workspace.createNew": "+ สร้าง Workspace ใหม่",
@@ -76,6 +81,8 @@ export const dict = {
   "error.reloadAmountMin": "จำนวนเงินที่โหลดซ้ำต้องมีอย่างน้อย ${{amount}}",
   "error.reloadTriggerMin": "ยอดคงเหลือที่กระตุ้นต้องมีอย่างน้อย ${{amount}}",
 
+  "app.meta.description": "OpenCode - เอเจนต์เขียนโค้ดแบบโอเพนซอร์ส",
+
   "home.title": "OpenCode | เอเจนต์เขียนโค้ดด้วย AI แบบโอเพนซอร์ส",
 
   "temp.title": "OpenCode | เอเจนต์เขียนโค้ด AI ที่สร้างมาเพื่อเทอร์มินัล",
@@ -91,6 +98,8 @@ export const dict = {
   "temp.feature.models.afterLink": "รวมถึงโมเดล Local",
   "temp.screenshot.caption": "OpenCode TUI พร้อมธีม tokyonight",
   "temp.screenshot.alt": "OpenCode TUI พร้อมธีม tokyonight",
+  "temp.logoLightAlt": "โลโก้ opencode แบบสว่าง",
+  "temp.logoDarkAlt": "โลโก้ opencode แบบมืด",
 
   "home.banner.badge": "ใหม่",
   "home.banner.text": "แอปเดสก์ท็อปพร้อมใช้งานในเวอร์ชันเบต้า",
@@ -239,11 +248,30 @@ export const dict = {
     "โมเดล Zen ทั้งหมดโฮสต์ในสหรัฐอเมริกา ผู้ให้บริการปฏิบัติตามนโยบายไม่เก็บรักษาข้อมูล (zero-retention policy) และไม่ใช้ข้อมูลของคุณสำหรับการฝึกโมเดล โดยมี",
   "zen.privacy.exceptionsLink": "ข้อยกเว้นดังนี้",
 
+  "zen.api.error.rateLimitExceeded": "เกินขีดจำกัดอัตราการใช้งาน กรุณาลองใหม่ในภายหลัง",
+  "zen.api.error.modelNotSupported": "ไม่รองรับโมเดล {{model}}",
+  "zen.api.error.modelFormatNotSupported": "ไม่รองรับโมเดล {{model}} สำหรับรูปแบบ {{format}}",
+  "zen.api.error.noProviderAvailable": "ไม่มีผู้ให้บริการที่พร้อมใช้งาน",
+  "zen.api.error.providerNotSupported": "ไม่รองรับผู้ให้บริการ {{provider}}",
+  "zen.api.error.missingApiKey": "ไม่มี API key",
+  "zen.api.error.invalidApiKey": "API key ไม่ถูกต้อง",
+  "zen.api.error.subscriptionQuotaExceeded": "โควต้าการสมัครสมาชิกเกินขีดจำกัด ลองใหม่ในอีก {{retryIn}}",
+  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
+    "โควต้าการสมัครสมาชิกเกินขีดจำกัด คุณสามารถดำเนินการต่อโดยใช้โมเดลฟรี",
+  "zen.api.error.noPaymentMethod": "ไม่มีวิธีการชำระเงิน เพิ่มวิธีการชำระเงินที่นี่: {{billingUrl}}",
+  "zen.api.error.insufficientBalance": "ยอดเงินคงเหลือไม่เพียงพอ จัดการการเรียกเก็บเงินของคุณที่นี่: {{billingUrl}}",
+  "zen.api.error.workspaceMonthlyLimitReached":
+    "Workspace ของคุณถึงขีดจำกัดการใช้จ่ายรายเดือนที่ ${{amount}} แล้ว จัดการขีดจำกัดของคุณที่นี่: {{billingUrl}}",
+  "zen.api.error.userMonthlyLimitReached":
+    "คุณถึงขีดจำกัดการใช้จ่ายรายเดือนที่ ${{amount}} แล้ว จัดการขีดจำกัดของคุณที่นี่: {{membersUrl}}",
+  "zen.api.error.modelDisabled": "โมเดลถูกปิดใช้งาน",
+
   "black.meta.title": "OpenCode Black | เข้าถึงโมเดลเขียนโค้ดที่ดีที่สุดในโลก",
   "black.meta.description": "เข้าถึง Claude, GPT, Gemini และอื่นๆ ด้วยแผนสมาชิก OpenCode Black",
   "black.hero.title": "เข้าถึงโมเดลเขียนโค้ดที่ดีที่สุดในโลก",
   "black.hero.subtitle": "รวมถึง Claude, GPT, Gemini และอื่นๆ อีกมากมาย",
   "black.title": "OpenCode Black | ราคา",
+  "black.paused": "การสมัครแผน Black หยุดชั่วคราว",
   "black.plan.icon20": "แผน Black 20",
   "black.plan.icon100": "แผน Black 100",
   "black.plan.icon200": "แผน Black 200",
@@ -339,12 +367,15 @@ export const dict = {
   "workspace.usage.table.input": "Input",
   "workspace.usage.table.output": "Output",
   "workspace.usage.table.cost": "ค่าใช้จ่าย",
+  "workspace.usage.table.session": "เซสชัน",
   "workspace.usage.breakdown.input": "Input",
   "workspace.usage.breakdown.cacheRead": "Cache Read",
   "workspace.usage.breakdown.cacheWrite": "Cache Write",
   "workspace.usage.breakdown.output": "Output",
   "workspace.usage.breakdown.reasoning": "Reasoning",
-  "workspace.usage.subscription": "สมัครสมาชิก (${{amount}})",
+  "workspace.usage.subscription": "Black (${{amount}})",
+  "workspace.usage.lite": "Go (${{amount}})",
+  "workspace.usage.byok": "BYOK (${{amount}})",
 
   "workspace.cost.title": "ค่าใช้จ่าย",
   "workspace.cost.subtitle": "ต้นทุนการใช้งานแยกตามโมเดล",
@@ -353,6 +384,7 @@ export const dict = {
   "workspace.cost.deletedSuffix": "(ลบแล้ว)",
   "workspace.cost.empty": "ไม่มีข้อมูลการใช้งานในช่วงเวลาที่เลือก",
   "workspace.cost.subscriptionShort": "sub",
+  "workspace.cost.liteShort": "lite",
 
   "workspace.keys.title": "API Keys",
   "workspace.keys.subtitle": "จัดการ API keys ของคุณสำหรับการเข้าถึงบริการ OpenCode",
@@ -443,6 +475,7 @@ export const dict = {
   "workspace.reload.updatePaymentMethod": "โปรดอัปเดตวิธีการชำระเงินของคุณแล้วลองอีกครั้ง",
   "workspace.reload.retrying": "กำลังลองอีกครั้ง...",
   "workspace.reload.retry": "ลองอีกครั้ง",
+  "workspace.reload.error.paymentFailed": "การชำระเงินล้มเหลว",
 
   "workspace.payments.title": "ประวัติการชำระเงิน",
   "workspace.payments.subtitle": "รายการธุรกรรมการชำระเงินล่าสุด",
@@ -480,6 +513,36 @@ export const dict = {
   "workspace.black.waitlist.enrolled": "ลงทะเบียนแล้ว",
   "workspace.black.waitlist.enrollNote":
     "เมื่อคุณคลิกลงทะเบียน การสมัครสมาชิกของคุณจะเริ่มต้นทันทีและบัตรของคุณจะถูกเรียกเก็บเงิน",
+
+  "workspace.lite.loading": "กำลังโหลด...",
+  "workspace.lite.time.day": "วัน",
+  "workspace.lite.time.days": "วัน",
+  "workspace.lite.time.hour": "ชั่วโมง",
+  "workspace.lite.time.hours": "ชั่วโมง",
+  "workspace.lite.time.minute": "นาที",
+  "workspace.lite.time.minutes": "นาที",
+  "workspace.lite.time.fewSeconds": "ไม่กี่วินาที",
+  "workspace.lite.subscription.title": "การสมัครสมาชิก Go",
+  "workspace.lite.subscription.message": "คุณได้สมัครสมาชิก OpenCode Go แล้ว",
+  "workspace.lite.subscription.manage": "จัดการการสมัครสมาชิก",
+  "workspace.lite.subscription.rollingUsage": "การใช้งานแบบหมุนเวียน",
+  "workspace.lite.subscription.weeklyUsage": "การใช้งานรายสัปดาห์",
+  "workspace.lite.subscription.monthlyUsage": "การใช้งานรายเดือน",
+  "workspace.lite.subscription.resetsIn": "รีเซ็ตใน",
+  "workspace.lite.subscription.useBalance": "ใช้ยอดคงเหลือของคุณหลังจากถึงขีดจำกัดการใช้งาน",
+  "workspace.lite.subscription.selectProvider":
+    'เลือก "OpenCode Go" เป็นผู้ให้บริการในการตั้งค่า opencode ของคุณเพื่อใช้โมเดล Go',
+  "workspace.lite.other.title": "การสมัครสมาชิก Go",
+  "workspace.lite.other.message":
+    "สมาชิกคนอื่นใน Workspace นี้ได้สมัคร OpenCode Go แล้ว สามารถสมัครได้เพียงหนึ่งคนต่อหนึ่ง Workspace เท่านั้น",
+  "workspace.lite.promo.title": "OpenCode Go",
+  "workspace.lite.promo.description":
+    "OpenCode Go เป็นการสมัครสมาชิกราคา 10 ดอลลาร์ต่อเดือน ที่ให้การเข้าถึงโมเดลโอเพนโค้ดดิงยอดนิยมได้อย่างเสถียร ด้วยขีดจำกัดการใช้งานที่ครอบคลุม",
+  "workspace.lite.promo.modelsTitle": "สิ่งที่รวมอยู่ด้วย",
+  "workspace.lite.promo.footer":
+    "แผนนี้ออกแบบมาสำหรับผู้ใช้งานต่างประเทศเป็นหลัก โดยมีโมเดลโฮสต์อยู่ในสหรัฐอเมริกา สหภาพยุโรป และสิงคโปร์ เพื่อการเข้าถึงที่เสถียรทั่วโลก ราคาและขีดจำกัดการใช้งานอาจมีการเปลี่ยนแปลงตามที่เราได้เรียนรู้จากการใช้งานในช่วงแรกและข้อเสนอแนะ",
+  "workspace.lite.promo.subscribe": "สมัครสมาชิก Go",
+  "workspace.lite.promo.subscribing": "กำลังเปลี่ยนเส้นทาง...",
 
   "download.title": "OpenCode | ดาวน์โหลด",
   "download.meta.description": "ดาวน์โหลด OpenCode สำหรับ macOS, Windows และ Linux",
@@ -531,6 +594,10 @@ export const dict = {
   "enterprise.form.send": "ส่ง",
   "enterprise.form.sending": "กำลังส่ง...",
   "enterprise.form.success": "ส่งข้อความแล้ว เราจะติดต่อกลับเร็วๆ นี้",
+  "enterprise.form.success.submitted": "ส่งแบบฟอร์มสำเร็จแล้ว",
+  "enterprise.form.error.allFieldsRequired": "จำเป็นต้องกรอกทุกช่อง",
+  "enterprise.form.error.invalidEmailFormat": "รูปแบบอีเมลไม่ถูกต้อง",
+  "enterprise.form.error.internalServer": "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์",
   "enterprise.faq.title": "คำถามที่พบบ่อย",
   "enterprise.faq.q1": "OpenCode Enterprise คืออะไร?",
   "enterprise.faq.a1":
@@ -563,6 +630,7 @@ export const dict = {
   "bench.list.table.agent": "เอเจนต์",
   "bench.list.table.model": "โมเดล",
   "bench.list.table.score": "คะแนน",
+  "bench.submission.error.allFieldsRequired": "จำเป็นต้องกรอกทุกช่อง",
 
   "bench.detail.title": "Benchmark - {{task}}",
   "bench.detail.notFound": "ไม่พบงาน",

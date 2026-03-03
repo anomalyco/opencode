@@ -2,6 +2,7 @@
 /* tslint:disable */
 /* eslint-disable */
 /* deno-fmt-ignore-file */
+/* biome-ignore-all lint: auto-generated */
 
 import "sst"
 declare module "sst" {
@@ -118,14 +119,19 @@ declare module "sst" {
       "type": "sst.cloudflare.StaticSite"
       "url": string
     }
-    "ZEN_BLACK_LIMITS": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
     "ZEN_BLACK_PRICE": {
       "plan100": string
       "plan20": string
       "plan200": string
+      "product": string
+      "type": "sst.sst.Linkable"
+    }
+    "ZEN_LIMITS": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_LITE_PRICE": {
+      "price": string
       "product": string
       "type": "sst.sst.Linkable"
     }

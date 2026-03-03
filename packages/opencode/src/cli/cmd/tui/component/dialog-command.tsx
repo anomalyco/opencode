@@ -10,8 +10,7 @@ import {
   type ParentProps,
 } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
-import { useKeybind } from "@tui/context/keybind"
-import type { KeybindsConfig } from "@opencode-ai/sdk/v2"
+import { type KeybindKey, useKeybind } from "@tui/context/keybind"
 
 type Context = ReturnType<typeof init>
 const ctx = createContext<Context>()
@@ -22,7 +21,7 @@ export type Slash = {
 }
 
 export type CommandOption = DialogSelectOption<string> & {
-  keybind?: keyof KeybindsConfig
+  keybind?: KeybindKey
   suggested?: boolean
   slash?: Slash
   hidden?: boolean
