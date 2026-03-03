@@ -107,7 +107,7 @@ export default function Page() {
     if (desktopReviewOpen()) return `${layout.session.width()}px`
     return `calc(100% - ${layout.fileTree.width()}px)`
   })
-  const centered = createMemo(() => isDesktop() && !desktopSidePanelOpen())
+  const centered = createMemo(() => isDesktop() && !desktopReviewOpen())
 
   function normalizeTab(tab: string) {
     if (!tab.startsWith("file://")) return tab
@@ -254,12 +254,13 @@ export default function Page() {
     const msgs = visibleUserMessages()
     if (msgs.length === 0) return
 
-    const current = activeMessage()
-    const currentIndex = current ? msgs.findIndex((m) => m.id === current.id) : -1
-    const targetIndex = currentIndex === -1 ? (offset > 0 ? 0 : msgs.length - 1) : currentIndex + offset
-    if (targetIndex < 0 || targetIndex >= msgs.length) return
+    const current = store.messageId
+    const base = current ? msgs.findIndex((m) => m.id === current) : msgs.length
+    const currentIndex = base === -1 ? msgs.length : base
+    const targetIndex = currentIndex + offset
+    if (targetIndex < 0 || targetIndex > msgs.length) return
 
-    if (targetIndex === msgs.length - 1) {
+    if (targetIndex === msgs.length) {
       resumeScroll()
       return
     }
@@ -273,6 +274,11 @@ export default function Page() {
     if (!id) return true
     if (!hasReview()) return true
     return sync.data.session_diff[id] !== undefined
+  })
+  const reviewEmptyKey = createMemo(() => {
+    const project = sync.project
+    if (!project || project.vcs) return "session.review.empty"
+    return "session.review.noVcs"
   })
 
   let inputRef!: HTMLDivElement
@@ -373,11 +379,58 @@ export default function Page() {
     })
   }
 
+  const updateCommentInContext = (input: {
+    id: string
+    file: string
+    selection: SelectedLineRange
+    comment: string
+    preview?: string
+  }) => {
+    comments.update(input.file, input.id, input.comment)
+    prompt.context.updateComment(input.file, input.id, {
+      comment: input.comment,
+      ...(input.preview ? { preview: input.preview } : {}),
+    })
+  }
+
+  const removeCommentFromContext = (input: { id: string; file: string }) => {
+    comments.remove(input.file, input.id)
+    prompt.context.removeComment(input.file, input.id)
+  }
+
+  const reviewCommentActions = createMemo(() => ({
+    moreLabel: language.t("common.moreOptions"),
+    editLabel: language.t("common.edit"),
+    deleteLabel: language.t("common.delete"),
+    saveLabel: language.t("common.save"),
+  }))
+
+  const isEditableTarget = (target: EventTarget | null | undefined) => {
+    if (!(target instanceof HTMLElement)) return false
+    return /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName) || target.isContentEditable
+  }
+
+  const deepActiveElement = () => {
+    let current: Element | null = document.activeElement
+    while (current instanceof HTMLElement && current.shadowRoot?.activeElement) {
+      current = current.shadowRoot.activeElement
+    }
+    return current instanceof HTMLElement ? current : undefined
+  }
+
   const handleKeyDown = (event: KeyboardEvent) => {
-    const activeElement = document.activeElement as HTMLElement | undefined
+    const path = event.composedPath()
+    const target = path.find((item): item is HTMLElement => item instanceof HTMLElement)
+    const activeElement = deepActiveElement()
+
+    const protectedTarget = path.some(
+      (item) => item instanceof HTMLElement && item.closest("[data-prevent-autofocus]") !== null,
+    )
+    if (protectedTarget || isEditableTarget(target)) return
+
     if (activeElement) {
       const isProtected = activeElement.closest("[data-prevent-autofocus]")
-      const isInput = /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(activeElement.tagName) || activeElement.isContentEditable
+      const isInput = isEditableTarget(activeElement)
       if (isProtected || isInput) return
     }
     if (dialog.active) return
@@ -410,7 +463,7 @@ export default function Page() {
   )
 
   const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
-  const reviewTab = createMemo(() => isDesktop() && !layout.fileTree.opened())
+  const reviewTab = createMemo(() => isDesktop())
 
   const fileTreeTab = () => layout.fileTree.tab()
   const setFileTreeTab = (value: "changes" | "all") => layout.fileTree.setTab(value)
@@ -463,7 +516,8 @@ export default function Page() {
       }
       onSelect={(option) => option && setStore("changes", option)}
       variant="ghost"
-      size="large"
+      size="small"
+      valueClass="text-14-medium"
     />
   )
 
@@ -493,6 +547,9 @@ export default function Page() {
           onScrollRef={(el) => setTree("reviewScroll", el)}
           focusedFile={tree.activeDiff}
           onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+          onLineCommentUpdate={updateCommentInContext}
+          onLineCommentDelete={removeCommentFromContext}
+          lineCommentActions={reviewCommentActions()}
           comments={comments.all()}
           focusedComment={comments.focus()}
           onFocusedCommentChange={comments.setFocus}
@@ -514,6 +571,9 @@ export default function Page() {
             onScrollRef={(el) => setTree("reviewScroll", el)}
             focusedFile={tree.activeDiff}
             onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+            onLineCommentUpdate={updateCommentInContext}
+            onLineCommentDelete={removeCommentFromContext}
+            lineCommentActions={reviewCommentActions()}
             comments={comments.all()}
             focusedComment={comments.focus()}
             onFocusedCommentChange={comments.setFocus}
@@ -531,7 +591,7 @@ export default function Page() {
             ) : (
               <div class={input.emptyClass}>
                 <Mark class="w-14 opacity-10" />
-                <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.empty")}</div>
+                <div class="text-14-regular text-text-weak max-w-56">{language.t(reviewEmptyKey())}</div>
               </div>
             )
           }
@@ -542,6 +602,9 @@ export default function Page() {
           onScrollRef={(el) => setTree("reviewScroll", el)}
           focusedFile={tree.activeDiff}
           onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+          onLineCommentUpdate={updateCommentInContext}
+          onLineCommentDelete={removeCommentFromContext}
+          lineCommentActions={reviewCommentActions()}
           comments={comments.all()}
           focusedComment={comments.focus()}
           onFocusedCommentChange={comments.setFocus}
@@ -694,32 +757,11 @@ export default function Page() {
           const active = tabs().active()
           const tab = active === "review" || (!active && hasReview()) ? "changes" : "all"
           layout.fileTree.setTab(tab)
-          return
         }
-
-        if (fileTreeTab() !== "changes") return
-        tabs().setActive("review")
       },
       { defer: true },
     ),
   )
-
-  createEffect(() => {
-    if (!isDesktop()) return
-    if (!layout.fileTree.opened()) return
-    if (fileTreeTab() !== "all") return
-
-    const active = tabs().active()
-    if (active && active !== "review") return
-
-    const first = openedTabs()[0]
-    if (first) {
-      tabs().setActive(first)
-      return
-    }
-
-    if (contextOpen()) tabs().setActive("context")
-  })
 
   createEffect(() => {
     const id = params.id

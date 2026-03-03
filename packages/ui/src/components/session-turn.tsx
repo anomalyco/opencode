@@ -1,6 +1,6 @@
 import { AssistantMessage, type FileDiff, Message as MessageType, Part as PartType } from "@opencode-ai/sdk/v2/client"
 import { useData } from "../context"
-import { useDiffComponent } from "../context/diff"
+import { useFileComponent } from "../context/file"
 
 import { Binary } from "@opencode-ai/util/binary"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
@@ -140,6 +140,8 @@ export function SessionTurn(
     messageID: string
     lastUserMessageID?: string
     showReasoningSummaries?: boolean
+    shellToolDefaultOpen?: boolean
+    editToolDefaultOpen?: boolean
     onUserInteracted?: () => void
     classes?: {
       root?: string
@@ -150,7 +152,7 @@ export function SessionTurn(
 ) {
   const data = useData()
   const i18n = useI18n()
-  const diffComponent = useDiffComponent()
+  const fileComponent = useFileComponent()
 
   const emptyMessages: MessageType[] = []
   const emptyParts: PartType[] = []
@@ -369,6 +371,8 @@ export function SessionTurn(
                       turnDurationMs={turnDurationMs()}
                       working={working()}
                       showReasoningSummaries={showReasoningSummaries()}
+                      shellToolDefaultOpen={props.shellToolDefaultOpen}
+                      editToolDefaultOpen={props.editToolDefaultOpen}
                     />
                   </div>
                 </Show>
@@ -461,7 +465,8 @@ export function SessionTurn(
                                         <Show when={visible()}>
                                           <div data-slot="session-turn-diff-view" data-scrollable>
                                             <Dynamic
-                                              component={diffComponent}
+                                              component={fileComponent}
+                                              mode="diff"
                                               before={{ name: diff.file, contents: diff.before }}
                                               after={{ name: diff.file, contents: diff.after }}
                                             />
