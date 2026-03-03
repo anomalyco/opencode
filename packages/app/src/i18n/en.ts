@@ -154,6 +154,7 @@ export const dict = {
   "pr.merge.submit": "Merge",
   "pr.merge.submitting": "Merging...",
   "pr.merge.conflict": "This branch has conflicts that must be resolved",
+  "pr.merge.conflict.fix": "Ask agent to fix conflicts",
   "pr.merge.checks_failing": "Some checks are failing",
   "pr.toast.merged": "Pull request merged",
   "pr.toast.ready": "Pull request marked as ready for review",

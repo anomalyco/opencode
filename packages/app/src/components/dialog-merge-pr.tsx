@@ -8,6 +8,8 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { createMemo, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
+import { useLocal } from "@/context/local"
+import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { resolveApiErrorMessage } from "@/utils/pr-errors"
@@ -20,6 +22,8 @@ export function MergePrDialog() {
   const dialog = useDialog()
   const sdk = useSDK()
   const sync = useSync()
+  const local = useLocal()
+  const prompt = usePrompt()
   const language = useLanguage()
 
   const pr = createMemo(() => sync.data.vcs?.pr)
@@ -37,6 +41,36 @@ export function MergePrDialog() {
   const strategyLabel = (s: MergeStrategy) => {
     const key = `pr.merge.strategy.${s}` as const
     return language.t(key as Parameters<typeof language.t>[0])
+  }
+
+  const handleFixConflicts = () => {
+    const currentPr = pr()
+    if (!currentPr) return
+
+    let text = `Fix the merge conflicts on this branch.\n\n`
+    text += `## Context\n\n`
+    text += `Branch \`${currentPr.headRefName}\` has conflicts with \`${currentPr.baseRefName}\`.\n\n`
+    text += `## Instructions\n\n`
+    text += `1. Fetch the latest changes from the base branch \`${currentPr.baseRefName}\`\n`
+    text += `2. Merge \`${currentPr.baseRefName}\` into \`${currentPr.headRefName}\` and resolve all conflicts\n`
+    text += `3. Commit the resolved changes\n`
+    text += `4. \`git push\`\n`
+    text += `5. Do NOT force-push or rewrite history\n`
+
+    if (local.agent.current()?.name !== "build") {
+      local.agent.set("build")
+    }
+    dialog.close()
+    requestAnimationFrame(() => {
+      prompt.set([
+        {
+          type: "text",
+          content: text,
+          start: 0,
+          end: text.length,
+        },
+      ])
+    })
   }
 
   const handleSubmit = async () => {
@@ -80,9 +114,12 @@ export function MergePrDialog() {
 
         {/* Conflict warning */}
         <Show when={hasConflict()}>
-          <div class="flex items-start gap-2 rounded-md border border-border-critical-base bg-surface-critical-weak px-3 py-2.5">
-            <Icon name="circle-x" size="small" class="text-icon-critical-base shrink-0 mt-px" />
+          <div class="flex items-center gap-2 rounded-md border border-border-critical-base bg-surface-critical-weak px-3 py-2">
+            <Icon name="circle-x" size="small" class="text-icon-critical-base shrink-0" />
             <span class="flex-1 text-13-regular text-text-danger">{language.t("pr.merge.conflict")}</span>
+            <Button variant="secondary" size="small" icon="models" class="shrink-0" onClick={handleFixConflicts}>
+              {language.t("pr.merge.conflict.fix")}
+            </Button>
           </div>
         </Show>
 
