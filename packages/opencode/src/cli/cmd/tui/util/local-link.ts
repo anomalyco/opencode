@@ -70,7 +70,9 @@ function pathlike(raw: string) {
     raw.startsWith("./") ||
     raw.startsWith("../") ||
     raw.startsWith("~/") ||
+    /^[A-Za-z]:[\\/]/.test(raw) ||
     raw.includes("/") ||
+    raw.includes("\\") ||
     /^[A-Za-z0-9._-]+$/.test(raw)
   )
 }

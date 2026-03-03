@@ -78,4 +78,12 @@ describe("localLink", () => {
     const result = localLink(`- package-lock.json (file://${file})`, root)
     expect(result).toBe(`- [package-lock.json](file://${file})`)
   })
+
+  test("converts concealed file URL format with windows-style labels", async () => {
+    await using tmp = await tmpdir()
+    const root = tmp.path
+    const input = `Here: C:\\Users\\runneradmin\\repo (file://${root})`
+    const result = localLink(input, root)
+    expect(result).toBe(`Here: [C:\\Users\\runneradmin\\repo](file://${root})`)
+  })
 })
