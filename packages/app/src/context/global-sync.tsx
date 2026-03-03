@@ -36,6 +36,7 @@ import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
 import { sanitizeProject } from "./global-sync/utils"
 import { usePlatform } from "./platform"
+import { formatServerError } from "@/utils/server-errors"
 
 type GlobalStore = {
   ready: boolean
@@ -49,12 +50,6 @@ type GlobalStore = {
   provider_auth: ProviderAuthResponse
   config: Config
   reload: undefined | "pending" | "complete"
-}
-
-function errorMessage(error: unknown) {
-  if (error instanceof Error && error.message) return error.message
-  if (typeof error === "string" && error) return error
-  return "Unknown error"
 }
 
 function createGlobalSync() {
@@ -207,8 +202,12 @@ function createGlobalSync() {
         console.error("Failed to load sessions", err)
         const project = getFilename(directory)
         showToast({
+          variant: "error",
           title: language.t("toast.session.listFailed.title", { project }),
-          description: errorMessage(err),
+          description: formatServerError(err, {
+            unknown: language.t("error.chain.unknown"),
+            invalidConfiguration: language.t("error.server.invalidConfiguration"),
+          }),
         })
       })
 
@@ -238,6 +237,8 @@ function createGlobalSync() {
         setStore: child[1],
         vcsCache: cache,
         loadSessions,
+        unknownError: language.t("error.chain.unknown"),
+        invalidConfigurationError: language.t("error.server.invalidConfiguration"),
       })
     })()
 
@@ -312,6 +313,9 @@ function createGlobalSync() {
         url: globalSDK.url,
       }),
       requestFailedTitle: language.t("common.requestFailed"),
+      unknownError: language.t("error.chain.unknown"),
+      invalidConfigurationError: language.t("error.server.invalidConfiguration"),
+      formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
       setGlobalStore,
     })
   }

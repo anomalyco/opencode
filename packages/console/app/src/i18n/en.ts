@@ -11,6 +11,7 @@ export const dict = {
   "nav.home": "Home",
   "nav.openMenu": "Open menu",
   "nav.getStartedFree": "Get started for free",
+  "nav.logoAlt": "OpenCode",
 
   "nav.context.copyLogo": "Copy logo as SVG",
   "nav.context.copyWordmark": "Copy wordmark as SVG",
@@ -38,8 +39,12 @@ export const dict = {
   "notFound.docs": "Docs",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
+  "notFound.logoLightAlt": "opencode logo light",
+  "notFound.logoDarkAlt": "opencode logo dark",
 
   "user.logout": "Logout",
+
+  "auth.callback.error.codeMissing": "No authorization code found.",
 
   "workspace.select": "Select workspace",
   "workspace.createNew": "+ Create New Workspace",
@@ -72,6 +77,8 @@ export const dict = {
   "error.reloadAmountMin": "Reload amount must be at least ${{amount}}",
   "error.reloadTriggerMin": "Balance trigger must be at least ${{amount}}",
 
+  "app.meta.description": "OpenCode - The open source coding agent.",
+
   "home.title": "OpenCode | The open source AI coding agent",
 
   "temp.title": "opencode | AI coding agent built for the terminal",
@@ -87,6 +94,8 @@ export const dict = {
   "temp.feature.models.afterLink": ", including local models",
   "temp.screenshot.caption": "opencode TUI with the tokyonight theme",
   "temp.screenshot.alt": "opencode TUI with tokyonight theme",
+  "temp.logoLightAlt": "opencode logo light",
+  "temp.logoDarkAlt": "opencode logo dark",
 
   "home.banner.badge": "New",
   "home.banner.text": "Desktop app available in beta",
@@ -234,11 +243,30 @@ export const dict = {
     "All Zen models are hosted in the US. Providers follow a zero-retention policy and do not use your data for model training, with the",
   "zen.privacy.exceptionsLink": "following exceptions",
 
+  "zen.api.error.rateLimitExceeded": "Rate limit exceeded. Please try again later.",
+  "zen.api.error.modelNotSupported": "Model {{model}} not supported",
+  "zen.api.error.modelFormatNotSupported": "Model {{model}} not supported for format {{format}}",
+  "zen.api.error.noProviderAvailable": "No provider available",
+  "zen.api.error.providerNotSupported": "Provider {{provider}} not supported",
+  "zen.api.error.missingApiKey": "Missing API key.",
+  "zen.api.error.invalidApiKey": "Invalid API key.",
+  "zen.api.error.subscriptionQuotaExceeded": "Subscription quota exceeded. Retry in {{retryIn}}.",
+  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
+    "Subscription quota exceeded. You can continue using free models.",
+  "zen.api.error.noPaymentMethod": "No payment method. Add a payment method here: {{billingUrl}}",
+  "zen.api.error.insufficientBalance": "Insufficient balance. Manage your billing here: {{billingUrl}}",
+  "zen.api.error.workspaceMonthlyLimitReached":
+    "Your workspace has reached its monthly spending limit of ${{amount}}. Manage your limits here: {{billingUrl}}",
+  "zen.api.error.userMonthlyLimitReached":
+    "You have reached your monthly spending limit of ${{amount}}. Manage your limits here: {{membersUrl}}",
+  "zen.api.error.modelDisabled": "Model is disabled",
+
   "black.meta.title": "OpenCode Black | Access all the world's best coding models",
   "black.meta.description": "Get access to Claude, GPT, Gemini and more with OpenCode Black subscription plans.",
   "black.hero.title": "Access all the world's best coding models",
   "black.hero.subtitle": "Including Claude, GPT, Gemini and more",
   "black.title": "OpenCode Black | Pricing",
+  "black.paused": "Black plan enrollment is temporarily paused.",
   "black.plan.icon20": "Black 20 plan",
   "black.plan.icon100": "Black 100 plan",
   "black.plan.icon200": "Black 200 plan",
@@ -334,12 +362,15 @@ export const dict = {
   "workspace.usage.table.input": "Input",
   "workspace.usage.table.output": "Output",
   "workspace.usage.table.cost": "Cost",
+  "workspace.usage.table.session": "Session",
   "workspace.usage.breakdown.input": "Input",
   "workspace.usage.breakdown.cacheRead": "Cache Read",
   "workspace.usage.breakdown.cacheWrite": "Cache Write",
   "workspace.usage.breakdown.output": "Output",
   "workspace.usage.breakdown.reasoning": "Reasoning",
-  "workspace.usage.subscription": "subscription (${{amount}})",
+  "workspace.usage.subscription": "Black (${{amount}})",
+  "workspace.usage.lite": "Go (${{amount}})",
+  "workspace.usage.byok": "BYOK (${{amount}})",
 
   "workspace.cost.title": "Cost",
   "workspace.cost.subtitle": "Usage costs broken down by model.",
@@ -348,6 +379,7 @@ export const dict = {
   "workspace.cost.deletedSuffix": "(deleted)",
   "workspace.cost.empty": "No usage data available for the selected period.",
   "workspace.cost.subscriptionShort": "sub",
+  "workspace.cost.liteShort": "lite",
 
   "workspace.keys.title": "API Keys",
   "workspace.keys.subtitle": "Manage your API keys for accessing opencode services.",
@@ -438,6 +470,7 @@ export const dict = {
   "workspace.reload.updatePaymentMethod": "Please update your payment method and try again.",
   "workspace.reload.retrying": "Retrying...",
   "workspace.reload.retry": "Retry",
+  "workspace.reload.error.paymentFailed": "Payment failed.",
 
   "workspace.payments.title": "Payments History",
   "workspace.payments.subtitle": "Recent payment transactions.",
@@ -475,6 +508,36 @@ export const dict = {
   "workspace.black.waitlist.enrolled": "Enrolled",
   "workspace.black.waitlist.enrollNote":
     "When you click Enroll, your subscription starts immediately and your card will be charged.",
+
+  "workspace.lite.loading": "Loading...",
+  "workspace.lite.time.day": "day",
+  "workspace.lite.time.days": "days",
+  "workspace.lite.time.hour": "hour",
+  "workspace.lite.time.hours": "hours",
+  "workspace.lite.time.minute": "minute",
+  "workspace.lite.time.minutes": "minutes",
+  "workspace.lite.time.fewSeconds": "a few seconds",
+  "workspace.lite.subscription.title": "Go Subscription",
+  "workspace.lite.subscription.message": "You are subscribed to OpenCode Go.",
+  "workspace.lite.subscription.manage": "Manage Subscription",
+  "workspace.lite.subscription.rollingUsage": "Rolling Usage",
+  "workspace.lite.subscription.weeklyUsage": "Weekly Usage",
+  "workspace.lite.subscription.monthlyUsage": "Monthly Usage",
+  "workspace.lite.subscription.resetsIn": "Resets in",
+  "workspace.lite.subscription.useBalance": "Use your available balance after reaching the usage limits",
+  "workspace.lite.subscription.selectProvider":
+    'Select "OpenCode Go" as the provider in your opencode configuration to use Go models.',
+  "workspace.lite.other.title": "Go Subscription",
+  "workspace.lite.other.message":
+    "Another member in this workspace is already subscribed to OpenCode Go. Only one member per workspace can subscribe.",
+  "workspace.lite.promo.title": "OpenCode Go",
+  "workspace.lite.promo.description":
+    "OpenCode Go is a $10 per month subscription that provides reliable access to popular open coding models with generous usage limits.",
+  "workspace.lite.promo.modelsTitle": "What's Included",
+  "workspace.lite.promo.footer":
+    "The plan is designed primarily for international users, with models hosted in the US, EU, and Singapore for stable global access. Pricing and usage limits may change as we learn from early usage and feedback.",
+  "workspace.lite.promo.subscribe": "Subscribe to Go",
+  "workspace.lite.promo.subscribing": "Redirecting...",
 
   "download.title": "OpenCode | Download",
   "download.meta.description": "Download OpenCode for macOS, Windows, and Linux",
@@ -526,6 +589,10 @@ export const dict = {
   "enterprise.form.send": "Send",
   "enterprise.form.sending": "Sending...",
   "enterprise.form.success": "Message sent, we'll be in touch soon.",
+  "enterprise.form.success.submitted": "Form submitted successfully.",
+  "enterprise.form.error.allFieldsRequired": "All fields are required.",
+  "enterprise.form.error.invalidEmailFormat": "Invalid email format.",
+  "enterprise.form.error.internalServer": "Internal server error.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "What is OpenCode Enterprise?",
   "enterprise.faq.a1":
@@ -558,6 +625,7 @@ export const dict = {
   "bench.list.table.agent": "Agent",
   "bench.list.table.model": "Model",
   "bench.list.table.score": "Score",
+  "bench.submission.error.allFieldsRequired": "All fields are required.",
 
   "bench.detail.title": "Benchmark - {{task}}",
   "bench.detail.notFound": "Task not found",

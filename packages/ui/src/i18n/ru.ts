@@ -3,6 +3,9 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "Изменения последнего хода",
   "ui.sessionReview.diffStyle.unified": "Объединённый",
   "ui.sessionReview.diffStyle.split": "Разделённый",
+  "ui.sessionReview.openFile": "Открыть файл",
+  "ui.sessionReview.selection.line": "строка {{line}}",
+  "ui.sessionReview.selection.lines": "строки {{start}}-{{end}}",
   "ui.sessionReview.expandAll": "Развернуть всё",
   "ui.sessionReview.collapseAll": "Свернуть всё",
 
@@ -14,6 +17,15 @@ export const dict = {
   "ui.sessionReview.largeDiff.title": "Diff слишком большой для отображения",
   "ui.sessionReview.largeDiff.meta": "Лимит: {{limit}} изменённых строк. Текущий: {{current}} изменённых строк.",
   "ui.sessionReview.largeDiff.renderAnyway": "Отобразить всё равно",
+  "ui.fileMedia.kind.image": "изображение",
+  "ui.fileMedia.kind.audio": "аудио",
+  "ui.fileMedia.state.removed": "{{kind}} удалено",
+  "ui.fileMedia.state.loading": "Загружается {{kind}}...",
+  "ui.fileMedia.state.error": "Не удалось загрузить {{kind}}",
+  "ui.fileMedia.state.unavailable": "{{kind}} недоступно",
+  "ui.fileMedia.binary.title": "Бинарный файл",
+  "ui.fileMedia.binary.description.path": "Невозможно отобразить {{path}}, так как это бинарный файл.",
+  "ui.fileMedia.binary.description.default": "Невозможно отобразить этот файл, так как он бинарный.",
   "ui.lineComment.label.prefix": "Комментарий к ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Комментирование: ",
@@ -27,6 +39,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "повтор",
   "ui.sessionTurn.retry.inSeconds": "через {{seconds}}с",
+  "ui.sessionTurn.retry.attempt": "попытка №{{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - попытка №{{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini сейчас перегружен",
   "ui.sessionTurn.error.freeUsageExceeded": "Лимит бесплатного использования превышен",
   "ui.sessionTurn.error.addCredits": "Добавить кредиты",
 
@@ -43,6 +58,14 @@ export const dict = {
   "ui.sessionTurn.status.gatheringThoughts": "Сбор мыслей",
   "ui.sessionTurn.status.consideringNextSteps": "Рассмотрение следующих шагов",
 
+  "ui.messagePart.questions.dismissed": "Вопросы отклонены",
+  "ui.messagePart.compaction": "История сжата",
+  "ui.messagePart.context.read.one": "{{count}} чтение",
+  "ui.messagePart.context.read.other": "{{count}} чтений",
+  "ui.messagePart.context.search.one": "{{count}} поиск",
+  "ui.messagePart.context.search.other": "{{count}} поисков",
+  "ui.messagePart.context.list.one": "{{count}} список",
+  "ui.messagePart.context.list.other": "{{count}} списков",
   "ui.messagePart.diagnostic.error": "Ошибка",
   "ui.messagePart.title.edit": "Редактировать",
   "ui.messagePart.title.write": "Написать",
@@ -62,6 +85,7 @@ export const dict = {
   "ui.textField.copied": "Скопировано",
 
   "ui.imagePreview.alt": "Предпросмотр изображения",
+  "ui.scrollView.ariaLabel": "прокручиваемый контент",
 
   "ui.tool.read": "Чтение",
   "ui.tool.loaded": "Загружено",

@@ -103,6 +103,70 @@ function setCopyState(button: HTMLButtonElement, labels: CopyLabels, copied: boo
   button.setAttribute("data-tooltip", labels.copy)
 }
 
+function ensureCodeWrapper(block: HTMLPreElement, labels: CopyLabels) {
+  const parent = block.parentElement
+  if (!parent) return
+  const wrapped = parent.getAttribute("data-component") === "markdown-code"
+  if (!wrapped) {
+    const wrapper = document.createElement("div")
+    wrapper.setAttribute("data-component", "markdown-code")
+    parent.replaceChild(wrapper, block)
+    wrapper.appendChild(block)
+    wrapper.appendChild(createCopyButton(labels))
+    return
+  }
+
+  const buttons = Array.from(parent.querySelectorAll('[data-slot="markdown-copy-button"]')).filter(
+    (el): el is HTMLButtonElement => el instanceof HTMLButtonElement,
+  )
+
+  if (buttons.length === 0) {
+    parent.appendChild(createCopyButton(labels))
+    return
+  }
+
+  for (const button of buttons.slice(1)) {
+    button.remove()
+  }
+}
+
+function markCodeLinks(root: HTMLDivElement) {
+  const codeNodes = Array.from(root.querySelectorAll(":not(pre) > code"))
+  for (const code of codeNodes) {
+    const href = codeUrl(code.textContent ?? "")
+    const parentLink =
+      code.parentElement instanceof HTMLAnchorElement && code.parentElement.classList.contains("external-link")
+        ? code.parentElement
+        : null
+
+    if (!href) {
+      if (parentLink) parentLink.replaceWith(code)
+      continue
+    }
+
+    if (parentLink) {
+      parentLink.href = href
+      continue
+    }
+
+    const link = document.createElement("a")
+    link.href = href
+    link.className = "external-link"
+    link.target = "_blank"
+    link.rel = "noopener noreferrer"
+    code.parentNode?.replaceChild(link, code)
+    link.appendChild(code)
+  }
+}
+
+function decorate(root: HTMLDivElement, labels: CopyLabels) {
+  const blocks = Array.from(root.querySelectorAll("pre"))
+  for (const block of blocks) {
+    ensureCodeWrapper(block, labels)
+  }
+  markCodeLinks(root)
+}
+
 function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels) {
   const timeouts = new Map<HTMLButtonElement, ReturnType<typeof setTimeout>>()
 
@@ -176,11 +240,7 @@ function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels) {
     timeouts.set(button, timeout)
   }
 
-  const blocks = Array.from(root.querySelectorAll("pre"))
-  for (const block of blocks) {
-    ensureWrapper(block)
-  }
-  markCodeLinks()
+  decorate(root, labels)
 
   const buttons = Array.from(root.querySelectorAll('[data-slot="markdown-copy-button"]'))
   for (const button of buttons) {
@@ -382,21 +442,6 @@ export function Markdown(
       childrenOnly: true,
       onBeforeElUpdated: (fromEl, toEl) => {
         if (fromEl.isEqualNode(toEl)) return false
-        if (fromEl.getAttribute("data-component") === "markdown-code") {
-          const fromPre = fromEl.querySelector("pre")
-          const toPre = toEl.querySelector("pre")
-          if (fromPre && toPre && !fromPre.isEqualNode(toPre)) {
-            morphdom(fromPre, toPre)
-          }
-          return false
-        }
-        return true
-      },
-      onBeforeNodeDiscarded: (node) => {
-        if (node instanceof Element) {
-          if (node.getAttribute("data-slot") === "markdown-copy-button") return false
-          if (node.getAttribute("data-component") === "markdown-code") return false
-        }
         return true
       },
     })

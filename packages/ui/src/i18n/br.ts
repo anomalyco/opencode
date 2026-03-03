@@ -3,6 +3,9 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "Alterações do último turno",
   "ui.sessionReview.diffStyle.unified": "Unificado",
   "ui.sessionReview.diffStyle.split": "Dividido",
+  "ui.sessionReview.openFile": "Abrir arquivo",
+  "ui.sessionReview.selection.line": "linha {{line}}",
+  "ui.sessionReview.selection.lines": "linhas {{start}}-{{end}}",
   "ui.sessionReview.expandAll": "Expandir tudo",
   "ui.sessionReview.collapseAll": "Recolher tudo",
   "ui.sessionReview.change.added": "Adicionado",
@@ -13,6 +16,15 @@ export const dict = {
   "ui.sessionReview.largeDiff.title": "Diff grande demais para renderizar",
   "ui.sessionReview.largeDiff.meta": "Limite: {{limit}} linhas alteradas. Atual: {{current}} linhas alteradas.",
   "ui.sessionReview.largeDiff.renderAnyway": "Renderizar mesmo assim",
+  "ui.fileMedia.kind.image": "imagem",
+  "ui.fileMedia.kind.audio": "áudio",
+  "ui.fileMedia.state.removed": "Removido: {{kind}}",
+  "ui.fileMedia.state.loading": "Carregando {{kind}}...",
+  "ui.fileMedia.state.error": "Erro ao carregar {{kind}}",
+  "ui.fileMedia.state.unavailable": "{{kind}} indisponível",
+  "ui.fileMedia.binary.title": "Arquivo binário",
+  "ui.fileMedia.binary.description.path": "Não é possível exibir {{path}} porque é um arquivo binário.",
+  "ui.fileMedia.binary.description.default": "Não é possível exibir o arquivo porque ele é binário.",
 
   "ui.lineComment.label.prefix": "Comentar em ",
   "ui.lineComment.label.suffix": "",
@@ -28,6 +40,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "tentando novamente",
   "ui.sessionTurn.retry.inSeconds": "em {{seconds}}s",
+  "ui.sessionTurn.retry.attempt": "tentativa #{{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - tentativa #{{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini está muito sobrecarregado agora",
   "ui.sessionTurn.error.freeUsageExceeded": "Limite de uso gratuito excedido",
   "ui.sessionTurn.error.addCredits": "Adicionar créditos",
 
@@ -44,6 +59,14 @@ export const dict = {
   "ui.sessionTurn.status.gatheringThoughts": "Organizando pensamentos",
   "ui.sessionTurn.status.consideringNextSteps": "Considerando próximos passos",
 
+  "ui.messagePart.questions.dismissed": "Perguntas descartadas",
+  "ui.messagePart.compaction": "Histórico compactado",
+  "ui.messagePart.context.read.one": "{{count}} leitura",
+  "ui.messagePart.context.read.other": "{{count}} leituras",
+  "ui.messagePart.context.search.one": "{{count}} pesquisa",
+  "ui.messagePart.context.search.other": "{{count}} pesquisas",
+  "ui.messagePart.context.list.one": "{{count}} lista",
+  "ui.messagePart.context.list.other": "{{count}} listas",
   "ui.messagePart.diagnostic.error": "Erro",
   "ui.messagePart.title.edit": "Editar",
   "ui.messagePart.title.write": "Escrever",
@@ -63,6 +86,7 @@ export const dict = {
   "ui.textField.copied": "Copiado",
 
   "ui.imagePreview.alt": "Visualização de imagem",
+  "ui.scrollView.ariaLabel": "conteúdo rolável",
 
   "ui.tool.read": "Ler",
   "ui.tool.loaded": "Carregado",

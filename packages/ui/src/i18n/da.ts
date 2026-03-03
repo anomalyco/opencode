@@ -3,6 +3,9 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "Ændringer fra sidste tur",
   "ui.sessionReview.diffStyle.unified": "Samlet",
   "ui.sessionReview.diffStyle.split": "Opdelt",
+  "ui.sessionReview.openFile": "Åbn fil",
+  "ui.sessionReview.selection.line": "linje {{line}}",
+  "ui.sessionReview.selection.lines": "linjer {{start}}-{{end}}",
   "ui.sessionReview.expandAll": "Udvid alle",
   "ui.sessionReview.collapseAll": "Skjul alle",
 
@@ -14,6 +17,15 @@ export const dict = {
   "ui.sessionReview.largeDiff.title": "Diff er for stor til at blive vist",
   "ui.sessionReview.largeDiff.meta": "Grænse: {{limit}} ændrede linjer. Nuværende: {{current}} ændrede linjer.",
   "ui.sessionReview.largeDiff.renderAnyway": "Vis alligevel",
+  "ui.fileMedia.kind.image": "billede",
+  "ui.fileMedia.kind.audio": "lyd",
+  "ui.fileMedia.state.removed": "Fjernet: {{kind}}",
+  "ui.fileMedia.state.loading": "Indlæser {{kind}}...",
+  "ui.fileMedia.state.error": "Fejl ved indlæsning: {{kind}}",
+  "ui.fileMedia.state.unavailable": "Utilgængelig: {{kind}}",
+  "ui.fileMedia.binary.title": "Binær fil",
+  "ui.fileMedia.binary.description.path": "{{path}} kan ikke vises, fordi det er en binær fil.",
+  "ui.fileMedia.binary.description.default": "Denne fil kan ikke vises, fordi det er en binær fil.",
   "ui.lineComment.label.prefix": "Kommenter på ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Kommenterer på ",
@@ -27,6 +39,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "prøver igen",
   "ui.sessionTurn.retry.inSeconds": "om {{seconds}}s",
+  "ui.sessionTurn.retry.attempt": "forsøg #{{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - forsøg #{{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini er meget overbelastet lige nu",
   "ui.sessionTurn.error.freeUsageExceeded": "Gratis forbrug overskredet",
   "ui.sessionTurn.error.addCredits": "Tilføj kreditter",
 
@@ -43,6 +58,14 @@ export const dict = {
   "ui.sessionTurn.status.gatheringThoughts": "Samler tanker",
   "ui.sessionTurn.status.consideringNextSteps": "Overvejer næste skridt",
 
+  "ui.messagePart.questions.dismissed": "Spørgsmål afvist",
+  "ui.messagePart.compaction": "Historik komprimeret",
+  "ui.messagePart.context.read.one": "{{count}} læsning",
+  "ui.messagePart.context.read.other": "{{count}} læsninger",
+  "ui.messagePart.context.search.one": "{{count}} søgning",
+  "ui.messagePart.context.search.other": "{{count}} søgninger",
+  "ui.messagePart.context.list.one": "{{count}} liste",
+  "ui.messagePart.context.list.other": "{{count}} lister",
   "ui.messagePart.diagnostic.error": "Fejl",
   "ui.messagePart.title.edit": "Rediger",
   "ui.messagePart.title.write": "Skriv",
@@ -62,6 +85,7 @@ export const dict = {
   "ui.textField.copied": "Kopieret",
 
   "ui.imagePreview.alt": "Billedforhåndsvisning",
+  "ui.scrollView.ariaLabel": "rulbart indhold",
 
   "ui.tool.read": "Læs",
   "ui.tool.loaded": "Indlæst",

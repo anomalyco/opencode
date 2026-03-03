@@ -26,6 +26,7 @@ export const commands = {
 	setDefaultEditor: (editor: string | null) => __TAURI_INVOKE<null>("set_default_editor", { editor }),
 	wslPath: (path: string, mode: "windows" | "linux" | null) => __TAURI_INVOKE<string>("wsl_path", { path, mode }),
 	resolveAppPath: (appName: string) => __TAURI_INVOKE<string | null>("resolve_app_path", { appName }),
+	openPath: (path: string, appName: string | null) => __TAURI_INVOKE<null>("open_path", { path, appName }),
 };
 
 /** Events */

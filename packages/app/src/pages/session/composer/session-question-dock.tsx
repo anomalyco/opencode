@@ -408,7 +408,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                     setStore("editing", false)
                     return
                   }
-                  if (e.key !== "Enter" || e.shiftKey) return
+                  if (e.key !== "Enter" || !e.metaKey) return
                   e.preventDefault()
                   commitCustom()
                 }}

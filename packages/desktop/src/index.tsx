@@ -21,7 +21,6 @@ import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification"
-import { openPath as openerOpenPath } from "@tauri-apps/plugin-opener"
 import { type as ostype } from "@tauri-apps/plugin-os"
 import { relaunch } from "@tauri-apps/plugin-process"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
@@ -203,20 +202,7 @@ const createPlatform = (): Platform => {
     },
 
     async openPath(path: string, app?: string) {
-      const os = ostype()
-      if (os === "windows") {
-        const resolvedApp = (app && (await commands.resolveAppPath(app))) || app
-        const resolvedPath = await (async () => {
-          if (window.__OPENCODE__?.wsl) {
-            const converted = await commands.wslPath(path, "windows").catch(() => null)
-            if (converted) return converted
-          }
-
-          return path
-        })()
-        return openerOpenPath(resolvedPath, resolvedApp)
-      }
-      return openerOpenPath(path, app)
+      await commands.openPath(path, app ?? null)
     },
 
     back() {
@@ -548,7 +534,7 @@ render(() => {
             }
             const server: ServerConnection.Any = data.is_sidecar
               ? {
-                  displayName: "Local Server",
+                  displayName: t("desktop.server.local"),
                   type: "sidecar",
                   variant: "base",
                   http,

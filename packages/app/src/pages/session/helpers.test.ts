@@ -16,7 +16,7 @@ describe("createOpenReviewFile", () => {
 
     openReviewFile("src/a.ts")
 
-    expect(calls).toEqual(["show", "tab:src/a.ts", "open:file://src/a.ts", "load:src/a.ts"])
+    expect(calls).toEqual(["show", "load:src/a.ts", "tab:src/a.ts", "open:file://src/a.ts"])
   })
 })
 

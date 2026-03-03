@@ -3,6 +3,9 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "تغييرات آخر دور",
   "ui.sessionReview.diffStyle.unified": "موحد",
   "ui.sessionReview.diffStyle.split": "منقسم",
+  "ui.sessionReview.openFile": "فتح ملف",
+  "ui.sessionReview.selection.line": "سطر {{line}}",
+  "ui.sessionReview.selection.lines": "الأسطر {{start}}-{{end}}",
   "ui.sessionReview.expandAll": "توسيع الكل",
   "ui.sessionReview.collapseAll": "طي الكل",
   "ui.sessionReview.change.added": "مضاف",
@@ -13,6 +16,15 @@ export const dict = {
   "ui.sessionReview.largeDiff.title": "Diff كبير جدا لعرضه",
   "ui.sessionReview.largeDiff.meta": "الحد: {{limit}} سطرًا متغيرًا. الحالي: {{current}} سطرًا متغيرًا.",
   "ui.sessionReview.largeDiff.renderAnyway": "اعرض على أي حال",
+  "ui.fileMedia.kind.image": "صورة",
+  "ui.fileMedia.kind.audio": "صوت",
+  "ui.fileMedia.state.removed": "تمت إزالة {{kind}}",
+  "ui.fileMedia.state.loading": "جاري تحميل {{kind}}...",
+  "ui.fileMedia.state.error": "خطأ في تحميل {{kind}}",
+  "ui.fileMedia.state.unavailable": "{{kind}} غير متوفر",
+  "ui.fileMedia.binary.title": "ملف ثنائي",
+  "ui.fileMedia.binary.description.path": "{{path}} عبارة عن ملف ثنائي ولا يمكن عرضه.",
+  "ui.fileMedia.binary.description.default": "هذا ملف ثنائي ولا يمكن عرضه.",
 
   "ui.lineComment.label.prefix": "تعليق على ",
   "ui.lineComment.label.suffix": "",
@@ -28,6 +40,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "إعادة المحاولة",
   "ui.sessionTurn.retry.inSeconds": "خلال {{seconds}} ثواني",
+  "ui.sessionTurn.retry.attempt": "المحاولة رقم {{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - المحاولة رقم {{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini مزدحم حاليا",
   "ui.sessionTurn.error.freeUsageExceeded": "تم تجاوز حد الاستخدام المجاني",
   "ui.sessionTurn.error.addCredits": "إضافة رصيد",
 
@@ -44,6 +59,14 @@ export const dict = {
   "ui.sessionTurn.status.gatheringThoughts": "جمع الأفكار",
   "ui.sessionTurn.status.consideringNextSteps": "النظر في الخطوات التالية",
 
+  "ui.messagePart.questions.dismissed": "تم رفض الأسئلة",
+  "ui.messagePart.compaction": "تم ضغط السجل",
+  "ui.messagePart.context.read.one": "{{count}} قراءة",
+  "ui.messagePart.context.read.other": "{{count}} قراءات",
+  "ui.messagePart.context.search.one": "{{count}} بحث",
+  "ui.messagePart.context.search.other": "{{count}} عمليات بحث",
+  "ui.messagePart.context.list.one": "{{count}} قائمة",
+  "ui.messagePart.context.list.other": "{{count}} قوائم",
   "ui.messagePart.diagnostic.error": "خطأ",
   "ui.messagePart.title.edit": "تحرير",
   "ui.messagePart.title.write": "كتابة",
@@ -63,6 +86,7 @@ export const dict = {
   "ui.textField.copied": "تم النسخ",
 
   "ui.imagePreview.alt": "معاينة الصورة",
+  "ui.scrollView.ariaLabel": "محتوى قابل للتمرير",
 
   "ui.tool.read": "قراءة",
   "ui.tool.loaded": "تم التحميل",
