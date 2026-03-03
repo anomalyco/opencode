@@ -1147,6 +1147,23 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     // Note: Shift+Enter is handled earlier, before IME check
     if (event.key === "Enter" && !event.shiftKey) {
+      if (working() && params.id && prompt.dirty()) {
+        const text = prompt.current().filter(p => p.type === "text").map(p => p.content).join("").trim()
+        if (text) {
+          fetch(`${sdk.url}/session/${params.id}/steer`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text, mode: "queue" }),
+          }).then(res => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`)
+            showToast({ title: "Message queued", description: text.slice(0, 60) })
+            prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
+            editorRef.innerHTML = ""
+          }).catch(err => showToast({ title: "Failed to queue message", description: err?.message }))
+          event.preventDefault()
+          return
+        }
+      }
       handleSubmit(event)
     }
   }
