@@ -146,7 +146,7 @@ const WorkspaceHeader = (props: {
               PR #{currentPr().number}
             </span>
             <Show when={hasUnresolvedComments()}>
-              <div class="absolute -top-px -right-px z-10 size-1.5 rounded-full bg-text-interactive-base" />
+              <div class="absolute -top-px -right-px z-10 size-1.5 rounded-full bg-text-interactive-base transition-opacity duration-200 group-hover/workspace:opacity-0 group-focus-within/workspace:opacity-0" />
             </Show>
           </div>
         )
