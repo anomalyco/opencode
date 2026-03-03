@@ -6,6 +6,7 @@ import { Log } from "@/util/log"
 import { Context } from "../util/context"
 import { Project } from "./project"
 import { State } from "./state"
+import pLimit from "p-limit"
 
 export interface InstanceContext {
   directory: string
@@ -20,6 +21,10 @@ const disposal = {
   all: undefined as Promise<void> | undefined,
 }
 
+// Limit concurrent Instance bootstraps to avoid overwhelming the system
+// with subprocesses (each bootstrap spawns 5-7 git/ripgrep processes).
+const limit = pLimit(3)
+
 function emit(directory: string) {
   GlobalBus.emit("event", {
     directory,
@@ -33,7 +38,7 @@ function emit(directory: string) {
 }
 
 function boot(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
-  return iife(async () => {
+  return limit(async () => {
     const ctx =
       input.project && input.worktree
         ? {

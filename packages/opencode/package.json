@@ -138,6 +138,7 @@
     "opencode-gitlab-auth": "2.0.1",
     "opencode-poe-auth": "0.0.1",
     "opentui-spinner": "0.0.6",
+    "p-limit": "7.3.0",
     "partial-json": "0.1.7",
     "remeda": "catalog:",
     "semver": "^7.6.3",
