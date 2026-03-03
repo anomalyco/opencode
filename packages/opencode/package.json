@@ -25,6 +25,10 @@
   "exports": {
     "./*": "./src/*.ts"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anomalyco/opencode.git"
+  },
   "devDependencies": {
     "@babel/core": "7.28.4",
     "@octokit/webhooks-types": "7.6.1",
