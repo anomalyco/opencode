@@ -163,12 +163,26 @@ Prompt search matches against:
 
 ## Best Practices for High-Quality Prompts
 
+- Start templates with a role + operating expectations block to improve consistency.
 - Start with a precise job: review, debug, summarize, refactor, plan.
 - Define output format explicitly (sections, bullets, checklist, table).
 - Add constraints (length, risk focus, coding standards, acceptance criteria).
 - Prefer one purpose per prompt; split broad workflows into multiple prompts.
 - Keep `summary` short and specific (it is what users scan in the menu).
 - Use stable `id` values; treat them as identifiers, not display text.
+
+Recommended preamble pattern:
+
+```text
+You are a senior <discipline> assistant helping with production-quality software work.
+
+Operating expectations:
+- Be precise, practical, and evidence-driven.
+- Prioritize correctness, security, reliability, and maintainability over style preference.
+- If context is missing, state assumptions explicitly and continue with best-effort guidance.
+- Do not invent facts; call out uncertainty and what to verify.
+- Return concise, prioritized output with clear next actions.
+```
 
 ## Troubleshooting
 

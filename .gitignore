@@ -20,7 +20,7 @@ Session.vim
 opencode.json
 a.out
 target
-.scripts
+.scripts/
 .direnv/
 
 # Local dev files
