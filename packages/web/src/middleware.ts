@@ -77,13 +77,36 @@ function localeFromAcceptLanguage(header: string | null) {
   return locale ?? "root"
 }
 
-export const onRequest = defineMiddleware((ctx, next) => {
+export const onRequest = defineMiddleware(async (ctx, next) => {
   const alias = docsAlias(ctx.url.pathname)
   if (alias) {
     return redirect(ctx.url, alias.path, alias.locale)
   }
 
-  if (ctx.url.pathname !== "/docs" && ctx.url.pathname !== "/docs/") return next()
+  if (ctx.url.pathname !== "/docs" && ctx.url.pathname !== "/docs/") {
+    const response = await next()
+
+    // Detect the locale from the URL path and persist it in the oc_locale cookie so
+    // that the user's language-switcher choice is remembered across navigations.
+    //
+    // Previously the cookie was only written during alias-redirect (e.g. /docs/en/ →
+    // /docs/).  Canonical locale paths like /docs/tr/page and English paths like
+    // /docs/page never wrote the cookie, so returning to /docs/ would re-apply the
+    // browser's Accept-Language header and undo the user's manual selection.
+    const hit = /^\/docs\/([^/]+)(?:\/|$)/.exec(ctx.url.pathname)
+    const urlLocale = (hit ? exactLocale(hit[1] ?? "") : null) ?? "root"
+    const cookieLocale = localeFromCookie(ctx.request.headers.get("cookie"))
+    if (cookieLocale !== urlLocale) {
+      const headers = new Headers(response.headers)
+      headers.append("Set-Cookie", cookie(urlLocale))
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      })
+    }
+    return response
+  }
 
   const locale =
     localeFromCookie(ctx.request.headers.get("cookie")) ??
