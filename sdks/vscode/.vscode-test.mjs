@@ -9,7 +9,7 @@ export default defineConfig([
     mocha: {
       ui: "tdd",
       timeout: 60000,
-      reporter: "mochawesome",
+      reporter: "spec",
       require: ["./out/test/bootstrap.js"],
       reporterOptions: {
         reportDir: "test-results",
@@ -28,7 +28,7 @@ export default defineConfig([
     mocha: {
       ui: "tdd",
       timeout: 60000,
-      reporter: "mochawesome",
+      reporter: "spec",
       require: ["./out/test/bootstrap.js"],
       reporterOptions: {
         reportDir: "test-results",
