@@ -41,7 +41,7 @@ export function prepareTools({
 
   for (const tool of tools) {
     if (tool.type === "provider") {
-      toolWarnings.push(unsupportedTool())
+      toolWarnings.push(unsupportedTool(tool))
     } else {
       openaiCompatTools.push({
         type: "function",

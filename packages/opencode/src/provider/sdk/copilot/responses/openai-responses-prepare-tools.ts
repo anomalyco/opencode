@@ -135,7 +135,7 @@ export function prepareResponsesTools({
         break
       }
       default:
-        toolWarnings.push(unsupportedTool())
+        toolWarnings.push(unsupportedTool(tool))
         break
     }
   }

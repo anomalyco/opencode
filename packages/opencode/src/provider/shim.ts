@@ -98,12 +98,12 @@ export function shimProvider(sdk: any): any {
 
   // Use a Proxy rather than a plain object so that callable providers (e.g.
   // SAP AI Core exposes provider(modelId) as a shorthand) keep working after
-  // shimming. The apply trap forwards calls to the original and shimms the
-  // returned language model. get/set traps layer the v3 property overrides on
+  // shimming. The apply trap forwards calls to the original and shims the
+  // returned language model. The get trap layers v3 property overrides on
   // top of the original properties.
   return new Proxy(sdk, {
     apply(target, thisArg, args) {
-      return shimLanguageModel(target(...args))
+      return shimLanguageModel(Reflect.apply(target, thisArg, args))
     },
     get(target, prop) {
       switch (prop) {
