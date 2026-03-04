@@ -1,0 +1,2 @@
+OPENCODE_SANDBOX_EVIDENCE_DIR=/tmp/oc-empty bash .sisyphus/evidence/check-sandbox-evidence.sh idle
+Missing idle evidence files: /tmp/oc-empty/task-2-idle-a.txt or /tmp/oc-empty/task-2-idle-b.txt

@@ -1,0 +1,3 @@
+bash -n .sisyphus/evidence/run-sandbox-tui.sh -> OK
+bash -n .sisyphus/evidence/check-sandbox-evidence.sh -> OK
+bash -n scripts/compare-tui-baseline.sh -> OK

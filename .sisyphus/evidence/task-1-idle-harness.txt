@@ -1,0 +1,3 @@
+Sandbox config: /tmp/opencode-sandbox-idle-1772587986/config/opencode/opencode.json
+State: idle
+TUI did not become ready within timeout. Evidence: /home/choza/projects/opencode-source/.sisyphus/evidence/task-2-idle.txt
