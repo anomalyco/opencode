@@ -251,11 +251,12 @@ export const dict = {
 
   "go.cta.start": "Subscribe to Go - $10/mo",
   "go.pricing.body": "Use with any agent. Top up credit if needed. Cancel any time.",
+  "go.graph.free": "Free",
+  "go.graph.go": "Go",
   "go.problem.title": "What problem is Go solving?",
   "go.problem.body":
     "We're focused on bringing the OpenCode experience to as many people as possible. OpenCode Go is a low cost ($10/month) subscription designed to bring agentic coding to programmers around the world. It provides generous limits and reliable access to the most capable open source models.",
-  "go.problem.subtitle":
-    " ",
+  "go.problem.subtitle": " ",
   "go.problem.item1": "Low cost subscription pricing",
   "go.problem.item2": "Generous limits and reliable access",
   "go.problem.item3": "Built for as many programmers as possible",

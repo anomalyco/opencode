@@ -1,11 +1,10 @@
 import "./index.css"
 import { createAsync, query, redirect } from "@solidjs/router"
 import { Title, Meta } from "@solidjs/meta"
+import { For, createSignal, onCleanup, onMount } from "solid-js"
 //import { HttpHeader } from "@solidjs/start"
 import goLogoLight from "../../asset/go-ornate-light.svg"
 import goLogoDark from "../../asset/go-ornate-dark.svg"
-import compareVideo from "../../asset/lander/opencode-comparison-min.mp4"
-import compareVideoPoster from "../../asset/lander/opencode-comparison-poster.png"
 import avatarDax from "../../asset/lander/avatar-dax.png"
 import avatarJay from "../../asset/lander/avatar-jay.png"
 import avatarFrank from "../../asset/lander/avatar-frank.png"
@@ -27,6 +26,137 @@ const checkLoggedIn = query(async () => {
   const workspaceID = await getLastSeenWorkspaceID().catch(() => {})
   if (workspaceID) throw redirect(`/workspace/${workspaceID}`)
 }, "checkLoggedIn.get")
+
+function LimitsGraph(props: { href: string; labels: { free: string; go: string } }) {
+  let root!: HTMLElement
+  const [visible, setVisible] = createSignal(false)
+
+  onMount(() => {
+    if (typeof IntersectionObserver === "undefined") return setVisible(true)
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        if (!entry?.isIntersecting) return
+        setVisible(true)
+        observer.disconnect()
+      },
+      { threshold: 0.35 },
+    )
+    observer.observe(root)
+    onCleanup(() => observer.disconnect())
+  })
+
+  const free = 200 * 30
+  const models = [
+    { id: "glm", name: "GLM-5", month: 5750, d: "120ms" },
+    { id: "kimi", name: "Kimi K2.5", month: 9250, d: "240ms" },
+    { id: "minimax", name: "MiniMax M2.5", month: 100000, d: "360ms" },
+  ]
+  const scale = 18
+  const ratio = (n: number) => n / free
+
+  const w = 720
+  const h = 220
+  const left = 88
+  const right = 24
+  const top = 22
+  const bottom = 46
+  const plot = w - left - right
+  const x = (r: number) => left + (Math.min(r, scale) / scale) * plot
+  const start = (x(1) / w) * 100
+
+  const yFree = 74
+  const yGo = 134
+  const ticks = [1, 2, 5, 10, 15]
+  const y = (n: number) => `${(n / h) * 100}%`
+
+  return (
+    <figure
+      data-component="limit-graph"
+      aria-label="Requests per month: Free vs Go"
+      data-visible={visible() ? "" : undefined}
+      ref={root}
+      style={{ "--start": `${start}%` } as any}
+    >
+      <div data-slot="plot">
+        <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-hidden="true">
+          <g data-slot="grid">
+            <For each={ticks}>
+              {(t) => (
+                <g>
+                  <line x1={x(t)} y1={top} x2={x(t)} y2={h - bottom} data-grid />
+                  <text x={x(t)} y={h - 18} text-anchor="middle" data-tick>
+                    {t}x
+                  </text>
+                </g>
+              )}
+            </For>
+          </g>
+
+          <g data-slot="free" style={{ "--d": "0ms" } as any}>
+            <circle cx={x(1)} cy={yFree} r={5.5} data-point data-kind="free" />
+          </g>
+
+          <g data-slot="go">
+            <line
+              x1={x(ratio(models[0]!.month))}
+              y1={yGo}
+              x2={x(ratio(models[2]!.month))}
+              y2={yGo}
+              data-range
+              data-animate="line"
+            />
+            <For each={models}>
+              {(m) => (
+                <g style={{ "--d": m.d } as any}>
+                  <circle cx={x(ratio(m.month))} cy={yGo} r={5.5} data-point data-kind="go" data-model={m.id} />
+                </g>
+              )}
+            </For>
+          </g>
+        </svg>
+
+        <div data-slot="plot-labels">
+          <span data-row-label style={{ "--y": y(yFree) } as any}>
+            {props.labels.free}
+          </span>
+          <span data-row-label style={{ "--y": y(yGo) } as any}>
+            {props.labels.go}
+          </span>
+        </div>
+      </div>
+
+      <figcaption>
+        <div data-slot="caption-row">
+          <div data-slot="caption-left">
+            <div data-slot="caption-meta">
+              <span data-slot="caption-label">Requests/month</span>
+              <a data-slot="caption-link" href={props.href}>
+                Usage limits
+              </a>
+            </div>
+            <div data-slot="legend">
+              <span data-item>
+                <i data-dot data-kind="free" />
+                <span data-name>Free</span>
+                <span data-value>{free.toLocaleString()}</span>
+              </span>
+              <For each={models}>
+                {(m) => (
+                  <span data-item>
+                    <i data-dot data-kind="go" data-model={m.id} />
+                    <span data-name>{m.name}</span>
+                    <span data-value>{m.month.toLocaleString()}</span>
+                  </span>
+                )}
+              </For>
+            </div>
+          </div>
+        </div>
+      </figcaption>
+    </figure>
+  )
+}
 
 export default function Home() {
   const loggedin = createAsync(() => checkLoggedIn())
@@ -144,9 +274,10 @@ export default function Home() {
           </section>
 
           <section data-component="comparison">
-            <video src={compareVideo} autoplay playsinline loop muted preload="auto" poster={compareVideoPoster}>
-              {i18n.t("common.videoUnsupported")}
-            </video>
+            <LimitsGraph
+              href={language.route("/docs/go/#usage-limits")}
+              labels={{ free: i18n.t("go.graph.free"), go: i18n.t("go.graph.go") }}
+            />
           </section>
 
           <section data-component="problem">
