@@ -10,7 +10,7 @@ export default defineConfig([
       ui: "tdd",
       timeout: 60000,
       reporter: "mochawesome",
-      require: ["out/test/bootstrap.js"],
+      require: ["./out/test/bootstrap.js"],
       reporterOptions: {
         reportDir: "test-results",
         reportFilename: "e2e-report",
@@ -29,7 +29,7 @@ export default defineConfig([
       ui: "tdd",
       timeout: 60000,
       reporter: "mochawesome",
-      require: ["out/test/bootstrap.js"],
+      require: ["./out/test/bootstrap.js"],
       reporterOptions: {
         reportDir: "test-results",
         reportFilename: "e2e-report",
