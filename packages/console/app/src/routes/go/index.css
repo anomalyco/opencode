@@ -354,7 +354,7 @@ body {
       border-radius: 4px;
       font-weight: 500;
       cursor: pointer;
-      margin-bottom: 56px;
+      margin-bottom: 40px;
       display: flex;
       width: fit-content;
       gap: 12px;
@@ -396,7 +396,7 @@ body {
     }
 
     p:first-child {
-      margin-bottom: 24px;
+      margin-bottom: 0;
       color: var(--color-text);
       display: flex;
       gap: 8px;
