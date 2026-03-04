@@ -36,7 +36,7 @@ const fetchSvgContent = async (svgPath: string): Promise<string> => {
   }
 }
 
-export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
+export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: boolean }) {
   const navigate = useNavigate()
   const i18n = useI18n()
   const language = useLanguage()
@@ -161,19 +161,24 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
           <li>
             <a href={language.route("/docs")}>{i18n.t("nav.docs")}</a>
           </li>
+          <Show when={!props.zen}>
+            <li>
+              <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
+            </li>
+          </Show>
+          <Show when={!props.go}>
+            <li>
+              <A href={language.route("/go")}>{i18n.t("nav.go")}</A>
+            </li>
+          </Show>
           <li>
             <A href={language.route("/enterprise")}>{i18n.t("nav.enterprise")}</A>
           </li>
-          <li>
-            <Switch>
-              <Match when={props.zen}>
-                <a href="/auth">{i18n.t("nav.login")}</a>
-              </Match>
-              <Match when={!props.zen}>
-                <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
-              </Match>
-            </Switch>
-          </li>
+          <Show when={props.zen || props.go}>
+            <li>
+              <a href="/auth">{i18n.t("nav.login")}</a>
+            </li>
+          </Show>
           <Show when={!props.hideGetStarted}>
             <li>
               <A href={language.route("/download")} data-slot="cta-button">
@@ -257,19 +262,24 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
                 <li>
                   <a href={language.route("/docs")}>{i18n.t("nav.docs")}</a>
                 </li>
+                <Show when={!props.zen}>
+                  <li>
+                    <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
+                  </li>
+                </Show>
+                <Show when={!props.go}>
+                  <li>
+                    <A href={language.route("/go")}>{i18n.t("nav.go")}</A>
+                  </li>
+                </Show>
                 <li>
                   <A href={language.route("/enterprise")}>{i18n.t("nav.enterprise")}</A>
                 </li>
-                <li>
-                  <Switch>
-                    <Match when={props.zen}>
-                      <a href="/auth">{i18n.t("nav.login")}</a>
-                    </Match>
-                    <Match when={!props.zen}>
-                      <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
-                    </Match>
-                  </Switch>
-                </li>
+                <Show when={props.zen || props.go}>
+                  <li>
+                    <a href="/auth">{i18n.t("nav.login")}</a>
+                  </li>
+                </Show>
                 <Show when={!props.hideGetStarted}>
                   <li>
                     <A href={language.route("/download")} data-slot="cta-button">
