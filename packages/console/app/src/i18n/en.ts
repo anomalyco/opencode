@@ -290,6 +290,7 @@ export const dict = {
   "go.problem.item1": "Low cost subscription pricing",
   "go.problem.item2": "Generous limits and reliable access",
   "go.problem.item3": "Built for as many programmers as possible",
+  "go.problem.item4": "Includes GLM-5, Kimi K2.5, and MiniMax M2.5",
   "go.how.title": "How Go works",
   "go.how.body": "Go is a $10/month subscription you can use with OpenCode or any agent.",
   "go.how.step1.title": "Create an account",

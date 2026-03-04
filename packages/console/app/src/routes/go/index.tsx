@@ -308,6 +308,9 @@ export default function Home() {
               <li>
                 <span>[*]</span> {i18n.t("go.problem.item3")}
               </li>
+              <li>
+                <span>[*]</span> {i18n.t("go.problem.item4")}
+              </li>
             </ul>
           </section>
 
