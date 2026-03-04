@@ -1975,7 +1975,10 @@ function Task(props: ToolProps<typeof TaskTool>) {
 
   const content = createMemo(() => {
     if (!props.input.description) return ""
-    let content = [`Task ${props.input.description}`]
+    const agentPrefix = props.input.subagent_type
+      ? `${Locale.titlecase(props.input.subagent_type)}: `
+      : ""
+    let content = [`${agentPrefix}Task ${props.input.description}`]
 
     if (isRunning() && tools().length > 0) {
       // content[0] += ` · ${tools().length} toolcalls`
