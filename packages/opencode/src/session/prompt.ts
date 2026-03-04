@@ -2,6 +2,7 @@ import path from "path"
 import os from "os"
 import fs from "fs/promises"
 import z from "zod"
+import { zodToJsonSchema } from "zod-to-json-schema"
 import { Filesystem } from "../util/filesystem"
 import { Identifier } from "../id/id"
 import { MessageV2 } from "./message-v2"
@@ -784,7 +785,7 @@ export namespace SessionPrompt {
       { modelID: input.model.api.id, providerID: input.model.providerID },
       input.agent,
     )) {
-      const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
+      const schema = ProviderTransform.schema(input.model, zodToJsonSchema(item.parameters) as any)
       tools[item.id] = tool({
         id: item.id as any,
         description: item.description,
