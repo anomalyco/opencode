@@ -401,7 +401,7 @@ export namespace Session {
       return Database.use((db) => {
         const row = db
           .update(SessionTable)
-          .set({ time_archived: input.time ?? null })
+          .set({ time_archived: input.time })
           .where(eq(SessionTable.id, input.sessionID))
           .returning()
           .get()
