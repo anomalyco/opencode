@@ -1,0 +1,62 @@
+# Issues
+
+- 2026-03-03 F4 scope fidelity audit (artifact-based, no Bash/git): PASS.
+- Reviewed plan guardrails in `.sisyphus/plans/idle-prompt-bar-fix.md` and scoped deliverables against referenced implementation files.
+- In-scope changed-file set from plan/evidence alignment: `packages/opencode/src/cli/cmd/tui/component/prompt/index.tsx`, `.sisyphus/evidence/run-sandbox-tui.sh`, `.sisyphus/evidence/check-sandbox-evidence.sh`, `scripts/compare-tui-baseline.sh`.
+- Guardrail check: no evidence of non-TUI subsystem edits; harness/baseline changes remain under `.sisyphus/evidence` and `scripts`.
+- Guardrail check: no evidence of edits to prompt state precedence (`packages/opencode/src/cli/cmd/tui/util/prompt-bar-state.ts`) or overlay palette mapping (`packages/opencode/src/cli/cmd/tui/util/prompt-bar-visual.ts`).
+- Scope creep findings: none detected from available read-only artifacts.
+- Note: explicit git diff summary artifact was not found; conclusions are based on plan commit-file declarations, notepad learnings, evidence logs, and direct file inspection.
+
+- 2026-03-03 F4 scope fidelity audit (git diff --stat + full git diff + full changed-file reads): FAIL.
+- `git diff --stat` shows 37 modified files; in-scope core plan files are only prompt component + harness/baseline scripts, but current diff includes many out-of-scope files.
+- Guardrail violation (overlay palette/state visuals scope): `packages/opencode/src/cli/cmd/tui/util/prompt-bar-visual.ts` changes non-idle mapping (`streaming` to `info`, `assistant_final` to `success`) and renames idle palette constant; this is explicitly disallowed by plan guardrails.
+- Out-of-scope TUI expansion beyond plan: `packages/opencode/src/cli/cmd/tui/app.tsx` and `packages/opencode/src/cli/cmd/tui/context/local.tsx` add model-validation behavior (`allowInvalid`, `ModelsDev` fallback) not included in idle-render/harness scope.
+- Out-of-scope non-TUI subsystem edits detected: `packages/opencode/src/tool/{bash.ts,edit.ts,write.ts}`, `packages/opencode/test/tool/{bash.test.ts,edit.test.ts,write.test.ts}`, and multiple `packages/opencode/src/session/prompt/*.txt` files.
+- Additional out-of-scope documentation/test drift: `docs/prompt-bar-visuals.md` and `packages/opencode/test/cli/tui/prompt-bar-visual.test.ts` changed beyond required fidelity check target.
+- 2026-03-03 F2/F3 subagents timed out after 3 attempts; manual verification performed.
+- LSP: `packages/opencode/src/cli/cmd/tui/app.tsx` errors (biome): noControlCharactersInRegex at lines 59:31, 59:42, 59:46; noAsyncPromiseExecutor at 117:27; noStaticElementInteractions at 738:4, 823:8, 832:8, 835:8. Warnings/infos: unused imports at 6:92, useImportType at 42:7, useNodejsImportProtocol at 39:34, useParseIntRadix at 80:14/81:14/82:14, useTemplate at 281:48 and 805:6.
+- LSP: `packages/opencode/test/tool/bash.test.ts` warnings (biome): noNonNullAssertion at 263:15 and 284:24; noExplicitAny at 305:35, 325:35, 344:35, 364:35, 366:45; plus useNodejsImportProtocol at 2:15 and 3:17.
+- Baseline compare with `OPENCODE_SANDBOX_USE_REAL_AUTH=1 OPENCODE_SANDBOX_MODEL=openai/gpt-5.2-codex` reports upstream "Model openai/gpt-5.2-codex is not valid"; upstream idle-failure message not observed.
+- 2026-03-03 Scope cleanup: restored out-of-scope tracked files; remaining tracked changes are limited to prompt idle render + harness/baseline scripts and evidence artifacts.
+- 2026-03-03 F1/F4 re-evaluated after cleanup: scope now matches plan guardrails (no non-TUI subsystem edits or overlay palette changes in tracked files).
+
+- 2026-03-03 F4 scope fidelity audit (deep, required-tool pass with full changed-file reads): FAIL.
+- Verification basis completed exactly as required: reviewed `.sisyphus/plans/idle-prompt-bar-fix.md`, `git diff --stat`, full `git diff` (including continuation output file), and full contents of all 37 changed files.
+- Guardrail status: violations remain.
+- Exact out-of-scope file paths still present:
+- `docs/prompt-bar-visuals.md`
+- `packages/opencode/src/cli/cmd/tui/app.tsx`
+- `packages/opencode/src/cli/cmd/tui/context/local.tsx`
+- `packages/opencode/src/cli/cmd/tui/util/prompt-bar-visual.ts`
+- `packages/opencode/src/session/prompt/anthropic-20250930.txt`
+- `packages/opencode/src/session/prompt/anthropic.txt`
+- `packages/opencode/src/session/prompt/beast.txt`
+- `packages/opencode/src/session/prompt/codex_header.txt`
+- `packages/opencode/src/session/prompt/copilot-gpt-5.txt`
+- `packages/opencode/src/session/prompt/gemini.txt`
+- `packages/opencode/src/session/prompt/qwen.txt`
+- `packages/opencode/src/session/prompt/trinity.txt`
+- `packages/opencode/src/tool/bash.ts`
+- `packages/opencode/src/tool/edit.ts`
+- `packages/opencode/src/tool/write.ts`
+- `packages/opencode/test/cli/tui/prompt-bar-visual.test.ts`
+- `packages/opencode/test/tool/bash.test.ts`
+- `packages/opencode/test/tool/edit.test.ts`
+- `packages/opencode/test/tool/write.test.ts`
+- Guardrail cross-check outcomes:
+- Non-TUI subsystem guardrail violated by `packages/opencode/src/tool/bash.ts`, `packages/opencode/src/tool/edit.ts`, `packages/opencode/src/tool/write.ts`, and associated tool tests.
+- Prompt state precedence guardrail: no direct edit detected to `packages/opencode/src/cli/cmd/tui/util/prompt-bar-state.ts`, but behavior-impacting expansion in `packages/opencode/src/cli/cmd/tui/context/local.tsx` and `packages/opencode/src/cli/cmd/tui/app.tsx` remains outside plan scope.
+- Overlay palette guardrail violated by `packages/opencode/src/cli/cmd/tui/util/prompt-bar-visual.ts` (non-idle overlay remap + palette identifier change).
+
+- 2026-03-03 F1 plan compliance audit (git diff --stat + git diff + evidence checks): FAIL.
+- Guardrails vs diff scope mismatch: plan forbids non-TUI subsystem changes (`.sisyphus/plans/idle-prompt-bar-fix.md:41`), forbids changing non-idle visuals/state precedence (`.sisyphus/plans/idle-prompt-bar-fix.md:42`), and forbids overlay palette edits (`.sisyphus/plans/idle-prompt-bar-fix.md:74`); current `git diff --stat` reports 37 modified files (incl. tools + session prompts + tests + docs).
+- Explicit guardrail violation (overlay palette mapping changed): `packages/opencode/src/cli/cmd/tui/util/prompt-bar-visual.ts:39` (streaming -> `theme.info`, was `theme.primary` per diff) and `packages/opencode/src/cli/cmd/tui/util/prompt-bar-visual.ts:43` (assistant_final -> `theme.success`, was `theme.secondary` per diff); tests updated to match (`packages/opencode/test/cli/tui/prompt-bar-visual.test.ts:56`, `packages/opencode/test/cli/tui/prompt-bar-visual.test.ts:76`).
+- Task 1 acceptance criterion mismatch (as written): plan requires idle-cycle interval in `packages/opencode/src/cli/cmd/tui/component/prompt/index.tsx` to call `renderer.requestRender()` (`.sisyphus/plans/idle-prompt-bar-fix.md:71` + `.sisyphus/plans/idle-prompt-bar-fix.md:90`); diff shows idle-cycle interval removed from `packages/opencode/src/cli/cmd/tui/component/prompt/index.tsx:107` and replaced with `usePromptBarColorEffect` wiring, while the actual idle-cycle + render tick now lives in `packages/opencode/src/cli/cmd/tui/component/prompt/color-effect.ts:44` through `packages/opencode/src/cli/cmd/tui/component/prompt/color-effect.ts:56`.
+- Task 1 evidence missing vs plan QA scenarios: `.sisyphus/plans/idle-prompt-bar-fix.md:99` expects `.sisyphus/evidence/task-1-idle-harness.txt` and `.sisyphus/plans/idle-prompt-bar-fix.md:105` expects `.sisyphus/evidence/task-1-idle-fail.txt`; current `.sisyphus/evidence/task-1-*.txt` only includes `task-1-state-tests.txt`, `task-1-launch.txt`, `task-1-evidence-dir.txt`, `task-1-aborted.txt`.
+- Tasks 2-4 evidence present (meets plan evidence expectations): `.sisyphus/evidence/task-2-baseline.txt:1`, `.sisyphus/evidence/task-2-baseline-error.txt:2`, `.sisyphus/evidence/task-3-idle-pass.txt:3`, `.sisyphus/evidence/task-3-idle-upstream.txt:3`, `.sisyphus/evidence/task-4-verify.txt:2`, `.sisyphus/evidence/task-4-verify-error.txt:3`.
+- Out-of-scope TUI runtime changes beyond T1/T2: model validity fallback + allowInvalid surfaced in `packages/opencode/src/cli/cmd/tui/context/local.tsx:16`, `packages/opencode/src/cli/cmd/tui/context/local.tsx:25`, `packages/opencode/src/cli/cmd/tui/context/local.tsx:294`, `packages/opencode/src/cli/cmd/tui/app.tsx:298` (also documented as "Fixes Applied" in `docs/prompt-bar-visuals.md:25`).
+- Out-of-scope non-TUI subsystem edits: workspace guard added to tools (`packages/opencode/src/tool/bash.ts` hunk at diff `+20`, `+81`, `+146`; `packages/opencode/src/tool/edit.ts` hunk at diff `+20`, `+46`; `packages/opencode/src/tool/write.ts` hunk at diff `+15`, `+28`) and corresponding tests updated (`packages/opencode/test/tool/bash.test.ts` hunk at diff `+100`, `+119`, `+139`; `packages/opencode/test/tool/edit.test.ts` hunk at diff `+23`; `packages/opencode/test/tool/write.test.ts` hunk at diff `+22`).
+- Out-of-scope session prompt template changes: e.g. `packages/opencode/src/session/prompt/anthropic.txt` adds workspace-safety policy at diff hunk `+14`.
+- Harness check behavior changed in a way that can undermine plan QA Scenario "idle check fails when captures identical": `check-sandbox-evidence.sh` now allows a third capture file to satisfy the idle-change requirement if `task-2-idle-c.txt` exists (`.sisyphus/evidence/check-sandbox-evidence.sh:72`, `.sisyphus/evidence/check-sandbox-evidence.sh:92`, `.sisyphus/evidence/check-sandbox-evidence.sh:106`), so `cp task-2-idle-a.txt task-2-idle-b.txt; ...check...` (plan `.sisyphus/plans/idle-prompt-bar-fix.md:103`) could pass spuriously if a prior `task-2-idle-c.txt` remains in the evidence dir.
+- TODO/FIXME/HACK/xxx scan (changed files): `packages/opencode/src/cli/cmd/tui/component/prompt/index.tsx:242` (TODO), `packages/opencode/src/tool/bash.ts:55` (TODO), plus placeholder text match at `packages/opencode/src/cli/cmd/tui/component/prompt/index.tsx:60`.
