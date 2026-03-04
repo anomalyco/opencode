@@ -518,7 +518,7 @@ export const dict = {
   "common.rename": "Umbenennen",
   "common.reset": "Zurücksetzen",
   "common.archive": "Archivieren",
-  "common.unarchive": "Darchivieren",
+  "common.unarchive": "Entarchivieren",
   "common.archived": "Archiviert",
   "common.delete": "Löschen",
   "common.close": "Schließen",
