@@ -2,8 +2,8 @@ import "./index.css"
 import { createAsync, query, redirect } from "@solidjs/router"
 import { Title, Meta } from "@solidjs/meta"
 //import { HttpHeader } from "@solidjs/start"
-import zenLogoLight from "../../asset/zen-ornate-light.svg"
-import zenLogoDark from "../../asset/zen-ornate-dark.svg"
+import goLogoLight from "../../asset/go-ornate-light.svg"
+import goLogoDark from "../../asset/go-ornate-dark.svg"
 import compareVideo from "../../asset/lander/opencode-comparison-min.mp4"
 import compareVideoPoster from "../../asset/lander/opencode-comparison-poster.png"
 import avatarDax from "../../asset/lander/avatar-dax.png"
@@ -47,8 +47,8 @@ export default function Home() {
         <div data-component="content">
           <section data-component="hero">
             <div data-slot="hero-copy">
-              <img data-slot="zen logo light" src={zenLogoLight} alt="" />
-              <img data-slot="zen logo dark" src={zenLogoDark} alt="" />
+              <img data-slot="zen logo light" src={goLogoLight} alt="" />
+              <img data-slot="zen logo dark" src={goLogoDark} alt="" />
               <h1>Low cost coding models for everyone</h1>
               <p>
                 Go brings agentic coding to programmers around the world. Offering generous limits and reliable access
