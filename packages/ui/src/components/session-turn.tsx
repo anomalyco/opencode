@@ -369,7 +369,6 @@ export function SessionTurn(
     if (queued()) return false
     if (status().type === "retry") return false
     if (showReasoningSummaries()) return assistantVisible() === 0
-    if (assistantTailVisible() === "text") return false
     return true
   })
 
