@@ -244,6 +244,65 @@ export const dict = {
     "All Zen models are hosted in the US. Providers follow a zero-retention policy and do not use your data for model training, with the",
   "zen.privacy.exceptionsLink": "following exceptions",
 
+  "go.title": "OpenCode Go | Low cost coding models for everyone",
+  "go.hero.title": "Low cost coding models for everyone",
+  "go.hero.body":
+    "Go brings agentic coding to programmers around the world. Offering generous limits and reliable access to the most capable open-source models, so you can build with powerful agents without worrying about cost or availability.",
+
+  "go.cta.start": "Subscribe to Go - $10/mo",
+  "go.pricing.body": "Use with any agent. Top up credit if needed. Cancel any time.",
+  "go.problem.title": "What problem is Go solving?",
+  "go.problem.body":
+    "There are so many models available, but only a few work well with coding agents. Most providers configure them differently with varying results.",
+  "go.problem.subtitle": "We're fixing this for everyone, not just OpenCode users.",
+  "go.problem.item1": "Testing select models and consulting their teams",
+  "go.problem.item2": "Working with providers to ensure they're delivered properly",
+  "go.problem.item3": "Benchmarking all model-provider combinations we recommend",
+  "go.how.title": "How Go works",
+  "go.how.body": "Go is a $10/month subscription you can use with OpenCode or any agent.",
+  "go.how.step1.title": "Create an account",
+  "go.how.step1.beforeLink": "follow the",
+  "go.how.step1.link": "setup instructions",
+  "go.how.step2.title": "Subscribe to Go",
+  "go.how.step2.link": "$10/month",
+  "go.how.step2.afterLink": "with generous limits",
+  "go.how.step3.title": "Start coding",
+  "go.how.step3.body": "with reliable access to open-source models",
+  "go.privacy.title": "Your privacy is important to us",
+  "go.privacy.beforeExceptions":
+    "Go models are hosted in the US. Providers follow a zero-retention policy and do not use your data for model training, with the",
+  "go.privacy.exceptionsLink": "following exceptions",
+  "go.faq.q1": "What is OpenCode Go?",
+  "go.faq.a1":
+    "Go is a low-cost subscription that gives you reliable access to capable open-source models for agentic coding.",
+  "go.faq.q2": "What models does Go include?",
+  "go.faq.a2":
+    "Go focuses on the most capable open-source models available through OpenCode, with generous limits and reliable access.",
+  "go.faq.q3": "Is Go the same as Zen?",
+  "go.faq.a3":
+    "No. Zen is pay-as-you-go, while Go is a $10/month subscription with generous limits and reliable access to open-source models GLM-5, Kimi K2.5, and MiniMax M2.5.",
+  "go.faq.q4": "How much does Go cost?",
+  "go.faq.a4.p1.beforePricing": "Go costs",
+  "go.faq.a4.p1.pricingLink": "$10/month",
+  "go.faq.a4.p1.afterPricing": "with generous limits.",
+  "go.faq.a4.p2.beforeAccount": "You can manage your subscription in your",
+  "go.faq.a4.p2.accountLink": "account",
+  "go.faq.a4.p3": "Cancel any time.",
+  "go.faq.q5": "What about data and privacy?",
+  "go.faq.a5.beforeExceptions":
+    "Go models are hosted in the US. Providers follow a zero-retention policy and do not use your data for model training, with the",
+  "go.faq.a5.exceptionsLink": "following exceptions",
+  "go.faq.q6": "Can I top up credit?",
+  "go.faq.a6": "If you need more usage, you can top up credit in your account.",
+  "go.faq.q7": "Can I cancel?",
+  "go.faq.a7": "Yes, you can cancel any time.",
+  "go.faq.q8": "Can I use Go with other coding agents?",
+  "go.faq.a8": "Yes, you can use Go with any agent. Follow the setup instructions in your preferred coding agent.",
+
+  "go.faq.q9": "What is the difference between the free models included and Go?",
+  "go.faq.a9":
+    "Free models include Big Pickle plus promotional models available at the time, with a quota of 200 requests/day. Go includes GLM-5, Kimi K2.5, and MiniMax M2.5 with higher request quotas enforced across rolling windows (5-hour, weekly, and monthly), roughly equivalent to $12 per 5 hours, $30 per week, and $60 per month (actual request counts vary by model and usage).",
+
   "zen.api.error.rateLimitExceeded": "Rate limit exceeded. Please try again later.",
   "zen.api.error.modelNotSupported": "Model {{model}} not supported",
   "zen.api.error.modelFormatNotSupported": "Model {{model}} not supported for format {{format}}",

@@ -35,7 +35,7 @@ export default function Home() {
   return (
     <main data-page="go">
       {/*<HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />*/}
-      <Title>{i18n.t("zen.title")}</Title>
+      <Title>{i18n.t("go.title")}</Title>
       <LocaleLinks path="/go" />
       <Meta property="og:image" content="/social-share-zen.png" />
       <Meta name="twitter:image" content="/social-share-zen.png" />
@@ -49,12 +49,8 @@ export default function Home() {
             <div data-slot="hero-copy">
               <img data-slot="zen logo light" src={goLogoLight} alt="" />
               <img data-slot="zen logo dark" src={goLogoDark} alt="" />
-              <h1>Low cost coding models for everyone</h1>
-              <p>
-                Go brings agentic coding to programmers around the world. Offering generous limits and reliable access
-                to the most capable open-source models, so you can build with powerful agents without worrying about
-                cost or availability.
-              </p>
+              <h1>{i18n.t("go.hero.title")}</h1>
+              <p>{i18n.t("go.hero.body")}</p>
               <div data-slot="model-logos">
                 {/*
                 <div>
@@ -131,7 +127,7 @@ export default function Home() {
                 */}
               </div>
               <a href="/auth">
-                <span>Subscribe to Go - $10/mo</span>
+                <span>{i18n.t("go.cta.start")}</span>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path
                     d="M6.5 12L17 12M13 16.5L17.5 12L13 7.5"
@@ -143,7 +139,7 @@ export default function Home() {
               </a>
             </div>
             <div data-slot="pricing-copy">
-              <p>{i18n.t("zen.pricing.body")}</p>
+              <p>{i18n.t("go.pricing.body")}</p>
             </div>
           </section>
 
@@ -155,50 +151,50 @@ export default function Home() {
 
           <section data-component="problem">
             <div data-slot="section-title">
-              <h3>{i18n.t("zen.problem.title")}</h3>
-              <p>{i18n.t("zen.problem.body")}</p>
+              <h3>{i18n.t("go.problem.title")}</h3>
+              <p>{i18n.t("go.problem.body")}</p>
             </div>
-            <p>{i18n.t("zen.problem.subtitle")}</p>
+            <p>{i18n.t("go.problem.subtitle")}</p>
             <ul>
               <li>
-                <span>[*]</span> {i18n.t("zen.problem.item1")}
+                <span>[*]</span> {i18n.t("go.problem.item1")}
               </li>
               <li>
-                <span>[*]</span> {i18n.t("zen.problem.item2")}
+                <span>[*]</span> {i18n.t("go.problem.item2")}
               </li>
               <li>
-                <span>[*]</span> {i18n.t("zen.problem.item3")}
+                <span>[*]</span> {i18n.t("go.problem.item3")}
               </li>
             </ul>
           </section>
 
           <section data-component="how">
             <div data-slot="section-title">
-              <h3>{i18n.t("zen.how.title")}</h3>
-              <p>{i18n.t("zen.how.body")}</p>
+              <h3>{i18n.t("go.how.title")}</h3>
+              <p>{i18n.t("go.how.body")}</p>
             </div>
             <ul>
               <li>
                 <span>[1]</span>
                 <div>
-                  <strong>{i18n.t("zen.how.step1.title")}</strong> - {i18n.t("zen.how.step1.beforeLink")}{" "}
-                  <a href={language.route("/docs/zen/#how-it-works")} title={i18n.t("zen.how.step1.link")}>
-                    {i18n.t("zen.how.step1.link")}
+                  <strong>{i18n.t("go.how.step1.title")}</strong> - {i18n.t("go.how.step1.beforeLink")}{" "}
+                  <a href={language.route("/docs/zen/#how-it-works")} title={i18n.t("go.how.step1.link")}>
+                    {i18n.t("go.how.step1.link")}
                   </a>
                 </div>
               </li>
               <li>
                 <span>[2]</span>
                 <div>
-                  <strong>{i18n.t("zen.how.step2.title")}</strong> -{" "}
-                  <a href={language.route("/docs/zen/#pricing")}>{i18n.t("zen.how.step2.link")}</a>{" "}
-                  {i18n.t("zen.how.step2.afterLink")}
+                  <strong>{i18n.t("go.how.step2.title")}</strong> -{" "}
+                  <a href={language.route("/docs/zen/#pricing")}>{i18n.t("go.how.step2.link")}</a>{" "}
+                  {i18n.t("go.how.step2.afterLink")}
                 </div>
               </li>
               <li>
                 <span>[3]</span>
                 <div>
-                  <strong>{i18n.t("zen.how.step3.title")}</strong> - {i18n.t("zen.how.step3.body")}
+                  <strong>{i18n.t("go.how.step3.title")}</strong> - {i18n.t("go.how.step3.body")}
                 </div>
               </li>
             </ul>
@@ -206,12 +202,12 @@ export default function Home() {
 
           <section data-component="privacy">
             <div data-slot="privacy-title">
-              <h3>{i18n.t("zen.privacy.title")}</h3>
+              <h3>{i18n.t("go.privacy.title")}</h3>
               <div>
                 <span>[*]</span>
                 <p>
-                  {i18n.t("zen.privacy.beforeExceptions")}{" "}
-                  <a href={language.route("/docs/zen/#privacy")}>{i18n.t("zen.privacy.exceptionsLink")}</a>.
+                  {i18n.t("go.privacy.beforeExceptions")}{" "}
+                  <a href={language.route("/docs/zen/#privacy")}>{i18n.t("go.privacy.exceptionsLink")}</a>.
                 </p>
               </div>
             </div>
@@ -296,36 +292,39 @@ export default function Home() {
             </div>
             <ul>
               <li>
-                <Faq question={i18n.t("zen.faq.q1")}>{i18n.t("zen.faq.a1")}</Faq>
+                <Faq question={i18n.t("go.faq.q1")}>{i18n.t("go.faq.a1")}</Faq>
               </li>
               <li>
-                <Faq question={i18n.t("zen.faq.q2")}>{i18n.t("zen.faq.a2")}</Faq>
+                <Faq question={i18n.t("go.faq.q2")}>{i18n.t("go.faq.a2")}</Faq>
               </li>
               <li>
-                <Faq question={i18n.t("zen.faq.q3")}>{i18n.t("zen.faq.a3")}</Faq>
+                <Faq question={i18n.t("go.faq.q9")}>{i18n.t("go.faq.a9")}</Faq>
               </li>
               <li>
-                <Faq question={i18n.t("zen.faq.q4")}>
-                  {i18n.t("zen.faq.a4.p1.beforePricing")}{" "}
-                  <a href={language.route("/docs/zen/#pricing")}>{i18n.t("zen.faq.a4.p1.pricingLink")}</a>{" "}
-                  {i18n.t("zen.faq.a4.p1.afterPricing")} {i18n.t("zen.faq.a4.p2.beforeAccount")}{" "}
-                  <a href="/auth">{i18n.t("zen.faq.a4.p2.accountLink")}</a>. {i18n.t("zen.faq.a4.p3")}
+                <Faq question={i18n.t("go.faq.q3")}>{i18n.t("go.faq.a3")}</Faq>
+              </li>
+              <li>
+                <Faq question={i18n.t("go.faq.q4")}>
+                  {i18n.t("go.faq.a4.p1.beforePricing")}{" "}
+                  <a href={language.route("/docs/zen/#pricing")}>{i18n.t("go.faq.a4.p1.pricingLink")}</a>{" "}
+                  {i18n.t("go.faq.a4.p1.afterPricing")} {i18n.t("go.faq.a4.p2.beforeAccount")}{" "}
+                  <a href="/auth">{i18n.t("go.faq.a4.p2.accountLink")}</a>. {i18n.t("go.faq.a4.p3")}
                 </Faq>
               </li>
               <li>
-                <Faq question={i18n.t("zen.faq.q5")}>
-                  {i18n.t("zen.faq.a5.beforeExceptions")}{" "}
-                  <a href={language.route("/docs/zen/#privacy")}>{i18n.t("zen.faq.a5.exceptionsLink")}</a>.
+                <Faq question={i18n.t("go.faq.q5")}>
+                  {i18n.t("go.faq.a5.beforeExceptions")}{" "}
+                  <a href={language.route("/docs/zen/#privacy")}>{i18n.t("go.faq.a5.exceptionsLink")}</a>.
                 </Faq>
               </li>
               <li>
-                <Faq question={i18n.t("zen.faq.q6")}>{i18n.t("zen.faq.a6")}</Faq>
+                <Faq question={i18n.t("go.faq.q6")}>{i18n.t("go.faq.a6")}</Faq>
               </li>
               <li>
-                <Faq question={i18n.t("zen.faq.q7")}>{i18n.t("zen.faq.a7")}</Faq>
+                <Faq question={i18n.t("go.faq.q7")}>{i18n.t("go.faq.a7")}</Faq>
               </li>
               <li>
-                <Faq question={i18n.t("zen.faq.q8")}>{i18n.t("zen.faq.a8")}</Faq>
+                <Faq question={i18n.t("go.faq.q8")}>{i18n.t("go.faq.a8")}</Faq>
               </li>
             </ul>
           </section>
