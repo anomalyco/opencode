@@ -359,6 +359,14 @@ body {
       width: fit-content;
       gap: 12px;
       text-decoration: none;
+
+      [data-slot="cta-price"] {
+        opacity: 0.6;
+      }
+
+      svg {
+        opacity: 0.6;
+      }
     }
 
     a:hover {

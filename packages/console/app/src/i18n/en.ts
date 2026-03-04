@@ -250,7 +250,10 @@ export const dict = {
   "go.hero.body":
     "Go brings agentic coding to programmers around the world. Offering generous limits and reliable access to the most capable open-source models, so you can build with powerful agents without worrying about cost or availability.",
 
-  "go.cta.start": "Subscribe to Go - $10/mo",
+  "go.cta.start": "Subscribe to Go",
+  "go.cta.template": "{{text}} {{price}}",
+  "go.cta.text": "Subscribe to Go",
+  "go.cta.price": "$10/month",
   "go.pricing.body": "Use with any agent. Top up credit if needed. Cancel any time.",
   "go.graph.free": "Free",
   "go.graph.go": "Go",
