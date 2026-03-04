@@ -1,6 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Log } from "../util/log"
+import { existsSync } from "node:fs"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
@@ -52,6 +53,9 @@ export namespace Server {
 
   let _url: URL | undefined
   let _corsWhitelist: string[] = []
+
+  // OPENSACIA: Path to static build directory
+  const STATIC_DIST_PATH = "./packages/app/dist"
 
   export function url(): URL {
     return _url ?? new URL("http://localhost:4096")
@@ -591,6 +595,14 @@ export namespace Server {
     cors?: string[]
   }) {
     _corsWhitelist = opts.cors ?? []
+
+    // OPENSACIA: Validate static build exists
+    if (!existsSync(STATIC_DIST_PATH)) {
+      throw new Error(
+        `Static build not found at ${STATIC_DIST_PATH}.\n` +
+        `Run: bun run --cwd packages/app build`
+      )
+    }
 
     const args = {
       hostname: opts.hostname,
