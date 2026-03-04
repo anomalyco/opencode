@@ -1,19 +1,24 @@
 import { Dialog } from "@opencode-ai/ui/dialog"
+import { IconButton } from "@opencode-ai/ui/icon-button"
 import { List } from "@opencode-ai/ui/list"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Button } from "@opencode-ai/ui/button"
-import type { Component } from "solid-js"
+import { Show, type Component } from "solid-js"
 import { useLocal } from "@/context/local"
+import { useGlobalSync } from "@/context/global-sync"
 import { popularProviders } from "@/hooks/use-providers"
 import { useLanguage } from "@/context/language"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectProvider } from "./dialog-select-provider"
+import { DialogCustomProvider } from "./dialog-custom-provider"
+import { DialogConnectProvider } from "./dialog-connect-provider"
 
 export const DialogManageModels: Component = () => {
   const local = useLocal()
   const language = useLanguage()
   const dialog = useDialog()
+  const globalSync = useGlobalSync()
 
   const handleConnectProvider = () => {
     dialog.show(() => <DialogSelectProvider />)
@@ -26,6 +31,38 @@ export const DialogManageModels: Component = () => {
     providerList(providerID).forEach((x) => {
       local.model.setVisibility({ modelID: x.id, providerID: x.provider.id }, checked)
     })
+  }
+
+  const isConfigCustom = (providerID: string) => {
+    const provider = globalSync.data.config.provider?.[providerID]
+    if (!provider) return false
+    if (provider.npm !== "@ai-sdk/openai-compatible") return false
+    if (!provider.models || Object.keys(provider.models).length === 0) return false
+    return true
+  }
+
+  const getProviderSource = (providerID: string) => {
+    const item = globalSync.data.provider.all.find((p) => p.id === providerID)
+    if (!item) return undefined
+    if (!("source" in item)) return undefined
+    const value = (item as { source: string }).source
+    if (value === "env" || value === "api" || value === "config" || value === "custom") return value
+    return undefined
+  }
+
+  const isEditable = (providerID: string) => {
+    const source = getProviderSource(providerID)
+    if (source === "config" && isConfigCustom(providerID)) return true
+    if (source === "api") return true
+    return false
+  }
+
+  const handleEditProvider = (providerID: string) => {
+    if (isConfigCustom(providerID)) {
+      dialog.show(() => <DialogCustomProvider editProviderID={providerID} back="close" />)
+    } else {
+      dialog.show(() => <DialogConnectProvider provider={providerID} />)
+    }
   }
 
   return (
@@ -50,7 +87,21 @@ export const DialogManageModels: Component = () => {
           const provider = group.items[0].provider
           return (
             <>
-              <span>{provider.name}</span>
+              <span class="flex items-center gap-x-1.5">
+                {provider.name}
+                <Show when={isEditable(provider.id)}>
+                  <IconButton
+                    icon="pencil-line"
+                    variant="ghost"
+                    class="size-5"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleEditProvider(provider.id)
+                    }}
+                    aria-label={language.t("common.edit")}
+                  />
+                </Show>
+              </span>
               <Tooltip
                 placement="top"
                 value={language.t("dialog.model.manage.provider.toggle", { provider: provider.name })}

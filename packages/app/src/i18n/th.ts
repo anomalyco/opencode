@@ -155,6 +155,9 @@ export const dict = {
   "provider.connect.toast.connected.description": "โมเดล {{provider}} พร้อมใช้งานแล้ว",
 
   "provider.custom.title": "ผู้ให้บริการที่กำหนดเอง",
+  "provider.custom.title.edit": "แก้ไขผู้ให้บริการ",
+  "provider.edit.toast.updated.title": "อัปเดต {{provider}} แล้ว",
+  "provider.edit.toast.updated.description": "การกำหนดค่า {{provider}} ได้รับการอัปเดตแล้ว",
   "provider.custom.description.prefix": "กำหนดค่าผู้ให้บริการที่เข้ากันได้กับ OpenAI ดู ",
   "provider.custom.description.link": "เอกสารการกำหนดค่าผู้ให้บริการ",
   "provider.custom.description.suffix": ".",

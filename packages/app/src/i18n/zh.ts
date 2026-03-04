@@ -177,6 +177,9 @@ export const dict = {
   "provider.connect.toast.connected.description": "现在可以使用 {{provider}} 模型了。",
 
   "provider.custom.title": "自定义提供商",
+  "provider.custom.title.edit": "编辑提供商",
+  "provider.edit.toast.updated.title": "{{provider}} 已更新",
+  "provider.edit.toast.updated.description": "{{provider}} 配置已更新。",
   "provider.custom.description.prefix": "配置与 OpenAI 兼容的提供商。请查看",
   "provider.custom.description.link": "提供商配置文档",
   "provider.custom.description.suffix": "。",

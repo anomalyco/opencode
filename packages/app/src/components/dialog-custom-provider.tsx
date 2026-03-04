@@ -159,6 +159,7 @@ function validateCustomProvider(input: ValidateArgs) {
 
 type Props = {
   back?: "providers" | "close"
+  editProviderID?: string
 }
 
 export function DialogCustomProvider(props: Props) {
@@ -167,22 +168,46 @@ export function DialogCustomProvider(props: Props) {
   const globalSDK = useGlobalSDK()
   const language = useLanguage()
 
-  const [form, setForm] = createStore<FormState>({
-    providerID: "",
-    name: "",
-    baseURL: "",
-    apiKey: "",
-    models: [{ id: "", name: "" }],
-    headers: [{ key: "", value: "" }],
-    saving: false,
-  })
+  const isEdit = () => !!props.editProviderID
+
+  const initialForm = (): FormState => {
+    if (!props.editProviderID) {
+      return {
+        providerID: "",
+        name: "",
+        baseURL: "",
+        apiKey: "",
+        models: [{ id: "", name: "" }],
+        headers: [{ key: "", value: "" }],
+        saving: false,
+      }
+    }
+    const config = globalSync.data.config.provider?.[props.editProviderID]
+    const models: ModelRow[] = config?.models
+      ? Object.entries(config.models).map(([id, m]) => ({ id, name: (m as { name: string }).name }))
+      : [{ id: "", name: "" }]
+    const headers: HeaderRow[] = config?.options?.headers
+      ? Object.entries(config.options.headers as Record<string, string>).map(([key, value]) => ({ key, value }))
+      : [{ key: "", value: "" }]
+    return {
+      providerID: props.editProviderID,
+      name: config?.name ?? "",
+      baseURL: (config?.options?.baseURL as string) ?? "",
+      apiKey: "",
+      models: models.length > 0 ? models : [{ id: "", name: "" }],
+      headers: headers.length > 0 ? headers : [{ key: "", value: "" }],
+      saving: false,
+    }
+  }
+
+  const [form, setForm] = createStore<FormState>(initialForm())
 
   const [errors, setErrors] = createStore<FormErrors>({
     providerID: undefined,
     name: undefined,
     baseURL: undefined,
-    models: [{}],
-    headers: [{}],
+    models: form.models.map(() => ({})),
+    headers: form.headers.map(() => ({})),
   })
 
   const goBack = () => {
@@ -216,11 +241,13 @@ export function DialogCustomProvider(props: Props) {
   }
 
   const validate = () => {
+    const existingIDs = new Set(globalSync.data.provider.all.map((p) => p.id))
+    if (props.editProviderID) existingIDs.delete(props.editProviderID)
     const output = validateCustomProvider({
       form,
       t: language.t,
       disabledProviders: globalSync.data.config.disabled_providers ?? [],
-      existingProviderIDs: new Set(globalSync.data.provider.all.map((p) => p.id)),
+      existingProviderIDs: existingIDs,
     })
     setErrors(output.errors)
     return output.result
@@ -257,8 +284,12 @@ export function DialogCustomProvider(props: Props) {
         showToast({
           variant: "success",
           icon: "circle-check",
-          title: language.t("provider.connect.toast.connected.title", { provider: result.name }),
-          description: language.t("provider.connect.toast.connected.description", { provider: result.name }),
+          title: isEdit()
+            ? language.t("provider.edit.toast.updated.title", { provider: result.name })
+            : language.t("provider.connect.toast.connected.title", { provider: result.name }),
+          description: isEdit()
+            ? language.t("provider.edit.toast.updated.description", { provider: result.name })
+            : language.t("provider.connect.toast.connected.description", { provider: result.name }),
         })
       })
       .catch((err: unknown) => {
@@ -286,7 +317,9 @@ export function DialogCustomProvider(props: Props) {
       <div class="flex flex-col gap-6 px-2.5 pb-3 overflow-y-auto max-h-[60vh]">
         <div class="px-2.5 flex gap-4 items-center">
           <ProviderIcon id="synthetic" class="size-5 shrink-0 icon-strong-base" />
-          <div class="text-16-medium text-text-strong">{language.t("provider.custom.title")}</div>
+          <div class="text-16-medium text-text-strong">
+            {isEdit() ? language.t("provider.custom.title.edit") : language.t("provider.custom.title")}
+          </div>
         </div>
 
         <form onSubmit={save} class="px-2.5 pb-6 flex flex-col gap-6">
@@ -300,7 +333,8 @@ export function DialogCustomProvider(props: Props) {
 
           <div class="flex flex-col gap-4">
             <TextField
-              autofocus
+              autofocus={!isEdit()}
+              disabled={isEdit()}
               label={language.t("provider.custom.field.providerID.label")}
               placeholder={language.t("provider.custom.field.providerID.placeholder")}
               description={language.t("provider.custom.field.providerID.description")}
@@ -423,7 +457,7 @@ export function DialogCustomProvider(props: Props) {
           </div>
 
           <Button class="w-auto self-start" type="submit" size="large" variant="primary" disabled={form.saving}>
-            {form.saving ? language.t("common.saving") : language.t("common.submit")}
+            {form.saving ? language.t("common.saving") : isEdit() ? language.t("common.save") : language.t("common.submit")}
           </Button>
         </form>
       </div>
