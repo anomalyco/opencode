@@ -51,9 +51,9 @@ export default function Home() {
               <img data-slot="zen logo dark" src={zenLogoDark} alt="" />
               <h1>Low cost coding models for everyone</h1>
               <p>
-                Go brings agentic coding to programmers around the world for just $10/month. Generous limits and
-                reliable access to the most capable open-source models, so you can build with powerful agents without
-                worrying about cost or availability.
+                Go brings agentic coding to programmers around the world. Offering generous limits and reliable access
+                to the most capable open-source models, so you can build with powerful agents without worrying about
+                cost or availability.
               </p>
               <div data-slot="model-logos">
                 {/*
@@ -143,9 +143,6 @@ export default function Home() {
               </a>
             </div>
             <div data-slot="pricing-copy">
-              <p>
-                <strong>{i18n.t("zen.pricing.title")}</strong> <span>{i18n.t("zen.pricing.fee")}</span>
-              </p>
               <p>{i18n.t("zen.pricing.body")}</p>
             </div>
           </section>
