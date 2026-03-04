@@ -127,7 +127,7 @@ export default function Home() {
                 */}
               </div>
               <a href="/auth">
-                <span>{i18n.t("zen.cta.start")}</span>
+                <span>Subscribe to Go - $10/mo</span>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path
                     d="M6.5 12L17 12M13 16.5L17.5 12L13 7.5"
