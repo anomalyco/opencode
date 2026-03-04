@@ -178,7 +178,7 @@ export default function Home() {
                 <span>[1]</span>
                 <div>
                   <strong>{i18n.t("go.how.step1.title")}</strong> - {i18n.t("go.how.step1.beforeLink")}{" "}
-                  <a href={language.route("/docs/zen/#how-it-works")} title={i18n.t("go.how.step1.link")}>
+                  <a href={language.route("/docs/go/#how-it-works")} title={i18n.t("go.how.step1.link")}>
                     {i18n.t("go.how.step1.link")}
                   </a>
                 </div>
@@ -187,7 +187,7 @@ export default function Home() {
                 <span>[2]</span>
                 <div>
                   <strong>{i18n.t("go.how.step2.title")}</strong> -{" "}
-                  <a href={language.route("/docs/zen/#pricing")}>{i18n.t("go.how.step2.link")}</a>{" "}
+                  <a href={language.route("/docs/go/#pricing")}>{i18n.t("go.how.step2.link")}</a>{" "}
                   {i18n.t("go.how.step2.afterLink")}
                 </div>
               </li>
