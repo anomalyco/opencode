@@ -13,6 +13,7 @@ import {
   confirmDialog,
   openSidebar,
   openWorkspaceMenu,
+  setWorkspacePinned,
   setWorkspacesEnabled,
 } from "../actions"
 import { dropdownMenuContentSelector, inlineInputSelector, workspaceItemSelector } from "../selectors"
@@ -299,6 +300,71 @@ test("can delete a workspace", async ({ page, withProject }) => {
     await openSidebar(page)
     await expect(page.locator(workspaceItemSelector(slug))).toHaveCount(0, { timeout: 60_000 })
     await expect(page.locator(workspaceItemSelector(rootSlug)).first()).toBeVisible()
+  })
+})
+
+test("can pin and unpin a workspace with persistence", async ({ page, withProject }) => {
+  await page.setViewportSize({ width: 1400, height: 800 })
+  await withProject(async ({ slug: rootSlug }) => {
+    await openSidebar(page)
+    await setWorkspacesEnabled(page, rootSlug, true)
+
+    const workspaces = [] as string[]
+    for (const _ of [0, 1]) {
+      const prev = slugFromUrl(page.url())
+      await page.getByRole("button", { name: "New workspace" }).first().click()
+      await expect
+        .poll(
+          () => {
+            const slug = slugFromUrl(page.url())
+            return slug.length > 0 && slug !== rootSlug && slug !== prev
+          },
+          { timeout: 45_000 },
+        )
+        .toBe(true)
+
+      workspaces.push(slugFromUrl(page.url()))
+      await openSidebar(page)
+    }
+
+    const a = workspaces[0]
+    const b = workspaces[1]
+    if (!a || !b) throw new Error("Expected two created workspaces")
+
+    const list = async () => {
+      const nodes = page.locator('[data-component="sidebar-nav-desktop"] [data-component="workspace-item"]')
+      const slugs = await nodes.evaluateAll((els) => {
+        return els.map((el) => el.getAttribute("data-workspace") ?? "").filter((x) => x.length > 0)
+      })
+      return slugs.filter((slug) => slug !== rootSlug && (slug === a || slug === b)).slice(0, 2)
+    }
+
+    const listAll = async () => {
+      const nodes = page.locator('[data-component="sidebar-nav-desktop"] [data-component="workspace-item"]')
+      const slugs = await nodes.evaluateAll((els) => {
+        return els.map((el) => el.getAttribute("data-workspace") ?? "").filter((x) => x.length > 0)
+      })
+      return slugs.filter((slug) => slug === rootSlug || slug === a || slug === b).slice(0, 3)
+    }
+
+    await expect.poll(async () => await list()).toHaveLength(2)
+    const before = await list()
+
+    await setWorkspacePinned(page, a, true)
+    await expect.poll(async () => await list()).toEqual([a, b])
+
+    await setWorkspacePinned(page, rootSlug, false)
+    await expect.poll(async () => (await listAll())[0]).toBe(a)
+
+    await setWorkspacePinned(page, rootSlug, true)
+    await expect.poll(async () => (await listAll())[0]).toBe(rootSlug)
+
+    await page.reload()
+    await openSidebar(page)
+    await expect.poll(async () => await list()).toEqual([a, b])
+
+    await setWorkspacePinned(page, a, false)
+    await expect.poll(async () => await list()).toEqual(before)
   })
 })
 

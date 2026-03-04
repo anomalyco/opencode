@@ -52,6 +52,8 @@ export type WorkspaceSidebarContext = {
   setWorkspaceExpanded: (directory: string, value: boolean) => void
   showResetWorkspaceDialog: (root: string, directory: string) => void
   showDeleteWorkspaceDialog: (root: string, directory: string) => void
+  workspacePinned: (root: string, directory: string) => boolean
+  setWorkspacePinned: (root: string, directory: string, value: boolean) => void
   setScrollContainerRef: (el: HTMLDivElement | undefined, mobile?: boolean) => void
 }
 
@@ -152,6 +154,8 @@ const WorkspaceActions = (props: {
   openEditor: WorkspaceSidebarContext["openEditor"]
   showResetWorkspaceDialog: WorkspaceSidebarContext["showResetWorkspaceDialog"]
   showDeleteWorkspaceDialog: WorkspaceSidebarContext["showDeleteWorkspaceDialog"]
+  pinned: Accessor<boolean>
+  setWorkspacePinned: WorkspaceSidebarContext["setWorkspacePinned"]
   root: string
   setHoverSession: WorkspaceSidebarContext["setHoverSession"]
   clearHoverProjectSoon: WorkspaceSidebarContext["clearHoverProjectSoon"]
@@ -199,6 +203,15 @@ const WorkspaceActions = (props: {
             }}
           >
             <DropdownMenu.ItemLabel>{props.language.t("common.rename")}</DropdownMenu.ItemLabel>
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            data-action="workspace-pin-toggle"
+            data-workspace={base64Encode(props.directory)}
+            onSelect={() => props.setWorkspacePinned(props.root, props.directory, !props.pinned())}
+          >
+            <DropdownMenu.ItemLabel>
+              {props.pinned() ? props.language.t("workspace.unpin") : props.language.t("workspace.pin")}
+            </DropdownMenu.ItemLabel>
           </DropdownMenu.Item>
           <DropdownMenu.Item
             disabled={props.local() || props.busy()}
@@ -303,6 +316,7 @@ export const SortableWorkspace = (props: {
   directory: string
   project: LocalProject
   sortNow: Accessor<number>
+  divider?: boolean
   mobile?: boolean
 }): JSX.Element => {
   const navigate = useNavigate()
@@ -330,6 +344,7 @@ export const SortableWorkspace = (props: {
   const booted = createMemo((prev) => prev || workspaceStore.status === "complete", false)
   const hasMore = createMemo(() => workspaceStore.sessionTotal > sessions().length)
   const busy = createMemo(() => props.ctx.isBusy(props.directory))
+  const pinned = createMemo(() => props.ctx.workspacePinned(props.project.worktree, props.directory))
   const wasBusy = createMemo((prev) => prev || busy(), false)
   const loading = createMemo(() => open() && !booted() && sessions().length === 0 && !wasBusy())
   const touch = createMediaQuery("(hover: none)")
@@ -359,6 +374,7 @@ export const SortableWorkspace = (props: {
       classList={{
         "opacity-30": sortable.isActiveDraggable,
         "opacity-50 pointer-events-none": busy(),
+        "pt-3 mt-1 border-t border-border-weak-base": !!props.divider,
       }}
     >
       <Collapsible variant="ghost" open={open()} class="shrink-0" onOpenChange={openWrapper}>
@@ -434,6 +450,8 @@ export const SortableWorkspace = (props: {
                 openEditor={props.ctx.openEditor}
                 showResetWorkspaceDialog={props.ctx.showResetWorkspaceDialog}
                 showDeleteWorkspaceDialog={props.ctx.showDeleteWorkspaceDialog}
+                pinned={pinned}
+                setWorkspacePinned={props.ctx.setWorkspacePinned}
                 root={props.project.worktree}
                 setHoverSession={props.ctx.setHoverSession}
                 clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}

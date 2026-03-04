@@ -17,6 +17,7 @@ import {
   listItemKeyStartsWithSelector,
   workspaceItemSelector,
   workspaceMenuTriggerSelector,
+  workspacePinToggleSelector,
 } from "./selectors"
 import type { createSdk } from "./utils"
 
@@ -575,4 +576,17 @@ export async function openWorkspaceMenu(page: Page, workspaceSlug: string) {
   const menu = page.locator(dropdownMenuContentSelector).first()
   await expect(menu).toBeVisible()
   return menu
+}
+
+export async function setWorkspacePinned(page: Page, workspaceSlug: string, enabled: boolean) {
+  const menu = await openWorkspaceMenu(page, workspaceSlug)
+  const toggle = menu.locator(workspacePinToggleSelector(workspaceSlug)).first()
+  await expect(toggle).toBeVisible()
+  const name = await toggle.textContent()
+  const pinned = (name ?? "").toLowerCase().includes("unpin")
+  if (pinned === enabled) {
+    await page.keyboard.press("Escape")
+    return
+  }
+  await toggle.click({ force: true })
 }
