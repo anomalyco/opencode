@@ -2,6 +2,7 @@ import {
   Component,
   createEffect,
   createMemo,
+  createResource,
   createSignal,
   For,
   Match,
@@ -57,6 +58,7 @@ import { patchFiles } from "./apply-patch-file"
 import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
 import { attached, inline, kind } from "./message-file"
+import { AppBridge, PostMessageTransport } from "@modelcontextprotocol/ext-apps/app-bridge"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -1324,7 +1326,10 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     return taskId()
   })
 
-  const render = createMemo(() => ToolRegistry.render(part().tool) ?? GenericTool)
+  const render = createMemo(() => {
+    if (partMetadata()?.resourceUri) return ToolRegistry.render("__mcp_app__") ?? GenericTool
+    return ToolRegistry.render(part().tool) ?? GenericTool
+  })
 
   return (
     <Show when={!hideQuestion()}>
@@ -2289,5 +2294,103 @@ ToolRegistry.register({
     )
 
     return <BasicTool icon="brain" status={props.status} trigger={trigger()} hideDetails />
+  },
+})
+
+ToolRegistry.register({
+  name: "__mcp_app__",
+  render(props) {
+    const data = useData()
+    const resourceUri = () => props.metadata?.resourceUri as string | undefined
+    const server = () => props.metadata?.server as string | undefined
+
+    const [html] = createResource(
+      () => {
+        const uri = resourceUri()
+        const srv = server()
+        if (!uri || !srv || !data.fetchAppResource) return undefined
+        return { uri, srv }
+      },
+      (key) => data.fetchAppResource!(key.srv, key.uri).then((r) => r?.html),
+    )
+
+    let iframeRef: HTMLIFrameElement | undefined
+    let cleanup: (() => void) | undefined
+    const [height, setHeight] = createSignal(0)
+
+    const connectBridge = (frame: HTMLIFrameElement) => {
+      if (cleanup) cleanup()
+      const cap = (props.metadata?.maxHeight as number | undefined) ?? 640
+      const bridge = new AppBridge(null, { name: "opencode", version: "0.0.0" }, { serverTools: {}, logging: {} })
+
+      bridge.oninitialized = () => {
+        if (props.input && Object.keys(props.input).length > 0) {
+          bridge.sendToolInput({ arguments: props.input })
+        }
+        const sc = props.metadata?.structuredContent
+        if (sc) {
+          bridge.sendToolResult({
+            content: [{ type: "text", text: props.output ?? "" }],
+            structuredContent: JSON.parse(JSON.stringify(sc)),
+          })
+        }
+      }
+
+      bridge.oncalltool = async (params: { name: string; arguments?: Record<string, unknown> }) => {
+        const srv = server()
+        if (!srv) return { content: [] }
+        const res = await fetch(new URL("/experimental/mcp-app/tool-call", window.location.origin).href, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ server: srv, name: params.name, arguments: params.arguments ?? {} }),
+        }).catch(() => undefined)
+        if (!res?.ok) return { content: [] }
+        return res.json()
+      }
+
+      bridge.onsizechange = ({ height: h }) => {
+        if (h != null) setHeight(Math.min(h, cap))
+      }
+
+      const transport = new PostMessageTransport(frame.contentWindow!, frame.contentWindow!)
+      bridge.connect(transport).catch(() => {})
+
+      cleanup = () => {
+        bridge
+          .teardownResource({})
+          .catch(() => {})
+          .finally(() => bridge.close())
+      }
+    }
+
+    onCleanup(() => cleanup?.())
+
+    const trigger = () => (
+      <div data-slot="basic-tool-tool-info-structured">
+        <div data-slot="basic-tool-tool-info-main">
+          <span data-slot="basic-tool-tool-title">{props.tool}</span>
+        </div>
+      </div>
+    )
+
+    return (
+      <BasicTool icon="code" status={props.status} trigger={trigger()} defaultOpen>
+        <Show when={html()}>
+          <div style={{ height: `${height()}px`, overflow: "hidden" }}>
+            <iframe
+              ref={iframeRef}
+              srcdoc={html()}
+              sandbox="allow-scripts allow-same-origin allow-forms"
+              style={{ width: "100%", height: "100%", border: "none", overflow: "auto" }}
+              onLoad={() => {
+                if (iframeRef) {
+                  connectBridge(iframeRef)
+                }
+              }}
+            />
+          </div>
+        </Show>
+      </BasicTool>
+    )
   },
 })

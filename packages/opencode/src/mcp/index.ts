@@ -99,6 +99,66 @@ export const Status = Schema.Union([
   .pipe(withStatics((s) => ({ zod: effectZod(s) })))
 export type Status = Schema.Schema.Type<typeof Status>
 
+// MCP Apps schemas and registries
+export const AppMeta = z
+  .object({
+    resourceUri: z.string(),
+    visibility: z.array(z.enum(["model", "app"])).optional(),
+    maxHeight: z.number().optional(),
+  })
+  .meta({ ref: "McpAppMeta" })
+export type AppMeta = z.infer<typeof AppMeta>
+
+export const AppResource = z
+  .object({
+    html: z.string(),
+    server: z.string(),
+  })
+  .meta({ ref: "McpAppResource" })
+export type AppResource = z.infer<typeof AppResource>
+
+const toolMetaRegistry = new Map<string, AppMeta & { server: string }>()
+const appResourceCache = new Map<string, AppResource>()
+
+function extractAppMeta(mcpTool: MCPToolDef): AppMeta | undefined {
+  const ui = (mcpTool._meta as Record<string, unknown> | undefined)?.ui as Record<string, unknown> | undefined
+  if (!ui) return undefined
+  const resourceUri =
+    (ui.resourceUri as string | undefined) ??
+    ((mcpTool._meta as Record<string, unknown>)?.["ui/resourceUri"] as string | undefined)
+  if (!resourceUri || !resourceUri.startsWith("ui://")) return undefined
+  const visibility = ui.visibility as Array<"model" | "app"> | undefined
+  const maxHeight = ui.maxHeight as number | undefined
+  return { resourceUri, ...(visibility ? { visibility } : {}), ...(maxHeight ? { maxHeight } : {}) }
+}
+
+export function toolMeta(key: string) {
+  return toolMetaRegistry.get(key)
+}
+
+export function apps() {
+  return Object.fromEntries(toolMetaRegistry)
+}
+
+export async function appResource(
+  server: string,
+  resourceUri: string,
+  readResourceFn: (server: string, uri: string) => Promise<Awaited<ReturnType<MCPClient["readResource"]>> | undefined>,
+  force = false,
+) {
+  if (!force) {
+    const cached = appResourceCache.get(resourceUri)
+    if (cached && !cached.html.includes("export{")) return cached
+  }
+  const result = await readResourceFn(server, resourceUri)
+  if (!result) return undefined
+  const content = result.contents.find((c) => c.mimeType === "text/html;profile=mcp-app" && "text" in c)
+  if (!content || !("text" in content)) return undefined
+  const entry: AppResource = { html: content.text as string, server }
+  appResourceCache.set(resourceUri, entry)
+  return entry
+}
+
 // Store transports for OAuth servers to allow finishing auth
 type TransportWithAuth = StreamableHTTPClientTransport | SSEClientTransport
 const pendingOAuthTransports = new Map<string, TransportWithAuth>()
@@ -654,7 +714,11 @@ export const layer = Layer.effect(
 
             const timeout = entry?.timeout ?? defaultTimeout
             for (const mcpTool of listed) {
-              result[sanitize(clientName) + "_" + sanitize(mcpTool.name)] = convertMcpTool(mcpTool, client, timeout)
+              const key = sanitize(clientName) + "_" + sanitize(mcpTool.name)
+              const meta = extractAppMeta(mcpTool)
+              if (meta) toolMetaRegistry.set(key, { ...meta, server: sanitize(clientName) })
+              if (meta?.visibility && !meta.visibility.includes("model")) continue
+              result[key] = convertMcpTool(mcpTool, client, timeout)
             }
           }),
         { concurrency: "unbounded" },
