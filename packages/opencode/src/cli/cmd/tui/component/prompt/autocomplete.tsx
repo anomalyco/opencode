@@ -354,11 +354,15 @@ export function Autocomplete(props: {
   })
 
   const commands = createMemo((): AutocompleteOption[] => {
-    const results: AutocompleteOption[] = [...command.slashes()]
+    const slashes = command.slashes()
+    const results: AutocompleteOption[] = [...slashes]
+    const slashNames = new Set(slashes.map((s) => s.display.replace(/^\//, "").trim()))
 
     for (const serverCommand of sync.data.command) {
       if (serverCommand.source === "skill") continue
-      const label = serverCommand.source === "mcp" ? ":mcp" : ""
+      // Skip commands already registered in the command palette as slash commands
+      if (slashNames.has(serverCommand.name)) continue
+      const label = serverCommand.source === "mcp" ? ":mcp" : serverCommand.source === "agent" ? ":agent" : ""
       results.push({
         display: "/" + serverCommand.name + label,
         description: serverCommand.description,

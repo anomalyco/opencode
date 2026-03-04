@@ -267,6 +267,7 @@ export const dict = {
   "prompt.slash.badge.custom": "กำหนดเอง",
   "prompt.slash.badge.skill": "ทักษะ",
   "prompt.slash.badge.mcp": "MCP",
+  "prompt.slash.badge.agent": "agent",
   "prompt.context.active": "ใช้งานอยู่",
   "prompt.context.includeActiveFile": "รวมไฟล์ที่ใช้งานอยู่",
   "prompt.context.removeActiveFile": "เอาไฟล์ที่ใช้งานอยู่ออกจากบริบท",

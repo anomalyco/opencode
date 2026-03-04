@@ -659,6 +659,36 @@ function App() {
     },
   ])
 
+  // Register agent invocation commands and configured commands in the command palette
+  command.register(() =>
+    sync.data.command
+      .filter((cmd) => cmd.source !== "skill")
+      .map((cmd) => {
+        const category = cmd.source === "agent" ? "Agent" : cmd.source === "mcp" ? "MCP" : "Command"
+        const label = cmd.source === "mcp" ? " (mcp)" : cmd.source === "agent" ? " (agent)" : ""
+        return {
+          title: `/${cmd.name}${label}`,
+          description: cmd.description,
+          value: `command.invoke.${cmd.name}`,
+          category,
+          slash: {
+            name: cmd.name,
+          },
+          onSelect: (dlg) => {
+            const promptRefCurrent = promptRef.current
+            if (promptRefCurrent) {
+              promptRefCurrent.set({
+                input: `/${cmd.name} `,
+                parts: [],
+              })
+              promptRefCurrent.focus()
+            }
+            dlg.clear()
+          },
+        }
+      }),
+  )
+
   createEffect(() => {
     const currentModel = local.model.current()
     if (!currentModel) return

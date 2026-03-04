@@ -122,7 +122,9 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
                             ? props.t("prompt.slash.badge.skill")
                             : cmd.source === "mcp"
                               ? props.t("prompt.slash.badge.mcp")
-                              : props.t("prompt.slash.badge.custom")}
+                              : cmd.source === "agent"
+                                ? props.t("prompt.slash.badge.agent")
+                                : props.t("prompt.slash.badge.custom")}
                         </span>
                       </Show>
                       <Show when={props.commandKeybind(cmd.id)}>

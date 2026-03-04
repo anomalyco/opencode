@@ -267,6 +267,7 @@ export const dict = {
   "prompt.slash.badge.custom": "personalizado",
   "prompt.slash.badge.skill": "skill",
   "prompt.slash.badge.mcp": "mcp",
+  "prompt.slash.badge.agent": "agent",
   "prompt.context.active": "activo",
   "prompt.context.includeActiveFile": "Incluir archivo activo",
   "prompt.context.removeActiveFile": "Eliminar archivo activo del contexto",

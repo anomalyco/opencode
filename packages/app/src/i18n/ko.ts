@@ -251,6 +251,7 @@ export const dict = {
   "prompt.slash.badge.custom": "사용자 지정",
   "prompt.slash.badge.skill": "스킬",
   "prompt.slash.badge.mcp": "mcp",
+  "prompt.slash.badge.agent": "agent",
   "prompt.context.active": "활성",
   "prompt.context.includeActiveFile": "활성 파일 포함",
   "prompt.context.removeActiveFile": "컨텍스트에서 활성 파일 제거",

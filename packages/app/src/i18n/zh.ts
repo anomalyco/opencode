@@ -287,6 +287,7 @@ export const dict = {
   "prompt.slash.badge.custom": "自定义",
   "prompt.slash.badge.skill": "技能",
   "prompt.slash.badge.mcp": "mcp",
+  "prompt.slash.badge.agent": "agent",
   "prompt.context.active": "当前",
   "prompt.context.includeActiveFile": "包含当前文件",
   "prompt.context.removeActiveFile": "从上下文移除活动文件",

@@ -268,6 +268,7 @@ export const dict = {
   "prompt.slash.badge.custom": "prilagođeno",
   "prompt.slash.badge.skill": "skill",
   "prompt.slash.badge.mcp": "mcp",
+  "prompt.slash.badge.agent": "agent",
   "prompt.context.active": "aktivno",
   "prompt.context.includeActiveFile": "Uključi aktivnu datoteku",
   "prompt.context.removeActiveFile": "Ukloni aktivnu datoteku iz konteksta",

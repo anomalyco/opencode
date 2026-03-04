@@ -7,6 +7,7 @@ import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 import { MCP } from "../mcp"
 import { Skill } from "../skill"
+import { Agent } from "../agent/agent"
 
 export namespace Command {
   export const Event = {
@@ -27,7 +28,7 @@ export namespace Command {
       description: z.string().optional(),
       agent: z.string().optional(),
       model: z.string().optional(),
-      source: z.enum(["command", "mcp", "skill"]).optional(),
+      source: z.enum(["command", "mcp", "skill", "agent"]).optional(),
       // workaround for zod not supporting async functions natively so we use getters
       // https://zod.dev/v4/changelog?id=zfunction
       template: z.promise(z.string()).or(z.string()),
@@ -134,6 +135,25 @@ export namespace Command {
           return skill.content
         },
         hints: [],
+      }
+    }
+
+    // Add agents and subagents as invokable commands
+    for (const agent of await Agent.list()) {
+      if (agent.hidden) continue
+      // Skip if a command with this name already exists
+      if (result[agent.name]) continue
+      result[agent.name] = {
+        name: agent.name,
+        description: agent.description ?? `Invoke the ${agent.name} agent`,
+        source: "agent",
+        agent: agent.name,
+        model: agent.model ? `${agent.model.providerID}/${agent.model.modelID}` : undefined,
+        get template() {
+          return "$ARGUMENTS"
+        },
+        subtask: agent.mode === "subagent" ? true : undefined,
+        hints: ["$ARGUMENTS"],
       }
     }
 
