@@ -268,7 +268,7 @@ export const AuthLoginCommand = cmd({
       })
       .option("provider", {
         alias: ["p"],
-        describe: "provider id to log in to (skips provider selection)",
+        describe: "provider id or name to log in to (skips provider selection)",
         type: "string",
       })
       .option("method", {
@@ -369,9 +369,12 @@ export const AuthLoginCommand = cmd({
 
         let provider: string
         if (args.provider) {
-          const match = options.find((x) => x.label.toLowerCase() === args.provider!.toLowerCase())
+          const input = args.provider
+          const byID = options.find((x) => x.value === input)
+          const byName = options.find((x) => x.label.toLowerCase() === input.toLowerCase())
+          const match = byID ?? byName
           if (!match) {
-            prompts.log.error(`Unknown provider "${args.provider}"`)
+            prompts.log.error(`Unknown provider "${input}"`)
             process.exit(1)
           }
           provider = match.value
