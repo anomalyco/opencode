@@ -32,7 +32,7 @@ permissions:
 
 jobs:
   version:
-    runs-on: ${{ (github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404') || 'ubuntu-latest' }}
+    runs-on: "blacksmith-4vcpu-ubuntu-2404"
     steps:
       - uses: actions/checkout@v3
         with:
@@ -56,7 +56,7 @@ jobs:
         run: |
           ./script/version.ts
         env:
-          GH_TOKEN: ${{ (github.repository == 'anomalyco/opencode' && steps.committer.outputs.token) || github.token }}
+          GH_TOKEN: ${{ steps.committer.outputs.token }}
           OPENCODE_BUMP: ${{ inputs.bump }}
           OPENCODE_VERSION: ${{ inputs.version }}
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
@@ -69,7 +69,7 @@ jobs:
 
   build-cli:
     needs: version
-    runs-on: ${{ (github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404') || 'ubuntu-latest' }}
+    runs-on: "blacksmith-4vcpu-ubuntu-2404"
     steps:
       - uses: actions/checkout@v3
         with:
@@ -80,7 +80,6 @@ jobs:
       - name: Setup git committer
         id: committer
         uses: ./.github/actions/setup-git-committer
-        if: github.repository == 'anomalyco/opencode'
         with:
           opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
@@ -93,7 +92,7 @@ jobs:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
           GH_REPO: ${{ needs.version.outputs.repo }}
-          GH_TOKEN: ${{ (github.repository == 'anomalyco/opencode' && steps.committer.outputs.token) || github.token }}
+          GH_TOKEN: ${{ steps.committer.outputs.token }}
 
       - uses: actions/upload-artifact@v4
         with:
@@ -176,6 +175,13 @@ jobs:
           workspaces: packages/desktop/src-tauri
           shared-key: ${{ matrix.settings.target }}
 
+      - name: Setup git committer
+        id: committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+
       - name: Prepare
         run: |
           cd packages/desktop
@@ -184,7 +190,6 @@ jobs:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
           RUST_TARGET: ${{ matrix.settings.target }}
-          GH_TOKEN: ${{ github.token }}
           GITHUB_RUN_ID: ${{ github.run_id }}
 
       - name: Resolve tauri portable SHA
@@ -204,13 +209,6 @@ jobs:
       - name: Show tauri-cli version
         if: contains(matrix.settings.host, 'ubuntu')
         run: cargo tauri --version
-
-      - name: Setup git committer
-        id: committer
-        uses: ./.github/actions/setup-git-committer
-        with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
       - name: Build and upload artifacts
         uses: tauri-apps/tauri-action@390cbe447412ced1303d35abe75287949e43437a
@@ -254,13 +252,13 @@ jobs:
           - host: macos-latest
             target: aarch64-apple-darwin
             platform_flag: --mac --arm64
-          - host: ${{ (github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-windows-2025') || 'windows-latest' }}
+          - host: "blacksmith-4vcpu-windows-2025"
             target: x86_64-pc-windows-msvc
             platform_flag: --win
-          - host: ${{ (github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404') || 'ubuntu-24.04' }}
+          - host: "blacksmith-4vcpu-ubuntu-2404"
             target: x86_64-unknown-linux-gnu
             platform_flag: --linux
-          - host: ${{ (github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404') || 'ubuntu-24.04-arm' }}
+          - host: "blacksmith-4vcpu-ubuntu-2404"
             target: aarch64-unknown-linux-gnu
             platform_flag: --linux
     runs-on: ${{ matrix.settings.host }}
@@ -363,7 +361,8 @@ jobs:
       - build-cli
       - build-tauri
       - build-electron
-    runs-on: ${{ (github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404') || 'ubuntu-latest' }}
+    runs-on: "blacksmith-4vcpu-ubuntu-2404"
+    if: github.ref_name == 'beta'
     steps:
       - uses: actions/checkout@v3
 
