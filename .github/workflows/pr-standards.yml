@@ -94,11 +94,11 @@ jobs:
 
             await removeLabel('needs:title');
 
-            // Step 2: Check for linked issue (skip for docs/refactor PRs)
-            const skipIssueCheck = /^(docs|refactor)\s*(\([a-zA-Z0-9-]+\))?\s*:/.test(title);
+            // Step 2: Check for linked issue (skip for docs/refactor/feat PRs)
+            const skipIssueCheck = /^(docs|refactor|feat)\s*(\([a-zA-Z0-9-]+\))?\s*:/.test(title);
             if (skipIssueCheck) {
               await removeLabel('needs:issue');
-              console.log('Skipping issue check for docs/refactor PR');
+              console.log('Skipping issue check for docs/refactor/feat PR');
               return;
             }
             const query = `

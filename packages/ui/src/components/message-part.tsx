@@ -23,11 +23,9 @@ import {
   ToolPart,
   UserMessage,
   Todo,
-  QuestionRequest,
   QuestionAnswer,
   QuestionInfo,
 } from "@opencode-ai/sdk/v2"
-import { createStore } from "solid-js/store"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { useCodeComponent } from "../context/code"
@@ -37,7 +35,6 @@ import { BasicTool } from "./basic-tool"
 import { GenericTool } from "./basic-tool"
 import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
-import { Button } from "./button"
 import { Card } from "./card"
 import { Collapsible } from "./collapsible"
 import { FileIcon } from "./file-icon"
@@ -96,6 +93,7 @@ export interface MessageProps {
   parts: PartType[]
   showAssistantCopyPartID?: string | null
   interrupted?: boolean
+  showReasoningSummaries?: boolean
 }
 
 export interface MessagePartProps {
@@ -104,6 +102,7 @@ export interface MessagePartProps {
   hideDetails?: boolean
   defaultOpen?: boolean
   showAssistantCopyPartID?: string | null
+  turnDurationMs?: number
 }
 
 export type PartComponent = Component<MessagePartProps>
@@ -149,6 +148,8 @@ function createThrottledValue(getValue: () => string) {
 function relativizeProjectPaths(text: string, directory?: string) {
   if (!text) return ""
   if (!directory) return text
+  if (directory === "/") return text
+  if (directory === "\\") return text
   return text.split(directory).join("")
 }
 
@@ -261,21 +262,35 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
   return fallback
 }
 
-function renderable(part: PartType) {
+function renderable(part: PartType, showReasoningSummaries = true) {
   if (part.type === "tool") {
     if (HIDDEN_TOOLS.has(part.tool)) return false
     if (part.tool === "question") return part.state.status !== "pending" && part.state.status !== "running"
     return true
   }
   if (part.type === "text") return !!part.text?.trim()
-  if (part.type === "reasoning") return !!part.text?.trim()
+  if (part.type === "reasoning") return showReasoningSummaries && !!part.text?.trim()
   return !!PART_MAPPING[part.type]
+}
+
+function toolDefaultOpen(tool: string, shell = false, edit = false) {
+  if (tool === "bash") return shell
+  if (tool === "edit" || tool === "write" || tool === "apply_patch") return edit
+}
+
+function partDefaultOpen(part: PartType, shell = false, edit = false) {
+  if (part.type !== "tool") return
+  return toolDefaultOpen(part.tool, shell, edit)
 }
 
 export function AssistantParts(props: {
   messages: AssistantMessage[]
   showAssistantCopyPartID?: string | null
+  turnDurationMs?: number
   working?: boolean
+  showReasoningSummaries?: boolean
+  shellToolDefaultOpen?: boolean
+  editToolDefaultOpen?: boolean
 }) {
   const data = useData()
   const emptyParts: PartType[] = []
@@ -296,7 +311,7 @@ export function AssistantParts(props: {
 
     const parts = props.messages.flatMap((message) =>
       list(data.store.part?.[message.id], emptyParts)
-        .filter(renderable)
+        .filter((part) => renderable(part, props.showReasoningSummaries ?? true))
         .map((part) => ({ message, part })),
     )
 
@@ -365,6 +380,8 @@ export function AssistantParts(props: {
                   part={entry().part}
                   message={entry().message}
                   showAssistantCopyPartID={props.showAssistantCopyPartID}
+                  turnDurationMs={props.turnDurationMs}
+                  defaultOpen={partDefaultOpen(entry().part, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
                 />
               )}
             </Show>
@@ -475,6 +492,7 @@ export function Message(props: MessageProps) {
             message={assistantMessage() as AssistantMessage}
             parts={props.parts}
             showAssistantCopyPartID={props.showAssistantCopyPartID}
+            showReasoningSummaries={props.showReasoningSummaries}
           />
         )}
       </Match>
@@ -486,6 +504,7 @@ export function AssistantMessageDisplay(props: {
   message: AssistantMessage
   parts: PartType[]
   showAssistantCopyPartID?: string | null
+  showReasoningSummaries?: boolean
 }) {
   const grouped = createMemo(() => {
     const keys: string[] = []
@@ -514,7 +533,7 @@ export function AssistantMessageDisplay(props: {
     }
 
     parts.forEach((part, index) => {
-      if (!renderable(part)) return
+      if (!renderable(part, props.showReasoningSummaries ?? true)) return
 
       if (isContextGroupTool(part)) {
         if (start < 0) start = index
@@ -849,6 +868,7 @@ export function Part(props: MessagePartProps) {
         hideDetails={props.hideDetails}
         defaultOpen={props.defaultOpen}
         showAssistantCopyPartID={props.showAssistantCopyPartID}
+        turnDurationMs={props.turnDurationMs}
       />
     </Show>
   )
@@ -890,8 +910,43 @@ export const ToolRegistry = {
   render: getTool,
 }
 
+function ToolFileAccordion(props: { path: string; actions?: JSX.Element; children: JSX.Element }) {
+  const value = createMemo(() => props.path || "tool-file")
+
+  return (
+    <Accordion
+      multiple
+      data-scope="apply-patch"
+      style={{ "--sticky-accordion-offset": "40px" }}
+      defaultValue={[value()]}
+    >
+      <Accordion.Item value={value()}>
+        <StickyAccordionHeader>
+          <Accordion.Trigger>
+            <div data-slot="apply-patch-trigger-content">
+              <div data-slot="apply-patch-file-info">
+                <FileIcon node={{ path: props.path, type: "file" }} />
+                <div data-slot="apply-patch-file-name-container">
+                  <Show when={props.path.includes("/")}>
+                    <span data-slot="apply-patch-directory">{`\u202A${getDirectory(props.path)}\u202C`}</span>
+                  </Show>
+                  <span data-slot="apply-patch-filename">{getFilename(props.path)}</span>
+                </div>
+              </div>
+              <div data-slot="apply-patch-trigger-actions">
+                {props.actions}
+                <Icon name="chevron-grabber-vertical" size="small" />
+              </div>
+            </div>
+          </Accordion.Trigger>
+        </StickyAccordionHeader>
+        <Accordion.Content>{props.children}</Accordion.Content>
+      </Accordion.Item>
+    </Accordion>
+  )
+}
+
 PART_MAPPING["tool"] = function ToolPartDisplay(props) {
-  const data = useData()
   const i18n = useI18n()
   const part = props.part as ToolPart
   if (part.tool === "todowrite" || part.tool === "todoread") return null
@@ -900,75 +955,18 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     () => part.tool === "question" && (part.state.status === "pending" || part.state.status === "running"),
   )
 
-  const permission = createMemo(() => {
-    const next = data.store.permission?.[props.message.sessionID]?.[0]
-    if (!next || !next.tool) return undefined
-    if (next.tool!.callID !== part.callID) return undefined
-    return next
-  })
-
-  const questionRequest = createMemo(() => {
-    const next = data.store.question?.[props.message.sessionID]?.[0]
-    if (!next || !next.tool) return undefined
-    if (next.tool!.callID !== part.callID) return undefined
-    return next
-  })
-
-  const [showPermission, setShowPermission] = createSignal(false)
-  const [showQuestion, setShowQuestion] = createSignal(false)
-
-  createEffect(() => {
-    const perm = permission()
-    if (perm) {
-      const timeout = setTimeout(() => setShowPermission(true), 50)
-      onCleanup(() => clearTimeout(timeout))
-    } else {
-      setShowPermission(false)
-    }
-  })
-
-  createEffect(() => {
-    const question = questionRequest()
-    if (question) {
-      const timeout = setTimeout(() => setShowQuestion(true), 50)
-      onCleanup(() => clearTimeout(timeout))
-    } else {
-      setShowQuestion(false)
-    }
-  })
-
-  const [forceOpen, setForceOpen] = createSignal(false)
-  createEffect(() => {
-    if (permission() || questionRequest()) setForceOpen(true)
-  })
-
-  const respond = (response: "once" | "always" | "reject") => {
-    const perm = permission()
-    if (!perm || !data.respondToPermission) return
-    data.respondToPermission({
-      sessionID: perm.sessionID,
-      permissionID: perm.id,
-      response,
-    })
-  }
-
   const emptyInput: Record<string, any> = {}
   const emptyMetadata: Record<string, any> = {}
 
   const input = () => part.state?.input ?? emptyInput
   // @ts-expect-error
   const partMetadata = () => part.state?.metadata ?? emptyMetadata
-  const metadata = () => {
-    const perm = permission()
-    if (perm?.metadata) return { ...perm.metadata, ...partMetadata() }
-    return partMetadata()
-  }
 
   const render = ToolRegistry.render(part.tool) ?? GenericTool
 
   return (
     <Show when={!hideQuestion()}>
-      <div data-component="tool-part-wrapper" data-permission={showPermission()} data-question={showQuestion()}>
+      <div data-component="tool-part-wrapper">
         <Switch>
           <Match when={part.state.status === "error" && part.state.error}>
             {(error) => {
@@ -1008,33 +1006,15 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
               component={render}
               input={input()}
               tool={part.tool}
-              metadata={metadata()}
+              metadata={partMetadata()}
               // @ts-expect-error
               output={part.state.output}
               status={part.state.status}
               hideDetails={props.hideDetails}
-              forceOpen={forceOpen()}
-              locked={showPermission() || showQuestion()}
               defaultOpen={props.defaultOpen}
             />
           </Match>
         </Switch>
-        <Show when={showPermission() && permission()}>
-          <div data-component="permission-prompt">
-            <div data-slot="permission-actions">
-              <Button variant="ghost" size="normal" onClick={() => respond("reject")}>
-                {i18n.t("ui.permission.deny")}
-              </Button>
-              <Button variant="secondary" size="normal" onClick={() => respond("always")}>
-                {i18n.t("ui.permission.allowAlways")}
-              </Button>
-              <Button variant="primary" size="normal" onClick={() => respond("once")}>
-                {i18n.t("ui.permission.allowOnce")}
-              </Button>
-            </div>
-          </div>
-        </Show>
-        <Show when={showQuestion() && questionRequest()}>{(request) => <QuestionPrompt request={request()} />}</Show>
       </div>
     </Show>
   )
@@ -1060,8 +1040,12 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     if (props.message.role !== "assistant") return ""
     const message = props.message as AssistantMessage
     const completed = message.time.completed
-    if (typeof completed !== "number") return ""
-    const ms = completed - message.time.created
+    const ms =
+      typeof props.turnDurationMs === "number"
+        ? props.turnDurationMs
+        : typeof completed === "number"
+          ? completed - message.time.created
+          : -1
     if (!(ms >= 0)) return ""
     const total = Math.round(ms / 1000)
     if (total < 60) return `${total}s`
@@ -1465,57 +1449,67 @@ ToolRegistry.register({
     const i18n = useI18n()
     const diffComponent = useDiffComponent()
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
+    const path = createMemo(() => props.metadata?.filediff?.file || props.input.filePath || "")
     const filename = () => getFilename(props.input.filePath ?? "")
     const pending = () => props.status === "pending" || props.status === "running"
     return (
-      <BasicTool
-        {...props}
-        icon="code-lines"
-        defer
-        trigger={
-          <div data-component="edit-trigger">
-            <div data-slot="message-part-title-area">
-              <div data-slot="message-part-title">
-                <span data-slot="message-part-title-text">
-                  <Show when={pending()} fallback={i18n.t("ui.messagePart.title.edit")}>
-                    <TextShimmer text={i18n.t("ui.messagePart.title.edit")} />
+      <div data-component="edit-tool">
+        <BasicTool
+          {...props}
+          icon="code-lines"
+          defer
+          trigger={
+            <div data-component="edit-trigger">
+              <div data-slot="message-part-title-area">
+                <div data-slot="message-part-title">
+                  <span data-slot="message-part-title-text">
+                    <Show when={pending()} fallback={i18n.t("ui.messagePart.title.edit")}>
+                      <TextShimmer text={i18n.t("ui.messagePart.title.edit")} />
+                    </Show>
+                  </span>
+                  <Show when={!pending()}>
+                    <span data-slot="message-part-title-filename">{filename()}</span>
                   </Show>
-                </span>
-                <Show when={!pending()}>
-                  <span data-slot="message-part-title-filename">{filename()}</span>
+                </div>
+                <Show when={!pending() && props.input.filePath?.includes("/")}>
+                  <div data-slot="message-part-path">
+                    <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
+                  </div>
                 </Show>
               </div>
-              <Show when={!pending() && props.input.filePath?.includes("/")}>
-                <div data-slot="message-part-path">
-                  <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
-                </div>
-              </Show>
+              <div data-slot="message-part-actions">
+                <Show when={!pending() && props.metadata.filediff}>
+                  <DiffChanges changes={props.metadata.filediff} />
+                </Show>
+              </div>
             </div>
-            <div data-slot="message-part-actions">
-              <Show when={!pending() && props.metadata.filediff}>
-                <DiffChanges changes={props.metadata.filediff} />
-              </Show>
-            </div>
-          </div>
-        }
-      >
-        <Show when={props.metadata.filediff?.path || props.input.filePath}>
-          <div data-component="edit-content">
-            <Dynamic
-              component={diffComponent}
-              before={{
-                name: props.metadata?.filediff?.file || props.input.filePath,
-                contents: props.metadata?.filediff?.before || props.input.oldString,
-              }}
-              after={{
-                name: props.metadata?.filediff?.file || props.input.filePath,
-                contents: props.metadata?.filediff?.after || props.input.newString,
-              }}
-            />
-          </div>
-        </Show>
-        <DiagnosticsDisplay diagnostics={diagnostics()} />
-      </BasicTool>
+          }
+        >
+          <Show when={path()}>
+            <ToolFileAccordion
+              path={path()}
+              actions={
+                <Show when={!pending() && props.metadata.filediff}>{(diff) => <DiffChanges changes={diff()} />}</Show>
+              }
+            >
+              <div data-component="edit-content">
+                <Dynamic
+                  component={diffComponent}
+                  before={{
+                    name: props.metadata?.filediff?.file || props.input.filePath,
+                    contents: props.metadata?.filediff?.before || props.input.oldString,
+                  }}
+                  after={{
+                    name: props.metadata?.filediff?.file || props.input.filePath,
+                    contents: props.metadata?.filediff?.after || props.input.newString,
+                  }}
+                />
+              </div>
+            </ToolFileAccordion>
+          </Show>
+          <DiagnosticsDisplay diagnostics={diagnostics()} />
+        </BasicTool>
+      </div>
     )
   },
 })
@@ -1526,51 +1520,56 @@ ToolRegistry.register({
     const i18n = useI18n()
     const codeComponent = useCodeComponent()
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
+    const path = createMemo(() => props.input.filePath || "")
     const filename = () => getFilename(props.input.filePath ?? "")
     const pending = () => props.status === "pending" || props.status === "running"
     return (
-      <BasicTool
-        {...props}
-        icon="code-lines"
-        defer
-        trigger={
-          <div data-component="write-trigger">
-            <div data-slot="message-part-title-area">
-              <div data-slot="message-part-title">
-                <span data-slot="message-part-title-text">
-                  <Show when={pending()} fallback={i18n.t("ui.messagePart.title.write")}>
-                    <TextShimmer text={i18n.t("ui.messagePart.title.write")} />
+      <div data-component="write-tool">
+        <BasicTool
+          {...props}
+          icon="code-lines"
+          defer
+          trigger={
+            <div data-component="write-trigger">
+              <div data-slot="message-part-title-area">
+                <div data-slot="message-part-title">
+                  <span data-slot="message-part-title-text">
+                    <Show when={pending()} fallback={i18n.t("ui.messagePart.title.write")}>
+                      <TextShimmer text={i18n.t("ui.messagePart.title.write")} />
+                    </Show>
+                  </span>
+                  <Show when={!pending()}>
+                    <span data-slot="message-part-title-filename">{filename()}</span>
                   </Show>
-                </span>
-                <Show when={!pending()}>
-                  <span data-slot="message-part-title-filename">{filename()}</span>
+                </div>
+                <Show when={!pending() && props.input.filePath?.includes("/")}>
+                  <div data-slot="message-part-path">
+                    <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
+                  </div>
                 </Show>
               </div>
-              <Show when={!pending() && props.input.filePath?.includes("/")}>
-                <div data-slot="message-part-path">
-                  <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
-                </div>
-              </Show>
+              <div data-slot="message-part-actions">{/* <DiffChanges diff={diff} /> */}</div>
             </div>
-            <div data-slot="message-part-actions">{/* <DiffChanges diff={diff} /> */}</div>
-          </div>
-        }
-      >
-        <Show when={props.input.content}>
-          <div data-component="write-content">
-            <Dynamic
-              component={codeComponent}
-              file={{
-                name: props.input.filePath,
-                contents: props.input.content,
-                cacheKey: checksum(props.input.content),
-              }}
-              overflow="scroll"
-            />
-          </div>
-        </Show>
-        <DiagnosticsDisplay diagnostics={diagnostics()} />
-      </BasicTool>
+          }
+        >
+          <Show when={props.input.content && path()}>
+            <ToolFileAccordion path={path()}>
+              <div data-component="write-content">
+                <Dynamic
+                  component={codeComponent}
+                  file={{
+                    name: props.input.filePath,
+                    contents: props.input.content,
+                    cacheKey: checksum(props.input.content),
+                  }}
+                  overflow="scroll"
+                />
+              </div>
+            </ToolFileAccordion>
+          </Show>
+          <DiagnosticsDisplay diagnostics={diagnostics()} />
+        </BasicTool>
+      </div>
     )
   },
 })
@@ -1593,6 +1592,12 @@ ToolRegistry.register({
     const i18n = useI18n()
     const diffComponent = useDiffComponent()
     const files = createMemo(() => (props.metadata.files ?? []) as ApplyPatchFile[])
+    const pending = createMemo(() => props.status === "pending" || props.status === "running")
+    const single = createMemo(() => {
+      const list = files()
+      if (list.length !== 1) return
+      return list[0]
+    })
     const [expanded, setExpanded] = createSignal<string[]>([])
     let seeded = false
 
@@ -1611,100 +1616,175 @@ ToolRegistry.register({
     })
 
     return (
-      <div data-component="apply-patch-tool">
-        <BasicTool
-          {...props}
-          icon="code-lines"
-          defer
-          trigger={{
-            title: i18n.t("ui.tool.patch"),
-            subtitle: subtitle(),
-          }}
-        >
-          <Show when={files().length > 0}>
-            <Accordion
-              multiple
-              data-scope="apply-patch"
-              style={{ "--sticky-accordion-offset": "40px" }}
-              value={expanded()}
-              onChange={(value) => setExpanded(Array.isArray(value) ? value : value ? [value] : [])}
+      <Show
+        when={single()}
+        fallback={
+          <div data-component="apply-patch-tool">
+            <BasicTool
+              {...props}
+              icon="code-lines"
+              defer
+              trigger={{
+                title: i18n.t("ui.tool.patch"),
+                subtitle: subtitle(),
+              }}
             >
-              <For each={files()}>
-                {(file) => {
-                  const active = createMemo(() => expanded().includes(file.filePath))
-                  const [visible, setVisible] = createSignal(false)
+              <Show when={files().length > 0}>
+                <Accordion
+                  multiple
+                  data-scope="apply-patch"
+                  style={{ "--sticky-accordion-offset": "40px" }}
+                  value={expanded()}
+                  onChange={(value) => setExpanded(Array.isArray(value) ? value : value ? [value] : [])}
+                >
+                  <For each={files()}>
+                    {(file) => {
+                      const active = createMemo(() => expanded().includes(file.filePath))
+                      const [visible, setVisible] = createSignal(false)
 
-                  createEffect(() => {
-                    if (!active()) {
-                      setVisible(false)
-                      return
-                    }
+                      createEffect(() => {
+                        if (!active()) {
+                          setVisible(false)
+                          return
+                        }
 
-                    requestAnimationFrame(() => {
-                      if (!active()) return
-                      setVisible(true)
-                    })
-                  })
+                        requestAnimationFrame(() => {
+                          if (!active()) return
+                          setVisible(true)
+                        })
+                      })
 
-                  return (
-                    <Accordion.Item value={file.filePath} data-type={file.type}>
-                      <StickyAccordionHeader>
-                        <Accordion.Trigger>
-                          <div data-slot="apply-patch-trigger-content">
-                            <div data-slot="apply-patch-file-info">
-                              <FileIcon node={{ path: file.relativePath, type: "file" }} />
-                              <div data-slot="apply-patch-file-name-container">
-                                <Show when={file.relativePath.includes("/")}>
-                                  <span data-slot="apply-patch-directory">{`\u202A${getDirectory(file.relativePath)}\u202C`}</span>
-                                </Show>
-                                <span data-slot="apply-patch-filename">{getFilename(file.relativePath)}</span>
+                      return (
+                        <Accordion.Item value={file.filePath} data-type={file.type}>
+                          <StickyAccordionHeader>
+                            <Accordion.Trigger>
+                              <div data-slot="apply-patch-trigger-content">
+                                <div data-slot="apply-patch-file-info">
+                                  <FileIcon node={{ path: file.relativePath, type: "file" }} />
+                                  <div data-slot="apply-patch-file-name-container">
+                                    <Show when={file.relativePath.includes("/")}>
+                                      <span data-slot="apply-patch-directory">{`\u202A${getDirectory(file.relativePath)}\u202C`}</span>
+                                    </Show>
+                                    <span data-slot="apply-patch-filename">{getFilename(file.relativePath)}</span>
+                                  </div>
+                                </div>
+                                <div data-slot="apply-patch-trigger-actions">
+                                  <Switch>
+                                    <Match when={file.type === "add"}>
+                                      <span data-slot="apply-patch-change" data-type="added">
+                                        {i18n.t("ui.patch.action.created")}
+                                      </span>
+                                    </Match>
+                                    <Match when={file.type === "delete"}>
+                                      <span data-slot="apply-patch-change" data-type="removed">
+                                        {i18n.t("ui.patch.action.deleted")}
+                                      </span>
+                                    </Match>
+                                    <Match when={file.type === "move"}>
+                                      <span data-slot="apply-patch-change" data-type="modified">
+                                        {i18n.t("ui.patch.action.moved")}
+                                      </span>
+                                    </Match>
+                                    <Match when={true}>
+                                      <DiffChanges changes={{ additions: file.additions, deletions: file.deletions }} />
+                                    </Match>
+                                  </Switch>
+                                  <Icon name="chevron-grabber-vertical" size="small" />
+                                </div>
                               </div>
-                            </div>
-                            <div data-slot="apply-patch-trigger-actions">
-                              <Switch>
-                                <Match when={file.type === "add"}>
-                                  <span data-slot="apply-patch-change" data-type="added">
-                                    {i18n.t("ui.patch.action.created")}
-                                  </span>
-                                </Match>
-                                <Match when={file.type === "delete"}>
-                                  <span data-slot="apply-patch-change" data-type="removed">
-                                    {i18n.t("ui.patch.action.deleted")}
-                                  </span>
-                                </Match>
-                                <Match when={file.type === "move"}>
-                                  <span data-slot="apply-patch-change" data-type="modified">
-                                    {i18n.t("ui.patch.action.moved")}
-                                  </span>
-                                </Match>
-                                <Match when={true}>
-                                  <DiffChanges changes={{ additions: file.additions, deletions: file.deletions }} />
-                                </Match>
-                              </Switch>
-                              <Icon name="chevron-grabber-vertical" size="small" />
-                            </div>
-                          </div>
-                        </Accordion.Trigger>
-                      </StickyAccordionHeader>
-                      <Accordion.Content>
-                        <Show when={visible()}>
-                          <div data-component="apply-patch-file-diff">
-                            <Dynamic
-                              component={diffComponent}
-                              before={{ name: file.filePath, contents: file.before }}
-                              after={{ name: file.movePath ?? file.filePath, contents: file.after }}
-                            />
-                          </div>
+                            </Accordion.Trigger>
+                          </StickyAccordionHeader>
+                          <Accordion.Content>
+                            <Show when={visible()}>
+                              <div data-component="apply-patch-file-diff">
+                                <Dynamic
+                                  component={diffComponent}
+                                  before={{ name: file.filePath, contents: file.before }}
+                                  after={{ name: file.movePath ?? file.filePath, contents: file.after }}
+                                />
+                              </div>
+                            </Show>
+                          </Accordion.Content>
+                        </Accordion.Item>
+                      )
+                    }}
+                  </For>
+                </Accordion>
+              </Show>
+            </BasicTool>
+          </div>
+        }
+      >
+        {(file) => (
+          <div data-component="apply-patch-tool">
+            <BasicTool
+              {...props}
+              icon="code-lines"
+              defer
+              trigger={
+                <div data-component="edit-trigger">
+                  <div data-slot="message-part-title-area">
+                    <div data-slot="message-part-title">
+                      <span data-slot="message-part-title-text">
+                        <Show when={pending()} fallback={i18n.t("ui.tool.patch")}>
+                          <TextShimmer text={i18n.t("ui.tool.patch")} />
                         </Show>
-                      </Accordion.Content>
-                    </Accordion.Item>
-                  )
-                }}
-              </For>
-            </Accordion>
-          </Show>
-        </BasicTool>
-      </div>
+                      </span>
+                      <Show when={!pending()}>
+                        <span data-slot="message-part-title-filename">{getFilename(file().relativePath)}</span>
+                      </Show>
+                    </div>
+                    <Show when={!pending() && file().relativePath.includes("/")}>
+                      <div data-slot="message-part-path">
+                        <span data-slot="message-part-directory">{getDirectory(file().relativePath)}</span>
+                      </div>
+                    </Show>
+                  </div>
+                  <div data-slot="message-part-actions">
+                    <Show when={!pending()}>
+                      <DiffChanges changes={{ additions: file().additions, deletions: file().deletions }} />
+                    </Show>
+                  </div>
+                </div>
+              }
+            >
+              <ToolFileAccordion
+                path={file().relativePath}
+                actions={
+                  <Switch>
+                    <Match when={file().type === "add"}>
+                      <span data-slot="apply-patch-change" data-type="added">
+                        {i18n.t("ui.patch.action.created")}
+                      </span>
+                    </Match>
+                    <Match when={file().type === "delete"}>
+                      <span data-slot="apply-patch-change" data-type="removed">
+                        {i18n.t("ui.patch.action.deleted")}
+                      </span>
+                    </Match>
+                    <Match when={file().type === "move"}>
+                      <span data-slot="apply-patch-change" data-type="modified">
+                        {i18n.t("ui.patch.action.moved")}
+                      </span>
+                    </Match>
+                    <Match when={true}>
+                      <DiffChanges changes={{ additions: file().additions, deletions: file().deletions }} />
+                    </Match>
+                  </Switch>
+                }
+              >
+                <div data-component="apply-patch-file-diff">
+                  <Dynamic
+                    component={diffComponent}
+                    before={{ name: file().filePath, contents: file().before }}
+                    after={{ name: file().movePath ?? file().filePath, contents: file().after }}
+                  />
+                </div>
+              </ToolFileAccordion>
+            </BasicTool>
+          </div>
+        )}
+      </Show>
     )
   },
 })
@@ -1804,245 +1884,3 @@ ToolRegistry.register({
     )
   },
 })
-
-function QuestionPrompt(props: { request: QuestionRequest }) {
-  const data = useData()
-  const i18n = useI18n()
-  const questions = createMemo(() => props.request.questions)
-  const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
-
-  const [store, setStore] = createStore({
-    tab: 0,
-    answers: [] as QuestionAnswer[],
-    custom: [] as string[],
-    editing: false,
-  })
-
-  const question = createMemo(() => questions()[store.tab])
-  const confirm = createMemo(() => !single() && store.tab === questions().length)
-  const options = createMemo(() => question()?.options ?? [])
-  const input = createMemo(() => store.custom[store.tab] ?? "")
-  const multi = createMemo(() => question()?.multiple === true)
-  const customPicked = createMemo(() => {
-    const value = input()
-    if (!value) return false
-    return store.answers[store.tab]?.includes(value) ?? false
-  })
-
-  function submit() {
-    const answers = questions().map((_, i) => store.answers[i] ?? [])
-    data.replyToQuestion?.({
-      requestID: props.request.id,
-      answers,
-    })
-  }
-
-  function reject() {
-    data.rejectQuestion?.({
-      requestID: props.request.id,
-    })
-  }
-
-  function pick(answer: string, custom: boolean = false) {
-    const answers = [...store.answers]
-    answers[store.tab] = [answer]
-    setStore("answers", answers)
-    if (custom) {
-      const inputs = [...store.custom]
-      inputs[store.tab] = answer
-      setStore("custom", inputs)
-    }
-    if (single()) {
-      data.replyToQuestion?.({
-        requestID: props.request.id,
-        answers: [[answer]],
-      })
-      return
-    }
-    setStore("tab", store.tab + 1)
-  }
-
-  function toggle(answer: string) {
-    const existing = store.answers[store.tab] ?? []
-    const next = [...existing]
-    const index = next.indexOf(answer)
-    if (index === -1) next.push(answer)
-    if (index !== -1) next.splice(index, 1)
-    const answers = [...store.answers]
-    answers[store.tab] = next
-    setStore("answers", answers)
-  }
-
-  function selectTab(index: number) {
-    setStore("tab", index)
-    setStore("editing", false)
-  }
-
-  function selectOption(optIndex: number) {
-    if (optIndex === options().length) {
-      setStore("editing", true)
-      return
-    }
-    const opt = options()[optIndex]
-    if (!opt) return
-    if (multi()) {
-      toggle(opt.label)
-      return
-    }
-    pick(opt.label)
-  }
-
-  function handleCustomSubmit(e: Event) {
-    e.preventDefault()
-    const value = input().trim()
-    if (!value) {
-      setStore("editing", false)
-      return
-    }
-    if (multi()) {
-      const existing = store.answers[store.tab] ?? []
-      const next = [...existing]
-      if (!next.includes(value)) next.push(value)
-      const answers = [...store.answers]
-      answers[store.tab] = next
-      setStore("answers", answers)
-      setStore("editing", false)
-      return
-    }
-    pick(value, true)
-    setStore("editing", false)
-  }
-
-  return (
-    <div data-component="question-prompt">
-      <Show when={!single()}>
-        <div data-slot="question-tabs">
-          <For each={questions()}>
-            {(q, index) => {
-              const active = () => index() === store.tab
-              const answered = () => (store.answers[index()]?.length ?? 0) > 0
-              return (
-                <button
-                  data-slot="question-tab"
-                  data-active={active()}
-                  data-answered={answered()}
-                  onClick={() => selectTab(index())}
-                >
-                  {q.header}
-                </button>
-              )
-            }}
-          </For>
-          <button data-slot="question-tab" data-active={confirm()} onClick={() => selectTab(questions().length)}>
-            {i18n.t("ui.common.confirm")}
-          </button>
-        </div>
-      </Show>
-
-      <Show when={!confirm()}>
-        <div data-slot="question-content">
-          <div data-slot="question-text">
-            {question()?.question}
-            {multi() ? " " + i18n.t("ui.question.multiHint") : ""}
-          </div>
-          <div data-slot="question-options">
-            <For each={options()}>
-              {(opt, i) => {
-                const picked = () => store.answers[store.tab]?.includes(opt.label) ?? false
-                return (
-                  <button data-slot="question-option" data-picked={picked()} onClick={() => selectOption(i())}>
-                    <span data-slot="option-label">{opt.label}</span>
-                    <Show when={opt.description}>
-                      <span data-slot="option-description">{opt.description}</span>
-                    </Show>
-                    <Show when={picked()}>
-                      <Icon name="check-small" size="normal" />
-                    </Show>
-                  </button>
-                )
-              }}
-            </For>
-            <button
-              data-slot="question-option"
-              data-picked={customPicked()}
-              onClick={() => selectOption(options().length)}
-            >
-              <span data-slot="option-label">{i18n.t("ui.messagePart.option.typeOwnAnswer")}</span>
-              <Show when={!store.editing && input()}>
-                <span data-slot="option-description">{input()}</span>
-              </Show>
-              <Show when={customPicked()}>
-                <Icon name="check-small" size="normal" />
-              </Show>
-            </button>
-            <Show when={store.editing}>
-              <form data-slot="custom-input-form" onSubmit={handleCustomSubmit}>
-                <input
-                  ref={(el) => setTimeout(() => el.focus(), 0)}
-                  type="text"
-                  data-slot="custom-input"
-                  placeholder={i18n.t("ui.question.custom.placeholder")}
-                  value={input()}
-                  onInput={(e) => {
-                    const inputs = [...store.custom]
-                    inputs[store.tab] = e.currentTarget.value
-                    setStore("custom", inputs)
-                  }}
-                />
-                <Button type="submit" variant="primary" size="small">
-                  {multi() ? i18n.t("ui.common.add") : i18n.t("ui.common.submit")}
-                </Button>
-                <Button type="button" variant="ghost" size="small" onClick={() => setStore("editing", false)}>
-                  {i18n.t("ui.common.cancel")}
-                </Button>
-              </form>
-            </Show>
-          </div>
-        </div>
-      </Show>
-
-      <Show when={confirm()}>
-        <div data-slot="question-review">
-          <div data-slot="review-title">{i18n.t("ui.messagePart.review.title")}</div>
-          <For each={questions()}>
-            {(q, index) => {
-              const value = () => store.answers[index()]?.join(", ") ?? ""
-              const answered = () => Boolean(value())
-              return (
-                <div data-slot="review-item">
-                  <span data-slot="review-label">{q.question}</span>
-                  <span data-slot="review-value" data-answered={answered()}>
-                    {answered() ? value() : i18n.t("ui.question.review.notAnswered")}
-                  </span>
-                </div>
-              )
-            }}
-          </For>
-        </div>
-      </Show>
-
-      <div data-slot="question-actions">
-        <Button variant="ghost" size="small" onClick={reject}>
-          {i18n.t("ui.common.dismiss")}
-        </Button>
-        <Show when={!single()}>
-          <Show when={confirm()}>
-            <Button variant="primary" size="small" onClick={submit}>
-              {i18n.t("ui.common.submit")}
-            </Button>
-          </Show>
-          <Show when={!confirm() && multi()}>
-            <Button
-              variant="secondary"
-              size="small"
-              onClick={() => selectTab(store.tab + 1)}
-              disabled={(store.answers[store.tab]?.length ?? 0) === 0}
-            >
-              {i18n.t("ui.common.next")}
-            </Button>
-          </Show>
-        </Show>
-      </div>
-    </div>
-  )
-}

@@ -589,6 +589,7 @@ export const dict = {
   "settings.general.section.notifications": "系統通知",
   "settings.general.section.updates": "更新",
   "settings.general.section.sounds": "音效",
+  "settings.general.section.feed": "資訊流",
   "settings.general.section.display": "顯示",
 
   "settings.general.row.language.title": "語言",
@@ -600,6 +601,10 @@ export const dict = {
   "settings.general.row.font.title": "字型",
   "settings.general.row.font.description": "自訂程式碼區塊使用的等寬字型",
 
+  "settings.general.row.shellToolPartsExpanded.title": "展開 shell 工具區塊",
+  "settings.general.row.shellToolPartsExpanded.description": "在時間軸中預設展開 shell 工具區塊",
+  "settings.general.row.editToolPartsExpanded.title": "展開 edit 工具區塊",
+  "settings.general.row.editToolPartsExpanded.description": "在時間軸中預設展開 edit、write 和 patch 工具區塊",
   "settings.general.row.wayland.title": "使用原生 Wayland",
   "settings.general.row.wayland.description": "在 Wayland 上停用 X11 後備模式。需要重新啟動。",
   "settings.general.row.wayland.tooltip": "在混合更新率螢幕的 Linux 系統上，原生 Wayland 可能更穩定。",
@@ -629,6 +634,7 @@ export const dict = {
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
   "font.option.geistMono": "Geist Mono",
+  "sound.option.none": "無",
   "sound.option.alert01": "警報 01",
   "sound.option.alert02": "警報 02",
   "sound.option.alert03": "警報 03",

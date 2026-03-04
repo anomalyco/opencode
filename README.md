@@ -3,7 +3,6 @@
 
 This is a fork of [anamolyco's](https://github.com/anomalyco) [Opencode](https://github.com/anomalyco/opencode) coding agent. That is the main development repo, and it sees constant improvements to I recommend just building the code from there.
 
-
 ### Development Notes - How is this different than Opencode?
 
 This fork was made to isolate the agent tool from the opencode.ai session share server, and point it towards a server of my own. 
