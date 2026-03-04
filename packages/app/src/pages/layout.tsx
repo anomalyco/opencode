@@ -49,6 +49,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { DialogSelectProvider } from "@/components/dialog-select-provider"
 import { DialogSelectServer } from "@/components/dialog-select-server"
+import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSettings } from "@/components/dialog-settings"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
@@ -930,6 +931,13 @@ export default function Layout(props: ParentProps) {
           const session = currentSessions().find((s) => s.id === params.id)
           if (session) archiveSession(session)
         },
+      },
+      {
+        id: "session.browse.archived",
+        title: language.t("command.session.browseArchived"),
+        category: language.t("command.category.session"),
+        disabled: !params.dir,
+        onSelect: () => dialog.show(() => <DialogSelectFile mode="archived" />),
       },
       {
         id: "workspace.new",

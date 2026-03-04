@@ -40,6 +40,7 @@ export const dict = {
   "command.session.previous.unseen": "上一个未读会话",
   "command.session.next.unseen": "下一个未读会话",
   "command.session.archive": "归档会话",
+  "command.session.browseArchived": "浏览已归档会话",
 
   "command.palette": "命令面板",
 
@@ -116,6 +117,7 @@ export const dict = {
   "command.session.unshare.description": "停止分享此会话",
 
   "palette.search.placeholder": "搜索文件、命令和会话",
+  "palette.search.archived.placeholder": "搜索已归档会话",
   "palette.empty": "未找到结果",
   "palette.group.commands": "命令",
   "palette.group.files": "文件",
@@ -562,6 +564,8 @@ export const dict = {
   "common.rename": "重命名",
   "common.reset": "重置",
   "common.archive": "归档",
+  "common.unarchive": "取消归档",
+  "common.archived": "已归档",
   "common.delete": "删除",
   "common.close": "关闭",
   "common.edit": "编辑",

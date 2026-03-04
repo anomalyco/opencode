@@ -34,7 +34,7 @@ type Entry = {
   updated?: number
 }
 
-type DialogSelectFileMode = "all" | "files"
+type DialogSelectFileMode = "all" | "files" | "archived"
 
 const ENTRY_LIMIT = 5
 const COMMON_COMMAND_IDS = [
@@ -99,11 +99,13 @@ const createSessionEntry = (
 
 function createCommandEntries(props: {
   filesOnly: () => boolean
+  archivedOnly: () => boolean
   command: ReturnType<typeof useCommand>
   language: ReturnType<typeof useLanguage>
 }) {
   const allowed = createMemo(() => {
     if (props.filesOnly()) return []
+    if (props.archivedOnly()) return []
     return props.command.options.filter(
       (option) => !option.disabled && !option.id.startsWith("suggested.") && option.id !== "file.open",
     )
@@ -174,10 +176,14 @@ function createSessionEntries(props: {
     token: number
     inflight: Promise<Entry[]> | undefined
     cached: Entry[] | undefined
+    archivedInflight: Promise<Entry[]> | undefined
+    archivedCached: Entry[] | undefined
   } = {
     token: 0,
     inflight: undefined,
     cached: undefined,
+    archivedInflight: undefined,
+    archivedCached: undefined,
   }
 
   const sessions = (text: string) => {
@@ -250,7 +256,73 @@ function createSessionEntries(props: {
     return state.inflight
   }
 
-  return { sessions }
+  const archived = () => {
+    if (state.archivedCached) return state.archivedCached
+    if (state.archivedInflight) return state.archivedInflight
+
+    const dirs = props.workspaces()
+    if (dirs.length === 0) return [] as Entry[]
+
+    state.archivedInflight = Promise.all(
+      dirs.map((directory) => {
+        const description = props.label(directory)
+        return props.globalSDK.client.experimental.session
+          .list({
+            directory,
+            roots: true,
+            archived: true,
+            limit: 200,
+          })
+          .then((x) =>
+            (x.data ?? [])
+              .filter((s) => !!s?.id)
+              .filter((s) => !!s.time?.archived)
+              .map((s) => ({
+                id: s.id,
+                title: s.title ?? props.language.t("command.session.new"),
+                description,
+                directory,
+                archived: s.time?.archived,
+                updated: s.time?.updated,
+              })),
+          )
+          .catch(
+            () =>
+              [] as {
+                id: string
+                title: string
+                description: string
+                directory: string
+                archived?: number
+                updated?: number
+              }[],
+          )
+      }),
+    )
+      .then((results) => {
+        const seen = new Set<string>()
+        const category = props.language.t("command.category.session")
+        const next = results
+          .flat()
+          .filter((item) => {
+            const key = `${item.directory}:${item.id}`
+            if (seen.has(key)) return false
+            seen.add(key)
+            return true
+          })
+          .map((item) => createSessionEntry(item, category))
+        state.archivedCached = next
+        return next
+      })
+      .catch(() => [] as Entry[])
+      .finally(() => {
+        state.archivedInflight = undefined
+      })
+
+    return state.archivedInflight
+  }
+
+  return { sessions, archived }
 }
 
 export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFile?: (path: string) => void }) {
@@ -264,12 +336,13 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
   const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
   const filesOnly = () => props.mode === "files"
+  const archivedOnly = () => props.mode === "archived"
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey))
   const view = createMemo(() => layout.view(sessionKey))
   const state = { cleanup: undefined as (() => void) | void, committed: false }
   const [grouped, setGrouped] = createSignal(false)
-  const commandEntries = createCommandEntries({ filesOnly, command, language })
+  const commandEntries = createCommandEntries({ filesOnly, archivedOnly, command, language })
   const fileEntries = createFileEntries({ file, tabs, language })
 
   const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
@@ -301,11 +374,15 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
     return `${kind} : ${name || path}`
   }
 
-  const { sessions } = createSessionEntries({ workspaces, label, globalSDK, language })
+  const sessions = createSessionEntries({ workspaces, label, globalSDK, language })
 
   const items = async (text: string) => {
     const query = text.trim()
     setGrouped(query.length > 0)
+
+    if (archivedOnly()) {
+      return Promise.resolve(sessions.archived())
+    }
 
     if (!query && filesOnly()) {
       const loaded = file.tree.state("")?.loaded
@@ -329,7 +406,10 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
       return files.map((path) => createFileEntry(path, category))
     }
 
-    const [files, nextSessions] = await Promise.all([file.searchFiles(query), Promise.resolve(sessions(query))])
+    const [files, nextSessions] = await Promise.all([
+      file.searchFiles(query),
+      Promise.resolve(sessions.sessions(query)),
+    ])
     const category = language.t("palette.group.files")
     const entries = files.map((path) => createFileEntry(path, category))
     return [...commandEntries.list(), ...nextSessions, ...entries]
@@ -384,7 +464,9 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
         search={{
           placeholder: filesOnly()
             ? language.t("session.header.searchFiles")
-            : language.t("palette.search.placeholder"),
+            : archivedOnly()
+              ? language.t("palette.search.archived.placeholder")
+              : language.t("palette.search.placeholder"),
           autofocus: true,
           hideIcon: true,
         }}
@@ -437,6 +519,11 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
                     >
                       {item.title}
                     </span>
+                    <Show when={item.archived}>
+                      <span class="text-11-regular text-text-subtle px-1.5 py-0.5 bg-surface-base rounded">
+                        {language.t("common.archived")}
+                      </span>
+                    </Show>
                     <Show when={item.description}>
                       <span
                         class="text-14-regular text-text-weak truncate"

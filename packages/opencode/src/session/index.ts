@@ -395,13 +395,13 @@ export namespace Session {
   export const setArchived = fn(
     z.object({
       sessionID: Identifier.schema("session"),
-      time: z.number().optional(),
+      time: z.number().nullable().optional(),
     }),
     async (input) => {
       return Database.use((db) => {
         const row = db
           .update(SessionTable)
-          .set({ time_archived: input.time })
+          .set({ time_archived: input.time ?? null })
           .where(eq(SessionTable.id, input.sessionID))
           .returning()
           .get()

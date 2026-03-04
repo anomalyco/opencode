@@ -31,6 +31,7 @@ export const dict = {
   "command.session.previous.unseen": "Prethodna nepročitana sesija",
   "command.session.next.unseen": "Sljedeća nepročitana sesija",
   "command.session.archive": "Arhiviraj sesiju",
+  "command.session.browseArchived": "Pregledaj arhivirane sesije",
 
   "command.palette": "Paleta komandi",
 
@@ -89,6 +90,7 @@ export const dict = {
   "command.session.unshare.description": "Zaustavi dijeljenje ove sesije",
 
   "palette.search.placeholder": "Pretraži datoteke, komande i sesije",
+  "palette.search.archived.placeholder": "Pretraži arhivirane sesije",
   "palette.empty": "Nema rezultata",
   "palette.group.commands": "Komande",
   "palette.group.files": "Datoteke",
@@ -568,6 +570,8 @@ export const dict = {
   "common.rename": "Preimenuj",
   "common.reset": "Resetuj",
   "common.archive": "Arhiviraj",
+  "common.unarchive": "Vrati iz arhive",
+  "common.archived": "Arhivirano",
   "common.delete": "Izbriši",
   "common.close": "Zatvori",
   "common.edit": "Uredi",

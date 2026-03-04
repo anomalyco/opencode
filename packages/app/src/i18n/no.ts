@@ -34,6 +34,7 @@ export const dict = {
   "command.session.previous.unseen": "Forrige uleste økt",
   "command.session.next.unseen": "Neste uleste økt",
   "command.session.archive": "Arkiver sesjon",
+  "command.session.browseArchived": "Bla gjennom arkiverte sesjoner",
 
   "command.palette": "Kommandopalett",
 
@@ -92,6 +93,7 @@ export const dict = {
   "command.session.unshare.description": "Slutt å dele denne sesjonen",
 
   "palette.search.placeholder": "Søk i filer, kommandoer og sesjoner",
+  "palette.search.archived.placeholder": "Søk i arkiverte sesjoner",
   "palette.empty": "Ingen resultater funnet",
   "palette.group.commands": "Kommandoer",
   "palette.group.files": "Filer",
@@ -571,6 +573,8 @@ export const dict = {
   "common.rename": "Gi nytt navn",
   "common.reset": "Tilbakestill",
   "common.archive": "Arkiver",
+  "common.unarchive": "Gjenopprett fra arkiv",
+  "common.archived": "Arkivert",
   "common.delete": "Slett",
   "common.close": "Lukk",
   "common.edit": "Rediger",

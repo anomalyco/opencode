@@ -35,6 +35,7 @@ export const dict = {
   "command.session.previous.unseen": "上一個未讀會話",
   "command.session.next.unseen": "下一個未讀會話",
   "command.session.archive": "封存工作階段",
+  "command.session.browseArchived": "瀏覽已封存工作階段",
 
   "command.palette": "命令面板",
 
@@ -93,6 +94,7 @@ export const dict = {
   "command.session.unshare.description": "停止分享此工作階段",
 
   "palette.search.placeholder": "搜尋檔案、命令和工作階段",
+  "palette.search.archived.placeholder": "搜尋已封存工作階段",
   "palette.empty": "找不到結果",
   "palette.group.commands": "命令",
   "palette.group.files": "檔案",
@@ -559,6 +561,8 @@ export const dict = {
   "common.rename": "重新命名",
   "common.reset": "重設",
   "common.archive": "封存",
+  "common.unarchive": "取消封存",
+  "common.archived": "已封存",
   "common.delete": "刪除",
   "common.close": "關閉",
   "common.edit": "編輯",

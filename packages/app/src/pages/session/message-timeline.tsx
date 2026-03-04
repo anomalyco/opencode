@@ -261,7 +261,8 @@ export function MessageTimeline(props: {
   })
   const titleValue = createMemo(() => info()?.title)
   const parentID = createMemo(() => info()?.parentID)
-  const showHeader = createMemo(() => !!(titleValue() || parentID()))
+  const archivedAt = createMemo(() => info()?.time?.archived)
+  const showHeader = createMemo(() => !!(titleValue() || parentID() || archivedAt()))
   const stageCfg = { init: 1, batch: 3 }
   const staging = createTimelineStaging({
     sessionKey,
@@ -373,6 +374,34 @@ export function MessageTimeline(props: {
           }),
         )
         navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
+      })
+      .catch((err) => {
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: errorMessage(err),
+        })
+      })
+  }
+
+  const unarchiveSession = async (sessionID: string) => {
+    const session = sync.session.get(sessionID)
+    if (!session) return
+
+    await sdk.client.session
+      .update({ sessionID, time: { archived: null } })
+      .then((res) => {
+        const next = res.data ?? { ...session, time: { ...session.time, archived: undefined } }
+        sync.set(
+          produce((draft) => {
+            const index = draft.session.findIndex((s) => s.id === sessionID)
+            if (index !== -1) {
+              draft.session[index] = next
+              return
+            }
+            const match = Binary.search(draft.session, sessionID, (s) => s.id)
+            draft.session.splice(match.index, 0, next)
+          }),
+        )
       })
       .catch((err) => {
         showToast({
@@ -609,6 +638,11 @@ export function MessageTimeline(props: {
                       />
                     </Show>
                   </Show>
+                  <Show when={archivedAt()}>
+                    <span class="text-11-regular text-text-subtle px-1.5 py-0.5 rounded bg-surface-base">
+                      {language.t("common.archived")}
+                    </span>
+                  </Show>
                 </div>
                 <Show when={sessionID()}>
                   {(id) => (
@@ -645,8 +679,12 @@ export function MessageTimeline(props: {
                             >
                               <DropdownMenu.ItemLabel>{language.t("common.rename")}</DropdownMenu.ItemLabel>
                             </DropdownMenu.Item>
-                            <DropdownMenu.Item onSelect={() => void archiveSession(id())}>
-                              <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
+                            <DropdownMenu.Item
+                              onSelect={() => (archivedAt() ? void unarchiveSession(id()) : void archiveSession(id()))}
+                            >
+                              <DropdownMenu.ItemLabel>
+                                {archivedAt() ? language.t("common.unarchive") : language.t("common.archive")}
+                              </DropdownMenu.ItemLabel>
                             </DropdownMenu.Item>
                             <DropdownMenu.Separator />
                             <DropdownMenu.Item

@@ -31,6 +31,7 @@ export const dict = {
   "command.session.previous.unseen": "Sesión no leída anterior",
   "command.session.next.unseen": "Siguiente sesión no leída",
   "command.session.archive": "Archivar sesión",
+  "command.session.browseArchived": "Ver sesiones archivadas",
 
   "command.palette": "Paleta de comandos",
 
@@ -89,6 +90,7 @@ export const dict = {
   "command.session.unshare.description": "Dejar de compartir esta sesión",
 
   "palette.search.placeholder": "Buscar archivos, comandos y sesiones",
+  "palette.search.archived.placeholder": "Buscar sesiones archivadas",
   "palette.empty": "No se encontraron resultados",
   "palette.group.commands": "Comandos",
   "palette.group.files": "Archivos",
@@ -571,6 +573,8 @@ export const dict = {
   "common.rename": "Renombrar",
   "common.reset": "Restablecer",
   "common.archive": "Archivar",
+  "common.unarchive": "Desarchivar",
+  "common.archived": "Archivado",
   "common.delete": "Eliminar",
   "common.close": "Cerrar",
   "common.edit": "Editar",

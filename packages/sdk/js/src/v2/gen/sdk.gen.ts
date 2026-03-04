@@ -1399,7 +1399,7 @@ export class Session2 extends HeyApiClient {
       workspace?: string
       title?: string
       time?: {
-        archived?: number
+        archived?: number | null
       }
     },
     options?: Options<never, ThrowOnError>,

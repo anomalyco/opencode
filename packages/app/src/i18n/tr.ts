@@ -35,6 +35,7 @@ export const dict = {
   "command.session.previous.unseen": "Önceki okunmamış oturum",
   "command.session.next.unseen": "Sonraki okunmamış oturum",
   "command.session.archive": "Oturumu arşivle",
+  "command.session.browseArchived": "Arşivlenmiş oturumlara göz at",
 
   "command.palette": "Komut paleti",
 
@@ -93,6 +94,7 @@ export const dict = {
   "command.session.unshare.description": "Bu oturumun paylaşımını durdur",
 
   "palette.search.placeholder": "Dosya, komut ve oturum ara",
+  "palette.search.archived.placeholder": "Arşivlenmiş oturumları ara",
   "palette.empty": "Sonuç bulunamadı",
   "palette.group.commands": "Komutlar",
   "palette.group.files": "Dosyalar",
@@ -577,6 +579,8 @@ export const dict = {
   "common.rename": "Yeniden adlandır",
   "common.reset": "Sıfırla",
   "common.archive": "Arşivle",
+  "common.unarchive": "Arşivden çıkar",
+  "common.archived": "Arşivlendi",
   "common.delete": "Sil",
   "common.close": "Kapat",
   "common.edit": "Düzenle",

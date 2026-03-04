@@ -267,7 +267,7 @@ export const SessionRoutes = lazy(() =>
           title: z.string().optional(),
           time: z
             .object({
-              archived: z.number().optional(),
+              archived: z.number().nullable().optional(),
             })
             .optional(),
         }),

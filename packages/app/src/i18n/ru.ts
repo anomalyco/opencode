@@ -31,6 +31,7 @@ export const dict = {
   "command.session.previous.unseen": "Предыдущая непрочитанная сессия",
   "command.session.next.unseen": "Следующая непрочитанная сессия",
   "command.session.archive": "Архивировать сессию",
+  "command.session.browseArchived": "Просмотреть архивированные сессии",
 
   "command.palette": "Палитра команд",
 
@@ -89,6 +90,7 @@ export const dict = {
   "command.session.unshare.description": "Прекратить публикацию сессии",
 
   "palette.search.placeholder": "Поиск файлов, команд и сессий",
+  "palette.search.archived.placeholder": "Поиск в архивированных сессиях",
   "palette.empty": "Ничего не найдено",
   "palette.group.commands": "Команды",
   "palette.group.files": "Файлы",
@@ -569,6 +571,8 @@ export const dict = {
   "common.rename": "Переименовать",
   "common.reset": "Сбросить",
   "common.archive": "Архивировать",
+  "common.unarchive": "Разархивировать",
+  "common.archived": "Архивировано",
   "common.delete": "Удалить",
   "common.close": "Закрыть",
   "common.edit": "Редактировать",
