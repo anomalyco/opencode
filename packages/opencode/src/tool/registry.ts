@@ -62,23 +62,63 @@ export namespace ToolRegistry {
   })
 
   function fromPlugin(id: string, def: ToolDefinition): Tool.Info {
-    // Newer @opencode-ai/plugin versions provide a pre-built object schema.
-    // Using it avoids cross-instance Zod metadata loss (notably `.describe()`).
-    const parameters = def.parameters ?? z.object(def.args)
+    // Why this exists:
+    // Custom tools are loaded from `.opencode/node_modules`, which can resolve a
+    // different Zod module instance than opencode core. In Zod v4, field metadata
+    // from `.describe()` / `.meta()` is stored in a per-instance global registry.
+    // Without copying that metadata into this runtime's registry, `z.toJSONSchema`
+    // drops argument descriptions/titles/examples, so the model receives weaker
+    // tool parameter guidance even though the tool schema itself is valid.
 
-    // Backward compatibility for older plugin versions that only expose `args`.
-    // In Zod v4, `.describe()` is stored in a per-instance registry. When args
-    // schemas come from a different Zod instance, descriptions can be dropped
-    // during `z.toJSONSchema(...)` unless we register them in this instance.
-    if (!def.parameters) {
-      for (const value of Object.values(def.args)) {
-        const description = (value as any).description
-        if (!description) continue
-        z.globalRegistry.add(value, {
-          description,
-        })
+    // Walk nested Zod internals once and copy metadata into this runtime's
+    // registry so JSON Schema export keeps `.describe()` / `.meta()` fields
+    // even when tool schemas were created by another Zod instance.
+    const seen = new WeakSet<object>()
+    const rehydrate = (value: unknown): void => {
+      if (!value || typeof value !== "object") return
+      if (seen.has(value)) return
+      seen.add(value)
+
+      if ("_zod" in value) {
+        const schema = value as z.ZodType
+        const metaFn = Reflect.get(schema, "meta")
+        const meta = metaFn instanceof Function ? Reflect.apply(metaFn, schema, []) : undefined
+
+        const base = {} as Record<string, unknown>
+        if (meta && typeof meta === "object" && !("_zod" in meta)) {
+          Object.assign(base, meta as Record<string, unknown>)
+        }
+
+        const description = Reflect.get(schema, "description")
+        if (typeof description === "string" && base.description === undefined) {
+          base.description = description
+        }
+
+        if (Object.keys(base).length > 0) {
+          z.globalRegistry.add(schema, base)
+        }
+
+        // Continue into child schema defs (object shape, union options, array items, etc.)
+        // so nested arg metadata is also preserved.
+        const def = Reflect.get(Reflect.get(schema, "_zod") as object, "def")
+        rehydrate(def)
+        return
       }
+
+      if (Array.isArray(value)) {
+        for (const item of value) rehydrate(item)
+        return
+      }
+
+      for (const item of Object.values(value as Record<string, unknown>)) rehydrate(item)
     }
+
+    // Zod v4 metadata (`.describe()`, `.meta()`) lives in a module-local
+    // registry. Custom tools can be loaded from a different Zod instance, so
+    // copy metadata for all arg schemas into this instance before export.
+    for (const value of Object.values(def.args)) rehydrate(value)
+
+    const parameters = z.object(def.args)
     return {
       id,
       init: async (initCtx) => ({
