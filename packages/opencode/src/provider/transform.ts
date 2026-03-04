@@ -458,20 +458,20 @@ export namespace ProviderTransform {
         )
 
       case "@ai-sdk/cerebras":
-      // https://v5.ai-sdk.dev/providers/ai-sdk-providers/cerebras
+      // https://ai-sdk.dev/providers/ai-sdk-providers/cerebras
       case "@ai-sdk/togetherai":
-      // https://v5.ai-sdk.dev/providers/ai-sdk-providers/togetherai
+      // https://ai-sdk.dev/providers/ai-sdk-providers/togetherai
       case "@ai-sdk/xai":
-      // https://v5.ai-sdk.dev/providers/ai-sdk-providers/xai
+      // https://ai-sdk.dev/providers/ai-sdk-providers/xai
       case "@ai-sdk/deepinfra":
-      // https://v5.ai-sdk.dev/providers/ai-sdk-providers/deepinfra
+      // https://ai-sdk.dev/providers/ai-sdk-providers/deepinfra
       case "venice-ai-sdk-provider":
       // https://docs.venice.ai/overview/guides/reasoning-models#reasoning-effort
       case "@ai-sdk/openai-compatible":
         return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
 
       case "@ai-sdk/azure":
-        // https://v5.ai-sdk.dev/providers/ai-sdk-providers/azure
+        // https://ai-sdk.dev/providers/ai-sdk-providers/azure
         if (id === "o1-mini") return {}
         const azureEfforts = ["low", "medium", "high"]
         if (id.includes("gpt-5-") || id === "gpt-5") {
@@ -488,7 +488,7 @@ export namespace ProviderTransform {
           ]),
         )
       case "@ai-sdk/openai":
-        // https://v5.ai-sdk.dev/providers/ai-sdk-providers/openai
+        // https://ai-sdk.dev/providers/ai-sdk-providers/openai
         if (id === "gpt-5-pro") return {}
         const openaiEfforts = iife(() => {
           if (id.includes("codex")) {
@@ -519,9 +519,9 @@ export namespace ProviderTransform {
         )
 
       case "@ai-sdk/anthropic":
-      // https://v5.ai-sdk.dev/providers/ai-sdk-providers/anthropic
+      // https://ai-sdk.dev/providers/ai-sdk-providers/anthropic
       case "@ai-sdk/google-vertex/anthropic":
-        // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex#anthropic-provider
+        // https://ai-sdk.dev/providers/ai-sdk-providers/google-vertex#anthropic-provider
 
         if (isAnthropicAdaptive) {
           return Object.fromEntries(
@@ -553,7 +553,7 @@ export namespace ProviderTransform {
         }
 
       case "@ai-sdk/amazon-bedrock":
-        // https://v5.ai-sdk.dev/providers/ai-sdk-providers/amazon-bedrock
+        // https://ai-sdk.dev/providers/ai-sdk-providers/amazon-bedrock
         if (isAnthropicAdaptive) {
           return Object.fromEntries(
             adaptiveEfforts.map((effort) => [
@@ -599,9 +599,9 @@ export namespace ProviderTransform {
         )
 
       case "@ai-sdk/google-vertex":
-      // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex
+      // https://ai-sdk.dev/providers/ai-sdk-providers/google-vertex
       case "@ai-sdk/google":
-        // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-generative-ai
+        // https://ai-sdk.dev/providers/ai-sdk-providers/google-generative-ai
         if (id.includes("2.5")) {
           return {
             high: {
@@ -636,15 +636,15 @@ export namespace ProviderTransform {
         )
 
       case "@ai-sdk/mistral":
-        // https://v5.ai-sdk.dev/providers/ai-sdk-providers/mistral
+        // https://ai-sdk.dev/providers/ai-sdk-providers/mistral
         return {}
 
       case "@ai-sdk/cohere":
-        // https://v5.ai-sdk.dev/providers/ai-sdk-providers/cohere
+        // https://ai-sdk.dev/providers/ai-sdk-providers/cohere
         return {}
 
       case "@ai-sdk/groq":
-        // https://v5.ai-sdk.dev/providers/ai-sdk-providers/groq
+        // https://ai-sdk.dev/providers/ai-sdk-providers/groq
         const groqEffort = ["none", ...WIDELY_SUPPORTED_EFFORTS]
         return Object.fromEntries(
           groqEffort.map((effort) => [
@@ -656,7 +656,7 @@ export namespace ProviderTransform {
         )
 
       case "@ai-sdk/perplexity":
-        // https://v5.ai-sdk.dev/providers/ai-sdk-providers/perplexity
+        // https://ai-sdk.dev/providers/ai-sdk-providers/perplexity
         return {}
 
       case "@mymediset/sap-ai-provider":
