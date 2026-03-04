@@ -263,7 +263,8 @@ export const AuthLoginCommand = cmd({
         UI.empty()
         prompts.intro("Add credential")
         if (args.url) {
-          const wellknown = await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json() as any)
+          const url = args.url.replace(/\/+$/, "")
+          const wellknown = await fetch(`${url}/.well-known/opencode`).then((x) => x.json() as any)
           prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
           const proc = Process.spawn(wellknown.auth.command, {
             stdout: "pipe",
@@ -279,12 +280,12 @@ export const AuthLoginCommand = cmd({
             prompts.outro("Done")
             return
           }
-          await Auth.set(args.url, {
+          await Auth.set(url, {
             type: "wellknown",
             key: wellknown.auth.env,
             token: token.trim(),
           })
-          prompts.log.success("Logged into " + args.url)
+          prompts.log.success("Logged into " + url)
           prompts.outro("Done")
           return
         }

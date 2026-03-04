@@ -102,7 +102,7 @@ export const dict = {
   "temp.logoDarkAlt": "opencode koyu logo",
 
   "home.banner.badge": "Yeni",
-  "home.banner.text": "Masaüstü uygulaması beta olarak kullanılabilir",
+  "home.banner.text": "Masaüstü uygulaması beta olarak mevcut",
   "home.banner.platforms": "macOS, Windows ve Linux'ta",
   "home.banner.downloadNow": "Şimdi indir",
   "home.banner.downloadBetaNow": "Masaüstü betayı şimdi indir",
@@ -139,7 +139,7 @@ export const dict = {
   "home.growth.contributors": "Katılımcılar",
   "home.growth.monthlyDevs": "Aylık Geliştiriciler",
 
-  "home.privacy.title": "Önce gizlilik için tasarlandı",
+  "home.privacy.title": "Gizlilik öncelikli tasarlandı",
   "home.privacy.body":
     "OpenCode kodunuzu veya bağlam verilerinizi saklamaz; bu sayede gizliliğe duyarlı ortamlarda çalışabilir.",
   "home.privacy.learnMore": "Hakkında daha fazla bilgi:",
@@ -157,12 +157,12 @@ export const dict = {
   "home.faq.a3.p2.afterZen": " hesabı oluşturabilirsiniz.",
   "home.faq.a3.p3": "Zen'i öneriyoruz, ancak OpenCode OpenAI, Anthropic, xAI gibi popüler sağlayıcılarla da çalışır.",
   "home.faq.a3.p4.beforeLocal": "Hatta",
-  "home.faq.a3.p4.localLink": "yerel modellerinizi",
+  "home.faq.a3.p4.localLink": "yerel modellerinizi bağlayabilirsiniz",
   "home.faq.q4": "Mevcut AI aboneliklerimi OpenCode ile kullanabilir miyim?",
   "home.faq.a4.p1":
     "Evet. OpenCode tüm büyük sağlayıcıların aboneliklerini destekler. Claude Pro/Max, ChatGPT Plus/Pro veya GitHub Copilot kullanabilirsiniz.",
   "home.faq.q5": "OpenCode'u sadece terminalde mi kullanabilirim?",
-  "home.faq.a5.beforeDesktop": "Artık hayır! OpenCode şimdi",
+  "home.faq.a5.beforeDesktop": "Artık hayır! OpenCode artık sizin bu cihazlarınıza",
   "home.faq.a5.desktop": "masaüstü",
   "home.faq.a5.and": "ve",
   "home.faq.a5.web": "web",
@@ -178,10 +178,10 @@ export const dict = {
   "home.faq.a7.p2.shareLink": "paylaşım sayfaları",
   "home.faq.q8": "OpenCode açık kaynak mı?",
   "home.faq.a8.p1": "Evet, OpenCode tamamen açık kaynaktır. Kaynak kodu",
-  "home.faq.a8.p2": "altında",
+  "home.faq.a8.p2": "'da",
   "home.faq.a8.mitLicense": "MIT Lisansı",
   "home.faq.a8.p3":
-    ", yani herkes kullanabilir, değiştirebilir veya geliştirmeye katkıda bulunabilir. Topluluktan herkes issue açabilir, pull request gönderebilir ve işlevselliği genişletebilir.",
+    "altında herkese açıktır, yani herkes kullanabilir, değiştirebilir veya geliştirmeye katkıda bulunabilir. Topluluktan herkes issue açabilir, pull request gönderebilir ve işlevselliği genişletebilir.",
 
   "home.zenCta.title": "Kodlama ajanları için güvenilir, optimize modeller",
   "home.zenCta.body":

@@ -555,6 +555,45 @@ export const RunCommand = cmd({
       // Validate agent if specified
       const agent = await (async () => {
         if (!args.agent) return undefined
+
+        // When attaching, validate against the running server instead of local Instance state.
+        if (args.attach) {
+          const modes = await sdk.app
+            .agents(undefined, { throwOnError: true })
+            .then((x) => x.data ?? [])
+            .catch(() => undefined)
+
+          if (!modes) {
+            UI.println(
+              UI.Style.TEXT_WARNING_BOLD + "!",
+              UI.Style.TEXT_NORMAL,
+              `failed to list agents from ${args.attach}. Falling back to default agent`,
+            )
+            return undefined
+          }
+
+          const agent = modes.find((a) => a.name === args.agent)
+          if (!agent) {
+            UI.println(
+              UI.Style.TEXT_WARNING_BOLD + "!",
+              UI.Style.TEXT_NORMAL,
+              `agent "${args.agent}" not found. Falling back to default agent`,
+            )
+            return undefined
+          }
+
+          if (agent.mode === "subagent") {
+            UI.println(
+              UI.Style.TEXT_WARNING_BOLD + "!",
+              UI.Style.TEXT_NORMAL,
+              `agent "${args.agent}" is a subagent, not a primary agent. Falling back to default agent`,
+            )
+            return undefined
+          }
+
+          return args.agent
+        }
+
         const entry = await Agent.get(args.agent)
         if (!entry) {
           UI.println(
