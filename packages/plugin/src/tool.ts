@@ -31,13 +31,9 @@ export function tool<Args extends z.ZodRawShape>(input: {
   args: Args
   execute(args: z.infer<z.ZodObject<Args>>, context: ToolContext): Promise<string>
 }) {
-  return {
-    ...input,
-    // Build and expose a full object schema from the same Zod instance that
-    // defined the arg fields so downstream JSON Schema conversion preserves
-    // field-level metadata like `.describe(...)`.
-    parameters: z.object(input.args),
-  }
+  // Keep runtime shape minimal: custom tool loaders normalize/validate `args`.
+  // This helper primarily exists for TypeScript inference and shared `tool.schema`.
+  return input
 }
 tool.schema = z
 
