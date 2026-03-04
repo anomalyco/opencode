@@ -83,6 +83,7 @@
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
+    "react": "19.2.4",
     "typescript": "catalog:"
   },
   "repository": {
