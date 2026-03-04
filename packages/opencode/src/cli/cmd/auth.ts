@@ -11,6 +11,8 @@ import { Global } from "../../global"
 import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
+import { Process } from "../../util/process"
+import { text } from "node:stream/consumers"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
 
@@ -281,25 +283,29 @@ export const AuthLoginCommand = cmd({
         UI.empty()
         prompts.intro("Add credential")
         if (args.url) {
-          const wellknown = await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json() as any)
+          const url = args.url.replace(/\/+$/, "")
+          const wellknown = await fetch(`${url}/.well-known/opencode`).then((x) => x.json() as any)
           prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
-          const proc = Bun.spawn({
-            cmd: wellknown.auth.command,
+          const proc = Process.spawn(wellknown.auth.command, {
             stdout: "pipe",
           })
-          const exit = await proc.exited
+          if (!proc.stdout) {
+            prompts.log.error("Failed")
+            prompts.outro("Done")
+            return
+          }
+          const [exit, token] = await Promise.all([proc.exited, text(proc.stdout)])
           if (exit !== 0) {
             prompts.log.error("Failed")
             prompts.outro("Done")
             return
           }
-          const token = await new Response(proc.stdout).text()
-          await Auth.set(args.url, {
+          await Auth.set(url, {
             type: "wellknown",
             key: wellknown.auth.env,
             token: token.trim(),
           })
-          prompts.log.success("Logged into " + args.url)
+          prompts.log.success("Logged into " + url)
           prompts.outro("Done")
           return
         }
