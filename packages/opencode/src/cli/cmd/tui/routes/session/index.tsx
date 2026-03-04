@@ -1312,6 +1312,8 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const local = useLocal()
   const { theme } = useTheme()
   const sync = useSync()
+  const command = useCommandDialog()
+  const [hover, setHover] = createSignal(false)
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
 
   const final = createMemo(() => {
@@ -1346,7 +1348,14 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         }}
       </For>
       <Show when={props.parts.some((x) => x.type === "tool" && x.tool === "task")}>
-        <box paddingTop={1} paddingLeft={3}>
+        <box
+          paddingTop={1}
+          paddingLeft={3}
+          onMouseOver={() => setHover(true)}
+          onMouseOut={() => setHover(false)}
+          onMouseUp={() => command.trigger("session.child.first")}
+          backgroundColor={hover() ? theme.backgroundElement : undefined}
+        >
           <text fg={theme.text}>
             {keybind.print("session_child_first")}
             <span style={{ fg: theme.textMuted }}> view subagents</span>
@@ -1625,12 +1634,9 @@ function InlineTool(props: {
   spinner?: boolean
   children: JSX.Element
   part: ToolPart
-  onClick?: () => void
 }) {
   const [margin, setMargin] = createSignal(0)
-  const [hover, setHover] = createSignal(false)
   const { theme } = useTheme()
-  const renderer = useRenderer()
   const ctx = use()
   const sync = useSync()
 
@@ -1687,21 +1693,11 @@ function InlineTool(props: {
           <Spinner color={fg()} children={props.children} />
         </Match>
         <Match when={true}>
-          <box
-            onMouseOver={() => props.onClick && setHover(true)}
-            onMouseOut={() => setHover(false)}
-            onMouseUp={() => {
-              if (renderer.getSelection()?.getSelectedText()) return
-              props.onClick?.()
-            }}
-            backgroundColor={hover() ? theme.backgroundElement : undefined}
-          >
-            <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
-              <Show fallback={<>~ {props.pending}</>} when={props.complete}>
-                <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
-              </Show>
-            </text>
-          </box>
+          <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
+            <Show fallback={<>~ {props.pending}</>} when={props.complete}>
+              <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
+            </Show>
+          </text>
         </Match>
       </Switch>
       <Show when={error() && !denied()}>
@@ -1954,7 +1950,6 @@ function WebSearch(props: ToolProps<any>) {
 }
 
 function Task(props: ToolProps<typeof TaskTool>) {
-  const { navigate } = useRoute()
   const sync = useSync()
 
   onMount(() => {
@@ -2007,9 +2002,6 @@ function Task(props: ToolProps<typeof TaskTool>) {
       complete={props.input.description}
       pending="Delegating..."
       part={props.part}
-      onClick={
-        props.metadata.sessionId ? () => navigate({ type: "session", sessionID: props.metadata.sessionId! }) : undefined
-      }
     >
       {content()}
     </InlineTool>
