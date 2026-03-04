@@ -318,6 +318,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
           trigger={item}
         />
       </Show>
+
       <div
         class={`absolute ${props.dense ? "top-0.5 right-0.5" : "top-1 right-1"} flex items-center gap-0.5 transition-opacity`}
         classList={{
