@@ -257,10 +257,10 @@ export const dict = {
   "go.pricing.body": "Use with any agent. Top up credit if needed. Cancel any time.",
   "go.graph.free": "Free",
   "go.graph.go": "Go",
-  "go.graph.label": "Requests/month",
+  "go.graph.label": "Requests/5h",
   "go.graph.usageLimits": "Usage limits",
   "go.graph.tick": "{{n}}x",
-  "go.graph.aria": "Requests per month: {{free}} vs {{go}}",
+  "go.graph.aria": "Requests per 5h: {{free}} vs {{go}}",
 
   "go.testimonials.brand.zen": "Zen",
   "go.testimonials.brand.go": "Go",

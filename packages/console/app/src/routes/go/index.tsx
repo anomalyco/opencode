@@ -48,13 +48,12 @@ function LimitsGraph(props: { href: string }) {
     onCleanup(() => observer.disconnect())
   })
 
-  const free = 200 * 30
+  const free = 200
   const models = [
-    { id: "glm", name: "GLM-5", month: 5750, d: "120ms" },
-    { id: "kimi", name: "Kimi K2.5", month: 9250, d: "240ms" },
-    { id: "minimax", name: "MiniMax M2.5", month: 100000, d: "360ms" },
+    { id: "glm", name: "GLM-5", req: 1150, d: "120ms" },
+    { id: "kimi", name: "Kimi K2.5", req: 1850, d: "240ms" },
+    { id: "minimax", name: "MiniMax M2.5", req: 20000, d: "360ms" },
   ]
-  const scale = 18
   const ratio = (n: number) => n / free
 
   const w = 720
@@ -64,12 +63,14 @@ function LimitsGraph(props: { href: string }) {
   const top = 22
   const bottom = 46
   const plot = w - left - right
-  const x = (r: number) => left + (Math.min(r, scale) / scale) * plot
+  const rmax = Math.max(1, ...models.map((m) => ratio(m.req)))
+  const log = (n: number) => Math.log10(Math.max(n, 1))
+  const x = (r: number) => left + (log(r) / log(rmax)) * plot
   const start = (x(1) / w) * 100
 
   const yFree = 74
   const yGo = 134
-  const ticks = [1, 2, 5, 10, 15]
+  const ticks = [1, 2, 5, 10, 25, 50, 100].filter((t) => t <= rmax)
   const y = (n: number) => `${(n / h) * 100}%`
 
   return (
@@ -100,10 +101,11 @@ function LimitsGraph(props: { href: string }) {
           </g>
 
           <g data-slot="go">
+            <line x1={x(1)} y1={yGo} x2={x(ratio(models[0]!.req))} y2={yGo} data-range data-animate="line" />
             <line
-              x1={x(ratio(models[0]!.month))}
+              x1={x(ratio(models[0]!.req))}
               y1={yGo}
-              x2={x(ratio(models[2]!.month))}
+              x2={x(ratio(models[2]!.req))}
               y2={yGo}
               data-range
               data-animate="line"
@@ -111,7 +113,7 @@ function LimitsGraph(props: { href: string }) {
             <For each={models}>
               {(m) => (
                 <g style={{ "--d": m.d } as any}>
-                  <circle cx={x(ratio(m.month))} cy={yGo} r={5.5} data-point data-kind="go" data-model={m.id} />
+                  <circle cx={x(ratio(m.req))} cy={yGo} r={5.5} data-point data-kind="go" data-model={m.id} />
                 </g>
               )}
             </For>
@@ -148,7 +150,7 @@ function LimitsGraph(props: { href: string }) {
                   <span data-item>
                     <i data-dot data-kind="go" data-model={m.id} />
                     <span data-name>{m.name}</span>
-                    <span data-value>{m.month.toLocaleString()}</span>
+                    <span data-value>{m.req.toLocaleString()}</span>
                   </span>
                 )}
               </For>
