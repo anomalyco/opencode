@@ -128,6 +128,11 @@ export function Session() {
       .filter((x) => x.parentID === parentID || x.id === parentID)
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
+  const subagents = createMemo(() => {
+    return sync.data.session
+      .filter((x) => x.parentID === route.sessionID)
+      .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
   const permissions = createMemo(() => {
     if (session()?.parentID) return []
@@ -316,20 +321,14 @@ export function Session() {
   const local = useLocal()
 
   function moveFirstChild() {
-    if (children().length === 1) return
-    const next = children().find((x) => !!x.parentID)
-    if (next) {
-      navigate({
-        type: "session",
-        sessionID: next.id,
-      })
-    }
+    const next = subagents()[0]
+    if (!next) return
+    navigate({ type: "session", sessionID: next.id })
   }
 
   function moveChild(direction: number) {
-    if (children().length === 1) return
-
     const sessions = children().filter((x) => !!x.parentID)
+    if (sessions.length === 0) return
     let next = sessions.findIndex((x) => x.id === session()?.id) + direction
 
     if (next >= sessions.length) next = 0
@@ -1990,16 +1989,35 @@ function Task(props: ToolProps<typeof TaskTool>) {
     return content.join("\n")
   })
 
+  const lines = createMemo(() => content().split("\n"))
+  const body = createMemo(() => lines().slice(1).join("\n"))
+
   return (
-    <InlineTool
-      icon="│"
-      spinner={isRunning()}
-      complete={props.input.description}
-      pending="Delegating..."
-      part={props.part}
-    >
-      {content()}
-    </InlineTool>
+    <Switch>
+      <Match when={props.metadata.sessionId}>
+        <BlockTool
+          title={lines()[0]}
+          part={props.part}
+          spinner={isRunning()}
+          onClick={() => navigate({ type: "session", sessionID: props.metadata.sessionId! })}
+        >
+          <Show when={body()}>
+            <text fg={theme.textMuted}>{body()}</text>
+          </Show>
+        </BlockTool>
+      </Match>
+      <Match when={true}>
+        <InlineTool
+          icon="│"
+          spinner={isRunning()}
+          complete={props.input.description}
+          pending="Delegating..."
+          part={props.part}
+        >
+          {content()}
+        </InlineTool>
+      </Match>
+    </Switch>
   )
 }
 
