@@ -44,7 +44,6 @@ jobs:
       - name: Setup git committer
         id: committer
         uses: ./.github/actions/setup-git-committer
-        if: github.repository == 'anomalyco/opencode'
         with:
           opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
@@ -123,7 +122,6 @@ jobs:
           - host: blacksmith-8vcpu-ubuntu-2404-arm
             target: aarch64-unknown-linux-gnu
     runs-on: ${{ matrix.settings.host }}
-    if: github.repository == 'anomalyco/opencode'
     steps:
       - uses: actions/checkout@v3
         with:
@@ -178,13 +176,6 @@ jobs:
           workspaces: packages/desktop/src-tauri
           shared-key: ${{ matrix.settings.target }}
 
-      - name: Setup git committer
-        id: committer
-        uses: ./.github/actions/setup-git-committer
-        with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
-
       - name: Prepare
         run: |
           cd packages/desktop
@@ -213,6 +204,13 @@ jobs:
       - name: Show tauri-cli version
         if: contains(matrix.settings.host, 'ubuntu')
         run: cargo tauri --version
+
+      - name: Setup git committer
+        id: committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
       - name: Build and upload artifacts
         uses: tauri-apps/tauri-action@390cbe447412ced1303d35abe75287949e43437a
