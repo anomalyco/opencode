@@ -528,17 +528,19 @@ export namespace Config {
       if (pkg) return pkg
 
       // Fallback: use filename, skip generic names
-      const parsed = path.parse(fp)
+      // Use URL pathname for name extraction (always posix-style /)
+      const pathname = new URL(plugin).pathname
+      const parsed = path.posix.parse(pathname)
       if (parsed.name !== "index") return parsed.name
 
       // Walk up to find a meaningful directory name
       const skip = new Set(["src", "dist", "lib", "build", "out", "esm", "cjs"])
       let dir = parsed.dir
-      const root = path.parse(dir).root
+      const root = path.posix.parse(dir).root
       for (let i = 0; i < 5 && dir !== root; i++) {
-        const name = path.basename(dir)
+        const name = path.posix.basename(dir)
         if (!skip.has(name)) return name
-        dir = path.dirname(dir)
+        dir = path.posix.dirname(dir)
       }
 
       return parsed.name
