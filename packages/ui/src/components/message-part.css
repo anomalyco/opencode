@@ -281,11 +281,11 @@
     margin-top: 24px;
     font-style: normal;
     font-size: inherit;
-    color: var(--text-weak);
+    color: var(--text-base);
 
     strong,
     b {
-      color: var(--text-weak);
+      color: var(--text-base);
     }
 
     p:has(strong) {
