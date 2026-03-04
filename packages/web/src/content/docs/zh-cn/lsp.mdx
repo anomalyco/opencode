@@ -1,0 +1,189 @@
+---
+title: LSP 服务器
+description: OpenCode 与你的 LSP 服务器集成。
+---
+
+OpenCode 与你的语言服务器协议（LSP）集成，帮助 LLM 与你的代码库进行交互。它利用诊断信息向 LLM 提供反馈。
+
+---
+
+## 内置支持
+
+OpenCode 内置了多种适用于主流语言的 LSP 服务器：
+
+| LSP 服务器         | 扩展名                                                              | 要求                                                  |
+| ------------------ | ------------------------------------------------------------------- | ----------------------------------------------------- |
+| astro              | .astro                                                              | 为 Astro 项目自动安装                                 |
+| bash               | .sh, .bash, .zsh, .ksh                                              | 自动安装 bash-language-server                         |
+| clangd             | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++                | 为 C/C++ 项目自动安装                                 |
+| csharp             | .cs                                                                 | 需要已安装 `.NET SDK`                                 |
+| clojure-lsp        | .clj, .cljs, .cljc, .edn                                            | 需要 `clojure-lsp` 命令可用                           |
+| dart               | .dart                                                               | 需要 `dart` 命令可用                                  |
+| deno               | .ts, .tsx, .js, .jsx, .mjs                                          | 需要 `deno` 命令可用（自动检测 deno.json/deno.jsonc） |
+| elixir-ls          | .ex, .exs                                                           | 需要 `elixir` 命令可用                                |
+| eslint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                  | 项目中需要 `eslint` 依赖                              |
+| fsharp             | .fs, .fsi, .fsx, .fsscript                                          | 需要已安装 `.NET SDK`                                 |
+| gleam              | .gleam                                                              | 需要 `gleam` 命令可用                                 |
+| gopls              | .go                                                                 | 需要 `go` 命令可用                                    |
+| hls                | .hs, .lhs                                                           | 需要 `haskell-language-server-wrapper` 命令可用       |
+| jdtls              | .java                                                               | 需要已安装 `Java SDK (version 21+)`                   |
+| julials            | .jl                                                                 | 需要安装 `julia` and `LanguageServer.jl`              |
+| kotlin-ls          | .kt, .kts                                                           | 为 Kotlin 项目自动安装                                |
+| lua-ls             | .lua                                                                | 为 Lua 项目自动安装                                   |
+| nixd               | .nix                                                                | 需要 `nixd` 命令可用                                  |
+| ocaml-lsp          | .ml, .mli                                                           | 需要 `ocamllsp` 命令可用                              |
+| oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | 项目中需要 `oxlint` 依赖                              |
+| php intelephense   | .php                                                                | 为 PHP 项目自动安装                                   |
+| prisma             | .prisma                                                             | 需要 `prisma` 命令可用                                |
+| pyright            | .py, .pyi                                                           | 需要已安装 `pyright` 依赖                             |
+| ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | 需要 `ruby` 和 `gem` 命令可用                         |
+| rust               | .rs                                                                 | 需要 `rust-analyzer` 命令可用                         |
+| sourcekit-lsp      | .swift, .objc, .objcpp                                              | 需要已安装 `swift`（macOS 上为 `xcode`）              |
+| svelte             | .svelte                                                             | 为 Svelte 项目自动安装                                |
+| terraform          | .tf, .tfvars                                                        | 从 GitHub releases 自动安装                           |
+| tinymist           | .typ, .typc                                                         | 从 GitHub releases 自动安装                           |
+| typescript         | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | 项目中需要 `typescript` 依赖                          |
+| vue                | .vue                                                                | 为 Vue 项目自动安装                                   |
+| yaml-ls            | .yaml, .yml                                                         | 自动安装 Red Hat yaml-language-server                 |
+| zls                | .zig, .zon                                                          | 需要 `zig` 命令可用                                   |
+
+当检测到上述文件扩展名且满足相应要求时，LSP 服务器会自动启用。
+
+:::note
+你可以将 `OPENCODE_DISABLE_LSP_DOWNLOAD` 环境变量设置为 `true` 来禁用 LSP 服务器的自动下载。
+:::
+
+---
+
+## 工作原理
+
+当 opencode 打开一个文件时，它会：
+
+1. 将文件扩展名与所有已启用的 LSP 服务器进行匹配。
+2. 如果对应的 LSP 服务器尚未运行，则自动启动它。
+
+---
+
+## 配置
+
+你可以通过 opencode 配置文件中的 `lsp` 部分来自定义 LSP 服务器。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {}
+}
+```
+
+每个 LSP 服务器支持以下配置项：
+
+| 属性             | 类型     | 描述                              |
+| ---------------- | -------- | --------------------------------- |
+| `disabled`       | boolean  | 设置为 `true` 可禁用该 LSP 服务器 |
+| `command`        | string[] | 启动 LSP 服务器的命令             |
+| `extensions`     | string[] | 该 LSP 服务器需要处理的文件扩展名 |
+| `env`            | object   | 启动服务器时设置的环境变量        |
+| `initialization` | object   | 发送给 LSP 服务器的初始化选项     |
+
+下面来看一些示例。
+
+---
+
+### 环境变量
+
+使用 `env` 属性在启动 LSP 服务器时设置环境变量：
+
+```json title="opencode.json" {5-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "rust": {
+      "env": {
+        "RUST_LOG": "debug"
+      }
+    }
+  }
+}
+```
+
+---
+
+### 初始化选项
+
+使用 `initialization` 属性向 LSP 服务器传递初始化选项。这些是在 LSP `initialize` 请求期间发送的服务器特定设置：
+
+```json title="opencode.json" {5-9}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "typescript": {
+      "initialization": {
+        "preferences": {
+          "importModuleSpecifierPreference": "relative"
+        }
+      }
+    }
+  }
+}
+```
+
+:::note
+初始化选项因 LSP 服务器而异。请查阅你所使用的 LSP 服务器的文档以了解可用选项。
+:::
+
+---
+
+### 禁用 LSP 服务器
+
+要全局禁用**所有** LSP 服务器，将 `lsp` 设置为 `false`：
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": false
+}
+```
+
+要禁用**特定的** LSP 服务器，将 `disabled` 设置为 `true`：
+
+```json title="opencode.json" {5}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "typescript": {
+      "disabled": true
+    }
+  }
+}
+```
+
+---
+
+### 自定义 LSP 服务器
+
+你可以通过指定命令和文件扩展名来添加自定义 LSP 服务器：
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "custom-lsp": {
+      "command": ["custom-lsp-server", "--stdio"],
+      "extensions": [".custom"]
+    }
+  }
+}
+```
+
+---
+
+## 补充信息
+
+### PHP Intelephense
+
+PHP Intelephense 通过许可证密钥提供高级功能。你可以将许可证密钥单独放在以下路径的文本文件中：
+
+- macOS/Linux：`$HOME/intelephense/license.txt`
+- Windows：`%USERPROFILE%/intelephense/license.txt`
+
+该文件应仅包含许可证密钥，不要添加其他任何内容。

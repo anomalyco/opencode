@@ -6,6 +6,7 @@ import { createTwoFilesPatch } from "diff"
 import DESCRIPTION from "./write.txt"
 import { Bus } from "../bus"
 import { File } from "../file"
+import { FileWatcher } from "../file/watcher"
 import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
@@ -25,9 +26,8 @@ export const WriteTool = Tool.define("write", {
     const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     await assertExternalDirectory(ctx, filepath)
 
-    const file = Bun.file(filepath)
-    const exists = await file.exists()
-    const contentOld = exists ? await file.text() : ""
+    const exists = await Filesystem.exists(filepath)
+    const contentOld = exists ? await Filesystem.readText(filepath) : ""
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
 
     const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, params.content))
@@ -41,13 +41,17 @@ export const WriteTool = Tool.define("write", {
       },
     })
 
-    await Bun.write(filepath, params.content)
+    await Filesystem.write(filepath, params.content)
     await Bus.publish(File.Event.Edited, {
       file: filepath,
     })
+    await Bus.publish(FileWatcher.Event.Updated, {
+      file: filepath,
+      event: exists ? "change" : "add",
+    })
     FileTime.read(ctx.sessionID, filepath)
 
-    let output = ""
+    let output = "Wrote file successfully."
     await LSP.touchFile(filepath, true)
     const diagnostics = await LSP.diagnostics()
     const normalizedFilepath = Filesystem.normalizePath(filepath)
@@ -59,12 +63,12 @@ export const WriteTool = Tool.define("write", {
       const suffix =
         errors.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${errors.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
       if (file === normalizedFilepath) {
-        output += `\nThis file has errors, please fix\n<file_diagnostics>\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</file_diagnostics>\n`
+        output += `\n\nLSP errors detected in this file, please fix:\n<diagnostics file="${filepath}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
         continue
       }
       if (projectDiagnosticsCount >= MAX_PROJECT_DIAGNOSTICS_FILES) continue
       projectDiagnosticsCount++
-      output += `\n<project_diagnostics>\n${file}\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</project_diagnostics>\n`
+      output += `\n\nLSP errors detected in other files:\n<diagnostics file="${file}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
     }
 
     return {

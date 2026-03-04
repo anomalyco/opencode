@@ -8,18 +8,23 @@ import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { CodexAuthPlugin } from "./codex"
+import { Session } from "../session"
+import { NamedError } from "@opencode-ai/util/error"
+import { CopilotAuthPlugin } from "./copilot"
+import { gitlabAuthPlugin as GitlabAuthPlugin } from "@gitlab/opencode-gitlab-auth"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
-  const BUILTIN = ["opencode-copilot-auth@0.0.12", "opencode-anthropic-auth@0.0.8"]
+  const BUILTIN = ["opencode-anthropic-auth@0.0.13"]
 
   // Built-in plugins that are directly imported (not installed from npm)
-  const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin]
+  const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin, GitlabAuthPlugin]
 
   const state = Instance.state(async () => {
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
+      directory: Instance.directory,
       // @ts-ignore - fetch type incompatibility
       fetch: async (...args) => Server.App().fetch(...args),
     })
@@ -36,40 +41,60 @@ export namespace Plugin {
 
     for (const plugin of INTERNAL_PLUGINS) {
       log.info("loading internal plugin", { name: plugin.name })
-      const init = await plugin(input)
-      hooks.push(init)
+      const init = await plugin(input).catch((err) => {
+        log.error("failed to load internal plugin", { name: plugin.name, error: err })
+      })
+      if (init) hooks.push(init)
     }
 
-    const plugins = [...(config.plugin ?? [])]
+    let plugins = config.plugin ?? []
+    if (plugins.length) await Config.waitForDependencies()
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
-      plugins.push(...BUILTIN)
+      plugins = [...BUILTIN, ...plugins]
     }
+
     for (let plugin of plugins) {
       // ignore old codex plugin since it is supported first party now
-      if (plugin.includes("opencode-openai-codex-auth")) continue
+      if (plugin.includes("opencode-openai-codex-auth") || plugin.includes("opencode-copilot-auth")) continue
       log.info("loading plugin", { path: plugin })
       if (!plugin.startsWith("file://")) {
         const lastAtIndex = plugin.lastIndexOf("@")
         const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
         const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
-        const builtin = BUILTIN.some((x) => x.startsWith(pkg + "@"))
         plugin = await BunProc.install(pkg, version).catch((err) => {
-          if (builtin) return ""
-          throw err
+          const cause = err instanceof Error ? err.cause : err
+          const detail = cause instanceof Error ? cause.message : String(cause ?? err)
+          log.error("failed to install plugin", { pkg, version, error: detail })
+          Bus.publish(Session.Event.Error, {
+            error: new NamedError.Unknown({
+              message: `Failed to install plugin ${pkg}@${version}: ${detail}`,
+            }).toObject(),
+          })
+          return ""
         })
         if (!plugin) continue
       }
-      const mod = await import(plugin)
       // Prevent duplicate initialization when plugins export the same function
       // as both a named export and default export (e.g., `export const X` and `export default X`).
       // Object.entries(mod) would return both entries pointing to the same function reference.
-      const seen = new Set<PluginInstance>()
-      for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
-        if (seen.has(fn)) continue
-        seen.add(fn)
-        const init = await fn(input)
-        hooks.push(init)
-      }
+      await import(plugin)
+        .then(async (mod) => {
+          const seen = new Set<PluginInstance>()
+          for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
+            if (seen.has(fn)) continue
+            seen.add(fn)
+            hooks.push(await fn(input))
+          }
+        })
+        .catch((err) => {
+          const message = err instanceof Error ? err.message : String(err)
+          log.error("failed to load plugin", { path: plugin, error: message })
+          Bus.publish(Session.Event.Error, {
+            error: new NamedError.Unknown({
+              message: `Failed to load plugin ${plugin}: ${message}`,
+            }).toObject(),
+          })
+        })
     }
 
     return {

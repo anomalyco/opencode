@@ -1,0 +1,287 @@
+---
+title: الخادم
+description: تفاعل مع خادم opencode عبر HTTP.
+---
+
+import config from "../../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+يشغّل الأمر `opencode serve` خادما HTTP دون واجهة ويعرض نقطة نهاية OpenAPI يمكن لعميل opencode استخدامها.
+
+---
+
+### الاستخدام
+
+```bash
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+```
+
+#### الخيارات
+
+| الخيار          | الوصف                                 | الافتراضي        |
+| --------------- | ------------------------------------- | ---------------- |
+| `--port`        | المنفذ الذي يستمع عليه                | `4096`           |
+| `--hostname`    | اسم المضيف الذي يستمع عليه            | `127.0.0.1`      |
+| `--mdns`        | تفعيل اكتشاف mDNS                     | `false`          |
+| `--mdns-domain` | اسم نطاق مخصص لخدمة mDNS              | `opencode.local` |
+| `--cors`        | أصول (Origins) متصفح إضافية مسموح بها | `[]`             |
+
+يمكن تمرير `--cors` عدة مرات:
+
+```bash
+opencode serve --cors http://localhost:5173 --cors https://app.example.com
+```
+
+---
+
+### المصادقة
+
+عيّن `OPENCODE_SERVER_PASSWORD` لحماية الخادم باستخدام مصادقة HTTP الأساسية. اسم المستخدم افتراضيا هو `opencode`، أو عيّن `OPENCODE_SERVER_USERNAME` لتغييره. ينطبق ذلك على كل من `opencode serve` و `opencode web`.
+
+```bash
+OPENCODE_SERVER_PASSWORD=your-password opencode serve
+```
+
+---
+
+### كيف يعمل
+
+عند تشغيل `opencode` يبدأ تشغيل واجهة terminal تفاعلية (TUI) وخادما. تكون الـ TUI هي
+العميل الذي يتحدث إلى الخادم. يوفّر الخادم نقطة نهاية لمواصفة OpenAPI 3.1.
+وتُستخدم هذه النقطة أيضا لتوليد [SDK](/docs/sdk).
+
+:::tip
+استخدم خادم opencode للتفاعل مع opencode برمجيا.
+:::
+
+تتيح هذه البنية لـ opencode دعم عدة عملاء وتمكّنك من التفاعل مع opencode برمجيا.
+
+يمكنك تشغيل `opencode serve` لبدء خادم مستقل. إذا كانت واجهة opencode في terminal (TUI)
+قيد التشغيل، فسيبدأ `opencode serve` خادما جديدا.
+
+---
+
+#### الاتصال بخادم موجود
+
+عند بدء الـ TUI تقوم بتعيين منفذ واسم مضيف عشوائيا. يمكنك بدلا من ذلك تمرير [الخيارات](/docs/cli) `--hostname` و `--port`، ثم استخدامهما للاتصال بخادمها.
+
+يمكن استخدام نقطة النهاية [`/tui`](#tui) للتحكم في الـ TUI عبر الخادم. على سبيل المثال، يمكنك تعبئة الموجّه مسبقا أو تشغيله. يُستخدم هذا الإعداد بواسطة ملحقات OpenCode لـ [IDE](/docs/ide).
+
+---
+
+## المواصفات
+
+ينشر الخادم مواصفة OpenAPI 3.1 ويمكن عرضها على:
+
+```
+http://<hostname>:<port>/doc
+```
+
+على سبيل المثال: `http://localhost:4096/doc`. استخدم المواصفة لتوليد عملاء أو لفحص أنواع الطلبات والاستجابات. أو اعرضها في مستكشف Swagger.
+
+---
+
+## واجهات API
+
+يعرض خادم opencode واجهات API التالية.
+
+---
+
+### عام
+
+| الطريقة | المسار           | الوصف                                | الاستجابة                            |
+| ------- | ---------------- | ------------------------------------ | ------------------------------------ |
+| `GET`   | `/global/health` | الحصول على صحة الخادم وإصداره        | `{ healthy: true, version: string }` |
+| `GET`   | `/global/event`  | الحصول على الأحداث العامة (تدفق SSE) | تدفق أحداث                           |
+
+---
+
+### المشروع
+
+| الطريقة | المسار             | الوصف                     | الاستجابة                                     |
+| ------- | ------------------ | ------------------------- | --------------------------------------------- |
+| `GET`   | `/project`         | سرد جميع المشاريع         | <a href={typesUrl}><code>Project[]</code></a> |
+| `GET`   | `/project/current` | الحصول على المشروع الحالي | <a href={typesUrl}><code>Project</code></a>   |
+
+---
+
+### المسار و VCS
+
+| الطريقة | المسار  | الوصف                                 | الاستجابة                                   |
+| ------- | ------- | ------------------------------------- | ------------------------------------------- |
+| `GET`   | `/path` | الحصول على المسار الحالي              | <a href={typesUrl}><code>Path</code></a>    |
+| `GET`   | `/vcs`  | الحصول على معلومات VCS للمشروع الحالي | <a href={typesUrl}><code>VcsInfo</code></a> |
+
+---
+
+### المثيل
+
+| الطريقة | المسار              | الوصف                   | الاستجابة |
+| ------- | ------------------- | ----------------------- | --------- |
+| `POST`  | `/instance/dispose` | التخلص من المثيل الحالي | `boolean` |
+
+---
+
+### الإعدادات
+
+| الطريقة | المسار              | الوصف                             | الاستجابة                                                                                |
+| ------- | ------------------- | --------------------------------- | ---------------------------------------------------------------------------------------- |
+| `GET`   | `/config`           | الحصول على معلومات الإعدادات      | <a href={typesUrl}><code>Config</code></a>                                               |
+| `PATCH` | `/config`           | تحديث الإعدادات                   | <a href={typesUrl}><code>Config</code></a>                                               |
+| `GET`   | `/config/providers` | سرد المزوّدين والنماذج الافتراضية | `{ providers: `<a href={typesUrl}>Provider[]</a>`, default: { [key: string]: string } }` |
+
+---
+
+### المزوّد
+
+| الطريقة | المسار                           | الوصف                         | الاستجابة                                                                           |
+| ------- | -------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------- |
+| `GET`   | `/provider`                      | سرد جميع المزوّدين            | `{ all: `<a href={typesUrl}>Provider[]</a>`, default: {...}, connected: string[] }` |
+| `GET`   | `/provider/auth`                 | الحصول على طرق مصادقة المزوّد | `{ [providerID: string]: `<a href={typesUrl}>ProviderAuthMethod[]</a>` }`           |
+| `POST`  | `/provider/{id}/oauth/authorize` | تفويض مزوّد باستخدام OAuth    | <a href={typesUrl}><code>ProviderAuthAuthorization</code></a>                       |
+| `POST`  | `/provider/{id}/oauth/callback`  | معالجة رد نداء OAuth لمزوّد   | `boolean`                                                                           |
+
+---
+
+### الجلسات
+
+| الطريقة  | المسار                                   | الوصف                                 | الملاحظات                                                                        |
+| -------- | ---------------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------- |
+| `GET`    | `/session`                               | سرد جميع الجلسات                      | يعيد <a href={typesUrl}><code>Session[]</code></a>                               |
+| `POST`   | `/session`                               | إنشاء جلسة جديدة                      | المتن: `{ parentID?, title? }`، يعيد <a href={typesUrl}><code>Session</code></a> |
+| `GET`    | `/session/status`                        | الحصول على حالة الجلسات جميعها        | يعيد `{ [sessionID: string]: `<a href={typesUrl}>SessionStatus</a>` }`           |
+| `GET`    | `/session/:id`                           | الحصول على تفاصيل الجلسة              | يعيد <a href={typesUrl}><code>Session</code></a>                                 |
+| `DELETE` | `/session/:id`                           | حذف جلسة وجميع بياناتها               | يعيد `boolean`                                                                   |
+| `PATCH`  | `/session/:id`                           | تحديث خصائص الجلسة                    | المتن: `{ title? }`، يعيد <a href={typesUrl}><code>Session</code></a>            |
+| `GET`    | `/session/:id/children`                  | الحصول على الجلسات الفرعية لجلسة      | يعيد <a href={typesUrl}><code>Session[]</code></a>                               |
+| `GET`    | `/session/:id/todo`                      | الحصول على قائمة المهام (todo) للجلسة | يعيد <a href={typesUrl}><code>Todo[]</code></a>                                  |
+| `POST`   | `/session/:id/init`                      | تحليل التطبيق وإنشاء `AGENTS.md`      | المتن: `{ messageID, providerID, modelID }`، يعيد `boolean`                      |
+| `POST`   | `/session/:id/fork`                      | تفريع جلسة موجودة عند رسالة           | المتن: `{ messageID? }`، يعيد <a href={typesUrl}><code>Session</code></a>        |
+| `POST`   | `/session/:id/abort`                     | إلغاء جلسة قيد التشغيل                | يعيد `boolean`                                                                   |
+| `POST`   | `/session/:id/share`                     | مشاركة جلسة                           | يعيد <a href={typesUrl}><code>Session</code></a>                                 |
+| `DELETE` | `/session/:id/share`                     | إلغاء مشاركة جلسة                     | يعيد <a href={typesUrl}><code>Session</code></a>                                 |
+| `GET`    | `/session/:id/diff`                      | الحصول على diff لهذه الجلسة           | الاستعلام: `messageID?`، يعيد <a href={typesUrl}><code>FileDiff[]</code></a>     |
+| `POST`   | `/session/:id/summarize`                 | تلخيص الجلسة                          | المتن: `{ providerID, modelID }`، يعيد `boolean`                                 |
+| `POST`   | `/session/:id/revert`                    | التراجع عن رسالة                      | المتن: `{ messageID, partID? }`، يعيد `boolean`                                  |
+| `POST`   | `/session/:id/unrevert`                  | استعادة جميع الرسائل المتراجع عنها    | يعيد `boolean`                                                                   |
+| `POST`   | `/session/:id/permissions/:permissionID` | الرد على طلب إذن                      | المتن: `{ response, remember? }`، يعيد `boolean`                                 |
+
+---
+
+### الرسائل
+
+| الطريقة | المسار                            | الوصف                                     | الملاحظات                                                                                                                                                           |
+| ------- | --------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`   | `/session/:id/message`            | سرد رسائل جلسة                            | الاستعلام: `limit?`، يعيد `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}[]`                                                     |
+| `POST`  | `/session/:id/message`            | إرسال رسالة والانتظار للحصول على رد       | المتن: `{ messageID?, model?, agent?, noReply?, system?, tools?, parts }`، يعيد `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}` |
+| `GET`   | `/session/:id/message/:messageID` | الحصول على تفاصيل الرسالة                 | يعيد `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                                                            |
+| `POST`  | `/session/:id/prompt_async`       | إرسال رسالة بشكل غير متزامن (بدون انتظار) | المتن: مثل `/session/:id/message`، يعيد `204 No Content`                                                                                                            |
+| `POST`  | `/session/:id/command`            | تنفيذ أمر شرطة مائلة (slash)              | المتن: `{ messageID?, agent?, model?, command, arguments }`، يعيد `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`               |
+| `POST`  | `/session/:id/shell`              | تشغيل أمر في shell                        | المتن: `{ agent, model?, command }`، يعيد `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                       |
+
+---
+
+### الأوامر
+
+| الطريقة | المسار     | الوصف            | الاستجابة                                     |
+| ------- | ---------- | ---------------- | --------------------------------------------- |
+| `GET`   | `/command` | سرد جميع الأوامر | <a href={typesUrl}><code>Command[]</code></a> |
+
+---
+
+### الملفات
+
+| الطريقة | المسار                   | الوصف                               | الاستجابة                                                                                           |
+| ------- | ------------------------ | ----------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `GET`   | `/find?pattern=<pat>`    | البحث عن نص داخل الملفات            | مصفوفة من كائنات المطابقة تحتوي على `path` و`lines` و`line_number` و`absolute_offset` و`submatches` |
+| `GET`   | `/find/file?query=<q>`   | العثور على الملفات والمجلدات بالاسم | `string[]` (مسارات)                                                                                 |
+| `GET`   | `/find/symbol?query=<q>` | العثور على رموز مساحة العمل         | <a href={typesUrl}><code>Symbol[]</code></a>                                                        |
+| `GET`   | `/file?path=<path>`      | سرد الملفات والمجلدات               | <a href={typesUrl}><code>FileNode[]</code></a>                                                      |
+| `GET`   | `/file/content?path=<p>` | قراءة ملف                           | <a href={typesUrl}><code>FileContent</code></a>                                                     |
+| `GET`   | `/file/status`           | الحصول على حالة الملفات المتعقّبة   | <a href={typesUrl}><code>File[]</code></a>                                                          |
+
+#### معلمات الاستعلام لـ `/find/file`
+
+- `query` (مطلوب) — سلسلة البحث (مطابقة ضبابية)
+- `type` (اختياري) — حصر النتائج في `"file"` أو `"directory"`
+- `directory` (اختياري) — تجاوز جذر المشروع لأجل البحث
+- `limit` (اختياري) — الحد الأقصى للنتائج (1–200)
+- `dirs` (اختياري) — خيار قديم (إرجاع `"false"` يعيد الملفات فقط)
+
+---
+
+### الأدوات (تجريبية)
+
+| الطريقة | المسار                                      | الوصف                             | الاستجابة                                    |
+| ------- | ------------------------------------------- | --------------------------------- | -------------------------------------------- |
+| `GET`   | `/experimental/tool/ids`                    | سرد جميع معرّفات الأدوات          | <a href={typesUrl}><code>ToolIDs</code></a>  |
+| `GET`   | `/experimental/tool?provider=<p>&model=<m>` | سرد الأدوات مع مخططات JSON لنموذج | <a href={typesUrl}><code>ToolList</code></a> |
+
+---
+
+### LSP والمنسّقات و MCP
+
+| الطريقة | المسار       | الوصف                     | الاستجابة                                                |
+| ------- | ------------ | ------------------------- | -------------------------------------------------------- |
+| `GET`   | `/lsp`       | الحصول على حالة خادم LSP  | <a href={typesUrl}><code>LSPStatus[]</code></a>          |
+| `GET`   | `/formatter` | الحصول على حالة المنسّقات | <a href={typesUrl}><code>FormatterStatus[]</code></a>    |
+| `GET`   | `/mcp`       | الحصول على حالة خادم MCP  | `{ [name: string]: `<a href={typesUrl}>MCPStatus</a>` }` |
+| `POST`  | `/mcp`       | إضافة خادم MCP ديناميكيا  | المتن: `{ name, config }`، يعيد كائن حالة MCP            |
+
+---
+
+### الوكلاء
+
+| الطريقة | المسار   | الوصف                     | الاستجابة                                   |
+| ------- | -------- | ------------------------- | ------------------------------------------- |
+| `GET`   | `/agent` | سرد جميع الوكلاء المتاحين | <a href={typesUrl}><code>Agent[]</code></a> |
+
+---
+
+### التسجيل
+
+| الطريقة | المسار | الوصف                                                         | الاستجابة |
+| ------- | ------ | ------------------------------------------------------------- | --------- |
+| `POST`  | `/log` | كتابة إدخال سجل. المتن: `{ service, level, message, extra? }` | `boolean` |
+
+---
+
+### TUI
+
+| الطريقة | المسار                  | الوصف                                      | الاستجابة     |
+| ------- | ----------------------- | ------------------------------------------ | ------------- |
+| `POST`  | `/tui/append-prompt`    | إلحاق نص بالموجّه                          | `boolean`     |
+| `POST`  | `/tui/open-help`        | فتح مربع حوار المساعدة                     | `boolean`     |
+| `POST`  | `/tui/open-sessions`    | فتح محدد الجلسات                           | `boolean`     |
+| `POST`  | `/tui/open-themes`      | فتح محدد السمات                            | `boolean`     |
+| `POST`  | `/tui/open-models`      | فتح محدد النماذج                           | `boolean`     |
+| `POST`  | `/tui/submit-prompt`    | إرسال الموجّه الحالي                       | `boolean`     |
+| `POST`  | `/tui/clear-prompt`     | مسح الموجّه                                | `boolean`     |
+| `POST`  | `/tui/execute-command`  | تنفيذ أمر (`{ command }`)                  | `boolean`     |
+| `POST`  | `/tui/show-toast`       | عرض toast (`{ title?, message, variant }`) | `boolean`     |
+| `GET`   | `/tui/control/next`     | الانتظار لطلب التحكم التالي                | كائن طلب تحكم |
+| `POST`  | `/tui/control/response` | الاستجابة لطلب تحكم (`{ body }`)           | `boolean`     |
+
+---
+
+### المصادقة
+
+| الطريقة | المسار      | الوصف                                                         | الاستجابة |
+| ------- | ----------- | ------------------------------------------------------------- | --------- |
+| `PUT`   | `/auth/:id` | تعيين بيانات اعتماد المصادقة. يجب أن يطابق المتن مخطط المزوّد | `boolean` |
+
+---
+
+### الأحداث
+
+| الطريقة | المسار   | الوصف                                                                            | الاستجابة                  |
+| ------- | -------- | -------------------------------------------------------------------------------- | -------------------------- |
+| `GET`   | `/event` | تدفق أحداث مرسلة من الخادم (SSE). أول حدث هو `server.connected` ثم أحداث الحافلة | تدفق أحداث مرسلة من الخادم |
+
+---
+
+### التوثيق
+
+| الطريقة | المسار | الوصف              | الاستجابة                      |
+| ------- | ------ | ------------------ | ------------------------------ |
+| `GET`   | `/doc` | مواصفة OpenAPI 3.1 | صفحة HTML تتضمن مواصفة OpenAPI |

@@ -1,8 +1,8 @@
 import { SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
 import path from "path"
 import { createEffect, createMemo, onMount } from "solid-js"
-import { useSync } from "@tui/context/sync"
 import { createSimpleContext } from "./helper"
+import { Glob } from "../../../../util/glob"
 import aura from "./theme/aura.json" with { type: "json" }
 import ayu from "./theme/ayu.json" with { type: "json" }
 import catppuccin from "./theme/catppuccin.json" with { type: "json" }
@@ -35,12 +35,13 @@ import tokyonight from "./theme/tokyonight.json" with { type: "json" }
 import vercel from "./theme/vercel.json" with { type: "json" }
 import vesper from "./theme/vesper.json" with { type: "json" }
 import zenburn from "./theme/zenburn.json" with { type: "json" }
+import carbonfox from "./theme/carbonfox.json" with { type: "json" }
 import { useKV } from "./kv"
 import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
-import { useSDK } from "./sdk"
+import { useTuiConfig } from "./tui-config"
 
 type ThemeColors = {
   primary: RGBA
@@ -170,6 +171,7 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   vesper,
   vercel,
   zenburn,
+  carbonfox,
 }
 
 function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
@@ -278,17 +280,17 @@ function ansiToRgba(code: number): RGBA {
 export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
   init: (props: { mode: "dark" | "light" }) => {
-    const sync = useSync()
+    const config = useTuiConfig()
     const kv = useKV()
     const [store, setStore] = createStore({
       themes: DEFAULT_THEMES,
       mode: kv.get("theme_mode", props.mode),
-      active: (sync.data.config.theme ?? kv.get("theme", "opencode")) as string,
+      active: (config.theme ?? kv.get("theme", "opencode")) as string,
       ready: false,
     })
 
     createEffect(() => {
-      const theme = sync.data.config.theme
+      const theme = config.theme
       if (theme) setStore("active", theme)
     })
 
@@ -390,7 +392,6 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   },
 })
 
-const CUSTOM_THEME_GLOB = new Bun.Glob("themes/*.json")
 async function getCustomThemes() {
   const directories = [
     Global.Path.config,
@@ -404,35 +405,36 @@ async function getCustomThemes() {
 
   const result: Record<string, ThemeJson> = {}
   for (const dir of directories) {
-    for await (const item of CUSTOM_THEME_GLOB.scan({
-      absolute: true,
-      followSymlinks: true,
-      dot: true,
+    for (const item of await Glob.scan("themes/*.json", {
       cwd: dir,
+      absolute: true,
+      dot: true,
+      symlink: true,
     })) {
       const name = path.basename(item, ".json")
-      result[name] = await Bun.file(item).json()
+      result[name] = await Filesystem.readJson(item)
     }
   }
   return result
 }
 
+export function tint(base: RGBA, overlay: RGBA, alpha: number): RGBA {
+  const r = base.r + (overlay.r - base.r) * alpha
+  const g = base.g + (overlay.g - base.g) * alpha
+  const b = base.b + (overlay.b - base.b) * alpha
+  return RGBA.fromInts(Math.round(r * 255), Math.round(g * 255), Math.round(b * 255))
+}
+
 function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJson {
   const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
   const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!)
+  const transparent = RGBA.fromInts(0, 0, 0, 0)
   const isDark = mode == "dark"
 
   const col = (i: number) => {
     const value = colors.palette[i]
     if (value) return RGBA.fromHex(value)
     return ansiToRgba(i)
-  }
-
-  const tint = (base: RGBA, overlay: RGBA, alpha: number) => {
-    const r = base.r + (overlay.r - base.r) * alpha
-    const g = base.g + (overlay.g - base.g) * alpha
-    const b = base.b + (overlay.b - base.b) * alpha
-    return RGBA.fromInts(Math.round(r * 255), Math.round(g * 255), Math.round(b * 255))
   }
 
   // Generate gray scale based on terminal background
@@ -477,8 +479,8 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
       textMuted,
       selectedListItemText: bg,
 
-      // Background colors
-      background: bg,
+      // Background colors - use transparent to respect terminal transparency
+      background: transparent,
       backgroundPanel: grays[2],
       backgroundElement: grays[3],
       backgroundMenu: grays[3],

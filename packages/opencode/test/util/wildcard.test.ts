@@ -7,6 +7,26 @@ test("match handles glob tokens", () => {
   expect(Wildcard.match("foo+bar", "foo+bar")).toBe(true)
 })
 
+test("match with trailing space+wildcard matches command with or without args", () => {
+  // "ls *" should match "ls" (no args) and "ls -la" (with args)
+  expect(Wildcard.match("ls", "ls *")).toBe(true)
+  expect(Wildcard.match("ls -la", "ls *")).toBe(true)
+  expect(Wildcard.match("ls foo bar", "ls *")).toBe(true)
+
+  // "ls*" (no space) should NOT match "ls" alone — wait, it should because .* matches empty
+  // but it WILL match "lstmeval" which is the dangerous case users should avoid
+  expect(Wildcard.match("ls", "ls*")).toBe(true)
+  expect(Wildcard.match("lstmeval", "ls*")).toBe(true)
+
+  // "ls *" (with space) should NOT match "lstmeval"
+  expect(Wildcard.match("lstmeval", "ls *")).toBe(false)
+
+  // multi-word commands
+  expect(Wildcard.match("git status", "git *")).toBe(true)
+  expect(Wildcard.match("git", "git *")).toBe(true)
+  expect(Wildcard.match("git commit -m foo", "git *")).toBe(true)
+})
+
 test("all picks the most specific pattern", () => {
   const rules = {
     "*": "deny",
@@ -52,4 +72,19 @@ test("allStructured handles sed flags", () => {
   expect(Wildcard.allStructured({ head: "sed", tail: ["-i.bak", "file"] }, rules)).toBe("ask")
   expect(Wildcard.allStructured({ head: "sed", tail: ["-n", "1p", "file"] }, rules)).toBe("allow")
   expect(Wildcard.allStructured({ head: "sed", tail: ["-i", "-n", "/./p", "myfile.txt"] }, rules)).toBe("ask")
+})
+
+test("match normalizes slashes for cross-platform globbing", () => {
+  expect(Wildcard.match("C:\\Windows\\System32\\*", "C:/Windows/System32/*")).toBe(true)
+  expect(Wildcard.match("C:/Windows/System32/drivers", "C:\\Windows\\System32\\*")).toBe(true)
+})
+
+test("match handles case-insensitivity on Windows", () => {
+  if (process.platform === "win32") {
+    expect(Wildcard.match("C:\\windows\\system32\\hosts", "C:/Windows/System32/*")).toBe(true)
+    expect(Wildcard.match("c:/windows/system32/hosts", "C:\\Windows\\System32\\*")).toBe(true)
+  } else {
+    // Unix paths are case-sensitive
+    expect(Wildcard.match("/users/test/file", "/Users/test/*")).toBe(false)
+  }
 })

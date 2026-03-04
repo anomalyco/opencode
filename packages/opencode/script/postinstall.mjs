@@ -106,8 +106,17 @@ async function main() {
       return
     }
 
-    const { binaryPath, binaryName } = findBinary()
-    symlinkBinary(binaryPath, binaryName)
+    // On non-Windows platforms, just verify the binary package exists
+    // Don't replace the wrapper script - it handles binary execution
+    const { binaryPath } = findBinary()
+    const target = path.join(__dirname, "bin", ".opencode")
+    if (fs.existsSync(target)) fs.unlinkSync(target)
+    try {
+      fs.linkSync(binaryPath, target)
+    } catch {
+      fs.copyFileSync(binaryPath, target)
+    }
+    fs.chmodSync(target, 0o755)
   } catch (error) {
     console.error("Failed to setup opencode binary:", error.message)
     process.exit(1)
