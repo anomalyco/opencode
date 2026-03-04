@@ -29,13 +29,13 @@ function getSystemMode(): "light" | "dark" {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
 }
 
-function applyThemeCss(theme: DesktopTheme, themeId: string, mode: "light" | "dark") {
+function applyThemeCss(theme: DesktopTheme, id: string, mode: "light" | "dark") {
   const isDark = mode === "dark"
   const variant = isDark ? theme.dark : theme.light
   const tokens = resolveThemeVariant(variant, isDark)
   const css = themeToCss(tokens)
 
-  if (themeId !== "oc-1") {
+  if (id !== "oc-1") {
     try {
       localStorage.setItem(isDark ? STORAGE_KEYS.THEME_CSS_DARK : STORAGE_KEYS.THEME_CSS_LIGHT, css)
     } catch {}
@@ -49,7 +49,6 @@ function applyThemeCss(theme: DesktopTheme, themeId: string, mode: "light" | "da
 
   document.getElementById("oc-theme-preload")?.remove()
   ensureThemeStyleElement().textContent = fullCss
-  document.documentElement.dataset.theme = themeId
   document.documentElement.dataset.colorScheme = mode
 }
 

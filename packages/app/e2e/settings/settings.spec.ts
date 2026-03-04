@@ -106,7 +106,7 @@ test("changing theme persists in localStorage", async ({ page, gotoSession }) =>
   const dataTheme = await page.evaluate(() => {
     return document.documentElement.getAttribute("data-theme")
   })
-  expect(dataTheme).toBe(storedThemeId)
+  expect(dataTheme).toBeNull()
 })
 
 test("changing font persists in localStorage and updates CSS variable", async ({ page, gotoSession }) => {
