@@ -51,6 +51,7 @@
     "@solid-primitives/media": "2.3.3",
     "@solid-primitives/resize-observer": "2.1.3",
     "@solidjs/meta": "catalog:",
+    "@solidjs/router": "catalog:",
     "dompurify": "3.3.1",
     "fuzzysort": "catalog:",
     "katex": "0.16.27",
