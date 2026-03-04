@@ -6,6 +6,7 @@ import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { streamSSE } from "hono/streaming"
 import { proxy } from "hono/proxy"
+import { serveStatic } from "hono/bun"
 import { basicAuth } from "hono/basic-auth"
 import z from "zod"
 import { Provider } from "../provider/provider"
@@ -558,22 +559,13 @@ export namespace Server {
             })
           },
         )
-        .all("/*", async (c) => {
-          const path = c.req.path
-
-          const response = await proxy(`https://app.opencode.ai${path}`, {
-            ...c.req,
-            headers: {
-              ...c.req.raw.headers,
-              host: "app.opencode.ai",
-            },
-          })
-          response.headers.set(
-            "Content-Security-Policy",
-            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:",
-          )
-          return response
-        }) as unknown as Hono,
+        // OPENSACIA: Serve local static assets instead of proxying to cloud
+        .all("/*", serveStatic({
+          root: "../../app/dist",
+          onNotFound: (path) => {
+            log.debug("static file not found", { path })
+          }
+        })),
   )
 
   export async function openapi() {
