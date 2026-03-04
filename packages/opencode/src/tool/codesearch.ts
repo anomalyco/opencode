@@ -1,6 +1,7 @@
 import z from "zod"
 import { Tool } from "./tool"
 import DESCRIPTION from "./codesearch.txt"
+import { abortAfterAny } from "../util/abort"
 
 const API_CONFIG = {
   BASE_URL: "https://mcp.exa.ai",
@@ -73,8 +74,7 @@ export const CodeSearchTool = Tool.define("codesearch", {
       },
     }
 
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 30000)
+    const { signal, clearTimeout } = abortAfterAny(30000, ctx.abort)
 
     try {
       const headers: Record<string, string> = {
@@ -86,10 +86,10 @@ export const CodeSearchTool = Tool.define("codesearch", {
         method: "POST",
         headers,
         body: JSON.stringify(codeRequest),
-        signal: AbortSignal.any([controller.signal, ctx.abort]),
+        signal,
       })
 
-      clearTimeout(timeoutId)
+      clearTimeout()
 
       if (!response.ok) {
         const errorText = await response.text()
@@ -120,7 +120,7 @@ export const CodeSearchTool = Tool.define("codesearch", {
         metadata: {},
       }
     } catch (error) {
-      clearTimeout(timeoutId)
+      clearTimeout()
 
       if (error instanceof Error && error.name === "AbortError") {
         throw new Error("Code search request timed out")

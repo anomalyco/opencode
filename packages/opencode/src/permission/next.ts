@@ -3,7 +3,8 @@ import { BusEvent } from "@/bus/bus-event"
 import { Config } from "@/config/config"
 import { Identifier } from "@/id/id"
 import { Instance } from "@/project/instance"
-import { Storage } from "@/storage/storage"
+import { Database, eq } from "@/storage/db"
+import { PermissionTable } from "@/session/session.sql"
 import { fn } from "@/util/fn"
 import { Log } from "@/util/log"
 import { Wildcard } from "@/util/wildcard"
@@ -105,9 +106,12 @@ export namespace PermissionNext {
     ),
   }
 
-  const state = Instance.state(async () => {
+  const state = Instance.state(() => {
     const projectID = Instance.project.id
-    const stored = await Storage.read<Ruleset>(["permission", projectID]).catch(() => [] as Ruleset)
+    const row = Database.use((db) =>
+      db.select().from(PermissionTable).where(eq(PermissionTable.project_id, projectID)).get(),
+    )
+    const stored = row?.data ?? ([] as Ruleset)
 
     const pending: Record<
       string,
@@ -222,7 +226,8 @@ export namespace PermissionNext {
 
         // TODO: we don't save the permission ruleset to disk yet until there's
         // UI to manage it
-        // await Storage.write(["permission", Instance.project.id], s.approved)
+        // db().insert(PermissionTable).values({ projectID: Instance.project.id, data: s.approved })
+        //   .onConflictDoUpdate({ target: PermissionTable.projectID, set: { data: s.approved } }).run()
         return
       }
     },
@@ -275,6 +280,7 @@ export namespace PermissionNext {
   }
 
   export async function list() {
-    return state().then((x) => Object.values(x.pending).map((x) => x.info))
+    const s = await state()
+    return Object.values(s.pending).map((x) => x.info)
   }
 }
