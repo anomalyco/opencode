@@ -25,9 +25,9 @@ export namespace Todo {
     ),
   }
 
-  export function update(input: { sessionID: string; todos: Info[] }) {
-    store.transaction((tx) => {
-      tx.todo_replace(
+  export async function update(input: { sessionID: string; todos: Info[] }) {
+    await store.transaction(async (tx) => {
+      await tx.todo_replace(
         input.sessionID,
         input.todos.map((todo, position) => ({
           session_id: input.sessionID,
@@ -41,8 +41,8 @@ export namespace Todo {
     Bus.publish(Event.Updated, input)
   }
 
-  export function get(sessionID: string) {
-    const rows = store.use((tx) => tx.todo_list(sessionID))
+  export async function get(sessionID: string) {
+    const rows = await store.use((tx) => tx.todo_list(sessionID))
     rows.sort((a, b) => a.position - b.position)
     return rows.map((row) => ({
       content: row.content,

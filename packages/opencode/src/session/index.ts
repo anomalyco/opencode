@@ -681,14 +681,14 @@ export namespace Session {
   export const updateMessage = fn(MessageV2.Info, async (msg) => {
     const time_created = msg.time.created
     const { id, sessionID, ...data } = msg
-    store.use((tx) => {
-      tx.message_upsert({
+    await store.use(async (tx) => {
+      await tx.message_upsert({
         id,
         session_id: sessionID,
         time_created,
         data,
       })
-      store.effect(() =>
+      await store.effect(() =>
         Bus.publish(MessageV2.Event.Updated, {
           info: msg,
         }),
@@ -704,9 +704,9 @@ export namespace Session {
     }),
     async (input) => {
       // CASCADE delete handles parts automatically
-      store.use((tx) => {
-        tx.message_delete(input.sessionID, input.messageID)
-        store.effect(() =>
+      await store.use(async (tx) => {
+        await tx.message_delete(input.sessionID, input.messageID)
+        await store.effect(() =>
           Bus.publish(MessageV2.Event.Removed, {
             sessionID: input.sessionID,
             messageID: input.messageID,
@@ -724,9 +724,9 @@ export namespace Session {
       partID: Identifier.schema("part"),
     }),
     async (input) => {
-      store.use((tx) => {
-        tx.part_delete(input.sessionID, input.partID)
-        store.effect(() =>
+      await store.use(async (tx) => {
+        await tx.part_delete(input.sessionID, input.partID)
+        await store.effect(() =>
           Bus.publish(MessageV2.Event.PartRemoved, {
             sessionID: input.sessionID,
             messageID: input.messageID,
@@ -743,15 +743,15 @@ export namespace Session {
   export const updatePart = fn(UpdatePartInput, async (part) => {
     const { id, messageID, sessionID, ...data } = part
     const time = Date.now()
-    store.use((tx) => {
-      tx.part_upsert({
+    await store.use(async (tx) => {
+      await tx.part_upsert({
         id,
         message_id: messageID,
         session_id: sessionID,
         time_created: time,
         data,
       })
-      store.effect(() =>
+      await store.effect(() =>
         Bus.publish(MessageV2.Event.PartUpdated, {
           part: structuredClone(part),
         }),

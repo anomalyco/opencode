@@ -10,6 +10,7 @@ export type TodoRow = typeof TodoTable.$inferSelect
 export type TodoInput = typeof TodoTable.$inferInsert
 export type PermissionRow = typeof PermissionTable.$inferSelect
 export type PermissionInput = typeof PermissionTable.$inferInsert
+export type Asyncable<T> = T | Promise<T>
 
 export type SessionPatch = Partial<
   Pick<
@@ -47,35 +48,35 @@ export type MessagePageInput = {
   desc?: boolean
 }
 
-export type SessionStoreEffect = () => unknown
+export type SessionStoreEffect = () => Asyncable<unknown>
 
 export interface SessionStoreTx {
-  session_insert(row: SessionInput): void
-  session_get(id: string): SessionRow | undefined
-  session_update(id: string, patch: SessionPatch): SessionRow | undefined
-  session_list(input?: SessionListInput): SessionRow[]
-  session_children(project_id: string, parent_id: string): SessionRow[]
-  session_delete(id: string): void
+  session_insert(row: SessionInput): Asyncable<void>
+  session_get(id: string): Asyncable<SessionRow | undefined>
+  session_update(id: string, patch: SessionPatch): Asyncable<SessionRow | undefined>
+  session_list(input?: SessionListInput): Asyncable<SessionRow[]>
+  session_children(project_id: string, parent_id: string): Asyncable<SessionRow[]>
+  session_delete(id: string): Asyncable<void>
 
-  message_upsert(row: MessageInput): void
-  message_get(id: string): MessageRow | undefined
-  message_list(input: MessagePageInput): MessageRow[]
-  message_delete(session_id: string, id: string): void
+  message_upsert(row: MessageInput): Asyncable<void>
+  message_get(id: string): Asyncable<MessageRow | undefined>
+  message_list(input: MessagePageInput): Asyncable<MessageRow[]>
+  message_delete(session_id: string, id: string): Asyncable<void>
 
-  part_upsert(row: PartInput): void
-  part_list_by_message(message_id: string): PartRow[]
-  part_list_by_messages(message_ids: string[]): PartRow[]
-  part_delete(session_id: string, id: string): void
+  part_upsert(row: PartInput): Asyncable<void>
+  part_list_by_message(message_id: string): Asyncable<PartRow[]>
+  part_list_by_messages(message_ids: string[]): Asyncable<PartRow[]>
+  part_delete(session_id: string, id: string): Asyncable<void>
 
-  todo_replace(session_id: string, rows: TodoInput[]): void
-  todo_list(session_id: string): TodoRow[]
+  todo_replace(session_id: string, rows: TodoInput[]): Asyncable<void>
+  todo_list(session_id: string): Asyncable<TodoRow[]>
 
-  permission_get(project_id: string): PermissionRow | undefined
-  permission_upsert(row: PermissionInput): void
+  permission_get(project_id: string): Asyncable<PermissionRow | undefined>
+  permission_upsert(row: PermissionInput): Asyncable<void>
 }
 
 export interface SessionStore {
-  use<T>(fn: (tx: SessionStoreTx) => T): T
-  transaction<T>(fn: (tx: SessionStoreTx) => T): T
-  effect(fn: SessionStoreEffect): void
+  use<T>(fn: (tx: SessionStoreTx) => Asyncable<T>): Asyncable<T>
+  transaction<T>(fn: (tx: SessionStoreTx) => Asyncable<T>): Asyncable<T>
+  effect(fn: SessionStoreEffect): Asyncable<void>
 }
