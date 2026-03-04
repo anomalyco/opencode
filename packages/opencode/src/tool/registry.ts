@@ -68,6 +68,7 @@ export namespace ToolRegistry {
         parameters: z.object(def.args),
         description: def.description,
         execute: async (args, ctx) => {
+          const parsed = z.object(def.args).parse(args)
           let title = ""
           let metadata: Record<string, unknown> = {}
           const pluginCtx: PluginToolContext = {
@@ -80,7 +81,7 @@ export namespace ToolRegistry {
             directory: Instance.directory,
             worktree: Instance.worktree,
           }
-          const result = await def.execute(args, pluginCtx)
+          const result = await def.execute(parsed, pluginCtx)
           const out = await Truncate.output(result, {}, initCtx?.agent)
           return {
             title,
