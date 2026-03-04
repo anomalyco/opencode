@@ -299,7 +299,7 @@ export const dict = {
   "go.faq.q8": "Can I use Go with other coding agents?",
   "go.faq.a8": "Yes, you can use Go with any agent. Follow the setup instructions in your preferred coding agent.",
 
-  "go.faq.q9": "What is the difference between the free models included and Go?",
+  "go.faq.q9": "What is the difference between free models and Go?",
   "go.faq.a9":
     "Free models include Big Pickle plus promotional models available at the time, with a quota of 200 requests/day. Go includes GLM-5, Kimi K2.5, and MiniMax M2.5 with higher request quotas enforced across rolling windows (5-hour, weekly, and monthly), roughly equivalent to $12 per 5 hours, $30 per week, and $60 per month (actual request counts vary by model and usage).",
 
