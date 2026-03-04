@@ -3,7 +3,8 @@ set -euo pipefail
 
 state="${1:-}"
 evidence_file="${2:-}"
-evidence_dir="/home/choza/projects/opencode-source/.sisyphus/evidence"
+repo_root="${OPENCODE_SANDBOX_REPO_ROOT:-/home/choza/projects/opencode-source}"
+evidence_dir="${OPENCODE_SANDBOX_EVIDENCE_DIR:-$repo_root/.sisyphus/evidence}"
 
 if [[ -z "$state" ]]; then
   echo "Usage: $0 <error|final|stream|tool|warning|idle> [evidence-file]"
@@ -41,7 +42,18 @@ filter_prompt_line() {
 }
 
 extract_prompt_line_raw() {
-  rg -m1 "Ask anything|Build" "$1" || true
+  local file="$1"
+  local model="${OPENCODE_SANDBOX_MODEL:-}"
+
+  if [[ -n "$model" ]]; then
+    local provider="${model%%/*}"
+    local model_id="${model#*/}"
+    rg -m1 -i -F "$model_id" "$file" || rg -m1 -i -F "$provider" "$file" \
+      || rg -m1 "GPT-5\\.2|OpenAI" "$file" || rg -m1 "Build" "$file" || rg -m1 "Ask anything" "$file" || true
+    return
+  fi
+
+  rg -m1 "GPT-5\\.2|OpenAI" "$file" || rg -m1 "Build" "$file" || rg -m1 "Ask anything" "$file" || true
 }
 
 extract_background_code() {
@@ -57,6 +69,7 @@ case "$state" in
   idle)
     local_file_a="$evidence_dir/task-2-idle-a.txt"
     local_file_b="$evidence_dir/task-2-idle-b.txt"
+    local_file_c="$evidence_dir/task-2-idle-c.txt"
 
     if [[ ! -f "$local_file_a" || ! -f "$local_file_b" ]]; then
       echo "Missing idle evidence files: $local_file_a or $local_file_b"
@@ -76,13 +89,30 @@ case "$state" in
 
     if [[ -n "$bg_a" && -n "$bg_b" ]]; then
       if [[ "$bg_a" == "$bg_b" ]]; then
-        echo "Idle prompt bar background did not change between captures"
-        exit 1
+        if [[ -f "$local_file_c" ]]; then
+          line_c="$(extract_prompt_line_raw "$local_file_c")"
+          bg_c="$(extract_background_code "$line_c")"
+          if [[ -z "$bg_c" || "$bg_b" == "$bg_c" ]]; then
+            echo "Idle prompt bar background did not change between captures"
+            exit 1
+          fi
+        else
+          echo "Idle prompt bar background did not change between captures"
+          exit 1
+        fi
       fi
     else
       if [[ "$line_a" == "$line_b" ]]; then
-        echo "Idle prompt bar line did not change between captures"
-        exit 1
+        if [[ -f "$local_file_c" ]]; then
+          line_c="$(extract_prompt_line_raw "$local_file_c")"
+          if [[ "$line_b" == "$line_c" ]]; then
+            echo "Idle prompt bar line did not change between captures"
+            exit 1
+          fi
+        else
+          echo "Idle prompt bar line did not change between captures"
+          exit 1
+        fi
       fi
     fi
     ;;

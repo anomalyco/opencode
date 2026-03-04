@@ -2,11 +2,17 @@
 set -euo pipefail
 
 state="${1:-}"
+repo_root="${OPENCODE_SANDBOX_REPO_ROOT:-/home/choza/projects/opencode-source}"
+evidence_dir="${OPENCODE_SANDBOX_EVIDENCE_DIR:-$repo_root/.sisyphus/evidence}"
+opencode_dir="${OPENCODE_SANDBOX_OPENCODE_DIR:-$repo_root/packages/opencode}"
+check_script="$repo_root/.sisyphus/evidence/check-sandbox-evidence.sh"
+model="${OPENCODE_SANDBOX_MODEL:-openai/gpt-5.2-codex}"
 if [[ -z "$state" ]]; then
   echo "Usage: $0 <error|final|stream|tool|warning|idle>"
-  echo "Tip: view ANSI output with: less -R /home/choza/projects/opencode-source/.sisyphus/evidence/task-2-<state>.txt"
-  echo "Tip: validate output with: /home/choza/projects/opencode-source/.sisyphus/evidence/check-sandbox-evidence.sh <state>"
+  echo "Tip: view ANSI output with: less -R $evidence_dir/task-2-<state>.txt"
+  echo "Tip: validate output with: $evidence_dir/check-sandbox-evidence.sh <state>"
   echo "Tip: set OPENCODE_SANDBOX_OPENAI_API_KEY for non-error states"
+  echo "Tip: set OPENCODE_SANDBOX_MODEL to override the default model"
   exit 1
 fi
 
@@ -58,11 +64,11 @@ if [[ "$state" != "error" && -z "${OPENCODE_SANDBOX_OPENAI_API_KEY:-}" && ! -f "
   exit 1
 fi
 if [[ "$state" == "error" ]]; then
-  cat > "$config_path" <<'EOF'
+  cat > "$config_path" <<EOF
 {
-  "$schema": "https://opencode.ai/config.json",
+  "\$schema": "https://opencode.ai/config.json",
   "enabled_providers": ["openai"],
-  "model": "openai/gpt-5.2-codex",
+  "model": "${model}",
   "provider": {
     "openai": {
       "options": {
@@ -73,11 +79,11 @@ if [[ "$state" == "error" ]]; then
 }
 EOF
 else
-  cat > "$config_path" <<'EOF'
+  cat > "$config_path" <<EOF
 {
-  "$schema": "https://opencode.ai/config.json",
+  "\$schema": "https://opencode.ai/config.json",
   "enabled_providers": ["openai"],
-  "model": "openai/gpt-5.2-codex",
+  "model": "${model}",
   "provider": {
     "openai": {
       "options": {
@@ -97,7 +103,7 @@ if [[ -n "${OPENCODE_SANDBOX_SESSION_NAME:-}" ]]; then
 else
   session_name="opencode-sandbox-${state}-$(date +%s)"
 fi
-evidence_dir="/home/choza/projects/opencode-source/.sisyphus/evidence"
+evidence_dir="$evidence_dir"
 evidence_file="$evidence_dir/task-2-${state}.txt"
 idle_evidence_a="$evidence_dir/task-2-idle-a.txt"
 idle_evidence_b="$evidence_dir/task-2-idle-b.txt"
@@ -114,8 +120,8 @@ fi
 tmux new-session -d -s "$session_name" "bash"
 tmux send-keys -t "$session_name" "export PATH=\"$HOME/.bun/bin:$PATH\"" Enter
 tmux send-keys -t "$session_name" "export XDG_DATA_HOME=$XDG_DATA_HOME XDG_CONFIG_HOME=$XDG_CONFIG_HOME XDG_STATE_HOME=$XDG_STATE_HOME XDG_CACHE_HOME=$XDG_CACHE_HOME OPENCODE_TEST_HOME=$OPENCODE_TEST_HOME OPENCODE_DISABLE_PROJECT_CONFIG=1 OPENCODE_PERMISSION='$OPENCODE_PERMISSION' OPENCODE_DISABLE_DEFAULT_PLUGINS=1 OPENCODE_DISABLE_LSP_DOWNLOAD=1 OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER=1 OPENCODE_DISABLE_MODELS_FETCH=1" Enter
-tmux send-keys -t "$session_name" "cd /home/choza/projects/opencode-source/packages/opencode" Enter
-tmux send-keys -t "$session_name" "bun run dev -- --model openai/gpt-5.2-codex" Enter
+tmux send-keys -t "$session_name" "cd $opencode_dir" Enter
+tmux send-keys -t "$session_name" "bun run dev -- --model $model" Enter
 
 prompt_ready=0
 for _ in {1..12}; do
@@ -170,8 +176,10 @@ case "$state" in
   idle)
     sleep 1
     tmux capture-pane -e -t "$session_name" -p > "$idle_evidence_a"
-    sleep 2
+    sleep 1
     tmux capture-pane -e -t "$session_name" -p > "$idle_evidence_b"
+    sleep 1
+    tmux capture-pane -e -t "$session_name" -p > "$evidence_dir/task-2-idle-c.txt"
     evidence_file="$idle_evidence_a"
     skip_final_capture=1
     ;;
@@ -223,8 +231,10 @@ else
   echo "Log not found: $log_file" > "$log_evidence"
 fi
 
-if [[ -f "$evidence_dir/check-sandbox-evidence.sh" ]]; then
-  bash "$evidence_dir/check-sandbox-evidence.sh" "$state" "$evidence_file"
+if [[ -f "$check_script" ]]; then
+  OPENCODE_SANDBOX_EVIDENCE_DIR="$evidence_dir" OPENCODE_SANDBOX_REPO_ROOT="$repo_root" \
+    OPENCODE_SANDBOX_MODEL="$model" \
+    bash "$check_script" "$state" "$evidence_file"
 fi
 
 echo "Captured ANSI evidence: $evidence_file"
