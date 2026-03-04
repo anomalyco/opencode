@@ -49,6 +49,12 @@ const cacheDir = path.join(dir, "cache", "opencode")
 await fs.mkdir(cacheDir, { recursive: true })
 await fs.writeFile(path.join(cacheDir, "version"), "14")
 
+// Set git identity for tests so commits work without a global ~/.gitconfig
+process.env["GIT_AUTHOR_NAME"] = "opencode"
+process.env["GIT_AUTHOR_EMAIL"] = "test@opencode.ai"
+process.env["GIT_COMMITTER_NAME"] = "opencode"
+process.env["GIT_COMMITTER_EMAIL"] = "test@opencode.ai"
+
 // Clear provider env vars to ensure clean test state
 delete process.env["ANTHROPIC_API_KEY"]
 delete process.env["OPENAI_API_KEY"]
