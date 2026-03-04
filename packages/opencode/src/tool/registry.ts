@@ -68,17 +68,28 @@ export namespace ToolRegistry {
         parameters: z.object(def.args),
         description: def.description,
         execute: async (args, ctx) => {
-          const pluginCtx = {
+          let title = ""
+          let metadata: Record<string, unknown> = {}
+          const pluginCtx: PluginToolContext = {
             ...ctx,
+            metadata: (input) => {
+              if (input.title !== undefined) title = input.title
+              if (input.metadata) metadata = { ...metadata, ...input.metadata }
+              ctx.metadata(input)
+            },
             directory: Instance.directory,
             worktree: Instance.worktree,
-          } as unknown as PluginToolContext
-          const result = await def.execute(args as any, pluginCtx)
+          }
+          const result = await def.execute(args, pluginCtx)
           const out = await Truncate.output(result, {}, initCtx?.agent)
           return {
-            title: "",
+            title,
             output: out.truncated ? out.content : result,
-            metadata: { truncated: out.truncated, outputPath: out.truncated ? out.outputPath : undefined },
+            metadata: {
+              ...metadata,
+              truncated: out.truncated,
+              ...(out.truncated && { outputPath: out.outputPath }),
+            },
           }
         },
       }),
