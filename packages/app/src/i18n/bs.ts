@@ -347,6 +347,9 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "Skripta za pokretanje radnog prostora",
   "dialog.project.edit.worktree.startup.description": "Pokreće se nakon kreiranja novog radnog prostora (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "npr. bun install",
+  "dialog.project.edit.worktree.shutdown": "Skripta za gašenje radnog prostora",
+  "dialog.project.edit.worktree.shutdown.description": "Pokreće se prije brisanja radnog prostora (worktree).",
+  "dialog.project.edit.worktree.shutdown.placeholder": "npr. docker compose down",
 
   "context.breakdown.title": "Razlaganje konteksta",
   "context.breakdown.note":

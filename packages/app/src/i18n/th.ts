@@ -346,6 +346,9 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "สคริปต์เริ่มต้นพื้นที่ทำงาน",
   "dialog.project.edit.worktree.startup.description": "ทำงานหลังจากสร้างพื้นที่ทำงานใหม่ (worktree)",
   "dialog.project.edit.worktree.startup.placeholder": "เช่น bun install",
+  "dialog.project.edit.worktree.shutdown": "สคริปต์ปิดพื้นที่ทำงาน",
+  "dialog.project.edit.worktree.shutdown.description": "ทำงานก่อนลบพื้นที่ทำงาน (worktree)",
+  "dialog.project.edit.worktree.shutdown.placeholder": "เช่น docker compose down",
 
   "context.breakdown.title": "การแบ่งบริบท",
   "context.breakdown.note": 'การแบ่งโดยประมาณของโทเค็นนำเข้า "อื่น ๆ" รวมถึงคำนิยามเครื่องมือและโอเวอร์เฮด',

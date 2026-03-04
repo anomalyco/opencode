@@ -351,6 +351,9 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "Çalışma alanı başlatma betiği",
   "dialog.project.edit.worktree.startup.description": "Yeni bir çalışma alanı (worktree) oluşturduktan sonra çalışır.",
   "dialog.project.edit.worktree.startup.placeholder": "örneğin bun install",
+  "dialog.project.edit.worktree.shutdown": "Çalışma alanı kapatma betiği",
+  "dialog.project.edit.worktree.shutdown.description": "Bir çalışma alanı (worktree) silinmeden önce çalıştırılır.",
+  "dialog.project.edit.worktree.shutdown.placeholder": "örneğin docker compose down",
 
   "context.breakdown.title": "Bağlam Dökümü",
   "context.breakdown.note": 'Girdi tokenlerinin yaklaşık dökümü. "Diğer" araç tanımları ve ek yükleri içerir.',

@@ -318,6 +318,9 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "Script de inicialização do espaço de trabalho",
   "dialog.project.edit.worktree.startup.description": "Executa após criar um novo espaço de trabalho (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "ex: bun install",
+  "dialog.project.edit.worktree.shutdown": "Script de desligamento do espaço de trabalho",
+  "dialog.project.edit.worktree.shutdown.description": "Executado antes de excluir um espaço de trabalho (worktree).",
+  "dialog.project.edit.worktree.shutdown.placeholder": "ex: docker compose down",
   "context.breakdown.title": "Detalhamento do Contexto",
   "context.breakdown.note":
     'Detalhamento aproximado dos tokens de entrada. "Outros" inclui definições de ferramentas e overhead.',

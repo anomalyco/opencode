@@ -33,6 +33,10 @@ export type Project = {
      * Startup script to run when creating a new workspace (worktree)
      */
     start?: string
+    /**
+     * Cleanup script to run before deleting a workspace (worktree)
+     */
+    stop?: string
   }
   time: {
     created: number
@@ -1661,6 +1665,10 @@ export type WorktreeCreateInput = {
 
 export type WorktreeRemoveInput = {
   directory: string
+  /**
+   * Additional cleanup script to run before the project's stop command
+   */
+  stopCommand?: string
 }
 
 export type WorktreeResetInput = {
@@ -2123,6 +2131,10 @@ export type ProjectUpdateData = {
        * Startup script to run when creating a new workspace (worktree)
        */
       start?: string
+      /**
+       * Cleanup script to run before deleting a workspace (worktree)
+       */
+      stop?: string
     }
   }
   path: {

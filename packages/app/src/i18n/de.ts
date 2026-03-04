@@ -325,6 +325,10 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description":
     "Wird nach dem Erstellen eines neuen Arbeitsbereichs (Worktree) ausgeführt.",
   "dialog.project.edit.worktree.startup.placeholder": "z. B. bun install",
+  "dialog.project.edit.worktree.shutdown": "Herunterfahren-Skript für Arbeitsbereich",
+  "dialog.project.edit.worktree.shutdown.description":
+    "Wird vor dem Löschen eines Arbeitsbereichs (Worktree) ausgeführt.",
+  "dialog.project.edit.worktree.shutdown.placeholder": "z. B. docker compose down",
   "context.breakdown.title": "Kontext-Aufschlüsselung",
   "context.breakdown.note":
     'Ungefähre Aufschlüsselung der Eingabe-Token. "Andere" beinhaltet Werkzeugdefinitionen und Overhead.',

@@ -364,6 +364,9 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "工作区启动脚本",
   "dialog.project.edit.worktree.startup.description": "在创建新的工作区 (worktree) 后运行。",
   "dialog.project.edit.worktree.startup.placeholder": "例如 bun install",
+  "dialog.project.edit.worktree.shutdown": "工作区关闭脚本",
+  "dialog.project.edit.worktree.shutdown.description": "在删除工作区（worktree）之前运行。",
+  "dialog.project.edit.worktree.shutdown.placeholder": "例如 docker compose down",
 
   "context.breakdown.title": "上下文拆分",
   "context.breakdown.note": "输入 token 的大致拆分。“其他”包含工具定义和开销。",

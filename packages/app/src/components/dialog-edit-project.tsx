@@ -28,6 +28,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
     color: props.project.icon?.color || "pink",
     iconUrl: props.project.icon?.override || "",
     startup: props.project.commands?.start ?? "",
+    shutdown: props.project.commands?.stop ?? "",
     saving: false,
     dragOver: false,
     iconHover: false,
@@ -79,6 +80,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
         setStore("saving", true)
         const name = store.name.trim() === folderName() ? "" : store.name.trim()
         const start = store.startup.trim()
+        const stop = store.shutdown.trim()
 
         if (props.project.id && props.project.id !== "global") {
           await globalSDK.client.project.update({
@@ -86,7 +88,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
             directory: props.project.worktree,
             name,
             icon: { color: store.color, override: store.iconUrl },
-            commands: { start },
+            commands: { start, stop },
           })
           globalSync.project.icon(props.project.worktree, store.iconUrl || undefined)
           dialog.close()
@@ -96,7 +98,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
         globalSync.project.meta(props.project.worktree, {
           name,
           icon: { color: store.color, override: store.iconUrl || undefined },
-          commands: { start: start || undefined },
+          commands: { start: start || undefined, stop: stop || undefined },
         })
         dialog.close()
       })
@@ -106,9 +108,12 @@ export function DialogEditProject(props: { project: LocalProject }) {
   }
 
   return (
-    <Dialog title={language.t("dialog.project.edit.title")} class="w-full max-w-[480px] mx-auto">
-      <form onSubmit={handleSubmit} class="flex flex-col gap-6 p-6 pt-0">
-        <div class="flex flex-col gap-4">
+    <Dialog
+      title={language.t("dialog.project.edit.title")}
+      class="w-full max-w-[480px] mx-auto max-h-[calc(100vh-120px)] flex flex-col"
+    >
+      <form onSubmit={handleSubmit} class="flex flex-col min-h-0 flex-1">
+        <div class="flex flex-col gap-4 p-6 pt-0 overflow-y-auto">
           <TextField
             autofocus
             type="text"
@@ -240,9 +245,20 @@ export function DialogEditProject(props: { project: LocalProject }) {
             spellcheck={false}
             class="max-h-14 w-full overflow-y-auto font-mono text-xs"
           />
+
+          <TextField
+            multiline
+            label={language.t("dialog.project.edit.worktree.shutdown")}
+            description={language.t("dialog.project.edit.worktree.shutdown.description")}
+            placeholder={language.t("dialog.project.edit.worktree.shutdown.placeholder")}
+            value={store.shutdown}
+            onChange={(v) => setStore("shutdown", v)}
+            spellcheck={false}
+            class="max-h-14 w-full overflow-y-auto font-mono text-xs"
+          />
         </div>
 
-        <div class="flex justify-end gap-2">
+        <div class="flex justify-end items-center gap-2 px-6 py-4 border-t border-border-base mt-auto shrink-0">
           <Button type="button" variant="ghost" size="large" onClick={() => dialog.close()}>
             {language.t("common.cancel")}
           </Button>

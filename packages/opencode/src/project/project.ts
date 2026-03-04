@@ -47,6 +47,7 @@ export namespace Project {
       commands: z
         .object({
           start: z.string().optional().describe("Startup script to run when creating a new workspace (worktree)"),
+          stop: z.string().optional().describe("Cleanup script to run before deleting a workspace (worktree)"),
         })
         .optional(),
       time: z.object({

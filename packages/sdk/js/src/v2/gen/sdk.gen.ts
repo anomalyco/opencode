@@ -477,6 +477,10 @@ export class Project extends HeyApiClient {
          * Startup script to run when creating a new workspace (worktree)
          */
         start?: string
+        /**
+         * Cleanup script to run before deleting a workspace (worktree)
+         */
+        stop?: string
       }
     },
     options?: Options<never, ThrowOnError>,

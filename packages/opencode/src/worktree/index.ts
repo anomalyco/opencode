@@ -64,6 +64,7 @@ export namespace Worktree {
   export const RemoveInput = z
     .object({
       directory: z.string(),
+      stopCommand: z.string().optional().describe("Additional cleanup script to run before the project's stop command"),
     })
     .meta({
       ref: "WorktreeRemoveInput",
@@ -323,6 +324,34 @@ export namespace Worktree {
     return true
   }
 
+  type StopKind = "worktree" | "project"
+
+  async function runStopScript(directory: string, cmd: string, kind: StopKind) {
+    const text = cmd.trim()
+    if (!text) return true
+
+    const ran = await runStartCommand(directory, text)
+    if (ran.code === 0) return true
+
+    log.error("worktree stop command failed", {
+      kind,
+      directory,
+      message: errorText(ran),
+    })
+    return false
+  }
+
+  async function runStopScripts(directory: string, input: { projectID: ProjectID; extra?: string }) {
+    const extra = input.extra ?? ""
+    await runStopScript(directory, extra, "worktree")
+
+    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, input.projectID)).get())
+    const project = row ? Project.fromRow(row) : undefined
+    const stopcmd = project?.commands?.stop?.trim() ?? ""
+    await runStopScript(directory, stopcmd, "project")
+    return true
+  }
+
   function queueStartScripts(directory: string, input: { projectID: ProjectID; extra?: string }) {
     setTimeout(() => {
       const start = async () => {
@@ -497,6 +526,10 @@ export namespace Worktree {
       }
       return true
     }
+
+    const projectID = Instance.project.id
+    const extra = input?.stopCommand?.trim()
+    await runStopScripts(directory, { projectID, extra })
 
     await stop(entry.path)
     const removed = await git(["worktree", "remove", "--force", entry.path], {

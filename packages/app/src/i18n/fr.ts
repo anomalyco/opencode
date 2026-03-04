@@ -320,6 +320,10 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description":
     "S'exécute après la création d'un nouvel espace de travail (arbre de travail).",
   "dialog.project.edit.worktree.startup.placeholder": "p. ex. bun install",
+  "dialog.project.edit.worktree.shutdown": "Script d'arrêt de l'espace de travail",
+  "dialog.project.edit.worktree.shutdown.description":
+    "S'exécute avant la suppression d'un espace de travail (arbre de travail).",
+  "dialog.project.edit.worktree.shutdown.placeholder": "p. ex. docker compose down",
   "context.breakdown.title": "Répartition du contexte",
   "context.breakdown.note":
     "Répartition approximative des jetons d'entrée. \"Autre\" inclut les définitions d'outils et les frais généraux.",

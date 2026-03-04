@@ -349,6 +349,9 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "Oppstartsskript for arbeidsområde",
   "dialog.project.edit.worktree.startup.description": "Kjører etter at et nytt arbeidsområde (worktree) er opprettet.",
   "dialog.project.edit.worktree.startup.placeholder": "f.eks. bun install",
+  "dialog.project.edit.worktree.shutdown": "Nedstengingsskript for arbeidsområde",
+  "dialog.project.edit.worktree.shutdown.description": "Kjøres før sletting av et arbeidsområde (worktree).",
+  "dialog.project.edit.worktree.shutdown.placeholder": "f.eks. docker compose down",
 
   "context.breakdown.title": "Kontekstfordeling",
   "context.breakdown.note": 'Omtrentlig fordeling av input-tokens. "Annet" inkluderer verktøydefinisjoner og overhead.',

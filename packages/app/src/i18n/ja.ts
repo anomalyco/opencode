@@ -318,6 +318,9 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description":
     "新しいワークスペース (ワークツリー) を作成した後に実行されます。",
   "dialog.project.edit.worktree.startup.placeholder": "例: bun install",
+  "dialog.project.edit.worktree.shutdown": "ワークスペース シャットダウンスクリプト",
+  "dialog.project.edit.worktree.shutdown.description": "ワークスペース（ワークツリー）を削除する前に実行されます。",
+  "dialog.project.edit.worktree.shutdown.placeholder": "例: docker compose down",
   "context.breakdown.title": "コンテキストの内訳",
   "context.breakdown.note": '入力トークンのおおよその内訳です。"その他"にはツールの定義やオーバーヘッドが含まれます。',
   "context.breakdown.system": "システム",

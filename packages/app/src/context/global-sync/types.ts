@@ -28,6 +28,7 @@ export type ProjectMeta = {
   }
   commands?: {
     start?: string
+    stop?: string
   }
 }
 
