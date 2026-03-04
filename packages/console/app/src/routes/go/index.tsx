@@ -5,11 +5,6 @@ import { For, createSignal, onCleanup, onMount } from "solid-js"
 //import { HttpHeader } from "@solidjs/start"
 import goLogoLight from "../../asset/go-ornate-light.svg"
 import goLogoDark from "../../asset/go-ornate-dark.svg"
-import avatarDax from "../../asset/lander/avatar-dax.png"
-import avatarJay from "../../asset/lander/avatar-jay.png"
-import avatarFrank from "../../asset/lander/avatar-frank.png"
-import avatarAdam from "../../asset/lander/avatar-adam.png"
-import avatarDavid from "../../asset/lander/avatar-david.png"
 import { EmailSignup } from "~/component/email-signup"
 import { Faq } from "~/component/faq"
 import { Legal } from "~/component/legal"
@@ -346,69 +341,6 @@ export default function Home() {
                 </div>
               </li>
             </ul>
-          </section>
-
-          <section data-component="testimonials">
-            {/*Dax*/}
-            <div data-slot="testimonial">
-              <div data-slot="name">
-                <img src={avatarDax} alt="" />
-                <strong>{i18n.t("go.testimonials.dax.name")}</strong>
-                <span>{i18n.t("go.testimonials.dax.title")}</span>
-              </div>
-              <div data-slot="quote">
-                <span>{i18n.t("go.testimonials.handle")}</span> <s>{i18n.t("go.testimonials.brand.zen")}</s>{" "}
-                {i18n.t("go.testimonials.brand.go")} {i18n.t("go.testimonials.dax.quoteAfter")}
-              </div>
-            </div>
-            {/*Jay*/}
-            <div data-slot="testimonial">
-              <div data-slot="name">
-                <img src={avatarJay} alt="" />
-                <strong>{i18n.t("go.testimonials.jay.name")}</strong>
-                <span>{i18n.t("go.testimonials.jay.title")}</span>
-              </div>
-              <div data-slot="quote">
-                {i18n.t("go.testimonials.jay.quoteBefore")} <span>{i18n.t("go.testimonials.handle")}</span>{" "}
-                <s>{i18n.t("go.testimonials.brand.zen")}</s> {i18n.t("go.testimonials.brand.go")}
-                {i18n.t("go.testimonials.jay.quoteAfter")}
-              </div>
-            </div>
-            {/*Adam*/}
-            <div data-slot="testimonial">
-              <div data-slot="name">
-                <img src={avatarAdam} alt="" />
-                <strong>{i18n.t("go.testimonials.adam.name")}</strong>
-                <span>{i18n.t("go.testimonials.adam.title")}</span>
-              </div>
-              <div data-slot="quote">
-                {i18n.t("go.testimonials.adam.quoteBefore")} <span>{i18n.t("go.testimonials.handle")}</span>{" "}
-                <s>{i18n.t("go.testimonials.brand.zen")}</s> {i18n.t("go.testimonials.brand.go")}{" "}
-                {i18n.t("go.testimonials.adam.quoteAfter")}
-              </div>
-            </div>
-            {/*David*/}
-            <div data-slot="testimonial">
-              <div data-slot="name">
-                <img src={avatarDavid} alt="" />
-                <strong>{i18n.t("go.testimonials.david.name")}</strong>
-                <span>{i18n.t("go.testimonials.david.title")}</span>
-              </div>
-              <div data-slot="quote">
-                {i18n.t("go.testimonials.david.quoteBefore")} <span>{i18n.t("go.testimonials.handle")}</span>{" "}
-                <s>{i18n.t("go.testimonials.brand.zen")}</s> {i18n.t("go.testimonials.brand.go")}{" "}
-                {i18n.t("go.testimonials.david.quoteAfter")}
-              </div>
-            </div>
-            {/*Frank*/}
-            <div data-slot="testimonial">
-              <div data-slot="name">
-                <img src={avatarFrank} alt="" />
-                <strong>{i18n.t("go.testimonials.frank.name")}</strong>
-                <span>{i18n.t("go.testimonials.frank.title")}</span>
-              </div>
-              <div data-slot="quote">{i18n.t("go.testimonials.frank.quote")}</div>
-            </div>
           </section>
 
           <section data-component="faq">
