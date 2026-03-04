@@ -1,10 +1,10 @@
-import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, RGBA, KeyEvent } from "@opentui/core"
+import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, KeyEvent } from "@opentui/core"
 import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
 import { Filesystem } from "@/util/filesystem"
 import { useLocal } from "@tui/context/local"
-import { tint, useTheme } from "@tui/context/theme"
+import { useTheme } from "@tui/context/theme"
 import { EmptyBorder } from "@tui/component/border"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
@@ -23,7 +23,6 @@ import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
 import type { FilePart } from "@opencode-ai/sdk/v2"
 import { derivePromptBarState } from "@tui/util/prompt-bar-state"
-import { resolvePromptBarOverlay } from "@tui/util/prompt-bar-visual"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
@@ -36,6 +35,7 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { usePromptBarColorEffect } from "./color-effect"
 
 export type PromptProps = {
   sessionID?: string
@@ -104,35 +104,13 @@ export function Prompt(props: PromptProps) {
     })
   })
   const hasPromptContent = createMemo(() => store.prompt.input.trim().length > 0 || store.prompt.parts.length > 0)
-  const [idleCycleIndex, setIdleCycleIndex] = createSignal(0)
-  createEffect(() => {
-    const shouldCycle =
-      promptBarState() === "idle" && !hasPromptContent() && kv.get("animations_enabled", true)
-    if (!shouldCycle) {
-      setIdleCycleIndex(0)
-      return
-    }
-
-    const timer = setInterval(() => setIdleCycleIndex((value) => value + 1), 1000)
-    onCleanup(() => clearInterval(timer))
-  })
-  const promptBarBackground = createMemo(() => {
-    const base = theme.backgroundElement
-    const overlay = resolvePromptBarOverlay({
-      state: promptBarState(),
-      hasContent: hasPromptContent(),
-      idleCycleIndex: idleCycleIndex(),
-      idleCycleEnabled: kv.get("animations_enabled", true),
-      theme,
-    })
-    if (!overlay || base.a === 0) return base
-    const tinted = tint(base, overlay, 0.35)
-    return RGBA.fromInts(
-      Math.round(tinted.r * 255),
-      Math.round(tinted.g * 255),
-      Math.round(tinted.b * 255),
-      Math.round(base.a * 255),
-    )
+  const promptBarColor = usePromptBarColorEffect({
+    visible: () => props.visible !== false,
+    state: promptBarState,
+    hasContent: hasPromptContent,
+    animationsEnabled: () => kv.get("animations_enabled", true),
+    theme,
+    requestRender: () => renderer.requestRender(),
   })
 
   function promptModelWarning() {
@@ -856,7 +834,7 @@ export function Prompt(props: PromptProps) {
             paddingRight={2}
             paddingTop={1}
             flexShrink={0}
-            backgroundColor={theme.backgroundElement}
+            backgroundColor={promptBarColor.background()}
             flexGrow={1}
           >
             <textarea
@@ -1033,11 +1011,11 @@ export function Prompt(props: PromptProps) {
                 }, 0)
               }}
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
-              focusedBackgroundColor={theme.backgroundElement}
+              focusedBackgroundColor={promptBarColor.background()}
               cursorColor={theme.text}
               syntaxStyle={syntax()}
             />
-            <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} backgroundColor={promptBarBackground()}>
+            <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
               <text fg={highlight()}>
                 {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
               </text>
