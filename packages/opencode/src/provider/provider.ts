@@ -44,6 +44,7 @@ import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
+import { shimLanguageModel, shimProvider } from "./shim"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -84,10 +85,11 @@ export namespace Provider {
     })
   }
 
-  // Provider factories return varying types: some are ProviderV3 (most @ai-sdk/* packages) while
-  // others (e.g. GitLabProvider) still use the V2 specification. Additionally, not all providers
-  // implement the full provider interface (e.g. missing embeddingModel). Typed as `any` to avoid
-  // breaking on mixed-version bundles; narrow at the call site via the `SDK` cast (line ~1143).
+  // Provider factories return varying types: most @ai-sdk/* packages are ProviderV3 while legacy
+  // third-party packages (e.g. GitLab, Venice) may still return ProviderV2. shimProvider() in
+  // ./shim.ts wraps v2 providers/models to v3 transparently at load time so all downstream code
+  // sees a consistent v3 interface. Typed as `any` because not all providers expose the full
+  // provider interface (e.g. missing embeddingModel).
   const BUNDLED_PROVIDERS: Record<string, (options: any) => any> = {
     "@ai-sdk/amazon-bedrock": createAmazonBedrock,
     "@ai-sdk/anthropic": createAnthropic,
@@ -1142,8 +1144,9 @@ export namespace Provider {
           name: model.providerID,
           ...options,
         })
-        s.sdk.set(key, loaded)
-        return loaded as SDK
+        const shimmed = shimProvider(loaded)
+        s.sdk.set(key, shimmed)
+        return shimmed as SDK
       }
 
       let installedPath: string
@@ -1154,15 +1157,23 @@ export namespace Provider {
         installedPath = model.api.npm
       }
 
-      const mod = await import(installedPath)
-
-      const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
-      const loaded = fn({
-        name: model.providerID,
-        ...options,
-      })
-      s.sdk.set(key, loaded)
-      return loaded as SDK
+      try {
+        const mod = await import(installedPath)
+        const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
+        const loaded = fn({
+          name: model.providerID,
+          ...options,
+        })
+        const shimmed = shimProvider(loaded)
+        s.sdk.set(key, shimmed)
+        return shimmed as SDK
+      } catch (e) {
+        log.warn("failed to load provider - it may not be compatible with AI SDK v6", {
+          providerID: model.providerID,
+          pkg: model.api.npm,
+        })
+        throw e
+      }
     } catch (e) {
       throw new InitError({ providerID: model.providerID }, { cause: e })
     }
@@ -1201,9 +1212,10 @@ export namespace Provider {
     const sdk = await getSDK(model)
 
     try {
-      const language = s.modelLoaders[model.providerID]
+      const raw = s.modelLoaders[model.providerID]
         ? await s.modelLoaders[model.providerID](sdk, model.api.id, provider.options)
         : sdk.languageModel(model.api.id)
+      const language = shimLanguageModel(raw)
       s.models.set(key, language)
       return language
     } catch (e) {
