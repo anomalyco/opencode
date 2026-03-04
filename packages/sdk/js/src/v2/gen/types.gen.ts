@@ -889,21 +889,6 @@ export type EventVcsBranchUpdated = {
   }
 }
 
-export type EventWorktreeReady = {
-  type: "worktree.ready"
-  properties: {
-    name: string
-    branch: string
-  }
-}
-
-export type EventWorktreeFailed = {
-  type: "worktree.failed"
-  properties: {
-    message: string
-  }
-}
-
 export type EventWorkspaceReady = {
   type: "workspace.ready"
   properties: {
@@ -957,6 +942,21 @@ export type EventPtyDeleted = {
   }
 }
 
+export type EventWorktreeReady = {
+  type: "worktree.ready"
+  properties: {
+    name: string
+    branch: string
+  }
+}
+
+export type EventWorktreeFailed = {
+  type: "worktree.failed"
+  properties: {
+    message: string
+  }
+}
+
 export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
@@ -995,14 +995,14 @@ export type Event =
   | EventSessionDiff
   | EventSessionError
   | EventVcsBranchUpdated
-  | EventWorktreeReady
-  | EventWorktreeFailed
   | EventWorkspaceReady
   | EventWorkspaceFailed
   | EventPtyCreated
   | EventPtyUpdated
   | EventPtyExited
   | EventPtyDeleted
+  | EventWorktreeReady
+  | EventWorktreeFailed
 
 export type GlobalEvent = {
   directory: string
@@ -1633,14 +1633,12 @@ export type ToolList = Array<ToolListItem>
 
 export type Workspace = {
   id: string
+  type: string
   branch: string | null
+  name: string | null
+  directory: string | null
+  extra: unknown | null
   projectID: string
-  config: {
-    type: "worktree"
-    directory: string
-    name: string
-    branch: string
-  }
 }
 
 export type Worktree = {
@@ -2468,10 +2466,10 @@ export type ExperimentalWorkspaceListResponse =
 
 export type ExperimentalWorkspaceCreateData = {
   body?: {
-    branch?: string | null
-  } & {
-    type: "worktree"
-    name: string
+    id?: string
+    type: string
+    branch: string | null
+    extra: unknown | null
   }
   path?: never
   query?: {

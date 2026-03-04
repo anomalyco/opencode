@@ -902,12 +902,10 @@ export class Workspace extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
-      body?: {
-        branch?: string | null
-      } & {
-        type: "worktree"
-        name: string
-      }
+      id?: string
+      type?: string
+      branch?: string | null
+      extra?: unknown | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -918,7 +916,10 @@ export class Workspace extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
-            { key: "body", map: "body" },
+            { in: "body", key: "id" },
+            { in: "body", key: "type" },
+            { in: "body", key: "branch" },
+            { in: "body", key: "extra" },
           ],
         },
       ],
