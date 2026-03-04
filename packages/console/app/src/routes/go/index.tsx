@@ -67,7 +67,7 @@ function LimitsGraph(props: { href: string }) {
   const x = (r: number) => left + base + Math.pow(log(r) / log(rmax), p) * (plot - base)
   const start = (x(1) / w) * 100
 
-  const ticks = [1, 2, 5, 10, 25, 50, 100].filter((t) => t <= rmax)
+  const ticks = [1, 5, 10, 25, 50, 100].filter((t) => t <= rmax)
   const labels = (() => {
     const set = new Set<number>()
     let last = -Infinity
@@ -162,7 +162,7 @@ function LimitsGraph(props: { href: string }) {
 
         <div data-slot="pills" aria-hidden="true">
           <span data-item data-kind="free" style={{ "--x": px(x(1)), "--y": py(fy), "--d": "0ms" } as any}>
-            <span data-name>{i18n.t("go.graph.free")}</span>
+            <span data-name>{i18n.t("go.graph.freePill")}</span>
             <span data-value>{free.toLocaleString()}</span>
           </span>
           <For each={models}>
