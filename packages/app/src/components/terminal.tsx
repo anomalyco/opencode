@@ -18,7 +18,7 @@ const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
   onSubmit?: () => void
-  onCleanup?: (pty: LocalPTY) => void
+  onCleanup?: (pty: Partial<LocalPTY> & { id: string }) => void
   onConnect?: () => void
   onConnectError?: (error: unknown) => void
 }
@@ -126,8 +126,8 @@ const persistTerminal = (input: {
   term: Term | undefined
   addon: SerializeAddon | undefined
   cursor: number
-  pty: LocalPTY
-  onCleanup?: (pty: LocalPTY) => void
+  id: string
+  onCleanup?: (pty: Partial<LocalPTY> & { id: string }) => void
 }) => {
   if (!input.addon || !input.onCleanup || !input.term) return
   const buffer = (() => {
@@ -140,7 +140,7 @@ const persistTerminal = (input: {
   })()
 
   input.onCleanup({
-    ...input.pty,
+    id: input.id,
     buffer,
     cursor: input.cursor,
     rows: input.term.rows,
@@ -158,6 +158,19 @@ export const Terminal = (props: TerminalProps) => {
   const server = useServer()
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, ["pty", "class", "classList", "onConnect", "onConnectError"])
+  const id = local.pty.id
+  const restore = typeof local.pty.buffer === "string" ? local.pty.buffer : ""
+  const restoreSize =
+    restore &&
+    typeof local.pty.cols === "number" &&
+    Number.isSafeInteger(local.pty.cols) &&
+    local.pty.cols > 0 &&
+    typeof local.pty.rows === "number" &&
+    Number.isSafeInteger(local.pty.rows) &&
+    local.pty.rows > 0
+      ? { cols: local.pty.cols, rows: local.pty.rows }
+      : undefined
+  const scrollY = typeof local.pty.scrollY === "number" ? local.pty.scrollY : undefined
   let ws: WebSocket | undefined
   let term: Term | undefined
   let ghostty: Ghostty
@@ -190,7 +203,7 @@ export const Terminal = (props: TerminalProps) => {
   const pushSize = (cols: number, rows: number) => {
     return sdk.client.pty
       .update({
-        ptyID: local.pty.id,
+        ptyID: id,
         size: { cols, rows },
       })
       .catch((err) => {
@@ -319,18 +332,6 @@ export const Terminal = (props: TerminalProps) => {
       const mod = loaded.mod
       const g = loaded.ghostty
 
-      const restore = typeof local.pty.buffer === "string" ? local.pty.buffer : ""
-      const restoreSize =
-        restore &&
-        typeof local.pty.cols === "number" &&
-        Number.isSafeInteger(local.pty.cols) &&
-        local.pty.cols > 0 &&
-        typeof local.pty.rows === "number" &&
-        Number.isSafeInteger(local.pty.rows) &&
-        local.pty.rows > 0
-          ? { cols: local.pty.cols, rows: local.pty.rows }
-          : undefined
-
       const t = new mod.Terminal({
         cursorBlink: true,
         cursorStyle: "bar",
@@ -427,14 +428,14 @@ export const Terminal = (props: TerminalProps) => {
         await write(restore)
         fit.fit()
         scheduleSize(t.cols, t.rows)
-        if (typeof local.pty.scrollY === "number") t.scrollToLine(local.pty.scrollY)
+        if (scrollY !== undefined) t.scrollToLine(scrollY)
         startResize()
       } else {
         fit.fit()
         scheduleSize(t.cols, t.rows)
         if (restore) {
           await write(restore)
-          if (typeof local.pty.scrollY === "number") t.scrollToLine(local.pty.scrollY)
+          if (scrollY !== undefined) t.scrollToLine(scrollY)
         }
         startResize()
       }
@@ -446,9 +447,9 @@ export const Terminal = (props: TerminalProps) => {
       const once = { value: false }
       let closing = false
 
-      const url = new URL(sdk.url + `/pty/${local.pty.id}/connect`)
+      const url = new URL(sdk.url + `/pty/${id}/connect`)
       url.searchParams.set("directory", sdk.directory)
-      url.searchParams.set("cursor", String(start !== undefined ? start : local.pty.buffer ? -1 : 0))
+      url.searchParams.set("cursor", String(start !== undefined ? start : restore ? -1 : 0))
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
       url.username = server.current?.http.username ?? ""
       url.password = server.current?.http.password ?? ""
@@ -542,7 +543,7 @@ export const Terminal = (props: TerminalProps) => {
     if (ws && ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) ws.close(1000)
 
     const finalize = () => {
-      persistTerminal({ term, addon: serializeAddon, cursor, pty: local.pty, onCleanup: props.onCleanup })
+      persistTerminal({ term, addon: serializeAddon, cursor, id, onCleanup: props.onCleanup })
       cleanup()
     }
 
