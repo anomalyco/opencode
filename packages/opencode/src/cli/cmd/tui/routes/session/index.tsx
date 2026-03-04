@@ -1348,18 +1348,18 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         }}
       </For>
       <Show when={props.parts.some((x) => x.type === "tool" && x.tool === "task")}>
-        <box
-          paddingTop={1}
-          paddingLeft={3}
-          onMouseOver={() => setHover(true)}
-          onMouseOut={() => setHover(false)}
-          onMouseUp={() => command.trigger("session.child.first")}
-          backgroundColor={hover() ? theme.backgroundElement : undefined}
-        >
-          <text fg={theme.text}>
-            {keybind.print("session_child_first")}
-            <span style={{ fg: theme.textMuted }}> view subagents</span>
-          </text>
+        <box paddingTop={1} paddingLeft={3}>
+          <box
+            onMouseOver={() => setHover(true)}
+            onMouseOut={() => setHover(false)}
+            onMouseUp={() => command.trigger("session.child.first")}
+            backgroundColor={hover() ? theme.backgroundElement : undefined}
+          >
+            <text fg={theme.text}>
+              {keybind.print("session_child_first")}
+              <span style={{ fg: theme.textMuted }}> view subagents</span>
+            </text>
+          </box>
         </box>
       </Show>
       <Show when={props.message.error && props.message.error.name !== "MessageAbortedError"}>
