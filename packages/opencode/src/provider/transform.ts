@@ -26,16 +26,18 @@ export namespace ProviderTransform {
       case "@ai-sdk/github-copilot":
         return "copilot"
       case "@ai-sdk/openai":
-      case "@ai-sdk/azure":
         return "openai"
+      case "@ai-sdk/azure":
+        return "azure"
       case "@ai-sdk/amazon-bedrock":
         return "bedrock"
       case "@ai-sdk/anthropic":
       case "@ai-sdk/google-vertex/anthropic":
         return "anthropic"
-      case "@ai-sdk/google-vertex":
       case "@ai-sdk/google":
         return "google"
+      case "@ai-sdk/google-vertex":
+        return "vertex"
       case "@ai-sdk/gateway":
         return "gateway"
       case "@openrouter/ai-sdk-provider":
@@ -267,7 +269,7 @@ export namespace ProviderTransform {
 
     // Remap providerOptions keys from stored providerID to expected SDK key
     const key = sdkKey(model.api.npm)
-    if (key && key !== model.providerID && model.api.npm !== "@ai-sdk/azure") {
+    if (key && key !== model.providerID) {
       const remap = (opts: Record<string, any> | undefined) => {
         if (!opts) return opts
         if (!(model.providerID in opts)) return opts

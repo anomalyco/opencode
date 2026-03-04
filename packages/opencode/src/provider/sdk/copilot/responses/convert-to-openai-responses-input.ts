@@ -1,9 +1,9 @@
 import {
-  type LanguageModelV2CallWarning,
   type LanguageModelV3Prompt,
   type LanguageModelV3ToolCallPart,
   UnsupportedFunctionalityError,
 } from "@ai-sdk/provider"
+import type { SharedV3Warning } from "../warnings"
 import { convertToBase64, parseProviderOptions } from "@ai-sdk/provider-utils"
 import { z } from "zod/v4"
 import type { OpenAIResponsesInput, OpenAIResponsesReasoning } from "./openai-responses-api-types"
@@ -32,10 +32,10 @@ export async function convertToOpenAIResponsesInput({
   hasLocalShellTool?: boolean
 }): Promise<{
   input: OpenAIResponsesInput
-  warnings: Array<LanguageModelV2CallWarning>
+  warnings: Array<SharedV3Warning>
 }> {
   const input: OpenAIResponsesInput = []
-  const warnings: Array<LanguageModelV2CallWarning> = []
+  const warnings: Array<SharedV3Warning> = []
 
   for (const { role, content } of prompt) {
     switch (role) {

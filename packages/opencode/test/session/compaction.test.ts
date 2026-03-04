@@ -270,7 +270,15 @@ describe("session.getUsage", () => {
         inputTokens: 1000,
         outputTokens: 500,
         totalTokens: 1500,
-        cachedInputTokens: 200,
+        inputTokenDetails: {
+          noCacheTokens: undefined,
+          cacheReadTokens: 200,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
       },
     })
 
@@ -305,7 +313,15 @@ describe("session.getUsage", () => {
         inputTokens: 1000,
         outputTokens: 500,
         totalTokens: 1500,
-        cachedInputTokens: 200,
+        inputTokenDetails: {
+          noCacheTokens: undefined,
+          cacheReadTokens: 200,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
       },
       metadata: {
         anthropic: {},
@@ -324,7 +340,15 @@ describe("session.getUsage", () => {
         inputTokens: 1000,
         outputTokens: 500,
         totalTokens: 1500,
-        reasoningTokens: 100,
+        inputTokenDetails: {
+          noCacheTokens: undefined,
+          cacheReadTokens: undefined,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: 100,
+        },
       },
     })
 
@@ -382,7 +406,15 @@ describe("session.getUsage", () => {
         // These providers typically report total as input + output only,
         // excluding cache read/write.
         totalTokens: 1500,
-        cachedInputTokens: 200,
+        inputTokenDetails: {
+          noCacheTokens: undefined,
+          cacheReadTokens: 200,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
       }
       if (npm === "@ai-sdk/amazon-bedrock") {
         const result = Session.getUsage({

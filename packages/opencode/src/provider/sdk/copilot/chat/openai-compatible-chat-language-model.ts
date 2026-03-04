@@ -2,7 +2,6 @@ import {
   APICallError,
   InvalidResponseDataError,
   type LanguageModelV3,
-  type LanguageModelV2CallWarning,
   type LanguageModelV3Content,
   type LanguageModelV3StreamPart,
   type SharedV3ProviderMetadata,
@@ -28,7 +27,7 @@ import { type OpenAICompatibleChatModelId, openaiCompatibleProviderOptions } fro
 import { defaultOpenAICompatibleErrorStructure, type ProviderErrorStructure } from "../openai-compatible-error"
 import type { MetadataExtractor } from "./openai-compatible-metadata-extractor"
 import { prepareTools } from "./openai-compatible-prepare-tools"
-import { toV3Warnings } from "../warnings"
+import { type SharedV3Warning, unsupportedSetting } from "../warnings"
 
 export type OpenAICompatibleChatConfig = {
   provider: string
@@ -99,7 +98,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
     toolChoice,
     tools,
   }: Parameters<LanguageModelV3["doGenerate"]>[0]) {
-    const warnings: LanguageModelV2CallWarning[] = []
+    const warnings: SharedV3Warning[] = []
 
     // Parse provider options
     const compatibleOptions = Object.assign(
@@ -116,15 +115,13 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
     )
 
     if (topK != null) {
-      warnings.push({ type: "unsupported-setting", setting: "topK" })
+      warnings.push(unsupportedSetting("topK"))
     }
 
     if (responseFormat?.type === "json" && responseFormat.schema != null && !this.supportsStructuredOutputs) {
-      warnings.push({
-        type: "unsupported-setting",
-        setting: "responseFormat",
-        details: "JSON response format schema is only supported with structuredOutputs",
-      })
+      warnings.push(
+        unsupportedSetting("responseFormat", "JSON response format schema is only supported with structuredOutputs"),
+      )
     }
 
     const {
@@ -299,7 +296,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
         headers: responseHeaders,
         body: rawResponse,
       },
-      warnings: toV3Warnings(warnings),
+      warnings,
     }
   }
 
@@ -378,7 +375,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
       stream: response.pipeThrough(
         new TransformStream<ParseResult<z.infer<typeof this.chunkSchema>>, LanguageModelV3StreamPart>({
           start(controller) {
-            controller.enqueue({ type: "stream-start", warnings: toV3Warnings(warnings) })
+            controller.enqueue({ type: "stream-start", warnings })
           },
 
           // TODO we lost type safety on Chunk, most likely due to the error schema. MUST FIX

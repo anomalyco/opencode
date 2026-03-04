@@ -1,8 +1,5 @@
-import {
-  type LanguageModelV3CallOptions,
-  type LanguageModelV2CallWarning,
-  UnsupportedFunctionalityError,
-} from "@ai-sdk/provider"
+import { type LanguageModelV3CallOptions, UnsupportedFunctionalityError } from "@ai-sdk/provider"
+import { type SharedV3Warning, unsupportedTool } from "../warnings"
 import { codeInterpreterArgsSchema } from "./tool/code-interpreter"
 import { fileSearchArgsSchema } from "./tool/file-search"
 import { webSearchArgsSchema } from "./tool/web-search"
@@ -30,12 +27,12 @@ export function prepareResponsesTools({
     | { type: "function"; name: string }
     | { type: "code_interpreter" }
     | { type: "image_generation" }
-  toolWarnings: LanguageModelV2CallWarning[]
+  toolWarnings: SharedV3Warning[]
 } {
   // when the tools array is empty, change it to undefined to prevent errors:
   tools = tools?.length ? tools : undefined
 
-  const toolWarnings: LanguageModelV2CallWarning[] = []
+  const toolWarnings: SharedV3Warning[] = []
 
   if (tools == null) {
     return { tools: undefined, toolChoice: undefined, toolWarnings }
@@ -138,7 +135,7 @@ export function prepareResponsesTools({
         break
       }
       default:
-        toolWarnings.push({ type: "unsupported-tool", tool })
+        toolWarnings.push(unsupportedTool())
         break
     }
   }

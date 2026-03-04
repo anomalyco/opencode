@@ -27,7 +27,7 @@ import { WorkspaceContext } from "../control-plane/workspace-context"
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
 import { Global } from "@/global"
-import type { LanguageModelV2Usage } from "@ai-sdk/provider"
+import type { LanguageModelUsage } from "ai"
 import { iife } from "@/util/iife"
 
 export namespace Session {
@@ -784,7 +784,7 @@ export namespace Session {
   export const getUsage = fn(
     z.object({
       model: z.custom<Provider.Model>(),
-      usage: z.custom<LanguageModelV2Usage>(),
+      usage: z.custom<LanguageModelUsage>(),
       metadata: z.custom<ProviderMetadata>().optional(),
     }),
     (input) => {
@@ -794,9 +794,9 @@ export namespace Session {
       }
       const inputTokens = safe(input.usage.inputTokens ?? 0)
       const outputTokens = safe(input.usage.outputTokens ?? 0)
-      const reasoningTokens = safe(input.usage.reasoningTokens ?? 0)
+      const reasoningTokens = safe(input.usage.outputTokenDetails?.reasoningTokens ?? 0)
 
-      const cacheReadInputTokens = safe(input.usage.cachedInputTokens ?? 0)
+      const cacheReadInputTokens = safe(input.usage.inputTokenDetails?.cacheReadTokens ?? 0)
       const cacheWriteInputTokens = safe(
         (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
           // @ts-expect-error

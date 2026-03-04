@@ -2,7 +2,6 @@ import {
   APICallError,
   type JSONValue,
   type LanguageModelV3,
-  type LanguageModelV2CallWarning,
   type LanguageModelV3Content,
   type LanguageModelV3ProviderTool,
   type LanguageModelV3StreamPart,
@@ -29,7 +28,7 @@ import type { OpenAIResponsesIncludeOptions, OpenAIResponsesIncludeValue } from 
 import { prepareResponsesTools } from "./openai-responses-prepare-tools"
 import type { OpenAIResponsesModelId } from "./openai-responses-settings"
 import { localShellInputSchema } from "./tool/local-shell"
-import { toV3Warnings } from "../warnings"
+import { type SharedV3Warning, unsupportedSetting } from "../warnings"
 
 const webSearchCallItem = z.object({
   type: z.literal("web_search_call"),
@@ -164,29 +163,23 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
     toolChoice,
     responseFormat,
   }: Parameters<LanguageModelV3["doGenerate"]>[0]) {
-    const warnings: LanguageModelV2CallWarning[] = []
+    const warnings: SharedV3Warning[] = []
     const modelConfig = getResponsesModelConfig(this.modelId)
 
     if (topK != null) {
-      warnings.push({ type: "unsupported-setting", setting: "topK" })
+      warnings.push(unsupportedSetting("topK"))
     }
 
     if (seed != null) {
-      warnings.push({ type: "unsupported-setting", setting: "seed" })
+      warnings.push(unsupportedSetting("seed"))
     }
 
     if (presencePenalty != null) {
-      warnings.push({
-        type: "unsupported-setting",
-        setting: "presencePenalty",
-      })
+      warnings.push(unsupportedSetting("presencePenalty"))
     }
 
     if (frequencyPenalty != null) {
-      warnings.push({
-        type: "unsupported-setting",
-        setting: "frequencyPenalty",
-      })
+      warnings.push(unsupportedSetting("frequencyPenalty"))
     }
 
     if (stopSequences != null) {
@@ -764,7 +757,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
         body: rawResponse,
       },
       providerMetadata,
-      warnings: toV3Warnings(warnings),
+      warnings,
     }
   }
 
@@ -840,7 +833,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
       stream: response.pipeThrough(
         new TransformStream<ParseResult<z.infer<typeof openaiResponsesChunkSchema>>, LanguageModelV3StreamPart>({
           start(controller) {
-            controller.enqueue({ type: "stream-start", warnings: toV3Warnings(warnings) })
+            controller.enqueue({ type: "stream-start", warnings })
           },
 
           transform(chunk, controller) {
@@ -1689,12 +1682,11 @@ function getResponsesModelConfig(modelId: string): ResponsesModelConfig {
   }
 }
 
-// TODO AI SDK 6: use optional here instead of nullish
 const openaiResponsesProviderOptionsSchema = z.object({
   include: z
     .array(z.enum(["reasoning.encrypted_content", "file_search_call.results", "message.output_text.logprobs"]))
-    .nullish(),
-  instructions: z.string().nullish(),
+    .optional(),
+  instructions: z.string().optional(),
 
   /**
    * Return the log probabilities of the tokens.
@@ -1715,20 +1707,20 @@ const openaiResponsesProviderOptionsSchema = z.object({
    * This maximum number applies across all built-in tool calls, not per individual tool.
    * Any further attempts to call a tool by the model will be ignored.
    */
-  maxToolCalls: z.number().nullish(),
+  maxToolCalls: z.number().optional(),
 
-  metadata: z.any().nullish(),
-  parallelToolCalls: z.boolean().nullish(),
-  previousResponseId: z.string().nullish(),
-  promptCacheKey: z.string().nullish(),
-  reasoningEffort: z.string().nullish(),
-  reasoningSummary: z.string().nullish(),
-  safetyIdentifier: z.string().nullish(),
-  serviceTier: z.enum(["auto", "flex", "priority"]).nullish(),
-  store: z.boolean().nullish(),
-  strictJsonSchema: z.boolean().nullish(),
-  textVerbosity: z.enum(["low", "medium", "high"]).nullish(),
-  user: z.string().nullish(),
+  metadata: z.any().optional(),
+  parallelToolCalls: z.boolean().optional(),
+  previousResponseId: z.string().optional(),
+  promptCacheKey: z.string().optional(),
+  reasoningEffort: z.string().optional(),
+  reasoningSummary: z.string().optional(),
+  safetyIdentifier: z.string().optional(),
+  serviceTier: z.enum(["auto", "flex", "priority"]).optional(),
+  store: z.boolean().optional(),
+  strictJsonSchema: z.boolean().optional(),
+  textVerbosity: z.enum(["low", "medium", "high"]).optional(),
+  user: z.string().optional(),
 })
 
 export type OpenAIResponsesProviderOptions = z.infer<typeof openaiResponsesProviderOptionsSchema>
