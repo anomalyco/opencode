@@ -427,6 +427,10 @@ body {
         radial-gradient(1200px 400px at 15% 0%, rgba(255, 255, 255, 0.03), transparent 55%),
         radial-gradient(900px 320px at 85% 15%, rgba(255, 255, 255, 0.02), transparent 60%),
         var(--color-background-weak);
+
+      [data-component="limit-graph"] {
+        --bar-go: #f7ff00;
+      }
     }
 
     [data-component="limit-graph"] {
@@ -436,6 +440,7 @@ body {
       border: none;
       background: transparent;
       padding: 58px var(--padding) 56px;
+      --bar-go: var(--color-go-2);
 
       @media (max-width: 48rem) {
         width: 100%;
@@ -574,7 +579,7 @@ body {
         transform-origin: left center;
         opacity: 0;
         transform: scaleX(0.02);
-        fill: var(--color-go-2);
+        fill: var(--bar-go);
         stroke: none;
       }
 
