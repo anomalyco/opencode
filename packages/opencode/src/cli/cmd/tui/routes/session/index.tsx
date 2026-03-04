@@ -1348,7 +1348,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         }}
       </For>
       <Show when={props.parts.some((x) => x.type === "tool" && x.tool === "task")}>
-        <box paddingTop={1} paddingLeft={3}>
+        <box paddingTop={1} paddingLeft={3} flexDirection="row">
           <box
             onMouseOver={() => setHover(true)}
             onMouseOut={() => setHover(false)}
