@@ -442,9 +442,9 @@ body {
       padding: 58px var(--padding) 56px;
       --bar-go: var(--color-go-2);
 
-      @media (max-width: 48rem) {
-        width: 100%;
-        max-width: 100%;
+      @media (max-width: 60rem) {
+        width: 50%;
+        max-width: 50%;
       }
 
       [data-slot="plot"] {
@@ -452,17 +452,34 @@ body {
         overflow: visible;
         width: 100%;
         margin: 0 auto;
-        margin-left: -40px;
-
-        @media (max-width: 60rem) {
-          margin-left: 0;
-        }
+        margin-left: -56px;
       }
 
       [data-slot="ylabels"] {
         position: absolute;
         inset: 0;
         pointer-events: none;
+      }
+
+      [data-slot="xlabels"] {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      [data-slot="xlabels"] [data-xlabel] {
+        position: absolute;
+        left: var(--x);
+        top: var(--y);
+        transform: translate(-50%, -50%);
+        color: var(--color-text-weak);
+        font-size: 12px;
+        line-height: 1;
+        white-space: nowrap;
+
+        @media (prefers-color-scheme: light) {
+          color: color-mix(in srgb, var(--color-text-weak) 82%, var(--color-text-strong));
+        }
       }
 
       [data-slot="ylabels"] [data-ylabel] {
@@ -475,6 +492,10 @@ body {
         font-weight: 700;
         line-height: 1;
         white-space: nowrap;
+
+        @media (max-width: 60rem) {
+          font-size: 13px;
+        }
       }
 
       [data-slot="pills"] {
@@ -715,8 +736,12 @@ body {
       [data-slot="caption-meta"] {
         display: flex;
         flex-direction: row;
+        flex-wrap: nowrap;
         gap: 16px;
         align-items: baseline;
+        width: 100%;
+        max-width: none;
+        justify-content: center;
       }
 
       [data-slot="caption-label"] {
@@ -731,6 +756,7 @@ body {
         text-decoration-thickness: 1px;
         width: fit-content;
         line-height: 1;
+        white-space: nowrap;
       }
 
       [data-slot="caption-note"] {

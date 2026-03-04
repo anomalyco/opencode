@@ -84,6 +84,7 @@ function LimitsGraph(props: { href: string }) {
     }
     return set
   })()
+  const shown = ticks.filter((t) => labels.has(t))
   const bh = 8
   const gap = 16
   const step = bh + gap
@@ -94,6 +95,7 @@ function LimitsGraph(props: { href: string }) {
   const px = (n: number) => `${(n / w) * 100}%`
   const py = (n: number) => `${(n / h) * 100}%`
   const lx = px(left - 16)
+  const ty = py(h - 18)
 
   return (
     <figure
@@ -116,11 +118,6 @@ function LimitsGraph(props: { href: string }) {
               {(t) => (
                 <g>
                   <line x1={x(t)} y1={top} x2={x(t)} y2={h - bottom} data-grid />
-                  {labels.has(t) ? (
-                    <text x={x(t)} y={h - 18} text-anchor="middle" data-tick>
-                      {i18n.t("go.graph.tick", { n: t })}
-                    </text>
-                  ) : null}
                 </g>
               )}
             </For>
@@ -158,6 +155,16 @@ function LimitsGraph(props: { href: string }) {
           <span data-ylabel style={{ "--x": lx, "--y": py(my) } as any}>
             {i18n.t("go.graph.go")}
           </span>
+        </div>
+
+        <div data-slot="xlabels" aria-hidden="true">
+          <For each={shown}>
+            {(t) => (
+              <span data-xlabel style={{ "--x": px(x(t)), "--y": ty } as any}>
+                {i18n.t("go.graph.tick", { n: t })}
+              </span>
+            )}
+          </For>
         </div>
 
         <div data-slot="pills" aria-hidden="true">
