@@ -10,6 +10,15 @@ export default defineConfig({
   },
   build: {
     target: "esnext",
-    // sourcemap: true,
+    // OPENSACIA: Production-ready static build config
+    outDir: "dist",
+    emptyOutDir: true,
+    minify: "terser",
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: undefined,
+      },
+    },
   },
 })
