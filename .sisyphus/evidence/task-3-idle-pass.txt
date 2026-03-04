@@ -1,0 +1,6 @@
+OPENCODE_SANDBOX_USE_REAL_AUTH=1 OPENCODE_SANDBOX_MODEL=openai/gpt-4o-mini
+bash .sisyphus/evidence/run-sandbox-tui.sh idle
+Result: Evidence OK: idle
+OPENCODE_SANDBOX_USE_REAL_AUTH=1 OPENCODE_SANDBOX_MODEL=openai/gpt-5.2-codex
+bash .sisyphus/evidence/run-sandbox-tui.sh idle
+Result: Evidence OK: idle

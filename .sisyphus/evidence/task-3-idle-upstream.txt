@@ -1,0 +1,6 @@
+OPENCODE_SANDBOX_USE_REAL_AUTH=1 OPENCODE_SANDBOX_MODEL=openai/gpt-4o-mini
+bash scripts/compare-tui-baseline.sh idle
+Result: fork and upstream harnesses ran; diff output printed.
+OPENCODE_SANDBOX_USE_REAL_AUTH=1 OPENCODE_SANDBOX_MODEL=openai/gpt-5.2-codex
+bash scripts/compare-tui-baseline.sh idle
+Result: upstream reported "Model openai/gpt-5.2-codex is not valid"; diff output printed.

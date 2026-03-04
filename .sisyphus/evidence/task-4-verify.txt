@@ -1,0 +1,4 @@
+export PATH="$HOME/.bun/bin:$PATH"
+bun run --cwd packages/opencode typecheck -> OK
+bun run --cwd packages/opencode test -> OK (1207 pass, 5 skip)
+bun run --cwd packages/opencode build -> OK
