@@ -1,23 +1,23 @@
-name: vouch-check-issue
+name: vouch-check-pr
 
 on:
-  issues:
+  pull_request_target:
     types: [opened]
 
 permissions:
   contents: read
-  issues: write
+  pull-requests: write
 
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - name: Check if issue author is denounced
+      - name: Check if PR author is denounced
         uses: actions/github-script@v7
         with:
           script: |
-            const author = context.payload.issue.user.login;
-            const issueNumber = context.payload.issue.number;
+            const author = context.payload.pull_request.user.login;
+            const prNumber = context.payload.pull_request.number;
 
             // Skip bots
             if (author.endsWith('[bot]')) {
@@ -42,17 +42,15 @@ jobs:
               throw error;
             }
 
-            // Parse the .td file for vouched and denounced users
-            const vouched = new Set();
+            // Parse the .td file for denounced users
             const denounced = new Map();
             for (const line of content.split('\n')) {
               const trimmed = line.trim();
               if (!trimmed || trimmed.startsWith('#')) continue;
+              if (!trimmed.startsWith('-')) continue;
 
-              const isDenounced = trimmed.startsWith('-');
-              const rest = isDenounced ? trimmed.slice(1).trim() : trimmed;
+              const rest = trimmed.slice(1).trim();
               if (!rest) continue;
-
               const spaceIdx = rest.indexOf(' ');
               const handle = spaceIdx === -1 ? rest : rest.slice(0, spaceIdx);
               const reason = spaceIdx === -1 ? null : rest.slice(spaceIdx + 1).trim();
@@ -67,50 +65,29 @@ jobs:
               const username = colonIdx === -1 ? handle : handle.slice(colonIdx + 1);
               if (!username) continue;
 
-              if (isDenounced) {
-                denounced.set(username.toLowerCase(), reason);
-                continue;
-              }
-
-              vouched.add(username.toLowerCase());
+              denounced.set(username.toLowerCase(), reason);
             }
 
             // Check if the author is denounced
             const reason = denounced.get(author.toLowerCase());
-            if (reason !== undefined) {
-              // Author is denounced — close the issue
-              const body = 'This issue has been automatically closed.';
-
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issueNumber,
-                body,
-              });
-
-              await github.rest.issues.update({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issueNumber,
-                state: 'closed',
-                state_reason: 'not_planned',
-              });
-
-              core.info(`Closed issue #${issueNumber} from denounced user ${author}`);
+            if (reason === undefined) {
+              core.info(`User ${author} is not denounced. Allowing PR.`);
               return;
             }
 
-            // Author is positively vouched — add label
-            if (!vouched.has(author.toLowerCase())) {
-              core.info(`User ${author} is not denounced or vouched. Allowing issue.`);
-              return;
-            }
-
-            await github.rest.issues.addLabels({
+            // Author is denounced — close the PR
+            await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: issueNumber,
-              labels: ['Vouched'],
+              issue_number: prNumber,
+              body: 'This pull request has been automatically closed.',
             });
 
-            core.info(`Added vouched label to issue #${issueNumber} from ${author}`);
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+              state: 'closed',
+            });
+
+            core.info(`Closed PR #${prNumber} from denounced user ${author}`);
