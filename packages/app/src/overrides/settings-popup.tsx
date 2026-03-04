@@ -1,9 +1,11 @@
-import { createMemo, createResource, createSignal } from "solid-js"
+import { createMemo, createResource, createSignal, Show } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Popover } from "@opencode-ai/ui/popover"
+import { Switch } from "@opencode-ai/ui/switch"
 import { TextField } from "@opencode-ai/ui/text-field"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { showToast } from "@opencode-ai/ui/toast"
 import { usePlatform } from "@/context/platform"
 import { useLayout } from "@/context/layout"
@@ -11,6 +13,7 @@ import { useTerminal } from "@/context/terminal"
 import { useSDK } from "@/context/sdk"
 import { decode64 } from "@/utils/base64"
 import { getFilename } from "@opencode-ai/util/path"
+import { hasAllAccess, addAllAccess, removeAllAccess, filterDisplayUsers } from "./settings-popup-helpers"
 
 export function SettingsPopup() {
   const params = useParams()
@@ -66,6 +69,18 @@ export function SettingsPopup() {
       }
     },
   )
+
+  const allAccess = createMemo(() => hasAllAccess(accessList() || []))
+
+  const toggleAllAccess = async (checked: boolean) => {
+    const current = accessList() || []
+    if (checked) {
+      const next = addAllAccess(current)
+      if (next !== current) await updateAccess(next)
+    } else {
+      await updateAccess(removeAllAccess(current))
+    }
+  }
 
   const openLink = (url: string) => {
     if (!url) return
@@ -174,31 +189,40 @@ export function SettingsPopup() {
           </div>
         </div>
         <div class="flex flex-col gap-2">
-          <div class="flex items-center gap-2">
-            <span class="text-12-regular text-text-weak w-[56px] shrink-0">Access</span>
-            <TextField
-              value={email()}
-              onInput={(event) => setEmail(event.currentTarget.value)}
-              placeholder="Email"
-              class="flex-1 min-w-0"
-            />
-            <Button variant="secondary" class="h-[28px] shrink-0" onClick={addUser}>
-              Add
-            </Button>
-            <Button variant="secondary" class="h-[28px] shrink-0" onClick={() => refetchAccess()}>
-              Refresh
-            </Button>
+          <div class="flex items-center justify-between">
+            <span class="text-12-regular text-text-weak">Access</span>
+            <Tooltip placement="top" value="Grant access to everyone with a @later.com account">
+              <Switch checked={allAccess()} onChange={toggleAllAccess}>
+                All Later employees
+              </Switch>
+            </Tooltip>
           </div>
-          <div class="flex flex-wrap gap-2">
-            {(accessList() || []).map((item) => (
-              <div class="flex items-center gap-1 rounded-sm border border-border-weak-base px-2 py-1">
-                <span class="text-12-regular text-text-strong">{item}</span>
-                <Button variant="ghost" class="h-[20px] w-[20px] p-0" onClick={() => removeUser(item)}>
-                  <Icon name="close-small" size="small" class="text-icon-weak" />
-                </Button>
-              </div>
-            ))}
-          </div>
+          <Show when={!allAccess()}>
+            <div class="flex items-center gap-2">
+              <TextField
+                value={email()}
+                onInput={(event) => setEmail(event.currentTarget.value)}
+                placeholder="Email"
+                class="flex-1 min-w-0"
+              />
+              <Button variant="secondary" class="h-[28px] shrink-0" onClick={addUser}>
+                Add
+              </Button>
+              <Button variant="secondary" class="h-[28px] shrink-0" onClick={() => refetchAccess()}>
+                Refresh
+              </Button>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              {filterDisplayUsers(accessList() || []).map((item) => (
+                <div class="flex items-center gap-1 rounded-sm border border-border-weak-base px-2 py-1">
+                  <span class="text-12-regular text-text-strong">{item}</span>
+                  <Button variant="ghost" class="h-[20px] w-[20px] p-0" onClick={() => removeUser(item)}>
+                    <Icon name="close-small" size="small" class="text-icon-weak" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </Show>
         </div>
         <div class="flex items-center justify-between gap-2">
           <span class="text-12-regular text-text-weak">Authentication with Google</span>
