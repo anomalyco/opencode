@@ -12,8 +12,9 @@ export namespace MDNS {
     if (bonjour) unpublish()
 
     try {
-      const host = domain ?? "opencode.local"
-      const name = `opencode-${port}`
+      // OPENSACIA: Default mDNS domain changed to opensacia.local
+      const host = domain ?? "opensacia.local"
+      const name = `opensacia-${port}`
       bonjour = new Bonjour()
       const service = bonjour.publish({
         name,
