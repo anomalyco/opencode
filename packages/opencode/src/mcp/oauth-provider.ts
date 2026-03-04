@@ -145,7 +145,15 @@ export class McpOAuthProvider implements OAuthClientProvider {
   async state(): Promise<string> {
     const entry = await McpAuth.get(this.mcpName)
     if (!entry?.oauthState) {
-      throw new Error(`No OAuth state saved for MCP server: ${this.mcpName}`)
+      // Generate a new state for fresh auth flows instead of throwing.
+      // Without this, the MCP SDK's authInternal() throws a generic Error
+      // that prevents UnauthorizedError from surfacing, causing clients to
+      // show "failed" instead of "needs authentication".
+      const bytes = new Uint8Array(32)
+      crypto.getRandomValues(bytes)
+      const state = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")
+      await this.saveState(state)
+      return state
     }
     return entry.oauthState
   }
