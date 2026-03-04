@@ -16,13 +16,10 @@ type WatcherOps = {
 }
 
 export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
-  if (event.type !== "file.watcher.updated") return
   const props =
     typeof event.properties === "object" && event.properties ? (event.properties as Record<string, unknown>) : undefined
   const rawPath = typeof props?.file === "string" ? props.file : undefined
-  const kind = typeof props?.event === "string" ? props.event : undefined
   if (!rawPath) return
-  if (!kind) return
 
   const path = ops.normalize(rawPath)
   if (!path) return
@@ -31,6 +28,11 @@ export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
   if (ops.hasFile(path) || ops.isOpen?.(path)) {
     ops.loadFile(path)
   }
+
+  if (event.type === "file.edited") return
+  if (event.type !== "file.watcher.updated") return
+  const kind = typeof props?.event === "string" ? props.event : undefined
+  if (!kind) return
 
   if (kind === "change") {
     const dir = (() => {

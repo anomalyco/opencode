@@ -58,6 +58,29 @@ describe("file watcher invalidation", () => {
     expect(loads).toEqual(["src/open.ts"])
   })
 
+  test("reloads file on direct file.edited events", () => {
+    const loads: string[] = []
+
+    invalidateFromWatcher(
+      {
+        type: "file.edited",
+        properties: {
+          file: "src/edited.ts",
+        },
+      },
+      {
+        normalize: (input) => input,
+        hasFile: (path) => path === "src/edited.ts",
+        loadFile: (path) => loads.push(path),
+        node: () => undefined,
+        isDirLoaded: () => false,
+        refreshDir: () => {},
+      },
+    )
+
+    expect(loads).toEqual(["src/edited.ts"])
+  })
+
   test("refreshes only changed loaded directory nodes", () => {
     const refresh: string[] = []
 

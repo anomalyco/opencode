@@ -3,6 +3,8 @@ import path from "path"
 import * as fs from "fs/promises"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
 import { Instance } from "../../src/project/instance"
+import { Bus } from "../../src/bus"
+import { File } from "../../src/file"
 import { tmpdir } from "../fixture/fixture"
 
 const baseCtx = {
@@ -279,6 +281,41 @@ describe("tool.apply_patch freeform", () => {
 
         await execute({ patchText }, ctx)
         expect(await fs.readFile(target, "utf-8")).toBe("new content\n")
+      },
+    })
+  })
+
+  test("result diff reflects post-edit formatter changes", async () => {
+    await using fixture = await tmpdir()
+    const { ctx } = makeCtx()
+
+    await Instance.provide({
+      directory: fixture.path,
+      fn: async () => {
+        const target = path.join(fixture.path, "repro.py")
+        await fs.writeFile(target, 'def a():\n    """x"""\n    return \'y\'\n', "utf-8")
+
+        const stop = Bus.subscribe(File.Event.Edited, async (payload) => {
+          const file = payload.properties.file
+          if (!file.endsWith("repro.py")) return
+          const content = await fs.readFile(file, "utf-8")
+          await fs.writeFile(file, content.replace("'y'", '"y"'), "utf-8")
+        })
+
+        try {
+          const patchText =
+            "*** Begin Patch\n*** Update File: repro.py\n@@\n-    \"\"\"x\"\"\"\n+    \"\"\"x updated\"\"\"\n*** End Patch"
+          const result = await execute({ patchText }, ctx)
+          const item = result.metadata.files.find((x: { relativePath: string; filePath: string }) => {
+            return x.relativePath.endsWith("repro.py") || x.filePath.endsWith("repro.py")
+          })
+          expect(item).toBeDefined()
+          expect(item.after).toContain('"y"')
+          expect(item.diff).toContain('+    return "y"')
+          expect(result.metadata.diff).toContain('+    return "y"')
+        } finally {
+          stop()
+        }
       },
     })
   })

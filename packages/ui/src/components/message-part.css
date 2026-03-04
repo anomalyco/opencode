@@ -792,11 +792,17 @@
   [data-slot="permission-footer-actions"] {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
     gap: 8px;
+    row-gap: 8px;
+    max-width: 100%;
 
     [data-component="button"] {
       padding-left: 12px;
       padding-right: 12px;
+      max-width: 100%;
+      white-space: normal;
     }
   }
 }

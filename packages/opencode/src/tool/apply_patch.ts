@@ -159,7 +159,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     }
 
     // Build per-file metadata for UI rendering (used for both permission and result)
-    const files = fileChanges.map((change) => ({
+    const preview = fileChanges.map((change) => ({
       filePath: change.filePath,
       relativePath: path.relative(Instance.worktree, change.movePath ?? change.filePath).replaceAll("\\", "/"),
       type: change.type,
@@ -180,7 +180,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       metadata: {
         filepath: relativePaths.join(", "),
         diff: totalDiff,
-        files,
+        files: preview,
       },
     })
 
@@ -239,16 +239,46 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     }
     const diagnostics = await LSP.diagnostics()
 
+    // Recompute diffs from final on-disk content (after formatters subscribed to file.edited run).
+    const files = await Promise.all(
+      fileChanges.map(async (change) => {
+        const target = change.movePath ?? change.filePath
+        const exists = change.type === "delete" ? false : await fs.stat(target).then(() => true).catch(() => false)
+        const after = exists ? await fs.readFile(target, "utf-8") : ""
+        const diff = trimDiff(createTwoFilesPatch(change.filePath, target, change.oldContent, after))
+        let additions = 0
+        let deletions = 0
+        for (const item of diffLines(change.oldContent, after)) {
+          if (item.added) additions += item.count || 0
+          if (item.removed) deletions += item.count || 0
+        }
+        return {
+          filePath: change.filePath,
+          relativePath: path.relative(Instance.worktree, target).replaceAll("\\", "/"),
+          type: change.type,
+          diff,
+          before: change.oldContent,
+          after,
+          additions,
+          deletions,
+          movePath: change.movePath,
+        }
+      }),
+    )
+    const totalDiffFinal = files
+      .map((item) => item.diff)
+      .filter(Boolean)
+      .join("\n")
+
     // Generate output summary
-    const summaryLines = fileChanges.map((change) => {
+    const summaryLines = files.map((change) => {
       if (change.type === "add") {
-        return `A ${path.relative(Instance.worktree, change.filePath).replaceAll("\\", "/")}`
+        return `A ${change.relativePath}`
       }
       if (change.type === "delete") {
-        return `D ${path.relative(Instance.worktree, change.filePath).replaceAll("\\", "/")}`
+        return `D ${change.relativePath}`
       }
-      const target = change.movePath ?? change.filePath
-      return `M ${path.relative(Instance.worktree, target).replaceAll("\\", "/")}`
+      return `M ${change.relativePath}`
     })
     let output = `Success. Updated the following files:\n${summaryLines.join("\n")}`
 
@@ -271,7 +301,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     return {
       title: output,
       metadata: {
-        diff: totalDiff,
+        diff: totalDiffFinal,
         files,
         diagnostics,
       },

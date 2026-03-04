@@ -131,12 +131,12 @@ export const ImportCommand = cmd({
         return
       }
 
-      const row = { ...Session.toRow(exportData.info), project_id: Instance.project.id }
+      const row = { ...Session.toRow(exportData.info), project_id: Instance.project.id, directory: Instance.worktree }
       Database.use((db) =>
         db
           .insert(SessionTable)
           .values(row)
-          .onConflictDoUpdate({ target: SessionTable.id, set: { project_id: row.project_id } })
+          .onConflictDoUpdate({ target: SessionTable.id, set: { project_id: row.project_id, directory: row.directory } })
           .run(),
       )
 
