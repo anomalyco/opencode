@@ -21,7 +21,12 @@ import {
 import type { createSdk } from "./utils"
 
 export async function defocus(page: Page) {
-  await page.mouse.click(5, 5)
+  await page
+    .evaluate(() => {
+      const el = document.activeElement
+      if (el instanceof HTMLElement) el.blur()
+    })
+    .catch(() => undefined)
 }
 
 export async function openPalette(page: Page) {
@@ -68,14 +73,50 @@ export async function toggleSidebar(page: Page) {
 
 export async function openSidebar(page: Page) {
   if (!(await isSidebarClosed(page))) return
+
+  const button = page.getByRole("button", { name: /toggle sidebar/i }).first()
+  const visible = await button
+    .isVisible()
+    .then((x) => x)
+    .catch(() => false)
+
+  if (visible) await button.click()
+  if (!visible) await toggleSidebar(page)
+
+  const main = page.locator("main")
+  const opened = await expect(main)
+    .not.toHaveClass(/xl:border-l/, { timeout: 1500 })
+    .then(() => true)
+    .catch(() => false)
+
+  if (opened) return
+
   await toggleSidebar(page)
-  await expect(page.locator("main")).not.toHaveClass(/xl:border-l/)
+  await expect(main).not.toHaveClass(/xl:border-l/)
 }
 
 export async function closeSidebar(page: Page) {
   if (await isSidebarClosed(page)) return
+
+  const button = page.getByRole("button", { name: /toggle sidebar/i }).first()
+  const visible = await button
+    .isVisible()
+    .then((x) => x)
+    .catch(() => false)
+
+  if (visible) await button.click()
+  if (!visible) await toggleSidebar(page)
+
+  const main = page.locator("main")
+  const closed = await expect(main)
+    .toHaveClass(/xl:border-l/, { timeout: 1500 })
+    .then(() => true)
+    .catch(() => false)
+
+  if (closed) return
+
   await toggleSidebar(page)
-  await expect(page.locator("main")).toHaveClass(/xl:border-l/)
+  await expect(main).toHaveClass(/xl:border-l/)
 }
 
 export async function openSettings(page: Page) {
@@ -182,13 +223,30 @@ export async function hoverSessionItem(page: Page, sessionID: string) {
 }
 
 export async function openSessionMoreMenu(page: Page, sessionID: string) {
-  const sessionEl = await hoverSessionItem(page, sessionID)
+  await expect(page).toHaveURL(new RegExp(`/session/${sessionID}(?:[/?#]|$)`))
 
-  const menuTrigger = sessionEl.locator(dropdownMenuTriggerSelector).first()
+  const scroller = page.locator(".scroll-view__viewport").first()
+  await expect(scroller).toBeVisible()
+  await expect(scroller.getByRole("heading", { level: 1 }).first()).toBeVisible({ timeout: 30_000 })
+
+  const menu = page
+    .locator(dropdownMenuContentSelector)
+    .filter({ has: page.getByRole("menuitem", { name: /rename/i }) })
+    .filter({ has: page.getByRole("menuitem", { name: /archive/i }) })
+    .filter({ has: page.getByRole("menuitem", { name: /delete/i }) })
+    .first()
+
+  const opened = await menu
+    .isVisible()
+    .then((x) => x)
+    .catch(() => false)
+
+  if (opened) return menu
+
+  const menuTrigger = scroller.getByRole("button", { name: /more options/i }).first()
   await expect(menuTrigger).toBeVisible()
   await menuTrigger.click()
 
-  const menu = page.locator(dropdownMenuContentSelector).first()
   await expect(menu).toBeVisible()
   return menu
 }
@@ -272,6 +330,163 @@ export async function withSession<T>(
   } finally {
     await sdk.session.delete({ sessionID: session.id }).catch(() => undefined)
   }
+}
+
+const seedSystem = [
+  "You are seeding deterministic e2e UI state.",
+  "Follow the user's instruction exactly.",
+  "When asked to call a tool, call exactly that tool exactly once with the exact JSON input.",
+  "Do not call any extra tools.",
+].join(" ")
+
+const wait = async <T>(input: { probe: () => Promise<T | undefined>; timeout?: number }) => {
+  const timeout = input.timeout ?? 30_000
+  const end = Date.now() + timeout
+  while (Date.now() < end) {
+    const value = await input.probe()
+    if (value !== undefined) return value
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+}
+
+const seed = async <T>(input: {
+  sessionID: string
+  prompt: string
+  sdk: ReturnType<typeof createSdk>
+  probe: () => Promise<T | undefined>
+  timeout?: number
+  attempts?: number
+}) => {
+  for (let i = 0; i < (input.attempts ?? 2); i++) {
+    await input.sdk.session.promptAsync({
+      sessionID: input.sessionID,
+      agent: "build",
+      system: seedSystem,
+      parts: [{ type: "text", text: input.prompt }],
+    })
+    const value = await wait({ probe: input.probe, timeout: input.timeout })
+    if (value !== undefined) return value
+  }
+}
+
+export async function seedSessionQuestion(
+  sdk: ReturnType<typeof createSdk>,
+  input: {
+    sessionID: string
+    questions: Array<{
+      header: string
+      question: string
+      options: Array<{ label: string; description: string }>
+      multiple?: boolean
+      custom?: boolean
+    }>
+  },
+) {
+  const first = input.questions[0]
+  if (!first) throw new Error("Question seed requires at least one question")
+
+  const text = [
+    "Your only valid response is one question tool call.",
+    `Use this JSON input: ${JSON.stringify({ questions: input.questions })}`,
+    "Do not output plain text.",
+    "After calling the tool, wait for the user response.",
+  ].join("\n")
+
+  const result = await seed({
+    sdk,
+    sessionID: input.sessionID,
+    prompt: text,
+    timeout: 30_000,
+    probe: async () => {
+      const list = await sdk.question.list().then((x) => x.data ?? [])
+      return list.find((item) => item.sessionID === input.sessionID && item.questions[0]?.header === first.header)
+    },
+  })
+
+  if (!result) throw new Error("Timed out seeding question request")
+  return { id: result.id }
+}
+
+export async function seedSessionPermission(
+  sdk: ReturnType<typeof createSdk>,
+  input: {
+    sessionID: string
+    permission: string
+    patterns: string[]
+    description?: string
+  },
+) {
+  const text = [
+    "Your only valid response is one bash tool call.",
+    `Use this JSON input: ${JSON.stringify({
+      command: input.patterns[0] ? `ls ${JSON.stringify(input.patterns[0])}` : "pwd",
+      workdir: "/",
+      description: input.description ?? `seed ${input.permission} permission request`,
+    })}`,
+    "Do not output plain text.",
+  ].join("\n")
+
+  const result = await seed({
+    sdk,
+    sessionID: input.sessionID,
+    prompt: text,
+    timeout: 30_000,
+    probe: async () => {
+      const list = await sdk.permission.list().then((x) => x.data ?? [])
+      return list.find((item) => item.sessionID === input.sessionID)
+    },
+  })
+
+  if (!result) throw new Error("Timed out seeding permission request")
+  return { id: result.id }
+}
+
+export async function seedSessionTodos(
+  sdk: ReturnType<typeof createSdk>,
+  input: {
+    sessionID: string
+    todos: Array<{ content: string; status: string; priority: string }>
+  },
+) {
+  const text = [
+    "Your only valid response is one todowrite tool call.",
+    `Use this JSON input: ${JSON.stringify({ todos: input.todos })}`,
+    "Do not output plain text.",
+  ].join("\n")
+  const target = JSON.stringify(input.todos)
+
+  const result = await seed({
+    sdk,
+    sessionID: input.sessionID,
+    prompt: text,
+    timeout: 30_000,
+    probe: async () => {
+      const todos = await sdk.session.todo({ sessionID: input.sessionID }).then((x) => x.data ?? [])
+      if (JSON.stringify(todos) !== target) return
+      return true
+    },
+  })
+
+  if (!result) throw new Error("Timed out seeding todos")
+  return true
+}
+
+export async function clearSessionDockSeed(sdk: ReturnType<typeof createSdk>, sessionID: string) {
+  const [questions, permissions] = await Promise.all([
+    sdk.question.list().then((x) => x.data ?? []),
+    sdk.permission.list().then((x) => x.data ?? []),
+  ])
+
+  await Promise.all([
+    ...questions
+      .filter((item) => item.sessionID === sessionID)
+      .map((item) => sdk.question.reject({ requestID: item.id }).catch(() => undefined)),
+    ...permissions
+      .filter((item) => item.sessionID === sessionID)
+      .map((item) => sdk.permission.reply({ requestID: item.id, reply: "reject" }).catch(() => undefined)),
+  ])
+
+  return true
 }
 
 export async function openStatusPopover(page: Page) {

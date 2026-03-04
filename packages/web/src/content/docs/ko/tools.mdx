@@ -1,0 +1,379 @@
+---
+title: 도구
+description: LLM이 사용할 수 있는 도구를 관리합니다.
+---
+
+도구는 LLM을 사용하여 코드베이스에서 작업을 수행 할 수 있습니다. opencode는 내장 도구 세트로 제공되지만, [custom tools](/docs/custom-tools) 또는 [MCP 서버](/docs/mcp-servers)로 확장할 수 있습니다.
+
+기본적으로 모든 도구는**enabled**이며, 실행할 권한이 없습니다. [permissions](/docs/permissions)를 통해 공구 동작을 제어할 수 있습니다.
+
+---
+
+## 구성
+
+`permission` 필드를 사용하여 도구 동작을 제어합니다. 각 도구에 대한 승인이 필요할 수 있습니다.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny",
+    "bash": "ask",
+    "webfetch": "allow"
+  }
+}
+```
+
+한 번에 여러 도구를 제어 할 와일드 카드를 사용할 수 있습니다. 예를 들어, MCP 서버의 모든 도구에 대한 승인을 요구합니다.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "mymcp_*": "ask"
+  }
+}
+```
+
+[Learn more](/docs/permissions) configuring 권한에 대해.
+
+---
+
+## 내장
+
+다음은 opencode에서 사용할 수있는 모든 내장 도구입니다.
+
+---
+
+###### bash
+
+프로젝트 환경에서 shell 명령을 실행합니다.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": "allow"
+  }
+}
+```
+
+이 도구는 `npm install`, `git status` 또는 다른 shell 명령과 같은 terminal 명령을 실행하는 LLM을 허용합니다.
+
+---
+
+### edit
+
+정확한 문자열 교체를 사용하여 기존 파일을 수정합니다.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+이 도구는 정확한 텍스트 일치를 대체하여 파일에 정확한 편집을 수행합니다. LLM은 코드를 modify하는 주요 방법입니다.
+
+---
+
+### write
+
+새로운 파일을 만들거나 기존의 것을 덮어쓰기.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+LLM을 사용하여 새 파일을 만듭니다. 이미 존재하는 경우 기존 파일을 덮어쓰겠습니다.
+
+:::note
+`write` 공구는 모든 파일 수정 (`edit`, `write`, `patch`, `multiedit`)를 포함하는 `edit` 허가에 의해 통제됩니다.
+:::
+
+---
+
+### read
+
+codebase에서 파일 내용을 읽으십시오.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "read": "allow"
+  }
+}
+```
+
+이 도구는 파일을 읽고 내용을 반환합니다. 큰 파일에 대한 특정 라인 범위를 읽을 수 있습니다.
+
+---
+
+#### grep
+
+정규 표현식을 사용하여 파일 내용을 검색합니다.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "grep": "allow"
+  }
+}
+```
+
+Codebase에서 빠른 콘텐츠 검색. 전체 regex 문법 및 파일 패턴 필터링 지원.
+
+---
+
+#### glob
+
+패턴 매칭으로 파일 찾기.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "glob": "allow"
+  }
+}
+```
+
+`**/*.js` 또는 `src/**/*.ts`와 같은 glob 패턴을 사용하여 파일 검색. 수정 시간에 의해 정렬 된 파일 경로 반환.
+
+---
+
+### list
+
+주어진 경로의 파일 및 디렉토리 목록.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "list": "allow"
+  }
+}
+```
+
+이 도구는 디렉토리 내용을 나열합니다. 그것은 glob 패턴을 필터 결과에 받아들입니다.
+
+---
+
+### lsp (실험적)
+
+정의, 참고, hover info 및 호출 hierarchy와 같은 코드 인텔리전스 기능을 얻기 위해 구성 된 LSP 서버와 인터랙트.
+
+:::note
+이 도구는 `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (또는 `OPENCODE_EXPERIMENTAL=true`) 때만 유효합니다.
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "lsp": "allow"
+  }
+}
+```
+
+지원된 가동은 `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls` 및 `outgoingCalls`를 포함합니다.
+
+LSP 서버가 프로젝트에 사용할 수 있는 구성하려면 [LSP Servers](/docs/lsp)를 참조하십시오.
+
+---
+
+## patch
+
+파일에 패치를 적용합니다.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+이 도구는 코드베이스에 패치 파일을 적용합니다. 다양한 소스에서 diffs 및 Patch를 적용하는 데 유용합니다.
+
+:::note
+`patch` 공구는 모든 파일 수정 (`edit`, `write`, `patch`, `multiedit`)를 포함하는 `edit` 허가에 의해 통제됩니다.
+:::
+
+---
+
+### skill
+
+[skill](/docs/skills) (`SKILL.md` 파일)을로드하고 대화의 내용을 반환합니다.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "skill": "allow"
+  }
+}
+```
+
+---
+
+## todowrite
+
+코딩 세션 중에 todo 목록을 관리합니다.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "todowrite": "allow"
+  }
+}
+```
+
+복잡한 작업 중에 진행 상황을 추적하기 위해 작업 목록을 만들고 업데이트합니다. LLM은 멀티 단계 작업을 구성하기 위해 이것을 사용합니다.
+
+:::note
+이 도구는 기본으로 시약을 비활성화하지만 수동으로 활성화 할 수 있습니다. [더 알아보기](/docs/agents/#permissions)
+:::
+
+---
+
+#### todoread
+
+기존의 todo 목록 읽기.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "todoread": "allow"
+  }
+}
+```
+
+현재 todo 목록 상태를 읽습니다. 작업이 종료되거나 완료되는 것을 추적하기 위해 LLM에 의해 사용됩니다.
+
+:::note
+이 도구는 기본으로 시약을 비활성화하지만 수동으로 활성화 할 수 있습니다. [더 알아보기](/docs/agents/#permissions)
+:::
+
+---
+
+#### webfetch
+
+Fetch 웹 콘텐츠.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "webfetch": "allow"
+  }
+}
+```
+
+LLM을 fetch 및 웹 페이지를 읽을 수 있습니다. 온라인 리소스를 찾는 데 도움이 되는 문서 또는 연구
+
+---
+
+#### websearch
+
+웹 검색
+
+:::note
+이 도구는 opencode 제공 업체 또는 `OPENCODE_ENABLE_EXA` 환경 변수가 모든 진실 값 (예 : `true` 또는 `1`)로 설정할 때만 사용할 수 있습니다.
+
+opencode를 실행할 때 활성화:
+
+```bash
+OPENCODE_ENABLE_EXA=1 opencode
+```
+
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "websearch": "allow"
+  }
+}
+```
+
+Exa AI를 사용하여 웹 검색을 수행하여 관련 정보를 온라인으로 찾으십시오. 연구 주제에 유용한, 현재 이벤트를 찾는, 또는 훈련 데이터 차단을 넘어 정보를 수집.
+
+API 키가 필요하지 않습니다 - 도구는 인증없이 Exa AI의 호스팅 MCP 서비스에 직접 연결됩니다.
+
+:::tip
+`websearch`를 사용하면 특정 URL (retrieval)에서 콘텐츠를 검색해야합니다.
+:::
+
+---
+
+### question
+
+실행 중에 사용자의 질문 요청.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "question": "allow"
+  }
+}
+```
+
+이 도구는 작업 중에 LLM을 요청할 수 있습니다. 그것은 유용합니다:
+
+- 사용자 선호도 또는 요구 사항 변경
+- 주위 지침
+- 구현 선택에 대한 결정
+- 어떤 방향에 대한 선택 제공
+
+각 질문에는 헤더, 질문 텍스트 및 옵션 목록이 포함되어 있습니다. 사용자는 제공된 선택권에서 선택하거나 주문 대답을 타자를 수 있습니다. 여러 질문이 있을 때, 사용자는 모든 답변을 제출하기 전에 그들 사이에서 탐색 할 수 있습니다.
+
+---
+
+## 사용자 정의 도구
+
+사용자 정의 도구는 LLM이 호출 할 수있는 자신의 기능을 정의 할 수 있습니다. config 파일에 정의되어 arbitrary 코드를 실행할 수 있습니다.
+
+[Learn more](/docs/custom-tools) 사용자 정의 도구 만들기.
+
+---
+
+## MCP 서버
+
+MCP(Model Context Protocol) 서버는 외부 도구와 서비스를 통합할 수 있습니다. 이 데이터베이스 액세스, API 통합 및 타사 서비스가 포함되어 있습니다.
+
+MCP 서버 구성에 대한 [Learn more](/docs/mcp-servers).
+
+---
+
+## 내부
+
+내부, 도구 `grep`, `glob`, 그리고 `list` 사용 [ripgrep](https://github.com/BurntSushi/ripgrep) 후드 아래에. 기본적으로 ripgrep은 `.gitignore` 패턴을 존중하며 `.gitignore`에 나열된 파일 및 디렉토리를 검색 및 목록에서 제외됩니다.
+
+---
+
+#### Ignore 패턴
+
+일반적으로 무시되는 파일을 포함하려면 프로젝트 루트에 `.ignore` 파일을 만듭니다. 이 파일은 명시적으로 특정 경로를 허용 할 수 있습니다.
+
+```text title=".ignore"
+!node_modules/
+!dist/
+!build/
+```
+
+예를 들어,이 `.ignore` 파일은 `node_modules/`, `dist/` 및 `build/` 디렉토리 내에서 검색 할 수 있습니다. `.gitignore`.

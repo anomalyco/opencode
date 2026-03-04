@@ -82,7 +82,7 @@
         box-shadow: var(--shadow-xs-border-base);
       }
 
-      &:not([data-expanded]):focus {
+      &:not([data-expanded]):not(:focus-visible):focus {
         background-color: transparent;
         box-shadow: none;
       }
