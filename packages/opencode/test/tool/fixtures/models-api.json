@@ -32933,7 +32933,7 @@
   "gitlab": {
     "id": "gitlab",
     "env": ["GITLAB_TOKEN"],
-    "npm": "@gitlab/gitlab-ai-provider",
+    "npm": "gitlab-ai-provider",
     "name": "GitLab Duo",
     "doc": "https://docs.gitlab.com/user/duo_agent_platform/",
     "models": {
