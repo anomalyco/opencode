@@ -1487,6 +1487,7 @@ export namespace ACP {
 
       case "edit":
       case "patch":
+      case "apply_patch":
       case "write":
         return "edit"
 

@@ -462,6 +462,27 @@ test("legacy tools config maps write/edit/patch/multiedit to edit permission", a
   })
 })
 
+test("legacy tools config maps apply_patch to edit permission", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        build: {
+          tools: {
+            apply_patch: false,
+          },
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const build = await Agent.get("build")
+      expect(evalPerm(build, "edit")).toBe("deny")
+    },
+  })
+})
+
 test("Truncate.GLOB is allowed even when user denies external_directory globally", async () => {
   const { Truncate } = await import("../../src/tool/truncation")
   await using tmp = await tmpdir({

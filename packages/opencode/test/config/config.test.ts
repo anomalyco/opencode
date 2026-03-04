@@ -1162,6 +1162,35 @@ test("migrates legacy patch tool to edit permission", async () => {
   })
 })
 
+test("migrates legacy apply_patch tool to edit permission", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Filesystem.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          agent: {
+            test: {
+              tools: {
+                apply_patch: true,
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.agent?.["test"]?.permission).toEqual({
+        edit: "allow",
+      })
+    },
+  })
+})
+
 test("migrates legacy multiedit tool to edit permission", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

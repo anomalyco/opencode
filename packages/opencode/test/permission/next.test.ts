@@ -365,9 +365,9 @@ test("disabled - disables tool when denied", () => {
   expect(result.has("read")).toBe(false)
 })
 
-test("disabled - disables edit/write/patch/multiedit when edit denied", () => {
+test("disabled - disables edit/write/patch/apply_patch/multiedit when edit denied", () => {
   const result = PermissionNext.disabled(
-    ["edit", "write", "patch", "multiedit", "bash"],
+    ["edit", "write", "patch", "apply_patch", "multiedit", "bash"],
     [
       { permission: "*", pattern: "*", action: "allow" },
       { permission: "edit", pattern: "*", action: "deny" },
@@ -376,6 +376,7 @@ test("disabled - disables edit/write/patch/multiedit when edit denied", () => {
   expect(result.has("edit")).toBe(true)
   expect(result.has("write")).toBe(true)
   expect(result.has("patch")).toBe(true)
+  expect(result.has("apply_patch")).toBe(true)
   expect(result.has("multiedit")).toBe(true)
   expect(result.has("bash")).toBe(false)
 })
