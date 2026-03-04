@@ -12,8 +12,11 @@ import { NamedError } from "@opencode-ai/util/error"
 import { withTimeout } from "../util/timeout"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
+import { Flag } from "../flag/flag"
 
-const DIAGNOSTICS_DEBOUNCE_MS = 150
+const SECS = Flag.OPENCODE_RESPECT_LSP_DIAGNOSTICS
+const RESPECT = SECS > 0
+const DIAGNOSTICS_DEBOUNCE_MS = RESPECT ? 0 : 150
 
 export namespace LSPClient {
   const log = Log.create({ service: "lsp.client" })
@@ -57,7 +60,7 @@ export namespace LSPClient {
       })
       const exists = diagnostics.has(filePath)
       diagnostics.set(filePath, params.diagnostics)
-      if (!exists && input.serverID === "typescript") return
+      if (!RESPECT && !exists && input.serverID === "typescript") return
       Bus.publish(Event.Diagnostics, { path: filePath, serverID: input.serverID })
     })
     connection.onRequest("window/workDoneProgress/create", (params) => {
@@ -213,6 +216,7 @@ export namespace LSPClient {
         log.info("waiting for diagnostics", { path: normalizedPath })
         let unsub: () => void
         let debounceTimer: ReturnType<typeof setTimeout> | undefined
+        const timeoutMs = RESPECT ? SECS * 1000 : 3000
         return await withTimeout(
           new Promise<void>((resolve) => {
             unsub = Bus.subscribe(Event.Diagnostics, (event) => {
@@ -227,7 +231,7 @@ export namespace LSPClient {
               }
             })
           }),
-          3000,
+          timeoutMs,
         )
           .catch(() => {})
           .finally(() => {
