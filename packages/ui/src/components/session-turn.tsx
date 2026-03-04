@@ -1,4 +1,5 @@
 import { AssistantMessage, type FileDiff, Message as MessageType, Part as PartType } from "@opencode-ai/sdk/v2/client"
+import type { SessionStatus } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
 import { useFileComponent } from "../context/file"
 
@@ -15,6 +16,7 @@ import { DiffChanges } from "./diff-changes"
 import { Icon } from "./icon"
 import { TextShimmer } from "./text-shimmer"
 import { SessionRetry } from "./session-retry"
+import { TextReveal } from "./text-reveal"
 import { createAutoScroll } from "../hooks"
 import { useI18n } from "../context/i18n"
 
@@ -142,6 +144,9 @@ export function SessionTurn(
     showReasoningSummaries?: boolean
     shellToolDefaultOpen?: boolean
     editToolDefaultOpen?: boolean
+    active?: boolean
+    queued?: boolean
+    status?: SessionStatus
     onUserInteracted?: () => void
     classes?: {
       root?: string
@@ -187,16 +192,39 @@ export function SessionTurn(
   })
 
   const pending = createMemo(() => {
+    if (typeof props.active === "boolean" && typeof props.queued === "boolean") return
     const messages = allMessages() ?? emptyMessages
     return messages.findLast(
       (item): item is AssistantMessage => item.role === "assistant" && typeof item.time.completed !== "number",
     )
   })
-  const active = createMemo(() => {
-    const msg = message()
+
+  const pendingUser = createMemo(() => {
     const item = pending()
-    if (!msg || !item) return false
-    return item.parentID === msg.id
+    if (!item?.parentID) return
+    const messages = allMessages() ?? emptyMessages
+    const result = Binary.search(messages, item.parentID, (m) => m.id)
+    const msg = result.found ? messages[result.index] : messages.find((m) => m.id === item.parentID)
+    if (!msg || msg.role !== "user") return
+    return msg
+  })
+
+  const active = createMemo(() => {
+    if (typeof props.active === "boolean") return props.active
+    const msg = message()
+    const parent = pendingUser()
+    if (!msg || !parent) return false
+    return parent.id === msg.id
+  })
+
+  const queued = createMemo(() => {
+    if (typeof props.queued === "boolean") return props.queued
+    const id = message()?.id
+    if (!id) return false
+    if (!pendingUser()) return false
+    const item = pending()
+    if (!item) return false
+    return id > item.id
   })
 
   const parts = createMemo(() => {
@@ -285,7 +313,11 @@ export function SessionTurn(
     return unwrap(String(msg))
   })
 
-  const status = createMemo(() => data.store.session_status[props.sessionID] ?? idle)
+  const status = createMemo(() => {
+    if (props.status !== undefined) return props.status
+    if (typeof props.active === "boolean" && !props.active) return idle
+    return data.store.session_status[props.sessionID] ?? idle
+  })
   const working = createMemo(() => status().type !== "idle" && active())
   const showReasoningSummaries = createMemo(() => props.showReasoningSummaries ?? true)
 
@@ -334,9 +366,9 @@ export function SessionTurn(
   )
   const showThinking = createMemo(() => {
     if (!working() || !!error()) return false
+    if (queued()) return false
     if (status().type === "retry") return false
     if (showReasoningSummaries()) return assistantVisible() === 0
-    if (assistantTailVisible() === "text") return false
     return true
   })
 
@@ -364,7 +396,7 @@ export function SessionTurn(
                 class={props.classes?.container}
               >
                 <div data-slot="session-turn-message-content" aria-live="off">
-                  <Message message={msg()} parts={parts()} interrupted={interrupted()} />
+                  <Message message={msg()} parts={parts()} interrupted={interrupted()} queued={queued()} />
                 </div>
                 <Show when={compaction()}>
                   {(part) => (
@@ -389,8 +421,13 @@ export function SessionTurn(
                 <Show when={showThinking()}>
                   <div data-slot="session-turn-thinking">
                     <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
-                    <Show when={!showReasoningSummaries() && reasoningHeading()}>
-                      {(text) => <span data-slot="session-turn-thinking-heading">{text()}</span>}
+                    <Show when={!showReasoningSummaries()}>
+                      <TextReveal
+                        text={reasoningHeading()}
+                        class="session-turn-thinking-heading"
+                        travel={25}
+                        duration={700}
+                      />
                     </Show>
                   </div>
                 </Show>

@@ -1,4 +1,4 @@
-import { For, createEffect, createMemo, on, onCleanup, Show, startTransition, type JSX } from "solid-js"
+import { For, createEffect, createMemo, on, onCleanup, Show, startTransition, Index, type JSX } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { useNavigate, useParams } from "@solidjs/router"
 import { Button } from "@opencode-ai/ui/button"
@@ -10,8 +10,9 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
-import type { Part, TextPart, UserMessage } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Message as MessageType, Part, TextPart, UserMessage } from "@opencode-ai/sdk/v2"
 import { showToast } from "@opencode-ai/ui/toast"
+import { Binary } from "@opencode-ai/util/binary"
 import { getFilename } from "@opencode-ai/util/path"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 import { SessionContextUsage } from "@/components/session-context-usage"
@@ -30,6 +31,9 @@ type MessageComment = {
     endLine: number
   }
 }
+
+const emptyMessages: MessageType[] = []
+const idle = { type: "idle" as const }
 
 const messageComments = (parts: Part[]): MessageComment[] =>
   parts.flatMap((part) => {
@@ -213,8 +217,43 @@ export function MessageTimeline(props: {
   const dialog = useDialog()
   const language = useLanguage()
 
+  const rendered = createMemo(() => props.renderedUserMessages.map((message) => message.id))
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const sessionID = createMemo(() => params.id)
+  const sessionMessages = createMemo(() => {
+    const id = sessionID()
+    if (!id) return emptyMessages
+    return sync.data.message[id] ?? emptyMessages
+  })
+  const pending = createMemo(() =>
+    sessionMessages().findLast(
+      (item): item is AssistantMessage => item.role === "assistant" && typeof item.time.completed !== "number",
+    ),
+  )
+  const sessionStatus = createMemo(() => {
+    const id = sessionID()
+    if (!id) return idle
+    return sync.data.session_status[id] ?? idle
+  })
+  const activeMessageID = createMemo(() => {
+    const parentID = pending()?.parentID
+    if (parentID) {
+      const messages = sessionMessages()
+      const result = Binary.search(messages, parentID, (message) => message.id)
+      const message = result.found ? messages[result.index] : messages.find((item) => item.id === parentID)
+      if (message && message.role === "user") return message.id
+    }
+
+    const status = sessionStatus()
+    if (status.type !== "idle") {
+      const messages = sessionMessages()
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === "user") return messages[i].id
+      }
+    }
+
+    return undefined
+  })
   const info = createMemo(() => {
     const id = sessionID()
     if (!id) return
@@ -651,57 +690,74 @@ export function MessageTimeline(props: {
                 </Button>
               </div>
             </Show>
-            <For each={staging.messages()}>
-              {(message) => {
-                const comments = createMemo(() => messageComments(sync.data.part[message.id] ?? []))
+            <For each={rendered()}>
+              {(messageID) => {
+                const active = createMemo(() => activeMessageID() === messageID)
+                const queued = createMemo(() => {
+                  if (active()) return false
+                  const activeID = activeMessageID()
+                  if (activeID) return messageID > activeID
+                  return false
+                })
+                const comments = createMemo(() => messageComments(sync.data.part[messageID] ?? []), [], {
+                  equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+                })
                 const commentCount = createMemo(() => comments().length)
                 return (
                   <div
-                    id={props.anchor(message.id)}
-                    data-message-id={message.id}
+                    id={props.anchor(messageID)}
+                    data-message-id={messageID}
                     ref={(el) => {
-                      props.onRegisterMessage(el, message.id)
-                      onCleanup(() => props.onUnregisterMessage(message.id))
+                      props.onRegisterMessage(el, messageID)
+                      onCleanup(() => props.onUnregisterMessage(messageID))
                     }}
                     classList={{
                       "min-w-0 w-full max-w-full": true,
                       "md:max-w-200 2xl:max-w-[1000px]": props.centered,
                     }}
-                    style={{ "content-visibility": "auto", "contain-intrinsic-size": "auto 500px" }}
                   >
                     <Show when={commentCount() > 0}>
                       <div class="w-full px-4 md:px-5 pb-2">
                         <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
                           <div class="flex w-max min-w-full justify-end gap-2">
-                            <For each={comments()}>
-                              {(comment) => (
-                                <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
-                                  <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
-                                    <FileIcon node={{ path: comment.path, type: "file" }} class="size-3.5 shrink-0" />
-                                    <span class="truncate">{getFilename(comment.path)}</span>
-                                    <Show when={comment.selection}>
-                                      {(selection) => (
-                                        <span class="shrink-0 text-text-weak">
-                                          {selection().startLine === selection().endLine
-                                            ? `:${selection().startLine}`
-                                            : `:${selection().startLine}-${selection().endLine}`}
-                                        </span>
-                                      )}
-                                    </Show>
+                            <Index each={comments()}>
+                              {(commentAccessor: () => MessageComment) => {
+                                const comment = createMemo(() => commentAccessor())
+                                return (
+                                  <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
+                                    <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
+                                      <FileIcon
+                                        node={{ path: comment().path, type: "file" }}
+                                        class="size-3.5 shrink-0"
+                                      />
+                                      <span class="truncate">{getFilename(comment().path)}</span>
+                                      <Show when={comment().selection}>
+                                        {(selection) => (
+                                          <span class="shrink-0 text-text-weak">
+                                            {selection().startLine === selection().endLine
+                                              ? `:${selection().startLine}`
+                                              : `:${selection().startLine}-${selection().endLine}`}
+                                          </span>
+                                        )}
+                                      </Show>
+                                    </div>
+                                    <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
+                                      {comment().comment}
+                                    </div>
                                   </div>
-                                  <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
-                                    {comment.comment}
-                                  </div>
-                                </div>
-                              )}
-                            </For>
+                                )
+                              }}
+                            </Index>
                           </div>
                         </div>
                       </div>
                     </Show>
                     <SessionTurn
                       sessionID={sessionID() ?? ""}
-                      messageID={message.id}
+                      messageID={messageID}
+                      active={active()}
+                      queued={queued()}
+                      status={active() ? sessionStatus() : undefined}
                       showReasoningSummaries={settings.general.showReasoningSummaries()}
                       shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
                       editToolDefaultOpen={settings.general.editToolPartsExpanded()}
