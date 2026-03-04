@@ -357,32 +357,12 @@ export namespace Worktree {
     const projectID = Instance.project.id
     const extra = startCommand?.trim()
 
-    const start = async () => {
-      const populated = await $`git reset --hard`.quiet().nothrow().cwd(info.directory)
-      if (populated.exitCode !== 0) {
-        const message = errorText(populated) || "Failed to populate worktree"
-        log.error("worktree checkout failed", { directory: info.directory, message })
-        GlobalBus.emit("event", {
-          directory: info.directory,
-          payload: {
-            type: Event.Failed.type,
-            properties: {
-              message,
-            },
-          },
-        })
-        return
-      }
-
-      const booted = await Instance.provide({
-        directory: info.directory,
-        init: InstanceBootstrap,
-        fn: () => undefined,
-      })
-        .then(() => true)
-        .catch((error) => {
-          const message = error instanceof Error ? error.message : String(error)
-          log.error("worktree bootstrap failed", { directory: info.directory, message })
+    return () => {
+      const start = async () => {
+        const populated = await $`git reset --hard`.quiet().nothrow().cwd(info.directory)
+        if (populated.exitCode !== 0) {
+          const message = errorText(populated) || "Failed to populate worktree"
+          log.error("worktree checkout failed", { directory: info.directory, message })
           GlobalBus.emit("event", {
             directory: info.directory,
             payload: {
@@ -392,33 +372,58 @@ export namespace Worktree {
               },
             },
           })
-          return false
+          return
+        }
+
+        const booted = await Instance.provide({
+          directory: info.directory,
+          init: InstanceBootstrap,
+          fn: () => undefined,
         })
-      if (!booted) return
+          .then(() => true)
+          .catch((error) => {
+            const message = error instanceof Error ? error.message : String(error)
+            log.error("worktree bootstrap failed", { directory: info.directory, message })
+            GlobalBus.emit("event", {
+              directory: info.directory,
+              payload: {
+                type: Event.Failed.type,
+                properties: {
+                  message,
+                },
+              },
+            })
+            return false
+          })
+        if (!booted) return
 
-      GlobalBus.emit("event", {
-        directory: info.directory,
-        payload: {
-          type: Event.Ready.type,
-          properties: {
-            name: info.name,
-            branch: info.branch,
+        GlobalBus.emit("event", {
+          directory: info.directory,
+          payload: {
+            type: Event.Ready.type,
+            properties: {
+              name: info.name,
+              branch: info.branch,
+            },
           },
-        },
+        })
+
+        await runStartScripts(info.directory, { projectID, extra })
+      }
+
+      void start().catch((error) => {
+        log.error("worktree start task failed", { directory: info.directory, error })
       })
-
-      await runStartScripts(info.directory, { projectID, extra })
     }
-
-    await start().catch((error) => {
-      log.error("worktree start task failed", { directory: info.directory, error })
-    })
   }
 
   export const create = fn(CreateInput.optional(), async (input) => {
     const info = await makeWorktreeInfo(input?.name)
+    const bootstrap = await createFromInfo(info, input?.startCommand)
+    // This is needed due to how worktrees currently work in the
+    // desktop app
     setTimeout(() => {
-      return createFromInfo(info, input?.startCommand)
+      bootstrap()
     }, 0)
     return info
   })

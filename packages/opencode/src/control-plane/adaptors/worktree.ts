@@ -22,11 +22,12 @@ export const WorktreeAdaptor: Adaptor = {
   },
   async create(info) {
     const config = Config.parse(info)
-    return Worktree.createFromInfo({
+    const bootstrap = await Worktree.createFromInfo({
       name: config.name,
       directory: config.directory,
       branch: config.branch,
     })
+    return bootstrap()
   },
   async remove(info) {
     const config = Config.parse(info)
