@@ -258,7 +258,7 @@ export const dict = {
   "go.cta.price": "$10/month",
   "go.pricing.body": "Use with any agent. Top up credit if needed. Cancel any time.",
   "go.graph.free": "Free",
-  "go.graph.freePill": "Big Pickle and promotional",
+  "go.graph.freePill": "Big Pickle and free models",
   "go.graph.go": "Go",
   "go.graph.label": "Requests per 5 hour",
   "go.graph.usageLimits": "Usage limits",

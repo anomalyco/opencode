@@ -169,8 +169,8 @@ function LimitsGraph(props: { href: string }) {
 
         <div data-slot="pills" aria-hidden="true">
           <span data-item data-kind="free" style={{ "--x": px(x(1)), "--y": py(fy), "--d": "0ms" } as any}>
-            <span data-name>{i18n.t("go.graph.freePill")}</span>
             <span data-value>{free.toLocaleString()}</span>
+            <span data-name>{i18n.t("go.graph.freePill")}</span>
           </span>
           <For each={models}>
             {(m, i) => (
@@ -180,8 +180,8 @@ function LimitsGraph(props: { href: string }) {
                 data-model={m.id}
                 style={{ "--x": px(x(ratio(m.req))), "--y": py(gy(i())), "--d": m.d } as any}
               >
-                <span data-name>{m.name}</span>
                 <span data-value>{m.req.toLocaleString()}</span>
+                <span data-name>{m.name}</span>
               </span>
             )}
           </For>
