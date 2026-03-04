@@ -1,0 +1,42 @@
+{
+  "version": "2.0",
+  "category": "troubleshooting",
+  "categoryIcon": "🧭",
+  "prompts": [
+    {
+      "id": "incident-triage",
+      "name": "Incident Triage",
+      "summary": "Prioritize impact, isolate blast radius, and stabilize",
+      "template": "Help me triage an active issue in this project quickly and safely.\n\nOutput:\n1) Immediate impact assessment\n2) Probable blast radius\n3) Stabilization actions (now)\n4) Investigation plan (next)\n5) Communication update draft",
+      "tags": ["incident", "triage", "operations"]
+    },
+    {
+      "id": "log-forensics",
+      "name": "Log Forensics",
+      "summary": "Extract signal from noisy logs and traces",
+      "template": "Analyze logs, traces, and error signals related to my current issue.\n\nOutput:\n1) Most important anomalies\n2) Timeline of likely failure sequence\n3) Correlated components/services\n4) Missing instrumentation\n5) Next targeted checks",
+      "tags": ["logs", "debugging", "observability"]
+    },
+    {
+      "id": "flaky-failure-analysis",
+      "name": "Flaky Failure Analysis",
+      "summary": "Diagnose non-deterministic test or runtime failures",
+      "template": "Investigate a flaky failure pattern in this codebase.\n\nOutput:\n1) Most likely non-deterministic causes\n2) Isolation strategy\n3) Deterministic repro plan\n4) Hardening fixes\n5) Monitoring/tests to prevent recurrence",
+      "tags": ["flaky", "stability", "tests"]
+    },
+    {
+      "id": "config-misfire-debug",
+      "name": "Config Misfire Debug",
+      "summary": "Find environment/config drift and unsafe defaults",
+      "template": "Help diagnose a configuration or environment mismatch causing failures.\n\nOutput:\n1) Candidate config mismatch points\n2) Runtime assumptions to verify\n3) Safe defaults and guardrails to add\n4) Validation script/checklist\n5) Preventive controls for future changes",
+      "tags": ["config", "env", "reliability"]
+    },
+    {
+      "id": "postmortem-draft",
+      "name": "Postmortem Draft",
+      "summary": "Create a blameless incident postmortem",
+      "template": "Draft a blameless postmortem for the issue I just resolved.\n\nOutput:\n1) Summary and impact\n2) Timeline\n3) Root causes and contributing factors\n4) What worked / what failed\n5) Action items with owners and due dates",
+      "tags": ["postmortem", "incident", "learning"]
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 plans/
 bun.lock
 package.json
-prompts/custom/
+prompts/custom/*
+!prompts/custom/.gitkeep

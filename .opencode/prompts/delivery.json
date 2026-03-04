@@ -1,0 +1,63 @@
+{
+  "version": "2.0",
+  "category": "delivery",
+  "categoryIcon": "🚀",
+  "prompts": [
+    {
+      "id": "commit-message",
+      "name": "Commit Message",
+      "summary": "Generate a high-quality commit message with rationale",
+      "template": "Write a commit message for the current changes.\n\nRequirements:\n- Use Conventional Commit style when appropriate\n- Subject <= 72 chars, imperative mood\n- Body explains why, not just what\n- Include notable risks or migration notes if relevant\n\nReturn:\n1) Primary commit message\n2) Two alternate subjects",
+      "tags": ["git", "commit", "workflow"]
+    },
+    {
+      "id": "pr-summary",
+      "name": "PR Summary",
+      "summary": "Produce a reviewer-friendly pull request description",
+      "template": "Draft a PR description that helps reviewers quickly understand and validate the change.\n\nFormat:\n## Why\n## What changed\n## How to review\n## Validation\n## Risks\n## Rollout / follow-ups\n\nIf information is missing, add a short Assumptions section.",
+      "tags": ["git", "pr", "communication"]
+    },
+    {
+      "id": "migration-plan",
+      "name": "Migration Plan",
+      "summary": "Plan safe rollout for schema/API/config changes",
+      "template": "Create a production-safe migration plan for the changes I am currently working on.\n\nOutput:\n1) Preconditions\n2) Ordered migration steps\n3) Backward compatibility strategy\n4) Rollback plan\n5) Verification in staging and production\n6) Stakeholder communication checklist",
+      "tags": ["migration", "release", "operations"]
+    },
+    {
+      "id": "release-risk-checklist",
+      "name": "Release Risk Checklist",
+      "summary": "Pre-merge and pre-release risk gate",
+      "template": "Build a release readiness checklist for the work I am currently doing.\n\nInclude:\n- Test and quality gates\n- Security and performance checks\n- Monitoring/alerting updates\n- Documentation updates\n- Rollout and rollback readiness\n\nReturn a checklist grouped by Must / Should / Nice-to-have.",
+      "tags": ["release", "risk", "checklist"]
+    },
+    {
+      "id": "docs-sync",
+      "name": "Docs Sync",
+      "summary": "Update docs to match real behavior",
+      "template": "Propose documentation updates to align with actual system behavior and current developer workflow for the code I am currently working on.\n\nOutput:\n1) Outdated or missing docs\n2) Proposed replacements (ready-to-paste)\n3) Common misunderstandings to prevent\n4) Quickstart verification steps",
+      "tags": ["docs", "developer-experience"]
+    },
+    {
+      "id": "release-notes-draft",
+      "name": "Release Notes Draft",
+      "summary": "Draft clear user-facing release notes",
+      "template": "Draft release notes for the work currently in this branch.\n\nOutput:\n1) Headline summary\n2) User-visible changes\n3) Developer-facing/internal changes\n4) Breaking changes and migration notes\n5) Known issues and mitigations",
+      "tags": ["release", "notes", "communication"]
+    },
+    {
+      "id": "rollback-runbook",
+      "name": "Rollback Runbook",
+      "summary": "Prepare a safe rollback procedure",
+      "template": "Create a rollback runbook for the change I am preparing to ship.\n\nOutput:\n1) Trigger conditions for rollback\n2) Exact rollback steps\n3) Data integrity and compatibility checks\n4) Monitoring during rollback\n5) Post-rollback verification and communication",
+      "tags": ["rollback", "operations", "incident"]
+    },
+    {
+      "id": "reviewer-checklist",
+      "name": "Reviewer Checklist",
+      "summary": "Guide reviewers through efficient validation",
+      "template": "Create a reviewer checklist for this change that minimizes review time while preserving quality.\n\nOutput:\n1) Critical files to inspect first\n2) Main invariants and assumptions\n3) Edge cases to challenge\n4) Exact validation steps\n5) Questions reviewers should ask before approval",
+      "tags": ["review", "checklist", "quality"]
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "version": "2.0",
+  "category": "documentation",
+  "categoryIcon": "📝",
+  "prompts": [
+    {
+      "id": "doc-architecture-overview",
+      "name": "Architecture Overview",
+      "summary": "Write a clear architecture narrative for this system",
+      "template": "Draft an architecture overview for the code I am currently working on.\n\nOutput:\n1) System purpose and boundaries\n2) Major components and responsibilities\n3) Data and control flow\n4) Key design decisions and tradeoffs\n5) Known limitations and future direction",
+      "tags": ["docs", "architecture", "overview"]
+    },
+    {
+      "id": "doc-api-guide",
+      "name": "API Usage Guide",
+      "summary": "Document API usage, contracts, and failure modes",
+      "template": "Write an API guide for the interfaces touched by my current changes.\n\nOutput:\n1) Endpoint/function summary\n2) Inputs, outputs, and error model\n3) Examples for common use cases\n4) Failure modes and retries\n5) Compatibility and versioning notes",
+      "tags": ["docs", "api", "guide"]
+    },
+    {
+      "id": "doc-onboarding-note",
+      "name": "Onboarding Note",
+      "summary": "Explain this area so a new teammate can contribute",
+      "template": "Create an onboarding note for the subsystem I changed.\n\nOutput:\n1) What this subsystem does\n2) Core files and where to start reading\n3) Local setup and run commands\n4) Common pitfalls\n5) First safe tasks for newcomers",
+      "tags": ["docs", "onboarding", "developer-experience"]
+    },
+    {
+      "id": "doc-runbook",
+      "name": "Operational Runbook",
+      "summary": "Create runbook steps for diagnose, recover, and verify",
+      "template": "Draft an operational runbook for this feature or service.\n\nOutput:\n1) Symptoms and alert triggers\n2) Diagnosis checklist\n3) Recovery actions\n4) Validation after fix\n5) Escalation path and ownership",
+      "tags": ["docs", "runbook", "operations"]
+    },
+    {
+      "id": "doc-change-log-entry",
+      "name": "Changelog Entry",
+      "summary": "Write a user-focused changelog update",
+      "template": "Draft a changelog entry for my current branch changes.\n\nOutput:\n1) Short headline\n2) User impact summary\n3) Breaking changes and migration notes\n4) Bug fixes and improvements\n5) Any caveats or known issues",
+      "tags": ["docs", "changelog", "release"]
+    },
+    {
+      "id": "doc-decision-record",
+      "name": "Decision Record (ADR)",
+      "summary": "Capture context, decision, and consequences",
+      "template": "Write an ADR-style decision record for a design choice in this work.\n\nOutput:\n1) Context and problem\n2) Decision made\n3) Alternatives considered\n4) Consequences and risks\n5) Follow-up decisions to revisit",
+      "tags": ["docs", "adr", "architecture"]
+    }
+  ]
+}

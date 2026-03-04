@@ -159,7 +159,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       const fileTree = value.fileTree
       const migratedFileTree = (() => {
         if (!isRecord(fileTree)) return fileTree
-        if (fileTree.tab === "changes" || fileTree.tab === "all") return fileTree
+        const prompt = isRecord(fileTree.prompt)
+          ? {
+              opened: typeof fileTree.prompt.opened === "boolean" ? fileTree.prompt.opened : false,
+              height: typeof fileTree.prompt.height === "number" ? fileTree.prompt.height : 220,
+            }
+          : { opened: false, height: 220 }
+        if (fileTree.tab === "changes" || fileTree.tab === "all") {
+          return {
+            ...fileTree,
+            prompt,
+          }
+        }
 
         const width = typeof fileTree.width === "number" ? fileTree.width : DEFAULT_PANEL_WIDTH
         return {
@@ -167,6 +178,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           opened: true,
           width: width === 260 ? DEFAULT_PANEL_WIDTH : width,
           tab: "changes",
+          prompt,
         }
       })()
 
@@ -246,6 +258,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           opened: true,
           width: DEFAULT_PANEL_WIDTH,
           tab: "changes" as "changes" | "all",
+          prompt: {
+            opened: false,
+            height: 220,
+          },
         },
         session: {
           width: DEFAULT_SESSION_WIDTH,
@@ -630,40 +646,99 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         opened: createMemo(() => store.fileTree?.opened ?? true),
         width: createMemo(() => store.fileTree?.width ?? DEFAULT_PANEL_WIDTH),
         tab: createMemo(() => store.fileTree?.tab ?? "changes"),
+        promptOpened: createMemo(() => store.fileTree?.prompt?.opened ?? false),
+        promptHeight: createMemo(() => store.fileTree?.prompt?.height ?? 220),
         setTab(tab: "changes" | "all") {
           if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_PANEL_WIDTH, tab })
+            setStore("fileTree", {
+              opened: true,
+              width: DEFAULT_PANEL_WIDTH,
+              tab,
+              prompt: { opened: false, height: 220 },
+            })
             return
           }
           setStore("fileTree", "tab", tab)
         },
         open() {
           if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_PANEL_WIDTH, tab: "changes" })
+            setStore("fileTree", {
+              opened: true,
+              width: DEFAULT_PANEL_WIDTH,
+              tab: "changes",
+              prompt: { opened: false, height: 220 },
+            })
             return
           }
           setStore("fileTree", "opened", true)
         },
         close() {
           if (!store.fileTree) {
-            setStore("fileTree", { opened: false, width: DEFAULT_PANEL_WIDTH, tab: "changes" })
+            setStore("fileTree", {
+              opened: false,
+              width: DEFAULT_PANEL_WIDTH,
+              tab: "changes",
+              prompt: { opened: false, height: 220 },
+            })
             return
           }
           setStore("fileTree", "opened", false)
         },
         toggle() {
           if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_PANEL_WIDTH, tab: "changes" })
+            setStore("fileTree", {
+              opened: true,
+              width: DEFAULT_PANEL_WIDTH,
+              tab: "changes",
+              prompt: { opened: false, height: 220 },
+            })
             return
           }
           setStore("fileTree", "opened", (x) => !x)
         },
         resize(width: number) {
           if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width, tab: "changes" })
+            setStore("fileTree", {
+              opened: true,
+              width,
+              tab: "changes",
+              prompt: { opened: false, height: 220 },
+            })
             return
           }
           setStore("fileTree", "width", width)
+        },
+        togglePrompt() {
+          if (!store.fileTree) {
+            setStore("fileTree", {
+              opened: true,
+              width: DEFAULT_PANEL_WIDTH,
+              tab: "changes",
+              prompt: { opened: false, height: 220 },
+            })
+            return
+          }
+          if (!store.fileTree.prompt) {
+            setStore("fileTree", "prompt", { opened: true, height: 220 })
+            return
+          }
+          setStore("fileTree", "prompt", "opened", (x) => !x)
+        },
+        resizePrompt(height: number) {
+          if (!store.fileTree) {
+            setStore("fileTree", {
+              opened: true,
+              width: DEFAULT_PANEL_WIDTH,
+              tab: "changes",
+              prompt: { opened: false, height },
+            })
+            return
+          }
+          if (!store.fileTree.prompt) {
+            setStore("fileTree", "prompt", { opened: true, height })
+            return
+          }
+          setStore("fileTree", "prompt", "height", height)
         },
       },
       session: {

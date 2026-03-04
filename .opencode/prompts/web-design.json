@@ -1,0 +1,49 @@
+{
+  "version": "2.0",
+  "category": "web-design",
+  "categoryIcon": "🎨",
+  "prompts": [
+    {
+      "id": "ui-critique",
+      "name": "UI Critique",
+      "summary": "Evaluate visual hierarchy and interaction clarity",
+      "template": "Review the UI I am currently building.\n\nOutput:\n1) First-impression clarity issues\n2) Visual hierarchy and scanability problems\n3) Interaction friction points\n4) High-impact design improvements\n5) Priority-ranked next edits",
+      "tags": ["ui", "design", "ux"]
+    },
+    {
+      "id": "layout-system-plan",
+      "name": "Layout System Plan",
+      "summary": "Create a spacing and layout system that scales",
+      "template": "Design a layout system for this screen or feature so it remains consistent as complexity grows.\n\nOutput:\n1) Grid/structure recommendation\n2) Spacing scale and rhythm\n3) Responsive breakpoints and behavior\n4) Component composition rules\n5) Common anti-patterns to avoid",
+      "tags": ["layout", "responsive", "design-system"]
+    },
+    {
+      "id": "accessibility-ux-audit",
+      "name": "Accessibility UX Audit",
+      "summary": "Catch a11y issues in keyboard, semantics, and contrast",
+      "template": "Perform an accessibility-focused UX audit of the UI changes I am making.\n\nOutput:\n1) Keyboard navigation issues\n2) Semantic and ARIA issues\n3) Contrast/readability concerns\n4) Screen reader flow problems\n5) Concrete fixes with expected user impact",
+      "tags": ["a11y", "ux", "accessibility"]
+    },
+    {
+      "id": "conversion-optimization",
+      "name": "Conversion Optimization",
+      "summary": "Improve flow completion and reduce user hesitation",
+      "template": "Analyze this user flow and suggest changes to improve completion rate and user confidence.\n\nOutput:\n1) Drop-off risks in the current flow\n2) Copy and CTA improvements\n3) Trust and clarity improvements\n4) Friction removal opportunities\n5) A/B test ideas and success metrics",
+      "tags": ["conversion", "product", "ux"]
+    },
+    {
+      "id": "mobile-polish-pass",
+      "name": "Mobile Polish Pass",
+      "summary": "Tune small screens for readability and touch ergonomics",
+      "template": "Run a mobile polish pass on the UI I am working on.\n\nOutput:\n1) Layout and density issues on small screens\n2) Touch target and gesture risks\n3) Typography and readability adjustments\n4) Performance-sensitive visual effects to simplify\n5) Final mobile QA checklist",
+      "tags": ["mobile", "responsive", "ui"]
+    },
+    {
+      "id": "microcopy-pass",
+      "name": "UX Microcopy Pass",
+      "summary": "Make product copy clear, concise, and confidence-building",
+      "template": "Improve the user-facing copy in the interface I am editing.\n\nOutput:\n1) Confusing or vague text\n2) Rewritten copy options\n3) Error and empty-state copy improvements\n4) Tone and consistency guidance\n5) Internationalization considerations",
+      "tags": ["copy", "ux-writing", "product"]
+    }
+  ]
+}

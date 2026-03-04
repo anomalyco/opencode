@@ -1,0 +1,42 @@
+{
+  "version": "2.0",
+  "category": "performance",
+  "categoryIcon": "⚡",
+  "prompts": [
+    {
+      "id": "latency-breakdown",
+      "name": "Latency Breakdown",
+      "summary": "Decompose end-to-end latency into actionable buckets",
+      "template": "Break down the latency profile of the feature or request path I am working on.\n\nOutput:\n1) Likely latency contributors by stage\n2) Which are CPU, I/O, network, or serialization bound\n3) Highest-leverage optimization points\n4) Expected gains per change\n5) Validation plan",
+      "tags": ["latency", "profiling", "optimization"]
+    },
+    {
+      "id": "query-performance-review",
+      "name": "Query Performance Review",
+      "summary": "Improve database query plans and access patterns",
+      "template": "Review database access patterns in this change for performance and scalability risks.\n\nOutput:\n1) Expensive query patterns\n2) Indexing recommendations\n3) N+1 or over-fetching issues\n4) Caching opportunities\n5) Safe rollout plan for query changes",
+      "tags": ["database", "query", "scalability"]
+    },
+    {
+      "id": "frontend-performance-pass",
+      "name": "Frontend Performance Pass",
+      "summary": "Reduce render cost and user-perceived slowness",
+      "template": "Audit the frontend changes I am making for runtime and load performance.\n\nOutput:\n1) Render bottlenecks and re-render causes\n2) Bundle and asset opportunities\n3) Interaction latency risks\n4) Low-risk quick wins\n5) Metrics to watch (LCP, INP, CLS, TTI)",
+      "tags": ["frontend", "web-vitals", "performance"]
+    },
+    {
+      "id": "memory-pressure-audit",
+      "name": "Memory Pressure Audit",
+      "summary": "Identify leaks and high-retention structures",
+      "template": "Analyze the current implementation for memory growth, retention, and leak risks.\n\nOutput:\n1) Probable retention sources\n2) Lifetime mismatches and leak patterns\n3) Data structure alternatives\n4) Instrumentation/profiling steps\n5) Mitigation plan with risk",
+      "tags": ["memory", "profiling", "stability"]
+    },
+    {
+      "id": "throughput-scaling-plan",
+      "name": "Throughput Scaling Plan",
+      "summary": "Increase capacity without sacrificing reliability",
+      "template": "Create a scaling plan for the workload this code path will face.\n\nOutput:\n1) Current bottleneck assumptions\n2) Horizontal vs vertical scaling options\n3) Queueing/backpressure recommendations\n4) Capacity test plan\n5) Reliability tradeoffs and safeguards",
+      "tags": ["throughput", "scaling", "capacity"]
+    }
+  ]
+}

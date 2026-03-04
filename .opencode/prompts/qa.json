@@ -1,0 +1,49 @@
+{
+  "version": "2.0",
+  "category": "qa",
+  "categoryIcon": "🧪",
+  "prompts": [
+    {
+      "id": "qa-test-strategy",
+      "name": "Test Strategy",
+      "summary": "Design layered tests by risk and confidence",
+      "template": "Design a practical test strategy for the changes I am currently working on.\n\nOutput:\n1) Risk map (critical, moderate, low)\n2) Test layers (unit, integration, e2e) with goals\n3) Highest-value tests to add first\n4) Manual exploratory checks\n5) Exit criteria for release",
+      "tags": ["qa", "testing", "strategy"]
+    },
+    {
+      "id": "qa-regression-matrix",
+      "name": "Regression Matrix",
+      "summary": "Build a concise matrix of what can break",
+      "template": "Create a regression matrix for my current changes.\n\nOutput:\n1) Core user journeys at risk\n2) Environment/version combinations to validate\n3) Data/state transitions to test\n4) Negative and failure-path checks\n5) Must-pass smoke tests",
+      "tags": ["qa", "regression", "matrix"]
+    },
+    {
+      "id": "qa-edge-case-hunt",
+      "name": "Edge Case Hunt",
+      "summary": "Find non-obvious edge cases before users do",
+      "template": "Find likely edge cases for the code I am currently touching.\n\nOutput:\n1) Input boundary cases\n2) Timing and concurrency cases\n3) Invalid/malformed data cases\n4) State transition traps\n5) Suggested tests for each case",
+      "tags": ["qa", "edge-cases", "reliability"]
+    },
+    {
+      "id": "qa-bug-repro",
+      "name": "Bug Reproduction Plan",
+      "summary": "Build a deterministic repro for flaky defects",
+      "template": "Create a deterministic bug reproduction plan for the issue I am investigating.\n\nOutput:\n1) Hypothesized trigger conditions\n2) Minimal reproduction environment\n3) Step-by-step repro script\n4) Instrumentation to confirm behavior\n5) Signals that prove fix is valid",
+      "tags": ["qa", "bugs", "reproduction"]
+    },
+    {
+      "id": "qa-release-smoke",
+      "name": "Release Smoke Plan",
+      "summary": "Define a fast smoke suite for deploy confidence",
+      "template": "Create a release smoke test plan for the current branch.\n\nOutput:\n1) Critical flows to verify in <15 minutes\n2) API and UI sanity checks\n3) Monitoring checks immediately after deploy\n4) Rollback triggers\n5) Ownership and run order",
+      "tags": ["qa", "smoke", "release"]
+    },
+    {
+      "id": "qa-test-data-plan",
+      "name": "Test Data Plan",
+      "summary": "Define representative and safe test data",
+      "template": "Create a test data plan for the changes I am building.\n\nOutput:\n1) Required data shapes and volumes\n2) Edge-case fixtures\n3) Privacy/security considerations\n4) Data setup and teardown approach\n5) How to keep data maintainable over time",
+      "tags": ["qa", "fixtures", "test-data"]
+    }
+  ]
+}

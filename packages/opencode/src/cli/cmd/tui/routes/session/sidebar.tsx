@@ -10,10 +10,7 @@ import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
 import { DialogSelect } from "../../ui/dialog-select"
 import { useDialog } from "../../ui/dialog"
-import { InputRenderable, MouseButton, type MouseEvent } from "@opentui/core"
-import { useLocal } from "../../context/local"
-import { useSDK } from "../../context/sdk"
-import { Identifier } from "@/id/id"
+import { MouseButton, type MouseEvent } from "@opentui/core"
 import { useToast } from "../../ui/toast"
 import { Filesystem } from "@/util/filesystem"
 import { Glob } from "@/util/glob"
@@ -21,6 +18,7 @@ import open from "open"
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "../../util/clipboard"
 import { rm } from "fs/promises"
+import { usePromptRef } from "../../context/prompt"
 
 type PromptDoc = {
   version?: string
@@ -29,6 +27,7 @@ type PromptDoc = {
   prompts?: {
     id: string
     name: string
+    summary?: string
     description?: string
     template: string
     tags?: string[]
@@ -38,6 +37,7 @@ type PromptDoc = {
 type PromptItem = {
   id: string
   name: string
+  summary?: string
   description?: string
   category: string
   icon?: string
@@ -46,166 +46,171 @@ type PromptItem = {
   file: string
 }
 
-const STARTER_PROMPTS: PromptDoc = {
-  version: "1.0",
-  category: "starter",
-  categoryIcon: "🧰",
-  prompts: [
-    {
-      id: "quick-code-review",
-      name: "Quick Code Review",
-      description: "Catch obvious bugs and style issues",
-      template:
-        "Review this code for obvious bugs and style issues. Keep it concise and actionable.\n\n```\n{{selection}}\n```",
-      tags: ["review", "quality"],
-    },
-    {
-      id: "deep-code-review",
-      name: "Deep Code Review",
-      description: "Architecture, correctness, and maintainability",
-      template:
-        "Do a deep code review focused on correctness, maintainability, and architecture. Provide prioritized findings.\n\n```\n{{selection}}\n```",
-      tags: ["review", "architecture"],
-    },
-    {
-      id: "security-audit",
-      name: "Security Audit",
-      description: "Find security risks and mitigations",
-      template:
-        "Audit this code for security vulnerabilities and risky assumptions. Suggest concrete fixes.\n\n```\n{{selection}}\n```",
-      tags: ["security", "review"],
-    },
-    {
-      id: "performance-review",
-      name: "Performance Review",
-      description: "Spot bottlenecks and improvements",
-      template:
-        "Review this code for performance bottlenecks and optimization opportunities. Include tradeoffs.\n\n```\n{{selection}}\n```",
-      tags: ["performance", "review"],
-    },
-    {
-      id: "accessibility-review",
-      name: "Accessibility Review",
-      description: "Check UI for accessibility issues",
-      template:
-        "Review this UI code for accessibility issues (keyboard navigation, semantics, contrast, ARIA).\n\n```\n{{selection}}\n```",
-      tags: ["a11y", "review"],
-    },
-    {
-      id: "commit-message",
-      name: "Generate Commit Message",
-      description: "Write a concise commit message",
-      template: "Write a concise commit message (title + 1 short body paragraph) for the current git changes.",
-      tags: ["git", "commit"],
-    },
-    {
-      id: "pr-summary",
-      name: "Generate PR Summary",
-      description: "Draft pull request summary",
-      template: "Draft a PR summary with context, what changed, and key risks for the current branch.",
-      tags: ["git", "pr"],
-    },
-    {
-      id: "lint-fix",
-      name: "Lint and Fix",
-      description: "Run lint and fix issues",
-      template: "Run lint, fix all safe issues, and summarize anything that must be fixed manually.",
-      tags: ["lint", "quality"],
-    },
-    {
-      id: "format-code",
-      name: "Format Code",
-      description: "Apply formatting standards",
-      template: "Apply formatting for changed files and report what was reformatted.",
-      tags: ["format"],
-    },
-    {
-      id: "generate-tests",
-      name: "Generate Unit Tests",
-      description: "Create focused tests",
-      template:
-        "Generate high-value unit tests for this code. Focus on edge cases and behavior, not implementation details.\n\n```\n{{selection}}\n```",
-      tags: ["test", "quality"],
-    },
-    {
-      id: "debug-error",
-      name: "Debug Error",
-      description: "Root cause analysis",
-      template:
-        "Debug this issue. Provide root cause, reproduction steps, and a fix plan.\n\nError/context:\n{{clipboard}}",
-      tags: ["debug"],
-    },
-    {
-      id: "refactor-plan",
-      name: "Refactor Plan",
-      description: "Propose a safe refactor",
-      template:
-        "Create a step-by-step refactor plan for this code with minimal risk and clear checkpoints.\n\n```\n{{selection}}\n```",
-      tags: ["refactor"],
-    },
-    {
-      id: "typescript-types",
-      name: "Improve TypeScript Types",
-      description: "Strengthen typing",
-      template:
-        "Improve the TypeScript types in this code. Avoid any, add precise return types, and simplify inference where possible.\n\n```\n{{selection}}\n```",
-      tags: ["typescript"],
-    },
-    {
-      id: "update-version",
-      name: "Update Project Version",
-      description: "Bump version safely",
-      template: "Update the project version safely and summarize impacted files and release notes.",
-      tags: ["release", "version"],
-    },
-    {
-      id: "changelog",
-      name: "Generate Changelog",
-      description: "Draft changelog from changes",
-      template: "Generate a changelog entry from recent commits and changed files.",
-      tags: ["release", "docs"],
-    },
-    {
-      id: "dependency-audit",
-      name: "Dependency Audit",
-      description: "Review dependency risks",
-      template: "Audit dependencies for outdated or vulnerable packages and propose update order.",
-      tags: ["dependencies", "security"],
-    },
-    {
-      id: "readme-update",
-      name: "Update README",
-      description: "Refresh docs for current behavior",
-      template: "Update README based on the current project behavior and setup instructions.",
-      tags: ["docs"],
-    },
-    {
-      id: "explain-code",
-      name: "Explain Code",
-      description: "Explain in plain language",
-      template: "Explain this code in plain language with a short example.\n\n```\n{{selection}}\n```",
-      tags: ["learning"],
-    },
-    {
-      id: "breakdown-task",
-      name: "Break Down Task",
-      description: "Turn goal into implementation plan",
-      template: "Break this task into implementation steps with risks and validation checks:\n{{clipboard}}",
-      tags: ["planning"],
-    },
-    {
-      id: "ship-checklist",
-      name: "Ship Checklist",
-      description: "Final pre-merge checks",
-      template:
-        "Create a pre-merge checklist for this change including tests, lint, build, docs, and rollout considerations.",
-      tags: ["release", "quality"],
-    },
-  ],
-}
+const FALLBACK_PACKS: PromptDoc[] = [
+  {
+    version: "2.0",
+    category: "code-review",
+    categoryIcon: "🔍",
+    prompts: [
+      {
+        id: "quick-code-review",
+        name: "Quick Code Review",
+        summary: "Fast, high-signal review with prioritized fixes",
+        template:
+          "Act as a senior reviewer. Do a fast, risk-focused review of the code I am currently working on.\n\nOutput:\n1) Verdict\n2) Critical findings\n3) Quick wins\n4) Suggested patches\n5) What looks good",
+        tags: ["review", "quality", "fast"],
+      },
+      {
+        id: "deep-code-review",
+        name: "Deep Code Review",
+        summary: "Thorough review for correctness and design",
+        template:
+          "Perform a deep review of the code I am currently working on as if it is production-critical. Evaluate correctness, edge cases, API design, maintainability, and testing gaps.",
+        tags: ["review", "architecture", "quality"],
+      },
+    ],
+  },
+  {
+    version: "2.0",
+    category: "engineering",
+    categoryIcon: "🛠",
+    prompts: [
+      {
+        id: "bug-root-cause",
+        name: "Root Cause Analysis",
+        summary: "Reproduce, isolate, and propose a safe fix",
+        template:
+          "Help debug the issue I am currently working on with a root-cause-first approach.\n\nOutput:\n1) Most likely cause\n2) Alternate hypotheses\n3) Minimal repro\n4) Safe fix plan\n5) Regression tests",
+        tags: ["debug", "rca", "incident"],
+      },
+      {
+        id: "implementation-plan",
+        name: "Implementation Plan",
+        summary: "Turn a goal into an executable plan",
+        template:
+          "Create an implementation plan for the feature I am currently working on, including constraints, phased execution, validation, and rollback strategy.",
+        tags: ["planning", "implementation", "architecture"],
+      },
+    ],
+  },
+  {
+    version: "2.0",
+    category: "qa",
+    categoryIcon: "🧪",
+    prompts: [
+      {
+        id: "qa-test-strategy",
+        name: "Test Strategy",
+        summary: "Design layered tests by risk and confidence",
+        template:
+          "Design a practical test strategy for the changes I am currently working on. Include risk map, unit/integration/e2e scope, and release exit criteria.",
+        tags: ["qa", "testing", "strategy"],
+      },
+      {
+        id: "qa-regression-matrix",
+        name: "Regression Matrix",
+        summary: "Build a concise matrix of what can break",
+        template:
+          "Create a regression matrix for my current changes with user journeys, environments, state transitions, negative paths, and must-pass smoke checks.",
+        tags: ["qa", "regression", "matrix"],
+      },
+    ],
+  },
+  {
+    version: "2.0",
+    category: "troubleshooting",
+    categoryIcon: "🧭",
+    prompts: [
+      {
+        id: "incident-triage",
+        name: "Incident Triage",
+        summary: "Prioritize impact and stabilize quickly",
+        template:
+          "Help me triage an active issue quickly and safely. Include blast radius, immediate actions, next investigations, and communication draft.",
+        tags: ["incident", "triage", "operations"],
+      },
+      {
+        id: "postmortem-draft",
+        name: "Postmortem Draft",
+        summary: "Create a blameless incident postmortem",
+        template:
+          "Draft a blameless postmortem for a resolved issue including timeline, contributing factors, and concrete follow-up actions.",
+        tags: ["postmortem", "incident", "learning"],
+      },
+    ],
+  },
+  {
+    version: "2.0",
+    category: "performance",
+    categoryIcon: "⚡",
+    prompts: [
+      {
+        id: "performance-triage",
+        name: "Performance Triage",
+        summary: "Find likely bottlenecks and prioritize fixes",
+        template:
+          "Review the code I am currently working on for performance bottlenecks. Provide top bottlenecks, quick wins, structural improvements, and measurement plan.",
+        tags: ["performance", "profiling", "optimization"],
+      },
+    ],
+  },
+  {
+    version: "2.0",
+    category: "web-design",
+    categoryIcon: "🎨",
+    prompts: [
+      {
+        id: "ui-critique",
+        name: "UI Critique",
+        summary: "Evaluate hierarchy and interaction clarity",
+        template:
+          "Review the UI I am currently building. Identify clarity issues, interaction friction, and highest-impact design improvements.",
+        tags: ["ui", "design", "ux"],
+      },
+    ],
+  },
+  {
+    version: "2.0",
+    category: "documentation",
+    categoryIcon: "📝",
+    prompts: [
+      {
+        id: "doc-architecture-overview",
+        name: "Architecture Overview",
+        summary: "Write a clear system architecture narrative",
+        template:
+          "Draft an architecture overview for the code I am currently working on, covering boundaries, components, flows, tradeoffs, and known limits.",
+        tags: ["docs", "architecture", "overview"],
+      },
+    ],
+  },
+  {
+    version: "2.0",
+    category: "delivery",
+    categoryIcon: "🚀",
+    prompts: [
+      {
+        id: "pr-summary",
+        name: "PR Summary",
+        summary: "Produce a reviewer-friendly pull request description",
+        template:
+          "Draft a PR description with sections: Why, What changed, How to review, Validation, Risks, and Rollout/follow-ups.",
+        tags: ["git", "pr", "communication"],
+      },
+      {
+        id: "release-risk-checklist",
+        name: "Release Risk Checklist",
+        summary: "Pre-merge and pre-release risk gate",
+        template: "Build a release readiness checklist for my current work grouped by Must/Should/Nice-to-have.",
+        tags: ["release", "risk", "checklist"],
+      },
+    ],
+  },
+]
 
 function normalizeCategory(text?: string) {
   if (!text) return "General"
+  if (text.toLowerCase() === "qa") return "QA"
   return text
     .split(/[-_]/g)
     .filter(Boolean)
@@ -228,36 +233,65 @@ function matchPrompt(item: PromptItem, query: string) {
   if (!query) return true
   const q = query.toLowerCase()
   if (item.name.toLowerCase().includes(q)) return true
+  if (item.summary?.toLowerCase().includes(q)) return true
   if (item.description?.toLowerCase().includes(q)) return true
   if (item.category.toLowerCase().includes(q)) return true
   if (item.tags.some((tag) => tag.toLowerCase().includes(q))) return true
   return item.template.toLowerCase().includes(q)
 }
 
+function builtInPromptItems() {
+  return FALLBACK_PACKS.flatMap((pack) =>
+    (pack.prompts ?? []).map((item) => ({
+      id: item.id,
+      name: item.name,
+      summary: item.summary ?? item.description,
+      description: item.description,
+      category: normalizeCategory(pack.category),
+      icon: pack.categoryIcon,
+      template: item.template,
+      tags: item.tags ?? [],
+      file: "builtin",
+    })),
+  )
+}
+
 async function ensurePromptFolder(directory: string) {
   const root = path.join(directory, ".opencode", "prompts")
   const custom = path.join(root, "custom")
-  const starter = path.join(root, "starter-pack.json")
   const gitignore = path.join(directory, ".opencode", ".gitignore")
   await Filesystem.write(path.join(custom, ".keep"), "")
-  const existing = await Filesystem.readText(starter).catch(() => "")
-  if (!existing) {
-    await Filesystem.writeJson(starter, STARTER_PROMPTS)
-  }
   const ignored = await Filesystem.readText(gitignore).catch(() => "")
-  if (!ignored.includes("prompts/custom/")) {
-    const next = ignored.trim() ? `${ignored.trim()}\nprompts/custom/\n` : "prompts/custom/\n"
-    await Filesystem.write(gitignore, next)
+  const hasIgnore = ignored.includes("prompts/custom/*") && ignored.includes("!prompts/custom/.gitkeep")
+  if (!hasIgnore) {
+    const lines = ignored
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+    if (!lines.includes("prompts/custom/*")) lines.push("prompts/custom/*")
+    if (!lines.includes("!prompts/custom/.gitkeep")) lines.push("!prompts/custom/.gitkeep")
+    await Filesystem.write(gitignore, lines.join("\n") + "\n")
   }
   return root
 }
 
+async function findPromptRoots(directory: string) {
+  const roots = await Filesystem.findUp(path.join(".opencode", "prompts"), directory)
+  return roots
+}
+
 async function readPromptFolder(directory: string) {
-  const root = await ensurePromptFolder(directory)
-  const files = await Glob.scan("**/*.json", { cwd: root, absolute: true, dot: true })
+  const roots = await findPromptRoots(directory)
+  if (roots.length === 0) return [] as PromptItem[]
+
+  const files = (
+    await Promise.all(roots.map((cwd) => Glob.scan("**/*.json", { cwd, absolute: true, dot: true })))
+  ).flat()
+
+  const uniqueFiles = Array.from(new Set(files))
   const result = (
     await Promise.all(
-      files.map(async (file) => {
+      uniqueFiles.map(async (file) => {
         const parsed = await Filesystem.readJson<PromptDoc>(file).catch(() => undefined)
         if (!parsed?.prompts?.length) return [] as PromptItem[]
         return parsed.prompts
@@ -265,6 +299,7 @@ async function readPromptFolder(directory: string) {
           .map((item) => ({
             id: item.id,
             name: item.name,
+            summary: item.summary ?? item.description,
             description: item.description,
             category: normalizeCategory(parsed.category),
             icon: parsed.categoryIcon,
@@ -278,10 +313,14 @@ async function readPromptFolder(directory: string) {
   return result
 }
 
+async function resolvePromptRoot(directory: string) {
+  const roots = await findPromptRoots(directory)
+  if (roots.length > 0) return roots[roots.length - 1]!
+  return ensurePromptFolder(directory)
+}
+
 function renderTemplate(template: string, input: { selection: string; clipboard: string }) {
-  return template
-    .replaceAll("{{selection}}", input.selection || "")
-    .replaceAll("{{clipboard}}", input.clipboard || "")
+  return template.replaceAll("{{selection}}", input.selection || "").replaceAll("{{clipboard}}", input.clipboard || "")
 }
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
@@ -335,8 +374,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const directory = useDirectory()
   const kv = useKV()
   const dialog = useDialog()
-  const local = useLocal()
-  const sdk = useSDK()
+  const promptRef = usePromptRef()
   const toast = useToast()
   const renderer = useRenderer()
   const terminal = useTerminalDimensions()
@@ -353,13 +391,13 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const [recent, setRecent] = kv.signal<string[]>("prompt_recent", [])
   const [usage, setUsage] = kv.signal<Record<string, number>>("prompt_usage", {})
   const [expandedPrompt, setExpandedPrompt] = kv.signal<Record<string, boolean>>("prompt_category_expanded", {})
-  let search: InputRenderable | undefined
 
   const root = createMemo(() => sync.data.path.directory || process.cwd())
 
   async function reloadPrompts() {
-    const list = await readPromptFolder(root()).catch(() => [] as PromptItem[])
-    setPrompts(list)
+    const user = await readPromptFolder(root()).catch(() => [] as PromptItem[])
+    const legacy = user.length > 0 && user.every((item) => item.category === "Starter")
+    setPrompts(user.length > 0 && !legacy ? user : builtInPromptItems())
   }
 
   onMount(() => {
@@ -427,7 +465,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   }
 
   async function openPromptFolder() {
-    const folder = await ensurePromptFolder(root()).catch(() => undefined)
+    const folder = await resolvePromptRoot(root()).catch(() => undefined)
     if (!folder) {
       toast.show({ message: "Failed to open prompt folder", variant: "error" })
       return
@@ -440,7 +478,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   async function createPromptFromQuery() {
     const name = query().trim()
     if (!name) return
-    const folder = await ensurePromptFolder(root()).catch(() => undefined)
+    const folder = await resolvePromptRoot(root()).catch(() => undefined)
     if (!folder) {
       toast.show({ message: "Failed to create prompt", variant: "error" })
       return
@@ -455,6 +493,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         {
           id,
           name,
+          summary: "Custom prompt",
           description: "Custom prompt",
           template: `You are helping with: ${name}.\n\nContext:\n{{selection}}`,
           tags: ["custom"],
@@ -502,7 +541,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   }
 
   async function duplicatePrompt(item: PromptItem) {
-    const folder = await ensurePromptFolder(root()).catch(() => undefined)
+    const folder = await resolvePromptRoot(root()).catch(() => undefined)
     if (!folder) return
     const file = path.join(folder, "custom", `${item.id}-copy.json`)
     const next = {
@@ -513,6 +552,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         {
           id: `${item.id}-copy`,
           name: `${item.name} (Copy)`,
+          summary: item.summary ?? item.description,
           description: item.description,
           template: item.template,
           tags: item.tags,
@@ -541,37 +581,18 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   }
 
   async function executePrompt(item: PromptItem) {
-    const model = local.model.current()
-    if (!model) {
-      toast.show({ message: "Connect a provider to run prompts", variant: "warning" })
+    const prompt = promptRef.current
+    if (!prompt) {
+      toast.show({ message: "Prompt input is unavailable", variant: "error" })
       return
     }
     const selection = renderer.getSelection()?.getSelectedText() ?? ""
     const clipboard = (await Clipboard.read().catch(() => undefined))?.data ?? ""
     const text = renderTemplate(item.template, { selection, clipboard })
-
-    await sdk.client.session
-      .prompt({
-        sessionID: props.sessionID,
-        agent: local.agent.current().name,
-        model,
-        variant: local.model.variant.current(),
-        messageID: Identifier.ascending("message"),
-        parts: [
-          {
-            id: Identifier.ascending("part"),
-            type: "text",
-            text,
-          },
-        ],
-      })
-      .then(() => {
-        updateRecent(item.id)
-        updateUsage(item.id)
-      })
-      .catch(() => {
-        toast.show({ message: "Failed to run prompt", variant: "error" })
-      })
+    prompt.set({ input: text, parts: [] })
+    prompt.focus()
+    updateRecent(item.id)
+    updateUsage(item.id)
   }
 
   function promptMenu(item: PromptItem) {
@@ -582,7 +603,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         options={[
           {
             value: "run",
-            title: "Execute",
+            title: "Insert into Prompt",
             onSelect: () => executePrompt(item),
           },
           {
@@ -611,12 +632,27 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     ))
   }
 
+  function openPromptSearch() {
+    dialog.replace(() => (
+      <DialogSelect
+        title="Prompt Search"
+        options={prompts().map((item) => ({
+          value: item.id,
+          title: item.name,
+          description: item.summary ?? item.description,
+          category: item.category,
+          onSelect: () => executePrompt(item),
+        }))}
+      />
+    ))
+  }
+
   useKeyboard((evt) => {
     if (!active()) return
     if (dialog.stack.length > 0) return
     if (evt.name === "/") {
       evt.preventDefault()
-      search?.focus()
+      openPromptSearch()
       return
     }
     if (evt.name === "escape") {
@@ -627,12 +663,12 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     }
     if (evt.name === "up" || (evt.ctrl && evt.name === "p")) {
       evt.preventDefault()
-      setSelected((value) => Math.max(0, value - 1))
+      setSelected((x) => Math.max(0, x - 1))
       return
     }
     if (evt.name === "down" || (evt.ctrl && evt.name === "n")) {
       evt.preventDefault()
-      setSelected((value) => Math.min(Math.max(ordered().length - 1, 0), value + 1))
+      setSelected((x) => Math.min(Math.max(ordered().length - 1, 0), x + 1))
       return
     }
     if (evt.name === "return") {
@@ -640,7 +676,6 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
       if (!item) return
       evt.preventDefault()
       executePrompt(item)
-      return
     }
   })
 
@@ -873,7 +908,9 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
             setDragTop(undefined)
           }}
         >
-          <text fg={dragging() ? theme.background : theme.textMuted}>{dragging() ? "════════════════════════════" : "────────────────────────────"}</text>
+          <text fg={dragging() ? theme.background : theme.textMuted}>
+            {dragging() ? "════════════════════════════" : "────────────────────────────"}
+          </text>
         </box>
 
         <box
@@ -883,24 +920,16 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
           onMouseOut={() => setActive(false)}
         >
           <box flexShrink={0} paddingTop={1} paddingBottom={1} flexDirection="row" gap={1}>
-            <input
-              onInput={(value) => setQuery(value)}
-              placeholder="Search prompts"
-              focusedBackgroundColor={theme.backgroundElement}
-              cursorColor={theme.primary}
-              ref={(r: InputRenderable) => {
-                search = r
-              }}
-            />
             <box
+              flexGrow={1}
               backgroundColor={theme.backgroundElement}
               paddingLeft={1}
               paddingRight={1}
               onMouseUp={() => {
-                createPromptFromQuery().catch(() => {})
+                openPromptSearch()
               }}
             >
-              <text fg={theme.text}>+</text>
+              <text fg={theme.textMuted}>Search prompts (/)</text>
             </box>
           </box>
           <scrollbox
@@ -951,7 +980,12 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                           promptMenu(item)
                         }}
                       >
-                        <text fg={theme.text}>★ {item.name}</text>
+                        <box flexDirection="column" flexGrow={1}>
+                          <text fg={theme.text}>★ {item.name}</text>
+                          <Show when={item.summary ?? item.description}>
+                            <text fg={theme.textMuted}>{item.summary ?? item.description}</text>
+                          </Show>
+                        </box>
                         <Show when={(usage()[item.id] ?? 0) > 0}>
                           <text fg={theme.textMuted}>{usage()[item.id]}</text>
                         </Show>
@@ -984,7 +1018,12 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                           promptMenu(item)
                         }}
                       >
-                        <text fg={theme.textMuted}>{item.name}</text>
+                        <box flexDirection="column" flexGrow={1}>
+                          <text fg={theme.textMuted}>{item.name}</text>
+                          <Show when={item.summary ?? item.description}>
+                            <text fg={theme.textMuted}>{item.summary ?? item.description}</text>
+                          </Show>
+                        </box>
                         <Show when={(usage()[item.id] ?? 0) > 0}>
                           <text fg={theme.textMuted}>{usage()[item.id]}</text>
                         </Show>
@@ -1006,7 +1045,10 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                     >
                       <text fg={theme.text}>{isExpanded(name) ? "▼" : "▶"}</text>
                       <text fg={theme.text}>
-                        <b>{items[0]?.icon ? `${items[0].icon} ` : ""}{name}</b>
+                        <b>
+                          {items[0]?.icon ? `${items[0].icon} ` : ""}
+                          {name}
+                        </b>
                       </text>
                       <text fg={theme.textMuted}>({items.length})</text>
                     </box>
@@ -1029,7 +1071,12 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                               promptMenu(item)
                             }}
                           >
-                            <text fg={theme.text}>• {item.name}</text>
+                            <box flexDirection="column" flexGrow={1}>
+                              <text fg={theme.text}>• {item.name}</text>
+                              <Show when={item.summary ?? item.description}>
+                                <text fg={theme.textMuted}>{item.summary ?? item.description}</text>
+                              </Show>
+                            </box>
                             <Show when={(usage()[item.id] ?? 0) > 0}>
                               <text fg={theme.textMuted}>{usage()[item.id]}</text>
                             </Show>
