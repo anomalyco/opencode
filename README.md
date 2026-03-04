@@ -38,6 +38,29 @@
   <a href="README.gr.md">Ελληνικά</a>
 </p>
 
+> [!NOTE]
+> ## Welcome to the `opencode-macros` fork
+> We love upstream OpenCode and keep this README mostly intact. This fork simply adds a friendlier prompt workflow for teams that rely on reusable prompt libraries.
+>
+> ### What’s new here
+> - **Prompt Library panel in the Desktop app** (right side) with search, categories, and quick folder access.
+> - **Prompt Library panel in the TUI** with the same prompt categories and custom prompt loading.
+> - **Built-in + user prompts shown together**, so you always get a solid default library plus project-specific prompts.
+> - **Project prompt packs** in `.opencode/prompts/*.json` (and optional personal prompts in `.opencode/prompts/custom/`).
+> - **TUI prompt insert mode**: clicking a prompt fills the composer but does **not** auto-send, so you can review and edit first.
+>
+> ### Prompt packs included in this fork
+> - `code-review.json`
+> - `engineering.json`
+> - `qa.json`
+> - `troubleshooting.json`
+> - `performance.json`
+> - `web-design.json`
+> - `documentation.json`
+> - `delivery.json`
+>
+> For prompt format and authoring tips, see `.opencode/prompts/README.md`.
+
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
 
 ---
