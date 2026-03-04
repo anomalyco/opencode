@@ -1,5 +1,6 @@
 export const docsLocale = [
   "ar",
+  "az",
   "bs",
   "da",
   "de",
@@ -26,6 +27,7 @@ export type Locale = (typeof locale)[number]
 
 export const localeAlias = {
   ar: "ar",
+  az: "az",
   br: "pt-br",
   bs: "bs",
   da: "da",
@@ -53,6 +55,7 @@ export const localeAlias = {
 } as const satisfies Record<string, Locale>
 
 const starts = [
+  ["az", "az"],
   ["ko", "ko"],
   ["bs", "bs"],
   ["de", "de"],

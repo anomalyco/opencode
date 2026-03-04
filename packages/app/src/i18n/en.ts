@@ -404,6 +404,7 @@ export const dict = {
   "language.bs": "Bosanski",
   "language.th": "ไทย",
   "language.tr": "Türkçe",
+  "language.az": "Azərbaycanca",
 
   "toast.language.title": "Language",
   "toast.language.description": "Switched to {{language}}",
