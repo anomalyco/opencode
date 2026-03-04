@@ -769,43 +769,6 @@ body {
     }
   }
 
-  [data-component="privacy"] {
-    border-top: 1px solid var(--color-border-weak);
-    padding: var(--vertical-padding) var(--padding);
-    color: var(--color-text);
-
-    [data-slot="privacy-title"] {
-      h3 {
-        font-size: 16px;
-        font-weight: 700;
-        color: var(--color-text);
-        margin-bottom: 12px;
-      }
-
-      div {
-        display: flex;
-        gap: 12px;
-      }
-
-      p {
-      }
-
-      span {
-        color: var(--color-icon);
-        line-height: 200%;
-
-        @media (max-width: 60rem) {
-          line-height: 180%;
-        }
-      }
-
-      div {
-        display: flex;
-        gap: 12px;
-      }
-    }
-  }
-
   [data-component="email"] {
     border-top: 1px solid var(--color-border-weak);
     padding: var(--vertical-padding) var(--padding);

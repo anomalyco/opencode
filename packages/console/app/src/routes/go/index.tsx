@@ -348,19 +348,6 @@ export default function Home() {
             </ul>
           </section>
 
-          <section data-component="privacy">
-            <div data-slot="privacy-title">
-              <h3>{i18n.t("go.privacy.title")}</h3>
-              <div>
-                <span>[*]</span>
-                <p>
-                  {i18n.t("go.privacy.body")} <a href="mailto:contact@anoma.ly">{i18n.t("common.contactUs")}</a>{" "}
-                  {i18n.t("go.privacy.contactAfter")}
-                </p>
-              </div>
-            </div>
-          </section>
-
           <section data-component="testimonials">
             {/*Dax*/}
             <div data-slot="testimonial">
