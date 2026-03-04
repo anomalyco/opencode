@@ -213,7 +213,7 @@ jobs:
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
       - name: Build and upload artifacts
-        uses: tauri-apps/tauri-action@390cbe447412ced1303d35abe75287949e43437a # 390cbe447412ced1303d35abe75287949e43437a
+        uses: tauri-apps/tauri-action@390cbe447412ced1303d35abe75287949e43437a
         timeout-minutes: 60
         with:
           projectPath: packages/desktop
