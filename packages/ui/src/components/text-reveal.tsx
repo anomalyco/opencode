@@ -57,6 +57,11 @@ export function TextReveal(props: {
       () => props.text,
       (next, prev) => {
         if (next === prev) return
+        if (typeof next === "string" && typeof prev === "string" && next.startsWith(prev)) {
+          setCur(next)
+          widen(win())
+          return
+        }
         setSwapping(true)
         setOld(prev)
         setCur(next)

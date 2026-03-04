@@ -53,7 +53,7 @@
     font-family: var(--font-family-sans);
     font-size: var(--font-size-base);
     font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
+    line-height: 20px;
     min-height: 20px;
 
     [data-component="spinner"] {
