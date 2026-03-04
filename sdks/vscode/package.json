@@ -163,6 +163,7 @@
     "typescript": "^5.8.3",
     "@vscode/test-cli": "^0.0.11",
     "@vscode/test-electron": "^2.5.2",
-    "@playwright/test": "^1.40.0"
+    "@playwright/test": "^1.40.0",
+    "mochawesome": "^8.0.0"
   }
 }
