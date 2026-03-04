@@ -233,6 +233,11 @@ export namespace LLM {
         ...input.messages,
       ],
       model: wrapLanguageModel({
+        // `getLanguage` returns `LanguageModel` from the `ai` package which is
+        // structurally identical to `LanguageModelV3` from `@ai-sdk/provider`.
+        // The cast is required because `wrapLanguageModel` is typed against the
+        // lower-level `@ai-sdk/provider` type. shimLanguageModel() in shim.ts
+        // guarantees all models entering here are already v3-spec.
         model: language as LanguageModelV3,
         middleware: [
           {

@@ -143,6 +143,11 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV3Pro
             case "error-json":
               contentValue = JSON.stringify(output.value)
               break
+            default: {
+              // Unknown tool output type — skip rather than forward an empty string
+              console.warn(`[copilot] unsupported tool output type: ${(output as any).type} — skipping`)
+              continue
+            }
           }
 
           const toolResponseMetadata = getOpenAIMetadata(toolResponse as any)

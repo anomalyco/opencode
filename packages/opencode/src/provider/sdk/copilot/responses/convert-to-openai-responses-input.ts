@@ -276,6 +276,14 @@ export async function convertToOpenAIResponsesInput({
             case "error-json":
               contentValue = JSON.stringify(output.value)
               break
+            default: {
+              // Unknown tool output type — skip rather than forward an empty string
+              warnings.push({
+                type: "other",
+                message: `Unsupported tool output type: ${(output as any).type} for tool ${part.toolName} — skipping`,
+              })
+              continue
+            }
           }
 
           input.push({

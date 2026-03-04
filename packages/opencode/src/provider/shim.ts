@@ -101,10 +101,13 @@ export function shimProvider(sdk: any): any {
   // shimming. The apply trap forwards calls to the original and shims the
   // returned language model. The get trap layers v3 property overrides on
   // top of the original properties.
-  return new Proxy(sdk, {
-    apply(target, thisArg, args) {
-      return shimLanguageModel(Reflect.apply(target, thisArg, args))
-    },
+  //
+  // NOTE: The apply trap is only reachable when the target is callable. For
+  // non-callable (plain object) providers it is never invoked — JavaScript
+  // raises a TypeError before the trap fires when you attempt to call a
+  // non-function Proxy. We guard with `typeof sdk === "function"` so we only
+  // emit the trap for providers that are actually callable.
+  const handler: ProxyHandler<any> = {
     get(target, prop) {
       switch (prop) {
         case "specificationVersion":
@@ -125,5 +128,11 @@ export function shimProvider(sdk: any): any {
           return target[prop]
       }
     },
-  })
+  }
+
+  if (typeof sdk === "function") {
+    handler.apply = (target, thisArg, args) => shimLanguageModel(Reflect.apply(target, thisArg, args))
+  }
+
+  return new Proxy(sdk, handler)
 }

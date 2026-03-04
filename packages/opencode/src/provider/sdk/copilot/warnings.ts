@@ -10,6 +10,14 @@ export function unsupportedTool(
   tool?: { type: string; id?: string; name?: string },
   details?: string,
 ): SharedV3Warning {
-  const desc = tool ? `${tool.type}${tool.id ? `:${tool.id}` : tool.name ? `:${tool.name}` : ""}` : undefined
+  // Build a descriptive identifier so callers can pinpoint which tool was skipped.
+  // Falls back to the full JSON serialisation when neither id nor name is present.
+  const desc = tool
+    ? tool.id
+      ? `${tool.type}:${tool.id}`
+      : tool.name
+        ? `${tool.type}:${tool.name}`
+        : JSON.stringify(tool)
+    : undefined
   return { type: "unsupported", feature: "tool", details: desc ?? details }
 }
