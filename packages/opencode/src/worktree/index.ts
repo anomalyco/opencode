@@ -420,6 +420,7 @@ export namespace Worktree {
     setTimeout(() => {
       return createFromInfo(info, input?.startCommand)
     }, 0)
+    return info
   })
 
   export const remove = fn(RemoveInput, async (input) => {
