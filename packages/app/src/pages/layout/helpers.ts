@@ -14,7 +14,7 @@ export const workspaceKey = (directory: string) => {
   return value.replace(/\/+$/, "")
 }
 
-function sortSessions(now: number) {
+export function sortSessions(now: number) {
   const oneMinuteAgo = now - 60 * 1000
   return (a: Session, b: Session) => {
     const aUpdated = a.time.updated ?? a.time.created

@@ -27,7 +27,7 @@ export function NewSessionView(props: NewSessionViewProps) {
     if (options().includes(selection)) return selection
     return MAIN_WORKTREE
   })
-  const projectRoot = createMemo(() => sync.project?.worktree ?? sdk.directory)
+  const displayDir = createMemo(() => sdk.directory)
   const isWorktree = createMemo(() => {
     const project = sync.project
     if (!project) return false
@@ -59,8 +59,8 @@ export function NewSessionView(props: NewSessionViewProps) {
           <div class="w-full flex flex-col gap-4 items-center">
             <div class="flex items-start justify-center gap-3 min-h-5">
               <div class="text-12-medium text-text-weak select-text leading-5 min-w-0 max-w-160 break-words text-center">
-                {getDirectory(projectRoot())}
-                <span class="text-text-strong">{getFilename(projectRoot())}</span>
+                {getDirectory(displayDir())}
+                <span class="text-text-strong">{getFilename(displayDir())}</span>
               </div>
             </div>
             <div class="flex items-start justify-center gap-1.5 min-h-5">

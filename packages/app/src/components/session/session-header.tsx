@@ -145,9 +145,12 @@ export function SessionHeader() {
     return layout.projects.list().find((p) => p.worktree === directory || p.sandboxes?.includes(directory))
   })
   const name = createMemo(() => {
+    const dir = projectDirectory()
     const current = project()
+    // When in a workspace (sandbox), show the workspace name, not the project root
+    if (current && dir && dir !== current.worktree) return getFilename(dir)
     if (current) return current.name || getFilename(current.worktree)
-    return getFilename(projectDirectory())
+    return getFilename(dir)
   })
   const hotkey = createMemo(() => command.keybind("file.open"))
   const os = createMemo(() => detectOS(platform))
