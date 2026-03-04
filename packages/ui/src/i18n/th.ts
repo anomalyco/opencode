@@ -61,6 +61,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "พิจารณาขั้นตอนถัดไป",
 
   "ui.messagePart.questions.dismissed": "ละทิ้งคำถามแล้ว",
+  "ui.messagePart.compaction": "ประวัติถูกบีบอัด",
   "ui.messagePart.context.read.one": "อ่าน {{count}} รายการ",
   "ui.messagePart.context.read.other": "อ่าน {{count}} รายการ",
   "ui.messagePart.context.search.one": "ค้นหา {{count}} รายการ",
@@ -126,6 +127,7 @@ export const dict = {
   "ui.message.copyResponse": "คัดลอกคำตอบ",
   "ui.message.copied": "คัดลอกแล้ว!",
   "ui.message.interrupted": "ถูกขัดจังหวะ",
+  "ui.message.queued": "อยู่ในคิว",
   "ui.message.attachment.alt": "ไฟล์แนบ",
 
   "ui.patch.action.deleted": "ลบ",

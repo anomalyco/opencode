@@ -56,6 +56,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Sonraki adımlar değerlendiriliyor",
 
   "ui.messagePart.questions.dismissed": "Sorular reddedildi",
+  "ui.messagePart.compaction": "Geçmiş sıkıştırıldı",
   "ui.messagePart.context.read.one": "{{count}} okuma",
   "ui.messagePart.context.read.other": "{{count}} okuma",
   "ui.messagePart.context.search.one": "{{count}} arama",
@@ -121,6 +122,7 @@ export const dict = {
   "ui.message.copyResponse": "Yanıtı kopyala",
   "ui.message.copied": "Kopyalandı",
   "ui.message.interrupted": "Kesildi",
+  "ui.message.queued": "Sırada",
   "ui.message.attachment.alt": "ek",
 
   "ui.patch.action.deleted": "Silindi",

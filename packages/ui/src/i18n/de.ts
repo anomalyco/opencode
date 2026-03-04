@@ -65,6 +65,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Nächste Schritte erwägen",
 
   "ui.messagePart.questions.dismissed": "Fragen verworfen",
+  "ui.messagePart.compaction": "Verlauf komprimiert",
   "ui.messagePart.context.read.one": "{{count}} Lesevorgang",
   "ui.messagePart.context.read.other": "{{count}} Lesevorgänge",
   "ui.messagePart.context.search.one": "{{count}} Suche",
@@ -130,6 +131,7 @@ export const dict = {
   "ui.message.copyResponse": "Antwort kopieren",
   "ui.message.copied": "Kopiert!",
   "ui.message.interrupted": "Unterbrochen",
+  "ui.message.queued": "In Warteschlange",
   "ui.message.attachment.alt": "Anhang",
 
   "ui.patch.action.deleted": "Gelöscht",

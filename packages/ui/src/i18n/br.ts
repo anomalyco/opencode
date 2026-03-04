@@ -60,6 +60,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Considerando próximos passos",
 
   "ui.messagePart.questions.dismissed": "Perguntas descartadas",
+  "ui.messagePart.compaction": "Histórico compactado",
   "ui.messagePart.context.read.one": "{{count}} leitura",
   "ui.messagePart.context.read.other": "{{count}} leituras",
   "ui.messagePart.context.search.one": "{{count}} pesquisa",
@@ -125,6 +126,7 @@ export const dict = {
   "ui.message.copyResponse": "Copiar resposta",
   "ui.message.copied": "Copiado!",
   "ui.message.interrupted": "Interrompido",
+  "ui.message.queued": "Na fila",
   "ui.message.attachment.alt": "anexo",
 
   "ui.patch.action.deleted": "Excluído",

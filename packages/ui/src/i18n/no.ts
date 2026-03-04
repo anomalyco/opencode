@@ -63,6 +63,7 @@ export const dict: Record<Keys, string> = {
   "ui.sessionTurn.status.consideringNextSteps": "Vurderer neste trinn",
 
   "ui.messagePart.questions.dismissed": "Spørsmål avvist",
+  "ui.messagePart.compaction": "Historikk komprimert",
   "ui.messagePart.context.read.one": "{{count}} lest",
   "ui.messagePart.context.read.other": "{{count}} lest",
   "ui.messagePart.context.search.one": "{{count}} søk",
@@ -128,6 +129,7 @@ export const dict: Record<Keys, string> = {
   "ui.message.copyResponse": "Kopier svar",
   "ui.message.copied": "Kopiert!",
   "ui.message.interrupted": "Avbrutt",
+  "ui.message.queued": "I kø",
   "ui.message.attachment.alt": "vedlegg",
 
   "ui.patch.action.deleted": "Slettet",

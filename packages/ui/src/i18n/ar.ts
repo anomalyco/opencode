@@ -60,6 +60,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "النظر في الخطوات التالية",
 
   "ui.messagePart.questions.dismissed": "تم رفض الأسئلة",
+  "ui.messagePart.compaction": "تم ضغط السجل",
   "ui.messagePart.context.read.one": "{{count}} قراءة",
   "ui.messagePart.context.read.other": "{{count}} قراءات",
   "ui.messagePart.context.search.one": "{{count}} بحث",
@@ -125,6 +126,7 @@ export const dict = {
   "ui.message.copyResponse": "نسخ الرد",
   "ui.message.copied": "تم النسخ!",
   "ui.message.interrupted": "تمت المقاطعة",
+  "ui.message.queued": "في الانتظار",
   "ui.message.attachment.alt": "مرفق",
 
   "ui.patch.action.deleted": "محذوف",
