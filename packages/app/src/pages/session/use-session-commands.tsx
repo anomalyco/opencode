@@ -23,6 +23,8 @@ import { canAddSelectionContext } from "@/pages/session/session-command-helpers"
 
 export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
+  jumpToTop: () => void
+  jumpToBottom: () => void
   setActiveMessage: (message: UserMessage | undefined) => void
   focusInput: () => void
 }
@@ -85,6 +87,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const navigateMessageByOffset = actions.navigateMessageByOffset
+  const jumpToTop = actions.jumpToTop
+  const jumpToBottom = actions.jumpToBottom
   const setActiveMessage = actions.setActiveMessage
   const focusInput = actions.focusInput
 
@@ -215,6 +219,22 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       keybind: "mod+arrowdown",
       disabled: !params.id,
       onSelect: () => navigateMessageByOffset(1),
+    }),
+    sessionCommand({
+      id: "message.top",
+      title: language.t("command.message.top"),
+      description: language.t("command.message.top.description"),
+      keybind: "mod+shift+arrowup",
+      disabled: !params.id,
+      onSelect: () => jumpToTop(),
+    }),
+    sessionCommand({
+      id: "message.bottom",
+      title: language.t("command.message.bottom"),
+      description: language.t("command.message.bottom.description"),
+      keybind: "mod+shift+arrowdown",
+      disabled: !params.id,
+      onSelect: () => jumpToBottom(),
     }),
   ])
 

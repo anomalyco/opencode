@@ -17,6 +17,8 @@ export const dict = {
   "desktop.menu.view.forward": "Forward",
   "desktop.menu.view.previousSession": "Previous Session",
   "desktop.menu.view.nextSession": "Next Session",
+  "desktop.menu.view.jumpToTop": "Jump to Top",
+  "desktop.menu.view.jumpToBottom": "Jump to Bottom",
   "desktop.menu.help.documentation": "OpenCode Documentation",
   "desktop.menu.help.supportForum": "Support Forum",
   "desktop.menu.help.shareFeedback": "Share Feedback",

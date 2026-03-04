@@ -667,9 +667,17 @@ export default function Page() {
   }
 
   const focusInput = () => inputRef?.focus()
+  const jumpToTop = () => {
+    const el = scroller
+    if (!el) return
+    autoScroll.pause()
+    el.scrollTo({ top: 0, behavior: "auto" })
+  }
 
   useSessionCommands({
     navigateMessageByOffset,
+    jumpToTop,
+    jumpToBottom: () => resumeScroll(),
     setActiveMessage,
     focusInput,
   })

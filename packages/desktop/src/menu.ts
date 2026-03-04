@@ -149,6 +149,16 @@ export async function createMenu(trigger: (id: string) => void) {
             text: t("desktop.menu.view.nextSession"),
             accelerator: "Option+ArrowDown",
           }),
+          await MenuItem.new({
+            action: () => trigger("message.top"),
+            text: t("desktop.menu.view.jumpToTop"),
+            accelerator: "Shift+Cmd+ArrowUp",
+          }),
+          await MenuItem.new({
+            action: () => trigger("message.bottom"),
+            text: t("desktop.menu.view.jumpToBottom"),
+            accelerator: "Shift+Cmd+ArrowDown",
+          }),
           await PredefinedMenuItem.new({
             item: "Separator",
           }),
