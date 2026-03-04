@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test"
 import { applyTheme, getActiveTheme, removeTheme } from "./loader"
+import type { DesktopTheme } from "./types"
 
 const theme = {
   name: "Test",
@@ -30,7 +31,7 @@ const theme = {
       diffDelete: "#f87171",
     },
   },
-}
+} satisfies DesktopTheme
 
 type Node = {
   id: string
