@@ -278,8 +278,7 @@ export const dict = {
   "go.faq.a1":
     "Go is a low-cost subscription that gives you reliable access to capable open-source models for agentic coding.",
   "go.faq.q2": "What models does Go include?",
-  "go.faq.a2":
-    "Go focuses on the most capable open-source models available through OpenCode, with generous limits and reliable access.",
+  "go.faq.a2": "Go includes GLM-5, Kimi K2.5, and MiniMax M2.5, with generous limits and reliable access.",
   "go.faq.q3": "Is Go the same as Zen?",
   "go.faq.a3":
     "No. Zen is pay-as-you-go, while Go is a $10/month subscription with generous limits and reliable access to open-source models GLM-5, Kimi K2.5, and MiniMax M2.5.",
