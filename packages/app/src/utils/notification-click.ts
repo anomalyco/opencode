@@ -1,12 +1,12 @@
-type WindowTarget = {
-  focus: () => void
-  location: {
-    assign: (href: string) => void
-  }
+let nav: ((href: string) => void) | undefined
+
+export const setNavigate = (fn: (href: string) => void) => {
+  nav = fn
 }
 
-export const handleNotificationClick = (href?: string, target: WindowTarget = window) => {
-  target.focus()
+export const handleNotificationClick = (href?: string) => {
+  window.focus()
   if (!href) return
-  target.location.assign(href)
+  if (nav) nav(href)
+  else window.location.assign(href)
 }
