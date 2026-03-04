@@ -54,8 +54,8 @@ export namespace Server {
   let _url: URL | undefined
   let _corsWhitelist: string[] = []
 
-  // OPENSACIA: Path to static build directory
-  const STATIC_DIST_PATH = "./packages/app/dist"
+  // OPENSACIA: Path to static build directory (relative to project root)
+  const STATIC_DIST_PATH = `${process.cwd()}/packages/app/dist`
 
   export function url(): URL {
     return _url ?? new URL("http://localhost:4096")
@@ -566,7 +566,7 @@ export namespace Server {
         )
         // OPENSACIA: Serve local static assets instead of proxying to cloud
         .all("/*", serveStatic({
-          root: "../../app/dist",
+          root: `${process.cwd()}/packages/app/dist`,
           onNotFound: (path) => {
             log.debug("static file not found", { path })
           }
