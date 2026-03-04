@@ -623,7 +623,7 @@ export const dict = {
   "settings.general.section.notifications": "System notifications",
   "settings.general.section.updates": "Updates",
   "settings.general.section.sounds": "Sound effects",
-  "settings.general.section.feed": "Feed",
+  "settings.general.section.feed": "Feed & copy",
   "settings.general.section.display": "Display",
 
   "settings.general.row.language.title": "Language",
@@ -642,6 +642,12 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Expand edit tool parts",
   "settings.general.row.editToolPartsExpanded.description":
     "Show edit, write, and patch tool parts expanded by default in the timeline",
+  "settings.general.row.assistantCopyFormat.title": "Assistant message copy",
+  "settings.general.row.assistantCopyFormat.description":
+    "Desktop only. Sets the default format for the assistant response Copy button.",
+  "settings.general.row.assistantCopyFormat.option.plain": "Plain text",
+  "settings.general.row.assistantCopyFormat.option.rich": "Rich text (default)",
+  "settings.general.row.assistantCopyFormat.option.ask": "Ask each time",
 
   "settings.general.row.wayland.title": "Use native Wayland",
   "settings.general.row.wayland.description": "Disable X11 fallback on Wayland. Requires restart.",

@@ -18,6 +18,7 @@ import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
@@ -214,8 +215,12 @@ export function MessageTimeline(props: {
   const sdk = useSDK()
   const sync = useSync()
   const settings = useSettings()
+  const platform = usePlatform()
   const dialog = useDialog()
   const language = useLanguage()
+  const assistantCopyMode = createMemo(() =>
+    platform.platform === "desktop" ? settings.general.assistantCopyFormat() : "plain",
+  )
 
   const rendered = createMemo(() => props.renderedUserMessages.map((message) => message.id))
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
@@ -759,6 +764,7 @@ export function MessageTimeline(props: {
                         queued={queued()}
                         status={active() ? sessionStatus() : undefined}
                         showReasoningSummaries={settings.general.showReasoningSummaries()}
+                        assistantCopyMode={assistantCopyMode()}
                         shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
                         editToolDefaultOpen={settings.general.editToolPartsExpanded()}
                         classes={{

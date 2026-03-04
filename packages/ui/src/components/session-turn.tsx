@@ -19,6 +19,7 @@ import { SessionRetry } from "./session-retry"
 import { TextReveal } from "./text-reveal"
 import { createAutoScroll } from "../hooks"
 import { useI18n } from "../context/i18n"
+import { MarkdownCopyMode } from "./markdown-copy"
 
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
@@ -142,6 +143,7 @@ export function SessionTurn(
     sessionID: string
     messageID: string
     showReasoningSummaries?: boolean
+    assistantCopyMode?: MarkdownCopyMode
     shellToolDefaultOpen?: boolean
     editToolDefaultOpen?: boolean
     active?: boolean
@@ -396,7 +398,13 @@ export function SessionTurn(
                 class={props.classes?.container}
               >
                 <div data-slot="session-turn-message-content" aria-live="off">
-                  <Message message={msg()} parts={parts()} interrupted={interrupted()} queued={queued()} />
+                  <Message
+                    message={msg()}
+                    parts={parts()}
+                    interrupted={interrupted()}
+                    queued={queued()}
+                    assistantCopyMode={props.assistantCopyMode}
+                  />
                 </div>
                 <Show when={compaction()}>
                   {(part) => (
@@ -410,6 +418,7 @@ export function SessionTurn(
                     <AssistantParts
                       messages={assistantMessages()}
                       showAssistantCopyPartID={assistantCopyPartID()}
+                      assistantCopyMode={props.assistantCopyMode}
                       turnDurationMs={turnDurationMs()}
                       working={working()}
                       showReasoningSummaries={showReasoningSummaries()}

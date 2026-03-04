@@ -48,11 +48,13 @@ import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/pa
 import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
+import { DropdownMenu } from "./dropdown-menu"
 import { TextShimmer } from "./text-shimmer"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
 import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
+import { MarkdownCopyMode, serializeMarkdownClipboardHTML, writeClipboardPayload } from "./markdown-copy"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -130,6 +132,7 @@ export interface MessageProps {
   message: MessageType
   parts: PartType[]
   showAssistantCopyPartID?: string | null
+  assistantCopyMode?: MarkdownCopyMode
   interrupted?: boolean
   queued?: boolean
   showReasoningSummaries?: boolean
@@ -141,6 +144,7 @@ export interface MessagePartProps {
   hideDetails?: boolean
   defaultOpen?: boolean
   showAssistantCopyPartID?: string | null
+  assistantCopyMode?: MarkdownCopyMode
   turnDurationMs?: number
 }
 
@@ -431,6 +435,7 @@ function partDefaultOpen(part: PartType, shell = false, edit = false) {
 export function AssistantParts(props: {
   messages: AssistantMessage[]
   showAssistantCopyPartID?: string | null
+  assistantCopyMode?: MarkdownCopyMode
   turnDurationMs?: number
   working?: boolean
   showReasoningSummaries?: boolean
@@ -507,6 +512,7 @@ export function AssistantParts(props: {
                             part={p()}
                             message={msg()}
                             showAssistantCopyPartID={props.showAssistantCopyPartID}
+                            assistantCopyMode={props.assistantCopyMode}
                             turnDurationMs={props.turnDurationMs}
                             defaultOpen={partDefaultOpen(p(), props.shellToolDefaultOpen, props.editToolDefaultOpen)}
                           />
@@ -621,6 +627,7 @@ export function Message(props: MessageProps) {
             message={assistantMessage() as AssistantMessage}
             parts={props.parts}
             showAssistantCopyPartID={props.showAssistantCopyPartID}
+            assistantCopyMode={props.assistantCopyMode}
             showReasoningSummaries={props.showReasoningSummaries}
           />
         )}
@@ -633,6 +640,7 @@ export function AssistantMessageDisplay(props: {
   message: AssistantMessage
   parts: PartType[]
   showAssistantCopyPartID?: string | null
+  assistantCopyMode?: MarkdownCopyMode
   showReasoningSummaries?: boolean
 }) {
   const emptyTools: ToolPart[] = []
@@ -691,6 +699,7 @@ export function AssistantMessageDisplay(props: {
                         part={p()}
                         message={props.message}
                         showAssistantCopyPartID={props.showAssistantCopyPartID}
+                        assistantCopyMode={props.assistantCopyMode}
                       />
                     )}
                   </Show>
@@ -1019,6 +1028,7 @@ export function Part(props: MessagePartProps) {
         hideDetails={props.hideDetails}
         defaultOpen={props.defaultOpen}
         showAssistantCopyPartID={props.showAssistantCopyPartID}
+        assistantCopyMode={props.assistantCopyMode}
         turnDurationMs={props.turnDurationMs}
       />
     </Show>
@@ -1246,38 +1256,84 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     if (typeof props.showAssistantCopyPartID === "string") return props.showAssistantCopyPartID === part().id
     return isLastTextPart()
   })
+  const copyMode = createMemo<MarkdownCopyMode>(() => props.assistantCopyMode ?? "plain")
+  let root: HTMLDivElement | undefined
   const [copied, setCopied] = createSignal(false)
+  const copyLabel = createMemo(() => {
+    if (copyMode() === "rich") return i18n.t("ui.message.copyResponseRich")
+    return i18n.t("ui.message.copyResponse")
+  })
 
-  const handleCopy = async () => {
-    const content = displayText()
-    if (!content) return
-    await navigator.clipboard.writeText(content)
+  const handleRichCopy = async () => {
+    const text = displayText()
+    if (!text) return
+    const markdown = root?.querySelector('[data-slot="text-part-body"] [data-component="markdown"]')
+    if (!(markdown instanceof HTMLDivElement)) {
+      await navigator.clipboard.writeText(text)
+      return
+    }
+    const wrap = document.createElement("div")
+    wrap.innerHTML = markdown.innerHTML
+    for (const item of wrap.querySelectorAll('[data-slot="markdown-copy-button"]')) {
+      item.remove()
+    }
+    const html = serializeMarkdownClipboardHTML(wrap.innerHTML)
+    await writeClipboardPayload({ text, html: html || undefined })
+  }
+
+  const copy = async (mode: "plain" | "rich") => {
+    const text = displayText()
+    if (!text) return
+    if (mode === "rich") await handleRichCopy()
+    if (mode === "plain") await navigator.clipboard.writeText(text)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
   return (
     <Show when={throttledText()}>
-      <div data-component="text-part">
+      <div data-component="text-part" ref={root}>
         <div data-slot="text-part-body">
           <Markdown text={throttledText()} cacheKey={part().id} />
         </div>
         <Show when={showCopy()}>
           <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
-            <Tooltip
-              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
-              placement="top"
-              gutter={4}
-            >
-              <IconButton
-                icon={copied() ? "check" : "copy"}
-                size="normal"
-                variant="ghost"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={handleCopy}
-                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
-              />
-            </Tooltip>
+            <Show when={copyMode() !== "ask"}>
+              <Tooltip value={copied() ? i18n.t("ui.message.copied") : copyLabel()} placement="top" gutter={4}>
+                <IconButton
+                  icon={copied() ? "check" : "copy"}
+                  size="normal"
+                  variant="ghost"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => copy(copyMode() === "rich" ? "rich" : "plain")}
+                  aria-label={copied() ? i18n.t("ui.message.copied") : copyLabel()}
+                />
+              </Tooltip>
+            </Show>
+            <Show when={copyMode() === "ask"}>
+              <DropdownMenu gutter={4} placement="bottom-start">
+                <Tooltip value={i18n.t("ui.message.copyOptions")} placement="top" gutter={4}>
+                  <DropdownMenu.Trigger
+                    as={IconButton}
+                    icon="copy"
+                    size="normal"
+                    variant="ghost"
+                    onMouseDown={(e) => e.preventDefault()}
+                    aria-label={i18n.t("ui.message.copyOptions")}
+                  />
+                </Tooltip>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content>
+                    <DropdownMenu.Item onSelect={() => void copy("plain")}>
+                      <DropdownMenu.ItemLabel>{i18n.t("ui.message.copyResponsePlain")}</DropdownMenu.ItemLabel>
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item onSelect={() => void copy("rich")}>
+                      <DropdownMenu.ItemLabel>{i18n.t("ui.message.copyResponseRich")}</DropdownMenu.ItemLabel>
+                    </DropdownMenu.Item>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu>
+            </Show>
             <Show when={meta()}>
               <span data-slot="text-part-meta" class="text-12-regular text-text-weak cursor-default">
                 {meta()}

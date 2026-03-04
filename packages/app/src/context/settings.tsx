@@ -18,6 +18,8 @@ export interface SoundSettings {
   errors: string
 }
 
+export type AssistantCopyFormat = "plain" | "rich" | "ask"
+
 export interface Settings {
   general: {
     autoSave: boolean
@@ -25,6 +27,7 @@ export interface Settings {
     showReasoningSummaries: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
+    assistantCopyFormat: AssistantCopyFormat
   }
   updates: {
     startup: boolean
@@ -48,6 +51,7 @@ const defaultSettings: Settings = {
     showReasoningSummaries: false,
     shellToolPartsExpanded: true,
     editToolPartsExpanded: false,
+    assistantCopyFormat: "rich",
   },
   updates: {
     startup: true,
@@ -146,6 +150,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setEditToolPartsExpanded(value: boolean) {
           setStore("general", "editToolPartsExpanded", value)
+        },
+        assistantCopyFormat: withFallback(
+          () => store.general?.assistantCopyFormat,
+          defaultSettings.general.assistantCopyFormat,
+        ),
+        setAssistantCopyFormat(value: AssistantCopyFormat) {
+          setStore("general", "assistantCopyFormat", value)
         },
       },
       updates: {
