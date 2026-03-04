@@ -284,6 +284,7 @@ export const ToolStatePending = Schema.Struct({
   status: Schema.Literal("pending"),
   input: Schema.Record(Schema.String, Schema.Any),
   raw: Schema.String,
+  received: Schema.optional(Schema.Number),
 })
   .annotate({ identifier: "ToolStatePending" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))

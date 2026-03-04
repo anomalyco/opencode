@@ -1848,6 +1848,16 @@ function Write(props: ToolProps<typeof WriteTool>) {
     if (!props.input.content) return ""
     return props.input.content
   })
+  const pending = createMemo(() => {
+    const state = props.part.state
+    if (state.status === "pending" && state.received) {
+      const bytes = formatKB(state.received)
+      if (state.input.filePath) return `Write ${normalizePath(state.input.filePath as string)} (receiving… ${bytes})`
+      return `Preparing write… (${bytes})`
+    }
+    return "Preparing write..."
+  })
+
 
   return (
     <Switch>
@@ -1866,7 +1876,7 @@ function Write(props: ToolProps<typeof WriteTool>) {
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="←" pending="Preparing write..." complete={props.input.filePath} part={props.part}>
+        <InlineTool icon="←" pending={pending()} complete={props.input.filePath} part={props.part}>
           Write {normalizePath(props.input.filePath!)}
         </InlineTool>
       </Match>
@@ -2039,6 +2049,12 @@ function Edit(props: ToolProps<typeof EditTool>) {
 
   const ft = createMemo(() => filetype(props.input.filePath))
 
+  const pending = createMemo(() => {
+    const state = props.part.state
+    if (state.status === "pending" && state.received) return `Preparing edit… (${formatKB(state.received)})`
+    return "Preparing edit..."
+  })
+
   const diffContent = createMemo(() => props.metadata.diff)
 
   return (
@@ -2070,7 +2086,7 @@ function Edit(props: ToolProps<typeof EditTool>) {
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="←" pending="Preparing edit..." complete={props.input.filePath} part={props.part}>
+        <InlineTool icon="←" pending={pending()} complete={props.input.filePath} part={props.part}>
           Edit {normalizePath(props.input.filePath!)} {input({ replaceAll: props.input.replaceAll })}
         </InlineTool>
       </Match>
@@ -2123,6 +2139,12 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
     return "← Patched " + file.relativePath
   }
 
+  const pending = createMemo(() => {
+    const state = props.part.state
+    if (state.status === "pending" && state.received) return `Preparing patch… (${formatKB(state.received)})`
+    return "Preparing patch..."
+  })
+
   return (
     <Switch>
       <Match when={files().length > 0}>
@@ -2145,7 +2167,7 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
         </For>
       </Match>
       <Match when={true}>
-        <InlineTool icon="%" pending="Preparing patch..." complete={false} part={props.part}>
+        <InlineTool icon="%" pending={pending()} complete={false} part={props.part}>
           Patch
         </InlineTool>
       </Match>
@@ -2237,6 +2259,12 @@ function Diagnostics(props: { diagnostics?: Record<string, Record<string, any>[]
       </box>
     </Show>
   )
+}
+
+function formatKB(bytes: number) {
+  if (bytes < 1024) return `${bytes}B`
+  if (bytes < 1048576) return `${Math.round(bytes / 1024)}KB`
+  return `${(bytes / 1048576).toFixed(1)}MB`
 }
 
 function normalizePath(input?: string) {

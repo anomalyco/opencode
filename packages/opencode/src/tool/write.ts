@@ -28,10 +28,10 @@ export const WriteTool = Tool.define(
     return {
       description: DESCRIPTION,
       parameters: z.object({
-        content: z.string().describe("The content to write to the file"),
         filePath: z.string().describe("The absolute path to the file to write (must be absolute, not relative)"),
+        content: z.string().describe("The content to write to the file"),
       }),
-      execute: (params: { content: string; filePath: string }, ctx: Tool.Context) =>
+      execute: (params: { filePath: string; content: string }, ctx: Tool.Context) =>
         Effect.gen(function* () {
           const filepath = path.isAbsolute(params.filePath)
             ? params.filePath

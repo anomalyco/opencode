@@ -23,6 +23,17 @@ import { isRecord } from "@/util/record"
 
 const DOOM_LOOP_THRESHOLD = 3
 const log = Log.create({ service: "session.processor" })
+const PATH_RE = /"filePath"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/
+const THROTTLE_MS = 500
+const THROTTLE_BYTES = 16384
+
+function foreignKeyConstraint(error: unknown) {
+  if (typeof error !== "object" || error === null) return false
+  if ("code" in error && error.code === "SQLITE_CONSTRAINT_FOREIGNKEY") return true
+  return (
+    "message" in error && typeof error.message === "string" && error.message.includes("FOREIGN KEY constraint failed")
+  )
+}
 
 export type Result = "compact" | "stop" | "continue"
 
@@ -65,6 +76,7 @@ type ToolCall = {
 
 interface ProcessorContext extends Input {
   toolcalls: Record<string, ToolCall>
+  deltas: Record<string, { text: string; bytes: number; path: string | undefined; last: number }>
   shouldBreak: boolean
   snapshot: string | undefined
   blocked: boolean
@@ -115,6 +127,7 @@ export const layer: Layer.Layer<
         sessionID: input.sessionID,
         model: input.model,
         toolcalls: {},
+        deltas: {},
         shouldBreak: false,
         snapshot: initialSnapshot,
         blocked: false,
@@ -134,6 +147,7 @@ export const layer: Layer.Layer<
       const settleToolCall = Effect.fn("SessionProcessor.settleToolCall")(function* (toolCallID: string) {
         const done = ctx.toolcalls[toolCallID]?.done
         delete ctx.toolcalls[toolCallID]
+        delete ctx.deltas[toolCallID]
         if (done) yield* Deferred.succeed(done, undefined).pipe(Effect.ignore)
       })
 
@@ -278,16 +292,65 @@ export const layer: Layer.Layer<
             }
             return
 
-          case "tool-input-delta":
+          case "tool-input-delta": {
+            const match = yield* readToolCall(value.id)
+            if (!match || match.part.state.status !== "pending") return
+            const acc =
+              ctx.deltas[value.id] ?? (ctx.deltas[value.id] = { text: "", bytes: 0, path: undefined, last: 0 })
+            if (!acc.path && acc.text.length < 8192) acc.text += value.delta
+            acc.bytes += Buffer.byteLength(value.delta, "utf8")
+            if (!acc.path) {
+              const found = PATH_RE.exec(acc.text)
+              if (found) {
+                try {
+                  acc.path = JSON.parse('"' + found[1] + '"')
+                } catch {
+                  acc.path = found[1]
+                }
+                acc.text = ""
+              }
+            }
+            const now = Date.now()
+            const discoveredPath = !!acc.path && !match.part.state.input.filePath
+            const elapsed = now - acc.last >= THROTTLE_MS
+            const grown = acc.bytes - (match.part.state.received ?? 0) >= THROTTLE_BYTES
+            if (!discoveredPath && !elapsed && !grown) return
+            acc.last = now
+            yield* session
+              .updatePart({
+                ...match.part,
+                state: {
+                  status: "pending",
+                  input: acc.path ? { ...match.part.state.input, filePath: acc.path } : match.part.state.input,
+                  raw: match.part.state.raw,
+                  received: acc.bytes,
+                },
+              } satisfies MessageV2.ToolPart)
+              .pipe(
+                Effect.tap((updated) =>
+                  Effect.sync(() => {
+                    ctx.toolcalls[value.id] = {
+                      ...match.call,
+                      partID: updated.id,
+                      messageID: updated.messageID,
+                      sessionID: updated.sessionID,
+                    }
+                  }),
+                ),
+                Effect.catchIf(foreignKeyConstraint, () => Effect.void),
+              )
             return
+          }
 
           case "tool-input-end":
+            delete ctx.deltas[value.id]
             return
 
           case "tool-call": {
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
             }
+            delete ctx.deltas[value.toolCallId]
             yield* updateToolCall(value.toolCallId, (match) => ({
               ...match,
               tool: value.toolName,
