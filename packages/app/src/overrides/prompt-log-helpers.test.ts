@@ -7,7 +7,14 @@ describe("trackPrompt", () => {
 
   beforeEach(() => {
     originalFetch = globalThis.fetch
-    fetchMock = mock(() => Promise.resolve(new Response(null, { status: 204 })))
+    fetchMock = mock(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ promptId: "test-uuid-123" }), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    )
     globalThis.fetch = fetchMock as unknown as typeof fetch
   })
 
@@ -15,8 +22,8 @@ describe("trackPrompt", () => {
     globalThis.fetch = originalFetch
   })
 
-  test("sends POST to /api/prompt-logs with correct body", () => {
-    trackPrompt({
+  test("sends POST to /api/prompt-logs with correct body", async () => {
+    await trackPrompt({
       promptText: "How do I deploy?",
       sessionId: "sess-123",
       projectName: "my-app",
@@ -39,8 +46,8 @@ describe("trackPrompt", () => {
     })
   })
 
-  test("sends only promptText when optional fields are omitted", () => {
-    trackPrompt({ promptText: "Hello" })
+  test("sends only promptText when optional fields are omitted", async () => {
+    await trackPrompt({ promptText: "Hello" })
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
     const body = JSON.parse(fetchMock.mock.calls[0][1].body)
@@ -51,16 +58,24 @@ describe("trackPrompt", () => {
     expect(body.agentName).toBeUndefined()
   })
 
-  test("does not throw when fetch rejects", () => {
-    globalThis.fetch = mock(() => Promise.reject(new Error("network error"))) as unknown as typeof fetch
-
-    expect(() => {
-      trackPrompt({ promptText: "test" })
-    }).not.toThrow()
+  test("returns promptId from successful response", async () => {
+    const result = await trackPrompt({ promptText: "test" })
+    expect(result).toBe("test-uuid-123")
   })
 
-  test("is fire-and-forget (returns void synchronously)", () => {
-    const result = trackPrompt({ promptText: "test" })
-    expect(result).toBeUndefined()
+  test("returns null when fetch rejects", async () => {
+    globalThis.fetch = mock(() => Promise.reject(new Error("network error"))) as unknown as typeof fetch
+
+    const result = await trackPrompt({ promptText: "test" })
+    expect(result).toBeNull()
+  })
+
+  test("returns null when response is not ok", async () => {
+    globalThis.fetch = mock(() =>
+      Promise.resolve(new Response(null, { status: 500 })),
+    ) as unknown as typeof fetch
+
+    const result = await trackPrompt({ promptText: "test" })
+    expect(result).toBeNull()
   })
 })
