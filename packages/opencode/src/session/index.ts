@@ -12,7 +12,7 @@ import { Installation } from "../installation"
 
 import { Database, NotFoundError, eq, and, or, gte, isNull, desc, like, inArray, lt } from "../storage/db"
 import type { SQL } from "../storage/db"
-import { SessionTable, MessageTable, PartTable } from "./session.sql"
+import { SessionTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
 import { Storage } from "@/storage/storage"
 import { Log } from "../util/log"
@@ -29,9 +29,11 @@ import { PermissionNext } from "@/permission/next"
 import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 import { iife } from "@/util/iife"
+import { SqliteSessionStore } from "./store.sqlite"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
+  const store = SqliteSessionStore
 
   const parentTitlePrefix = "New session - "
   const childTitlePrefix = "Child session - "
@@ -679,17 +681,14 @@ export namespace Session {
   export const updateMessage = fn(MessageV2.Info, async (msg) => {
     const time_created = msg.time.created
     const { id, sessionID, ...data } = msg
-    Database.use((db) => {
-      db.insert(MessageTable)
-        .values({
-          id,
-          session_id: sessionID,
-          time_created,
-          data,
-        })
-        .onConflictDoUpdate({ target: MessageTable.id, set: { data } })
-        .run()
-      Database.effect(() =>
+    store.use((tx) => {
+      tx.message_upsert({
+        id,
+        session_id: sessionID,
+        time_created,
+        data,
+      })
+      store.effect(() =>
         Bus.publish(MessageV2.Event.Updated, {
           info: msg,
         }),
@@ -705,11 +704,9 @@ export namespace Session {
     }),
     async (input) => {
       // CASCADE delete handles parts automatically
-      Database.use((db) => {
-        db.delete(MessageTable)
-          .where(and(eq(MessageTable.id, input.messageID), eq(MessageTable.session_id, input.sessionID)))
-          .run()
-        Database.effect(() =>
+      store.use((tx) => {
+        tx.message_delete(input.sessionID, input.messageID)
+        store.effect(() =>
           Bus.publish(MessageV2.Event.Removed, {
             sessionID: input.sessionID,
             messageID: input.messageID,
@@ -727,11 +724,9 @@ export namespace Session {
       partID: Identifier.schema("part"),
     }),
     async (input) => {
-      Database.use((db) => {
-        db.delete(PartTable)
-          .where(and(eq(PartTable.id, input.partID), eq(PartTable.session_id, input.sessionID)))
-          .run()
-        Database.effect(() =>
+      store.use((tx) => {
+        tx.part_delete(input.sessionID, input.partID)
+        store.effect(() =>
           Bus.publish(MessageV2.Event.PartRemoved, {
             sessionID: input.sessionID,
             messageID: input.messageID,
@@ -748,18 +743,15 @@ export namespace Session {
   export const updatePart = fn(UpdatePartInput, async (part) => {
     const { id, messageID, sessionID, ...data } = part
     const time = Date.now()
-    Database.use((db) => {
-      db.insert(PartTable)
-        .values({
-          id,
-          message_id: messageID,
-          session_id: sessionID,
-          time_created: time,
-          data,
-        })
-        .onConflictDoUpdate({ target: PartTable.id, set: { data } })
-        .run()
-      Database.effect(() =>
+    store.use((tx) => {
+      tx.part_upsert({
+        id,
+        message_id: messageID,
+        session_id: sessionID,
+        time_created: time,
+        data,
+      })
+      store.effect(() =>
         Bus.publish(MessageV2.Event.PartUpdated, {
           part: structuredClone(part),
         }),
@@ -885,4 +877,18 @@ export namespace Session {
   )
 }
 
-export type { SessionStore, SessionStoreTx, SessionRow, MessageRow, PartRow, TodoRow, PermissionRow } from "./store"
+export { SqliteSessionStore } from "./store.sqlite"
+export type {
+  SessionStore,
+  SessionStoreTx,
+  SessionRow,
+  SessionInput,
+  MessageRow,
+  MessageInput,
+  PartRow,
+  PartInput,
+  TodoRow,
+  TodoInput,
+  PermissionRow,
+  PermissionInput,
+} from "./store"

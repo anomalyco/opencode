@@ -1,10 +1,15 @@
 import type { SessionTable, MessageTable, PartTable, TodoTable, PermissionTable } from "./session.sql"
 
 export type SessionRow = typeof SessionTable.$inferSelect
+export type SessionInput = typeof SessionTable.$inferInsert
 export type MessageRow = typeof MessageTable.$inferSelect
+export type MessageInput = typeof MessageTable.$inferInsert
 export type PartRow = typeof PartTable.$inferSelect
+export type PartInput = typeof PartTable.$inferInsert
 export type TodoRow = typeof TodoTable.$inferSelect
+export type TodoInput = typeof TodoTable.$inferInsert
 export type PermissionRow = typeof PermissionTable.$inferSelect
+export type PermissionInput = typeof PermissionTable.$inferInsert
 
 export type SessionPatch = Partial<
   Pick<
@@ -42,36 +47,35 @@ export type MessagePageInput = {
   desc?: boolean
 }
 
-export type SessionStoreEffect = () => void | Promise<void>
-export type SessionStoreValue<T> = T | Promise<T>
+export type SessionStoreEffect = () => unknown
 
 export interface SessionStoreTx {
-  session_insert(row: SessionRow): SessionStoreValue<void>
-  session_get(id: string): SessionStoreValue<SessionRow | undefined>
-  session_update(id: string, patch: SessionPatch): SessionStoreValue<SessionRow | undefined>
-  session_list(input?: SessionListInput): SessionStoreValue<SessionRow[]>
-  session_children(project_id: string, parent_id: string): SessionStoreValue<SessionRow[]>
-  session_delete(id: string): SessionStoreValue<void>
+  session_insert(row: SessionInput): void
+  session_get(id: string): SessionRow | undefined
+  session_update(id: string, patch: SessionPatch): SessionRow | undefined
+  session_list(input?: SessionListInput): SessionRow[]
+  session_children(project_id: string, parent_id: string): SessionRow[]
+  session_delete(id: string): void
 
-  message_upsert(row: MessageRow): SessionStoreValue<void>
-  message_get(id: string): SessionStoreValue<MessageRow | undefined>
-  message_list(input: MessagePageInput): SessionStoreValue<MessageRow[]>
-  message_delete(session_id: string, id: string): SessionStoreValue<void>
+  message_upsert(row: MessageInput): void
+  message_get(id: string): MessageRow | undefined
+  message_list(input: MessagePageInput): MessageRow[]
+  message_delete(session_id: string, id: string): void
 
-  part_upsert(row: PartRow): SessionStoreValue<void>
-  part_list_by_message(message_id: string): SessionStoreValue<PartRow[]>
-  part_list_by_messages(message_ids: string[]): SessionStoreValue<PartRow[]>
-  part_delete(session_id: string, id: string): SessionStoreValue<void>
+  part_upsert(row: PartInput): void
+  part_list_by_message(message_id: string): PartRow[]
+  part_list_by_messages(message_ids: string[]): PartRow[]
+  part_delete(session_id: string, id: string): void
 
-  todo_replace(session_id: string, rows: TodoRow[]): SessionStoreValue<void>
-  todo_list(session_id: string): SessionStoreValue<TodoRow[]>
+  todo_replace(session_id: string, rows: TodoInput[]): void
+  todo_list(session_id: string): TodoRow[]
 
-  permission_get(project_id: string): SessionStoreValue<PermissionRow | undefined>
-  permission_upsert(row: PermissionRow): SessionStoreValue<void>
+  permission_get(project_id: string): PermissionRow | undefined
+  permission_upsert(row: PermissionInput): void
 }
 
 export interface SessionStore {
-  use<T>(fn: (tx: SessionStoreTx) => SessionStoreValue<T>): SessionStoreValue<T>
-  transaction<T>(fn: (tx: SessionStoreTx) => SessionStoreValue<T>): SessionStoreValue<T>
-  effect(fn: SessionStoreEffect): SessionStoreValue<void>
+  use<T>(fn: (tx: SessionStoreTx) => T): T
+  transaction<T>(fn: (tx: SessionStoreTx) => T): T
+  effect(fn: SessionStoreEffect): void
 }

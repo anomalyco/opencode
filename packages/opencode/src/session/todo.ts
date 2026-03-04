@@ -1,8 +1,9 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import z from "zod"
-import { Database, eq, asc } from "../storage/db"
-import { TodoTable } from "./session.sql"
+import { SqliteSessionStore } from "./store.sqlite"
+
+const store = SqliteSessionStore
 
 export namespace Todo {
   export const Info = z
@@ -25,28 +26,24 @@ export namespace Todo {
   }
 
   export function update(input: { sessionID: string; todos: Info[] }) {
-    Database.transaction((db) => {
-      db.delete(TodoTable).where(eq(TodoTable.session_id, input.sessionID)).run()
-      if (input.todos.length === 0) return
-      db.insert(TodoTable)
-        .values(
-          input.todos.map((todo, position) => ({
-            session_id: input.sessionID,
-            content: todo.content,
-            status: todo.status,
-            priority: todo.priority,
-            position,
-          })),
-        )
-        .run()
+    store.transaction((tx) => {
+      tx.todo_replace(
+        input.sessionID,
+        input.todos.map((todo, position) => ({
+          session_id: input.sessionID,
+          content: todo.content,
+          status: todo.status,
+          priority: todo.priority,
+          position,
+        })),
+      )
     })
     Bus.publish(Event.Updated, input)
   }
 
   export function get(sessionID: string) {
-    const rows = Database.use((db) =>
-      db.select().from(TodoTable).where(eq(TodoTable.session_id, sessionID)).orderBy(asc(TodoTable.position)).all(),
-    )
+    const rows = store.use((tx) => tx.todo_list(sessionID))
+    rows.sort((a, b) => a.position - b.position)
     return rows.map((row) => ({
       content: row.content,
       status: row.status,
