@@ -972,10 +972,6 @@ body {
     flex-direction: column;
     gap: 20px;
 
-    a {
-      text-decoration: none;
-    }
-
     [data-slot="testimonial"] {
       background: var(--color-background-weak);
       border-radius: 6px;

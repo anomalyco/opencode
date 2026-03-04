@@ -346,75 +346,61 @@ export default function Home() {
 
           <section data-component="testimonials">
             {/*Dax*/}
-            <a href="https://x.com/thdxr/status/1973531687629017227">
-              <div data-slot="testimonial">
-                <div data-slot="name">
-                  <img src={avatarDax} alt="" />
-                  <strong>Dax Raad</strong>
-                  <span>ex-CEO, Terminal Products</span>
-                </div>
-                <div data-slot="quote">
-                  <span>@OpenCode</span>
-                  {" Zen has been life changing, it's truly a no-brainer."}
-                </div>
+            <div data-slot="testimonial">
+              <div data-slot="name">
+                <img src={avatarDax} alt="" />
+                <strong>Dax Raad</strong>
+                <span>ex-CEO, Terminal Products</span>
               </div>
-            </a>
+              <div data-slot="quote">
+                <span>@OpenCode</span> <s>Zen</s> Go has been life changing, it's truly a no-brainer.
+              </div>
+            </div>
             {/*Jay*/}
-            <a href="https://x.com/jayair/status/1973530190870618456">
-              <div data-slot="testimonial">
-                <div data-slot="name">
-                  <img src={avatarJay} alt="" />
-                  <strong>Jay V</strong>
-                  <span>ex-Founder, SEED, PM, Melt, Pop, Dapt, Cadmus, and ViewPoint</span>
-                </div>
-                <div data-slot="quote">
-                  {"4 out of 5 people on our team love using "}
-                  <span>@OpenCode</span>
-                  {" Zen."}
-                </div>
+            <div data-slot="testimonial">
+              <div data-slot="name">
+                <img src={avatarJay} alt="" />
+                <strong>Jay V</strong>
+                <span>ex-Founder, SEED, PM, Melt, Pop, Dapt, Cadmus, and ViewPoint</span>
               </div>
-            </a>
+              <div data-slot="quote">
+                {"4 out of 5 people on our team love using "}
+                <span>@OpenCode</span> <s>Zen</s> Go.
+              </div>
+            </div>
             {/*Adam*/}
-            <a href="https://x.com/adamdotdev/status/1973732040718860563">
-              <div data-slot="testimonial">
-                <div data-slot="name">
-                  <img src={avatarAdam} alt="" />
-                  <strong>Adam Elmore</strong>
-                  <span>ex-Hero, AWS</span>
-                </div>
-                <div data-slot="quote">
-                  {"I can't recommend "}
-                  <span>@OpenCode</span>
-                  {" Zen enough. Seriously, it's really good."}
-                </div>
+            <div data-slot="testimonial">
+              <div data-slot="name">
+                <img src={avatarAdam} alt="" />
+                <strong>Adam Elmore</strong>
+                <span>ex-Hero, AWS</span>
               </div>
-            </a>
+              <div data-slot="quote">
+                {"I can't recommend "}
+                <span>@OpenCode</span> <s>Zen</s> Go enough. Seriously, it's really good.
+              </div>
+            </div>
             {/*David*/}
-            <a href="https://x.com/iamdavidhill/status/1973530568773214622">
-              <div data-slot="testimonial">
-                <div data-slot="name">
-                  <img src={avatarDavid} alt="" />
-                  <strong>David Hill</strong>
-                  <span>ex-Head of Design, Laravel</span>
-                </div>
-                <div data-slot="quote">
-                  {"With "}
-                  <span>@OpenCode</span>
-                  {" Zen I know all the models are tested and perfect for coding agents."}
-                </div>
+            <div data-slot="testimonial">
+              <div data-slot="name">
+                <img src={avatarDavid} alt="" />
+                <strong>David Hill</strong>
+                <span>ex-Head of Design, Laravel</span>
               </div>
-            </a>
+              <div data-slot="quote">
+                {"With "}
+                <span>@OpenCode</span> <s>Zen</s> Go I know all the models are tested and perfect for coding agents.
+              </div>
+            </div>
             {/*Frank*/}
-            <a href="https://x.com/fanjiewang/status/1973530092736487756">
-              <div data-slot="testimonial">
-                <div data-slot="name">
-                  <img src={avatarFrank} alt="" />
-                  <strong>Frank Wang</strong>
-                  <span>ex-Intern, Nvidia (4 times)</span>
-                </div>
-                <div data-slot="quote">I wish I was still at Nvidia.</div>
+            <div data-slot="testimonial">
+              <div data-slot="name">
+                <img src={avatarFrank} alt="" />
+                <strong>Frank Wang</strong>
+                <span>ex-Intern, Nvidia (4 times)</span>
               </div>
-            </a>
+              <div data-slot="quote">I wish I was still at Nvidia.</div>
+            </div>
           </section>
 
           <section data-component="faq">
