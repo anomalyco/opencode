@@ -27,9 +27,11 @@ const checkLoggedIn = query(async () => {
   if (workspaceID) throw redirect(`/workspace/${workspaceID}`)
 }, "checkLoggedIn.get")
 
-function LimitsGraph(props: { href: string; labels: { free: string; go: string } }) {
+function LimitsGraph(props: { href: string }) {
   let root!: HTMLElement
   const [visible, setVisible] = createSignal(false)
+
+  const i18n = useI18n()
 
   onMount(() => {
     if (typeof IntersectionObserver === "undefined") return setVisible(true)
@@ -73,7 +75,7 @@ function LimitsGraph(props: { href: string; labels: { free: string; go: string }
   return (
     <figure
       data-component="limit-graph"
-      aria-label="Requests per month: Free vs Go"
+      aria-label={i18n.t("go.graph.aria", { free: i18n.t("go.graph.free"), go: i18n.t("go.graph.go") })}
       data-visible={visible() ? "" : undefined}
       ref={root}
       style={{ "--start": `${start}%` } as any}
@@ -86,7 +88,7 @@ function LimitsGraph(props: { href: string; labels: { free: string; go: string }
                 <g>
                   <line x1={x(t)} y1={top} x2={x(t)} y2={h - bottom} data-grid />
                   <text x={x(t)} y={h - 18} text-anchor="middle" data-tick>
-                    {t}x
+                    {i18n.t("go.graph.tick", { n: t })}
                   </text>
                 </g>
               )}
@@ -118,10 +120,10 @@ function LimitsGraph(props: { href: string; labels: { free: string; go: string }
 
         <div data-slot="plot-labels">
           <span data-row-label style={{ "--y": y(yFree) } as any}>
-            {props.labels.free}
+            {i18n.t("go.graph.free")}
           </span>
           <span data-row-label style={{ "--y": y(yGo) } as any}>
-            {props.labels.go}
+            {i18n.t("go.graph.go")}
           </span>
         </div>
       </div>
@@ -130,15 +132,15 @@ function LimitsGraph(props: { href: string; labels: { free: string; go: string }
         <div data-slot="caption-row">
           <div data-slot="caption-left">
             <div data-slot="caption-meta">
-              <span data-slot="caption-label">Requests/month</span>
+              <span data-slot="caption-label">{i18n.t("go.graph.label")}</span>
               <a data-slot="caption-link" href={props.href}>
-                Usage limits
+                {i18n.t("go.graph.usageLimits")}
               </a>
             </div>
             <div data-slot="legend">
               <span data-item>
                 <i data-dot data-kind="free" />
-                <span data-name>Free</span>
+                <span data-name>{i18n.t("go.graph.free")}</span>
                 <span data-value>{free.toLocaleString()}</span>
               </span>
               <For each={models}>
@@ -274,10 +276,7 @@ export default function Home() {
           </section>
 
           <section data-component="comparison">
-            <LimitsGraph
-              href={language.route("/docs/go/#usage-limits")}
-              labels={{ free: i18n.t("go.graph.free"), go: i18n.t("go.graph.go") }}
-            />
+            <LimitsGraph href={language.route("/docs/go/#usage-limits")} />
           </section>
 
           <section data-component="problem">
@@ -349,57 +348,61 @@ export default function Home() {
             <div data-slot="testimonial">
               <div data-slot="name">
                 <img src={avatarDax} alt="" />
-                <strong>Dax Raad</strong>
-                <span>ex-CEO, Terminal Products</span>
+                <strong>{i18n.t("go.testimonials.dax.name")}</strong>
+                <span>{i18n.t("go.testimonials.dax.title")}</span>
               </div>
               <div data-slot="quote">
-                <span>@OpenCode</span> <s>Zen</s> Go has been life changing, it's truly a no-brainer.
+                <span>{i18n.t("go.testimonials.handle")}</span> <s>{i18n.t("go.testimonials.brand.zen")}</s>{" "}
+                {i18n.t("go.testimonials.brand.go")} {i18n.t("go.testimonials.dax.quoteAfter")}
               </div>
             </div>
             {/*Jay*/}
             <div data-slot="testimonial">
               <div data-slot="name">
                 <img src={avatarJay} alt="" />
-                <strong>Jay V</strong>
-                <span>ex-Founder, SEED, PM, Melt, Pop, Dapt, Cadmus, and ViewPoint</span>
+                <strong>{i18n.t("go.testimonials.jay.name")}</strong>
+                <span>{i18n.t("go.testimonials.jay.title")}</span>
               </div>
               <div data-slot="quote">
-                {"4 out of 5 people on our team love using "}
-                <span>@OpenCode</span> <s>Zen</s> Go.
+                {i18n.t("go.testimonials.jay.quoteBefore")} <span>{i18n.t("go.testimonials.handle")}</span>{" "}
+                <s>{i18n.t("go.testimonials.brand.zen")}</s> {i18n.t("go.testimonials.brand.go")}
+                {i18n.t("go.testimonials.jay.quoteAfter")}
               </div>
             </div>
             {/*Adam*/}
             <div data-slot="testimonial">
               <div data-slot="name">
                 <img src={avatarAdam} alt="" />
-                <strong>Adam Elmore</strong>
-                <span>ex-Hero, AWS</span>
+                <strong>{i18n.t("go.testimonials.adam.name")}</strong>
+                <span>{i18n.t("go.testimonials.adam.title")}</span>
               </div>
               <div data-slot="quote">
-                {"I can't recommend "}
-                <span>@OpenCode</span> <s>Zen</s> Go enough. Seriously, it's really good.
+                {i18n.t("go.testimonials.adam.quoteBefore")} <span>{i18n.t("go.testimonials.handle")}</span>{" "}
+                <s>{i18n.t("go.testimonials.brand.zen")}</s> {i18n.t("go.testimonials.brand.go")}{" "}
+                {i18n.t("go.testimonials.adam.quoteAfter")}
               </div>
             </div>
             {/*David*/}
             <div data-slot="testimonial">
               <div data-slot="name">
                 <img src={avatarDavid} alt="" />
-                <strong>David Hill</strong>
-                <span>ex-Head of Design, Laravel</span>
+                <strong>{i18n.t("go.testimonials.david.name")}</strong>
+                <span>{i18n.t("go.testimonials.david.title")}</span>
               </div>
               <div data-slot="quote">
-                {"With "}
-                <span>@OpenCode</span> <s>Zen</s> Go I know all the models are tested and perfect for coding agents.
+                {i18n.t("go.testimonials.david.quoteBefore")} <span>{i18n.t("go.testimonials.handle")}</span>{" "}
+                <s>{i18n.t("go.testimonials.brand.zen")}</s> {i18n.t("go.testimonials.brand.go")}{" "}
+                {i18n.t("go.testimonials.david.quoteAfter")}
               </div>
             </div>
             {/*Frank*/}
             <div data-slot="testimonial">
               <div data-slot="name">
                 <img src={avatarFrank} alt="" />
-                <strong>Frank Wang</strong>
-                <span>ex-Intern, Nvidia (4 times)</span>
+                <strong>{i18n.t("go.testimonials.frank.name")}</strong>
+                <span>{i18n.t("go.testimonials.frank.title")}</span>
               </div>
-              <div data-slot="quote">I wish I was still at Nvidia.</div>
+              <div data-slot="quote">{i18n.t("go.testimonials.frank.quote")}</div>
             </div>
           </section>
 
