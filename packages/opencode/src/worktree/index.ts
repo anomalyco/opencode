@@ -592,9 +592,6 @@ export namespace Worktree {
       .quiet()
       .nothrow()
       .cwd(Instance.worktree)
-    console.log(Instance.worktree)
-    console.log(mainCheck.stdout.toString(), mainCheck.stderr.toString())
-    console.log(masterCheck.stdout.toString(), masterCheck.stderr.toString())
     const localBranch = mainCheck.exitCode === 0 ? "main" : masterCheck.exitCode === 0 ? "master" : ""
 
     const target = remoteBranch ? `${remote}/${remoteBranch}` : localBranch
