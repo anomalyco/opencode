@@ -264,7 +264,7 @@ jobs:
             target: aarch64-unknown-linux-gnu
             platform_flag: --linux
     runs-on: ${{ matrix.settings.host }}
-    if: github.ref_name == 'beta'
+    # if: github.ref_name == 'beta'
     steps:
       - uses: actions/checkout@v3
 
