@@ -377,7 +377,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
             providerID: "openai",
             api: {
               id: "gpt-5.3-codex",
-              url: "https://chatgpt.com/backend-api/codex",
+              url: "https://api.openai.com/v1",
               npm: "@ai-sdk/openai",
             },
             name: "GPT-5.3 Codex",

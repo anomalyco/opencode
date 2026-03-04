@@ -154,6 +154,8 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          // Fallback to languageModel if responses is not available (e.g., @ai-sdk/openai-compatible)
+          if (sdk.responses === undefined) return sdk.languageModel(modelID)
           return sdk.responses(modelID)
         },
         options: {},
@@ -183,11 +185,11 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
+          // Fallback to languageModel if responses/chat are not available
           if (options?.["useCompletionUrls"]) {
-            return sdk.chat(modelID)
-          } else {
-            return sdk.responses(modelID)
+            return sdk.chat ? sdk.chat(modelID) : sdk.languageModel(modelID)
           }
+          return sdk.responses ? sdk.responses(modelID) : sdk.languageModel(modelID)
         },
         options: {},
       }
@@ -197,11 +199,11 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
+          // Fallback to languageModel if responses/chat are not available
           if (options?.["useCompletionUrls"]) {
-            return sdk.chat(modelID)
-          } else {
-            return sdk.responses(modelID)
+            return sdk.chat ? sdk.chat(modelID) : sdk.languageModel(modelID)
           }
+          return sdk.responses ? sdk.responses(modelID) : sdk.languageModel(modelID)
         },
         options: {
           baseURL: resourceName ? `https://${resourceName}.cognitiveservices.azure.com/openai` : undefined,
