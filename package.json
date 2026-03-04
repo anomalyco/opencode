@@ -14,7 +14,7 @@
     "prepare": "husky",
     "random": "echo 'Random script'",
     "hello": "echo 'Hello World!'",
-    "release": "OPENCODE_CHANNEL=latest OPENCODE_BUMP=patch bun run script/release-lash.ts",
+    "release": "OPENCODE_CHANNEL=latest OPENCODE_VERSION=$(npm view lashcode version 2>/dev/null | awk -F. '{print $1\".\"$2\".\"$3+1}') bun run script/release-lash.ts",
     "test": "echo 'do not run tests from root' && exit 1"
   },
   "workspaces": {
