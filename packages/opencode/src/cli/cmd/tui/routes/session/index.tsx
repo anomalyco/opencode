@@ -242,7 +242,6 @@ export function Session() {
     const logo = UI.logo("  ").split(/\r?\n/)
     return exit.message.set(
       [
-        ``,
         `${logo[0] ?? ""}`,
         `${logo[1] ?? ""}`,
         `${logo[2] ?? ""}`,
@@ -1413,13 +1412,6 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
     // OpenRouter sends encrypted reasoning data that appears as [REDACTED]
     return props.part.text.replace("[REDACTED]", "").trim()
   })
-  const streaming = createMemo(() => {
-    if (!props.last) return false
-    if (props.part.time.end) return false
-    if (props.message.time.completed) return false
-    if (props.message.error) return false
-    return true
-  })
   return (
     <Show when={content() && ctx.showThinking()}>
       <box
@@ -1434,7 +1426,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
         <code
           filetype="markdown"
           drawUnstyledText={false}
-          streaming={streaming()}
+          streaming={true}
           syntaxStyle={subtleSyntax()}
           content={"_Thinking:_ " + content()}
           conceal={ctx.conceal()}
@@ -1448,13 +1440,6 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
   const { theme, syntax } = useTheme()
-  const streaming = createMemo(() => {
-    if (!props.last) return false
-    if (props.part.time?.end) return false
-    if (props.message.time.completed) return false
-    if (props.message.error) return false
-    return true
-  })
   return (
     <Show when={props.part.text.trim()}>
       <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
@@ -1462,20 +1447,16 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
           <Match when={Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
             <markdown
               syntaxStyle={syntax()}
-              streaming={streaming()}
+              streaming={true}
               content={props.part.text.trim()}
               conceal={ctx.conceal()}
-              tableOptions={{
-                widthMode: "full",
-                columnFitter: "balanced",
-              }}
             />
           </Match>
           <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
             <code
               filetype="markdown"
               drawUnstyledText={false}
-              streaming={streaming()}
+              streaming={true}
               syntaxStyle={syntax()}
               content={props.part.text.trim()}
               conceal={ctx.conceal()}
@@ -1902,10 +1883,8 @@ function Read(props: ToolProps<typeof ReadTool>) {
       </InlineTool>
       <For each={loaded()}>
         {(filepath) => (
-          <box paddingLeft={3}>
-            <text paddingLeft={3} fg={theme.textMuted}>
-              ↳ Loaded {normalizePath(filepath)}
-            </text>
+          <box paddingLeft={5}>
+            <text fg={theme.textMuted}>⤷ Loaded {normalizePath(filepath)}</text>
           </box>
         )}
       </For>
@@ -2004,10 +1983,27 @@ function Task(props: ToolProps<typeof TaskTool>) {
     if (!sync.data.agent.some((x) => x.name === name && !x.hidden)) return
     return local.agent.color(name)
   })
+  
+  const content = createMemo(() => {
+    if (!props.input.description) return ""
+    let content = [`Task ${props.input.description}`]
+
+    if (isRunning() && tools().length > 0) {
+      // content[0] += ` · ${tools().length} toolcalls`
+      if (current()) content.push(`↳ ${Locale.titlecase(current()!.tool)} ${(current()!.state as any).title}`)
+      else content.push(`↳ ${tools().length} toolcalls`)
+    }
+
+    if (props.part.state.status === "completed") {
+      content.push(`└ ${tools().length} toolcalls · ${Locale.duration(duration())}`)
+    }
+
+    return content.join("\n")
+  })
 
   return (
     <InlineTool
-      icon="≡"
+      icon="│"
       spinner={isRunning()}
       complete={props.input.description}
       pending="Delegating..."
@@ -2015,25 +2011,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
       border={["left"]}
       borderColor={color()}
     >
-      {props.input.description}
-      <Show when={isRunning() && tools().length > 0}>
-        {" "}
-        · {tools().length} toolcalls
-        <Show fallback={"\n└ Running..."} when={current()}>
-          {(item) => {
-            const title = createMemo(() => (item().state as any).title)
-            return (
-              <>
-                {"\n"}└ {Locale.titlecase(item().tool)} {title()}
-              </>
-            )
-          }}
-        </Show>
-      </Show>
-      <Show when={duration() && props.part.state.status === "completed"}>
-        {"\n  "}
-        {tools().length} toolcalls · {Locale.duration(duration())}
-      </Show>
+      {content()}
     </InlineTool>
   )
 }
@@ -2253,10 +2231,16 @@ function Diagnostics(props: { diagnostics?: Record<string, Record<string, any>[]
 
 function normalizePath(input?: string) {
   if (!input) return ""
-  if (path.isAbsolute(input)) {
-    return path.relative(process.cwd(), input) || "."
-  }
-  return input
+
+  const cwd = process.cwd()
+  const absolute = path.isAbsolute(input) ? input : path.resolve(cwd, input)
+  const relative = path.relative(cwd, absolute)
+
+  if (!relative) return "."
+  if (!relative.startsWith("..")) return relative
+
+  // outside cwd - use absolute
+  return absolute
 }
 
 function input(input: Record<string, any>, omit?: string[]): string {

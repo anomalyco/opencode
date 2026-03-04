@@ -99,7 +99,6 @@ jobs:
         with:
           name: opencode-cli
           path: packages/opencode/dist
-
     outputs:
       version: ${{ needs.version.outputs.version }}
 
@@ -240,11 +239,130 @@ jobs:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_PATH: ${{ runner.temp }}/apple-api-key.p8
 
+  build-electron:
+    needs:
+      - build-cli
+      - version
+    continue-on-error: false
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - host: macos-latest
+            target: x86_64-apple-darwin
+            platform_flag: --mac --x64
+          - host: macos-latest
+            target: aarch64-apple-darwin
+            platform_flag: --mac --arm64
+          - host: "blacksmith-4vcpu-windows-2025"
+            target: x86_64-pc-windows-msvc
+            platform_flag: --win
+          - host: "blacksmith-4vcpu-ubuntu-2404"
+            target: x86_64-unknown-linux-gnu
+            platform_flag: --linux
+          - host: "blacksmith-4vcpu-ubuntu-2404"
+            target: aarch64-unknown-linux-gnu
+            platform_flag: --linux
+    runs-on: ${{ matrix.settings.host }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: apple-actions/import-codesign-certs@v2
+        if: runner.os == 'macOS'
+        with:
+          keychain: build
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+      - name: Setup Apple API Key
+        if: runner.os == 'macOS'
+        run: echo "${{ secrets.APPLE_API_KEY_PATH }}" > $RUNNER_TEMP/apple-api-key.p8
+
+      - uses: ./.github/actions/setup-bun
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Cache apt packages
+        if: contains(matrix.settings.host, 'ubuntu')
+        uses: actions/cache@v4
+        with:
+          path: ~/apt-cache
+          key: ${{ runner.os }}-${{ matrix.settings.target }}-apt-electron-${{ hashFiles('.github/workflows/publish.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.settings.target }}-apt-electron-
+
+      - name: Install dependencies (ubuntu only)
+        if: contains(matrix.settings.host, 'ubuntu')
+        run: |
+          mkdir -p ~/apt-cache && chmod -R a+rw ~/apt-cache
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends -o dir::cache::archives="$HOME/apt-cache" rpm
+          sudo chmod -R a+rw ~/apt-cache
+
+      - name: Setup git committer
+        id: committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+
+      - name: Prepare
+        run: bun ./scripts/prepare.ts
+        working-directory: packages/desktop-electron
+        env:
+          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
+          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+          RUST_TARGET: ${{ matrix.settings.target }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+
+      - name: Build
+        run: bun run build
+        working-directory: packages/desktop-electron
+        env:
+          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+
+      - name: Package and publish
+        if: needs.version.outputs.release
+        run: npx electron-builder ${{ matrix.settings.platform_flag }} --publish always --config electron-builder.config.ts
+        working-directory: packages/desktop-electron
+        timeout-minutes: 60
+        env:
+          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+          GH_TOKEN: ${{ steps.committer.outputs.token }}
+          CSC_LINK: ${{ secrets.APPLE_CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_API_KEY: ${{ runner.temp }}/apple-api-key.p8
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+
+      - name: Package (no publish)
+        if: ${{ !needs.version.outputs.release }}
+        run: npx electron-builder ${{ matrix.settings.platform_flag }} --publish never --config electron-builder.config.ts
+        working-directory: packages/desktop-electron
+        timeout-minutes: 60
+        env:
+          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opencode-electron-${{ matrix.settings.target }}
+          path: packages/desktop-electron/dist/*
+
+      - uses: actions/upload-artifact@v4
+        if: needs.version.outputs.release
+        with:
+          name: latest-yml-${{ matrix.settings.target }}
+          path: packages/desktop-electron/dist/latest*.yml
+
   publish:
     needs:
       - version
       - build-cli
       - build-tauri
+      - build-electron
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v3
@@ -281,6 +399,12 @@ jobs:
           name: opencode-cli
           path: packages/opencode/dist
 
+      - uses: actions/download-artifact@v4
+        if: needs.version.outputs.release
+        with:
+          pattern: latest-yml-*
+          path: /tmp/latest-yml
+
       - name: Cache apt packages (AUR)
         uses: actions/cache@v4
         with:
@@ -308,3 +432,4 @@ jobs:
           GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
           GH_REPO: ${{ needs.version.outputs.repo }}
           NPM_CONFIG_PROVENANCE: false
+          LATEST_YML_DIR: /tmp/latest-yml
