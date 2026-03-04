@@ -44,6 +44,7 @@ import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
+import { createOpenAIWebsocketFetch } from "./openai-websocket-fetch"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -150,13 +151,25 @@ export namespace Provider {
         options: hasKey ? {} : { apiKey: "public" },
       }
     },
-    openai: async () => {
+    openai: async (input) => {
+      const auth = await Auth.get("openai")
+      const base = input.options?.["baseURL"]
+      const defaultBase =
+        base === undefined ||
+        base === null ||
+        (typeof base === "string" &&
+          (base === "https://api.openai.com/v1" || base.startsWith("https://api.openai.com/")))
+      const useWs =
+        Flag.OPENCODE_EXPERIMENTAL_OPENAI_WEBSOCKET &&
+        auth?.type !== "oauth" &&
+        input.options?.["fetch"] === undefined &&
+        defaultBase
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
           return sdk.responses(modelID)
         },
-        options: {},
+        options: useWs ? { fetch: createOpenAIWebsocketFetch() } : {},
       }
     },
     "github-copilot": async () => {

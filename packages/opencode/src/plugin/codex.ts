@@ -4,12 +4,15 @@ import { Installation } from "../installation"
 import { Auth, OAUTH_DUMMY_KEY } from "../auth"
 import os from "os"
 import { ProviderTransform } from "@/provider/transform"
+import { Flag } from "@/flag/flag"
+import { createOpenAIWebsocketFetch } from "@/provider/openai-websocket-fetch"
 
 const log = Log.create({ service: "plugin.codex" })
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const ISSUER = "https://auth.openai.com"
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
+const CODEX_WS_ENDPOINT = "wss://chatgpt.com/backend-api/codex/responses"
 const OAUTH_PORT = 1455
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
 
@@ -355,6 +358,17 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
       async loader(getAuth, provider) {
         const auth = await getAuth()
         if (auth.type !== "oauth") return {}
+        const ws = Flag.OPENCODE_EXPERIMENTAL_OPENAI_WEBSOCKET
+          ? createOpenAIWebsocketFetch({
+              url: CODEX_WS_ENDPOINT,
+              scope: "codex",
+            })
+          : undefined
+        log.info("codex websocket transport", {
+          enabled: !!ws,
+          url: CODEX_WS_ENDPOINT,
+        })
+        const seen = new Set<string>()
 
         // Filter models to only allowed Codex models for OAuth
         const allowedModels = new Set([
@@ -486,11 +500,53 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               parsed.pathname.includes("/v1/responses") || parsed.pathname.includes("/chat/completions")
                 ? new URL(CODEX_API_ENDPOINT)
                 : parsed
+            const stream = (() => {
+              if (!init?.body || typeof init.body !== "string") return false
+              try {
+                const body = JSON.parse(init.body) as Record<string, unknown>
+                return body.stream === true
+              } catch {
+                return false
+              }
+            })()
 
-            return fetch(url, {
+            const req = {
               ...init,
               headers,
-            })
+            }
+
+            if (ws) {
+              if (stream && !seen.has("ws-attempt")) {
+                seen.add("ws-attempt")
+                log.info("codex websocket attempt", {
+                  path: parsed.pathname,
+                  endpoint: url.toString(),
+                })
+              }
+              try {
+                const response = await ws(url, req)
+                if (stream && !seen.has("ws-success")) {
+                  seen.add("ws-success")
+                  log.info("codex websocket active", {
+                    status: response.status,
+                    contentType: response.headers.get("content-type"),
+                  })
+                }
+                return response
+              } catch (error) {
+                log.warn("codex websocket fallback", { error })
+              }
+            }
+
+            if (stream && !seen.has("http")) {
+              seen.add("http")
+              log.info("codex transport http", {
+                path: parsed.pathname,
+                endpoint: url.toString(),
+              })
+            }
+
+            return fetch(url, req)
           },
         }
       },
