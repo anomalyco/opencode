@@ -27,7 +27,6 @@ import open from "open"
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
   const DEFAULT_TIMEOUT = 30_000
-  const CLOSE = 5_000
 
   export const Resource = z
     .object({
@@ -183,52 +182,6 @@ export namespace MCP {
     return pids
   }
 
-  function proc(client: MCPClient) {
-    const pid = (client.transport as { pid?: number } | undefined)?.pid
-    if (typeof pid === "number") return pid
-    return undefined
-  }
-
-  function signal(pid: number, kind: NodeJS.Signals) {
-    try {
-      process.kill(pid, kind)
-      return true
-    } catch {
-      return false
-    }
-  }
-
-  async function tree(pid: number, kind: NodeJS.Signals) {
-    const pids = await descendants(pid)
-    pids.forEach((child) => {
-      signal(child, kind)
-    })
-  }
-
-  async function close(client: MCPClient, key: string, raw?: number) {
-    const pid = raw ?? proc(client)
-    if (pid !== undefined) {
-      await tree(pid, "SIGTERM")
-    }
-
-    const closed = await withTimeout(client.close(), CLOSE)
-      .then(() => true)
-      .catch((error) => {
-        log.error("Failed to close MCP client", { key, error })
-        return false
-      })
-
-    if (closed || pid === undefined) return
-
-    signal(pid, "SIGTERM")
-    await tree(pid, "SIGTERM")
-    if (process.platform === "win32") return
-
-    await Bun.sleep(200)
-    signal(pid, "SIGKILL")
-    await tree(pid, "SIGKILL")
-  }
-
   const state = Instance.state(
     async () => {
       const cfg = await Config.get()
@@ -265,7 +218,30 @@ export namespace MCP {
       }
     },
     async (state) => {
-      await Promise.all(Object.entries(state.clients).map(([key, client]) => close(client, key)))
+      // The MCP SDK only signals the direct child process on close.
+      // Servers like chrome-devtools-mcp spawn grandchild processes
+      // (e.g. Chrome) that the SDK never reaches, leaving them orphaned.
+      // Kill the full descendant tree first so the server exits promptly
+      // and no processes are left behind.
+      for (const client of Object.values(state.clients)) {
+        const pid = (client.transport as any)?.pid
+        if (typeof pid !== "number") continue
+        for (const dpid of await descendants(pid)) {
+          try {
+            process.kill(dpid, "SIGTERM")
+          } catch {}
+        }
+      }
+
+      await Promise.all(
+        Object.values(state.clients).map((client) =>
+          client.close().catch((error) => {
+            log.error("Failed to close MCP client", {
+              error,
+            })
+          }),
+        ),
+      )
       pendingOAuthTransports.clear()
     },
   )
@@ -335,9 +311,11 @@ export namespace MCP {
       }
     }
     // Close existing client if present to prevent memory leaks
-    const prev = s.clients[name]
-    if (prev) {
-      await close(prev, name)
+    const existingClient = s.clients[name]
+    if (existingClient) {
+      await existingClient.close().catch((error) => {
+        log.error("Failed to close existing MCP client", { name, error })
+      })
     }
     s.clients[name] = result.mcpClient
     s.status[name] = result.status
@@ -402,14 +380,14 @@ export namespace MCP {
       ]
 
       let lastError: Error | undefined
-      const timeout = mcp.timeout ?? DEFAULT_TIMEOUT
+      const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
       for (const { name, transport } of transports) {
         try {
           const client = new Client({
             name: "opencode",
             version: Installation.VERSION,
           })
-          await withTimeout(client.connect(transport), timeout)
+          await withTimeout(client.connect(transport), connectTimeout)
           registerNotificationHandlers(client, key)
           mcpClient = client
           log.info("connected", { key, transport: name })
@@ -482,20 +460,19 @@ export namespace MCP {
         log.info(`mcp stderr: ${chunk.toString()}`, { key })
       })
 
-      const timeout = mcp.timeout ?? DEFAULT_TIMEOUT
-      const client = new Client({
-        name: "opencode",
-        version: Installation.VERSION,
-      })
+      const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
       try {
-        await withTimeout(client.connect(transport), timeout)
+        const client = new Client({
+          name: "opencode",
+          version: Installation.VERSION,
+        })
+        await withTimeout(client.connect(transport), connectTimeout)
         registerNotificationHandlers(client, key)
         mcpClient = client
         status = {
           status: "connected",
         }
       } catch (error) {
-        await close(client, key, (transport as { pid?: number } | undefined)?.pid)
         log.error("local mcp startup failed", {
           key,
           command: mcp.command,
@@ -528,7 +505,11 @@ export namespace MCP {
       return undefined
     })
     if (!result) {
-      await close(mcpClient, key)
+      await mcpClient.close().catch((error) => {
+        log.error("Failed to close MCP client", {
+          error,
+        })
+      })
       status = {
         status: "failed",
         error: "Failed to get tools",
@@ -597,9 +578,11 @@ export namespace MCP {
     s.status[name] = result.status
     if (result.mcpClient) {
       // Close existing client if present to prevent memory leaks
-      const prev = s.clients[name]
-      if (prev) {
-        await close(prev, name)
+      const existingClient = s.clients[name]
+      if (existingClient) {
+        await existingClient.close().catch((error) => {
+          log.error("Failed to close existing MCP client", { name, error })
+        })
       }
       s.clients[name] = result.mcpClient
     }
@@ -609,7 +592,9 @@ export namespace MCP {
     const s = await state()
     const client = s.clients[name]
     if (client) {
-      await close(client, name)
+      await client.close().catch((error) => {
+        log.error("Failed to close MCP client", { name, error })
+      })
       delete s.clients[name]
     }
     s.status[name] = { status: "disabled" }
