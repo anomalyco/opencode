@@ -1,4 +1,4 @@
-import type { ModelMessage } from "ai"
+import type { ModelMessage, ToolCallPart, ToolResultPart } from "ai"
 import { mergeDeep, unique } from "remeda"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import type { JSONSchema } from "zod/v4/core"
@@ -75,14 +75,14 @@ export namespace ProviderTransform {
       return msgs.map((msg) => {
         if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
           msg.content = msg.content.map((part) => {
-            if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
+            if (part.type === "tool-call" || part.type === "tool-result") {
               return {
-                ...part,
-                toolCallId: (part as any).toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_"),
+                ...(part as ToolCallPart | ToolResultPart),
+                toolCallId: (part as ToolCallPart | ToolResultPart).toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_"),
               }
             }
             return part
-          }) as any
+          }) as typeof msg.content
         }
         return msg
       })
@@ -99,20 +99,20 @@ export namespace ProviderTransform {
 
         if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
           msg.content = msg.content.map((part) => {
-            if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
+            if (part.type === "tool-call" || part.type === "tool-result") {
               // Mistral requires alphanumeric tool call IDs with exactly 9 characters
-              const normalizedId = (part as any).toolCallId
+              const normalizedId = (part as ToolCallPart | ToolResultPart).toolCallId
                 .replace(/[^a-zA-Z0-9]/g, "") // Remove non-alphanumeric characters
                 .substring(0, 9) // Take first 9 characters
                 .padEnd(9, "0") // Pad with zeros if less than 9 characters
 
               return {
-                ...part,
+                ...(part as ToolCallPart | ToolResultPart),
                 toolCallId: normalizedId,
               }
             }
             return part
-          }) as any
+          }) as typeof msg.content
         }
 
         result.push(msg)
@@ -200,7 +200,8 @@ export namespace ProviderTransform {
       if (shouldUseContentOptions) {
         const lastContent = msg.content[msg.content.length - 1]
         if (lastContent && typeof lastContent === "object") {
-          ;(lastContent as any).providerOptions = mergeDeep((lastContent as any).providerOptions ?? {}, providerOptions)
+          const part = lastContent as { providerOptions?: Record<string, Record<string, unknown>> }
+          part.providerOptions = mergeDeep(part.providerOptions ?? {}, providerOptions)
           continue
         }
       }
@@ -281,7 +282,10 @@ export namespace ProviderTransform {
         return {
           ...msg,
           providerOptions: remap(msg.providerOptions),
-          content: msg.content.map((part) => ({ ...part, providerOptions: remap((part as any).providerOptions) })),
+          content: msg.content.map((part) => {
+            const p = part as { providerOptions?: Record<string, unknown> }
+            return { ...part, providerOptions: remap(p.providerOptions) }
+          }),
         } as typeof msg
       })
     }

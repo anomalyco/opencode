@@ -1,12 +1,12 @@
 import {
   APICallError,
+  type JSONValue,
   type LanguageModelV3,
   type LanguageModelV2CallWarning,
   type LanguageModelV3Content,
   type LanguageModelV3ProviderTool,
   type LanguageModelV3StreamPart,
   type SharedV3ProviderMetadata,
-  type SharedV3Warning,
 } from "@ai-sdk/provider"
 import {
   combineHeaders,
@@ -29,15 +29,7 @@ import type { OpenAIResponsesIncludeOptions, OpenAIResponsesIncludeValue } from 
 import { prepareResponsesTools } from "./openai-responses-prepare-tools"
 import type { OpenAIResponsesModelId } from "./openai-responses-settings"
 import { localShellInputSchema } from "./tool/local-shell"
-
-function toV3Warnings(warnings: LanguageModelV2CallWarning[]): SharedV3Warning[] {
-  return warnings.map((w) => {
-    if (w.type === "unsupported-setting")
-      return { type: "unsupported" as const, feature: String(w.setting), details: w.details }
-    if (w.type === "unsupported-tool") return { type: "unsupported" as const, feature: "tool", details: w.details }
-    return { type: "other" as const, message: w.message }
-  })
-}
+import { toV3Warnings } from "../warnings"
 
 const webSearchCallItem = z.object({
   type: z.literal("web_search_call"),
@@ -693,13 +685,13 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
               queries: part.queries,
               results:
                 part.results?.map((result) => ({
-                  attributes: result.attributes as Record<string, unknown>,
+                  attributes: result.attributes as Record<string, JSONValue>,
                   fileId: result.file_id,
                   filename: result.filename,
                   score: result.score,
                   text: result.text,
                 })) ?? null,
-            } as any,
+            } satisfies z.infer<typeof fileSearchOutputSchema>,
           })
           break
         }
@@ -1041,13 +1033,13 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                     queries: value.item.queries,
                     results:
                       value.item.results?.map((result) => ({
-                        attributes: result.attributes as Record<string, unknown>,
+                        attributes: result.attributes as Record<string, JSONValue>,
                         fileId: result.file_id,
                         filename: result.filename,
                         score: result.score,
                         text: result.text,
                       })) ?? null,
-                  } as any,
+                  } satisfies z.infer<typeof fileSearchOutputSchema>,
                 })
               } else if (value.item.type === "code_interpreter_call") {
                 ongoingToolCalls[value.output_index] = undefined

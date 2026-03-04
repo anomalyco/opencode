@@ -6,7 +6,6 @@ import {
   type LanguageModelV3Content,
   type LanguageModelV3StreamPart,
   type SharedV3ProviderMetadata,
-  type SharedV3Warning,
 } from "@ai-sdk/provider"
 import {
   combineHeaders,
@@ -29,15 +28,7 @@ import { type OpenAICompatibleChatModelId, openaiCompatibleProviderOptions } fro
 import { defaultOpenAICompatibleErrorStructure, type ProviderErrorStructure } from "../openai-compatible-error"
 import type { MetadataExtractor } from "./openai-compatible-metadata-extractor"
 import { prepareTools } from "./openai-compatible-prepare-tools"
-
-function toV3Warnings(warnings: LanguageModelV2CallWarning[]): SharedV3Warning[] {
-  return warnings.map((w) => {
-    if (w.type === "unsupported-setting")
-      return { type: "unsupported" as const, feature: String(w.setting), details: w.details }
-    if (w.type === "unsupported-tool") return { type: "unsupported" as const, feature: "tool", details: w.details }
-    return { type: "other" as const, message: w.message }
-  })
-}
+import { toV3Warnings } from "../warnings"
 
 export type OpenAICompatibleChatConfig = {
   provider: string

@@ -11,6 +11,7 @@ import {
   tool,
   jsonSchema,
 } from "ai"
+import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { mergeDeep, pipe } from "remeda"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
@@ -232,7 +233,7 @@ export namespace LLM {
         ...input.messages,
       ],
       model: wrapLanguageModel({
-        model: language as any,
+        model: language as LanguageModelV3,
         middleware: [
           {
             specificationVersion: "v3" as const,

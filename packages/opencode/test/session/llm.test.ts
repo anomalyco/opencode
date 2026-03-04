@@ -557,8 +557,8 @@ describe("session.llm.stream", () => {
         expect(body.model).toBe(resolved.api.id)
         expect(body.max_tokens).toBe(ProviderTransform.maxOutputTokens(resolved))
         expect(body.temperature).toBe(0.4)
-        // Note: Anthropic v3 SDK doesn't send top_p when temperature is set (mutual exclusivity)
-        // expect(body.top_p).toBe(0.9)
+        // Anthropic v3 SDK doesn't send top_p when temperature is set (mutual exclusivity)
+        expect(body.top_p).toBeUndefined()
       },
     })
   })

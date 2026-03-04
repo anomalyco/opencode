@@ -84,6 +84,10 @@ export namespace Provider {
     })
   }
 
+  // Provider factories return varying types: some are ProviderV3 (most @ai-sdk/* packages) while
+  // others (e.g. GitLabProvider) still use the V2 specification. Additionally, not all providers
+  // implement the full provider interface (e.g. missing embeddingModel). Typed as `any` to avoid
+  // breaking on mixed-version bundles; narrow at the call site via the `SDK` cast (line ~1143).
   const BUNDLED_PROVIDERS: Record<string, (options: any) => any> = {
     "@ai-sdk/amazon-bedrock": createAmazonBedrock,
     "@ai-sdk/anthropic": createAnthropic,

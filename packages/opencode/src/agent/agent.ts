@@ -332,10 +332,13 @@ export namespace Agent {
       for await (const part of result.fullStream) {
         if (part.type === "error") throw part.error
       }
-      return (await result.output)!
+      const output = await result.output
+      if (!output) throw new Error("Failed to generate agent configuration")
+      return output
     }
 
     const result = await generateText(params)
-    return result.output!
+    if (!result.output) throw new Error("Failed to generate agent configuration")
+    return result.output
   }
 }
