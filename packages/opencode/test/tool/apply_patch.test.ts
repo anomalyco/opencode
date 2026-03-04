@@ -309,7 +309,7 @@ describe("tool.apply_patch freeform", () => {
           const item = result.metadata.files.find((x: { relativePath: string; filePath: string }) => {
             return x.relativePath.endsWith("repro.py") || x.filePath.endsWith("repro.py")
           })
-          expect(item).toBeDefined()
+          if (!item) throw new Error("expected repro.py in metadata files")
           expect(item.after).toContain('"y"')
           expect(item.diff).toContain('+    return "y"')
           expect(result.metadata.diff).toContain('+    return "y"')
