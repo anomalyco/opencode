@@ -32,7 +32,8 @@ permissions:
 
 jobs:
   version:
-    runs-on: "blacksmith-4vcpu-ubuntu-2404"
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    if: github.repository == 'anomalyco/opencode'
     steps:
       - uses: actions/checkout@v3
         with:
@@ -69,7 +70,8 @@ jobs:
 
   build-cli:
     needs: version
-    runs-on: "blacksmith-4vcpu-ubuntu-2404"
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    if: github.repository == 'anomalyco/opencode'
     steps:
       - uses: actions/checkout@v3
         with:
@@ -121,6 +123,7 @@ jobs:
           - host: blacksmith-8vcpu-ubuntu-2404-arm
             target: aarch64-unknown-linux-gnu
     runs-on: ${{ matrix.settings.host }}
+    if: github.repository == 'anomalyco/opencode'
     steps:
       - uses: actions/checkout@v3
         with:
@@ -190,6 +193,7 @@ jobs:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
           RUST_TARGET: ${{ matrix.settings.target }}
+          GH_TOKEN: ${{ github.token }}
           GITHUB_RUN_ID: ${{ github.run_id }}
 
       - name: Resolve tauri portable SHA
@@ -361,8 +365,7 @@ jobs:
       - build-cli
       - build-tauri
       - build-electron
-    runs-on: "blacksmith-4vcpu-ubuntu-2404"
-    if: github.ref_name == 'beta'
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v3
 
