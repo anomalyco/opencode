@@ -1,0 +1,68 @@
+name: sdks/vscode - Extension E2E (stable/insiders)
+
+on:
+  push:
+    paths:
+      - 'sdks/vscode/**'
+  pull_request:
+    paths:
+      - 'sdks/vscode/**'
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    name: E2E - ${{ matrix.channel }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: [stable, insiders]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: '1.3.10'
+
+      - name: Install dependencies (sdks/vscode)
+        run: |
+          cd sdks/vscode
+          bun install
+
+      - name: Install system deps (Xvfb & libs)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libgtk-3-0 libxss1 libasound2 libnss3 libgbm1
+
+      - name: Build & compile tests
+        run: |
+          cd sdks/vscode
+          bun run compile-tests
+          bun run compile
+
+      - name: Run E2E tests (${{ matrix.channel }})
+        run: |
+          cd sdks/vscode
+          mkdir -p test-results
+          set -o pipefail
+          EXIT=0
+          bun run test:e2e:${{ matrix.channel }} > test-results/runner.stdout.log 2> test-results/runner.stderr.log || EXIT=$?
+          exit $EXIT
+        env:
+          CI: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-e2e-results-${{ matrix.channel }}
+          path: sdks/vscode/test-results
