@@ -796,6 +796,35 @@ export namespace ProviderTransform {
     return result
   }
 
+  export function disableThinking(model: Provider.Model): Record<string, any> {
+    switch (model.api.npm) {
+      case "@ai-sdk/anthropic":
+      case "@ai-sdk/google-vertex/anthropic":
+        return { thinking: { type: "disabled" } }
+
+      case "@ai-sdk/openai":
+      case "@ai-sdk/azure":
+      case "@ai-sdk/github-copilot":
+        if (!model.capabilities.reasoning) return {}
+        return { reasoningEffort: "none" }
+
+      case "@ai-sdk/google":
+      case "@ai-sdk/google-vertex":
+        return { thinkingConfig: { includeThoughts: false } }
+
+      case "@ai-sdk/amazon-bedrock":
+        if (!model.capabilities.reasoning) return {}
+        return { reasoningConfig: { type: "disabled" } }
+
+      case "@openrouter/ai-sdk-provider":
+        if (!model.capabilities.reasoning) return {}
+        return { reasoning: { enabled: false } }
+
+      default:
+        return {}
+    }
+  }
+
   export function smallOptions(model: Provider.Model) {
     if (
       model.providerID === "openai" ||

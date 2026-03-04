@@ -32,6 +32,7 @@ export namespace Command {
       // https://zod.dev/v4/changelog?id=zfunction
       template: z.promise(z.string()).or(z.string()),
       subtask: z.boolean().optional(),
+      thinking: z.boolean().optional(),
       hints: z.array(z.string()),
     })
     .meta({
@@ -92,6 +93,7 @@ export namespace Command {
           return command.template
         },
         subtask: command.subtask,
+        thinking: command.thinking,
         hints: hints(command.template),
       }
     }

@@ -39,6 +39,7 @@ export namespace LLM {
     tools: Record<string, Tool>
     retries?: number
     toolChoice?: "auto" | "required" | "none"
+    thinking?: boolean
   }
 
   export type StreamOutput = StreamTextResult<ToolSet, unknown>
@@ -101,11 +102,13 @@ export namespace LLM {
           sessionID: input.sessionID,
           providerOptions: provider.options,
         })
+    const thinkingOverride = input.thinking === false ? ProviderTransform.disableThinking(input.model) : {}
     const options: Record<string, any> = pipe(
       base,
       mergeDeep(input.model.options),
       mergeDeep(input.agent.options),
       mergeDeep(variant),
+      mergeDeep(thinkingOverride),
     )
     if (isCodex) {
       options.instructions = SystemPrompt.instructions()

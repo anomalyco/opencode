@@ -108,6 +108,7 @@ export namespace SessionPrompt {
     format: MessageV2.Format.optional(),
     system: z.string().optional(),
     variant: z.string().optional(),
+    thinking: z.boolean().optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -181,7 +182,7 @@ export namespace SessionPrompt {
       return message
     }
 
-    return loop({ sessionID: input.sessionID })
+    return loop({ sessionID: input.sessionID, thinking: input.thinking })
   })
 
   export async function resolvePromptParts(template: string): Promise<PromptInput["parts"]> {
@@ -270,6 +271,7 @@ export namespace SessionPrompt {
   export const LoopInput = z.object({
     sessionID: Identifier.schema("session"),
     resume_existing: z.boolean().optional(),
+    thinking: z.boolean().optional(),
   })
   export const loop = fn(LoopInput, async (input) => {
     const { sessionID, resume_existing } = input
@@ -675,6 +677,7 @@ export namespace SessionPrompt {
         tools,
         model,
         toolChoice: format.type === "json_schema" ? "required" : undefined,
+        thinking: input.thinking,
       })
 
       // If structured output was captured, save it and exit immediately
@@ -1875,6 +1878,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       agent: userAgent,
       parts,
       variant: input.variant,
+      thinking: command.thinking,
     })) as MessageV2.WithParts
 
     Bus.publish(Command.Event.Executed, {
