@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="0" height="0">
+  <defs>
+    <symbol id="vscode" viewBox="0 0 24 24">
+      <rect width="24" height="24" rx="5" fill="#007ACC" />
+      <g transform="scale(1.5)">
+        <path
+          fill="#fff"
+          d="M11.5 11.19V4.8L7.3 7.99M1.17 6.07a.6.6 0 0 1-.01-.81L2 4.48c.14-.13.48-.18.73 0l2.39 1.83 5.55-5.09c.22-.22.61-.32 1.05-.08l2.8 1.34c.25.15.49.38.49.81v9.49c0 .28-.2.58-.42.7l-3.08 1.48c-.22.09-.64 0-.79-.14L5.11 9.69l-2.38 1.83c-.27.18-.6.13-.74 0l-.84-.77c-.22-.23-.2-.61.04-.84l2.1-1.9"
+        />
+      </g>
+    </symbol>
+
+    <symbol id="cursor" viewBox="0 0 24 24">
+      <rect width="24" height="24" rx="5" fill="#111827" />
+      <path
+        fill="#fff"
+        d="M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23"
+      />
+    </symbol>
+
+    <symbol id="zed" viewBox="0 0 24 24">
+      <rect width="24" height="24" rx="5" fill="#084CCF" />
+      <g transform="translate(12 12) scale(0.9) translate(-12 -12)">
+        <path
+          fill="#fff"
+          d="M2.25 1.5a.75.75 0 0 0-.75.75v16.5H0V2.25A2.25 2.25 0 0 1 2.25 0h20.095c1.002 0 1.504 1.212.795 1.92L10.764 14.298h3.486V12.75h1.5v1.922a1.125 1.125 0 0 1-1.125 1.125H9.264l-2.578 2.578h11.689V9h1.5v9.375a1.5 1.5 0 0 1-1.5 1.5H5.185L2.562 22.5H21.75a.75.75 0 0 0 .75-.75V5.25H24v16.5A2.25 2.25 0 0 1 21.75 24H1.655C.653 24 .151 22.788.86 22.08L13.19 9.75H9.75v1.5h-1.5V9.375A1.125 1.125 0 0 1 9.375 8.25h5.314l2.625-2.625H5.625V15h-1.5V5.625a1.5 1.5 0 0 1 1.5-1.5h13.19L21.438 1.5z"
+        />
+      </g>
+    </symbol>
+
+    <symbol id="finder" viewBox="0 0 24 24">
+      <rect width="24" height="24" rx="5" fill="#8ED0FF" />
+      <path d="M12 0H19a5 5 0 0 1 5 5V19a5 5 0 0 1-5 5H12Z" fill="#2D7BF7" />
+      <path d="M12 3v18" stroke="#0B2A4A" stroke-opacity="0.35" stroke-width="1.5" />
+      <circle cx="8.3" cy="9.2" r="1.1" fill="#0B2A4A" />
+      <circle cx="15.7" cy="9.2" r="1.1" fill="#0B2A4A" />
+      <path
+        d="M7.3 15c1.2 1.55 2.9 2.4 4.7 2.4s3.5-.85 4.7-2.4"
+        stroke="#0B2A4A"
+        stroke-width="1.5"
+        fill="none"
+        stroke-linecap="round"
+      />
+    </symbol>
+
+    <symbol id="terminal" viewBox="0 0 24 24">
+      <rect width="24" height="24" rx="5" fill="#111827" />
+      <rect
+        x="3.5"
+        y="4.5"
+        width="17"
+        height="15"
+        rx="2.5"
+        fill="#0B1220"
+        stroke="#334155"
+        stroke-opacity="0.5"
+      />
+      <path
+        d="M7.8 9.2 11 12 7.8 14.8"
+        stroke="#34D399"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <rect x="12.2" y="14.2" width="5.4" height="1.6" rx="0.8" fill="#34D399" />
+    </symbol>
+
+    <symbol id="iterm2" viewBox="0 0 24 24">
+      <rect width="24" height="24" rx="5" fill="#0B0B0B" />
+      <rect x="3.2" y="4.2" width="17.6" height="15.6" rx="2.4" fill="#000" stroke="#60A5FA" stroke-width="1.2" />
+      <circle cx="5.5" cy="6.3" r="0.75" fill="#F87171" />
+      <circle cx="7.6" cy="6.3" r="0.75" fill="#FBBF24" />
+      <circle cx="9.7" cy="6.3" r="0.75" fill="#34D399" />
+      <path
+        d="M7.9 10.2 10.6 12 7.9 13.8"
+        stroke="#34D399"
+        stroke-width="1.6"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <rect x="11.6" y="13.3" width="5" height="1.4" rx="0.7" fill="#34D399" />
+    </symbol>
+
+    <symbol id="ghostty" viewBox="0 0 24 24">
+      <rect width="24" height="24" rx="5" fill="#3551F3" />
+      <g transform="translate(12 12) scale(0.9) translate(-12 -12)">
+        <path
+          fill="#fff"
+          d="M12 0C6.7 0 2.4 4.3 2.4 9.6v11.146c0 1.772 1.45 3.267 3.222 3.254a3.18 3.18 0 0 0 1.955-.686 1.96 1.96 0 0 1 2.444 0 3.18 3.18 0 0 0 1.976.686c.75 0 1.436-.257 1.98-.686.715-.563 1.71-.587 2.419-.018.59.476 1.355.743 2.182.699 1.705-.094 3.022-1.537 3.022-3.244V9.601C21.6 4.3 17.302 0 12 0M6.069 6.562a1 1 0 0 1 .46.131l3.578 2.065v.002a.974.974 0 0 1 0 1.687L6.53 12.512a.975.975 0 0 1-.976-1.687L7.67 9.602 5.553 8.38a.975.975 0 0 1 .515-1.818m7.438 2.063h4.7a.975.975 0 1 1 0 1.95h-4.7a.975.975 0 0 1 0-1.95"
+        />
+      </g>
+    </symbol>
+
+    <symbol id="xcode" viewBox="0 0 24 24">
+      <rect width="24" height="24" rx="5" fill="#147EFB" />
+      <path d="M6 8H18" stroke="#fff" stroke-opacity="0.18" stroke-width="1.2" stroke-linecap="round" />
+      <path d="M8 6V18" stroke="#fff" stroke-opacity="0.18" stroke-width="1.2" stroke-linecap="round" />
+      <path d="M6 18H18" stroke="#fff" stroke-opacity="0.18" stroke-width="1.2" stroke-linecap="round" />
+      <path d="M18 6V18" stroke="#fff" stroke-opacity="0.18" stroke-width="1.2" stroke-linecap="round" />
+      <g transform="translate(12 12) rotate(-35) translate(-12 -12)">
+        <rect x="11.1" y="6.2" width="2" height="12.6" rx="1" fill="#fff" />
+        <rect x="9.2" y="5.3" width="5.6" height="2.7" rx="1" fill="#fff" />
+      </g>
+    </symbol>
+
+    <symbol id="android-studio" viewBox="0 0 24 24">
+      <rect width="24" height="24" rx="5" fill="#3DDC84" />
+      <circle cx="12" cy="12.2" r="6.8" fill="#3B82F6" />
+      <circle cx="12" cy="12.2" r="4.8" fill="none" stroke="#fff" stroke-width="1.6" />
+      <path d="M12 9.4l2.2 5-2.2-1.3-2.2 1.3z" fill="#fff" />
+      <circle cx="12" cy="12.2" r="0.9" fill="#fff" />
+    </symbol>
+  </defs>
+</svg>

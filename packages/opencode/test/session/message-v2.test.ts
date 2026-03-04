@@ -1,7 +1,57 @@
 import { describe, expect, test } from "bun:test"
+import { APICallError } from "ai"
 import { MessageV2 } from "../../src/session/message-v2"
+import type { Provider } from "../../src/provider/provider"
 
 const sessionID = "session"
+const model: Provider.Model = {
+  id: "test-model",
+  providerID: "test",
+  api: {
+    id: "test-model",
+    url: "https://example.com",
+    npm: "@ai-sdk/openai",
+  },
+  name: "Test Model",
+  capabilities: {
+    temperature: true,
+    reasoning: false,
+    attachment: false,
+    toolcall: true,
+    input: {
+      text: true,
+      audio: false,
+      image: false,
+      video: false,
+      pdf: false,
+    },
+    output: {
+      text: true,
+      audio: false,
+      image: false,
+      video: false,
+      pdf: false,
+    },
+    interleaved: false,
+  },
+  cost: {
+    input: 0,
+    output: 0,
+    cache: {
+      read: 0,
+      write: 0,
+    },
+  },
+  limit: {
+    context: 0,
+    input: 0,
+    output: 0,
+  },
+  status: "active",
+  options: {},
+  headers: {},
+  release_date: "2026-01-01",
+}
 
 function userInfo(id: string): MessageV2.User {
   return {
@@ -16,7 +66,13 @@ function userInfo(id: string): MessageV2.User {
   } as unknown as MessageV2.User
 }
 
-function assistantInfo(id: string, parentID: string, error?: MessageV2.Assistant["error"]): MessageV2.Assistant {
+function assistantInfo(
+  id: string,
+  parentID: string,
+  error?: MessageV2.Assistant["error"],
+  meta?: { providerID: string; modelID: string },
+): MessageV2.Assistant {
+  const infoModel = meta ?? { providerID: model.providerID, modelID: model.api.id }
   return {
     id,
     sessionID,
@@ -24,8 +80,8 @@ function assistantInfo(id: string, parentID: string, error?: MessageV2.Assistant
     time: { created: 0 },
     error,
     parentID,
-    modelID: "model",
-    providerID: "provider",
+    modelID: infoModel.modelID,
+    providerID: infoModel.providerID,
     mode: "",
     agent: "agent",
     path: { cwd: "/", root: "/" },
@@ -66,7 +122,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "hello" }],
@@ -91,7 +147,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([])
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([])
   })
 
   test("includes synthetic text parts", () => {
@@ -122,7 +178,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "hello" }],
@@ -189,7 +245,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
         role: "user",
         content: [
@@ -207,7 +263,7 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
-  test("converts assistant tool completion into tool-call + tool-result messages and emits attachment message", () => {
+  test("converts assistant tool completion into tool-call + tool-result messages with attachments", () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
 
@@ -249,7 +305,7 @@ describe("session.message-v2.toModelMessage", () => {
                   type: "file",
                   mime: "image/png",
                   filename: "attachment.png",
-                  url: "https://example.com/attachment.png",
+                  url: "data:image/png;base64,Zm9v",
                 },
               ],
             },
@@ -259,22 +315,10 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
-      },
-      {
-        role: "user",
-        content: [
-          { type: "text", text: "The tool bash returned the following attachments:" },
-          {
-            type: "file",
-            mediaType: "image/png",
-            filename: "attachment.png",
-            data: "https://example.com/attachment.png",
-          },
-        ],
       },
       {
         role: "assistant",
@@ -297,8 +341,89 @@ describe("session.message-v2.toModelMessage", () => {
             type: "tool-result",
             toolCallId: "call-1",
             toolName: "bash",
-            output: { type: "text", value: "ok" },
+            output: {
+              type: "content",
+              value: [
+                { type: "text", text: "ok" },
+                { type: "media", mediaType: "image/png", data: "Zm9v" },
+              ],
+            },
             providerOptions: { openai: { tool: "meta" } },
+          },
+        ],
+      },
+    ])
+  })
+
+  test("omits provider metadata when assistant model differs", () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID, undefined, { providerID: "other", modelID: "other" }),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "text",
+            text: "done",
+            metadata: { openai: { assistant: "meta" } },
+          },
+          {
+            ...basePart(assistantID, "a2"),
+            type: "tool",
+            callID: "call-1",
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: { cmd: "ls" },
+              output: "ok",
+              title: "Bash",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+            metadata: { openai: { tool: "meta" } },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run tool" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "done" },
+          {
+            type: "tool-call",
+            toolCallId: "call-1",
+            toolName: "bash",
+            input: { cmd: "ls" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "bash",
+            output: { type: "text", value: "ok" },
           },
         ],
       },
@@ -341,7 +466,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -408,7 +533,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -461,7 +586,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([])
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([])
   })
 
   test("includes aborted assistant messages only when they have non-step-start/reasoning content", () => {
@@ -504,7 +629,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
         role: "assistant",
         content: [
@@ -540,7 +665,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
         role: "assistant",
         content: [{ type: "text", text: "first" }],
@@ -567,7 +692,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([])
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([])
   })
 
   test("converts pending/running tool calls to error results to prevent dangling tool_use", () => {
@@ -614,7 +739,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    const result = MessageV2.toModelMessage(input)
+    const result = MessageV2.toModelMessages(input, model)
 
     expect(result).toStrictEqual([
       {
@@ -658,5 +783,142 @@ describe("session.message-v2.toModelMessage", () => {
         ],
       },
     ])
+  })
+})
+
+describe("session.message-v2.fromError", () => {
+  test("serializes context_length_exceeded as ContextOverflowError", () => {
+    const input = {
+      type: "error",
+      error: {
+        code: "context_length_exceeded",
+      },
+    }
+    const result = MessageV2.fromError(input, { providerID: "test" })
+
+    expect(result).toStrictEqual({
+      name: "ContextOverflowError",
+      data: {
+        message: "Input exceeds context window of this model",
+        responseBody: JSON.stringify(input),
+      },
+    })
+  })
+
+  test("serializes response error codes", () => {
+    const cases = [
+      {
+        code: "insufficient_quota",
+        message: "Quota exceeded. Check your plan and billing details.",
+      },
+      {
+        code: "usage_not_included",
+        message: "To use Codex with your ChatGPT plan, upgrade to Plus: https://chatgpt.com/explore/plus.",
+      },
+      {
+        code: "invalid_prompt",
+        message: "Invalid prompt from test",
+      },
+    ]
+
+    cases.forEach((item) => {
+      const input = {
+        type: "error",
+        error: {
+          code: item.code,
+          message: item.code === "invalid_prompt" ? item.message : undefined,
+        },
+      }
+      const result = MessageV2.fromError(input, { providerID: "test" })
+
+      expect(result).toStrictEqual({
+        name: "APIError",
+        data: {
+          message: item.message,
+          isRetryable: false,
+          responseBody: JSON.stringify(input),
+        },
+      })
+    })
+  })
+
+  test("maps github-copilot 403 to reauth guidance", () => {
+    const error = new APICallError({
+      message: "forbidden",
+      url: "https://api.githubcopilot.com/v1/chat/completions",
+      requestBodyValues: {},
+      statusCode: 403,
+      responseHeaders: { "content-type": "application/json" },
+      responseBody: '{"error":"forbidden"}',
+      isRetryable: false,
+    })
+
+    const result = MessageV2.fromError(error, { providerID: "github-copilot" })
+
+    expect(result).toStrictEqual({
+      name: "APIError",
+      data: {
+        message:
+          "Please reauthenticate with the copilot provider to ensure your credentials work properly with OpenCode.",
+        statusCode: 403,
+        isRetryable: false,
+        responseHeaders: { "content-type": "application/json" },
+        responseBody: '{"error":"forbidden"}',
+        metadata: {
+          url: "https://api.githubcopilot.com/v1/chat/completions",
+        },
+      },
+    })
+  })
+
+  test("detects context overflow from APICallError provider messages", () => {
+    const cases = [
+      "prompt is too long: 213462 tokens > 200000 maximum",
+      "Your input exceeds the context window of this model",
+      "The input token count (1196265) exceeds the maximum number of tokens allowed (1048575)",
+      "Please reduce the length of the messages or completion",
+      "400 status code (no body)",
+      "413 status code (no body)",
+    ]
+
+    cases.forEach((message) => {
+      const error = new APICallError({
+        message,
+        url: "https://example.com",
+        requestBodyValues: {},
+        statusCode: 400,
+        responseHeaders: { "content-type": "application/json" },
+        isRetryable: false,
+      })
+      const result = MessageV2.fromError(error, { providerID: "test" })
+      expect(MessageV2.ContextOverflowError.isInstance(result)).toBe(true)
+    })
+  })
+
+  test("does not classify 429 no body as context overflow", () => {
+    const result = MessageV2.fromError(
+      new APICallError({
+        message: "429 status code (no body)",
+        url: "https://example.com",
+        requestBodyValues: {},
+        statusCode: 429,
+        responseHeaders: { "content-type": "application/json" },
+        isRetryable: false,
+      }),
+      { providerID: "test" },
+    )
+    expect(MessageV2.ContextOverflowError.isInstance(result)).toBe(false)
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+  })
+
+  test("serializes unknown inputs", () => {
+    const result = MessageV2.fromError(123, { providerID: "test" })
+
+    expect(result).toStrictEqual({
+      name: "UnknownError",
+      data: {
+        message: "123",
+      },
+    })
   })
 })

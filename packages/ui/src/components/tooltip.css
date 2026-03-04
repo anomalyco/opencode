@@ -44,7 +44,7 @@
     /* transform: translate3d(0, 0, 0); */
   }
 
-  &[data-closed] {
+  &[data-closed]:not([data-force-open="true"]) {
     opacity: 0;
   }
 

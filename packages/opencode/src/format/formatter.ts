@@ -1,7 +1,8 @@
-import { readableStreamToText } from "bun"
+import { text } from "node:stream/consumers"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
+import { Process } from "../util/process"
 import { Flag } from "@/flag/flag"
 
 export interface Info {
@@ -67,7 +68,10 @@ export const prettier: Info = {
   async enabled() {
     const items = await Filesystem.findUp("package.json", Instance.directory, Instance.worktree)
     for (const item of items) {
-      const json = await Bun.file(item).json()
+      const json = await Filesystem.readJson<{
+        dependencies?: Record<string, string>
+        devDependencies?: Record<string, string>
+      }>(item)
       if (json.dependencies?.prettier) return true
       if (json.devDependencies?.prettier) return true
     }
@@ -86,7 +90,10 @@ export const oxfmt: Info = {
     if (!Flag.OPENCODE_EXPERIMENTAL_OXFMT) return false
     const items = await Filesystem.findUp("package.json", Instance.directory, Instance.worktree)
     for (const item of items) {
-      const json = await Bun.file(item).json()
+      const json = await Filesystem.readJson<{
+        dependencies?: Record<string, string>
+        devDependencies?: Record<string, string>
+      }>(item)
       if (json.dependencies?.oxfmt) return true
       if (json.devDependencies?.oxfmt) return true
     }
@@ -179,7 +186,7 @@ export const ruff: Info = {
       const found = await Filesystem.findUp(config, Instance.directory, Instance.worktree)
       if (found.length > 0) {
         if (config === "pyproject.toml") {
-          const content = await Bun.file(found[0]).text()
+          const content = await Filesystem.readText(found[0])
           if (content.includes("[tool.ruff]")) return true
         } else {
           return true
@@ -190,7 +197,7 @@ export const ruff: Info = {
     for (const dep of deps) {
       const found = await Filesystem.findUp(dep, Instance.directory, Instance.worktree)
       if (found.length > 0) {
-        const content = await Bun.file(found[0]).text()
+        const content = await Filesystem.readText(found[0])
         if (content.includes("ruff")) return true
       }
     }
@@ -207,12 +214,13 @@ export const rlang: Info = {
     if (airPath == null) return false
 
     try {
-      const proc = Bun.spawn(["air", "--help"], {
+      const proc = Process.spawn(["air", "--help"], {
         stdout: "pipe",
         stderr: "pipe",
       })
       await proc.exited
-      const output = await readableStreamToText(proc.stdout)
+      if (!proc.stdout) return false
+      const output = await text(proc.stdout)
 
       // Check for "Air: An R language server and formatter"
       const firstLine = output.split("\n")[0]
@@ -226,13 +234,13 @@ export const rlang: Info = {
 }
 
 export const uvformat: Info = {
-  name: "uv format",
+  name: "uv",
   command: ["uv", "format", "--", "$FILE"],
   extensions: [".py", ".pyi"],
   async enabled() {
     if (await ruff.enabled()) return false
     if (Bun.which("uv") !== null) {
-      const proc = Bun.spawn(["uv", "format", "--help"], { stderr: "pipe", stdout: "pipe" })
+      const proc = Process.spawn(["uv", "format", "--help"], { stderr: "pipe", stdout: "pipe" })
       const code = await proc.exited
       return code === 0
     }
@@ -337,23 +345,51 @@ export const rustfmt: Info = {
   command: ["rustfmt", "$FILE"],
   extensions: [".rs"],
   async enabled() {
-    if (!Bun.which("rustfmt")) return false
-    const configs = ["rustfmt.toml", ".rustfmt.toml"]
-    for (const config of configs) {
-      const found = await Filesystem.findUp(config, Instance.directory, Instance.worktree)
-      if (found.length > 0) return true
+    return Bun.which("rustfmt") !== null
+  },
+}
+
+export const pint: Info = {
+  name: "pint",
+  command: ["./vendor/bin/pint", "$FILE"],
+  extensions: [".php"],
+  async enabled() {
+    const items = await Filesystem.findUp("composer.json", Instance.directory, Instance.worktree)
+    for (const item of items) {
+      const json = await Filesystem.readJson<{
+        require?: Record<string, string>
+        "require-dev"?: Record<string, string>
+      }>(item)
+      if (json.require?.["laravel/pint"]) return true
+      if (json["require-dev"]?.["laravel/pint"]) return true
     }
     return false
   },
 }
 
-export const cargofmt: Info = {
-  name: "cargofmt",
-  command: ["cargo", "fmt", "--", "$FILE"],
-  extensions: [".rs"],
+export const ormolu: Info = {
+  name: "ormolu",
+  command: ["ormolu", "-i", "$FILE"],
+  extensions: [".hs"],
   async enabled() {
-    if (!Bun.which("cargo")) return false
-    const found = await Filesystem.findUp("Cargo.toml", Instance.directory, Instance.worktree)
-    return found.length > 0
+    return Bun.which("ormolu") !== null
+  },
+}
+
+export const cljfmt: Info = {
+  name: "cljfmt",
+  command: ["cljfmt", "fix", "--quiet", "$FILE"],
+  extensions: [".clj", ".cljs", ".cljc", ".edn"],
+  async enabled() {
+    return Bun.which("cljfmt") !== null
+  },
+}
+
+export const dfmt: Info = {
+  name: "dfmt",
+  command: ["dfmt", "-i", "$FILE"],
+  extensions: [".d"],
+  async enabled() {
+    return Bun.which("dfmt") !== null
   },
 }

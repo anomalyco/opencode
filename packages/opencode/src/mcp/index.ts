@@ -135,7 +135,7 @@ export namespace MCP {
         return client.callTool(
           {
             name: mcpTool.name,
-            arguments: args as Record<string, unknown>,
+            arguments: (args || {}) as Record<string, unknown>,
           },
           CallToolResultSchema,
           {
@@ -158,6 +158,28 @@ export namespace MCP {
   type McpEntry = NonNullable<Config.Info["mcp"]>[string]
   function isMcpConfigured(entry: McpEntry): entry is Config.Mcp {
     return typeof entry === "object" && entry !== null && "type" in entry
+  }
+
+  async function descendants(pid: number): Promise<number[]> {
+    if (process.platform === "win32") return []
+    const pids: number[] = []
+    const queue = [pid]
+    while (queue.length > 0) {
+      const current = queue.shift()!
+      const proc = Bun.spawn(["pgrep", "-P", String(current)], { stdout: "pipe", stderr: "pipe" })
+      const [code, out] = await Promise.all([proc.exited, new Response(proc.stdout).text()]).catch(
+        () => [-1, ""] as const,
+      )
+      if (code !== 0) continue
+      for (const tok of out.trim().split(/\s+/)) {
+        const cpid = parseInt(tok, 10)
+        if (!isNaN(cpid) && pids.indexOf(cpid) === -1) {
+          pids.push(cpid)
+          queue.push(cpid)
+        }
+      }
+    }
+    return pids
   }
 
   const state = Instance.state(
@@ -196,6 +218,21 @@ export namespace MCP {
       }
     },
     async (state) => {
+      // The MCP SDK only signals the direct child process on close.
+      // Servers like chrome-devtools-mcp spawn grandchild processes
+      // (e.g. Chrome) that the SDK never reaches, leaving them orphaned.
+      // Kill the full descendant tree first so the server exits promptly
+      // and no processes are left behind.
+      for (const client of Object.values(state.clients)) {
+        const pid = (client.transport as any)?.pid
+        if (typeof pid !== "number") continue
+        for (const dpid of await descendants(pid)) {
+          try {
+            process.kill(dpid, "SIGTERM")
+          } catch {}
+        }
+      }
+
       await Promise.all(
         Object.values(state.clients).map((client) =>
           client.close().catch((error) => {
@@ -409,7 +446,7 @@ export namespace MCP {
       const [cmd, ...args] = mcp.command
       const cwd = Instance.directory
       const transport = new StdioClientTransport({
-        stderr: "ignore",
+        stderr: "pipe",
         command: cmd,
         args,
         cwd,
@@ -418,6 +455,9 @@ export namespace MCP {
           ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
           ...mcp.environment,
         },
+      })
+      transport.stderr?.on("data", (chunk: Buffer) => {
+        log.info(`mcp stderr: ${chunk.toString()}`, { key })
       })
 
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
@@ -568,25 +608,28 @@ export namespace MCP {
     const clientsSnapshot = await clients()
     const defaultTimeout = cfg.experimental?.mcp_timeout
 
-    for (const [clientName, client] of Object.entries(clientsSnapshot)) {
-      // Only include tools from connected MCPs (skip disabled ones)
-      if (s.status[clientName]?.status !== "connected") {
-        continue
-      }
+    const connectedClients = Object.entries(clientsSnapshot).filter(
+      ([clientName]) => s.status[clientName]?.status === "connected",
+    )
 
-      const toolsResult = await client.listTools().catch((e) => {
-        log.error("failed to get tools", { clientName, error: e.message })
-        const failedStatus = {
-          status: "failed" as const,
-          error: e instanceof Error ? e.message : String(e),
-        }
-        s.status[clientName] = failedStatus
-        delete s.clients[clientName]
-        return undefined
-      })
-      if (!toolsResult) {
-        continue
-      }
+    const toolsResults = await Promise.all(
+      connectedClients.map(async ([clientName, client]) => {
+        const toolsResult = await client.listTools().catch((e) => {
+          log.error("failed to get tools", { clientName, error: e.message })
+          const failedStatus = {
+            status: "failed" as const,
+            error: e instanceof Error ? e.message : String(e),
+          }
+          s.status[clientName] = failedStatus
+          delete s.clients[clientName]
+          return undefined
+        })
+        return { clientName, client, toolsResult }
+      }),
+    )
+
+    for (const { clientName, client, toolsResult } of toolsResults) {
+      if (!toolsResult) continue
       const mcpConfig = config[clientName]
       const entry = isMcpConfigured(mcpConfig) ? mcpConfig : undefined
       const timeout = entry?.timeout ?? defaultTimeout
@@ -795,6 +838,11 @@ export namespace MCP {
     // The SDK has already added the state parameter to the authorization URL
     // We just need to open the browser
     log.info("opening browser for oauth", { mcpName, url: authorizationUrl, state: oauthState })
+
+    // Register the callback BEFORE opening the browser to avoid race condition
+    // when the IdP has an active SSO session and redirects immediately
+    const callbackPromise = McpOAuthCallback.waitForCallback(oauthState)
+
     try {
       const subprocess = await open(authorizationUrl)
       // The open package spawns a detached process and returns immediately.
@@ -822,8 +870,8 @@ export namespace MCP {
       Bus.publish(BrowserOpenFailed, { mcpName, url: authorizationUrl })
     }
 
-    // Wait for callback using the OAuth state parameter
-    const code = await McpOAuthCallback.waitForCallback(oauthState)
+    // Wait for callback using the already-registered promise
+    const code = await callbackPromise
 
     // Validate and clear the state
     const storedState = await McpAuth.getOAuthState(mcpName)

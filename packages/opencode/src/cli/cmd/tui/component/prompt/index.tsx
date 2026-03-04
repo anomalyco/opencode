@@ -1,6 +1,8 @@
 import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg } from "@opentui/core"
-import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, Show, Switch, Match } from "solid-js"
+import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
+import path from "path"
+import { Filesystem } from "@/util/filesystem"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
 import { EmptyBorder } from "@tui/component/border"
@@ -31,6 +33,7 @@ import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
+import { DialogSkill } from "../dialog-skill"
 
 export type PromptProps = {
   sessionID?: string
@@ -53,6 +56,7 @@ export type PromptRef = {
 }
 
 const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
+const SHELL_PLACEHOLDERS = ["ls -la", "git status", "pwd"]
 
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
@@ -93,8 +97,11 @@ export function Prompt(props: PromptProps) {
   let promptPartTypeId = 0
 
   sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
+    if (!input || input.isDestroyed) return
     input.insertText(evt.properties.text)
     setTimeout(() => {
+      // setTimeout is a workaround and needs to be addressed properly
+      if (!input || input.isDestroyed) return
       input.getLayoutNode().markDirty()
       input.gotoBufferEnd()
       renderer.requestRender()
@@ -130,6 +137,16 @@ export function Prompt(props: PromptProps) {
     interrupt: 0,
   })
 
+  createEffect(
+    on(
+      () => props.sessionID,
+      () => {
+        setStore("placeholder", Math.floor(Math.random() * PLACEHOLDERS.length))
+      },
+      { defer: true },
+    ),
+  )
+
   // Initialize agent/model/variant from last user message when session changes
   let syncedSessionID: string | undefined
   createEffect(() => {
@@ -157,7 +174,7 @@ export function Prompt(props: PromptProps) {
         title: "Clear prompt",
         value: "prompt.clear",
         category: "Prompt",
-        disabled: true,
+        hidden: true,
         onSelect: (dialog) => {
           input.extmarks.clear()
           input.clear()
@@ -167,9 +184,9 @@ export function Prompt(props: PromptProps) {
       {
         title: "Submit prompt",
         value: "prompt.submit",
-        disabled: true,
         keybind: "input_submit",
         category: "Prompt",
+        hidden: true,
         onSelect: (dialog) => {
           if (!input.focused) return
           submit()
@@ -179,9 +196,9 @@ export function Prompt(props: PromptProps) {
       {
         title: "Paste",
         value: "prompt.paste",
-        disabled: true,
         keybind: "input_paste",
         category: "Prompt",
+        hidden: true,
         onSelect: async () => {
           const content = await Clipboard.read()
           if (content?.mime.startsWith("image/")) {
@@ -197,8 +214,9 @@ export function Prompt(props: PromptProps) {
         title: "Interrupt session",
         value: "session.interrupt",
         keybind: "session_interrupt",
-        disabled: status().type === "idle",
         category: "Session",
+        hidden: true,
+        enabled: status().type !== "idle",
         onSelect: (dialog) => {
           if (autocomplete.visible) return
           if (!input.focused) return
@@ -229,7 +247,10 @@ export function Prompt(props: PromptProps) {
         category: "Session",
         keybind: "editor_open",
         value: "prompt.editor",
-        onSelect: async (dialog, trigger) => {
+        slash: {
+          name: "editor",
+        },
+        onSelect: async (dialog) => {
           dialog.clear()
 
           // replace summarized text parts with the actual text
@@ -242,7 +263,7 @@ export function Prompt(props: PromptProps) {
 
           const nonTextParts = store.prompt.parts.filter((p) => p.type !== "text")
 
-          const value = trigger === "prompt" ? "" : text
+          const value = text
           const content = await Editor.open({ value, renderer })
           if (!content) return
 
@@ -306,6 +327,28 @@ export function Prompt(props: PromptProps) {
           })
           restoreExtmarksFromParts(updatedNonTextParts)
           input.cursorOffset = Bun.stringWidth(content)
+        },
+      },
+      {
+        title: "Skills",
+        value: "prompt.skills",
+        category: "Prompt",
+        slash: {
+          name: "skills",
+        },
+        onSelect: () => {
+          dialog.replace(() => (
+            <DialogSkill
+              onSelect={(skill) => {
+                input.setText(`/${skill} `)
+                setStore("prompt", {
+                  input: `/${skill} `,
+                  parts: [],
+                })
+                input.gotoBufferEnd()
+              }}
+            />
+          ))
         },
       },
     ]
@@ -432,7 +475,7 @@ export function Prompt(props: PromptProps) {
       title: "Stash prompt",
       value: "prompt.stash",
       category: "Prompt",
-      disabled: !store.prompt.input,
+      enabled: !!store.prompt.input,
       onSelect: (dialog) => {
         if (!store.prompt.input) return
         stash.push({
@@ -450,7 +493,7 @@ export function Prompt(props: PromptProps) {
       title: "Stash pop",
       value: "prompt.stash.pop",
       category: "Prompt",
-      disabled: stash.list().length === 0,
+      enabled: stash.list().length > 0,
       onSelect: (dialog) => {
         const entry = stash.pop()
         if (entry) {
@@ -466,7 +509,7 @@ export function Prompt(props: PromptProps) {
       title: "Stash list",
       value: "prompt.stash.list",
       category: "Prompt",
-      disabled: stash.list().length === 0,
+      enabled: stash.list().length > 0,
       onSelect: (dialog) => {
         dialog.replace(() => (
           <DialogStash
@@ -542,16 +585,22 @@ export function Prompt(props: PromptProps) {
     } else if (
       inputText.startsWith("/") &&
       iife(() => {
-        const command = inputText.split(" ")[0].slice(1)
-        console.log(command)
+        const firstLine = inputText.split("\n")[0]
+        const command = firstLine.split(" ")[0].slice(1)
         return sync.data.command.some((x) => x.name === command)
       })
     ) {
-      let [command, ...args] = inputText.split(" ")
+      // Parse command from first line, preserve multi-line content in arguments
+      const firstLineEnd = inputText.indexOf("\n")
+      const firstLine = firstLineEnd === -1 ? inputText : inputText.slice(0, firstLineEnd)
+      const [command, ...firstLineArgs] = firstLine.split(" ")
+      const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
+      const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
+
       sdk.client.session.command({
         sessionID,
         command: command.slice(1),
-        arguments: args.join(" "),
+        arguments: args,
         agent: local.agent.current().name,
         model: `${selectedModel.providerID}/${selectedModel.modelID}`,
         messageID,
@@ -647,7 +696,7 @@ export function Prompt(props: PromptProps) {
   async function pasteImage(file: { filename?: string; content: string; mime: string }) {
     const currentOffset = input.visualCursor.offset
     const extmarkStart = currentOffset
-    const count = store.prompt.parts.filter((x) => x.type === "file").length
+    const count = store.prompt.parts.filter((x) => x.type === "file" && x.mime.startsWith("image/")).length
     const virtualText = `[Image ${count + 1}]`
     const extmarkEnd = extmarkStart + virtualText.length
     const textToInsert = virtualText + " "
@@ -698,6 +747,15 @@ export function Prompt(props: PromptProps) {
     if (variants.length === 0) return false
     const current = local.model.variant.current()
     return !!current
+  })
+
+  const placeholderText = createMemo(() => {
+    if (props.sessionID) return undefined
+    if (store.mode === "shell") {
+      const example = SHELL_PLACEHOLDERS[store.placeholder % SHELL_PLACEHOLDERS.length]
+      return `Run a command... "${example}"`
+    }
+    return `Ask anything... "${PLACEHOLDERS[store.placeholder % PLACEHOLDERS.length]}"`
   })
 
   const spinnerDef = createMemo(() => {
@@ -761,7 +819,7 @@ export function Prompt(props: PromptProps) {
             flexGrow={1}
           >
             <textarea
-              placeholder={props.sessionID ? undefined : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
+              placeholder={placeholderText()}
               textColor={keybind.leader ? theme.textMuted : theme.text}
               focusedTextColor={keybind.leader ? theme.textMuted : theme.text}
               minHeight={1}
@@ -814,6 +872,7 @@ export function Prompt(props: PromptProps) {
                   }
                 }
                 if (e.name === "!" && input.visualCursor.offset === 0) {
+                  setStore("placeholder", Math.floor(Math.random() * SHELL_PLACEHOLDERS.length))
                   setStore("mode", "shell")
                   e.preventDefault()
                   return
@@ -874,26 +933,26 @@ export function Prompt(props: PromptProps) {
                 const isUrl = /^(https?):\/\//.test(filepath)
                 if (!isUrl) {
                   try {
-                    const file = Bun.file(filepath)
+                    const mime = Filesystem.mimeType(filepath)
+                    const filename = path.basename(filepath)
                     // Handle SVG as raw text content, not as base64 image
-                    if (file.type === "image/svg+xml") {
+                    if (mime === "image/svg+xml") {
                       event.preventDefault()
-                      const content = await file.text().catch(() => {})
+                      const content = await Filesystem.readText(filepath).catch(() => {})
                       if (content) {
-                        pasteText(content, `[SVG: ${file.name ?? "image"}]`)
+                        pasteText(content, `[SVG: ${filename ?? "image"}]`)
                         return
                       }
                     }
-                    if (file.type.startsWith("image/")) {
+                    if (mime.startsWith("image/")) {
                       event.preventDefault()
-                      const content = await file
-                        .arrayBuffer()
+                      const content = await Filesystem.readArrayBuffer(filepath)
                         .then((buffer) => Buffer.from(buffer).toString("base64"))
                         .catch(() => {})
                       if (content) {
                         await pasteImage({
-                          filename: file.name,
-                          mime: file.type,
+                          filename,
+                          mime,
                           content,
                         })
                         return
@@ -914,6 +973,8 @@ export function Prompt(props: PromptProps) {
 
                 // Force layout update and render for the pasted content
                 setTimeout(() => {
+                  // setTimeout is a workaround and needs to be addressed properly
+                  if (!input || input.isDestroyed) return
                   input.getLayoutNode().markDirty()
                   renderer.requestRender()
                 }, 0)
@@ -925,6 +986,8 @@ export function Prompt(props: PromptProps) {
                 }
                 props.ref?.(ref)
                 setTimeout(() => {
+                  // setTimeout is a workaround and needs to be addressed properly
+                  if (!input || input.isDestroyed) return
                   input.cursorColor = theme.text
                 }, 0)
               }}
@@ -1065,9 +1128,11 @@ export function Prompt(props: PromptProps) {
             <box gap={2} flexDirection="row">
               <Switch>
                 <Match when={store.mode === "normal"}>
-                  <text fg={theme.text}>
-                    {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>variants</span>
-                  </text>
+                  <Show when={local.model.variant.list().length > 0}>
+                    <text fg={theme.text}>
+                      {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>variants</span>
+                    </text>
+                  </Show>
                   <text fg={theme.text}>
                     {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
                   </text>

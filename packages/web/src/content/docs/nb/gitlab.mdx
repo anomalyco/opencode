@@ -1,0 +1,195 @@
+---
+title: GitLab
+description: Bruk opencode i GitLab-problemer og Merge Requests.
+---
+
+OpenCode integreres med GitLab arbeidsflyten gjennom GitLab CI/CD pipeline eller med GitLab Duo.
+
+I begge tilfeller vil OpenCode kjøre på GitLab Runners.
+
+---
+
+## GitLab CI
+
+OpenCode fungerer i en vanlig GitLab-pipeline. Du kan bygge den inn i en pipeline som en [CI-komponent](https://docs.gitlab.com/ee/ci/components/)
+
+Her bruker vi en fellesskapsskapt CI/CD-komponent for OpenCode — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
+
+---
+
+### Funksjoner
+
+- **Bruk tilpasset konfigurasjon per jobb**: Konfigurer OpenCode med en tilpasset konfigurasjonskatalog, for eksempel `./config/#custom-directory` for å aktivere eller deaktivere funksjonalitet per OpenCode-anrop.
+- **Minimalt oppsett**: CI-komponenten setter opp OpenCode i bakgrunnen, du trenger bare å lage OpenCode-konfigurasjonen og den første ledeteksten.
+- **Fleksibel**: CI-komponenten støtter flere innganger for å tilpasse virkemåten
+
+---
+
+### Oppsett
+
+1. Lagre OpenCode sin autentiserings-JSON som en CI-miljøvariabel av typen Fil under **Innstillinger** > **CI/CD** > **Variabler**. Sørg for å merke dem som "Masked and hidden".
+2. Legg til følgende i `.gitlab-ci.yml`-filen.
+
+   ```yaml title=".gitlab-ci.yml"
+   include:
+     - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
+       inputs:
+         config_dir: ${CI_PROJECT_DIR}/opencode-config
+         auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
+         command: optional-custom-command
+         message: "Your prompt here"
+   ```
+
+For flere inndata og brukstilfeller [sjekk ut dokumentene](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode) for denne komponenten.
+
+---
+
+## GitLab Duo
+
+OpenCode integreres med din GitLab arbeidsflyt.
+Nevn `@opencode` i en kommentar, og OpenCode vil utføre oppgaver innenfor din GitLab CI-pipeline.
+
+---
+
+### Funksjoner
+
+- **Triage av saker**: Be OpenCode se på en sak og forklare den for deg.
+- **Fiks og implementer**: Be OpenCode om å fikse en sak eller implementere en funksjon.
+  Det vil opprette en ny gren og sende en Merge Request med endringene.
+- **Sikkert**: OpenCode kjører på GitLab Runners.
+
+---
+
+### Oppsett
+
+OpenCode kjører i GitLab CI/CD pipeline, her er det du trenger for å sette den opp:
+
+:::tip
+Sjekk ut [**GitLab-dokumentene**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) for oppdaterte instruksjoner.
+:::
+
+1.  Konfigurer GitLab-miljøet ditt
+2.  Sett opp CI/CD
+3.  Få en AI modellleverandør API nøkkel
+4.  Opprett en tjenestekonto
+5.  Konfigurer CI/CD variabler
+6.  Lag en flytkonfigurasjonsfil, her er et eksempel:
+
+        <details>
+
+    <summary>Flow configuration</summary>
+
+    ```yaml
+    image: node:22-slim
+    commands:
+      - echo "Installing opencode"
+      - npm install --global opencode-ai
+      - echo "Installing glab"
+      - export GITLAB_TOKEN=$GITLAB_TOKEN_OPENCODE
+      - apt-get update --quiet && apt-get install --yes curl wget gpg git && rm --recursive --force /var/lib/apt/lists/*
+      - curl --silent --show-error --location "https://raw.githubusercontent.com/upciti/wakemeops/main/assets/install_repository" | bash
+      - apt-get install --yes glab
+      - echo "Configuring glab"
+      - echo $GITLAB_HOST
+      - echo "Creating OpenCode auth configuration"
+      - mkdir --parents ~/.local/share/opencode
+      - |
+        cat > ~/.local/share/opencode/auth.json << EOF
+        {
+          "anthropic": {
+            "type": "api",
+            "key": "$ANTHROPIC_API_KEY"
+          }
+        }
+        EOF
+      - echo "Configuring git"
+      - git config --global user.email "opencode@gitlab.com"
+      - git config --global user.name "OpenCode"
+      - echo "Testing glab"
+      - glab issue list
+      - echo "Running OpenCode"
+      - |
+        opencode run "
+        You are an AI assistant helping with GitLab operations.
+
+        Context: $AI_FLOW_CONTEXT
+        Task: $AI_FLOW_INPUT
+        Event: $AI_FLOW_EVENT
+
+        Please execute the requested task using the available GitLab tools.
+        Be thorough in your analysis and provide clear explanations.
+
+        <important>
+        Please use the glab CLI to access data from GitLab. The glab CLI has already been authenticated. You can run the corresponding commands.
+
+        If you are asked to summarize an MR or issue or asked to provide more information then please post back a note to the MR/Issue so that the user can see it.
+        You don't need to commit or push up changes, those will be done automatically based on the file changes you make.
+        </important>
+        "
+      - git checkout --branch $CI_WORKLOAD_REF origin/$CI_WORKLOAD_REF
+      - echo "Checking for git changes and pushing if any exist"
+      - |
+        if ! git diff --quiet || ! git diff --cached --quiet || [ --not --zero "$(git ls-files --others --exclude-standard)" ]; then
+          echo "Git changes detected, adding and pushing..."
+          git add .
+          if git diff --cached --quiet; then
+            echo "No staged changes to commit"
+          else
+            echo "Committing changes to branch: $CI_WORKLOAD_REF"
+            git commit --message "Codex changes"
+            echo "Pushing changes up to $CI_WORKLOAD_REF"
+            git push https://gitlab-ci-token:$GITLAB_TOKEN@$GITLAB_HOST/gl-demo-ultimate-dev-ai-epic-17570/test-java-project.git $CI_WORKLOAD_REF
+            echo "Changes successfully pushed"
+          fi
+        else
+          echo "No git changes detected, skipping push"
+        fi
+    variables:
+      - ANTHROPIC_API_KEY
+      - GITLAB_TOKEN_OPENCODE
+      - GITLAB_HOST
+    ```
+
+        </details>
+
+Du kan se [GitLab CLI agents docs](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) for detaljerte instruksjoner.
+
+---
+
+### Eksempler
+
+Her er noen eksempler på hvordan du kan bruke OpenCode i GitLab.
+
+:::tip
+Du kan konfigurere til å bruke en annen triggerfrase enn `@opencode`.
+:::
+
+- **Forklar en sak**
+
+  Legg til denne kommentaren i en GitLab-sak.
+
+  ```
+  @opencode explain this issue
+  ```
+
+  OpenCode vil lese saken og svare med en klar forklaring.
+
+- **Fiks en sak**
+
+  I en GitLab-sak, si:
+
+  ```
+  @opencode fix this
+  ```
+
+  OpenCode vil opprette en ny gren, implementere endringene og åpne en Merge Request med endringene.
+
+- **Review av Merge Requests**
+
+  Legg igjen følgende kommentar på en GitLab Merge Request.
+
+  ```
+  @opencode review this merge request
+  ```
+
+  OpenCode vil gjennomgå Merge Request-en og gi tilbakemelding.

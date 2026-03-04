@@ -1,0 +1,114 @@
+name: vouch-check-pr
+
+on:
+  pull_request_target:
+    types: [opened]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if PR author is denounced
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const author = context.payload.pull_request.user.login;
+            const prNumber = context.payload.pull_request.number;
+
+            // Skip bots
+            if (author.endsWith('[bot]')) {
+              core.info(`Skipping bot: ${author}`);
+              return;
+            }
+
+            // Read the VOUCHED.td file via API (no checkout needed)
+            let content;
+            try {
+              const response = await github.rest.repos.getContent({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                path: '.github/VOUCHED.td',
+              });
+              content = Buffer.from(response.data.content, 'base64').toString('utf-8');
+            } catch (error) {
+              if (error.status === 404) {
+                core.info('No .github/VOUCHED.td file found, skipping check.');
+                return;
+              }
+              throw error;
+            }
+
+            // Parse the .td file for vouched and denounced users
+            const vouched = new Set();
+            const denounced = new Map();
+            for (const line of content.split('\n')) {
+              const trimmed = line.trim();
+              if (!trimmed || trimmed.startsWith('#')) continue;
+
+              const isDenounced = trimmed.startsWith('-');
+              const rest = isDenounced ? trimmed.slice(1).trim() : trimmed;
+              if (!rest) continue;
+
+              const spaceIdx = rest.indexOf(' ');
+              const handle = spaceIdx === -1 ? rest : rest.slice(0, spaceIdx);
+              const reason = spaceIdx === -1 ? null : rest.slice(spaceIdx + 1).trim();
+
+              // Handle platform:username or bare username
+              // Only match bare usernames or github: prefix (skip other platforms)
+              const colonIdx = handle.indexOf(':');
+              if (colonIdx !== -1) {
+                const platform = handle.slice(0, colonIdx).toLowerCase();
+                if (platform !== 'github') continue;
+              }
+              const username = colonIdx === -1 ? handle : handle.slice(colonIdx + 1);
+              if (!username) continue;
+
+              if (isDenounced) {
+                denounced.set(username.toLowerCase(), reason);
+                continue;
+              }
+
+              vouched.add(username.toLowerCase());
+            }
+
+            // Check if the author is denounced
+            const reason = denounced.get(author.toLowerCase());
+            if (reason !== undefined) {
+              // Author is denounced — close the PR
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: 'This pull request has been automatically closed.',
+              });
+
+              await github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                state: 'closed',
+              });
+
+              core.info(`Closed PR #${prNumber} from denounced user ${author}`);
+              return;
+            }
+
+            // Author is positively vouched — add label
+            if (!vouched.has(author.toLowerCase())) {
+              core.info(`User ${author} is not denounced or vouched. Allowing PR.`);
+              return;
+            }
+
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              labels: ['Vouched'],
+            });
+
+            core.info(`Added vouched label to PR #${prNumber} from ${author}`);

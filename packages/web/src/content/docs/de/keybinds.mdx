@@ -1,0 +1,192 @@
+---
+title: Tastenkombinationen
+description: Passen Sie Ihre Tastenkombinationen an.
+---
+
+OpenCode verfügt über eine Liste von Tastenkombinationen, die Sie über die OpenCode-Konfiguration anpassen können.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "keybinds": {
+    "leader": "ctrl+x",
+    "app_exit": "ctrl+c,ctrl+d,<leader>q",
+    "editor_open": "<leader>e",
+    "theme_list": "<leader>t",
+    "sidebar_toggle": "<leader>b",
+    "scrollbar_toggle": "none",
+    "username_toggle": "none",
+    "status_view": "<leader>s",
+    "tool_details": "none",
+    "session_export": "<leader>x",
+    "session_new": "<leader>n",
+    "session_list": "<leader>l",
+    "session_timeline": "<leader>g",
+    "session_fork": "none",
+    "session_rename": "none",
+    "session_share": "none",
+    "session_unshare": "none",
+    "session_interrupt": "escape",
+    "session_compact": "<leader>c",
+    "session_child_cycle": "<leader>right",
+    "session_child_cycle_reverse": "<leader>left",
+    "session_parent": "<leader>up",
+    "messages_page_up": "pageup,ctrl+alt+b",
+    "messages_page_down": "pagedown,ctrl+alt+f",
+    "messages_line_up": "ctrl+alt+y",
+    "messages_line_down": "ctrl+alt+e",
+    "messages_half_page_up": "ctrl+alt+u",
+    "messages_half_page_down": "ctrl+alt+d",
+    "messages_first": "ctrl+g,home",
+    "messages_last": "ctrl+alt+g,end",
+    "messages_next": "none",
+    "messages_previous": "none",
+    "messages_copy": "<leader>y",
+    "messages_undo": "<leader>u",
+    "messages_redo": "<leader>r",
+    "messages_last_user": "none",
+    "messages_toggle_conceal": "<leader>h",
+    "model_list": "<leader>m",
+    "model_cycle_recent": "f2",
+    "model_cycle_recent_reverse": "shift+f2",
+    "model_cycle_favorite": "none",
+    "model_cycle_favorite_reverse": "none",
+    "variant_cycle": "ctrl+t",
+    "command_list": "ctrl+p",
+    "agent_list": "<leader>a",
+    "agent_cycle": "tab",
+    "agent_cycle_reverse": "shift+tab",
+    "input_clear": "ctrl+c",
+    "input_paste": "ctrl+v",
+    "input_submit": "return",
+    "input_newline": "shift+return,ctrl+return,alt+return,ctrl+j",
+    "input_move_left": "left,ctrl+b",
+    "input_move_right": "right,ctrl+f",
+    "input_move_up": "up",
+    "input_move_down": "down",
+    "input_select_left": "shift+left",
+    "input_select_right": "shift+right",
+    "input_select_up": "shift+up",
+    "input_select_down": "shift+down",
+    "input_line_home": "ctrl+a",
+    "input_line_end": "ctrl+e",
+    "input_select_line_home": "ctrl+shift+a",
+    "input_select_line_end": "ctrl+shift+e",
+    "input_visual_line_home": "alt+a",
+    "input_visual_line_end": "alt+e",
+    "input_select_visual_line_home": "alt+shift+a",
+    "input_select_visual_line_end": "alt+shift+e",
+    "input_buffer_home": "home",
+    "input_buffer_end": "end",
+    "input_select_buffer_home": "shift+home",
+    "input_select_buffer_end": "shift+end",
+    "input_delete_line": "ctrl+shift+d",
+    "input_delete_to_line_end": "ctrl+k",
+    "input_delete_to_line_start": "ctrl+u",
+    "input_backspace": "backspace,shift+backspace",
+    "input_delete": "ctrl+d,delete,shift+delete",
+    "input_undo": "ctrl+-,super+z",
+    "input_redo": "ctrl+.,super+shift+z",
+    "input_word_forward": "alt+f,alt+right,ctrl+right",
+    "input_word_backward": "alt+b,alt+left,ctrl+left",
+    "input_select_word_forward": "alt+shift+f,alt+shift+right",
+    "input_select_word_backward": "alt+shift+b,alt+shift+left",
+    "input_delete_word_forward": "alt+d,alt+delete,ctrl+delete",
+    "input_delete_word_backward": "ctrl+w,ctrl+backspace,alt+backspace",
+    "history_previous": "up",
+    "history_next": "down",
+    "terminal_suspend": "ctrl+z",
+    "terminal_title_toggle": "none",
+    "tips_toggle": "<leader>h",
+    "display_thinking": "none"
+  }
+}
+```
+
+---
+
+## Leader Key
+
+OpenCode verwendet für die meisten Keybinds einen `leader`-Schlüssel. Dies vermeidet Konflikte in Ihrem Terminal.
+
+Standardmäßig ist `ctrl+x` der Leader Key und bei den meisten Aktionen müssen Sie zuerst den Leader Key und dann die Tastenkombination drücken. Um beispielsweise eine neue Sitzung zu starten, drücken Sie zuerst `ctrl+x` und dann `n`.
+
+Sie müssen für Ihre Keybinds keinen Leader Key verwenden, wir empfehlen jedoch, dies zu tun.
+
+---
+
+## Keybind deaktivieren
+
+Sie können eine Keybind deaktivieren, indem Sie den Schlüssel mit dem Wert „none“ zu Ihrer Konfiguration hinzufügen.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "keybinds": {
+    "session_compact": "none"
+  }
+}
+```
+
+---
+
+## Desktop-Prompt-Shortcuts
+
+Die Eingabeaufforderungseingabe der OpenCode-Desktop-App unterstützt gängige Readline/Emacs-style-Verknüpfungen zum Bearbeiten von Text. Diese sind integriert und derzeit nicht über `opencode.json` konfigurierbar.
+
+| Keybind  | Aktion                                                |
+| -------- | ----------------------------------------------------- |
+| `ctrl+a` | Zum Anfang der aktuellen Zeile gehen                  |
+| `ctrl+e` | Zum Ende der aktuellen Zeile gehen                    |
+| `ctrl+b` | Cursor um ein Zeichen zurückbewegen                   |
+| `ctrl+f` | Cursor um ein Zeichen vorwärts bewegen                |
+| `alt+b`  | Cursor um ein Wort zurückbewegen                      |
+| `alt+f`  | Bewegen Sie den Cursor ein Wort vorwärts              |
+| `ctrl+d` | Zeichen unter dem Cursor löschen                      |
+| `ctrl+k` | Bis zum Zeilenende löschen (Kill)                     |
+| `ctrl+u` | Bis zum Zeilenanfang löschen (Kill)                   |
+| `ctrl+w` | Vorheriges Wort löschen (Kill)                        |
+| `alt+d`  | Nächstes Wort löschen (Kill)                          |
+| `ctrl+t` | Zeichen transponieren                                 |
+| `ctrl+g` | Popovers abbrechen / Ausführung der Antwort abbrechen |
+
+---
+
+## Shift+Enter
+
+Einige Terminals senden standardmäßig keine Zusatztasten mit der Eingabetaste. Möglicherweise müssen Sie Ihr Terminal so konfigurieren, dass es `Shift+Enter` als Escape-Sequenz sendet.
+
+### Windows Terminal
+
+Öffnen Sie Ihr `settings.json` unter:
+
+```
+%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
+```
+
+Fügen Sie dies dem `actions`-Array auf Stammebene hinzu:
+
+```json
+"actions": [
+  {
+    "command": {
+      "action": "sendInput",
+      "input": "\u001b[13;2u"
+    },
+    "id": "User.sendInput.ShiftEnterCustom"
+  }
+]
+```
+
+Fügen Sie dies dem `keybindings`-Array auf Stammebene hinzu:
+
+```json
+"keybindings": [
+  {
+    "keys": "shift+enter",
+    "id": "User.sendInput.ShiftEnterCustom"
+  }
+]
+```
+
+Speichern Sie die Datei und starten Sie das Windows-Terminal neu oder öffnen Sie einen neuen Tab.
