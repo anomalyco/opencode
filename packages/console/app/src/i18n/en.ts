@@ -260,7 +260,7 @@ export const dict = {
   "go.graph.free": "Free",
   "go.graph.freePill": "Big Pickle and promotional",
   "go.graph.go": "Go",
-  "go.graph.label": "Requests/5h",
+  "go.graph.label": "Requests per 5 hour",
   "go.graph.usageLimits": "Usage limits",
   "go.graph.tick": "{{n}}x",
   "go.graph.aria": "Requests per 5h: {{free}} vs {{go}}",

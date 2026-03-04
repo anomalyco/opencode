@@ -453,6 +453,10 @@ body {
         width: 100%;
         margin: 0 auto;
         margin-left: -40px;
+
+        @media (max-width: 60rem) {
+          margin-left: 0;
+        }
       }
 
       [data-slot="ylabels"] {
