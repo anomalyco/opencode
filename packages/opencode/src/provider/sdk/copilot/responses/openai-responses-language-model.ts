@@ -1,13 +1,12 @@
 import {
   APICallError,
-  type LanguageModelV2,
+  type LanguageModelV3,
   type LanguageModelV2CallWarning,
-  type LanguageModelV2Content,
-  type LanguageModelV2FinishReason,
-  type LanguageModelV2ProviderDefinedTool,
-  type LanguageModelV2StreamPart,
-  type LanguageModelV2Usage,
-  type SharedV2ProviderMetadata,
+  type LanguageModelV3Content,
+  type LanguageModelV3ProviderTool,
+  type LanguageModelV3StreamPart,
+  type SharedV3ProviderMetadata,
+  type SharedV3Warning,
 } from "@ai-sdk/provider"
 import {
   combineHeaders,
@@ -30,6 +29,15 @@ import type { OpenAIResponsesIncludeOptions, OpenAIResponsesIncludeValue } from 
 import { prepareResponsesTools } from "./openai-responses-prepare-tools"
 import type { OpenAIResponsesModelId } from "./openai-responses-settings"
 import { localShellInputSchema } from "./tool/local-shell"
+
+function toV3Warnings(warnings: LanguageModelV2CallWarning[]): SharedV3Warning[] {
+  return warnings.map((w) => {
+    if (w.type === "unsupported-setting")
+      return { type: "unsupported" as const, feature: String(w.setting), details: w.details }
+    if (w.type === "unsupported-tool") return { type: "unsupported" as const, feature: "tool", details: w.details }
+    return { type: "other" as const, message: w.message }
+  })
+}
 
 const webSearchCallItem = z.object({
   type: z.literal("web_search_call"),
@@ -128,8 +136,8 @@ const LOGPROBS_SCHEMA = z.array(
   }),
 )
 
-export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
-  readonly specificationVersion = "v2"
+export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
+  readonly specificationVersion = "v3" as const
 
   readonly modelId: OpenAIResponsesModelId
 
@@ -163,7 +171,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
     tools,
     toolChoice,
     responseFormat,
-  }: Parameters<LanguageModelV2["doGenerate"]>[0]) {
+  }: Parameters<LanguageModelV3["doGenerate"]>[0]) {
     const warnings: LanguageModelV2CallWarning[] = []
     const modelConfig = getResponsesModelConfig(this.modelId)
 
@@ -218,7 +226,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
     }
 
     function hasOpenAITool(id: string) {
-      return tools?.find((tool) => tool.type === "provider-defined" && tool.id === id) != null
+      return tools?.find((tool) => tool.type === "provider" && tool.id === id) != null
     }
 
     // when logprobs are requested, automatically include them:
@@ -237,9 +245,8 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
     const webSearchToolName = (
       tools?.find(
         (tool) =>
-          tool.type === "provider-defined" &&
-          (tool.id === "openai.web_search" || tool.id === "openai.web_search_preview"),
-      ) as LanguageModelV2ProviderDefinedTool | undefined
+          tool.type === "provider" && (tool.id === "openai.web_search" || tool.id === "openai.web_search_preview"),
+      ) as LanguageModelV3ProviderTool | undefined
     )?.name
 
     if (webSearchToolName) {
@@ -392,8 +399,8 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
   }
 
   async doGenerate(
-    options: Parameters<LanguageModelV2["doGenerate"]>[0],
-  ): Promise<Awaited<ReturnType<LanguageModelV2["doGenerate"]>>> {
+    options: Parameters<LanguageModelV3["doGenerate"]>[0],
+  ): Promise<Awaited<ReturnType<LanguageModelV3["doGenerate"]>>> {
     const { args: body, warnings, webSearchToolName } = await this.getArgs(options)
     const url = this.config.url({
       path: "/responses",
@@ -508,7 +515,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
       })
     }
 
-    const content: Array<LanguageModelV2Content> = []
+    const content: Array<LanguageModelV3Content> = []
     const logprobs: Array<z.infer<typeof LOGPROBS_SCHEMA>> = []
 
     // flag that checks if there have been client-side tool calls (not executed by openai)
@@ -544,7 +551,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
             toolCallId: part.id,
             toolName: "image_generation",
             input: "{}",
-            providerExecuted: true,
           })
 
           content.push({
@@ -554,7 +560,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
             result: {
               result: part.result,
             } satisfies z.infer<typeof imageGenerationOutputSchema>,
-            providerExecuted: true,
           })
 
           break
@@ -640,7 +645,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
             toolCallId: part.id,
             toolName: webSearchToolName ?? "web_search",
             input: JSON.stringify({ action: part.action }),
-            providerExecuted: true,
           })
 
           content.push({
@@ -648,7 +652,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
             toolCallId: part.id,
             toolName: webSearchToolName ?? "web_search",
             result: { status: part.status },
-            providerExecuted: true,
           })
 
           break
@@ -660,7 +663,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
             toolCallId: part.id,
             toolName: "computer_use",
             input: "",
-            providerExecuted: true,
           })
 
           content.push({
@@ -671,7 +673,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
               type: "computer_use_tool_result",
               status: part.status || "completed",
             },
-            providerExecuted: true,
           })
           break
         }
@@ -682,7 +683,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
             toolCallId: part.id,
             toolName: "file_search",
             input: "{}",
-            providerExecuted: true,
           })
 
           content.push({
@@ -693,14 +693,13 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
               queries: part.queries,
               results:
                 part.results?.map((result) => ({
-                  attributes: result.attributes,
+                  attributes: result.attributes as Record<string, unknown>,
                   fileId: result.file_id,
                   filename: result.filename,
                   score: result.score,
                   text: result.text,
                 })) ?? null,
-            } satisfies z.infer<typeof fileSearchOutputSchema>,
-            providerExecuted: true,
+            } as any,
           })
           break
         }
@@ -714,7 +713,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
               code: part.code,
               containerId: part.container_id,
             } satisfies z.infer<typeof codeInterpreterInputSchema>),
-            providerExecuted: true,
           })
 
           content.push({
@@ -724,14 +722,13 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
             result: {
               outputs: part.outputs,
             } satisfies z.infer<typeof codeInterpreterOutputSchema>,
-            providerExecuted: true,
           })
           break
         }
       }
     }
 
-    const providerMetadata: SharedV2ProviderMetadata = {
+    const providerMetadata: SharedV3ProviderMetadata = {
       openai: { responseId: response.id },
     }
 
@@ -743,18 +740,28 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
       providerMetadata.openai.serviceTier = response.service_tier
     }
 
+    const rawFinishReason = response.incomplete_details?.reason
     return {
       content,
-      finishReason: mapOpenAIResponseFinishReason({
-        finishReason: response.incomplete_details?.reason,
-        hasFunctionCall,
-      }),
+      finishReason: {
+        unified: mapOpenAIResponseFinishReason({
+          finishReason: rawFinishReason,
+          hasFunctionCall,
+        }),
+        raw: rawFinishReason,
+      },
       usage: {
-        inputTokens: response.usage.input_tokens,
-        outputTokens: response.usage.output_tokens,
-        totalTokens: response.usage.input_tokens + response.usage.output_tokens,
-        reasoningTokens: response.usage.output_tokens_details?.reasoning_tokens ?? undefined,
-        cachedInputTokens: response.usage.input_tokens_details?.cached_tokens ?? undefined,
+        inputTokens: {
+          total: response.usage.input_tokens,
+          noCache: undefined,
+          cacheRead: response.usage.input_tokens_details?.cached_tokens ?? undefined,
+          cacheWrite: undefined,
+        },
+        outputTokens: {
+          total: response.usage.output_tokens,
+          text: undefined,
+          reasoning: response.usage.output_tokens_details?.reasoning_tokens ?? undefined,
+        },
       },
       request: { body },
       response: {
@@ -765,13 +772,13 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
         body: rawResponse,
       },
       providerMetadata,
-      warnings,
+      warnings: toV3Warnings(warnings),
     }
   }
 
   async doStream(
-    options: Parameters<LanguageModelV2["doStream"]>[0],
-  ): Promise<Awaited<ReturnType<LanguageModelV2["doStream"]>>> {
+    options: Parameters<LanguageModelV3["doStream"]>[0],
+  ): Promise<Awaited<ReturnType<LanguageModelV3["doStream"]>>> {
     const { args: body, warnings, webSearchToolName } = await this.getArgs(options)
 
     const { responseHeaders, value: response } = await postJsonToApi({
@@ -792,11 +799,13 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
 
     const self = this
 
-    let finishReason: LanguageModelV2FinishReason = "unknown"
-    const usage: LanguageModelV2Usage = {
-      inputTokens: undefined,
-      outputTokens: undefined,
-      totalTokens: undefined,
+    let finishReason: "stop" | "length" | "content-filter" | "tool-calls" | "error" | "other" = "other"
+    let finishReasonRaw: string | undefined
+    const usageTokens = {
+      inputTotal: undefined as number | undefined,
+      inputCacheRead: undefined as number | undefined,
+      outputTotal: undefined as number | undefined,
+      outputReasoning: undefined as number | undefined,
     }
     const logprobs: Array<z.infer<typeof LOGPROBS_SCHEMA>> = []
     let responseId: string | null = null
@@ -837,9 +846,9 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
 
     return {
       stream: response.pipeThrough(
-        new TransformStream<ParseResult<z.infer<typeof openaiResponsesChunkSchema>>, LanguageModelV2StreamPart>({
+        new TransformStream<ParseResult<z.infer<typeof openaiResponsesChunkSchema>>, LanguageModelV3StreamPart>({
           start(controller) {
-            controller.enqueue({ type: "stream-start", warnings })
+            controller.enqueue({ type: "stream-start", warnings: toV3Warnings(warnings) })
           },
 
           transform(chunk, controller) {
@@ -916,7 +925,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
                   toolCallId: value.item.id,
                   toolName: "file_search",
                   input: "{}",
-                  providerExecuted: true,
                 })
               } else if (value.item.type === "image_generation_call") {
                 controller.enqueue({
@@ -924,7 +932,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
                   toolCallId: value.item.id,
                   toolName: "image_generation",
                   input: "{}",
-                  providerExecuted: true,
                 })
               } else if (value.item.type === "message") {
                 // Start a stable text part for this assistant message
@@ -991,7 +998,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
                   toolCallId: value.item.id,
                   toolName: "web_search",
                   input: JSON.stringify({ action: value.item.action }),
-                  providerExecuted: true,
                 })
 
                 controller.enqueue({
@@ -999,7 +1005,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
                   toolCallId: value.item.id,
                   toolName: "web_search",
                   result: { status: value.item.status },
-                  providerExecuted: true,
                 })
               } else if (value.item.type === "computer_call") {
                 ongoingToolCalls[value.output_index] = undefined
@@ -1014,7 +1019,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
                   toolCallId: value.item.id,
                   toolName: "computer_use",
                   input: "",
-                  providerExecuted: true,
                 })
 
                 controller.enqueue({
@@ -1025,7 +1029,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
                     type: "computer_use_tool_result",
                     status: value.item.status || "completed",
                   },
-                  providerExecuted: true,
                 })
               } else if (value.item.type === "file_search_call") {
                 ongoingToolCalls[value.output_index] = undefined
@@ -1038,14 +1041,13 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
                     queries: value.item.queries,
                     results:
                       value.item.results?.map((result) => ({
-                        attributes: result.attributes,
+                        attributes: result.attributes as Record<string, unknown>,
                         fileId: result.file_id,
                         filename: result.filename,
                         score: result.score,
                         text: result.text,
                       })) ?? null,
-                  } satisfies z.infer<typeof fileSearchOutputSchema>,
-                  providerExecuted: true,
+                  } as any,
                 })
               } else if (value.item.type === "code_interpreter_call") {
                 ongoingToolCalls[value.output_index] = undefined
@@ -1057,7 +1059,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
                   result: {
                     outputs: value.item.outputs,
                   } satisfies z.infer<typeof codeInterpreterOutputSchema>,
-                  providerExecuted: true,
                 })
               } else if (value.item.type === "image_generation_call") {
                 controller.enqueue({
@@ -1067,7 +1068,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
                   result: {
                     result: value.item.result,
                   } satisfies z.infer<typeof imageGenerationOutputSchema>,
-                  providerExecuted: true,
                 })
               } else if (value.item.type === "local_shell_call") {
                 ongoingToolCalls[value.output_index] = undefined
@@ -1137,7 +1137,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
                 result: {
                   result: value.partial_image_b64,
                 } satisfies z.infer<typeof imageGenerationOutputSchema>,
-                providerExecuted: true,
               })
             } else if (isResponseCodeInterpreterCallCodeDeltaChunk(value)) {
               const toolCall = ongoingToolCalls[value.output_index]
@@ -1175,7 +1174,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
                     code: value.code,
                     containerId: toolCall.codeInterpreter!.containerId,
                   } satisfies z.infer<typeof codeInterpreterInputSchema>),
-                  providerExecuted: true,
                 })
               }
             } else if (isResponseCreatedChunk(value)) {
@@ -1244,15 +1242,15 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
                 })
               }
             } else if (isResponseFinishedChunk(value)) {
+              finishReasonRaw = value.response.incomplete_details?.reason
               finishReason = mapOpenAIResponseFinishReason({
-                finishReason: value.response.incomplete_details?.reason,
+                finishReason: finishReasonRaw,
                 hasFunctionCall,
               })
-              usage.inputTokens = value.response.usage.input_tokens
-              usage.outputTokens = value.response.usage.output_tokens
-              usage.totalTokens = value.response.usage.input_tokens + value.response.usage.output_tokens
-              usage.reasoningTokens = value.response.usage.output_tokens_details?.reasoning_tokens ?? undefined
-              usage.cachedInputTokens = value.response.usage.input_tokens_details?.cached_tokens ?? undefined
+              usageTokens.inputTotal = value.response.usage.input_tokens
+              usageTokens.inputCacheRead = value.response.usage.input_tokens_details?.cached_tokens ?? undefined
+              usageTokens.outputTotal = value.response.usage.output_tokens
+              usageTokens.outputReasoning = value.response.usage.output_tokens_details?.reasoning_tokens ?? undefined
               if (typeof value.response.service_tier === "string") {
                 serviceTier = value.response.service_tier
               }
@@ -1287,7 +1285,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
               currentTextId = null
             }
 
-            const providerMetadata: SharedV2ProviderMetadata = {
+            const providerMetadata: SharedV3ProviderMetadata = {
               openai: {
                 responseId,
               },
@@ -1303,8 +1301,20 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
 
             controller.enqueue({
               type: "finish",
-              finishReason,
-              usage,
+              finishReason: { unified: finishReason, raw: finishReasonRaw },
+              usage: {
+                inputTokens: {
+                  total: usageTokens.inputTotal,
+                  noCache: undefined,
+                  cacheRead: usageTokens.inputCacheRead,
+                  cacheWrite: undefined,
+                },
+                outputTokens: {
+                  total: usageTokens.outputTotal,
+                  text: undefined,
+                  reasoning: usageTokens.outputReasoning,
+                },
+              },
               providerMetadata,
             })
           },

@@ -1,7 +1,7 @@
 import {
   type LanguageModelV2CallWarning,
-  type LanguageModelV2Prompt,
-  type LanguageModelV2ToolCallPart,
+  type LanguageModelV3Prompt,
+  type LanguageModelV3ToolCallPart,
   UnsupportedFunctionalityError,
 } from "@ai-sdk/provider"
 import { convertToBase64, parseProviderOptions } from "@ai-sdk/provider-utils"
@@ -25,7 +25,7 @@ export async function convertToOpenAIResponsesInput({
   store,
   hasLocalShellTool = false,
 }: {
-  prompt: LanguageModelV2Prompt
+  prompt: LanguageModelV3Prompt
   systemMessageMode: "system" | "developer" | "remove"
   fileIdPrefixes?: readonly string[]
   store: boolean
@@ -118,7 +118,7 @@ export async function convertToOpenAIResponsesInput({
 
       case "assistant": {
         const reasoningMessages: Record<string, OpenAIResponsesReasoning> = {}
-        const toolCallParts: Record<string, LanguageModelV2ToolCallPart> = {}
+        const toolCallParts: Record<string, LanguageModelV3ToolCallPart> = {}
 
         for (const part of content) {
           switch (part.type) {
@@ -250,7 +250,10 @@ export async function convertToOpenAIResponsesInput({
       }
 
       case "tool": {
-        for (const part of content) {
+        for (const partRaw of content) {
+          // Skip tool approval responses (V3 addition) - only process tool results
+          if (partRaw.type !== "tool-result") continue
+          const part = partRaw
           const output = part.output
 
           if (hasLocalShellTool && part.toolName === "local_shell" && output.type === "json") {
@@ -262,7 +265,7 @@ export async function convertToOpenAIResponsesInput({
             break
           }
 
-          let contentValue: string
+          let contentValue = ""
           switch (output.type) {
             case "text":
             case "error-text":

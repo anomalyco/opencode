@@ -1,5 +1,5 @@
 import {
-  type LanguageModelV2CallOptions,
+  type LanguageModelV3CallOptions,
   type LanguageModelV2CallWarning,
   UnsupportedFunctionalityError,
 } from "@ai-sdk/provider"
@@ -8,8 +8,8 @@ export function prepareTools({
   tools,
   toolChoice,
 }: {
-  tools: LanguageModelV2CallOptions["tools"]
-  toolChoice?: LanguageModelV2CallOptions["toolChoice"]
+  tools: LanguageModelV3CallOptions["tools"]
+  toolChoice?: LanguageModelV3CallOptions["toolChoice"]
 }): {
   tools:
     | undefined
@@ -43,8 +43,8 @@ export function prepareTools({
   }> = []
 
   for (const tool of tools) {
-    if (tool.type === "provider-defined") {
-      toolWarnings.push({ type: "unsupported-tool", tool })
+    if (tool.type === "provider") {
+      toolWarnings.push({ type: "unsupported-tool", tool: tool as any })
     } else {
       openaiCompatTools.push({
         type: "function",

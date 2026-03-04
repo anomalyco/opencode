@@ -1,5 +1,5 @@
 import {
-  type LanguageModelV2CallOptions,
+  type LanguageModelV3CallOptions,
   type LanguageModelV2CallWarning,
   UnsupportedFunctionalityError,
 } from "@ai-sdk/provider"
@@ -15,8 +15,8 @@ export function prepareResponsesTools({
   toolChoice,
   strictJsonSchema,
 }: {
-  tools: LanguageModelV2CallOptions["tools"]
-  toolChoice?: LanguageModelV2CallOptions["toolChoice"]
+  tools: LanguageModelV3CallOptions["tools"]
+  toolChoice?: LanguageModelV3CallOptions["toolChoice"]
   strictJsonSchema: boolean
 }): {
   tools?: Array<OpenAIResponsesTool>
@@ -54,7 +54,7 @@ export function prepareResponsesTools({
           strict: strictJsonSchema,
         })
         break
-      case "provider-defined": {
+      case "provider": {
         switch (tool.id) {
           case "openai.file_search": {
             const args = fileSearchArgsSchema.parse(tool.args)

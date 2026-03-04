@@ -78,11 +78,11 @@ export namespace ProviderTransform {
             if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
               return {
                 ...part,
-                toolCallId: part.toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_"),
+                toolCallId: (part as any).toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_"),
               }
             }
             return part
-          })
+          }) as any
         }
         return msg
       })
@@ -101,7 +101,7 @@ export namespace ProviderTransform {
           msg.content = msg.content.map((part) => {
             if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
               // Mistral requires alphanumeric tool call IDs with exactly 9 characters
-              const normalizedId = part.toolCallId
+              const normalizedId = (part as any).toolCallId
                 .replace(/[^a-zA-Z0-9]/g, "") // Remove non-alphanumeric characters
                 .substring(0, 9) // Take first 9 characters
                 .padEnd(9, "0") // Pad with zeros if less than 9 characters
@@ -112,7 +112,7 @@ export namespace ProviderTransform {
               }
             }
             return part
-          })
+          }) as any
         }
 
         result.push(msg)
@@ -200,7 +200,7 @@ export namespace ProviderTransform {
       if (shouldUseContentOptions) {
         const lastContent = msg.content[msg.content.length - 1]
         if (lastContent && typeof lastContent === "object") {
-          lastContent.providerOptions = mergeDeep(lastContent.providerOptions ?? {}, providerOptions)
+          ;(lastContent as any).providerOptions = mergeDeep((lastContent as any).providerOptions ?? {}, providerOptions)
           continue
         }
       }
@@ -281,7 +281,7 @@ export namespace ProviderTransform {
         return {
           ...msg,
           providerOptions: remap(msg.providerOptions),
-          content: msg.content.map((part) => ({ ...part, providerOptions: remap(part.providerOptions) })),
+          content: msg.content.map((part) => ({ ...part, providerOptions: remap((part as any).providerOptions) })),
         } as typeof msg
       })
     }

@@ -1,6 +1,6 @@
-import type { LanguageModelV2FinishReason } from "@ai-sdk/provider"
+type V3FinishReasonUnified = "stop" | "length" | "content-filter" | "tool-calls" | "error" | "other"
 
-export function mapOpenAICompatibleFinishReason(finishReason: string | null | undefined): LanguageModelV2FinishReason {
+export function mapOpenAICompatibleFinishReason(finishReason: string | null | undefined): V3FinishReasonUnified {
   switch (finishReason) {
     case "stop":
       return "stop"
@@ -12,6 +12,6 @@ export function mapOpenAICompatibleFinishReason(finishReason: string | null | un
     case "tool_calls":
       return "tool-calls"
     default:
-      return "unknown"
+      return "other"
   }
 }

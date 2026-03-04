@@ -1,12 +1,12 @@
 import {
   APICallError,
   InvalidResponseDataError,
-  type LanguageModelV2,
+  type LanguageModelV3,
   type LanguageModelV2CallWarning,
-  type LanguageModelV2Content,
-  type LanguageModelV2FinishReason,
-  type LanguageModelV2StreamPart,
-  type SharedV2ProviderMetadata,
+  type LanguageModelV3Content,
+  type LanguageModelV3StreamPart,
+  type SharedV3ProviderMetadata,
+  type SharedV3Warning,
 } from "@ai-sdk/provider"
 import {
   combineHeaders,
@@ -30,6 +30,15 @@ import { defaultOpenAICompatibleErrorStructure, type ProviderErrorStructure } fr
 import type { MetadataExtractor } from "./openai-compatible-metadata-extractor"
 import { prepareTools } from "./openai-compatible-prepare-tools"
 
+function toV3Warnings(warnings: LanguageModelV2CallWarning[]): SharedV3Warning[] {
+  return warnings.map((w) => {
+    if (w.type === "unsupported-setting")
+      return { type: "unsupported" as const, feature: String(w.setting), details: w.details }
+    if (w.type === "unsupported-tool") return { type: "unsupported" as const, feature: "tool", details: w.details }
+    return { type: "other" as const, message: w.message }
+  })
+}
+
 export type OpenAICompatibleChatConfig = {
   provider: string
   headers: () => Record<string, string | undefined>
@@ -47,11 +56,11 @@ export type OpenAICompatibleChatConfig = {
   /**
    * The supported URLs for the model.
    */
-  supportedUrls?: () => LanguageModelV2["supportedUrls"]
+  supportedUrls?: () => LanguageModelV3["supportedUrls"]
 }
 
-export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
-  readonly specificationVersion = "v2"
+export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
+  readonly specificationVersion = "v3" as const
 
   readonly supportsStructuredOutputs: boolean
 
@@ -98,7 +107,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
     seed,
     toolChoice,
     tools,
-  }: Parameters<LanguageModelV2["doGenerate"]>[0]) {
+  }: Parameters<LanguageModelV3["doGenerate"]>[0]) {
     const warnings: LanguageModelV2CallWarning[] = []
 
     // Parse provider options
@@ -190,8 +199,8 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
   }
 
   async doGenerate(
-    options: Parameters<LanguageModelV2["doGenerate"]>[0],
-  ): Promise<Awaited<ReturnType<LanguageModelV2["doGenerate"]>>> {
+    options: Parameters<LanguageModelV3["doGenerate"]>[0],
+  ): Promise<Awaited<ReturnType<LanguageModelV3["doGenerate"]>>> {
     const { args, warnings } = await this.getArgs({ ...options })
 
     const body = JSON.stringify(args)
@@ -214,7 +223,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
     })
 
     const choice = responseBody.choices[0]
-    const content: Array<LanguageModelV2Content> = []
+    const content: Array<LanguageModelV3Content> = []
 
     // text content:
     const text = choice.message.content
@@ -257,7 +266,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
     }
 
     // provider metadata:
-    const providerMetadata: SharedV2ProviderMetadata = {
+    const providerMetadata: SharedV3ProviderMetadata = {
       [this.providerOptionsName]: {},
       ...(await this.config.metadataExtractor?.extractMetadata?.({
         parsedBody: rawResponse,
@@ -275,13 +284,22 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
 
     return {
       content,
-      finishReason: mapOpenAICompatibleFinishReason(choice.finish_reason),
+      finishReason: {
+        unified: mapOpenAICompatibleFinishReason(choice.finish_reason),
+        raw: choice.finish_reason ?? undefined,
+      },
       usage: {
-        inputTokens: responseBody.usage?.prompt_tokens ?? undefined,
-        outputTokens: responseBody.usage?.completion_tokens ?? undefined,
-        totalTokens: responseBody.usage?.total_tokens ?? undefined,
-        reasoningTokens: responseBody.usage?.completion_tokens_details?.reasoning_tokens ?? undefined,
-        cachedInputTokens: responseBody.usage?.prompt_tokens_details?.cached_tokens ?? undefined,
+        inputTokens: {
+          total: responseBody.usage?.prompt_tokens ?? undefined,
+          noCache: undefined,
+          cacheRead: responseBody.usage?.prompt_tokens_details?.cached_tokens ?? undefined,
+          cacheWrite: undefined,
+        },
+        outputTokens: {
+          total: responseBody.usage?.completion_tokens ?? undefined,
+          text: undefined,
+          reasoning: responseBody.usage?.completion_tokens_details?.reasoning_tokens ?? undefined,
+        },
       },
       providerMetadata,
       request: { body },
@@ -290,13 +308,13 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
         headers: responseHeaders,
         body: rawResponse,
       },
-      warnings,
+      warnings: toV3Warnings(warnings),
     }
   }
 
   async doStream(
-    options: Parameters<LanguageModelV2["doStream"]>[0],
-  ): Promise<Awaited<ReturnType<LanguageModelV2["doStream"]>>> {
+    options: Parameters<LanguageModelV3["doStream"]>[0],
+  ): Promise<Awaited<ReturnType<LanguageModelV3["doStream"]>>> {
     const { args, warnings } = await this.getArgs({ ...options })
 
     const body = {
@@ -332,7 +350,8 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
       hasFinished: boolean
     }> = []
 
-    let finishReason: LanguageModelV2FinishReason = "unknown"
+    let finishReason: "stop" | "length" | "content-filter" | "tool-calls" | "error" | "other" = "other"
+    let finishReasonRaw: string | undefined
     const usage: {
       completionTokens: number | undefined
       completionTokensDetails: {
@@ -366,9 +385,9 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
 
     return {
       stream: response.pipeThrough(
-        new TransformStream<ParseResult<z.infer<typeof this.chunkSchema>>, LanguageModelV2StreamPart>({
+        new TransformStream<ParseResult<z.infer<typeof this.chunkSchema>>, LanguageModelV3StreamPart>({
           start(controller) {
-            controller.enqueue({ type: "stream-start", warnings })
+            controller.enqueue({ type: "stream-start", warnings: toV3Warnings(warnings) })
           },
 
           // TODO we lost type safety on Chunk, most likely due to the error schema. MUST FIX
@@ -436,6 +455,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
 
             if (choice?.finish_reason != null) {
               finishReason = mapOpenAICompatibleFinishReason(choice.finish_reason)
+              finishReasonRaw = choice.finish_reason
             }
 
             if (choice?.delta == null) {
@@ -652,7 +672,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
               })
             }
 
-            const providerMetadata: SharedV2ProviderMetadata = {
+            const providerMetadata: SharedV3ProviderMetadata = {
               [providerOptionsName]: {},
               // Include reasoning_opaque for Copilot multi-turn reasoning
               ...(reasoningOpaque ? { copilot: { reasoningOpaque } } : {}),
@@ -669,13 +689,19 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
 
             controller.enqueue({
               type: "finish",
-              finishReason,
+              finishReason: { unified: finishReason, raw: finishReasonRaw },
               usage: {
-                inputTokens: usage.promptTokens ?? undefined,
-                outputTokens: usage.completionTokens ?? undefined,
-                totalTokens: usage.totalTokens ?? undefined,
-                reasoningTokens: usage.completionTokensDetails.reasoningTokens ?? undefined,
-                cachedInputTokens: usage.promptTokensDetails.cachedTokens ?? undefined,
+                inputTokens: {
+                  total: usage.promptTokens ?? undefined,
+                  noCache: undefined,
+                  cacheRead: usage.promptTokensDetails.cachedTokens ?? undefined,
+                  cacheWrite: undefined,
+                },
+                outputTokens: {
+                  total: usage.completionTokens ?? undefined,
+                  text: undefined,
+                  reasoning: usage.completionTokensDetails.reasoningTokens ?? undefined,
+                },
               },
               providerMetadata,
             })

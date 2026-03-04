@@ -1,16 +1,16 @@
 import {
-  type LanguageModelV2Prompt,
-  type SharedV2ProviderMetadata,
+  type LanguageModelV3Prompt,
+  type SharedV3ProviderMetadata,
   UnsupportedFunctionalityError,
 } from "@ai-sdk/provider"
 import type { OpenAICompatibleChatPrompt } from "./openai-compatible-api-types"
 import { convertToBase64 } from "@ai-sdk/provider-utils"
 
-function getOpenAIMetadata(message: { providerOptions?: SharedV2ProviderMetadata }) {
+function getOpenAIMetadata(message: { providerOptions?: SharedV3ProviderMetadata }) {
   return message?.providerOptions?.copilot ?? {}
 }
 
-export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV2Prompt): OpenAICompatibleChatPrompt {
+export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV3Prompt): OpenAICompatibleChatPrompt {
   const messages: OpenAICompatibleChatPrompt = []
   for (const { role, content, ...message } of prompt) {
     const metadata = getOpenAIMetadata({ ...message })
@@ -126,10 +126,13 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV2Pro
       }
 
       case "tool": {
-        for (const toolResponse of content) {
+        for (const toolResponseRaw of content) {
+          // Skip tool approval responses (V3 addition) - only process tool results
+          if (toolResponseRaw.type !== "tool-result") continue
+          const toolResponse = toolResponseRaw
           const output = toolResponse.output
 
-          let contentValue: string
+          let contentValue = ""
           switch (output.type) {
             case "text":
             case "error-text":
@@ -142,7 +145,7 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV2Pro
               break
           }
 
-          const toolResponseMetadata = getOpenAIMetadata(toolResponse)
+          const toolResponseMetadata = getOpenAIMetadata(toolResponse as any)
           messages.push({
             role: "tool",
             tool_call_id: toolResponse.toolCallId,

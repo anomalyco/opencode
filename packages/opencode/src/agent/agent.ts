@@ -1,7 +1,7 @@
 import { Config } from "../config/config"
 import z from "zod"
 import { Provider } from "../provider/provider"
-import { generateObject, streamObject, type ModelMessage } from "ai"
+import { generateText, streamText, Output, type ModelMessage } from "ai"
 import { SystemPrompt } from "../session/system"
 import { Instance } from "../project/instance"
 import { Truncate } from "../tool/truncation"
@@ -311,15 +311,17 @@ export namespace Agent {
         },
       ],
       model: language,
-      schema: z.object({
-        identifier: z.string(),
-        whenToUse: z.string(),
-        systemPrompt: z.string(),
+      output: Output.object({
+        schema: z.object({
+          identifier: z.string(),
+          whenToUse: z.string(),
+          systemPrompt: z.string(),
+        }),
       }),
-    } satisfies Parameters<typeof generateObject>[0]
+    } satisfies Parameters<typeof generateText>[0]
 
     if (defaultModel.providerID === "openai" && (await Auth.get(defaultModel.providerID))?.type === "oauth") {
-      const result = streamObject({
+      const result = streamText({
         ...params,
         providerOptions: ProviderTransform.providerOptions(model, {
           instructions: SystemPrompt.instructions(),
@@ -330,10 +332,10 @@ export namespace Agent {
       for await (const part of result.fullStream) {
         if (part.type === "error") throw part.error
       }
-      return result.object
+      return (await result.output)!
     }
 
-    const result = await generateObject(params)
-    return result.object
+    const result = await generateText(params)
+    return result.output!
   }
 }
