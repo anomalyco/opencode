@@ -230,7 +230,7 @@ function setupSelectionCopy(root: HTMLDivElement) {
 
     const range = selection.getRangeAt(0)
     const wrap = document.createElement("div")
-    wrap.append(range.cloneContents())
+    wrap.appendChild(range.cloneContents())
     for (const item of wrap.querySelectorAll('[data-slot="markdown-copy-button"]')) {
       item.remove()
     }

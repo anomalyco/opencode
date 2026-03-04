@@ -1318,7 +1318,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
                     icon="copy"
                     size="normal"
                     variant="ghost"
-                    onMouseDown={(e) => e.preventDefault()}
+                    onMouseDown={(e: MouseEvent) => e.preventDefault()}
                     aria-label={i18n.t("ui.message.copyOptions")}
                   />
                 </Tooltip>
