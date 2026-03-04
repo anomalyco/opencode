@@ -3,11 +3,9 @@
   "globalEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
   "globalPassThroughEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
   "tasks": {
-    "typecheck": {
-      "dependsOn": ["^build"]
-    },
+    "typecheck": {},
     "build": {
-      "dependsOn": ["^build"],
+      "dependsOn": [],
       "outputs": ["dist/**"]
     },
     "opencode#test": {

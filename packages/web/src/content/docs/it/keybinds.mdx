@@ -3,11 +3,11 @@ title: Scorciatoie
 description: Personalizza le scorciatoie da tastiera.
 ---
 
-OpenCode ha una lista di scorciatoie che puoi personalizzare tramite la configurazione di OpenCode.
+OpenCode ha una lista di scorciatoie che puoi personalizzare tramite `tui.json`.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -117,11 +117,11 @@ Non sei obbligato a usare un tasto leader per le scorciatoie, ma lo consigliamo.
 
 ## Disabilitare una scorciatoia
 
-Puoi disabilitare una scorciatoia aggiungendo la chiave nella configurazione con valore "none".
+Puoi disabilitare una scorciatoia aggiungendo la chiave in `tui.json` con valore "none".
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "session_compact": "none"
   }

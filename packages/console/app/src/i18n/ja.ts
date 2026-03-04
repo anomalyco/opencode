@@ -15,6 +15,7 @@ export const dict = {
   "nav.home": "ホーム",
   "nav.openMenu": "メニューを開く",
   "nav.getStartedFree": "無料ではじめる",
+  "nav.logoAlt": "OpenCode",
 
   "nav.context.copyLogo": "ロゴをSVGでコピー",
   "nav.context.copyWordmark": "ワードマークをSVGでコピー",
@@ -42,8 +43,12 @@ export const dict = {
   "notFound.docs": "ドキュメント",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
+  "notFound.logoLightAlt": "opencodeのロゴ（ライト）",
+  "notFound.logoDarkAlt": "opencodeのロゴ（ダーク）",
 
   "user.logout": "ログアウト",
+
+  "auth.callback.error.codeMissing": "認証コードが見つかりません。",
 
   "workspace.select": "ワークスペースを選択",
   "workspace.createNew": "+ 新しいワークスペースを作成",
@@ -76,6 +81,8 @@ export const dict = {
   "error.reloadAmountMin": "リロード額は少なくとも ${{amount}} である必要があります",
   "error.reloadTriggerMin": "残高トリガーは少なくとも ${{amount}} である必要があります",
 
+  "app.meta.description": "OpenCode - オープンソースのコーディングエージェント。",
+
   "home.title": "OpenCode | オープンソースのAIコーディングエージェント",
 
   "temp.title": "OpenCode | ターミナル向けに構築されたAIコーディングエージェント",
@@ -91,6 +98,8 @@ export const dict = {
   "temp.feature.models.afterLink": "を通じて75以上のLLMプロバイダーをサポート",
   "temp.screenshot.caption": "tokyonight テーマを使用した OpenCode TUI",
   "temp.screenshot.alt": "tokyonight テーマの OpenCode TUI",
+  "temp.logoLightAlt": "opencodeのロゴ（ライト）",
+  "temp.logoDarkAlt": "opencodeのロゴ（ダーク）",
 
   "home.banner.badge": "新着",
   "home.banner.text": "デスクトップアプリのベータ版が利用可能",
@@ -239,6 +248,25 @@ export const dict = {
     "すべてのZenモデルは米国でホストされています。プロバイダーはゼロ保持ポリシーに従い、モデルのトレーニングにデータを使用しません（",
   "zen.privacy.exceptionsLink": "以下の例外",
 
+  "zen.api.error.rateLimitExceeded": "レート制限を超えました。後でもう一度お試しください。",
+  "zen.api.error.modelNotSupported": "モデル {{model}} はサポートされていません",
+  "zen.api.error.modelFormatNotSupported": "フォーマット {{format}} ではモデル {{model}} はサポートされていません",
+  "zen.api.error.noProviderAvailable": "利用可能なプロバイダーがありません",
+  "zen.api.error.providerNotSupported": "プロバイダー {{provider}} はサポートされていません",
+  "zen.api.error.missingApiKey": "APIキーがありません。",
+  "zen.api.error.invalidApiKey": "無効なAPIキーです。",
+  "zen.api.error.subscriptionQuotaExceeded":
+    "サブスクリプションの制限を超えました。{{retryIn}} 後に再試行してください。",
+  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
+    "サブスクリプションの制限を超えました。無料モデルは引き続きご利用いただけます。",
+  "zen.api.error.noPaymentMethod": "お支払い方法がありません。こちらからお支払い方法を追加してください: {{billingUrl}}",
+  "zen.api.error.insufficientBalance": "残高が不足しています。こちらから請求を管理してください: {{billingUrl}}",
+  "zen.api.error.workspaceMonthlyLimitReached":
+    "ワークスペースが月額の利用上限 ${{amount}} に達しました。こちらから上限を管理してください: {{billingUrl}}",
+  "zen.api.error.userMonthlyLimitReached":
+    "月額の利用上限 ${{amount}} に達しました。こちらから上限を管理してください: {{membersUrl}}",
+  "zen.api.error.modelDisabled": "モデルが無効です",
+
   "black.meta.title": "OpenCode Black | 世界最高峰のコーディングモデルすべてにアクセス",
   "black.meta.description": "OpenCode Black サブスクリプションプランで、Claude、GPT、Gemini などにアクセス。",
   "black.hero.title": "世界最高峰のコーディングモデルすべてにアクセス",
@@ -346,8 +374,8 @@ export const dict = {
   "workspace.usage.breakdown.cacheWrite": "キャッシュ書き込み",
   "workspace.usage.breakdown.output": "出力",
   "workspace.usage.breakdown.reasoning": "推論",
-  "workspace.usage.subscription": "サブスクリプション (${{amount}})",
-  "workspace.usage.lite": "lite (${{amount}})",
+  "workspace.usage.subscription": "Black (${{amount}})",
+  "workspace.usage.lite": "Go (${{amount}})",
   "workspace.usage.byok": "BYOK (${{amount}})",
 
   "workspace.cost.title": "コスト",
@@ -448,6 +476,7 @@ export const dict = {
   "workspace.reload.updatePaymentMethod": "支払い方法を更新して、もう一度お試しください。",
   "workspace.reload.retrying": "再試行中...",
   "workspace.reload.retry": "再試行",
+  "workspace.reload.error.paymentFailed": "支払いに失敗しました。",
 
   "workspace.payments.title": "支払い履歴",
   "workspace.payments.subtitle": "最近の支払い取引。",
@@ -495,21 +524,26 @@ export const dict = {
   "workspace.lite.time.minute": "分",
   "workspace.lite.time.minutes": "分",
   "workspace.lite.time.fewSeconds": "数秒",
-  "workspace.lite.subscription.title": "Liteサブスクリプション",
-  "workspace.lite.subscription.message": "あなたは OpenCode Lite を購読しています。",
+  "workspace.lite.subscription.title": "Goサブスクリプション",
+  "workspace.lite.subscription.message": "あなたは OpenCode Go を購読しています。",
   "workspace.lite.subscription.manage": "サブスクリプションの管理",
   "workspace.lite.subscription.rollingUsage": "ローリング利用量",
   "workspace.lite.subscription.weeklyUsage": "週間利用量",
   "workspace.lite.subscription.monthlyUsage": "月間利用量",
   "workspace.lite.subscription.resetsIn": "リセットまで",
   "workspace.lite.subscription.useBalance": "利用限度額に達したら利用可能な残高を使用する",
-  "workspace.lite.other.title": "Liteサブスクリプション",
+  "workspace.lite.subscription.selectProvider":
+    "Go モデルを使用するには、opencode の設定で「OpenCode Go」をプロバイダーとして選択してください。",
+  "workspace.lite.other.title": "Goサブスクリプション",
   "workspace.lite.other.message":
-    "このワークスペースの別のメンバーが既に OpenCode Lite を購読しています。ワークスペースにつき1人のメンバーのみが購読できます。",
-  "workspace.lite.promo.title": "OpenCode Lite",
+    "このワークスペースの別のメンバーが既に OpenCode Go を購読しています。ワークスペースにつき1人のメンバーのみが購読できます。",
+  "workspace.lite.promo.title": "OpenCode Go",
   "workspace.lite.promo.description":
-    "月額$10で、十分な利用枠が設けられた最高のオープンモデル — Kimi K2.5、GLM-5、および MiniMax M2.5 — にアクセスできます。",
-  "workspace.lite.promo.subscribe": "Liteを購読する",
+    "OpenCode Goは月額$10のサブスクリプションプランで、人気のオープンコーディングモデルへの安定したアクセスを十分な利用枠で提供します。",
+  "workspace.lite.promo.modelsTitle": "含まれるもの",
+  "workspace.lite.promo.footer":
+    "このプランは主にグローバルユーザー向けに設計されており、米国、EU、シンガポールでホストされたモデルにより安定したグローバルアクセスを提供します。料金と利用制限は、初期の利用状況やフィードバックに基づいて変更される可能性があります。",
+  "workspace.lite.promo.subscribe": "Goを購読する",
   "workspace.lite.promo.subscribing": "リダイレクト中...",
 
   "download.title": "OpenCode | ダウンロード",
@@ -563,6 +597,10 @@ export const dict = {
   "enterprise.form.send": "送信",
   "enterprise.form.sending": "送信中...",
   "enterprise.form.success": "送信しました。まもなくご連絡いたします。",
+  "enterprise.form.success.submitted": "フォームが正常に送信されました。",
+  "enterprise.form.error.allFieldsRequired": "すべての項目は必須です。",
+  "enterprise.form.error.invalidEmailFormat": "無効なメール形式です。",
+  "enterprise.form.error.internalServer": "内部サーバーエラー。",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "OpenCode Enterpriseとは？",
   "enterprise.faq.a1":
@@ -595,6 +633,7 @@ export const dict = {
   "bench.list.table.agent": "エージェント",
   "bench.list.table.model": "モデル",
   "bench.list.table.score": "スコア",
+  "bench.submission.error.allFieldsRequired": "すべての項目は必須です。",
 
   "bench.detail.title": "ベンチマーク - {{task}}",
   "bench.detail.notFound": "タスクが見つかりません",
