@@ -1,4 +1,16 @@
-import { onCleanup, Show, Match, Switch, createMemo, createEffect, on, onMount, untrack } from "solid-js"
+import {
+  onCleanup,
+  Show,
+  Match,
+  Switch,
+  createMemo,
+  createEffect,
+  createComputed,
+  on,
+  onMount,
+  untrack,
+  createSignal,
+} from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLocal } from "@/context/local"
@@ -347,24 +359,6 @@ export default function Page() {
     if (path) file.load(path)
   })
 
-  createEffect(() => {
-    const current = tabs().all()
-    if (current.length === 0) return
-
-    const next = normalizeTabs(current)
-    if (same(current, next)) return
-
-    tabs().setAll(next)
-
-    const active = tabs().active()
-    if (!active) return
-    if (!active.startsWith("file://")) return
-
-    const normalized = normalizeTab(active)
-    if (active === normalized) return
-    tabs().setActive(normalized)
-  })
-
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
   const reviewCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
@@ -422,7 +416,19 @@ export default function Page() {
     mobileTab: "session" as "session" | "changes",
     changes: "session" as "session" | "turn",
     newSessionWorktree: "main",
+    deferRender: false,
   })
+
+  createComputed((prev) => {
+    const key = sessionKey()
+    if (key !== prev) {
+      setStore("deferRender", true)
+      requestAnimationFrame(() => {
+        setTimeout(() => setStore("deferRender", false), 0)
+      })
+    }
+    return key
+  }, sessionKey())
 
   const turnDiffs = createMemo(() => lastUserMessage()?.summary?.diffs ?? [])
   const reviewDiffs = createMemo(() => (store.changes === "session" ? diffs() : turnDiffs()))
@@ -730,35 +736,12 @@ export default function Page() {
     loadingClass: string
     emptyClass: string
   }) => (
-    <Switch>
-      <Match when={store.changes === "turn" && !!params.id}>
-        <SessionReviewTab
-          title={changesTitle()}
-          empty={emptyTurn()}
-          diffs={reviewDiffs}
-          view={view}
-          diffStyle={input.diffStyle}
-          onDiffStyleChange={input.onDiffStyleChange}
-          onScrollRef={(el) => setTree("reviewScroll", el)}
-          focusedFile={tree.activeDiff}
-          onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-          onLineCommentUpdate={updateCommentInContext}
-          onLineCommentDelete={removeCommentFromContext}
-          lineCommentActions={reviewCommentActions()}
-          comments={comments.all()}
-          focusedComment={comments.focus()}
-          onFocusedCommentChange={comments.setFocus}
-          onViewFile={openReviewFile}
-          classes={input.classes}
-        />
-      </Match>
-      <Match when={hasReview()}>
-        <Show
-          when={diffsReady()}
-          fallback={<div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>}
-        >
+    <Show when={!store.deferRender}>
+      <Switch>
+        <Match when={store.changes === "turn" && !!params.id}>
           <SessionReviewTab
             title={changesTitle()}
+            empty={emptyTurn()}
             diffs={reviewDiffs}
             view={view}
             diffStyle={input.diffStyle}
@@ -775,39 +758,64 @@ export default function Page() {
             onViewFile={openReviewFile}
             classes={input.classes}
           />
-        </Show>
-      </Match>
-      <Match when={true}>
-        <SessionReviewTab
-          title={changesTitle()}
-          empty={
-            store.changes === "turn" ? (
-              emptyTurn()
-            ) : (
-              <div class={input.emptyClass}>
-                <Mark class="w-14 opacity-10" />
-                <div class="text-14-regular text-text-weak max-w-56">{language.t(reviewEmptyKey())}</div>
-              </div>
-            )
-          }
-          diffs={reviewDiffs}
-          view={view}
-          diffStyle={input.diffStyle}
-          onDiffStyleChange={input.onDiffStyleChange}
-          onScrollRef={(el) => setTree("reviewScroll", el)}
-          focusedFile={tree.activeDiff}
-          onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-          onLineCommentUpdate={updateCommentInContext}
-          onLineCommentDelete={removeCommentFromContext}
-          lineCommentActions={reviewCommentActions()}
-          comments={comments.all()}
-          focusedComment={comments.focus()}
-          onFocusedCommentChange={comments.setFocus}
-          onViewFile={openReviewFile}
-          classes={input.classes}
-        />
-      </Match>
-    </Switch>
+        </Match>
+        <Match when={hasReview()}>
+          <Show
+            when={diffsReady()}
+            fallback={<div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>}
+          >
+            <SessionReviewTab
+              title={changesTitle()}
+              diffs={reviewDiffs}
+              view={view}
+              diffStyle={input.diffStyle}
+              onDiffStyleChange={input.onDiffStyleChange}
+              onScrollRef={(el) => setTree("reviewScroll", el)}
+              focusedFile={tree.activeDiff}
+              onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+              onLineCommentUpdate={updateCommentInContext}
+              onLineCommentDelete={removeCommentFromContext}
+              lineCommentActions={reviewCommentActions()}
+              comments={comments.all()}
+              focusedComment={comments.focus()}
+              onFocusedCommentChange={comments.setFocus}
+              onViewFile={openReviewFile}
+              classes={input.classes}
+            />
+          </Show>
+        </Match>
+        <Match when={true}>
+          <SessionReviewTab
+            title={changesTitle()}
+            empty={
+              store.changes === "turn" ? (
+                emptyTurn()
+              ) : (
+                <div class={input.emptyClass}>
+                  <Mark class="w-14 opacity-10" />
+                  <div class="text-14-regular text-text-weak max-w-56">{language.t(reviewEmptyKey())}</div>
+                </div>
+              )
+            }
+            diffs={reviewDiffs}
+            view={view}
+            diffStyle={input.diffStyle}
+            onDiffStyleChange={input.onDiffStyleChange}
+            onScrollRef={(el) => setTree("reviewScroll", el)}
+            focusedFile={tree.activeDiff}
+            onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+            onLineCommentUpdate={updateCommentInContext}
+            onLineCommentDelete={removeCommentFromContext}
+            lineCommentActions={reviewCommentActions()}
+            comments={comments.all()}
+            focusedComment={comments.focus()}
+            onFocusedCommentChange={comments.setFocus}
+            onViewFile={openReviewFile}
+            classes={input.classes}
+          />
+        </Match>
+      </Switch>
+    </Show>
   )
 
   const reviewPanel = () => (
@@ -1109,7 +1117,9 @@ export default function Page() {
 
       const el = scroller
       const delta = next - dockHeight
-      const stick = el ? el.scrollHeight - el.clientHeight - el.scrollTop < 10 + Math.max(0, delta) : false
+      const stick = el
+        ? !autoScroll.userScrolled() || el.scrollHeight - el.clientHeight - el.scrollTop < 10 + Math.max(0, delta)
+        : false
 
       dockHeight = next
 

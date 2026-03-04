@@ -116,9 +116,9 @@ export function TerminalPanel() {
     on(
       () => terminal.all().length,
       (count, prevCount) => {
-        if (prevCount !== undefined && prevCount > 0 && count === 0) {
-          if (opened()) view().terminal.toggle()
-        }
+        if (prevCount === undefined || prevCount <= 0 || count !== 0) return
+        if (!opened()) return
+        close()
       },
     ),
   )
@@ -162,7 +162,7 @@ export function TerminalPanel() {
 
   const all = createMemo(() => terminal.all())
   const ids = createMemo(() => all().map((pty) => pty.id))
-  const byId = createMemo(() => new Map(all().map((pty) => [pty.id, pty])))
+  const byId = createMemo(() => new Map(all().map((pty) => [pty.id, { ...pty }])))
   const tabIds = createMemo(() => {
     const used = new Set<string>()
     return all().flatMap((pty) => {
@@ -180,13 +180,6 @@ export function TerminalPanel() {
       return [id]
     })
   })
-  const tabs = createMemo(() =>
-    tabIds().flatMap((id) => {
-      const pty = byId().get(id)
-      if (!pty) return []
-      return [pty]
-    }),
-  )
   const activeTab = createMemo(() => {
     const active = terminal.active()
     if (!active) return
@@ -325,8 +318,12 @@ export function TerminalPanel() {
               <Tabs variant="alt" value={activeTab()} onChange={(id) => terminal.open(id)} class="!h-auto !flex-none">
                 <Tabs.List class="h-10">
                   <SortableProvider ids={tabIds()}>
-                    <For each={tabs()}>
-                      {(pty) => <SortableTerminalTab terminal={pty} onClose={closeTerminal} onSplit={split} />}
+                    <For each={tabIds()}>
+                      {(id) => (
+                        <Show when={byId().get(id)}>
+                          {(pty) => <SortableTerminalTab terminal={pty()} onClose={closeTerminal} onSplit={split} />}
+                        </Show>
+                      )}
                     </For>
                   </SortableProvider>
                   <div class="h-full flex items-center justify-center">

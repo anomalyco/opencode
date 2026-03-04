@@ -92,14 +92,19 @@ test("switching back to a project opens the latest workspace session", async ({ 
 
         await expect(page).toHaveURL(new RegExp(`/${workspaceSlug}/session(?:[/?#]|$)`))
 
-        const created = await createSdk(workspaceDir)
-          .session.create()
-          .then((x) => x.data?.id)
-        if (!created) throw new Error(`Failed to create session for workspace: ${workspaceDir}`)
+        // Create a session by sending a prompt
+        const prompt = page.locator(promptSelector)
+        await expect(prompt).toBeVisible()
+        await prompt.fill("test")
+        await page.keyboard.press("Enter")
+
+        // Wait for the URL to update with the new session ID
+        await expect.poll(() => sessionIDFromUrl(page.url()) ?? "", { timeout: 15_000 }).not.toBe("")
+
+        const created = sessionIDFromUrl(page.url())
+        if (!created) throw new Error(`Failed to get session ID from url: ${page.url()}`)
         sessionID = created
 
-        await page.goto(sessionPath(workspaceDir, created))
-        await expect(page.locator(promptSelector)).toBeVisible()
         await expect(page).toHaveURL(new RegExp(`/${workspaceSlug}/session/${created}(?:[/?#]|$)`))
 
         await openSidebar(page)
