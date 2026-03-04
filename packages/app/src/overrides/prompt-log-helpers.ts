@@ -21,12 +21,19 @@ export async function trackPrompt(params: TrackPromptParams): Promise<string | n
       }),
     })
 
-    if (res.ok) {
-      const data = await res.json()
-      return data?.promptId ?? null
+    if (!res.ok) {
+      console.warn(`[prompt-log] API returned ${res.status}`)
+      return null
     }
 
-    return null
+    const data = await res.json()
+    const promptId = data?.promptId ?? null
+
+    if (!promptId) {
+      console.warn("[prompt-log] API returned OK but no promptId in response")
+    }
+
+    return promptId
   } catch (err) {
     console.warn("[prompt-log] tracking failed:", err)
     return null
