@@ -62,18 +62,44 @@ export namespace ToolRegistry {
   })
 
   function fromPlugin(id: string, def: ToolDefinition): Tool.Info {
+    // Newer @opencode-ai/plugin versions provide a pre-built object schema.
+    // Using it avoids cross-instance Zod metadata loss (notably `.describe()`).
+    const parameters = def.parameters ?? z.object(def.args)
+
+    // Backward compatibility for older plugin versions that only expose `args`.
+    // In Zod v4, `.describe()` is stored in a per-instance registry. When args
+    // schemas come from a different Zod instance, descriptions can be dropped
+    // during `z.toJSONSchema(...)` unless we register them in this instance.
+    if (!def.parameters) {
+      for (const value of Object.values(def.args)) {
+        const description = (value as any).description
+        if (!description) continue
+        z.globalRegistry.add(value, {
+          description,
+        })
+      }
+    }
     return {
       id,
       init: async (initCtx) => ({
-        parameters: z.object(def.args),
+        parameters,
         description: def.description,
         execute: async (args, ctx) => {
+          // Mirror built-in tool behavior: always validate tool input at runtime
+          // before execute, even if the provider/model-side tool schema checks pass.
+          const validated = parameters.safeParse(args)
+          if (!validated.success)
+            throw new Error(
+              `The ${id} tool was called with invalid arguments: ${validated.error}.
+Please rewrite the input so it satisfies the expected schema.`,
+            )
+
           const pluginCtx = {
             ...ctx,
             directory: Instance.directory,
             worktree: Instance.worktree,
           } as unknown as PluginToolContext
-          const result = await def.execute(args as any, pluginCtx)
+          const result = await def.execute(validated.data as any, pluginCtx)
           const out = await Truncate.output(result, {}, initCtx?.agent)
           return {
             title: "",
