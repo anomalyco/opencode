@@ -10,6 +10,7 @@ import { Faq } from "~/component/faq"
 import { Legal } from "~/component/legal"
 import { Footer } from "~/component/footer"
 import { Header } from "~/component/header"
+import { config } from "~/config"
 import { getLastSeenWorkspaceID } from "../workspace/common"
 import { IconMiniMax, IconZai } from "~/component/icon"
 import { useI18n } from "~/context/i18n"
@@ -49,24 +50,50 @@ function LimitsGraph(props: { href: string }) {
     { id: "kimi", name: "Kimi K2.5", req: 1850, d: "240ms" },
     { id: "minimax", name: "MiniMax M2.5", req: 20000, d: "360ms" },
   ]
-  const ratio = (n: number) => n / free
 
   const w = 720
   const h = 220
-  const left = 88
-  const right = 24
-  const top = 22
-  const bottom = 46
+  const left = 40
+  const right = 60
+  const top = 18
+  const bottom = 44
   const plot = w - left - right
+
+  const ratio = (n: number) => n / free
   const rmax = Math.max(1, ...models.map((m) => ratio(m.req)))
   const log = (n: number) => Math.log10(Math.max(n, 1))
-  const x = (r: number) => left + (log(r) / log(rmax)) * plot
+  const base = 24
+  const p = 2.2
+  const x = (r: number) => left + base + Math.pow(log(r) / log(rmax), p) * (plot - base)
   const start = (x(1) / w) * 100
 
-  const yFree = 74
-  const yGo = 134
   const ticks = [1, 2, 5, 10, 25, 50, 100].filter((t) => t <= rmax)
-  const y = (n: number) => `${(n / h) * 100}%`
+  const labels = (() => {
+    const set = new Set<number>()
+    let last = -Infinity
+    for (const t of ticks) {
+      if (t === 1) {
+        set.add(t)
+        last = x(t)
+        continue
+      }
+      const pos = x(t)
+      if (pos - last < 44) continue
+      set.add(t)
+      last = pos
+    }
+    return set
+  })()
+  const bh = 8
+  const gap = 16
+  const step = bh + gap
+  const sep = bh + 40
+  const fy = top + 22
+  const gy = (i: number) => fy + sep + step * i
+  const my = models.length < 2 ? gy(0) : (gy(0) + gy(models.length - 1)) / 2
+  const px = (n: number) => `${(n / w) * 100}%`
+  const py = (n: number) => `${(n / h) * 100}%`
+  const lx = px(left - 16)
 
   return (
     <figure
@@ -77,51 +104,80 @@ function LimitsGraph(props: { href: string }) {
       style={{ "--start": `${start}%` } as any}
     >
       <div data-slot="plot">
-        <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-hidden="true">
+        <svg
+          viewBox={`0 0 ${w} ${h}`}
+          preserveAspectRatio="none"
+          role="img"
+          aria-hidden="true"
+          style={{ height: `${h}px` }}
+        >
           <g data-slot="grid">
             <For each={ticks}>
               {(t) => (
                 <g>
                   <line x1={x(t)} y1={top} x2={x(t)} y2={h - bottom} data-grid />
-                  <text x={x(t)} y={h - 18} text-anchor="middle" data-tick>
-                    {i18n.t("go.graph.tick", { n: t })}
-                  </text>
+                  {labels.has(t) ? (
+                    <text x={x(t)} y={h - 18} text-anchor="middle" data-tick>
+                      {i18n.t("go.graph.tick", { n: t })}
+                    </text>
+                  ) : null}
                 </g>
               )}
             </For>
           </g>
 
-          <g data-slot="free" style={{ "--d": "0ms" } as any}>
-            <circle cx={x(1)} cy={yFree} r={5.5} data-point data-kind="free" />
-          </g>
+          <line x1={left} y1={top} x2={left} y2={h - bottom} data-stub />
 
-          <g data-slot="go">
-            <line x1={x(1)} y1={yGo} x2={x(ratio(models[0]!.req))} y2={yGo} data-range data-animate="line" />
-            <line
-              x1={x(ratio(models[0]!.req))}
-              y1={yGo}
-              x2={x(ratio(models[2]!.req))}
-              y2={yGo}
-              data-range
-              data-animate="line"
-            />
+          <g data-slot="bars">
+            <g style={{ "--d": "0ms" } as any}>
+              <rect x={left} y={fy - bh / 2} width={Math.max(0, x(1) - left)} height={bh} data-bar data-kind="free" />
+            </g>
+
             <For each={models}>
-              {(m) => (
+              {(m, i) => (
                 <g style={{ "--d": m.d } as any}>
-                  <circle cx={x(ratio(m.req))} cy={yGo} r={5.5} data-point data-kind="go" data-model={m.id} />
+                  <rect
+                    x={left}
+                    y={gy(i()) - bh / 2}
+                    width={Math.max(0, x(ratio(m.req)) - left)}
+                    height={bh}
+                    data-bar
+                    data-kind="go"
+                    data-model={m.id}
+                  />
                 </g>
               )}
             </For>
           </g>
         </svg>
 
-        <div data-slot="plot-labels">
-          <span data-row-label style={{ "--y": y(yFree) } as any}>
+        <div data-slot="ylabels" aria-hidden="true">
+          <span data-ylabel style={{ "--x": lx, "--y": py(fy) } as any}>
             {i18n.t("go.graph.free")}
           </span>
-          <span data-row-label style={{ "--y": y(yGo) } as any}>
+          <span data-ylabel style={{ "--x": lx, "--y": py(my) } as any}>
             {i18n.t("go.graph.go")}
           </span>
+        </div>
+
+        <div data-slot="pills" aria-hidden="true">
+          <span data-item data-kind="free" style={{ "--x": px(x(1)), "--y": py(fy), "--d": "0ms" } as any}>
+            <span data-name>{i18n.t("go.graph.free")}</span>
+            <span data-value>{free.toLocaleString()}</span>
+          </span>
+          <For each={models}>
+            {(m, i) => (
+              <span
+                data-item
+                data-kind="go"
+                data-model={m.id}
+                style={{ "--x": px(x(ratio(m.req))), "--y": py(gy(i())), "--d": m.d } as any}
+              >
+                <span data-name>{m.name}</span>
+                <span data-value>{m.req.toLocaleString()}</span>
+              </span>
+            )}
+          </For>
         </div>
       </div>
 
@@ -133,22 +189,6 @@ function LimitsGraph(props: { href: string }) {
               <a data-slot="caption-link" href={props.href}>
                 {i18n.t("go.graph.usageLimits")}
               </a>
-            </div>
-            <div data-slot="legend">
-              <span data-item>
-                <i data-dot data-kind="free" />
-                <span data-name>{i18n.t("go.graph.free")}</span>
-                <span data-value>{free.toLocaleString()}</span>
-              </span>
-              <For each={models}>
-                {(m) => (
-                  <span data-item>
-                    <i data-dot data-kind="go" data-model={m.id} />
-                    <span data-name>{m.name}</span>
-                    <span data-value>{m.req.toLocaleString()}</span>
-                  </span>
-                )}
-              </For>
             </div>
           </div>
         </div>
@@ -165,9 +205,17 @@ export default function Home() {
     <main data-page="go">
       {/*<HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />*/}
       <Title>{i18n.t("go.title")}</Title>
+      <Meta name="description" content={i18n.t("go.meta.description")} />
       <LocaleLinks path="/go" />
-      <Meta property="og:image" content="/social-share-zen.png" />
-      <Meta name="twitter:image" content="/social-share-zen.png" />
+      <Meta property="og:type" content="website" />
+      <Meta property="og:url" content={`${config.baseUrl}${language.route("/go")}`} />
+      <Meta property="og:title" content={i18n.t("go.title")} />
+      <Meta property="og:description" content={i18n.t("go.meta.description")} />
+      <Meta property="og:image" content="/social-share-black.png" />
+      <Meta name="twitter:card" content="summary_large_image" />
+      <Meta name="twitter:title" content={i18n.t("go.title")} />
+      <Meta name="twitter:description" content={i18n.t("go.meta.description")} />
+      <Meta name="twitter:image" content="/social-share-black.png" />
       <Meta name="opencode:auth" content={loggedin() ? "true" : "false"} />
 
       <div data-component="container">

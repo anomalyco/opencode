@@ -246,6 +246,8 @@ export const dict = {
   "zen.privacy.exceptionsLink": "following exceptions",
 
   "go.title": "OpenCode Go | Low cost coding models for everyone",
+  "go.meta.description":
+    "Go is a $10/month subscription with generous 5-hour request limits for GLM-5, Kimi K2.5, and MiniMax M2.5.",
   "go.hero.title": "Low cost coding models for everyone",
   "go.hero.body":
     "Go brings agentic coding to programmers around the world. Offering generous limits and reliable access to the most capable open-source models, so you can build with powerful agents without worrying about cost or availability.",
