@@ -467,6 +467,12 @@ body {
         font-size: 12px;
       }
 
+      @media (prefers-color-scheme: light) {
+        [data-tick] {
+          fill: color-mix(in srgb, var(--color-text-weak) 82%, var(--color-text-strong));
+        }
+      }
+
       [data-row] {
         fill: var(--color-text-strong);
         font-size: 13px;
