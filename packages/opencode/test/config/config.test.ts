@@ -8,6 +8,7 @@ import fs from "fs/promises"
 import { pathToFileURL } from "url"
 import { Global } from "../../src/global"
 import { Filesystem } from "../../src/util/filesystem"
+import { ConfigPaths } from "../../src/config/paths"
 
 // Get managed config directory from environment (set in preload.ts)
 const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
@@ -1947,5 +1948,74 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
         delete process.env["OPENCODE_CONFIG_CONTENT"]
       }
     }
+  })
+})
+
+describe("ConfigPaths linked worktree", () => {
+  test("projectFiles: finds config in worktree root when directory is on a different filesystem branch", async () => {
+    // Simulate a linked worktree scenario:
+    //   worktreeRoot = ~/code/myproject/            (git common dir)
+    //   linkedDir    = ~/.local/share/opencode/worktree/<hash>/<name>/  (linked worktree)
+    // The two paths are on completely different branches of the directory tree.
+    await using worktreeRoot = await tmpdir({
+      init: async (dir) => {
+        // Place opencode.json directly in the worktree root
+        await fs.writeFile(path.join(dir, "opencode.json"), JSON.stringify({ model: "from-worktree-root" }))
+      },
+    })
+    await using linkedDir = await tmpdir()
+
+    // Sanity: linkedDir is NOT under worktreeRoot
+    expect(linkedDir.path.startsWith(worktreeRoot.path + path.sep)).toBe(false)
+
+    const files = await ConfigPaths.projectFiles("opencode", linkedDir.path, worktreeRoot.path)
+
+    // The worktree root's opencode.json should be included
+    expect(files).toContain(path.join(worktreeRoot.path, "opencode.json"))
+  })
+
+  test("directories: finds .opencode dir in worktree root when directory is on a different filesystem branch", async () => {
+    await using worktreeRoot = await tmpdir({
+      init: async (dir) => {
+        // Place .opencode/opencode.json in the worktree root
+        await fs.mkdir(path.join(dir, ".opencode"), { recursive: true })
+        await fs.writeFile(
+          path.join(dir, ".opencode", "opencode.json"),
+          JSON.stringify({ model: "from-dotOpencode" }),
+        )
+      },
+    })
+    await using linkedDir = await tmpdir()
+
+    // Sanity: linkedDir is NOT under worktreeRoot
+    expect(linkedDir.path.startsWith(worktreeRoot.path + path.sep)).toBe(false)
+
+    const dirs = await ConfigPaths.directories(linkedDir.path, worktreeRoot.path)
+
+    // The worktree root's .opencode directory should be included
+    expect(dirs).toContain(path.join(worktreeRoot.path, ".opencode"))
+  })
+
+  test("projectFiles: normal (non-linked) project still works correctly", async () => {
+    // directory IS under worktree — existing behaviour should be unchanged
+    await using worktreeRoot = await tmpdir({
+      init: async (dir) => {
+        await fs.writeFile(path.join(dir, "opencode.json"), JSON.stringify({ model: "root-model" }))
+      },
+    })
+    // Create a subdirectory that IS under worktreeRoot
+    const subDir = path.join(worktreeRoot.path, "subproject")
+    await fs.mkdir(subDir, { recursive: true })
+    await fs.writeFile(path.join(subDir, "opencode.json"), JSON.stringify({ model: "sub-model" }))
+
+    const files = await ConfigPaths.projectFiles("opencode", subDir, worktreeRoot.path)
+
+    // Both root and subproject files should appear; subproject wins (applied last)
+    expect(files).toContain(path.join(worktreeRoot.path, "opencode.json"))
+    expect(files).toContain(path.join(subDir, "opencode.json"))
+    // subproject entry must come after root entry so it takes precedence when merged
+    expect(files.indexOf(path.join(subDir, "opencode.json"))).toBeGreaterThan(
+      files.indexOf(path.join(worktreeRoot.path, "opencode.json")),
+    )
   })
 })

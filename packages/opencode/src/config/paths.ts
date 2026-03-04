@@ -8,8 +8,35 @@ import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 
 export namespace ConfigPaths {
+  /**
+   * Returns true if `worktree` is a filesystem ancestor of (or equal to) `directory`.
+   * For linked worktrees, the two paths may be on completely different branches of the
+   * directory tree (e.g., directory = ~/.local/share/opencode/worktree/…,
+   * worktree = ~/code/myproject/), so this check is necessary before relying on
+   * upward filesystem traversal to visit the worktree root.
+   */
+  function isAncestorOrEqual(ancestor: string, descendant: string): boolean {
+    const sep = path.sep
+    return descendant === ancestor || descendant.startsWith(ancestor.endsWith(sep) ? ancestor : ancestor + sep)
+  }
+
   export async function projectFiles(name: string, directory: string, worktree: string) {
     const files: string[] = []
+
+    // When `directory` is a linked worktree on a different filesystem branch than `worktree`
+    // (e.g., ~/.local/share/opencode/worktree/<hash>/<name>/ vs ~/code/myproject/), the
+    // upward traversal from `directory` will never visit `worktree`.  Explicitly check
+    // the worktree root first so those files are loaded at the lowest-priority slot
+    // (project-level base), allowing any config found in `directory`'s own tree to override.
+    if (!isAncestorOrEqual(worktree, directory)) {
+      for (const file of [`${name}.jsonc`, `${name}.json`]) {
+        const worktreeFile = path.join(worktree, file)
+        if (await Filesystem.exists(worktreeFile)) {
+          files.push(worktreeFile)
+        }
+      }
+    }
+
     for (const file of [`${name}.jsonc`, `${name}.json`]) {
       const found = await Filesystem.findUp(file, directory, worktree)
       for (const resolved of found.toReversed()) {
@@ -20,8 +47,21 @@ export namespace ConfigPaths {
   }
 
   export async function directories(directory: string, worktree: string) {
+    // For linked worktrees, `directory` may be on a different filesystem branch than `worktree`.
+    // Filesystem.up() walks upward from `directory` and will never visit `worktree/.opencode`
+    // in that case.  Collect it explicitly and insert it before the per-directory entries so
+    // that the project-level .opencode config is loaded at the correct (lower) priority.
+    const linkedWorktreeOcDir: string[] = []
+    if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG && !isAncestorOrEqual(worktree, directory)) {
+      const worktreeOcDir = path.join(worktree, ".opencode")
+      if (await Filesystem.exists(worktreeOcDir)) {
+        linkedWorktreeOcDir.push(worktreeOcDir)
+      }
+    }
+
     return [
       Global.Path.config,
+      ...linkedWorktreeOcDir,
       ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
         ? await Array.fromAsync(
             Filesystem.up({
