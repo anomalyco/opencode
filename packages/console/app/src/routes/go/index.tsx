@@ -337,8 +337,8 @@ export default function Home() {
               <div>
                 <span>[*]</span>
                 <p>
-                  {i18n.t("go.privacy.beforeExceptions")}{" "}
-                  <a href={language.route("/docs/zen/#privacy")}>{i18n.t("go.privacy.exceptionsLink")}</a>.
+                  {i18n.t("go.privacy.body")} <a href="mailto:contact@anoma.ly">{i18n.t("common.contactUs")}</a>{" "}
+                  {i18n.t("go.privacy.contactAfter")}
                 </p>
               </div>
             </div>
@@ -437,15 +437,15 @@ export default function Home() {
               <li>
                 <Faq question={i18n.t("go.faq.q4")}>
                   {i18n.t("go.faq.a4.p1.beforePricing")}{" "}
-                  <a href={language.route("/docs/zen/#pricing")}>{i18n.t("go.faq.a4.p1.pricingLink")}</a>{" "}
+                  <a href={language.route("/docs/go/#pricing")}>{i18n.t("go.faq.a4.p1.pricingLink")}</a>{" "}
                   {i18n.t("go.faq.a4.p1.afterPricing")} {i18n.t("go.faq.a4.p2.beforeAccount")}{" "}
                   <a href="/auth">{i18n.t("go.faq.a4.p2.accountLink")}</a>. {i18n.t("go.faq.a4.p3")}
                 </Faq>
               </li>
               <li>
                 <Faq question={i18n.t("go.faq.q5")}>
-                  {i18n.t("go.faq.a5.beforeExceptions")}{" "}
-                  <a href={language.route("/docs/zen/#privacy")}>{i18n.t("go.faq.a5.exceptionsLink")}</a>.
+                  {i18n.t("go.faq.a5.body")} <a href="mailto:contact@anoma.ly">{i18n.t("common.contactUs")}</a>{" "}
+                  {i18n.t("go.faq.a5.contactAfter")}
                 </Faq>
               </li>
               <li>

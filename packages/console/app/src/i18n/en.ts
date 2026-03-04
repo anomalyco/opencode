@@ -55,6 +55,7 @@ export const dict = {
   "common.cancel": "Cancel",
   "common.creating": "Creating...",
   "common.create": "Create",
+  "common.contactUs": "Contact us",
 
   "common.videoUnsupported": "Your browser does not support the video tag.",
   "common.figure": "Fig {{n}}.",
@@ -271,6 +272,9 @@ export const dict = {
   "go.how.step3.title": "Start coding",
   "go.how.step3.body": "with reliable access to open-source models",
   "go.privacy.title": "Your privacy is important to us",
+  "go.privacy.body":
+    "The plan is designed primarily for international users, with models hosted in the US, EU, and Singapore for stable global access.",
+  "go.privacy.contactAfter": "if you have any questions.",
   "go.privacy.beforeExceptions":
     "Go models are hosted in the US. Providers follow a zero-retention policy and do not use your data for model training, with the",
   "go.privacy.exceptionsLink": "following exceptions",
@@ -290,6 +294,9 @@ export const dict = {
   "go.faq.a4.p2.accountLink": "account",
   "go.faq.a4.p3": "Cancel any time.",
   "go.faq.q5": "What about data and privacy?",
+  "go.faq.a5.body":
+    "The plan is designed primarily for international users, with models hosted in the US, EU, and Singapore for stable global access.",
+  "go.faq.a5.contactAfter": "if you have any questions.",
   "go.faq.a5.beforeExceptions":
     "Go models are hosted in the US. Providers follow a zero-retention policy and do not use your data for model training, with the",
   "go.faq.a5.exceptionsLink": "following exceptions",
