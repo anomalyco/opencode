@@ -10,9 +10,16 @@ import { pathToFileURL } from "url"
 import { Global } from "../../src/global"
 import { ProjectID } from "../../src/project/schema"
 import { Filesystem } from "../../src/util/filesystem"
-
 // Get managed config directory from environment (set in preload.ts)
 const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
+
+// Generate a platform-correct file:// URL for testing
+// On Windows: file:///C:/path/to/...  On Unix: file:///path/to/...
+function testFileURL(...segments: string[]): string {
+  return pathToFileURL(path.resolve(path.sep, ...segments)).href
+}
+
+
 
 afterEach(async () => {
   await fs.rm(managedConfigDir, { force: true, recursive: true }).catch(() => {})
@@ -1695,9 +1702,9 @@ test("wellknown URL with trailing slash is normalized", async () => {
 
 describe("getPluginName", () => {
   test("extracts name from file:// URL", () => {
-    expect(Config.getPluginName("file:///path/to/plugin/foo.js")).toBe("foo")
-    expect(Config.getPluginName("file:///path/to/plugin/bar.ts")).toBe("bar")
-    expect(Config.getPluginName("file:///some/path/my-plugin.js")).toBe("my-plugin")
+    expect(Config.getPluginName(testFileURL("path", "to", "plugin", "foo.js"))).toBe("foo")
+    expect(Config.getPluginName(testFileURL("path", "to", "plugin", "bar.ts"))).toBe("bar")
+    expect(Config.getPluginName(testFileURL("some", "path", "my-plugin.js"))).toBe("my-plugin")
   })
 
   test("extracts name from npm package with version", () => {
@@ -1717,18 +1724,18 @@ describe("getPluginName", () => {
   })
 
   test("uses directory heuristic for index.ts in src/", () => {
-    expect(Config.getPluginName("file:///path/to/my-plugin/src/index.ts")).toBe("my-plugin")
+    expect(Config.getPluginName(testFileURL("path", "to", "my-plugin", "src", "index.ts"))).toBe("my-plugin")
   })
 
   test("skips dist/ for index.js entry points", () => {
-    expect(Config.getPluginName("file:///path/to/plugin/dist/index.js")).toBe("plugin")
+    expect(Config.getPluginName(testFileURL("path", "to", "plugin", "dist", "index.js"))).toBe("plugin")
   })
 
   test("skips build/out/esm/cjs for index entry points", () => {
-    expect(Config.getPluginName("file:///path/to/mypkg/build/index.js")).toBe("mypkg")
-    expect(Config.getPluginName("file:///path/to/mypkg/out/index.js")).toBe("mypkg")
-    expect(Config.getPluginName("file:///path/to/mypkg/esm/index.js")).toBe("mypkg")
-    expect(Config.getPluginName("file:///path/to/mypkg/cjs/index.js")).toBe("mypkg")
+    expect(Config.getPluginName(testFileURL("path", "to", "mypkg", "build", "index.js"))).toBe("mypkg")
+    expect(Config.getPluginName(testFileURL("path", "to", "mypkg", "out", "index.js"))).toBe("mypkg")
+    expect(Config.getPluginName(testFileURL("path", "to", "mypkg", "esm", "index.js"))).toBe("mypkg")
+    expect(Config.getPluginName(testFileURL("path", "to", "mypkg", "cjs", "index.js"))).toBe("mypkg")
   })
 
   test(".opencode/plugin scripts use filename, not host package.json", async () => {
@@ -1784,19 +1791,19 @@ describe("deduplicatePlugins", () => {
   })
 
   test("prefers local file over npm package with same name", () => {
-    const plugins = ["oh-my-opencode@2.4.3", "file:///project/.opencode/plugin/oh-my-opencode.js"]
+    const plugins = ["oh-my-opencode@2.4.3", testFileURL("project", ".opencode", "plugin", "oh-my-opencode.js")]
 
     const result = Config.deduplicatePlugins(plugins)
 
     expect(result.length).toBe(1)
-    expect(result[0]).toBe("file:///project/.opencode/plugin/oh-my-opencode.js")
+    expect(result[0]).toBe(testFileURL("project", ".opencode", "plugin", "oh-my-opencode.js"))
   })
 
   test("keeps all index.js plugins from different directories", () => {
     const plugins = [
-      "file:///path/to/alpha/src/index.ts",
-      "file:///path/to/beta/dist/index.js",
-      "file:///path/to/gamma/lib/index.js",
+      testFileURL("path", "to", "alpha", "src", "index.ts"),
+      testFileURL("path", "to", "beta", "dist", "index.js"),
+      testFileURL("path", "to", "gamma", "lib", "index.js"),
     ]
 
     const result = Config.deduplicatePlugins(plugins)
