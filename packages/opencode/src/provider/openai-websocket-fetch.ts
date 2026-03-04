@@ -57,7 +57,17 @@ export function createOpenAIWebsocketFetch(input?: { url?: string; scope?: strin
         reject(err)
       })
       sock.on("close", () => {
-        if (ws === sock) ws = undefined
+        const isCurrentSocket = ws === sock
+        if (isCurrentSocket) ws = undefined
+        // If the connection promise is still pending when the socket closes,
+        // reject it so callers don't get a never-settled promise.
+        if (con) {
+          const err = new Error("WebSocket connection closed before it was established")
+          con = undefined
+          log.warn("connect_closed_before_ready", { error: err, scope })
+          reject(err)
+          return
+        }
         log.info("closed", { scope })
       })
     })
