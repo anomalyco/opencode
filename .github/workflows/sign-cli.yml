@@ -15,7 +15,7 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     if: github.repository == 'anomalyco/opencode'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
         with:
           fetch-tags: true
 
@@ -27,7 +27,7 @@ jobs:
 
       - name: Upload unsigned Windows CLI
         id: upload_unsigned_windows_cli
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: unsigned-opencode-windows-cli
           path: packages/opencode/dist/opencode-windows-x64/bin/opencode.exe
@@ -35,7 +35,7 @@ jobs:
 
       - name: Submit SignPath signing request
         id: submit_signpath_signing_request
-        uses: signpath/github-action-submit-signing-request@v1
+        uses: signpath/github-action-submit-signing-request@ced31329c0317e779dad2eec2a7c3bb46ea1343e # v1
         with:
           api-token: ${{ secrets.SIGNPATH_API_KEY }}
           organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
@@ -47,7 +47,7 @@ jobs:
           output-artifact-directory: signed-opencode-cli
 
       - name: Upload signed Windows CLI
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: signed-opencode-windows-cli
           path: signed-opencode-cli/*.exe
