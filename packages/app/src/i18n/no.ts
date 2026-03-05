@@ -821,6 +821,12 @@ export const dict = {
   "workspace.reset.archived.one": "1 sesjon vil bli arkivert.",
   "workspace.reset.archived.many": "{{count}} sesjoner vil bli arkivert.",
   "workspace.reset.note": "Dette vil tilbakestille arbeidsområdet til å samsvare med standardgrenen.",
+
+  "settings.archive.title": "Arkiverte økter",
+  "settings.archive.description": "Gjenopprett arkiverte økter for å gjøre dem synlige i sidefeltet.",
+  "settings.archive.none": "Ingen arkiverte økter.",
+  "settings.archive.scope.all": "Alle prosjekter",
+  "settings.archive.scope.current": "Nåværende prosjekt",
   "common.open": "Åpne",
   "dialog.releaseNotes.action.getStarted": "Kom i gang",
   "dialog.releaseNotes.action.next": "Neste",

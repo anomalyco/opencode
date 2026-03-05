@@ -10,7 +10,7 @@ import { Flag } from "../flag/flag"
 import { Identifier } from "../id/id"
 import { Installation } from "../installation"
 
-import { Database, NotFoundError, eq, and, or, gte, isNull, desc, like, inArray, lt } from "../storage/db"
+import { Database, NotFoundError, eq, and, or, gte, isNull, isNotNull, desc, like, inArray, lt } from "../storage/db"
 import type { SQL } from "../storage/db"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
@@ -401,7 +401,7 @@ export namespace Session {
       return Database.use((db) => {
         const row = db
           .update(SessionTable)
-          .set({ time_archived: input.time })
+          .set({ time_archived: input.time ?? null })
           .where(eq(SessionTable.id, input.sessionID))
           .returning()
           .get()
@@ -598,6 +598,9 @@ export namespace Session {
     }
     if (input?.search) {
       conditions.push(like(SessionTable.title, `%${input.search}%`))
+    }
+    if (input?.archived) {
+      conditions.push(isNotNull(SessionTable.time_archived))
     }
     if (!input?.archived) {
       conditions.push(isNull(SessionTable.time_archived))

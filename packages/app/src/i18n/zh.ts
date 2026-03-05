@@ -809,6 +809,12 @@ export const dict = {
   "workspace.reset.archived.one": "将归档 1 个会话。",
   "workspace.reset.archived.many": "将归档 {{count}} 个会话。",
   "workspace.reset.note": "这将把工作区重置为与默认分支一致。",
+
+  "settings.archive.title": "归档会话",
+  "settings.archive.description": "恢复归档会话以使其在侧边栏中可见。",
+  "settings.archive.none": "没有归档会话。",
+  "settings.archive.scope.all": "所有项目",
+  "settings.archive.scope.current": "当前项目",
   "common.open": "打开",
   "dialog.releaseNotes.action.getStarted": "开始",
   "dialog.releaseNotes.action.next": "下一步",

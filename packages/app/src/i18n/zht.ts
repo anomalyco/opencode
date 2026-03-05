@@ -804,6 +804,12 @@ export const dict = {
   "workspace.reset.archived.one": "將封存 1 個工作階段。",
   "workspace.reset.archived.many": "將封存 {{count}} 個工作階段。",
   "workspace.reset.note": "這將把工作區重設為與預設分支一致。",
+
+  "settings.archive.title": "封存工作階段",
+  "settings.archive.description": "恢復封存的工作階段以使其在側邊欄中可見。",
+  "settings.archive.none": "沒有封存的工作階段。",
+  "settings.archive.scope.all": "所有專案",
+  "settings.archive.scope.current": "目前專案",
   "common.open": "打開",
   "dialog.releaseNotes.action.getStarted": "開始",
   "dialog.releaseNotes.action.next": "下一步",
