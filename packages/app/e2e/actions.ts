@@ -8,6 +8,7 @@ import {
   sessionItemSelector,
   dropdownMenuTriggerSelector,
   dropdownMenuContentSelector,
+  sessionHeaderSelector,
   projectMenuTriggerSelector,
   projectWorkspacesToggleSelector,
   titlebarRightSelector,
@@ -225,9 +226,9 @@ export async function hoverSessionItem(page: Page, sessionID: string) {
 export async function openSessionMoreMenu(page: Page, sessionID: string) {
   await expect(page).toHaveURL(new RegExp(`/session/${sessionID}(?:[/?#]|$)`))
 
-  const scroller = page.locator(".scroll-view__viewport").first()
-  await expect(scroller).toBeVisible()
-  await expect(scroller.getByRole("heading", { level: 1 }).first()).toBeVisible({ timeout: 30_000 })
+  const header = page.locator(sessionHeaderSelector).first()
+  await expect(header).toBeVisible()
+  await expect(header.getByRole("heading", { level: 1 }).first()).toBeVisible({ timeout: 30_000 })
 
   const menu = page
     .locator(dropdownMenuContentSelector)
@@ -243,7 +244,7 @@ export async function openSessionMoreMenu(page: Page, sessionID: string) {
 
   if (opened) return menu
 
-  const menuTrigger = scroller.getByRole("button", { name: /more options/i }).first()
+  const menuTrigger = header.getByRole("button", { name: /more options/i }).first()
   await expect(menuTrigger).toBeVisible()
   await menuTrigger.click()
 

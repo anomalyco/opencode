@@ -101,7 +101,8 @@ export const dict = {
   "ui.tool.todos": "할 일",
   "ui.tool.todos.read": "할 일 읽기",
   "ui.tool.questions": "질문",
-  "ui.tool.agent": "{{type}} 에이전트",
+  "ui.tool.skill": "스킬",
+  "ui.tool.agent": "에이전트",
 
   "ui.common.file.one": "파일",
   "ui.common.file.other": "파일",

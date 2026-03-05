@@ -2,7 +2,7 @@ import { attachSpring, motionValue } from "motion"
 import type { SpringOptions } from "motion"
 import { createEffect, createSignal, onCleanup } from "solid-js"
 
-type Opt = Partial<Pick<SpringOptions, "visualDuration" | "bounce" | "stiffness" | "damping" | "mass" | "velocity">>
+type Opt = Pick<SpringOptions, "visualDuration" | "bounce" | "stiffness" | "damping" | "mass" | "velocity">
 const eq = (a: Opt | undefined, b: Opt | undefined) =>
   a?.visualDuration === b?.visualDuration &&
   a?.bounce === b?.bounce &&
@@ -18,7 +18,7 @@ export function useSpring(target: () => number, options?: Opt | (() => Opt)) {
   const spring = motionValue(value())
   let config = read()
   let stop = attachSpring(spring, source, config)
-  let off = spring.on("change", (next: number) => setValue(next))
+  let off = spring.on("change", (next) => setValue(next))
 
   createEffect(() => {
     source.set(target())

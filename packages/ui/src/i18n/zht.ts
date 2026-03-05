@@ -105,7 +105,8 @@ export const dict = {
   "ui.tool.todos": "待辦",
   "ui.tool.todos.read": "讀取待辦",
   "ui.tool.questions": "問題",
-  "ui.tool.agent": "{{type}} 代理程式",
+  "ui.tool.skill": "技能",
+  "ui.tool.agent": "代理程式",
 
   "ui.common.file.one": "個檔案",
   "ui.common.file.other": "個檔案",

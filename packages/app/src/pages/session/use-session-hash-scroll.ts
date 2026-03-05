@@ -16,7 +16,7 @@ export const useSessionHashScroll = (input: {
   setPendingMessage: (value: string | undefined) => void
   setActiveMessage: (message: UserMessage | undefined) => void
   setTurnStart: (value: number) => void
-  autoScroll: { pause: () => void; forceScrollToBottom: () => void }
+  autoScroll: { pause: () => void; snapToBottom: () => void }
   scroller: () => HTMLDivElement | undefined
   anchor: (id: string) => string
   scheduleScrollState: (el: HTMLDivElement) => void
@@ -47,9 +47,10 @@ export const useSessionHashScroll = (input: {
 
     const a = el.getBoundingClientRect()
     const b = root.getBoundingClientRect()
-    const sticky = root.querySelector("[data-session-title]")
-    const inset = sticky instanceof HTMLElement ? sticky.offsetHeight : 0
-    const top = Math.max(0, a.top - b.top + root.scrollTop - inset)
+    const title = parseFloat(getComputedStyle(root).getPropertyValue("--session-title-height"))
+    const inset = Number.isNaN(title) ? 0 : title
+    // With column-reverse, scrollTop is negative — don't clamp to 0
+    const top = a.top - b.top + root.scrollTop - inset
     root.scrollTo({ top, behavior })
     return true
   }
@@ -105,7 +106,7 @@ export const useSessionHashScroll = (input: {
   const applyHash = (behavior: ScrollBehavior) => {
     const hash = location.hash.slice(1)
     if (!hash) {
-      input.autoScroll.forceScrollToBottom()
+      input.autoScroll.snapToBottom()
       const el = input.scroller()
       if (el) input.scheduleScrollState(el)
       return
@@ -129,7 +130,7 @@ export const useSessionHashScroll = (input: {
       return
     }
 
-    input.autoScroll.forceScrollToBottom()
+    input.autoScroll.snapToBottom()
     const el = input.scroller()
     if (el) input.scheduleScrollState(el)
   }
