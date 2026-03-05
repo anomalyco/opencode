@@ -5,6 +5,7 @@ import { GenerateCommand } from "./cli/cmd/generate"
 import { Log } from "./util/log"
 import { AuthCommand } from "./cli/cmd/auth"
 import { AgentCommand } from "./cli/cmd/agent"
+import { OpensaciaCommand } from "./cli/cmd/opensacia"
 import { UpgradeCommand } from "./cli/cmd/upgrade"
 import { UninstallCommand } from "./cli/cmd/uninstall"
 import { ModelsCommand } from "./cli/cmd/models"
@@ -132,6 +133,7 @@ let cli = yargs(hideBin(process.argv))
   .command(DebugCommand)
   .command(AuthCommand)
   .command(AgentCommand)
+  .command(OpensaciaCommand)
   .command(UpgradeCommand)
   .command(UninstallCommand)
   .command(ServeCommand)
