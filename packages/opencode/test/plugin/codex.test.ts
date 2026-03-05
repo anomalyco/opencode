@@ -1,15 +1,47 @@
 import { describe, expect, test } from "bun:test"
+import type { PluginInput } from "@opencode-ai/plugin"
 import {
+  CodexAuthPlugin,
   parseJwtClaims,
   extractAccountIdFromClaims,
   extractAccountId,
   type IdTokenClaims,
 } from "../../src/plugin/codex"
+import type { Provider as ProviderNS } from "../../src/provider/provider"
 
 function createTestJwt(payload: object): string {
   const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url")
   const body = Buffer.from(JSON.stringify(payload)).toString("base64url")
   return `${header}.${body}.sig`
+}
+
+function createModel(id: string) {
+  return {
+    id,
+    providerID: "openai",
+    api: {
+      id,
+      url: "https://api.openai.com",
+      npm: "@ai-sdk/openai",
+    },
+    name: id,
+    capabilities: {
+      temperature: false,
+      reasoning: true,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+    limit: { context: 400_000, input: 272_000, output: 128_000 },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "2026-03-05",
+    variants: {},
+  }
 }
 
 describe("plugin.codex", () => {
@@ -118,6 +150,42 @@ describe("plugin.codex", () => {
           refresh_token: "rt",
         }),
       ).toBe("acc-123")
+    })
+  })
+
+  describe("auth loader", () => {
+    test("keeps gpt-5.4 in oauth model allowlist", async () => {
+      const hooks = await CodexAuthPlugin({
+        client: {
+          auth: {
+            set: async () => {},
+          },
+        },
+      } as unknown as PluginInput)
+
+      if (!hooks.auth?.loader) {
+        throw new Error("Missing auth loader")
+      }
+
+      const provider = {
+        models: {
+          "gpt-5.4": createModel("gpt-5.4"),
+          "gpt-4.1": createModel("gpt-4.1"),
+        },
+      } as unknown as ProviderNS.Info
+
+      await hooks.auth.loader(
+        async () => ({
+          type: "oauth",
+          access: "token",
+          refresh: "refresh",
+          expires: Date.now() + 60_000,
+        }),
+        provider,
+      )
+
+      expect(provider.models["gpt-5.4"]).toBeDefined()
+      expect(provider.models["gpt-4.1"]).toBeUndefined()
     })
   })
 })

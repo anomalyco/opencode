@@ -110,6 +110,36 @@ test("enabled_providers restricts to only listed providers", async () => {
   })
 })
 
+test("gpt-5.4 is backfilled for openai and opencode", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("OPENAI_API_KEY", "test-openai-key")
+      Env.set("OPENCODE_API_KEY", "test-opencode-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const openai = providers["openai"]?.models["gpt-5.4"]
+      const opencode = providers["opencode"]?.models["gpt-5.4"]
+      expect(openai).toBeDefined()
+      expect(opencode).toBeDefined()
+      expect(openai?.limit.context).toBe(1_050_000)
+      expect(openai?.limit.input).toBe(922_000)
+      expect(opencode?.api.npm).toBe("@ai-sdk/openai")
+    },
+  })
+})
+
 test("model whitelist filters models for provider", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

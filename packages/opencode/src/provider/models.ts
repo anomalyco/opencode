@@ -81,21 +81,71 @@ export namespace ModelsDev {
 
   export type Provider = z.infer<typeof Provider>
 
+  const gpt54: Model = {
+    id: "gpt-5.4",
+    name: "GPT-5.4",
+    family: "gpt",
+    release_date: "2026-03-05",
+    attachment: true,
+    reasoning: true,
+    temperature: false,
+    tool_call: true,
+    cost: {
+      input: 2.5,
+      output: 15,
+      cache_read: 0.25,
+    },
+    limit: {
+      context: 1_050_000,
+      input: 922_000,
+      output: 128_000,
+    },
+    modalities: {
+      input: ["text", "image"],
+      output: ["text"],
+    },
+    options: {},
+  }
+
+  const gpt54op: Model = {
+    ...gpt54,
+    modalities: {
+      input: ["text", "image", "pdf"],
+      output: ["text"],
+    },
+    provider: {
+      npm: "@ai-sdk/openai",
+    },
+  }
+
+  function add(data: Record<string, Provider>, id: string, model: Model) {
+    const provider = data[id]
+    if (!provider) return
+    if (provider.models[model.id]) return
+    provider.models[model.id] = model
+  }
+
+  function patch(data: Record<string, Provider>) {
+    add(data, "openai", gpt54)
+    add(data, "opencode", gpt54op)
+    return data
+  }
+
   function url() {
     return Flag.OPENCODE_MODELS_URL || "https://models.dev"
   }
 
   export const Data = lazy(async () => {
     const result = await Filesystem.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).catch(() => {})
-    if (result) return result
+    if (result) return patch(result as Record<string, Provider>)
     // @ts-ignore
     const snapshot = await import("./models-snapshot")
       .then((m) => m.snapshot as Record<string, unknown>)
       .catch(() => undefined)
-    if (snapshot) return snapshot
-    if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return {}
+    if (snapshot) return patch(snapshot as Record<string, Provider>)
+    if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return patch({})
     const json = await fetch(`${url()}/api.json`).then((x) => x.text())
-    return JSON.parse(json)
+    return patch(JSON.parse(json) as Record<string, Provider>)
   })
 
   export async function get() {
