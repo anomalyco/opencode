@@ -118,22 +118,6 @@ const useDefaultServerKey = (
     }
 
     setUrl(normalizeServerUrl(result.url))
-  })
-      return
-    }
-
-    if (result instanceof Promise) {
-      void result.then((next) => {
-        if (dead) return
-        setUrl(next ? normalizeServerUrl(next) : undefined)
-      })
-      onCleanup(() => {
-        dead = true
-      })
-      return
-    }
-
-    setUrl(normalizeServerUrl(result))
     onCleanup(() => {
       dead = true
     })
