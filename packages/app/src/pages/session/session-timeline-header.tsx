@@ -5,6 +5,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
+import { prefersReducedMotion } from "@opencode-ai/ui/hooks"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { animate, type AnimationPlaybackControls, clearFadeStyles, FAST_SPRING } from "@opencode-ai/ui/motion"
 import { showToast } from "@opencode-ai/ui/toast"
@@ -31,6 +32,7 @@ export function SessionTimelineHeader(props: {
   const sync = useSync()
   const dialog = useDialog()
   const language = useLanguage()
+  const reduce = prefersReducedMotion
 
   const [title, setTitle] = createStore({
     draft: "",
@@ -64,7 +66,7 @@ export function SessionTimelineHeader(props: {
     if (!el) return
 
     clearHeaderAnim()
-    if (!headerText.muted) {
+    if (!headerText.muted || reduce()) {
       el.style.opacity = "1"
       return
     }
@@ -96,6 +98,10 @@ export function SessionTimelineHeader(props: {
 
   const animateEnterSpan = () => {
     if (!enterRef) return
+    if (reduce()) {
+      settleTitleEnter()
+      return
+    }
     enterAnim = animate(
       enterRef,
       { opacity: [0, 1], filter: ["blur(2px)", "blur(0px)"], transform: ["translateY(-2px)", "translateY(0)"] },
@@ -108,6 +114,13 @@ export function SessionTimelineHeader(props: {
     clearTitleAnims()
     setHeaderText({ prev: headerText.value, prevMuted: headerText.muted })
     setHeaderText({ value: nextTitle, muted: nextMuted })
+
+    if (reduce()) {
+      setHeaderText({ prev: undefined, prevMuted: false })
+      hideLeave()
+      settleTitleEnter()
+      return
+    }
 
     if (leaveRef) {
       leaveAnim = animate(

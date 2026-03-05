@@ -895,11 +895,12 @@ function ContextToolRollingResults(props: { parts: ToolPart[]; pending: boolean 
   const wiped = new Set<string>()
   const [mounted, setMounted] = createSignal(false)
   onMount(() => setMounted(true))
+  const reduce = prefersReducedMotion
   const show = () => mounted() && props.pending
   const opacity = useSpring(() => (show() ? 1 : 0), GROW_SPRING)
   const blur = useSpring(() => (show() ? 0 : 2), GROW_SPRING)
   return (
-    <div style={{ opacity: opacity(), filter: `blur(${blur()}px)` }}>
+    <div style={{ opacity: reduce() ? (show() ? 1 : 0) : opacity(), filter: `blur(${reduce() ? 0 : blur()}px)` }}>
       <RollingResults
         items={props.parts}
         rows={3}
@@ -922,6 +923,7 @@ function ContextToolRollingResults(props: { parts: ToolPart[]; pending: boolean 
                   if (!el || !d) return
                   if (wiped.has(k)) return
                   wiped.add(k)
+                  if (reduce()) return
                   el.style.maskImage = WIPE_MASK
                   el.style.webkitMaskImage = WIPE_MASK
                   el.style.maskSize = "240% 100%"

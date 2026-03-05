@@ -1,5 +1,6 @@
 import { createEffect, on, type JSX, onMount, onCleanup } from "solid-js"
 import { animate, tunableSpringValue, type AnimationPlaybackControls, GROW_SPRING, type SpringConfig } from "./motion"
+import { prefersReducedMotion } from "../hooks/use-reduced-motion"
 
 export interface GrowBoxProps {
   children: JSX.Element
@@ -48,6 +49,7 @@ export interface GrowBoxProps {
  * Used for timeline turns, assistant part groups, and user messages.
  */
 export function GrowBox(props: GrowBoxProps) {
+  const reduce = prefersReducedMotion
   const spring = () => props.spring ?? GROW_SPRING
   const toggleSpring = () => props.toggleSpring ?? spring()
   let mode: "mount" | "toggle" = "mount"
@@ -83,7 +85,8 @@ export function GrowBox(props: GrowBoxProps) {
   const edgeIdle = () => Math.max(0, props.edgeIdle ?? 320)
   const edgeFade = () => Math.max(0.05, props.edgeFade ?? 0.24)
   const edgeRise = () => Math.max(0.05, props.edgeRise ?? 0.2)
-  const edgeReady = () => props.animate !== false && open() && edge() && edgeHeight() > 0
+  const animated = () => props.animate !== false && !reduce()
+  const edgeReady = () => animated() && open() && edge() && edgeHeight() > 0
 
   const stopEdgeTimer = () => {
     if (edgeTimer === undefined) return
@@ -99,7 +102,7 @@ export function GrowBox(props: GrowBoxProps) {
     }
     edgeAnim?.stop()
     edgeAnim = undefined
-    if (instant) {
+    if (instant || reduce()) {
       edgeRef.style.opacity = "0"
       edgeOn = false
       return
@@ -124,6 +127,11 @@ export function GrowBox(props: GrowBoxProps) {
   const showEdge = () => {
     stopEdgeTimer()
     if (!edgeRef) return
+    if (reduce()) {
+      edgeRef.style.opacity = `${edgeOpacity()}`
+      edgeOn = true
+      return
+    }
     if (edgeOn && edgeAnim === undefined) {
       edgeRef.style.opacity = `${edgeOpacity()}`
       return
@@ -175,6 +183,10 @@ export function GrowBox(props: GrowBoxProps) {
 
   const fadeBodyIn = (nextMode: "mount" | "toggle" = "mount") => {
     if (props.fade === false || !body) return
+    if (reduce()) {
+      clearBody()
+      return
+    }
     hideBody()
     fadeAnim?.stop()
     fadeAnim = animate(body, { opacity: 1, filter: "blur(0px)" }, nextMode === "toggle" ? toggleSpring() : spring())
@@ -185,6 +197,9 @@ export function GrowBox(props: GrowBoxProps) {
   }
 
   const setInstant = (visible: boolean) => {
+    const next = visible ? targetHeight() : 0
+    springTarget = next
+    height.jump(next)
     root!.style.height = visible ? "" : "0px"
     root!.style.overflow = visible ? "" : "clip"
     hideEdge(true)
@@ -207,6 +222,18 @@ export function GrowBox(props: GrowBoxProps) {
   const setHeight = (nextMode: "mount" | "toggle" = "mount") => {
     if (!root || !open()) return
     const next = targetHeight()
+    if (reduce()) {
+      springTarget = next
+      height.jump(next)
+      if (props.autoHeight === false || watch()) {
+        root.style.height = `${next}px`
+        root.style.overflow = next > 0 ? "visible" : "clip"
+        return
+      }
+      root.style.height = "auto"
+      root.style.overflow = next > 0 ? "visible" : "clip"
+      return
+    }
     if (next === springTarget) return
     const prev = currentHeight()
     if (Math.abs(next - prev) < 1) {
@@ -266,7 +293,7 @@ export function GrowBox(props: GrowBoxProps) {
       offChange()
     })
 
-    if (!props.animate) {
+    if (!animated()) {
       setInstant(open())
       return
     }
@@ -310,7 +337,7 @@ export function GrowBox(props: GrowBoxProps) {
       (value) => {
         if (value === undefined) return
         if (!root || !body) return
-        if (!animateToggle()) {
+        if (!animateToggle() || reduce()) {
           setInstant(value)
           return
         }
@@ -342,12 +369,20 @@ export function GrowBox(props: GrowBoxProps) {
   createEffect(() => {
     if (!edgeRef) return
     edgeRef.style.height = `${edgeHeight()}px`
-    if (props.animate === false || !open() || edgeHeight() <= 0) {
+    if (!animated() || !open() || edgeHeight() <= 0) {
       hideEdge(true)
       return
     }
     if (edge()) return
     hideEdge()
+  })
+
+  createEffect(() => {
+    if (!root || !body) return
+    if (!reduce()) return
+    fadeAnim?.stop()
+    edgeAnim?.stop()
+    setInstant(open())
   })
 
   onCleanup(() => {
