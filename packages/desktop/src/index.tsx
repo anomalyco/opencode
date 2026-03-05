@@ -348,13 +348,14 @@ const createPlatform = (): Platform => {
       await commands.setWslConfig({ enabled })
     },
 
-    getDefaultServerUrl: async () => {
-      const result = await commands.getDefaultServerUrl().catch(() => null)
-      return result
+    getDefaultServerUrl: async (): Promise<import("@opencode-ai/app").DefaultServerConfig | null> => {
+      const url = await commands.getDefaultServerUrl().catch(() => null)
+      if (!url) return null
+      return { url }
     },
 
-    setDefaultServerUrl: async (url: string | null) => {
-      await commands.setDefaultServerUrl(url)
+    setDefaultServerUrl: async (cfg: import("@opencode-ai/app").DefaultServerConfig | null) => {
+      await commands.setDefaultServerUrl(cfg?.url ?? null)
     },
 
     getDisplayBackend: async () => {
@@ -413,8 +414,9 @@ render(() => {
   const platform = createPlatform()
 
   const [defaultServer] = createResource(() =>
-    platform.getDefaultServerUrl?.().then((url) => {
-      if (url) return ServerConnection.key({ type: "http", http: { url } })
+    platform.getDefaultServerUrl?.().then((cfg) => {
+      if (!cfg) return
+      return ServerConnection.key({ type: "http", http: { url: cfg.url } })
     }),
   )
 
