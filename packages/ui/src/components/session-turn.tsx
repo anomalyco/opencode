@@ -1,12 +1,13 @@
 import { AssistantMessage, type FileDiff, Message as MessageType, Part as PartType } from "@opencode-ai/sdk/v2/client"
+import type { SessionStatus } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
-import { useDiffComponent } from "../context/diff"
+import { useFileComponent } from "../context/file"
 
 import { Binary } from "@opencode-ai/util/binary"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { createEffect, createMemo, createSignal, For, on, ParentProps, Show } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import { AssistantParts, Message, PART_MAPPING } from "./message-part"
+import { AssistantParts, Message, Part, PART_MAPPING } from "./message-part"
 import { Card } from "./card"
 import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
@@ -14,6 +15,8 @@ import { Collapsible } from "./collapsible"
 import { DiffChanges } from "./diff-changes"
 import { Icon } from "./icon"
 import { TextShimmer } from "./text-shimmer"
+import { SessionRetry } from "./session-retry"
+import { TextReveal } from "./text-reveal"
 import { createAutoScroll } from "../hooks"
 import { useI18n } from "../context/i18n"
 
@@ -138,10 +141,12 @@ export function SessionTurn(
   props: ParentProps<{
     sessionID: string
     messageID: string
-    lastUserMessageID?: string
     showReasoningSummaries?: boolean
     shellToolDefaultOpen?: boolean
     editToolDefaultOpen?: boolean
+    active?: boolean
+    queued?: boolean
+    status?: SessionStatus
     onUserInteracted?: () => void
     classes?: {
       root?: string
@@ -152,7 +157,7 @@ export function SessionTurn(
 ) {
   const data = useData()
   const i18n = useI18n()
-  const diffComponent = useDiffComponent()
+  const fileComponent = useFileComponent()
 
   const emptyMessages: MessageType[] = []
   const emptyParts: PartType[] = []
@@ -186,24 +191,49 @@ export function SessionTurn(
     return msg
   })
 
-  const lastUserMessageID = createMemo(() => {
-    if (props.lastUserMessageID) return props.lastUserMessageID
-
+  const pending = createMemo(() => {
+    if (typeof props.active === "boolean" && typeof props.queued === "boolean") return
     const messages = allMessages() ?? emptyMessages
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const msg = messages[i]
-      if (msg?.role === "user") return msg.id
-    }
-    return undefined
+    return messages.findLast(
+      (item): item is AssistantMessage => item.role === "assistant" && typeof item.time.completed !== "number",
+    )
   })
 
-  const isLastUserMessage = createMemo(() => props.messageID === lastUserMessageID())
+  const pendingUser = createMemo(() => {
+    const item = pending()
+    if (!item?.parentID) return
+    const messages = allMessages() ?? emptyMessages
+    const result = Binary.search(messages, item.parentID, (m) => m.id)
+    const msg = result.found ? messages[result.index] : messages.find((m) => m.id === item.parentID)
+    if (!msg || msg.role !== "user") return
+    return msg
+  })
+
+  const active = createMemo(() => {
+    if (typeof props.active === "boolean") return props.active
+    const msg = message()
+    const parent = pendingUser()
+    if (!msg || !parent) return false
+    return parent.id === msg.id
+  })
+
+  const queued = createMemo(() => {
+    if (typeof props.queued === "boolean") return props.queued
+    const id = message()?.id
+    if (!id) return false
+    if (!pendingUser()) return false
+    const item = pending()
+    if (!item) return false
+    return id > item.id
+  })
 
   const parts = createMemo(() => {
     const msg = message()
     if (!msg) return emptyParts
     return list(data.store.part?.[msg.id], emptyParts)
   })
+
+  const compaction = createMemo(() => parts().find((part) => part.type === "compaction"))
 
   const diffs = createMemo(() => {
     const files = message()?.summary?.diffs
@@ -283,8 +313,12 @@ export function SessionTurn(
     return unwrap(String(msg))
   })
 
-  const status = createMemo(() => data.store.session_status[props.sessionID] ?? idle)
-  const working = createMemo(() => status().type !== "idle" && isLastUserMessage())
+  const status = createMemo(() => {
+    if (props.status !== undefined) return props.status
+    if (typeof props.active === "boolean" && !props.active) return idle
+    return data.store.session_status[props.sessionID] ?? idle
+  })
+  const working = createMemo(() => status().type !== "idle" && active())
   const showReasoningSummaries = createMemo(() => props.showReasoningSummaries ?? true)
 
   const assistantCopyPartID = createMemo(() => {
@@ -332,8 +366,9 @@ export function SessionTurn(
   )
   const showThinking = createMemo(() => {
     if (!working() || !!error()) return false
+    if (queued()) return false
+    if (status().type === "retry") return false
     if (showReasoningSummaries()) return assistantVisible() === 0
-    if (assistantTailVisible() === "text") return false
     return true
   })
 
@@ -361,8 +396,15 @@ export function SessionTurn(
                 class={props.classes?.container}
               >
                 <div data-slot="session-turn-message-content" aria-live="off">
-                  <Message message={msg()} parts={parts()} interrupted={interrupted()} />
+                  <Message message={msg()} parts={parts()} interrupted={interrupted()} queued={queued()} />
                 </div>
+                <Show when={compaction()}>
+                  {(part) => (
+                    <div data-slot="session-turn-compaction">
+                      <Part part={part()} message={msg()} hideDetails />
+                    </div>
+                  )}
+                </Show>
                 <Show when={assistantMessages().length > 0}>
                   <div data-slot="session-turn-assistant-content" aria-hidden={working()}>
                     <AssistantParts
@@ -379,11 +421,17 @@ export function SessionTurn(
                 <Show when={showThinking()}>
                   <div data-slot="session-turn-thinking">
                     <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
-                    <Show when={!showReasoningSummaries() && reasoningHeading()}>
-                      {(text) => <span data-slot="session-turn-thinking-heading">{text()}</span>}
+                    <Show when={!showReasoningSummaries()}>
+                      <TextReveal
+                        text={reasoningHeading()}
+                        class="session-turn-thinking-heading"
+                        travel={25}
+                        duration={700}
+                      />
                     </Show>
                   </div>
                 </Show>
+                <SessionRetry status={status()} show={active()} />
                 <Show when={edited() > 0 && !working()}>
                   <div data-slot="session-turn-diffs">
                     <Collapsible open={open()} onOpenChange={setOpen} variant="ghost">
@@ -465,7 +513,8 @@ export function SessionTurn(
                                         <Show when={visible()}>
                                           <div data-slot="session-turn-diff-view" data-scrollable>
                                             <Dynamic
-                                              component={diffComponent}
+                                              component={fileComponent}
+                                              mode="diff"
                                               before={{ name: diff.file, contents: diff.before }}
                                               after={{ name: diff.file, contents: diff.after }}
                                             />
