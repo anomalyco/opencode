@@ -198,6 +198,30 @@ test("GitLab Duo: config apiKey takes precedence over environment variable", asy
   })
 })
 
+test("GitLab Duo: includes context-1m beta header in aiGatewayHeaders", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("GITLAB_TOKEN", "test-token")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["gitlab"]).toBeDefined()
+      expect(providers["gitlab"].options?.aiGatewayHeaders?.["anthropic-beta"]).toContain("context-1m-2025-08-07")
+    },
+  })
+})
+
 test("GitLab Duo: supports feature flags configuration", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
