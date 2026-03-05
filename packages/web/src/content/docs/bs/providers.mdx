@@ -84,6 +84,37 @@ Radi kao i svaki drugi provajder u OpenCode i potpuno je opcionalan za korišten
 
 ---
 
+## OpenCode Go
+
+OpenCode Go je jeftin plan pretplate koji pruža pouzdan pristup popularnim modelima otvorenog kodiranja koje pruža OpenCode tim i koji su testirani i verificirani da dobro rade s OpenCode-om.
+
+1. Pokrenite naredbu `/connect` u TUI-u, odaberite `OpenCode Go` i idite na [opencode.ai/auth](https://opencode.ai/zen).
+
+   ```txt
+   /connect
+   ```
+
+2. Prijavite se, dodajte svoje detalje naplate i kopirajte svoj API ključ.
+
+3. Zalijepite svoj API ključ.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Pokrenite naredbu `/models` u TUI da vidite listu modela koje preporučujemo.
+
+   ```txt
+   /models
+   ```
+
+Radi kao i svaki drugi provajder u OpenCode i potpuno je opcionalan za korištenje.
+
+---
+
 ## Direktorij
 
 Pogledajmo neke od provajdera detaljno. Ako želite dodati provajdera na
@@ -1479,9 +1510,42 @@ Ove postavke su opcione i treba ih konfigurirati u skladu s vašim SAP AI Core p
 
 5. Pokrenite naredbu `/models` da odaberete između 40+ dostupnih modela.
 
-```txt
+   ```txt
    /models
-```
+   ```
+
+---
+
+### STACKIT
+
+STACKIT AI Model Serving pruža potpuno upravljano suvereno hosting okruženje za AI modele, fokusirajući se na LLM-ove kao što su Llama, Mistral i Qwen, uz maksimalan suverenitet podataka na evropskoj infrastrukturi.
+
+1. Idite na [STACKIT Portal](https://portal.stackit.cloud), idite na **AI Model Serving** i kreirajte token za autentifikaciju za svoj projekat.
+
+   :::tip
+   Potreban vam je STACKIT korisnički račun, korisnički nalog i projekat prije kreiranja tokena za autentifikaciju.
+   :::
+
+2. Pokrenite naredbu `/connect` i potražite **STACKIT**.
+
+   ```txt
+   /connect
+   ```
+
+3. Unesite svoj STACKIT AI Model Serving token za autentifikaciju.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Pokrenite naredbu `/models` da odaberete dostupne modele kao što su _Qwen3-VL 235B_ ili _Llama 3.3 70B_.
+
+   ```txt
+   /models
+   ```
 
 ---
 
