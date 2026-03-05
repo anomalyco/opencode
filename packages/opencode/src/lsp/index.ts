@@ -8,6 +8,7 @@ import { LSPServer } from "./server"
 import z from "zod"
 import { Config } from "../config/config"
 import { spawn } from "child_process"
+import { withTimeout } from "../util/timeout"
 import { Instance } from "../project/instance"
 import { Flag } from "@/flag/flag"
 
@@ -274,13 +275,18 @@ export namespace LSP {
     return false
   }
 
+  // Prevent indefinite hang when LSP server stdin is full (e.g. pyright under CPU load).
+  const LSP_WRITE_TIMEOUT_MS = 3_000
+
   export async function touchFile(input: string, waitForDiagnostics?: boolean) {
     log.info("touching file", { file: input })
     const clients = await getClients(input)
     await Promise.all(
       clients.map(async (client) => {
         const wait = waitForDiagnostics ? client.waitForDiagnostics({ path: input }) : Promise.resolve()
-        await client.notify.open({ path: input })
+        await withTimeout(client.notify.open({ path: input }), LSP_WRITE_TIMEOUT_MS).catch((err) => {
+          log.warn("LSP write timed out, skipping notification", { err, file: input })
+        })
         return wait
       }),
     ).catch((err) => {
