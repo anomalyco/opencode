@@ -24,7 +24,13 @@ interface DialogSelectDirectoryProps {
 export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const sdk = useGlobalSDK()
   const dialog = useDialog()
-  const terminal = useTerminal()
+  let terminal: ReturnType<typeof useTerminal> | null = null
+  try {
+    terminal = useTerminal()
+  } catch (e) {
+    // Terminal not available on home page — create project won't work
+    console.error("useTerminal not available:", e)
+  }
   const layout = useLayout()
   const params = useParams()
 
@@ -66,12 +72,29 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
       }
     } catch {}
 
-    terminal.run({
-      command: "latervibe",
-      args: ["create", value],
-      title: "New Project",
-      cwd: PROJECTS_DIR,
-    })
+    if (terminal) {
+      terminal.run({
+        command: "latervibe",
+        args: ["create", value],
+        title: "New Project",
+        cwd: PROJECTS_DIR,
+      })
+    } else {
+      sdk.client.pty
+        .create({
+          command: "latervibe",
+          args: ["create", value],
+          title: "New Project",
+          cwd: PROJECTS_DIR,
+        })
+        .catch(() => {
+          showToast({
+            variant: "error",
+            title: "Create failed",
+            description: "Could not create project.",
+          })
+        })
+    }
 
     setNewName("")
     resolve(`${PROJECTS_DIR}/${value}`)

@@ -1,4 +1,4 @@
-import { createMemo, For, Match, Switch } from "solid-js"
+import { createEffect, createMemo, For, Match, Switch } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
 import { LaterWordmark } from "@/overrides/later-branding"
 import { useLayout } from "@/context/layout"
@@ -28,6 +28,16 @@ export default function Home() {
       .slice()
       .sort((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
       .slice(0, 5)
+  })
+
+  // LATER OVERRIDE: Auto-select most recent project on fresh visit.
+  // If upstream changes `recent()` or `openProject()`, keep this effect
+  // and update to match the new signatures.
+  createEffect(() => {
+    const projects = recent()
+    if (projects.length > 0) {
+      openProject(projects[0].worktree)
+    }
   })
 
   const serverDotClass = createMemo(() => {
