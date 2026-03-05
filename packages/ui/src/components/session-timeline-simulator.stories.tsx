@@ -346,22 +346,27 @@ function createPlayback(events: TimelineEvent[]) {
 
   const appendAndPlay = (newEvents: TimelineEvent[]) => {
     pause()
+    // Cancel any in-flight advance so we don't race
+    if (appendTimer !== undefined) {
+      clearTimeout(appendTimer)
+      appendTimer = undefined
+    }
+    advancing = false
     // First, catch up: apply any unapplied events instantly
     const currentTotal = events.length
     const currentStep = step()
     if (currentStep < currentTotal) {
-      batch(() => {
-        for (let i = currentStep; i < currentTotal; i++) {
-          applyEvent(events[i])
-        }
-      })
-      setStep(currentTotal)
+      // Update appliedStep FIRST so the effect triggered by setStep is a no-op
+      for (let i = appliedStep; i < currentTotal && i < events.length; i++) {
+        applyEvent(events[i])
+      }
       appliedStep = currentTotal
+      setStep(currentTotal)
     }
     // Append new events
     events.push(...newEvents)
     setTotalSteps(events.length)
-    // Start or continue auto-advance
+    // Start fresh advance
     startAdvance()
   }
 
@@ -416,6 +421,7 @@ function createPlayback(events: TimelineEvent[]) {
     stepBack,
     reset,
     jumpTo,
+    applyEvent,
     appendAndPlay,
     fullReset,
     cleanup: () => {
@@ -778,6 +784,34 @@ function buildListEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
   }]
 }
 
+const fetchUrls = [
+  "https://docs.solidjs.com/concepts/signals",
+  "https://effect.website/docs/getting-started",
+  "https://github.com/opencode-ai/opencode/issues/342",
+  "https://developer.mozilla.org/en-US/docs/Web/API/IntersectionObserver",
+  "https://nodejs.org/api/child_process.html",
+]
+let fetchIndex = 0
+
+function buildWebFetchEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
+  const t = Date.now()
+  const url = fetchUrls[fetchIndex++ % fetchUrls.length]
+  const input = { url }
+  const fetchPart = mkTool(turn.asstMsgID, "webfetch", {})
+  const events: TimelineEvent[] = [
+    { type: "part", part: fetchPart },
+    { type: "delay", ms: 60 },
+    { type: "part-update", messageID: turn.asstMsgID, partID: fetchPart.id, patch: { state: { status: "pending", input, raw: JSON.stringify(input) } } },
+    { type: "delay", ms: 80 },
+    { type: "part-update", messageID: turn.asstMsgID, partID: fetchPart.id, patch: toolRunning(fetchPart, url, t) },
+  ]
+  return [events, {
+    part: fetchPart, turn, title: url, startTime: t,
+    completeOutput: "Fetched 24.3 KB",
+    completePatch: toolCompleted(fetchPart, url, "Fetched 24.3 KB", t, t + 1200),
+  }]
+}
+
 function buildEditEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
   const t = Date.now()
   const editInput = {
@@ -786,26 +820,28 @@ function buildEditEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
     newString: "const cmd = sanitize(input.command)",
   }
   const editPart = mkTool(turn.asstMsgID, "edit", editInput)
+  const filediff = {
+    file: editInput.filePath,
+    before: "const cmd = input.command",
+    after: "const cmd = sanitize(input.command)",
+    additions: 1,
+    deletions: 1,
+  }
   const events: TimelineEvent[] = [
     { type: "part", part: editPart },
     { type: "delay", ms: 100 },
-    { type: "part-update", messageID: turn.asstMsgID, partID: editPart.id, patch: toolRunning(editPart, "bash.ts", t) },
+    {
+      type: "part-update", messageID: turn.asstMsgID, partID: editPart.id, patch: {
+        state: { status: "running", input: editPart.state.input, title: "bash.ts", metadata: { filediff, diagnostics: {} }, time: { start: t } },
+      },
+    },
   ]
   const completePatch = {
     state: {
       status: "completed",
       input: editInput,
       title: "Updated bash.ts",
-      metadata: {
-        filediff: {
-          file: editInput.filePath,
-          before: "const cmd = input.command",
-          after: "const cmd = sanitize(input.command)",
-          additions: 1,
-          deletions: 1,
-        },
-        diagnostics: {},
-      },
+      metadata: { filediff, diagnostics: {} },
       time: { start: t, end: t + 300 },
     },
   }
@@ -917,17 +953,28 @@ function SessionTimelineSimulator() {
     return turn
   }
 
-  function ensureTurn(): [TurnState, TimelineEvent[]] {
+  const userPrompts = [
+    "Can you look at the bash tool and fix the streaming output?",
+    "Refactor the session manager to use Effect",
+    "The tests are failing on CI, can you investigate?",
+    "Add a new command for listing recent sessions",
+    "Fix the type errors in the provider module",
+  ]
+  let promptIndex = 0
+
+  function ensureTurn(): TurnState {
     const t = currentTurn()
-    if (t) return [t, []]
+    if (t) return t
     const turn = startNewTurn()
-    return [turn, [
-      { type: "status", status: { type: "busy" } },
-      { type: "message", message: mkUser(turn.userMsgID) },
-      { type: "part", part: mkText(turn.userMsgID, "Let's get started.") },
-      { type: "delay", ms: 80 },
-      { type: "message", message: mkAssistant(turn.asstMsgID, turn.userMsgID) },
-    ]]
+    const prompt = userPrompts[promptIndex++ % userPrompts.length]
+    // Apply user message events instantly so SessionTurn has data on mount
+    batch(() => {
+      pb.applyEvent({ type: "status", status: { type: "busy" } })
+      pb.applyEvent({ type: "message", message: mkUser(turn.userMsgID) })
+      pb.applyEvent({ type: "part", part: mkText(turn.userMsgID, prompt) })
+      pb.applyEvent({ type: "message", message: mkAssistant(turn.asstMsgID, turn.userMsgID) })
+    })
+    return turn
   }
 
   // Complete the current running tool, returning its completion events
@@ -950,10 +997,10 @@ function SessionTimelineSimulator() {
   // Fire a tool that stays running until the next action
   function triggerTool(builder: (turn: TurnState) => [TimelineEvent[], RunningTool]) {
     const drain = drainRunning()
-    const [turn, prefix] = ensureTurn()
+    const turn = ensureTurn()
     const [toolEvents, running] = builder(turn)
     setRunningTool(running)
-    pb.appendAndPlay([...drain, ...prefix, ...toolEvents])
+    pb.appendAndPlay([...drain, ...toolEvents])
   }
 
   // Fire a random context tool (read/grep/glob/list) — stays running until next action
@@ -972,12 +1019,15 @@ function SessionTimelineSimulator() {
       { type: "message", message: mkAssistant(turn.asstMsgID, turn.userMsgID, Date.now()) },
       { type: "status", status: { type: "idle" } },
     ]
+    setCurrentTurn(null)
     pb.appendAndPlay(evts)
   }
 
   function fullReset() {
     _pid = 0
     readIndex = 0
+    promptIndex = 0
+    fetchIndex = 0
     grepIndex = 0
     globIndex = 0
     listIndex = 0
@@ -1017,48 +1067,52 @@ function SessionTimelineSimulator() {
         }
         // First press — start a new bash tool
         const drain = drainRunning()
-        const [turn, prefix] = ensureTurn()
+        const turn = ensureTurn()
         const [toolEvents, running, cmdIdx] = buildBashStartEvents(turn)
         setRunningTool(running)
         bashState = { cmdIdx, chunkIdx: 0, currentOutput: "", part: running.part, turn }
-        pb.appendAndPlay([...drain, ...prefix, ...toolEvents])
+        pb.appendAndPlay([...drain, ...toolEvents])
       },
     },
     {
       key: "t", label: "Text", handler: () => {
         const drain = drainRunning()
-        const [turn, prefix] = ensureTurn()
-        pb.appendAndPlay([...drain, ...prefix, ...buildTextEvents(turn)])
+        const turn = ensureTurn()
+        pb.appendAndPlay([...drain, ...buildTextEvents(turn)])
       },
     },
     { key: "d", label: "Edit", handler: () => triggerTool(buildEditEvents) },
+    { key: "w", label: "WebFetch", handler: () => triggerTool(buildWebFetchEvents) },
     {
       key: "x", label: "Error", handler: () => {
         const drain = drainRunning()
-        const [turn, prefix] = ensureTurn()
-        pb.appendAndPlay([...drain, ...prefix, ...buildErrorEvents(turn)])
+        const turn = ensureTurn()
+        pb.appendAndPlay([...drain, ...buildErrorEvents(turn)])
       },
     },
     {
       key: "u", label: "User", handler: () => {
         const prev = currentTurn()
-        const evts: TimelineEvent[] = [...drainRunning()]
+        const drain = drainRunning()
+        // Complete previous turn if needed
+        const evts: TimelineEvent[] = [...drain]
         if (prev) {
           evts.push(
             { type: "message", message: mkAssistant(prev.asstMsgID, prev.userMsgID, Date.now()) },
             { type: "status", status: { type: "idle" } },
-            { type: "delay", ms: 150 },
           )
         }
+        // Apply completion events instantly, then set up new turn
+        for (const ev of evts) pb.applyEvent(ev)
+        // New turn — applied instantly so the user message shows immediately
         const turn = startNewTurn()
-        evts.push(
-          { type: "message", message: mkUser(turn.userMsgID) },
-          { type: "part", part: mkText(turn.userMsgID, `User message #${turn.turnIndex}`) },
-          { type: "delay", ms: 120 },
-          { type: "status", status: { type: "busy" } },
-          { type: "message", message: mkAssistant(turn.asstMsgID, turn.userMsgID) },
-        )
-        pb.appendAndPlay(evts)
+        const prompt = userPrompts[promptIndex++ % userPrompts.length]
+        batch(() => {
+          pb.applyEvent({ type: "status", status: { type: "busy" } })
+          pb.applyEvent({ type: "message", message: mkUser(turn.userMsgID) })
+          pb.applyEvent({ type: "part", part: mkText(turn.userMsgID, prompt) })
+          pb.applyEvent({ type: "message", message: mkAssistant(turn.asstMsgID, turn.userMsgID) })
+        })
       },
     },
     { key: "c", label: "Complete", handler: () => completeTurn() },
@@ -1117,8 +1171,18 @@ function SessionTimelineSimulator() {
         "font-size": "var(--font-size-base)",
       }}
     >
-      {/* Main content */}
-      <div style={{ flex: "1 1 0", "min-height": "0", overflow: "auto" }}>
+      {/* Main content — column-reverse pins content to bottom like the real session */}
+      <div
+        style={{
+          flex: "1 1 0",
+          "min-height": "0",
+          "overflow-y": "auto",
+          display: "flex",
+          "flex-direction": "column-reverse",
+          "overflow-anchor": "none",
+          "scrollbar-width": "none",
+        }}
+      >
         <DataProvider data={pb.data} directory="/Users/kit/project">
           <FileComponentProvider component={PlaceholderFile}>
             <div class="flex flex-col gap-0 items-start justify-start pb-16 w-full max-w-200 mx-auto 2xl:max-w-[1000px]">
