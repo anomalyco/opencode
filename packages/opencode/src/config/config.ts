@@ -1157,6 +1157,16 @@ export namespace Config {
         .object({
           disable_paste_summary: z.boolean().optional(),
           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
+          hashline_edit: z
+            .boolean()
+            .optional()
+            .describe("Enable hashline-backed edit/read tool behavior (default true, set false to disable)"),
+          hashline_autocorrect: z
+            .boolean()
+            .optional()
+            .describe(
+              "Enable hashline autocorrect cleanup for copied prefixes and formatting artifacts (default true)",
+            ),
           openTelemetry: z
             .boolean()
             .optional()

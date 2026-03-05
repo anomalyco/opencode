@@ -6,6 +6,7 @@ import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 import { PermissionNext } from "../../src/permission/next"
 import { Agent } from "../../src/agent/agent"
+import { hashlineLine } from "../../src/tool/hashline"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
@@ -269,10 +270,10 @@ describe("tool.read truncation", () => {
       fn: async () => {
         const read = await ReadTool.init()
         const result = await read.execute({ filePath: path.join(tmp.path, "offset.txt"), offset: 10, limit: 5 }, ctx)
-        expect(result.output).toContain("10: line10")
-        expect(result.output).toContain("14: line14")
-        expect(result.output).not.toContain("9: line10")
-        expect(result.output).not.toContain("15: line15")
+        expect(result.output).toContain(hashlineLine(10, "line10"))
+        expect(result.output).toContain(hashlineLine(14, "line14"))
+        expect(result.output).not.toContain(hashlineLine(9, "line9"))
+        expect(result.output).not.toContain(hashlineLine(15, "line15"))
         expect(result.output).toContain("line10")
         expect(result.output).toContain("line14")
         expect(result.output).not.toContain("line0")
@@ -438,6 +439,50 @@ root_type Monster;`
         expect(result.attachments).toBeUndefined()
         expect(result.output).toContain("namespace MyGame")
         expect(result.output).toContain("table Monster")
+      },
+    })
+  })
+})
+
+describe("tool.read hashline output", () => {
+  test("returns LINE#ID prefixes by default", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "hashline.txt"), "foo\nbar")
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, "hashline.txt") }, ctx)
+        expect(result.output).toContain(hashlineLine(1, "foo"))
+        expect(result.output).toContain(hashlineLine(2, "bar"))
+        expect(result.output).not.toContain("1: foo")
+      },
+    })
+  })
+
+  test("keeps legacy line prefixes when hashline mode is disabled", async () => {
+    await using tmp = await tmpdir({
+      config: {
+        experimental: {
+          hashline_edit: false,
+        },
+      },
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "legacy.txt"), "foo\nbar")
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, "legacy.txt") }, ctx)
+        expect(result.output).toContain("1: foo")
+        expect(result.output).toContain("2: bar")
       },
     })
   })

@@ -1,10 +1,33 @@
-Performs exact string replacements in files. 
+Performs file edits with two supported payload schemas.
 
 Usage:
-- You must use your `Read` tool at least once in the conversation before editing. This tool will error if you attempt an edit without reading the file. 
-- When editing text from Read tool output, ensure you preserve the exact indentation (tabs/spaces) as it appears AFTER the line number prefix. The line number prefix format is: line number + colon + space (e.g., `1: `). Everything after that space is the actual file content to match. Never include any part of the line number prefix in the oldString or newString.
+- You must use your `Read` tool at least once before editing an existing file. This tool rejects stale edits when file contents changed since read.
 - ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
 - Only use emojis if the user explicitly requests it. Avoid adding emojis to files unless asked.
-- The edit will FAIL if `oldString` is not found in the file with an error "oldString not found in content".
-- The edit will FAIL if `oldString` is found multiple times in the file with an error "Found multiple matches for oldString. Provide more surrounding lines in oldString to identify the correct match." Either provide a larger string with more surrounding context to make it unique or use `replaceAll` to change every instance of `oldString`. 
-- Use `replaceAll` for replacing and renaming strings across the file. This parameter is useful if you want to rename a variable for instance.
+
+Legacy schema (always supported):
+- `{ filePath, oldString, newString, replaceAll? }`
+- Exact replacement only.
+- The edit fails if `oldString` is not found.
+- The edit fails if `oldString` matches multiple locations and `replaceAll` is not true.
+- Use `replaceAll: true` for global replacements.
+
+Hashline schema (default behavior):
+- `{ filePath, edits, delete?, rename? }`
+- Do not mix legacy fields (`oldString/newString/replaceAll`) with hashline fields (`edits/delete/rename`) in one call.
+- Use strict anchor references from `Read` output: `LINE#ID`.
+- Hashline mode can be turned off with `experimental.hashline_edit: false`.
+- Autocorrect cleanup is on by default and can be turned off with `experimental.hashline_autocorrect: false`.
+- Default autocorrect only strips copied `LINE#ID:`/`>>>` prefixes; set `OPENCODE_HL_AUTOCORRECT=1` to opt into heavier cleanup heuristics.
+- When `Read` returns `LINE#ID:<content>`, prefer hashline operations.
+- Operations:
+  - `set_line { line, text }`
+  - `replace_lines { start_line, end_line, text }`
+  - `insert_after { line, text }`
+  - `insert_before { line, text }`
+  - `insert_between { after_line, before_line, text }`
+  - `append { text }`
+  - `prepend { text }`
+  - `replace { old_text, new_text, all? }`
+- In hashline mode, provide the exact `LINE#ID` anchors from the latest `Read` result. Mismatched anchors are rejected and should be retried with the returned `retry with` anchors.
+- Fallback guidance: GPT-family models can use `apply_patch` as fallback; non-GPT models should fallback to legacy `oldString/newString` payloads.
