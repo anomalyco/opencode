@@ -648,7 +648,13 @@ export const RunCommand = cmd({
     }
 
     if (args.attach) {
-      const sdk = createOpencodeClient({ baseUrl: args.attach, directory })
+      const headers = (() => {
+        const password = Flag.OPENCODE_SERVER_PASSWORD
+        if (!password) return undefined
+        const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
+        return { Authorization: `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}` }
+      })()
+      const sdk = createOpencodeClient({ baseUrl: args.attach, directory, headers })
       return await execute(sdk)
     }
 
