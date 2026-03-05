@@ -1,5 +1,5 @@
 // packages/opencode/test/security/integration.test.ts
-import { describe, test, expect, beforeAll } from "bun:test"
+import { describe, test, expect, beforeAll, afterAll } from "bun:test"
 import { KaliContainer } from "../../src/security/kali/container"
 import { KaliTool } from "../../src/tool/kali"
 
