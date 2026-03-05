@@ -92,9 +92,7 @@ rustPlatform.buildRustPackage (finalAttrs: {
 
   meta = {
     description = "OpenCode Desktop App";
-    homepage = "https://opencode.ai";
-    license = lib.licenses.mit;
     mainProgram = "opencode-desktop";
-    inherit (opencode.meta) platforms;
+    inherit (opencode.meta) homepage license platforms;
   };
 })
