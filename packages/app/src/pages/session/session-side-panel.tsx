@@ -378,6 +378,7 @@ export function SessionSidePanel(props: {
                       >
                         <FileTree
                           path=""
+                          class="pt-3"
                           allowed={diffFiles()}
                           kinds={kinds()}
                           draggable={false}
@@ -395,6 +396,7 @@ export function SessionSidePanel(props: {
                     <Match when={true}>
                       <FileTree
                         path=""
+                        class="pt-3"
                         modified={diffFiles()}
                         kinds={kinds()}
                         onFileClick={(node) => openTab(file.tab(node.path))}
