@@ -76,6 +76,7 @@ let cli = yargs(hideBin(process.argv))
 
     process.env.AGENT = "1"
     process.env.MAMMOUTH = "1"
+    process.env.OPENCODE_PID = String(process.pid)
 
     Log.Default.info("mammouth", {
       version: Installation.VERSION,

@@ -7,6 +7,11 @@ function env(key: string, fallback?: string) {
   return process.env[key] ?? (fallback ? process.env[fallback] : undefined)
 }
 
+function falsy(key: string) {
+  const value = process.env[key]?.toLowerCase()
+  return value === "false" || value === "0"
+}
+
 export namespace Flag {
   export const OPENCODE_AUTO_SHARE = truthy("MAMMOUTH_AUTO_SHARE")
   export const OPENCODE_GIT_BASH_PATH = process.env["MAMMOUTH_GIT_BASH_PATH"]
@@ -56,9 +61,9 @@ export namespace Flag {
   export const OPENCODE_EXPERIMENTAL_LSP_TOOL = OPENCODE_EXPERIMENTAL || truthy("MAMMOUTH_EXPERIMENTAL_LSP_TOOL")
   export const OPENCODE_DISABLE_FILETIME_CHECK = truthy("MAMMOUTH_DISABLE_FILETIME_CHECK")
   export const OPENCODE_EXPERIMENTAL_PLAN_MODE = OPENCODE_EXPERIMENTAL || truthy("MAMMOUTH_EXPERIMENTAL_PLAN_MODE")
-  export const OPENCODE_EXPERIMENTAL_MARKDOWN = truthy("MAMMOUTH_EXPERIMENTAL_MARKDOWN")
-  export const OPENCODE_MODELS_URL = env("MAMMOUTH_MODELS_URL", "OPENCODE_MODELS_URL")
-  export const OPENCODE_MODELS_PATH = env("MAMMOUTH_MODELS_PATH", "OPENCODE_MODELS_PATH")
+  export const OPENCODE_EXPERIMENTAL_MARKDOWN = !falsy("MAMMOUTH_EXPERIMENTAL_MARKDOWN")
+  export const OPENCODE_MODELS_URL = process.env["MAMMOUTH_MODELS_URL"]
+  export const OPENCODE_MODELS_PATH = process.env["MAMMOUTH_MODELS_PATH"]
 
   function number(key: string) {
     const value = process.env[key]

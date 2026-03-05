@@ -202,7 +202,8 @@ export function ReloadSection() {
                 minute: "2-digit",
                 second: "2-digit",
               })}
-              . {i18n.t("workspace.reload.reason")} {billingInfo()?.reloadError?.replace(/\.$/, "")}.{" "}
+              . {i18n.t("workspace.reload.reason")}{" "}
+              {localizeError(i18n.t, billingInfo()?.reloadError ?? undefined).replace(/\.$/, "")}.{" "}
               {i18n.t("workspace.reload.updatePaymentMethod")}
             </p>
             <form action={reload} method="post" data-slot="create-form">
