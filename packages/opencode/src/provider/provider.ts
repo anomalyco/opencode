@@ -112,6 +112,7 @@ export namespace Provider {
   type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
   type CustomLoader = (provider: Info) => Promise<{
     autoload: boolean
+    api?: string
     getModel?: CustomModelLoader
     options?: Record<string, any>
   }>
@@ -465,9 +466,9 @@ export namespace Provider {
       }
     },
     gitlab: async (input) => {
-      const instanceUrl = Env.get("GITLAB_INSTANCE_URL") || "https://gitlab.com"
-
       const auth = await Auth.get(input.id)
+      const url = (auth?.type === "api" && auth.url) || Env.get("GITLAB_INSTANCE_URL") || "https://gitlab.com"
+
       const apiKey = await (async () => {
         if (auth?.type === "oauth") return auth.access
         if (auth?.type === "api") return auth.key
@@ -484,8 +485,9 @@ export namespace Provider {
 
       return {
         autoload: !!apiKey,
+        api: url,
         options: {
-          instanceUrl,
+          instanceUrl: url,
           apiKey,
           aiGatewayHeaders,
           featureFlags: {
@@ -686,6 +688,7 @@ export namespace Provider {
     .object({
       id: z.string(),
       name: z.string(),
+      api: z.string().optional(),
       source: z.enum(["env", "config", "custom", "api"]),
       env: z.string().array(),
       key: z.string().optional(),
@@ -764,11 +767,16 @@ export namespace Provider {
     return m
   }
 
+  const DEFAULT_API: Record<string, string> = {
+    gitlab: "https://gitlab.com",
+  }
+
   export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
     return {
       id: provider.id,
       source: "custom",
       name: provider.name,
+      api: provider.api ?? DEFAULT_API[provider.id],
       env: provider.env ?? [],
       options: {},
       models: mapValues(provider.models, (model) => fromModelsDevModel(provider, model)),
@@ -993,6 +1001,7 @@ export namespace Provider {
         if (result.getModel) modelLoaders[providerID] = result.getModel
         const opts = result.options ?? {}
         const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
+        if (result.api) patch.api = result.api
         mergeProvider(providerID, patch)
       }
     }

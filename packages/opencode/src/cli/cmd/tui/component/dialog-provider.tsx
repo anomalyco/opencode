@@ -211,36 +211,66 @@ function ApiMethod(props: ApiMethodProps) {
   const sync = useSync()
   const { theme } = useTheme()
 
+  const provider = createMemo(() => sync.data.provider_next.all.find((p) => p.id === props.providerID))
+  const api = createMemo(() => provider()?.api)
+  const [url, setUrl] = createSignal("")
+
+  onMount(() => {
+    setUrl(api() || "")
+  })
+
+  const description = createMemo(() => {
+    return (
+      {
+        opencode: (
+          <box gap={1}>
+            <text fg={theme.textMuted}>
+              OpenCode Zen gives you access to all the best coding models at the cheapest prices with a single API key.
+            </text>
+            <text fg={theme.text}>
+              Go to <span style={{ fg: theme.primary }}>https://opencode.ai/zen</span> to get a key
+            </text>
+          </box>
+        ),
+        "opencode-go": (
+          <box gap={1}>
+            <text fg={theme.textMuted}>
+              OpenCode Go is a $10 per month subscription that provides reliable access to popular open coding models
+              with generous usage limits.
+            </text>
+            <text fg={theme.text}>
+              Go to <span style={{ fg: theme.primary }}>https://opencode.ai/zen</span> and enable OpenCode Go
+            </text>
+          </box>
+        ),
+      }[props.providerID] ?? undefined
+    )
+  })
+
+  if (api()) {
+    return (
+      <DialogPrompt
+        title={props.title}
+        placeholder={api()!}
+        value={url()}
+        description={
+          <box gap={1}>
+            <text fg={theme.textMuted}>API URL (press enter to use default)</text>
+          </box>
+        }
+        onConfirm={(input) => {
+          setUrl(input || api()!)
+          dialog.replace(() => <ApiKeyPrompt providerID={props.providerID} title={props.title} url={input || api()!} />)
+        }}
+      />
+    )
+  }
+
   return (
     <DialogPrompt
       title={props.title}
       placeholder="API key"
-      description={
-        {
-          opencode: (
-            <box gap={1}>
-              <text fg={theme.textMuted}>
-                OpenCode Zen gives you access to all the best coding models at the cheapest prices with a single API
-                key.
-              </text>
-              <text fg={theme.text}>
-                Go to <span style={{ fg: theme.primary }}>https://opencode.ai/zen</span> to get a key
-              </text>
-            </box>
-          ),
-          "opencode-go": (
-            <box gap={1}>
-              <text fg={theme.textMuted}>
-                OpenCode Go is a $10 per month subscription that provides reliable access to popular open coding models
-                with generous usage limits.
-              </text>
-              <text fg={theme.text}>
-                Go to <span style={{ fg: theme.primary }}>https://opencode.ai/zen</span> and enable OpenCode Go
-              </text>
-            </box>
-          ),
-        }[props.providerID] ?? undefined
-      }
+      description={description()}
       onConfirm={async (value) => {
         if (!value) return
         await sdk.client.auth.set({
@@ -248,6 +278,73 @@ function ApiMethod(props: ApiMethodProps) {
           auth: {
             type: "api",
             key: value,
+          },
+        })
+        await sdk.client.instance.dispose()
+        await sync.bootstrap()
+        dialog.replace(() => <DialogModel providerID={props.providerID} />)
+      }}
+    />
+  )
+}
+
+interface ApiKeyPromptProps {
+  providerID: string
+  title: string
+  url: string
+}
+
+function ApiKeyPrompt(props: ApiKeyPromptProps) {
+  const dialog = useDialog()
+  const sdk = useSDK()
+  const sync = useSync()
+  const { theme } = useTheme()
+
+  const description = createMemo(() => {
+    return (
+      {
+        opencode: (
+          <box gap={1}>
+            <text fg={theme.textMuted}>
+              OpenCode Zen gives you access to all the best coding models at the cheapest prices with a single API key.
+            </text>
+            <text fg={theme.text}>
+              Go to <span style={{ fg: theme.primary }}>https://opencode.ai/zen</span> to get a key
+            </text>
+          </box>
+        ),
+        "opencode-go": (
+          <box gap={1}>
+            <text fg={theme.textMuted}>
+              OpenCode Go is a $10 per month subscription that provides reliable access to popular open coding models
+              with generous usage limits.
+            </text>
+            <text fg={theme.text}>
+              Go to <span style={{ fg: theme.primary }}>https://opencode.ai/zen</span> and enable OpenCode Go
+            </text>
+          </box>
+        ),
+      }[props.providerID] ?? (
+        <box gap={1}>
+          <text fg={theme.textMuted}>Enter your API key</text>
+        </box>
+      )
+    )
+  })
+
+  return (
+    <DialogPrompt
+      title={props.title}
+      placeholder="API key"
+      description={description()}
+      onConfirm={async (value) => {
+        if (!value) return
+        await sdk.client.auth.set({
+          providerID: props.providerID,
+          auth: {
+            type: "api",
+            key: value,
+            url: props.url,
           },
         })
         await sdk.client.instance.dispose()

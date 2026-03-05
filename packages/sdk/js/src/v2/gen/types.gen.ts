@@ -1519,6 +1519,7 @@ export type OAuth = {
 export type ApiAuth = {
   type: "api"
   key: string
+  url?: string
 }
 
 export type WellKnownAuth = {
@@ -1610,6 +1611,7 @@ export type Model = {
 export type Provider = {
   id: string
   name: string
+  api?: string
   source: "env" | "config" | "custom" | "api"
   env: Array<string>
   key?: string

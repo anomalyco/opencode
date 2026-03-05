@@ -121,11 +121,13 @@ export namespace ProviderAuth {
     z.object({
       providerID: z.string(),
       key: z.string(),
+      url: z.string().optional(),
     }),
     async (input) => {
       await Auth.set(input.providerID, {
         type: "api",
         key: input.key,
+        url: input.url,
       })
     },
   )

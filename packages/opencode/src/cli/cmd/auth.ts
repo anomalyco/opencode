@@ -62,9 +62,11 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
         if (prompts.isCancel(value)) throw new UI.CancelledError()
         inputs[prompt.key] = value
       } else {
-        const value = await prompts.text({
+        const secret = /token|key|secret|password/i.test(prompt.key)
+        const fn = secret ? prompts.password : prompts.text
+        const value = await fn({
           message: prompt.message,
-          placeholder: prompt.placeholder,
+          placeholder: secret ? undefined : prompt.placeholder,
           validate: prompt.validate ? (v) => prompt.validate!(v ?? "") : undefined,
         })
         if (prompts.isCancel(value)) throw new UI.CancelledError()
@@ -444,15 +446,25 @@ export const AuthLoginCommand = cmd({
           )
         }
 
+        const info = providers[provider]
+        let url: string | undefined
+        if (info?.api) {
+          const input = await prompts.text({
+            message: "API URL",
+            placeholder: info.api,
+            defaultValue: info.api,
+          })
+          if (prompts.isCancel(input)) throw new UI.CancelledError()
+          url = input || info.api
+        }
+
         const key = await prompts.password({
           message: "Enter your API key",
           validate: (x) => (x && x.length > 0 ? undefined : "Required"),
         })
         if (prompts.isCancel(key)) throw new UI.CancelledError()
-        await Auth.set(provider, {
-          type: "api",
-          key,
-        })
+
+        await Auth.set(provider, { type: "api", key, url })
 
         prompts.outro("Done")
       },

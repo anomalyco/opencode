@@ -9,7 +9,7 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@opencode-ai/ui/toast"
-import { createMemo, Match, onCleanup, onMount, Switch } from "solid-js"
+import { createMemo, Match, onCleanup, onMount, Show, Switch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Link } from "@/components/link"
 import { useLanguage } from "@/context/language"
@@ -238,8 +238,10 @@ export function DialogConnectProvider(props: { provider: string }) {
   }
 
   function ApiAuthView() {
+    const api = createMemo(() => provider().api)
     const [formStore, setFormStore] = createStore({
-      value: "",
+      url: api() ?? "",
+      apiKey: "",
       error: undefined as string | undefined,
     })
 
@@ -249,6 +251,7 @@ export function DialogConnectProvider(props: { provider: string }) {
       const form = e.currentTarget as HTMLFormElement
       const formData = new FormData(form)
       const apiKey = formData.get("apiKey") as string
+      const url = formData.get("url") as string
 
       if (!apiKey?.trim()) {
         setFormStore("error", language.t("provider.connect.apiKey.required"))
@@ -261,6 +264,7 @@ export function DialogConnectProvider(props: { provider: string }) {
         auth: {
           type: "api",
           key: apiKey,
+          url: api() ? url?.trim() || undefined : undefined,
         },
       })
       await complete()
@@ -289,14 +293,24 @@ export function DialogConnectProvider(props: { provider: string }) {
           </Match>
         </Switch>
         <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
+          <Show when={api()}>
+            <TextField
+              type="text"
+              label="API URL"
+              placeholder={api()}
+              name="url"
+              value={formStore.url}
+              onChange={(v) => setFormStore("url", v)}
+            />
+          </Show>
           <TextField
-            autofocus
-            type="text"
+            autofocus={!api()}
+            type="password"
             label={language.t("provider.connect.apiKey.label", { provider: provider().name })}
             placeholder={language.t("provider.connect.apiKey.placeholder")}
             name="apiKey"
-            value={formStore.value}
-            onChange={(v) => setFormStore("value", v)}
+            value={formStore.apiKey}
+            onChange={(v) => setFormStore("apiKey", v)}
             validationState={formStore.error ? "invalid" : undefined}
             error={formStore.error}
           />
