@@ -34,6 +34,8 @@ export async function captureFailure(test: any, err: any, runDir?: string) {
   try {
     const run = runDir || path.join(process.cwd(), 'test-results', `run-${safeTimestamp()}`)
     await fsp.mkdir(run, { recursive: true })
+    // marker to indicate capture started
+    try { await fsp.writeFile(path.join(run, 'capture-started.txt'), new Date().toISOString(), 'utf8') } catch (e) {}
     const title = typeof test.fullTitle === 'function' ? test.fullTitle() : test.title || 'unknown_test'
     const safeName = title.replace(/[^a-zA-Z0-9-_]/g, '_').slice(0, 200)
     const out = path.join(run, safeName)
@@ -58,6 +60,27 @@ export async function captureFailure(test: any, err: any, runDir?: string) {
         const text = editor.document.getText()
         await fsp.writeFile(path.join(out, 'editor.txt'), text, 'utf8')
       }
+
+      // Attempt to use VS Code's capture-related commands if present.
+      try {
+        const cmds: string[] = await vscode.commands.getCommands(true)
+        try { await fsp.writeFile(path.join(out, 'vscode-commands.txt'), cmds.join('\n'), 'utf8') } catch (e) {}
+        const captureCmd = cmds.find(c => /screenshot|capture|screencap|captureScreen/i.test(c))
+        if (captureCmd) {
+          try {
+            // some capture commands may open a file or return a uri; record whatever is returned
+            const res = await vscode.commands.executeCommand(captureCmd)
+            await fsp.writeFile(path.join(out, 'vscode-capture-cmd.txt'), String(res || captureCmd), 'utf8')
+          } catch (e) {
+            // attempt well-known command ids, ignore errors
+            try { await vscode.commands.executeCommand('workbench.action.captureScreen') } catch (e) {}
+            try { await vscode.commands.executeCommand('workbench.action.captureEditor') } catch (e) {}
+            try { await vscode.commands.executeCommand('workbench.action.captureScreenshot') } catch (e) {}
+          }
+        }
+      } catch (e) {
+        // getCommands may fail in some hosts
+      }
     } catch (e) {}
 
     // copy mochawesome outputs if present in test-results dir
@@ -66,15 +89,50 @@ export async function captureFailure(test: any, err: any, runDir?: string) {
       await copyDir(reportDir, path.join(out, 'mochawesome'))
     } catch (e) {}
 
-    // capture Playwright page screenshot if available
+    // capture Playwright page screenshot if available; otherwise try X11 screenshot tools
     try {
       // @ts-ignore
       const page = (global as any).page
+      const png = path.join(out, 'screenshot.png')
       if (page && typeof page.screenshot === 'function') {
-        const png = path.join(out, 'screenshot.png')
         await page.screenshot({ path: png })
+      } else {
+        // fallback: attempt to take a screenshot of the X display using common tools
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const child_process = require('child_process')
+          const { promisify } = require('util')
+          const exec = promisify(child_process.exec)
+          const display = process.env.DISPLAY || ':0'
+          const cmds = [
+            `import -display ${display} -window root ${png}`,
+            `xwd -root -display ${display} -silent | convert xwd:- png:${png}`,
+            `scrot --display ${display} ${png}`,
+            `gnome-screenshot -f ${png}`
+          ]
+          for (const cmd of cmds) {
+            try {
+              await exec(cmd, { timeout: 5000 })
+              if (fs.existsSync(png)) break
+            } catch (e) {
+              // try next
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
       }
     } catch (e) {}
+
+    // mirror artifacts to package-local test-results (best-effort)
+    try {
+      const pkgRoot = path.resolve(__dirname, '..', '..', '..')
+      const mirrorBase = path.join(pkgRoot, 'test-results')
+      const mirrorRun = path.join(mirrorBase, path.basename(run))
+      await copyDir(run, mirrorRun)
+    } catch (e) {
+      // ignore mirror failures
+    }
 
   } catch (outerErr) {
     try {
