@@ -84,6 +84,38 @@ Funciona como cualquier otro proveedor en OpenCode y su uso es completamente opc
 
 ---
 
+## OpenCode Go
+
+OpenCode Go es un plan de suscripción de bajo costo que brinda acceso confiable a modelos de codificación abiertos populares proporcionados por el equipo de OpenCode que han sido
+probado y verificado para funcionar bien con OpenCode.
+
+1. Ejecute el comando `/connect` en TUI, seleccione `OpenCode Go` y diríjase a [opencode.ai/auth](https://opencode.ai/zen).
+
+   ```txt
+   /connect
+   ```
+
+2. Inicie sesión, agregue sus datos de facturación y copie su clave API.
+
+3. Pegue su clave API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Ejecute `/models` en TUI para ver la lista de modelos que recomendamos.
+
+   ```txt
+   /models
+   ```
+
+Funciona como cualquier otro proveedor en OpenCode y su uso es completamente opcional.
+
+---
+
 ## Directorio
 
 Veamos algunos de los proveedores en detalle. Si desea agregar un proveedor a la
@@ -792,8 +824,6 @@ Para utilizar su suscripción GitHub Copilot con opencode:
 :::note
 Algunos modelos pueden necesitar un [Pro+
 suscripción](https://github.com/features/copilot/plans) para usar.
-
-Algunos modelos deben habilitarse manualmente en su [GitHub configuración del copiloto](https://docs.github.com/en/copilot/how-tos/use-ai-models/configure-access-to-ai-models#setup-for-individual-use).
 :::
 
 1. Ejecute el comando `/connect` y busque GitHub Copilot.
@@ -1476,6 +1506,39 @@ SAP AI Core brinda acceso a más de 40 modelos de OpenAI, Anthropic, Google, Ama
    :::
 
 5. Ejecute el comando `/models` para seleccionar entre más de 40 modelos disponibles.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### STACKIT
+
+STACKIT AI Model Serving proporciona un entorno de alojamiento soberano totalmente gestionado para modelos de IA, centrándose en LLM como Llama, Mistral y Qwen, con máxima soberanía de datos en infraestructura europea.
+
+1. Diríjase al [Portal STACKIT](https://portal.stackit.cloud), navegue hasta **AI Model Serving** y cree un token de autenticación para su proyecto.
+
+   :::tip
+   Necesita una cuenta de cliente STACKIT, una cuenta de usuario y un proyecto antes de crear tokens de autenticación.
+   :::
+
+2. Ejecute el comando `/connect` y busque **STACKIT**.
+
+   ```txt
+   /connect
+   ```
+
+3. Ingrese su token de autenticación de STACKIT AI Model Serving.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Ejecute el comando `/models` para seleccionar entre los modelos disponibles como _Qwen3-VL 235B_ o _Llama 3.3 70B_.
 
    ```txt
    /models
