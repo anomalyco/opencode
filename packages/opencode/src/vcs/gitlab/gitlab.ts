@@ -18,6 +18,81 @@ export interface GitLabConfig {
   defaultProjectId?: number
 }
 
+namespace GitLabResponses {
+  export interface Author {
+    username: string
+    name: string
+  }
+
+  export interface DiffRefs {
+    base_sha: string
+    head_sha: string
+    start_sha: string
+  }
+
+  export interface MergeRequest {
+    iid: number
+    title: string
+    description: string
+    author: Author
+    source_branch: string
+    target_branch: string
+    sha: string
+    diff_refs: DiffRefs
+    created_at: string
+    state: string
+    web_url: string
+  }
+
+  export interface MergeRequestChange {
+    new_path: string
+    old_path: string
+    new_file: boolean
+    renamed_file: boolean
+    deleted_file: boolean
+    diff?: string
+    additions?: number
+    deletions?: number
+  }
+
+  export interface MergeRequestChanges {
+    changes: MergeRequestChange[]
+    additions: number
+    deletions: number
+  }
+
+  export interface Note {
+    id: number
+    body: string
+    author: Author
+    created_at: string
+    system: boolean
+  }
+
+  export interface DiscussionNote extends Note {
+    position_type?: string
+    new_path?: string
+    new_line?: number
+  }
+
+  export interface Discussion {
+    id: string
+    notes: DiscussionNote[]
+  }
+
+  export interface MergeRequestListResponse extends MergeRequest {}
+
+  export interface MergeRequestSingleResponse extends MergeRequest {}
+
+  export interface NotesListResponse extends Note {}
+
+  export interface NoteSingleResponse extends Note {}
+
+  export interface DiscussionsListResponse extends Discussion {}
+
+  export interface DiscussionSingleResponse extends Discussion {}
+}
+
 export class GitLabProvider implements IVCSProvider {
   name = "gitlab"
   private octokit: Octokit
@@ -36,12 +111,12 @@ export class GitLabProvider implements IVCSProvider {
     }
 
     const data = JSON.parse(body)
-    const objectKind = data.object_kind || data.event_type
+    const objectKind = data.object_kind ?? data.event_type
 
     const event: WebhookEvent = {
       type: this.mapEventType(objectKind),
       objectKind,
-      projectId: data.project?.id || data.project_id,
+      projectId: data.project?.id ?? data.project_id,
     }
 
     if (data.merge_request) {
@@ -74,88 +149,143 @@ export class GitLabProvider implements IVCSProvider {
   }
 
   async getMR(projectId: string, mrIid: number): Promise<MergeRequest> {
-    const response = await this.octokit.request("GET /projects/{project_id}/merge_requests/{mr_iid}", {
-      project_id: projectId,
-      mr_iid: mrIid,
-      headers: {
-        "PRIVATE-TOKEN": this.config.token,
-      },
-    })
+    try {
+      const effectiveProjectId = projectId ?? String(this.config.defaultProjectId ?? "")
+      if (!effectiveProjectId) {
+        throw new Error("Project ID is required and was not provided or configured")
+      }
 
-    const data = response.data as any
-    return {
-      iid: data.iid,
-      title: data.title,
-      description: data.description,
-      author: {
-        login: data.author.username,
-        name: data.author.name,
-      },
-      sourceBranch: data.source_branch,
-      targetBranch: data.target_branch,
-      sourceSha: data.sha,
-      targetSha: data.diff_refs?.base_sha || "",
-      createdAt: data.created_at,
-      state: data.state,
-      webUrl: data.web_url,
+      const response = await this.octokit.request<GitLabResponses.MergeRequestSingleResponse>(
+        "GET /projects/{project_id}/merge_requests/{mr_iid}",
+        {
+          project_id: effectiveProjectId,
+          mr_iid: mrIid,
+        }
+      )
+
+      const data = response.data
+      return {
+        iid: data.iid,
+        title: data.title,
+        description: data.description,
+        author: {
+          login: data.author.username,
+          name: data.author.name,
+        },
+        sourceBranch: data.source_branch,
+        targetBranch: data.target_branch,
+        sourceSha: data.sha,
+        targetSha: data.diff_refs?.base_sha ?? "",
+        createdAt: data.created_at,
+        state: data.state,
+        webUrl: data.web_url,
+      }
+    } catch (error) {
+      throw new Error(
+        `Failed to get merge request ${mrIid} for project ${projectId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      )
     }
   }
 
   async listMRs(projectId: string, filters?: MRFilters): Promise<MergeRequest[]> {
-    const response = await this.octokit.request("GET /projects/{project_id}/merge_requests", {
-      project_id: projectId,
-      state: filters?.state || "opened",
-      headers: {
-        "PRIVATE-TOKEN": this.config.token,
-      },
-    })
-
-    return (response.data as any).map((mr: any) => ({
-      iid: mr.iid,
-      title: mr.title,
-      description: mr.description,
-      author: {
-        login: mr.author.username,
-        name: mr.author.name,
-      },
-      sourceBranch: mr.source_branch,
-      targetBranch: mr.target_branch,
-      sourceSha: mr.sha,
-      targetSha: mr.diff_refs?.base_sha || "",
-      createdAt: mr.created_at,
-      state: mr.state,
-      webUrl: mr.web_url,
-    }))
-  }
-
-  async getMRChanges(projectId: string, mrIid: number): Promise<MRChanges> {
-    const response = await this.octokit.request(
-      "GET /projects/{project_id}/merge_requests/{mr_iid}/changes",
-      {
-        project_id: projectId,
-        mr_iid: mrIid,
-        headers: {
-          "PRIVATE-TOKEN": this.config.token,
-        },
+    try {
+      const effectiveProjectId = projectId ?? String(this.config.defaultProjectId ?? "")
+      if (!effectiveProjectId) {
+        throw new Error("Project ID is required and was not provided or configured")
       }
-    )
 
-    const data = response.data as any
-    return {
-      files: (data.changes || []).map((file: any) => ({
-        path: file.new_path || file.old_path,
-        newPath: file.new_path || "",
-        oldPath: file.old_path || "",
-        additions: file.diff?.split("\n").filter((l: string) => l.startsWith("+")).length || 0,
-        deletions: file.diff?.split("\n").filter((l: string) => l.startsWith("-")).length || 0,
-        changeType: this.mapChangeType(!!file.new_file, !!file.renamed_file, !!file.deleted_file),
-      })),
-      additions: data.additions || 0,
-      deletions: data.deletions || 0,
+      const response = await this.octokit.request<GitLabResponses.MergeRequestListResponse[]>(
+        "GET /projects/{project_id}/merge_requests",
+        {
+          project_id: effectiveProjectId,
+          state: filters?.state ?? "opened",
+        }
+      )
+
+      return response.data.map((mr) => ({
+        iid: mr.iid,
+        title: mr.title,
+        description: mr.description,
+        author: {
+          login: mr.author.username,
+          name: mr.author.name,
+        },
+        sourceBranch: mr.source_branch,
+        targetBranch: mr.target_branch,
+        sourceSha: mr.sha,
+        targetSha: mr.diff_refs?.base_sha ?? "",
+        createdAt: mr.created_at,
+        state: mr.state,
+        webUrl: mr.web_url,
+      }))
+    } catch (error) {
+      throw new Error(
+        `Failed to list merge requests for project ${projectId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      )
     }
   }
 
-  private mapChangeType(newFile: boolean, renamed: boolean, deleted: boolean): VCSFile["changeType"] {
+  async getMRChanges(projectId: string, mrIid: number): Promise<MRChanges> {
+    try {
+      const effectiveProjectId = projectId ?? String(this.config.defaultProjectId ?? "")
+      if (!effectiveProjectId) {
+        throw new Error("Project ID is required and was not provided or configured")
+      }
+
+      const response = await this.octokit.request<GitLabResponses.MergeRequestChanges>(
+        "GET /projects/{project_id}/merge_requests/{mr_iid}/changes",
+        {
+          project_id: effectiveProjectId,
+          mr_iid: mrIid,
+        }
+      )
+
+      const data = response.data
+      return {
+        files: (data.changes ?? []).map((file) => {
+          // Use GitLab's provided additions/deletions if available, otherwise parse diff
+          let additions = 0
+          let deletions = 0
+
+          if (file.additions !== undefined && file.deletions !== undefined) {
+            additions = file.additions
+            deletions = file.deletions
+          } else if (file.diff) {
+            const lines = file.diff.split("\n")
+            additions = lines.filter((l) => l.startsWith("+")).length
+            deletions = lines.filter((l) => l.startsWith("-")).length
+          }
+
+          return {
+            path: file.new_path ?? file.old_path,
+            newPath: file.new_path ?? "",
+            oldPath: file.old_path ?? "",
+            additions,
+            deletions,
+            changeType: this.mapChangeType(file.new_file, file.renamed_file, file.deleted_file),
+          }
+        }),
+        additions: data.additions ?? 0,
+        deletions: data.deletions ?? 0,
+      }
+    } catch (error) {
+      throw new Error(
+        `Failed to get merge request changes for MR ${mrIid} in project ${projectId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      )
+    }
+  }
+
+  private mapChangeType(
+    newFile: boolean | undefined,
+    renamed: boolean | undefined,
+    deleted: boolean | undefined
+  ): VCSFile["changeType"] {
     if (deleted) return "deleted"
     if (newFile) return "added"
     if (renamed) return "renamed"
@@ -163,70 +293,21 @@ export class GitLabProvider implements IVCSProvider {
   }
 
   async listMRNotes(projectId: string, mrIid: number): Promise<Note[]> {
-    const response = await this.octokit.request(
-      "GET /projects/{project_id}/merge_requests/{mr_iid}/notes",
-      {
-        project_id: projectId,
-        mr_iid: mrIid,
-        headers: {
-          "PRIVATE-TOKEN": this.config.token,
-        },
+    try {
+      const effectiveProjectId = projectId ?? String(this.config.defaultProjectId ?? "")
+      if (!effectiveProjectId) {
+        throw new Error("Project ID is required and was not provided or configured")
       }
-    )
 
-    return (response.data as any).map((note: any) => ({
-      id: note.id,
-      body: note.body,
-      author: {
-        login: note.author.username,
-        name: note.author.name,
-      },
-      createdAt: note.created_at,
-      system: note.system || false,
-    }))
-  }
+      const response = await this.octokit.request<GitLabResponses.NotesListResponse[]>(
+        "GET /projects/{project_id}/merge_requests/{mr_iid}/notes",
+        {
+          project_id: effectiveProjectId,
+          mr_iid: mrIid,
+        }
+      )
 
-  async createMRNote(projectId: string, mrIid: number, body: string): Promise<Note> {
-    const response = await this.octokit.request(
-      "POST /projects/{project_id}/merge_requests/{mr_iid}/notes",
-      {
-        project_id: projectId,
-        mr_iid: mrIid,
-        body,
-        headers: {
-          "PRIVATE-TOKEN": this.config.token,
-        },
-      }
-    )
-
-    const note = response.data as any
-    return {
-      id: note.id,
-      body: note.body,
-      author: {
-        login: note.author.username,
-        name: note.author.name,
-      },
-      createdAt: note.created_at,
-      system: note.system || false,
-    }
-  }
-
-  async listMRDiscussions(projectId: string, mrIid: number): Promise<Discussion[]> {
-    const response = await this.octokit.request(
-      "GET /projects/{project_id}/merge_requests/{mr_iid}/discussions",
-      {
-        project_id: projectId,
-        mr_iid: mrIid,
-        headers: {
-          "PRIVATE-TOKEN": this.config.token,
-        },
-      }
-    )
-
-    return (response.data as any).map((discussion: any) => ({
-      id: discussion.id,
-      notes: discussion.notes.map((note: any) => ({
+      return response.data.map((note) => ({
         id: note.id,
         body: note.body,
         author: {
@@ -234,9 +315,88 @@ export class GitLabProvider implements IVCSProvider {
           name: note.author.name,
         },
         createdAt: note.created_at,
-        system: note.system || false,
-      })),
-    }))
+        system: note.system ?? false,
+      }))
+    } catch (error) {
+      throw new Error(
+        `Failed to list notes for MR ${mrIid} in project ${projectId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      )
+    }
+  }
+
+  async createMRNote(projectId: string, mrIid: number, body: string): Promise<Note> {
+    try {
+      const effectiveProjectId = projectId ?? String(this.config.defaultProjectId ?? "")
+      if (!effectiveProjectId) {
+        throw new Error("Project ID is required and was not provided or configured")
+      }
+
+      const response = await this.octokit.request<GitLabResponses.NoteSingleResponse>(
+        "POST /projects/{project_id}/merge_requests/{mr_iid}/notes",
+        {
+          project_id: effectiveProjectId,
+          mr_iid: mrIid,
+          body,
+        }
+      )
+
+      const note = response.data
+      return {
+        id: note.id,
+        body: note.body,
+        author: {
+          login: note.author.username,
+          name: note.author.name,
+        },
+        createdAt: note.created_at,
+        system: note.system ?? false,
+      }
+    } catch (error) {
+      throw new Error(
+        `Failed to create note for MR ${mrIid} in project ${projectId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      )
+    }
+  }
+
+  async listMRDiscussions(projectId: string, mrIid: number): Promise<Discussion[]> {
+    try {
+      const effectiveProjectId = projectId ?? String(this.config.defaultProjectId ?? "")
+      if (!effectiveProjectId) {
+        throw new Error("Project ID is required and was not provided or configured")
+      }
+
+      const response = await this.octokit.request<GitLabResponses.DiscussionsListResponse[]>(
+        "GET /projects/{project_id}/merge_requests/{mr_iid}/discussions",
+        {
+          project_id: effectiveProjectId,
+          mr_iid: mrIid,
+        }
+      )
+
+      return response.data.map((discussion) => ({
+        id: discussion.id,
+        notes: discussion.notes.map((note) => ({
+          id: note.id,
+          body: note.body,
+          author: {
+            login: note.author.username,
+            name: note.author.name,
+          },
+          createdAt: note.created_at,
+          system: note.system ?? false,
+        })),
+      }))
+    } catch (error) {
+      throw new Error(
+        `Failed to list discussions for MR ${mrIid} in project ${projectId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      )
+    }
   }
 
   async createMRDiscussion(
@@ -246,10 +406,15 @@ export class GitLabProvider implements IVCSProvider {
     body: string
   ): Promise<Discussion> {
     try {
-      const response = await this.octokit.request(
+      const effectiveProjectId = projectId ?? String(this.config.defaultProjectId ?? "")
+      if (!effectiveProjectId) {
+        throw new Error("Project ID is required and was not provided or configured")
+      }
+
+      const response = await this.octokit.request<GitLabResponses.DiscussionSingleResponse>(
         "POST /projects/{project_id}/merge_requests/{mr_iid}/discussions",
         {
-          project_id: projectId,
+          project_id: effectiveProjectId,
           mr_iid: mrIid,
           body,
           position: {
@@ -260,16 +425,13 @@ export class GitLabProvider implements IVCSProvider {
             new_path: position.newPath,
             new_line: position.newLine,
           },
-          headers: {
-            "PRIVATE-TOKEN": this.config.token,
-          },
         }
       )
 
-      const discussion = response.data as any
+      const discussion = response.data
       return {
         id: discussion.id,
-        notes: discussion.notes.map((note: any) => ({
+        notes: discussion.notes.map((note) => ({
           id: note.id,
           body: note.body,
           author: {
@@ -277,11 +439,15 @@ export class GitLabProvider implements IVCSProvider {
             name: note.author.name,
           },
           createdAt: note.created_at,
-          system: note.system || false,
+          system: note.system ?? false,
         })),
       }
     } catch (error) {
-      throw new Error(`Failed to create inline comment: ${error}`)
+      throw new Error(
+        `Failed to create inline comment for MR ${mrIid} in project ${projectId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      )
     }
   }
 
