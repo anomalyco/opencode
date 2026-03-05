@@ -1,4 +1,6 @@
 // packages/opencode/src/security/kali/report.ts
+import { $ } from "bun"
+import { Flag } from "@/flag/flag"
 
 export interface AuditFinding {
   severity: "critical" | "high" | "medium" | "low" | "info"
@@ -22,6 +24,15 @@ export interface AuditReport {
 }
 
 export namespace ReportGenerator {
+  export function ensureReportDir(): void {
+    const reportPath = Flag.OPENSACIA_REPORT_PATH
+    try {
+      $`mkdir -p ${reportPath}`.quiet()
+    } catch {
+      // Directorio puede ya existir
+    }
+  }
+
   export function generate(input: {
     target: string
     duration: number
@@ -75,6 +86,7 @@ export namespace ReportGenerator {
   }
 
   export function save(report: string, path: string): void {
+    ensureReportDir()
     const fs = require("fs")
     fs.mkdirSync(require("path").dirname(path), { recursive: true })
     fs.writeFileSync(path, report, "utf-8")
@@ -83,6 +95,7 @@ export namespace ReportGenerator {
   export function getReportPath(target: string): string {
     const sanitized = target.replace(/[^a-zA-Z0-9.-]/g, "_")
     const date = new Date().toISOString().split("T")[0]
-    return `/tmp/opensacia-reports/${date}-${sanitized}.md`
+    const filename = `${date}-${sanitized}.md`
+    return require("path").join(Flag.OPENSACIA_REPORT_PATH, filename)
   }
 }
