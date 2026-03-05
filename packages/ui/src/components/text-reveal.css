@@ -67,10 +67,7 @@
     -webkit-mask-image: linear-gradient(to top, white 33%, transparent calc(33% + var(--_edge)));
     mask-position: 0 100%;
     -webkit-mask-position: 0 100%;
-    transition-property:
-      mask-position,
-      -webkit-mask-position,
-      transform;
+    transition-property: mask-position, -webkit-mask-position, transform;
     transform: translateY(0);
   }
 
@@ -85,10 +82,7 @@
     -webkit-mask-image: linear-gradient(to bottom, white 33%, transparent calc(33% + var(--_edge)));
     mask-position: 0 100%;
     -webkit-mask-position: 0 100%;
-    transition-property:
-      mask-position,
-      -webkit-mask-position,
-      transform;
+    transition-property: mask-position, -webkit-mask-position, transform;
     transform: translateY(var(--_travel));
   }
 
@@ -126,15 +120,14 @@
   &[data-truncate="true"] [data-slot="text-reveal-track"] {
     width: 100%;
     min-width: 0;
-    overflow: hidden;
+    overflow: clip;
   }
 
   &[data-truncate="true"] [data-slot="text-reveal-entering"],
   &[data-truncate="true"] [data-slot="text-reveal-leaving"] {
     min-width: 0;
     width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    overflow: clip;
   }
 }
 

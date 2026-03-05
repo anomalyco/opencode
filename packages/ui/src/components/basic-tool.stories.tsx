@@ -4,19 +4,21 @@ import * as mod from "./basic-tool"
 import { create } from "../storybook/scaffold"
 
 const docs = `### Overview
-Expandable tool panel with a structured trigger and optional details.
+Tool call surface with explicit row and panel variants.
 
 Use structured triggers for consistent layout; custom triggers allowed.
 
 ### API
-- Required: \`icon\` and \`trigger\` (structured or custom JSX).
-- Optional: \`status\`, \`defaultOpen\`, \`forceOpen\`, \`defer\`, \`locked\`.
+- Required: \`variant\`, \`icon\`, and \`trigger\`.
+- Row tools render summary-only.
+- Panel/group tools support \`defaultOpen\`, \`forceOpen\`, \`defer\`, and \`locked\`.
 
 ### Variants and states
 - Pending/running status animates the title via TextShimmer.
 
 ### Behavior
-- Uses Collapsible; can defer content rendering until open.
+- Row tools skip collapsible state and render lightweight trigger-only markup.
+- Panel/group tools use Collapsible and can defer content rendering until open.
 - Locked state prevents closing.
 
 ### Accessibility
@@ -28,13 +30,15 @@ Use structured triggers for consistent layout; custom triggers allowed.
 `
 
 const story = create({
-  title: "UI/Basic Tool",
+  title: "UI/Tool Call",
   mod,
+  name: "ToolCall",
   args: {
+    variant: "panel",
     icon: "mcp",
     defaultOpen: true,
     trigger: {
-      title: "Basic Tool",
+      title: "Tool Call",
       subtitle: "Example subtitle",
       args: ["--flag", "value"],
     },
@@ -43,8 +47,8 @@ const story = create({
 })
 
 export default {
-  title: "UI/Basic Tool",
-  id: "components-basic-tool",
+  title: "UI/Tool Call",
+  id: "components-tool-call",
   component: story.meta.component,
   tags: ["autodocs"],
   parameters: {
@@ -60,6 +64,7 @@ export const Basic = story.Basic
 
 export const Pending = {
   args: {
+    variant: "panel",
     status: "pending",
     trigger: {
       title: "Running tool",
@@ -71,6 +76,7 @@ export const Pending = {
 
 export const Locked = {
   args: {
+    variant: "panel",
     locked: true,
     trigger: {
       title: "Locked tool",
@@ -82,6 +88,7 @@ export const Locked = {
 
 export const Deferred = {
   args: {
+    variant: "panel",
     defer: true,
     defaultOpen: false,
     trigger: {
@@ -94,6 +101,7 @@ export const Deferred = {
 
 export const ForceOpen = {
   args: {
+    variant: "panel",
     forceOpen: true,
     trigger: {
       title: "Forced open",
@@ -103,14 +111,14 @@ export const ForceOpen = {
   },
 }
 
-export const HideDetails = {
+export const Row = {
   args: {
-    hideDetails: true,
+    variant: "row",
+    icon: "mcp",
     trigger: {
       title: "Summary only",
-      subtitle: "Details hidden",
+      subtitle: "Lightweight row",
     },
-    children: "Hidden content",
   },
 }
 
@@ -120,13 +128,14 @@ export const SubtitleAction = {
     return (
       <div style={{ display: "grid", gap: "8px" }}>
         <div style={{ "font-size": "12px", color: "var(--text-weak)" }}>{message()}</div>
-        <mod.BasicTool
+        <mod.ToolCall
+          variant="panel"
           icon="mcp"
           trigger={{ title: "Clickable subtitle", subtitle: "Click me" }}
           onSubtitleClick={() => setMessage("Subtitle clicked")}
         >
           Subtitle action details
-        </mod.BasicTool>
+        </mod.ToolCall>
       </div>
     )
   },

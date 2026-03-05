@@ -358,7 +358,6 @@ function createGlobalSync() {
       .update({ config })
       .then(bootstrap)
       .then(() => {
-        queue.refresh()
         setGlobalStore("reload", undefined)
         queue.refresh()
       })

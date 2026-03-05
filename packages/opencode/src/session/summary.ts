@@ -7,6 +7,7 @@ import { Identifier } from "@/id/id"
 import { Snapshot } from "@/snapshot"
 
 import { Storage } from "@/storage/storage"
+import { NotFoundError } from "@/storage/db"
 import { Bus } from "@/bus"
 
 export namespace SessionSummary {
@@ -82,14 +83,19 @@ export namespace SessionSummary {
 
   async function summarizeSession(input: { sessionID: string; messages: MessageV2.WithParts[] }) {
     const diffs = await computeDiff({ messages: input.messages })
-    await Session.setSummary({
-      sessionID: input.sessionID,
-      summary: {
-        additions: diffs.reduce((sum, x) => sum + x.additions, 0),
-        deletions: diffs.reduce((sum, x) => sum + x.deletions, 0),
-        files: diffs.length,
-      },
-    })
+    try {
+      await Session.setSummary({
+        sessionID: input.sessionID,
+        summary: {
+          additions: diffs.reduce((sum, x) => sum + x.additions, 0),
+          deletions: diffs.reduce((sum, x) => sum + x.deletions, 0),
+          files: diffs.length,
+        },
+      })
+    } catch (error) {
+      if (NotFoundError.isInstance(error)) return
+      throw error
+    }
     await Storage.write(["session_diff", input.sessionID], diffs)
     Bus.publish(Session.Event.Diff, {
       sessionID: input.sessionID,
@@ -101,14 +107,20 @@ export namespace SessionSummary {
     const messages = input.messages.filter(
       (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
     )
-    const msgWithParts = messages.find((m) => m.info.id === input.messageID)!
-    const userMsg = msgWithParts.info as MessageV2.User
+    const msgWithParts = messages.find((m) => m.info.id === input.messageID)
+    if (!msgWithParts || msgWithParts.info.role !== "user") return
+    const userMsg = msgWithParts.info
     const diffs = await computeDiff({ messages })
     userMsg.summary = {
       ...userMsg.summary,
       diffs,
     }
-    await Session.updateMessage(userMsg)
+    try {
+      await Session.updateMessage(userMsg)
+    } catch (error) {
+      if (NotFoundError.isInstance(error)) return
+      throw error
+    }
   }
 
   export const diff = fn(

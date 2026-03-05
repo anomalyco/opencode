@@ -256,7 +256,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     pendingAutoAccept: false,
   })
 
-  const buttonsSpring = useSpring(() => (store.mode === "normal" ? 1 : 0), { visualDuration: 0.2, bounce: 0 })
+  const buttonsSpring = useSpring(
+    () => (store.mode === "normal" ? 1 : 0),
+    { visualDuration: 0.2, bounce: 0 },
+  )
+
+  const springFade = (t: number): Record<string, string> => ({
+    opacity: `${t}`,
+    transform: `scale(${0.95 + t * 0.05})`,
+    filter: `blur(${(1 - t) * 2}px)`,
+    "pointer-events": t > 0.5 ? "auto" : "none",
+  })
 
   const commentCount = createMemo(() => {
     if (store.mode === "shell") return 0
@@ -1254,9 +1264,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             <div
               aria-hidden={store.mode !== "normal"}
               class="flex items-center gap-1"
-              style={{
-                "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
-              }}
+              style={{ "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none" }}
             >
               <TooltipKeybind
                 placement="top"
@@ -1268,11 +1276,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   type="button"
                   variant="ghost"
                   class="size-8 p-0"
-                  style={{
-                    opacity: buttonsSpring(),
-                    transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
-                    filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
-                  }}
+                  style={springFade(buttonsSpring())}
                   onClick={pick}
                   disabled={store.mode !== "normal"}
                   tabIndex={store.mode === "normal" ? undefined : -1}
@@ -1310,11 +1314,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   icon={working() ? "stop" : "arrow-up"}
                   variant="primary"
                   class="size-8"
-                  style={{
-                    opacity: buttonsSpring(),
-                    transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
-                    filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
-                  }}
+                  style={springFade(buttonsSpring())}
                   aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
                 />
               </Tooltip>
@@ -1370,13 +1370,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             <div class="flex items-center gap-1.5 min-w-0 flex-1 relative">
               <div
                 class="h-7 flex items-center gap-1.5 max-w-[160px] min-w-0 absolute inset-y-0 left-0"
-                style={{
-                  padding: "0 4px 0 8px",
-                  opacity: 1 - buttonsSpring(),
-                  transform: `scale(${0.95 + (1 - buttonsSpring()) * 0.05})`,
-                  filter: `blur(${buttonsSpring() * 2}px)`,
-                  "pointer-events": buttonsSpring() < 0.5 ? "auto" : "none",
-                }}
+                style={{ padding: "0 4px 0 8px", ...springFade(1 - buttonsSpring()) }}
               >
                 <span class="truncate text-13-medium text-text-strong">{language.t("prompt.mode.shell")}</span>
                 <div class="size-4 shrink-0" />
@@ -1395,13 +1389,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     onSelect={local.agent.set}
                     class="capitalize max-w-[160px]"
                     valueClass="truncate text-13-regular"
-                    triggerStyle={{
-                      height: "28px",
-                      opacity: buttonsSpring(),
-                      transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
-                      filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
-                      "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
-                    }}
+                    triggerStyle={{ height: "28px", ...springFade(buttonsSpring()) }}
                     variant="ghost"
                   />
                 </TooltipKeybind>
@@ -1419,13 +1407,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         variant="ghost"
                         size="normal"
                         class="min-w-0 max-w-[320px] text-13-regular group"
-                        style={{
-                          height: "28px",
-                          opacity: buttonsSpring(),
-                          transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
-                          filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
-                          "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
-                        }}
+                        style={{ height: "28px", ...springFade(buttonsSpring()) }}
                         onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}
                       >
                         <Show when={local.model.current()?.provider?.id}>
@@ -1454,13 +1436,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       triggerProps={{
                         variant: "ghost",
                         size: "normal",
-                        style: {
-                          height: "28px",
-                          opacity: buttonsSpring(),
-                          transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
-                          filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
-                          "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
-                        },
+                        style: { height: "28px", ...springFade(buttonsSpring()) },
                         class: "min-w-0 max-w-[320px] text-13-regular group",
                       }}
                     >
@@ -1492,13 +1468,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     onSelect={(x) => local.model.variant.set(x === "default" ? undefined : x)}
                     class="capitalize max-w-[160px]"
                     valueClass="truncate text-13-regular"
-                    triggerStyle={{
-                      height: "28px",
-                      opacity: buttonsSpring(),
-                      transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
-                      filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
-                      "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
-                    }}
+                    triggerStyle={{ height: "28px", ...springFade(buttonsSpring()) }}
                     variant="ghost"
                   />
                 </TooltipKeybind>

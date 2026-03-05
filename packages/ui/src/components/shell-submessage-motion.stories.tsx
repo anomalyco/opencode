@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { createEffect, createSignal, onCleanup } from "solid-js"
-import { BasicTool } from "./basic-tool"
+import { ToolCall } from "./basic-tool"
 import { animate } from "motion"
 
 export default {
@@ -61,24 +61,21 @@ const shellCss = `
 [data-component="shell-submessage"] {
   min-width: 0;
   max-width: 100%;
-  display: inline-flex;
-  align-items: baseline;
+  display: inline-block;
   vertical-align: baseline;
 }
 
 [data-component="shell-submessage"] [data-slot="shell-submessage-width"] {
   min-width: 0;
   max-width: 100%;
-  display: inline-flex;
-  align-items: baseline;
-  overflow: hidden;
+  display: inline-block;
+  overflow: clip;
 }
 
 [data-component="shell-submessage"] [data-slot="shell-submessage-value"] {
   display: inline-block;
   vertical-align: baseline;
   min-width: 0;
-  line-height: inherit;
   white-space: nowrap;
   opacity: 0;
   filter: blur(var(--shell-sub-blur, 2px));
@@ -192,7 +189,8 @@ export const Playground = {
       >
         <style>{shellCss}</style>
 
-        <BasicTool
+        <ToolCall
+          variant="panel"
           icon="console"
           defaultOpen
           trigger={
@@ -218,7 +216,7 @@ export const Playground = {
           >
             {"$ cat <<'TOPIC1'"}
           </div>
-        </BasicTool>
+        </ToolCall>
 
         <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
           <button onClick={replay} style={btn()}>
