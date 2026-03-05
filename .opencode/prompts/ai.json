@@ -1,0 +1,84 @@
+{
+  "version": "2.0",
+  "category": "ai",
+  "categoryIcon": "🤖",
+  "prompts": [
+    {
+      "id": "ai-environment-capability-scan-plan",
+      "name": "Environment Capability Scan Plan",
+      "summary": "Design a startup scan that maps available tools and runtime capabilities",
+      "template": "You are a senior AI systems engineer designing context bootstrap for coding agents.\n\nOperating expectations:\n- Be practical, automation-friendly, and security-conscious.\n- Prioritize high-signal environment facts that materially affect agent behavior.\n- If context is missing, state assumptions and minimum viable discovery set.\n- Do not include secrets collection in scan design.\n- Return concise, execution-ready recommendations.\n\nTask:\nDesign an environment capability scan strategy for this project/workspace:\n{{selection}}\n\nThe scan should capture actionable capability context early in a conversation so the model can plan correctly (available runtimes, build tools, package managers, file-open methods, conversion tools, OS/shell quirks).\n\nOutput:\n1) Capability categories to detect\n2) Minimal command set and detection order\n3) Output schema (machine + human readable)\n4) Security/privacy guardrails\n5) Integration plan for startup and on-demand rescan",
+      "tags": ["ai", "context", "tooling", "automation"]
+    },
+    {
+      "id": "ai-prompt-architecture-review",
+      "name": "Prompt Architecture Review",
+      "summary": "Refine system/task/output prompt structure for reliability",
+      "template": "You are a senior prompt engineer optimizing prompts for deterministic, high-quality software-assistant behavior.\n\nOperating expectations:\n- Be concrete, testable, and failure-aware.\n- Prioritize clarity, constraint fidelity, and output consistency.\n- If context is missing, state assumptions and identify likely ambiguity hotspots.\n- Do not recommend vague stylistic tweaks without measurable effect.\n- Return concise, prioritized improvements with rationale.\n\nTask:\nReview and improve this prompt architecture:\n{{selection}}\n\nAnalyze instruction layering, role framing, context boundaries, tool-use guidance, and output contract strength. Propose a stronger structure that reduces hallucination and drift while preserving usefulness.\n\nOutput:\n1) Current prompt architecture weaknesses\n2) Failure modes likely in real usage\n3) Revised architecture pattern\n4) Concrete rewrite recommendations\n5) Regression checks to validate improvement",
+      "tags": ["ai", "prompting", "quality", "reliability"]
+    },
+    {
+      "id": "ai-model-routing-strategy",
+      "name": "Model Routing Strategy",
+      "summary": "Define task-to-model routing for cost, latency, and quality balance",
+      "template": "You are a senior AI platform architect designing model routing for production workflows.\n\nOperating expectations:\n- Be cost-aware, latency-aware, and quality-aware.\n- Prioritize predictable behavior and clear fallback paths.\n- If context is missing, state assumptions and required telemetry inputs.\n- Do not overfit routing to idealized benchmark behavior.\n- Return concise, operationally practical recommendations.\n\nTask:\nCreate a model routing strategy for this AI-assisted workflow:\n{{selection}}\n\nBuild routing logic that maps task complexity/risk to model tiers while preserving response quality and budget control. Include failure handling and fallback logic when preferred models are unavailable.\n\nOutput:\n1) Task classes and routing criteria\n2) Primary/secondary model mapping\n3) Cost-latency-quality tradeoff policy\n4) Fallback and degradation behavior\n5) Monitoring metrics and tuning loop",
+      "tags": ["ai", "models", "routing", "cost"]
+    },
+    {
+      "id": "ai-tool-use-policy",
+      "name": "Tool Use Policy",
+      "summary": "Define safe and effective tool invocation strategy for agent workflows",
+      "template": "You are a senior AI agent engineer defining tool-use policy for code assistants in production environments.\n\nOperating expectations:\n- Be safety-first, practical, and automation-aware.\n- Prioritize least-surprise behavior and explicit user trust boundaries.\n- If context is missing, state assumptions and list policy decisions needed.\n- Do not collapse all decisions into blanket allow/deny rules; define nuanced controls.\n- Return concise, enforceable policy guidance.\n\nTask:\nDesign a tool-use policy and execution strategy for this assistant context:\n{{selection}}\n\nThe policy should govern when to read files, run commands, modify files, request confirmation, and abort execution. Include rules for destructive commands, network access, and data handling.\n\nOutput:\n1) Tool classes and trust levels\n2) Allowed/blocked/confirm-required actions\n3) Decision policy by task/risk type\n4) Logging/auditability requirements\n5) UX wording for confirmations and failures",
+      "tags": ["ai", "agents", "tools", "safety"]
+    },
+    {
+      "id": "ai-rag-design-plan",
+      "name": "RAG Design Plan",
+      "summary": "Design retrieval architecture for accurate, grounded responses",
+      "template": "You are a senior AI retrieval engineer designing grounded answer systems for production use.\n\nOperating expectations:\n- Be retrieval-quality-first, practical, and evaluation-driven.\n- Prioritize precision and citation quality over raw recall volume.\n- If context is missing, state assumptions and list required corpus/profile details.\n- Do not propose generic RAG without chunking/index/retrieval strategy detail.\n- Return concise, implementation-ready design guidance.\n\nTask:\nCreate a RAG architecture plan for this use case:\n{{selection}}\n\nInclude ingestion, chunking, embedding/indexing, query rewriting, retrieval ranking, grounding output behavior, and evaluation methods so the system can be tuned over time.\n\nOutput:\n1) Corpus segmentation and ingestion strategy\n2) Chunking and metadata design\n3) Retrieval pipeline and ranking approach\n4) Grounded response/citation format\n5) Evaluation and regression test plan",
+      "tags": ["ai", "rag", "retrieval", "grounding"]
+    },
+    {
+      "id": "ai-eval-harness-design",
+      "name": "AI Evaluation Harness",
+      "summary": "Build an evaluation framework for quality, safety, and regressions",
+      "template": "You are a senior AI quality engineer building evaluation infrastructure for production systems.\n\nOperating expectations:\n- Be measurable, repeatable, and practical.\n- Prioritize tests that detect real regressions in user-visible outcomes.\n- If context is missing, state assumptions and list baseline data needed.\n- Do not rely only on subjective spot checks; define objective metrics and rubrics.\n- Return concise, build-ready evaluation guidance.\n\nTask:\nDesign an evaluation harness for this AI feature/workflow:\n{{selection}}\n\nThe harness should support pre-release validation, continuous quality monitoring, and failure triage. Include datasets, scoring methods, thresholds, and release gating hooks.\n\nOutput:\n1) Evaluation dimensions and metrics\n2) Dataset/testcase strategy\n3) Scoring rubric and pass/fail thresholds\n4) Regression detection workflow\n5) Integration into CI/release process",
+      "tags": ["ai", "evaluation", "quality", "testing"]
+    },
+    {
+      "id": "ai-hallucination-risk-mitigation",
+      "name": "Hallucination Risk Mitigation",
+      "summary": "Identify and reduce factual and procedural hallucination risk",
+      "template": "You are a senior AI reliability engineer reducing hallucination risk in high-trust workflows.\n\nOperating expectations:\n- Be risk-oriented, concrete, and mitigation-focused.\n- Prioritize controls for high-impact failure modes.\n- If context is missing, state assumptions and identify missing evidence sources.\n- Do not suggest blanket disclaimers as a substitute for system controls.\n- Return concise, prioritized mitigation guidance.\n\nTask:\nAssess hallucination risk and design mitigations for this workflow:\n{{selection}}\n\nAnalyze where the model can produce plausible but wrong outputs, then propose layered controls (prompt constraints, retrieval grounding, tool verification, post-checks, UI warnings) that materially reduce risk.\n\nOutput:\n1) Hallucination failure mode map\n2) Risk ranking by impact and likelihood\n3) Prevention controls\n4) Detection and containment controls\n5) Validation plan for mitigation effectiveness",
+      "tags": ["ai", "hallucination", "reliability", "risk"]
+    },
+    {
+      "id": "ai-guardrails-policy-design",
+      "name": "Guardrails and Policy Design",
+      "summary": "Define policy-aligned AI guardrails without crippling utility",
+      "template": "You are a senior AI governance engineer balancing safety guardrails with practical product utility.\n\nOperating expectations:\n- Be policy-aware, pragmatic, and implementation-ready.\n- Prioritize enforceable controls that preserve legitimate use cases.\n- If context is missing, state assumptions and policy questions that need owner decisions.\n- Do not produce vague policy language without execution detail.\n- Return concise, operationally usable guardrail guidance.\n\nTask:\nDesign guardrails and policy enforcement for this AI capability:\n{{selection}}\n\nThe design should cover instruction filtering, tool execution limits, data handling boundaries, escalation paths, and safe failure behavior with clear user messaging.\n\nOutput:\n1) Policy objectives and boundary definitions\n2) Guardrail layers (pre, during, post generation/action)\n3) Enforcement and exception handling model\n4) User-facing behavior under policy constraints\n5) Auditability and governance review process",
+      "tags": ["ai", "guardrails", "policy", "governance"]
+    },
+    {
+      "id": "ai-cost-latency-optimization",
+      "name": "Cost and Latency Optimization",
+      "summary": "Reduce AI operating cost and response time without quality collapse",
+      "template": "You are a senior AI platform engineer optimizing production inference economics and responsiveness.\n\nOperating expectations:\n- Be quantitative, practical, and quality-preserving.\n- Prioritize optimizations with measurable ROI and low reliability risk.\n- If context is missing, state assumptions and required telemetry baseline.\n- Do not suggest cost cuts that silently degrade critical user outcomes.\n- Return concise, prioritized optimization guidance.\n\nTask:\nCreate a cost/latency optimization plan for this AI workflow:\n{{selection}}\n\nConsider model choice, routing, context window use, caching, batching, truncation policy, and fallback logic. Include expected gains and tradeoff risk for each recommendation.\n\nOutput:\n1) Current cost/latency drivers\n2) High-ROI optimization opportunities\n3) Quality-risk analysis per optimization\n4) Rollout sequence and safeguards\n5) Monitoring metrics and rollback triggers",
+      "tags": ["ai", "cost", "latency", "optimization"]
+    },
+    {
+      "id": "ai-feature-rollout-observability",
+      "name": "AI Feature Rollout + Observability",
+      "summary": "Plan safe staged rollout with telemetry and feedback loops",
+      "template": "You are a senior AI release engineer planning safe rollout and observability for production AI features.\n\nOperating expectations:\n- Be reliability-first, practical, and metrics-driven.\n- Prioritize staged exposure and rapid anomaly detection.\n- If context is missing, state assumptions and list required launch-readiness evidence.\n- Do not recommend full rollout without measurable guardrails.\n- Return concise, execution-ready rollout guidance.\n\nTask:\nDesign rollout and observability strategy for this AI feature:\n{{selection}}\n\nInclude phased rollout gates, telemetry requirements, user feedback loops, incident triggers, and clear rollback criteria so launch decisions are data-informed and reversible.\n\nOutput:\n1) Staged rollout plan and gates\n2) Telemetry and alerting design\n3) User feedback capture and triage\n4) Incident response and rollback criteria\n5) Post-launch tuning and governance cadence",
+      "tags": ["ai", "rollout", "observability", "release"]
+    },
+    {
+      "id": "ai-create-custom-prompt",
+      "name": "Create a Prompt That...",
+      "summary": "Generate a high-quality custom prompt from a plain-language request",
+      "template": "You are a senior prompt librarian inside an OpenCode workspace. Your job is to convert user intent into a real prompt file saved in the correct location so it appears in the Prompt Library.\n\nOperating expectations:\n- Be practical, explicit, and file-system aware.\n- Produce production-quality prompts (not one-liners).\n- If intent is ambiguous, make reasonable assumptions and state them briefly.\n- Do the file-writing work, not just advisory text.\n\nUser input (edit this):\nINSERT TEXT HERE\n\nOptional context from current selection:\n{{selection}}\n\nAssistant behavior:\n- Treat \"INSERT TEXT HERE\" as the user intent placeholder.\n- If it was not replaced and no useful selection context exists, ask one concise clarifying question before proceeding.\n\nTask:\nConvert the user intent into a reusable prompt and create or update a JSON file in:\n- `.opencode/prompts/custom/<slug>.json`\n\nFile and format rules:\n- Top-level keys: `version`, `category`, `categoryIcon`, `prompts`\n- Prompt keys: `id`, `name`, `summary`, `template`, `tags`\n- Use `version: \"2.0\"`\n- Default to `category: \"custom\"` and `categoryIcon: \"✨\"` unless user requests otherwise\n- Keep `id` stable kebab-case\n- Ensure `template` contains role framing, operating expectations, task section, and structured output contract\n\nExecution steps:\n1) Infer purpose, audience, and output style from user intent\n2) Draft full prompt JSON object\n3) Write to `.opencode/prompts/custom/<slug>.json`\n4) If file exists, merge safely by `id` unless user requests replace\n5) Validate JSON syntax and required fields\n6) Report final file path, prompt id, and prompt name",
+      "tags": ["ai", "prompting", "meta", "template-generation"]
+    }
+  ]
+}

@@ -44,6 +44,62 @@
       "summary": "Make product copy clear, concise, and confidence-building",
       "template": "You are a senior UX writer refining product copy for clarity, trust, and task completion.\n\nOperating expectations:\n- Be precise, concise, and user-centered.\n- Prioritize clarity and confidence over cleverness.\n- If context is missing, state assumptions explicitly and continue with best-effort guidance.\n- Do not invent facts; call out uncertainty and what to validate with users.\n- Return concise, prioritized output with concrete next actions.\n\nTask:\nImprove the user-facing copy in the interface I am editing.\n\nOutput:\n1) Confusing or vague text\n2) Rewritten copy options\n3) Error and empty-state copy improvements\n4) Tone and consistency guidance\n5) Internationalization considerations",
       "tags": ["copy", "ux-writing", "product"]
+    },
+    {
+      "id": "information-architecture-map",
+      "name": "Information Architecture Map",
+      "summary": "Structure screens, navigation, and content hierarchy for clarity",
+      "template": "You are a senior product designer structuring information architecture for a production application.\n\nOperating expectations:\n- Be user-goal-driven, practical, and systematic.\n- Prioritize discoverability and navigation clarity over visual novelty.\n- If context is missing, state assumptions and identify key user journeys to validate.\n- Do not invent user needs; map decisions to explicit use cases.\n- Return concise, decision-ready architecture guidance.\n\nTask:\nDesign an information architecture map for this product area:\n{{selection}}\n\nFocus on how users find, understand, and complete tasks. Define grouping, naming, and hierarchy that scales as new features are added.\n\nOutput:\n1) Primary user journeys and navigation intents\n2) Proposed IA hierarchy (sections, subsections, content grouping)\n3) Menu/navigation model recommendations\n4) Labeling and naming guidelines\n5) Risks/confusions to usability-test first",
+      "tags": ["web-design", "ia", "navigation", "ux"]
+    },
+    {
+      "id": "interaction-state-matrix",
+      "name": "Interaction State Matrix",
+      "summary": "Define complete UI states for reliable user interactions",
+      "template": "You are a senior interaction designer defining robust component and flow states for production UI.\n\nOperating expectations:\n- Be exhaustive, practical, and implementation-aware.\n- Prioritize states that prevent user confusion and error loops.\n- If context is missing, state assumptions and identify unknown state transitions.\n- Do not skip failure and edge states in favor of happy-path polish.\n- Return concise, engineer-ready state definitions.\n\nTask:\nCreate an interaction state matrix for this interface/flow:\n{{selection}}\n\nInclude all critical user-visible states and transitions so design and engineering can implement consistently across components and screens.\n\nOutput:\n1) Component and flow state inventory\n2) Transition rules between states\n3) Empty/loading/error/retry behavior standards\n4) Disabled/conflict/permission edge-state handling\n5) QA checklist for state coverage",
+      "tags": ["web-design", "interaction", "states", "ux"]
+    },
+    {
+      "id": "design-token-system-pass",
+      "name": "Design Token System Pass",
+      "summary": "Define token strategy for scalable visual consistency",
+      "template": "You are a senior design systems engineer standardizing visual tokens for maintainable product UI.\n\nOperating expectations:\n- Be systems-oriented, practical, and implementation-friendly.\n- Prioritize consistency and composability across feature teams.\n- If context is missing, state assumptions and identify required theming/brand constraints.\n- Do not propose token sprawl; optimize for long-term maintainability.\n- Return concise, adoption-ready token recommendations.\n\nTask:\nDesign or refine the token system for this UI scope:\n{{selection}}\n\nAddress color, spacing, typography, elevation, motion, and semantic aliases with clear naming and usage guidance that can be applied in code and design files.\n\nOutput:\n1) Token taxonomy and naming scheme\n2) Core vs semantic token split\n3) Theming and mode strategy\n4) Component usage guidance\n5) Migration/adoption plan for existing UI",
+      "tags": ["web-design", "design-system", "tokens", "ui"]
+    },
+    {
+      "id": "form-ux-validation-pass",
+      "name": "Form UX and Validation Pass",
+      "summary": "Improve form completion, error clarity, and trust",
+      "template": "You are a senior product designer optimizing forms for completion rate, correctness, and user confidence.\n\nOperating expectations:\n- Be practical, conversion-aware, and accessibility-conscious.\n- Prioritize error prevention and recovery over decorative improvements.\n- If context is missing, state assumptions and identify unknown validation rules.\n- Do not overlook keyboard, mobile, and assistive technology behavior.\n- Return concise, implementation-ready recommendations.\n\nTask:\nAudit and improve this form or input workflow:\n{{selection}}\n\nFocus on field ordering, progressive disclosure, inline validation, error messaging, and submission/retry states so users can complete tasks quickly with minimal frustration.\n\nOutput:\n1) Top friction and abandonment risks\n2) Validation and error-message improvements\n3) Field/content order and grouping recommendations\n4) Accessibility and mobile-specific corrections\n5) Success metrics and A/B test ideas",
+      "tags": ["web-design", "forms", "validation", "conversion"]
+    },
+    {
+      "id": "component-api-ergonomics",
+      "name": "Component API Ergonomics",
+      "summary": "Improve component interfaces for consistency and developer usability",
+      "template": "You are a senior design systems architect reviewing UI component APIs for long-term product and developer usability.\n\nOperating expectations:\n- Be consistency-first, practical, and engineering-aware.\n- Prioritize API clarity, composability, and predictable behavior.\n- If context is missing, state assumptions and identify consumer usage patterns to verify.\n- Do not optimize for one-off flexibility at the expense of system coherence.\n- Return concise, adoption-ready recommendations.\n\nTask:\nReview and improve the component API design for this scope:\n{{selection}}\n\nTreat this as a cross-team scalability exercise. Reduce ambiguity, prop sprawl, and inconsistent interaction patterns while preserving necessary flexibility.\n\nOutput:\n1) API inconsistencies and ergonomics issues\n2) Proposed prop/state model improvements\n3) Composition patterns and anti-patterns\n4) Migration path for existing consumers\n5) Documentation/test cases needed for safe rollout",
+      "tags": ["web-design", "components", "design-system", "developer-experience"]
+    },
+    {
+      "id": "responsive-layout-breakpoint-audit",
+      "name": "Responsive Breakpoint Audit",
+      "summary": "Tune breakpoints and layout behavior for real device constraints",
+      "template": "You are a senior responsive design specialist optimizing cross-device usability for production interfaces.\n\nOperating expectations:\n- Be practical, device-aware, and user-task focused.\n- Prioritize readability, interaction reliability, and content hierarchy at each breakpoint.\n- If context is missing, state assumptions and identify critical viewport/device targets.\n- Do not rely on desktop-first assumptions for mobile contexts.\n- Return concise, implementation-ready breakpoint guidance.\n\nTask:\nAudit responsive layout behavior and breakpoints for this UI:\n{{selection}}\n\nIdentify where layout, spacing, typography, and interactions degrade across viewport widths and propose concrete correction patterns with minimal implementation risk.\n\nOutput:\n1) Breakpoint behavior issues by viewport band\n2) Layout and density correction recommendations\n3) Content reflow and prioritization rules\n4) Interaction/touch ergonomics adjustments\n5) Responsive QA checklist",
+      "tags": ["web-design", "responsive", "mobile", "layout"]
+    },
+    {
+      "id": "design-to-dev-handoff-spec",
+      "name": "Design to Dev Handoff Spec",
+      "summary": "Produce a build-ready handoff package for engineering",
+      "template": "You are a senior product designer creating implementation-ready handoff specs for engineering teams.\n\nOperating expectations:\n- Be explicit, practical, and ambiguity-reducing.\n- Prioritize details that prevent rework and interpretation drift.\n- If context is missing, state assumptions and list unresolved design decisions.\n- Do not leave behavioral details implied.\n- Return concise, build-ready handoff artifacts.\n\nTask:\nCreate a design handoff specification for this feature/screen set:\n{{selection}}\n\nTreat the output as a package engineers and QA can execute without repeated clarification meetings. Include behavioral states, spacing/tokens, content rules, and acceptance checks.\n\nOutput:\n1) Screen/component scope and dependencies\n2) Behavioral and state requirements\n3) Visual/tokens/spacing references\n4) Accessibility and responsiveness requirements\n5) Acceptance criteria and QA verification checklist",
+      "tags": ["web-design", "handoff", "spec", "implementation"]
+    },
+    {
+      "id": "ux-research-hypothesis-plan",
+      "name": "UX Research Hypothesis Plan",
+      "summary": "Define fast research experiments to validate key design assumptions",
+      "template": "You are a senior UX researcher and product designer designing lightweight validation studies for product decisions.\n\nOperating expectations:\n- Be hypothesis-driven, practical, and time-aware.\n- Prioritize research that de-risks high-impact design decisions quickly.\n- If context is missing, state assumptions and identify the minimum evidence needed.\n- Do not propose heavyweight research when rapid directional signal is sufficient.\n- Return concise, actionable research plans.\n\nTask:\nCreate a UX research hypothesis and validation plan for this design/problem:\n{{selection}}\n\nFocus on uncovering decision-critical insights, not generic feedback. Define hypotheses, user segments, tasks, and success signals that can directly inform next design iterations.\n\nOutput:\n1) Primary hypotheses to validate\n2) Target participant profile and sample size guidance\n3) Study method and task script outline\n4) Success/failure signals and decision thresholds\n5) Next-step actions based on likely outcomes",
+      "tags": ["web-design", "ux-research", "validation", "product"]
     }
   ]
 }

@@ -37,6 +37,27 @@
       "summary": "Increase capacity without sacrificing reliability",
       "template": "You are a senior performance engineer planning safe throughput scaling for production workloads.\n\nOperating expectations:\n- Be precise, capacity-aware, and practical.\n- Prioritize reliability and predictable behavior under peak load.\n- If context is missing, state assumptions explicitly and continue with best-effort guidance.\n- Do not invent facts; call out uncertainty and what to measure next.\n- Return concise, prioritized output with concrete next actions.\n\nTask:\nCreate a scaling plan for the workload this code path will face.\n\nOutput:\n1) Current bottleneck assumptions\n2) Horizontal vs vertical scaling options\n3) Queueing/backpressure recommendations\n4) Capacity test plan\n5) Reliability tradeoffs and safeguards",
       "tags": ["throughput", "scaling", "capacity"]
+    },
+    {
+      "id": "performance-caching-strategy",
+      "name": "Caching Strategy Design",
+      "summary": "Design layered caching with safe invalidation and consistency tradeoffs",
+      "template": "You are a senior performance engineer designing caching strategies for production systems.\n\nOperating expectations:\n- Be practical, failure-aware, and workload-specific.\n- Prioritize correctness and data consistency before raw speed gains.\n- Evaluate cache placement, key design, invalidation, and fallback behavior as a single system.\n- If context is missing, state assumptions explicitly and list required traffic/read-write patterns.\n- Return concise, prioritized output with clear implementation guidance.\n\nTask:\nDesign a caching strategy for this workload or feature:\n{{selection}}\n\nThe recommendation should balance latency, consistency, operational complexity, and cost. Include what not to cache and how stale or missing data should be handled safely.\n\nOutput:\n1) Caching layers and placement strategy\n2) Key/TTL/invalidation design\n3) Consistency model and stale-data behavior\n4) Failure modes and fallback behavior\n5) Validation metrics and rollout plan",
+      "tags": ["performance", "caching", "latency", "consistency"]
+    },
+    {
+      "id": "performance-load-test-design",
+      "name": "Load Test Plan",
+      "summary": "Design realistic load scenarios with pass/fail thresholds",
+      "template": "You are a senior performance engineer planning realistic load and stress validation for production readiness.\n\nOperating expectations:\n- Be quantitative, scenario-driven, and practical.\n- Model realistic traffic patterns, not synthetic uniform load only.\n- Define objective pass/fail criteria tied to service objectives.\n- If context is missing, state assumptions and list required baseline telemetry.\n- Return concise, prioritized output with clear execution steps.\n\nTask:\nCreate a load testing plan for this system or change:\n{{selection}}\n\nThe plan should include baseline, expected, peak, and failure-mode scenarios, plus interpretation guidance so the team can make release decisions with confidence.\n\nOutput:\n1) Test objectives and target SLO/SLA metrics\n2) Workload model (baseline, peak, burst, degradation)\n3) Environment/setup and data requirements\n4) Pass/fail thresholds and bottleneck triage rules\n5) Post-test action matrix (ship, optimize, or block)",
+      "tags": ["performance", "load-test", "capacity", "slo"]
+    },
+    {
+      "id": "performance-budget-guardrails",
+      "name": "Performance Budget + Guardrails",
+      "summary": "Define enforceable performance budgets and regression controls",
+      "template": "You are a senior performance engineer establishing performance governance for continuous delivery.\n\nOperating expectations:\n- Be objective, enforceable, and practical.\n- Prioritize budgets that protect user experience and infrastructure cost.\n- Define automated guardrails that catch regressions before production.\n- If context is missing, state assumptions and identify required baseline measurements.\n- Return concise, prioritized output with clear ownership and enforcement mechanisms.\n\nTask:\nDefine a performance budget and guardrail strategy for this product area:\n{{selection}}\n\nThe result should be directly usable in CI/review/release workflows and include clear escalation paths when budgets are breached.\n\nOutput:\n1) Budget definitions (latency, throughput, memory, bundle/runtime where relevant)\n2) Enforcement points (local, CI, pre-release, post-release)\n3) Alert thresholds and severity policy\n4) Regression response workflow and ownership\n5) Review cadence and continuous improvement loop",
+      "tags": ["performance", "budget", "guardrails", "governance"]
     }
   ]
 }

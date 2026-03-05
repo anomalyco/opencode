@@ -12,9 +12,12 @@ Organize prompts by function. Each file is a section in the prompt menu.
 
 - `code-review.json` (`🔍`) review and quality gates
 - `engineering.json` (`🛠`) implementation and refactoring
+- `planning.json` (`🧭`) discovery, spec, architecture, and delivery planning
+- `ai.json` (`🤖`) AI workflow design, evaluation, safety, and rollout
 - `qa.json` (`🧪`) testing strategy and regression prevention
 - `troubleshooting.json` (`🧭`) incident triage and debugging
 - `performance.json` (`⚡`) latency, scalability, and profiling
+- `security.json` (`🔐`) threat modeling, hardening, and release gating
 - `web-design.json` (`🎨`) UX, accessibility, and interface polish
 - `documentation.json` (`📝`) architecture, guides, and runbooks
 - `delivery.json` (`🚀`) release, migration, and rollout workflows
@@ -27,6 +30,23 @@ Use one of these locations:
 - `.opencode/prompts/custom/*.json`
 
 For best compatibility across app views, keep prompt JSON files in the root `prompts` folder or in `prompts/custom`.
+
+## Environment Context Helper
+
+This fork includes a capability scan script to generate startup context for AI prompts.
+
+Run from repo root:
+
+```bash
+bun run env:scan
+```
+
+It writes:
+
+- `.opencode/context/env-capabilities.json`
+- `.opencode/context/env-capabilities.md`
+
+Use these files in AI/system prompts to improve tool-aware planning (available runtimes, package managers, open-file tools, conversion tools, etc.).
 
 ## JSON Format
 

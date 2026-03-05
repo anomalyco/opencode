@@ -3,3 +3,5 @@ bun.lock
 package.json
 prompts/custom/*
 !prompts/custom/.gitkeep
+context/*
+!context/.gitkeep

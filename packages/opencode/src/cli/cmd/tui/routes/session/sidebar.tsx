@@ -1,5 +1,5 @@
 import { useSync } from "@tui/context/sync"
-import { createEffect, createMemo, createSignal, For, onMount, Show, Switch, Match } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import path from "path"
@@ -45,6 +45,8 @@ type PromptItem = {
   tags: string[]
   file: string
 }
+
+const PRIMARY_PROMPT_ID = "ai-create-custom-prompt"
 
 const FALLBACK_PACKS: PromptDoc[] = [
   {
@@ -404,10 +406,20 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     reloadPrompts().catch(() => {})
   })
 
+  createEffect(() => {
+    root()
+    const timer = setInterval(() => {
+      reloadPrompts().catch(() => {})
+    }, 2000)
+    onCleanup(() => clearInterval(timer))
+  })
+
   const filtered = createMemo(() => prompts().filter((item) => matchPrompt(item, query())))
+  const primary = createMemo(() => filtered().find((item) => item.id === PRIMARY_PROMPT_ID))
   const grouped = createMemo(() => {
     const map = new Map<string, PromptItem[]>()
     for (const item of filtered()) {
+      if (item.id === PRIMARY_PROMPT_ID) continue
       const arr = map.get(item.category) ?? []
       arr.push(item)
       map.set(item.category, arr)
@@ -415,11 +427,15 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]))
   })
   const ordered = createMemo(() => {
-    return [...filtered()].sort((a, b) => {
-      const category = a.category.localeCompare(b.category)
-      if (category !== 0) return category
-      return a.name.localeCompare(b.name)
-    })
+    const rest = filtered()
+      .filter((item) => item.id !== PRIMARY_PROMPT_ID)
+      .sort((a, b) => {
+        const category = a.category.localeCompare(b.category)
+        if (category !== 0) return category
+        return a.name.localeCompare(b.name)
+      })
+    if (!primary()) return rest
+    return [...rest, primary()!]
   })
 
   const selectedPrompt = createMemo(() => ordered()[selected()])
@@ -435,7 +451,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
 
   const favoriteItems = createMemo(() => {
     const ids = new Set(fav())
-    return filtered().filter((item) => ids.has(item.id))
+    return filtered().filter((item) => item.id !== PRIMARY_PROMPT_ID && ids.has(item.id))
   })
 
   const recentItems = createMemo(() => {
@@ -443,6 +459,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     return recent()
       .map((id: string) => items.get(id))
       .filter((item: PromptItem | undefined): item is PromptItem => !!item)
+      .filter((item: PromptItem) => item.id !== PRIMARY_PROMPT_ID)
       .filter((item: PromptItem) => matchPrompt(item, query()))
       .slice(0, 5)
   })
@@ -1087,6 +1104,39 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                   </box>
                 )}
               </For>
+              <Show when={primary()}>
+                {(item) => (
+                  <box>
+                    <text fg={theme.textMuted}>Main</text>
+                    <box
+                      flexDirection="row"
+                      backgroundColor={selectedPrompt()?.id === item().id ? theme.backgroundElement : undefined}
+                      justifyContent="space-between"
+                      onMouseUp={(evt: MouseEvent) => {
+                        if (evt.button === MouseButton.RIGHT) return
+                        const index = ordered().findIndex((entry) => entry.id === item().id)
+                        if (index >= 0) setSelected(index)
+                        executePrompt(item())
+                      }}
+                      onMouseDown={(evt: MouseEvent) => {
+                        if (evt.button !== MouseButton.RIGHT) return
+                        evt.preventDefault()
+                        promptMenu(item())
+                      }}
+                    >
+                      <box flexDirection="column" flexGrow={1}>
+                        <text fg={theme.text}>✨ {item().name}</text>
+                        <Show when={item().summary ?? item().description}>
+                          <text fg={theme.textMuted}>{item().summary ?? item().description}</text>
+                        </Show>
+                      </box>
+                      <Show when={(usage()[item().id] ?? 0) > 0}>
+                        <text fg={theme.textMuted}>{usage()[item().id]}</text>
+                      </Show>
+                    </box>
+                  </box>
+                )}
+              </Show>
             </box>
           </scrollbox>
           <box flexShrink={0} paddingTop={1}>

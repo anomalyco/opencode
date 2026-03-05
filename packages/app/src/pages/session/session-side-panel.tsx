@@ -423,10 +423,22 @@ const FALLBACK_PROMPTS: PromptItem[] = [
     tags: ["rollback", "operations", "incident"],
     path: "fallback",
   },
+  {
+    id: "ai-create-custom-prompt",
+    name: "Create a Prompt That...",
+    summary: "Generate and save a high-quality custom prompt from plain language",
+    template:
+      'You are a senior prompt librarian inside an OpenCode workspace. Your job is to convert a user intent into a real prompt file saved in the correct location so it appears in the Prompt Library.\n\nOperating expectations:\n- Be practical, explicit, and file-system aware.\n- Produce production-quality prompts (not one-liners).\n- If intent is ambiguous, make reasonable assumptions and state them briefly.\n- Do the file-writing work, not just advisory text.\n\nUser input (edit this):\nINSERT TEXT HERE\n\nOptional context from current selection:\n{{selection}}\n\nAssistant behavior:\n- Treat "INSERT TEXT HERE" as the user intent placeholder.\n- If it was not replaced and no useful selection context exists, ask one concise clarifying question before proceeding.\n\nTask:\nConvert the user intent into a reusable prompt and create or update a JSON file in:\n- `.opencode/prompts/custom/<slug>.json`\n\nFile and format rules:\n- Use top-level keys: `version`, `category`, `categoryIcon`, `prompts`\n- Prompt keys: `id`, `name`, `summary`, `template`, `tags`\n- Use `version: "2.0"`\n- Default to `category: "custom"` and `categoryIcon: "✨"` unless user asks otherwise\n- Keep `id` stable kebab-case\n- Ensure `template` includes role framing, operating expectations, task section, and structured output contract\n\nExecution steps:\n1) Infer purpose, audience, and output style from user intent\n2) Draft full prompt JSON object\n3) Write to `.opencode/prompts/custom/<slug>.json`\n4) If file exists, merge safely by `id` unless user requests replace\n5) Validate JSON and required fields\n6) Report file path, prompt id, and name',
+    category: "AI",
+    icon: "✨",
+    tags: ["ai", "prompting", "meta", "template-generation"],
+    path: "fallback",
+  },
 ]
 
 const normalizePath = (value: string) => value.replaceAll("\\", "/")
 const joinPath = (base: string, part: string) => `${normalizePath(base).replace(/\/+$/, "")}/${part}`
+const PRIMARY_PROMPT_ID = "ai-create-custom-prompt"
 const categoryName = (value?: string) =>
   value
     ? value.toLowerCase() === "qa"
@@ -440,13 +452,6 @@ const categoryName = (value?: string) =>
 
 function renderPromptTemplate(template: string, values: { selection: string; clipboard: string }) {
   return template.replaceAll("{{selection}}", values.selection).replaceAll("{{clipboard}}", values.clipboard)
-}
-
-function mergePromptLists(builtIn: PromptItem[], user: PromptItem[]) {
-  const map = new Map<string, PromptItem>()
-  for (const item of builtIn) map.set(item.id, item)
-  for (const item of user) map.set(item.id, item)
-  return Array.from(map.values())
 }
 
 export function SessionSidePanel(props: {
@@ -612,12 +617,15 @@ export function SessionSidePanel(props: {
   const promptGrouped = createMemo(() => {
     const map = new Map<string, PromptItem[]>()
     for (const item of promptFiltered()) {
+      if (item.id === PRIMARY_PROMPT_ID) continue
       const list = map.get(item.category) ?? []
       list.push(item)
       map.set(item.category, list)
     }
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]))
   })
+
+  const promptPrimary = createMemo(() => promptFiltered().find((item) => item.id === PRIMARY_PROMPT_ID))
 
   const readPromptFile = (path: string) =>
     sdk.client.file
@@ -642,29 +650,50 @@ export function SessionSidePanel(props: {
       })
       .catch(() => [] as PromptItem[])
 
+  const promptRoots = (dir: string) => {
+    const base = normalizePath(dir).replace(/\/+$/, "")
+    const parts = base.split("/").filter(Boolean)
+    const out: string[] = [".opencode/prompts"]
+    if (parts.length === 0) return out
+    const head = base.startsWith("/") ? "/" : /^[A-Za-z]:$/.test(parts[0] ?? "") ? `${parts[0]}/` : ""
+    const body = head ? parts.slice(1) : parts
+    for (let i = 1; i <= body.length; i++) out.push(`${"../".repeat(i)}.opencode/prompts`)
+    for (let i = body.length; i >= 0; i--) {
+      const path = `${head}${body.slice(0, i).join("/")}`.replace(/\/+$/, "")
+      out.push(`${path}/.opencode/prompts`.replace(/^\/+/, head ? "" : "/"))
+    }
+    return Array.from(new Set(out))
+  }
+
+  const listPromptFiles = async (root: string) => {
+    const out = new Set<string>()
+    const walk = async (dir: string): Promise<void> => {
+      const nodes = await sdk.client.file
+        .list({ path: dir })
+        .then((r) => r.data ?? [])
+        .catch(() => [])
+      await Promise.all(
+        nodes.map(async (node) => {
+          if (node.type === "file" && node.path.endsWith(".json")) {
+            out.add(node.path)
+            return
+          }
+          if (node.type !== "directory") return
+          await walk(node.path)
+        }),
+      )
+    }
+    await walk(root)
+    return Array.from(out)
+  }
+
   const reloadPrompts = () => {
-    sdk.client.file
-      .list({ path: promptRoot() })
-      .then(async (nodes) => {
-        const files = (nodes.data ?? []).flatMap((node) => {
-          if (node.type === "file" && node.path.endsWith(".json")) return [node.path]
-          if (node.type !== "directory") return [] as string[]
-          if (!node.path.endsWith("/custom")) return [] as string[]
-          return [] as string[]
-        })
-
-        const custom = await sdk.client.file
-          .list({ path: joinPath(promptRoot(), "custom") })
-          .then((result) =>
-            (result.data ?? [])
-              .filter((node) => node.type === "file" && node.path.endsWith(".json"))
-              .map((node) => node.path),
-          )
-          .catch(() => [] as string[])
-
-        const unique = Array.from(new Set([...files, ...custom]))
-        const loaded = unique.length > 0 ? (await Promise.all(unique.map((file) => readPromptFile(file)))).flat() : []
-        setStore("promptList", mergePromptLists(FALLBACK_PROMPTS, loaded))
+    Promise.all(promptRoots(sdk.directory).map((root) => listPromptFiles(root)))
+      .then(async (groups) => {
+        const files = Array.from(new Set(groups.flat()))
+        const loaded = files.length > 0 ? (await Promise.all(files.map((file) => readPromptFile(file)))).flat() : []
+        const legacy = loaded.length > 0 && loaded.every((item) => item.category === "Starter")
+        setStore("promptList", loaded.length > 0 && !legacy ? loaded : FALLBACK_PROMPTS)
       })
       .catch(() => {
         setStore("promptList", FALLBACK_PROMPTS)
@@ -679,6 +708,12 @@ export function SessionSidePanel(props: {
   createEffect(() => {
     if (!promptOpen()) return
     reloadPrompts()
+  })
+
+  createEffect(() => {
+    if (!promptOpen()) return
+    const timer = setInterval(reloadPrompts, 2000)
+    onCleanup(() => clearInterval(timer))
   })
 
   const togglePromptCategory = (category: string) => {
@@ -1116,6 +1151,44 @@ export function SessionSidePanel(props: {
                             </div>
                           )}
                         </For>
+                        <Show when={promptPrimary()}>
+                          {(item) => (
+                            <div class="mt-2">
+                              <ContextMenu>
+                                <ContextMenu.Trigger
+                                  as="button"
+                                  type="button"
+                                  class="w-full text-left px-2 py-1.5 rounded-md hover:bg-surface-base-hover"
+                                  onClick={() => void applyPrompt(item())}
+                                >
+                                  <div class="text-12-medium text-text-strong truncate flex items-center gap-2">
+                                    <span style={{ color: "#22c55e", "font-weight": "700", "line-height": "1" }}>
+                                      +
+                                    </span>
+                                    <span>{item().name}</span>
+                                  </div>
+                                </ContextMenu.Trigger>
+                                <ContextMenu.Portal>
+                                  <ContextMenu.Content>
+                                    <ContextMenu.Item onSelect={() => void applyPrompt(item())}>
+                                      <ContextMenu.ItemLabel>Use prompt</ContextMenu.ItemLabel>
+                                    </ContextMenu.Item>
+                                    <ContextMenu.Item
+                                      onSelect={() => {
+                                        navigator.clipboard.writeText(item().template).catch(() => {})
+                                      }}
+                                    >
+                                      <ContextMenu.ItemLabel>Copy template</ContextMenu.ItemLabel>
+                                    </ContextMenu.Item>
+                                    <ContextMenu.Item onSelect={openPromptFolder}>
+                                      <ContextMenu.ItemLabel>Customize prompts</ContextMenu.ItemLabel>
+                                    </ContextMenu.Item>
+                                  </ContextMenu.Content>
+                                </ContextMenu.Portal>
+                              </ContextMenu>
+                            </div>
+                          )}
+                        </Show>
                       </Show>
                     </div>
                   </div>
