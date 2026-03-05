@@ -97,9 +97,9 @@ export async function handler(
     const zenData = ZenData.list(opts.modelList)
     const modelInfo = validateModel(zenData, model)
     const dataDumper = createDataDumper(sessionId, requestId, projectId)
-    const trialLimiter = createTrialLimiter(modelInfo.trial, ip, ocClient)
-    const isTrial = await trialLimiter?.isTrial()
-    const rateLimiter = createRateLimiter(modelInfo.rateLimit, ip, input.request)
+    const trialLimiter = createTrialLimiter(modelInfo.trialProvider, ip)
+    const trialProvider = await trialLimiter?.check()
+    const rateLimiter = createRateLimiter(modelInfo.allowAnonymous, ip, input.request)
     await rateLimiter?.check()
     const stickyTracker = createStickyTracker(modelInfo.stickyProvider, sessionId)
     const stickyProvider = await stickyTracker?.get()
@@ -114,7 +114,7 @@ export async function handler(
         authInfo,
         modelInfo,
         sessionId,
-        isTrial ?? false,
+        trialProvider,
         retry,
         stickyProvider,
       )
@@ -143,9 +143,6 @@ export async function handler(
           providerInfo.modifyHeaders(headers, body, providerInfo.apiKey)
           Object.entries(providerInfo.headerMappings ?? {}).forEach(([k, v]) => {
             headers.set(k, headers.get(v)!)
-          })
-          Object.entries(providerInfo.headers ?? {}).forEach(([k, v]) => {
-            headers.set(k, v)
           })
           headers.delete("host")
           headers.delete("content-length")
@@ -295,18 +292,13 @@ export async function handler(
                 part = part.trim()
                 usageParser.parse(part)
 
-                if (providerInfo.responseModifier) {
-                  for (const [k, v] of Object.entries(providerInfo.responseModifier)) {
-                    part = part.replace(k, v)
-                  }
-                  c.enqueue(encoder.encode(part + "\n\n"))
-                } else if (providerInfo.format !== opts.format) {
+                if (providerInfo.format !== opts.format) {
                   part = streamConverter(part)
                   c.enqueue(encoder.encode(part + "\n\n"))
                 }
               }
 
-              if (!providerInfo.responseModifier && providerInfo.format === opts.format) {
+              if (providerInfo.format === opts.format) {
                 c.enqueue(value)
               }
 
@@ -398,7 +390,7 @@ export async function handler(
     authInfo: AuthInfo,
     modelInfo: ModelInfo,
     sessionId: string,
-    isTrial: boolean,
+    trialProvider: string | undefined,
     retry: RetryOptions,
     stickyProvider: string | undefined,
   ) {
@@ -407,8 +399,8 @@ export async function handler(
         return modelInfo.providers.find((provider) => provider.id === modelInfo.byokProvider)
       }
 
-      if (isTrial) {
-        return modelInfo.providers.find((provider) => provider.id === modelInfo.trial!.provider)
+      if (trialProvider) {
+        return modelInfo.providers.find((provider) => provider.id === trialProvider)
       }
 
       if (stickyProvider) {
