@@ -22,7 +22,7 @@ import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { getFilename } from "@opencode-ai/util/path"
@@ -1937,20 +1937,14 @@ export default function Layout(props: ParentProps) {
                   fallback={
                     <>
                       <div class="shrink-0 py-4 px-3">
-                        <TooltipKeybind
-                          title={language.t("command.session.new")}
-                          keybind={command.keybind("session.new")}
-                          placement="top"
+                        <Button
+                          size="large"
+                          icon="plus-small"
+                          class="w-full"
+                          onClick={() => navigateWithSidebarReset(`/${base64Encode(p.worktree)}/session`)}
                         >
-                          <Button
-                            size="large"
-                            icon="plus-small"
-                            class="w-full"
-                            onClick={() => navigateWithSidebarReset(`/${base64Encode(p.worktree)}/session`)}
-                          >
-                            {language.t("command.session.new")}
-                          </Button>
-                        </TooltipKeybind>
+                          {language.t("command.session.new")}
+                        </Button>
                       </div>
                       <div class="flex-1 min-h-0">
                         <LocalWorkspace
@@ -1965,15 +1959,9 @@ export default function Layout(props: ParentProps) {
                 >
                   <>
                     <div class="shrink-0 py-4 px-3">
-                      <TooltipKeybind
-                        title={language.t("workspace.new")}
-                        keybind={command.keybind("workspace.new")}
-                        placement="top"
-                      >
-                        <Button size="large" icon="plus-small" class="w-full" onClick={() => createWorkspace(p)}>
-                          {language.t("workspace.new")}
-                        </Button>
-                      </TooltipKeybind>
+                      <Button size="large" icon="plus-small" class="w-full" onClick={() => createWorkspace(p)}>
+                        {language.t("workspace.new")}
+                      </Button>
                     </div>
                     <div class="relative flex-1 min-h-0">
                       <DragDropProvider
