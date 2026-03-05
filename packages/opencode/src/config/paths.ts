@@ -25,7 +25,7 @@ export namespace ConfigPaths {
       ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
         ? await Array.fromAsync(
             Filesystem.up({
-              targets: [".opencode"],
+              targets: [".opensacia"],
               start: directory,
               stop: worktree,
             }),
@@ -33,12 +33,12 @@ export namespace ConfigPaths {
         : []),
       ...(await Array.fromAsync(
         Filesystem.up({
-          targets: [".opencode"],
+          targets: [".opensacia"],
           start: Global.Path.home,
           stop: Global.Path.home,
         }),
       )),
-      ...(Flag.OPENCODE_CONFIG_DIR ? [Flag.OPENCODE_CONFIG_DIR] : []),
+      ...(Flag.OPENSACIA_CONFIG_DIR ? [Flag.OPENSACIA_CONFIG_DIR] : []),
     ]
   }
 

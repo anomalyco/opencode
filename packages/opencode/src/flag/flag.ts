@@ -14,6 +14,8 @@ export namespace Flag {
   export const OPENCODE_CONFIG = process.env["OPENCODE_CONFIG"]
   export declare const OPENCODE_TUI_CONFIG: string | undefined
   export declare const OPENCODE_CONFIG_DIR: string | undefined
+  // OPENSACIA: Config directory with fallback to OPENCODE_CONFIG_DIR
+  export declare const OPENSACIA_CONFIG_DIR: string | undefined
   export const OPENCODE_CONFIG_CONTENT = process.env["OPENCODE_CONFIG_CONTENT"]
   export const OPENCODE_DISABLE_AUTOUPDATE = truthy("OPENCODE_DISABLE_AUTOUPDATE")
   export const OPENCODE_DISABLE_PRUNE = truthy("OPENCODE_DISABLE_PRUNE")
@@ -104,6 +106,16 @@ Object.defineProperty(Flag, "OPENCODE_TUI_CONFIG", {
 Object.defineProperty(Flag, "OPENCODE_CONFIG_DIR", {
   get() {
     return process.env["OPENCODE_CONFIG_DIR"]
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+// OPENSACIA: Dynamic getter for OPENSACIA_CONFIG_DIR
+// Falls back to OPENCODE_CONFIG_DIR for compatibility
+Object.defineProperty(Flag, "OPENSACIA_CONFIG_DIR", {
+  get() {
+    return process.env["OPENSACIA_CONFIG_DIR"] ?? process.env["OPENCODE_CONFIG_DIR"]
   },
   enumerable: true,
   configurable: false,
