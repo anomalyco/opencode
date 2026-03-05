@@ -37,6 +37,62 @@ describe("tool.grep", () => {
     })
   })
 
+  test("hashline disabled keeps Line N format", async () => {
+    await using tmp = await tmpdir({
+      config: {
+        experimental: {
+          hashline_edit: false,
+        },
+      },
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "test.txt"), "alpha\nbeta")
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const grep = await GrepTool.init()
+        const result = await grep.execute(
+          {
+            pattern: "alpha",
+            path: tmp.path,
+          },
+          ctx,
+        )
+        expect(result.output).toContain("Line 1: alpha")
+      },
+    })
+  })
+
+  test("hashline enabled emits N#ID anchor format", async () => {
+    await using tmp = await tmpdir({
+      config: {
+        experimental: {
+          hashline_edit: true,
+        },
+      },
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "test.txt"), "alpha\nbeta")
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const grep = await GrepTool.init()
+        const result = await grep.execute(
+          {
+            pattern: "alpha",
+            path: tmp.path,
+          },
+          ctx,
+        )
+        expect(result.output).toMatch(/\b1#[ZPMQVRWSNKTXJBYH]{2}:alpha\b/)
+      },
+    })
+  })
+
   test("no matches returns correct output", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {

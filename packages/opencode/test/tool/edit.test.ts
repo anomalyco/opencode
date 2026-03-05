@@ -5,6 +5,7 @@ import { EditTool } from "../../src/tool/edit"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { FileTime } from "../../src/file/time"
+import { hashlineLine, hashlineRef } from "../../src/tool/hashline"
 
 const ctx = {
   sessionID: "test-edit-session",
@@ -489,6 +490,288 @@ describe("tool.edit", () => {
           // Both should complete without error (though one might fail due to content mismatch)
           const results = await Promise.allSettled([promise1, promise2])
           expect(results.some((r) => r.status === "fulfilled")).toBe(true)
+        },
+      })
+    })
+  })
+
+  describe("hashline payload", () => {
+    test("replaces a single line in hashline mode", async () => {
+      await using tmp = await tmpdir({
+        config: {
+          experimental: {
+            hashline_edit: true,
+          },
+        },
+        init: async (dir) => {
+          await fs.writeFile(path.join(dir, "file.txt"), "a\nb\nc", "utf-8")
+        },
+      })
+      const filepath = path.join(tmp.path, "file.txt")
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          FileTime.read(ctx.sessionID, filepath)
+          const edit = await EditTool.init()
+          const result = await edit.execute(
+            {
+              filePath: filepath,
+              edits: [
+                {
+                  type: "set_line",
+                  line: hashlineRef(2, "b"),
+                  text: "B",
+                },
+              ],
+            },
+            ctx,
+          )
+
+          const content = await fs.readFile(filepath, "utf-8")
+          expect(content).toBe("a\nB\nc")
+          expect(result.metadata.edit_mode).toBe("hashline")
+        },
+      })
+    })
+
+    test("applies hashline autocorrect prefixes through config", async () => {
+      await using tmp = await tmpdir({
+        config: {
+          experimental: {
+            hashline_edit: true,
+            hashline_autocorrect: true,
+          },
+        },
+        init: async (dir) => {
+          await fs.writeFile(path.join(dir, "file.txt"), "a\nb\nc", "utf-8")
+        },
+      })
+      const filepath = path.join(tmp.path, "file.txt")
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          FileTime.read(ctx.sessionID, filepath)
+          const edit = await EditTool.init()
+          await edit.execute(
+            {
+              filePath: filepath,
+              edits: [
+                {
+                  type: "set_line",
+                  line: hashlineRef(2, "b"),
+                  text: hashlineLine(2, "B"),
+                },
+              ],
+            },
+            ctx,
+          )
+
+          const content = await fs.readFile(filepath, "utf-8")
+          expect(content).toBe("a\nB\nc")
+        },
+      })
+    })
+
+    test("supports range replacement and insert modes", async () => {
+      await using tmp = await tmpdir({
+        config: {
+          experimental: {
+            hashline_edit: true,
+          },
+        },
+        init: async (dir) => {
+          await fs.writeFile(path.join(dir, "file.txt"), "a\nb\nc\nd", "utf-8")
+        },
+      })
+      const filepath = path.join(tmp.path, "file.txt")
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          FileTime.read(ctx.sessionID, filepath)
+          const edit = await EditTool.init()
+          await edit.execute(
+            {
+              filePath: filepath,
+              edits: [
+                {
+                  type: "replace_lines",
+                  start_line: hashlineRef(2, "b"),
+                  end_line: hashlineRef(3, "c"),
+                  text: ["B", "C"],
+                },
+                {
+                  type: "insert_before",
+                  line: hashlineRef(2, "b"),
+                  text: "x",
+                },
+                {
+                  type: "insert_after",
+                  line: hashlineRef(3, "c"),
+                  text: "y",
+                },
+              ],
+            },
+            ctx,
+          )
+
+          const content = await fs.readFile(filepath, "utf-8")
+          expect(content).toBe("a\nx\nB\nC\ny\nd")
+        },
+      })
+    })
+
+    test("creates missing files from append/prepend operations", async () => {
+      await using tmp = await tmpdir({
+        config: {
+          experimental: {
+            hashline_edit: true,
+          },
+        },
+      })
+      const filepath = path.join(tmp.path, "created.txt")
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const edit = await EditTool.init()
+          await edit.execute(
+            {
+              filePath: filepath,
+              edits: [
+                {
+                  type: "prepend",
+                  text: "start",
+                },
+                {
+                  type: "append",
+                  text: "end",
+                },
+              ],
+            },
+            ctx,
+          )
+
+          const content = await fs.readFile(filepath, "utf-8")
+          expect(content).toBe("start\nend")
+        },
+      })
+    })
+
+    test("rejects missing files for non-append/prepend edits", async () => {
+      await using tmp = await tmpdir({
+        config: {
+          experimental: {
+            hashline_edit: true,
+          },
+        },
+      })
+      const filepath = path.join(tmp.path, "missing.txt")
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const edit = await EditTool.init()
+          await expect(
+            edit.execute(
+              {
+                filePath: filepath,
+                edits: [
+                  {
+                    type: "replace",
+                    old_text: "a",
+                    new_text: "b",
+                  },
+                ],
+              },
+              ctx,
+            ),
+          ).rejects.toThrow("Missing file can only be created")
+        },
+      })
+    })
+
+    test("supports delete and rename flows", async () => {
+      await using tmp = await tmpdir({
+        config: {
+          experimental: {
+            hashline_edit: true,
+          },
+        },
+        init: async (dir) => {
+          await fs.writeFile(path.join(dir, "src.txt"), "a\nb", "utf-8")
+          await fs.writeFile(path.join(dir, "delete.txt"), "delete me", "utf-8")
+        },
+      })
+      const source = path.join(tmp.path, "src.txt")
+      const target = path.join(tmp.path, "renamed.txt")
+      const doomed = path.join(tmp.path, "delete.txt")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const edit = await EditTool.init()
+
+          FileTime.read(ctx.sessionID, source)
+          await edit.execute(
+            {
+              filePath: source,
+              rename: target,
+              edits: [
+                {
+                  type: "set_line",
+                  line: hashlineRef(2, "b"),
+                  text: "B",
+                },
+              ],
+            },
+            ctx,
+          )
+
+          expect(await fs.readFile(target, "utf-8")).toBe("a\nB")
+          await expect(fs.stat(source)).rejects.toThrow()
+
+          FileTime.read(ctx.sessionID, doomed)
+          await edit.execute(
+            {
+              filePath: doomed,
+              delete: true,
+              edits: [],
+            },
+            ctx,
+          )
+          await expect(fs.stat(doomed)).rejects.toThrow()
+        },
+      })
+    })
+
+    test("rejects hashline payload when experimental mode is disabled", async () => {
+      await using tmp = await tmpdir({
+        config: {
+          experimental: {
+            hashline_edit: false,
+          },
+        },
+        init: async (dir) => {
+          await fs.writeFile(path.join(dir, "file.txt"), "a", "utf-8")
+        },
+      })
+      const filepath = path.join(tmp.path, "file.txt")
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const edit = await EditTool.init()
+          await expect(
+            edit.execute(
+              {
+                filePath: filepath,
+                edits: [
+                  {
+                    type: "append",
+                    text: "b",
+                  },
+                ],
+              },
+              ctx,
+            ),
+          ).rejects.toThrow("Hashline edit payload is disabled")
         },
       })
     })
