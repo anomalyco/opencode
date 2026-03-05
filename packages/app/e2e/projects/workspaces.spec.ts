@@ -349,10 +349,18 @@ test("can pin and unpin a workspace with persistence", async ({ page, withProjec
       const slugs = await nodes.evaluateAll((els) => {
         return els.map((el) => el.getAttribute("data-workspace") ?? "").filter((x) => x.length > 0)
       })
-      return slugs.filter((slug) => {
-        const slugKey = key(slug)
-        return slugKey === aKey || slugKey === bKey
-      })
+      const seen = new Set<string>()
+      return slugs
+        .filter((slug) => {
+          const slugKey = key(slug)
+          if (seen.has(slugKey)) return false
+          seen.add(slugKey)
+          return true
+        })
+        .filter((slug) => {
+          const slugKey = key(slug)
+          return slugKey === aKey || slugKey === bKey
+        })
     }
 
     const listAll = async () => {
@@ -360,10 +368,18 @@ test("can pin and unpin a workspace with persistence", async ({ page, withProjec
       const slugs = await nodes.evaluateAll((els) => {
         return els.map((el) => el.getAttribute("data-workspace") ?? "").filter((x) => x.length > 0)
       })
-      return slugs.filter((slug) => {
-        const slugKey = key(slug)
-        return slugKey === rootKey || slugKey === aKey || slugKey === bKey
-      })
+      const seen = new Set<string>()
+      return slugs
+        .filter((slug) => {
+          const slugKey = key(slug)
+          if (seen.has(slugKey)) return false
+          seen.add(slugKey)
+          return true
+        })
+        .filter((slug) => {
+          const slugKey = key(slug)
+          return slugKey === rootKey || slugKey === aKey || slugKey === bKey
+        })
     }
 
     const find = async (target: string) => {
