@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test"
-import { type Session } from "@opencode-ai/sdk/v2/client"
-import { collectOpenProjectDeepLinks, drainPendingDeepLinks, parseDeepLink } from "./deep-links"
 import {
-  displayName,
-  errorMessage,
-  getDraggableId,
-  latestRootSession,
-  syncWorkspaceOrder,
-  workspaceKey,
-} from "./helpers"
+  collectNewSessionDeepLinks,
+  collectOpenProjectDeepLinks,
+  drainPendingDeepLinks,
+  parseDeepLink,
+  parseNewSessionDeepLink,
+} from "./deep-links"
+import { displayName, errorMessage, getDraggableId, syncWorkspaceOrder, workspaceKey } from "./helpers"
+import { type Session } from "@opencode-ai/sdk/v2/client"
+import { hasProjectPermissions, latestRootSession } from "./helpers"
 
 const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
   ({
@@ -59,6 +59,28 @@ describe("layout deep links", () => {
       "opencode://open-project?directory=/c",
     ])
     expect(result).toEqual(["/a", "/c"])
+  })
+
+  test("parses new-session deep links with optional prompt", () => {
+    expect(parseNewSessionDeepLink("opencode://new-session?directory=/tmp/demo")).toEqual({ directory: "/tmp/demo" })
+    expect(parseNewSessionDeepLink("opencode://new-session?directory=/tmp/demo&prompt=hello%20world")).toEqual({
+      directory: "/tmp/demo",
+      prompt: "hello world",
+    })
+  })
+
+  test("ignores new-session deep links without directory", () => {
+    expect(parseNewSessionDeepLink("opencode://new-session")).toBeUndefined()
+    expect(parseNewSessionDeepLink("opencode://new-session?directory=")).toBeUndefined()
+  })
+
+  test("collects only valid new-session deep links", () => {
+    const result = collectNewSessionDeepLinks([
+      "opencode://new-session?directory=/a",
+      "opencode://open-project?directory=/b",
+      "opencode://new-session?directory=/c&prompt=ship%20it",
+    ])
+    expect(result).toEqual([{ directory: "/a" }, { directory: "/c", prompt: "ship it" }])
   })
 
   test("drains global deep links once", () => {
@@ -114,6 +136,29 @@ describe("layout workspace helpers", () => {
     )
 
     expect(result?.id).toBe("workspace")
+  })
+
+  test("detects project permissions with a filter", () => {
+    const result = hasProjectPermissions(
+      {
+        root: [{ id: "perm-root" }, { id: "perm-hidden" }],
+        child: [{ id: "perm-child" }],
+      },
+      (item) => item.id === "perm-child",
+    )
+
+    expect(result).toBe(true)
+  })
+
+  test("ignores project permissions filtered out", () => {
+    const result = hasProjectPermissions(
+      {
+        root: [{ id: "perm-root" }],
+      },
+      () => false,
+    )
+
+    expect(result).toBe(false)
   })
 
   test("ignores archived and child sessions when finding latest root session", () => {

@@ -64,7 +64,7 @@
 
   [data-slot="basic-tool-tool-info-main"] {
     display: flex;
-    align-items: center;
+    align-items: baseline;
     gap: 8px;
     min-width: 0;
     overflow: hidden;
