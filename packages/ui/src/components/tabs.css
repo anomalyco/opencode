@@ -241,26 +241,26 @@
       [data-slot="tabs-trigger"] {
         .tab-fileicon-color,
         .tab-fileicon-mono {
-          transition: opacity 120ms ease;
+          pointer-events: none;
         }
 
         .tab-fileicon-color {
-          opacity: 0;
+          display: none;
         }
 
         .tab-fileicon-mono {
-          opacity: 1;
+          display: block;
           color: currentColor;
         }
 
         &[data-selected],
         &:hover {
           .tab-fileicon-color {
-            opacity: 1;
+            display: block;
           }
 
           .tab-fileicon-mono {
-            opacity: 0;
+            display: none;
           }
         }
       }
