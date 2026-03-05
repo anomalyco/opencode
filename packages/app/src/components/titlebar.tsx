@@ -266,6 +266,9 @@ export function Titlebar() {
           </div>
         </div>
         <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
+        <div class="bg-icon-interactive-base text-background-base font-medium px-2 rounded-sm uppercase font-mono">
+          BETA
+        </div>
       </div>
 
       <div class="min-w-0 flex items-center justify-center pointer-events-none">
