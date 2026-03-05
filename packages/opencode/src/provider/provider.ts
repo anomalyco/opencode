@@ -775,6 +775,58 @@ export namespace Provider {
     }
   }
 
+  function catalog(opts: Record<string, unknown>) {
+    return opts["catalog"] === "all" ? "all" : "user"
+  }
+
+  function tier(opts: Record<string, unknown>) {
+    if (opts["tier"] === "free") return "free"
+    if (opts["tier"] === "paid") return "paid"
+    if (opts["free_only"] === true) return "free"
+    return "any"
+  }
+
+  function parse(input: unknown) {
+    if (!input || typeof input !== "object") return
+    const data = (input as { data?: unknown }).data
+    if (!Array.isArray(data)) return
+    return data
+      .map((item) => {
+        if (!item || typeof item !== "object") return
+        const id = (item as { id?: unknown }).id
+        if (typeof id !== "string") return
+        return id
+      })
+      .filter((item): item is string => Boolean(item))
+  }
+
+  async function user(provider: Info) {
+    const key = provider.key ?? provider.options["apiKey"]
+    if (typeof key !== "string") return
+
+    const base = typeof provider.options["baseURL"] === "string" ? provider.options["baseURL"] : "https://openrouter.ai/api/v1"
+    const headers = new Headers()
+    if (provider.options["headers"] && typeof provider.options["headers"] === "object") {
+      for (const [k, v] of Object.entries(provider.options["headers"])) {
+        if (typeof v === "string") headers.set(k, v)
+      }
+    }
+    headers.set("Authorization", `Bearer ${key}`)
+    headers.set("User-Agent", Installation.USER_AGENT)
+
+    const result = await fetch(`${base.replace(/\/+$/, "")}/models/user`, {
+      headers,
+      signal: AbortSignal.timeout(10_000),
+    }).catch(() => undefined)
+    if (!result?.ok) return
+
+    const body = await result.json().catch(() => undefined)
+    const ids = parse(body)
+    if (!ids) return
+
+    return new Set(ids)
+  }
+
   const state = Instance.state(async () => {
     using _ = log.time("state")
     const config = await Config.get()
@@ -1013,6 +1065,26 @@ export namespace Provider {
       }
 
       const configProvider = config.provider?.[providerID]
+
+      if (providerID === "openrouter") {
+        if (catalog(provider.options) === "user") {
+          const ids = await user(provider)
+          if (ids) {
+            for (const [id, model] of Object.entries(provider.models)) {
+              if (!ids.has(id) && !ids.has(model.api.id)) delete provider.models[id]
+            }
+          }
+        }
+
+        const mode = tier(provider.options)
+        if (mode !== "any") {
+          for (const [id, model] of Object.entries(provider.models)) {
+            const free = id.endsWith(":free") || model.api.id.endsWith(":free")
+            if (mode === "free" && !free) delete provider.models[id]
+            if (mode === "paid" && free) delete provider.models[id]
+          }
+        }
+      }
 
       for (const [modelID, model] of Object.entries(provider.models)) {
         model.api.id = model.api.id ?? model.id ?? modelID

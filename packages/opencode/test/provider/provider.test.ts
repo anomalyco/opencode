@@ -1810,6 +1810,162 @@ test("custom model inherits api.url from models.dev provider", async () => {
   })
 })
 
+test("openrouter filters models using user catalog", async () => {
+  const orig = globalThis.fetch
+  const stub = (input: RequestInfo | URL, init?: RequestInit | BunFetchRequestInit) => {
+    const url = input instanceof Request ? input.url : input.toString()
+    if (url.endsWith("/models/user")) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [
+              { id: "deepseek/deepseek-v3.2" },
+              { id: "qwen/qwen3-coder:free" },
+            ],
+          }),
+          { status: 200 },
+        ),
+      )
+    }
+    return orig(input, init)
+  }
+  globalThis.fetch = stub as typeof fetch
+
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        Env.set("OPENROUTER_API_KEY", "test-api-key")
+      },
+      fn: async () => {
+        const providers = await Provider.list()
+        const models = Object.keys(providers["openrouter"].models)
+        expect(models).toContain("deepseek/deepseek-v3.2")
+        expect(models).toContain("qwen/qwen3-coder:free")
+        expect(models).not.toContain("deepseek/deepseek-r1-0528-qwen3-8b:free")
+      },
+    })
+  } finally {
+    globalThis.fetch = orig
+  }
+})
+
+test("openrouter supports tier free filter", async () => {
+  const orig = globalThis.fetch
+  const stub = (input: RequestInfo | URL, init?: RequestInit | BunFetchRequestInit) => {
+    const url = input instanceof Request ? input.url : input.toString()
+    if (url.endsWith("/models/user")) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [{ id: "deepseek/deepseek-v3.2" }, { id: "qwen/qwen3-coder:free" }],
+          }),
+          { status: 200 },
+        ),
+      )
+    }
+    return orig(input, init)
+  }
+  globalThis.fetch = stub as typeof fetch
+
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              openrouter: {
+                options: {
+                  tier: "free",
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        Env.set("OPENROUTER_API_KEY", "test-api-key")
+      },
+      fn: async () => {
+        const providers = await Provider.list()
+        const models = Object.keys(providers["openrouter"].models)
+        expect(models).toContain("qwen/qwen3-coder:free")
+        expect(models).not.toContain("deepseek/deepseek-v3.2")
+      },
+    })
+  } finally {
+    globalThis.fetch = orig
+  }
+})
+
+test("openrouter supports tier paid filter", async () => {
+  const orig = globalThis.fetch
+  const stub = (input: RequestInfo | URL, init?: RequestInit | BunFetchRequestInit) => {
+    const url = input instanceof Request ? input.url : input.toString()
+    if (url.endsWith("/models/user")) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [{ id: "deepseek/deepseek-v3.2" }, { id: "qwen/qwen3-coder:free" }],
+          }),
+          { status: 200 },
+        ),
+      )
+    }
+    return orig(input, init)
+  }
+  globalThis.fetch = stub as typeof fetch
+
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              openrouter: {
+                options: {
+                  tier: "paid",
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        Env.set("OPENROUTER_API_KEY", "test-api-key")
+      },
+      fn: async () => {
+        const providers = await Provider.list()
+        const models = Object.keys(providers["openrouter"].models)
+        expect(models).toContain("deepseek/deepseek-v3.2")
+        expect(models).not.toContain("qwen/qwen3-coder:free")
+      },
+    })
+  } finally {
+    globalThis.fetch = orig
+  }
+})
+
 test("model variants are generated for reasoning models", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
