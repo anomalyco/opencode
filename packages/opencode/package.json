@@ -1,10 +1,11 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.2.17",
+  "version": "1.2.15",
   "name": "opencode",
   "type": "module",
   "license": "MIT",
   "private": true,
+  "repository": "https://github.com/anomalyco/opencode",
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "test": "bun test --timeout 30000",
@@ -89,8 +90,8 @@
     "@opencode-ai/sdk": "workspace:*",
     "@opencode-ai/util": "workspace:*",
     "@openrouter/ai-sdk-provider": "1.5.4",
-    "@opentui/core": "0.1.86",
-    "@opentui/solid": "0.1.86",
+    "@opentui/core": "0.1.81",
+    "@opentui/solid": "0.1.81",
     "@parcel/watcher": "2.5.1",
     "@pierre/diffs": "catalog:",
     "@solid-primitives/event-bus": "1.1.2",
