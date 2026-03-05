@@ -385,7 +385,7 @@ export default function FileTree(props: {
   })
 
   return (
-    <div data-component="filetree" class={`mt-3 flex flex-col gap-0.5 ${props.class ?? ""}`}>
+    <div data-component="filetree" class={`flex flex-col gap-0.5 ${props.class ?? ""}`}>
       <For each={nodes()}>
         {(node) => {
           const expanded = () => file.tree.state(node.path)?.expanded ?? false
