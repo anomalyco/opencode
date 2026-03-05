@@ -123,6 +123,7 @@ export const dict = {
   "ui.message.copyResponse": "Kopier svar",
   "ui.message.copied": "Kopieret!",
   "ui.message.interrupted": "Afbrudt",
+  "ui.message.queued": "I kø",
   "ui.message.attachment.alt": "vedhæftning",
 
   "ui.patch.action.deleted": "Slettet",

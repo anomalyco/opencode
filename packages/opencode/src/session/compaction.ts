@@ -104,8 +104,30 @@ export namespace SessionCompaction {
     sessionID: string
     abort: AbortSignal
     auto: boolean
+    overflow?: boolean
   }) {
     const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
+
+    let messages = input.messages
+    let replay: MessageV2.WithParts | undefined
+    if (input.overflow) {
+      const idx = input.messages.findIndex((m) => m.info.id === input.parentID)
+      for (let i = idx - 1; i >= 0; i--) {
+        const msg = input.messages[i]
+        if (msg.info.role === "user" && !msg.parts.some((p) => p.type === "compaction")) {
+          replay = msg
+          messages = input.messages.slice(0, i)
+          break
+        }
+      }
+      const hasContent =
+        replay && messages.some((m) => m.info.role === "user" && !m.parts.some((p) => p.type === "compaction"))
+      if (!hasContent) {
+        replay = undefined
+        messages = input.messages
+      }
+    }
+
     const agent = await Agent.get("compaction")
     const model = agent.model
       ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
@@ -185,7 +207,7 @@ When constructing the summary, try to stick to this template:
       tools: {},
       system: [],
       messages: [
-        ...MessageV2.toModelMessages(input.messages, model),
+        ...MessageV2.toModelMessages(messages, model, { stripMedia: true }),
         {
           role: "user",
           content: [
@@ -199,29 +221,72 @@ When constructing the summary, try to stick to this template:
       model,
     })
 
+    if (result === "compact") {
+      processor.message.error = new MessageV2.ContextOverflowError({
+        message: replay
+          ? "Conversation history too large to compact - exceeds model context limit"
+          : "Session too large to compact - context exceeds model limit even after stripping media",
+      }).toObject()
+      processor.message.finish = "error"
+      await Session.updateMessage(processor.message)
+      return "stop"
+    }
+
     if (result === "continue" && input.auto) {
-      const continueMsg = await Session.updateMessage({
-        id: Identifier.ascending("message"),
-        role: "user",
-        sessionID: input.sessionID,
-        time: {
-          created: Date.now(),
-        },
-        agent: userMessage.agent,
-        model: userMessage.model,
-      })
-      await Session.updatePart({
-        id: Identifier.ascending("part"),
-        messageID: continueMsg.id,
-        sessionID: input.sessionID,
-        type: "text",
-        synthetic: true,
-        text: "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.",
-        time: {
-          start: Date.now(),
-          end: Date.now(),
-        },
-      })
+      if (replay) {
+        const original = replay.info as MessageV2.User
+        const replayMsg = await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: input.sessionID,
+          time: { created: Date.now() },
+          agent: original.agent,
+          model: original.model,
+          format: original.format,
+          tools: original.tools,
+          system: original.system,
+          variant: original.variant,
+        })
+        for (const part of replay.parts) {
+          if (part.type === "compaction") continue
+          const replayPart =
+            part.type === "file" && MessageV2.isMedia(part.mime)
+              ? { type: "text" as const, text: `[Attached ${part.mime}: ${part.filename ?? "file"}]` }
+              : part
+          await Session.updatePart({
+            ...replayPart,
+            id: Identifier.ascending("part"),
+            messageID: replayMsg.id,
+            sessionID: input.sessionID,
+          })
+        }
+      } else {
+        const continueMsg = await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: input.sessionID,
+          time: { created: Date.now() },
+          agent: userMessage.agent,
+          model: userMessage.model,
+        })
+        const text =
+          (input.overflow
+            ? "The previous request exceeded the provider's size limit due to large media attachments. The conversation was compacted and media files were removed from context. If the user was asking about attached images or files, explain that the attachments were too large to process and suggest they try again with smaller or fewer files.\n\n"
+            : "") +
+          "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed."
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: continueMsg.id,
+          sessionID: input.sessionID,
+          type: "text",
+          synthetic: true,
+          text,
+          time: {
+            start: Date.now(),
+            end: Date.now(),
+          },
+        })
+      }
     }
     if (processor.message.error) return "stop"
     Bus.publish(Event.Compacted, { sessionID: input.sessionID })
@@ -237,6 +302,7 @@ When constructing the summary, try to stick to this template:
         modelID: z.string(),
       }),
       auto: z.boolean(),
+      overflow: z.boolean().optional(),
     }),
     async (input) => {
       const msg = await Session.updateMessage({
@@ -255,6 +321,7 @@ When constructing the summary, try to stick to this template:
         sessionID: msg.sessionID,
         type: "compaction",
         auto: input.auto,
+        overflow: input.overflow,
       })
     },
   )
