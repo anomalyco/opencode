@@ -902,7 +902,7 @@ function ContextToolRollingResults(props: { parts: ToolPart[]; pending: boolean 
     <div style={{ opacity: opacity(), filter: `blur(${blur()}px)` }}>
       <RollingResults
         items={props.parts}
-        rows={5}
+        rows={3}
         rowHeight={22}
         rowGap={0}
         open={props.pending}

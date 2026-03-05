@@ -390,12 +390,12 @@ export function SessionTimelineHeader(props: {
             "bg-[linear-gradient(to_bottom,var(--background-stronger)_38px,transparent)]": true,
             "w-full": true,
             "pb-10": true,
-            "pl-2 pr-3 md:pl-4 md:pr-3": true,
+            "px-4 md:px-5": true,
             "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
           }}
         >
           <div class="pointer-events-auto h-12 w-full flex items-center justify-between gap-2">
-            <div class="flex items-center gap-1 min-w-0 flex-1 pr-3">
+            <div class="flex items-center gap-1 min-w-0 flex-1">
               <Show when={props.parentID()}>
                 <div>
                   <IconButton
@@ -411,7 +411,7 @@ export function SessionTimelineHeader(props: {
                 <Show
                   when={title.editing}
                   fallback={
-                    <h1 class="text-14-medium text-text-strong grow-1 min-w-0 pl-2" onDblClick={openTitleEditor}>
+                    <h1 class="text-14-medium text-text-strong grow-1 min-w-0" onDblClick={openTitleEditor}>
                       <span class="grid min-w-0" style={{ overflow: "clip" }}>
                         <span ref={enterRef} class="col-start-1 row-start-1 min-w-0 truncate">
                           <span classList={{ "opacity-60": headerText.muted }}>{headerText.value}</span>
@@ -433,7 +433,7 @@ export function SessionTimelineHeader(props: {
                     }}
                     value={title.draft}
                     disabled={title.saving}
-                    class="text-14-medium text-text-strong grow-1 min-w-0 pl-2 rounded-[6px]"
+                    class="text-14-medium text-text-strong grow-1 min-w-0 rounded-[6px]"
                     style={{ "--inline-input-shadow": "var(--shadow-xs-border-select)" }}
                     onInput={(event) => setTitle("draft", event.currentTarget.value)}
                     onKeyDown={(event) => {
