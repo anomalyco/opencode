@@ -1,6 +1,6 @@
 // packages/opencode/test/security/kali/parser.test.ts
 import { describe, test, expect } from "bun:test"
-import { NmapParser } from "@/security/kali/parser"
+import { NmapParser, NucleiParser } from "@/security/kali/parser"
 
 describe("NmapParser", () => {
   test("parsea output básico de nmap", () => {
@@ -47,5 +47,54 @@ PORT     STATE SERVICE VERSION
     expect(md).toContain("## Resultados Nmap")
     expect(md).toContain("192.168.1.1")
     expect(md).toContain("| 22 |")
+  })
+})
+
+describe("NucleiParser", () => {
+  test("parsea output JSON de nuclei", () => {
+    const jsonOutput = JSON.stringify([
+      {
+        template: "cves/2021/CVE-2021-22204.yaml",
+        templateID: "CVE-2021-22204",
+        info: {
+          name: "ExifTool CVE-2021-22204",
+          severity: "critical",
+        },
+        host: "http://example.com",
+        matched: "http://example.com",
+      },
+    ])
+
+    const result = NucleiParser.parse(jsonOutput)
+    expect(result.findings).toHaveLength(1)
+    expect(result.findings[0].severity).toBe("critical")
+  })
+
+  test("genera markdown agrupado por severidad", () => {
+    const result = {
+      findings: [
+        {
+          template: "cves/2021/CVE-2021-22204.yaml",
+          templateID: "CVE-2021-22204",
+          name: "ExifTool CVE-2021-22204",
+          severity: "critical",
+          host: "http://example.com",
+          matched: "http://example.com",
+        },
+        {
+          template: "exposures/configs/api-key.yaml",
+          templateID: "api-key-exposure",
+          name: "API Key Exposure",
+          severity: "high",
+          host: "http://example.com",
+          matched: "http://example.com/api/key",
+        },
+      ],
+    }
+    const md = NucleiParser.toMarkdown(result)
+    expect(md).toContain("## Resultados Nuclei")
+    expect(md).toContain("### CRITICAL")
+    expect(md).toContain("### HIGH")
+    expect(md).toContain("ExifTool CVE-2021-22204")
   })
 })
