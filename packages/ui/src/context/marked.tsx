@@ -6,6 +6,67 @@ import { bundledLanguages, type BundledLanguage } from "shiki"
 import { createSimpleContext } from "./helper"
 import { getSharedHighlighter, registerCustomTheme, ThemeRegistrationResolved } from "@pierre/diffs"
 
+const autoLinkBoundaryChars = new Set([
+  " ",
+  "\t",
+  "\n",
+  "\r",
+  "\f",
+  "\v",
+  ",",
+  ".",
+  ";",
+  ":",
+  "!",
+  "?",
+  ")",
+  "]",
+  "}",
+  ">",
+  "，",
+  "。",
+  "；",
+  "：",
+  "！",
+  "？",
+  "、",
+  "）",
+  "］",
+  "】",
+  "｝",
+  "〉",
+  "》",
+  "」",
+  "』",
+])
+
+function trimAutolinkAtBoundary(value: string) {
+  for (let i = 0; i < value.length; i++) {
+    if (autoLinkBoundaryChars.has(value[i])) return value.slice(0, i)
+  }
+  return value
+}
+
+function normalizeAutolink(href: string, text: string) {
+  const hrefTrimmed = href.trim()
+  const textTrimmed = text.trim()
+  if (!hrefTrimmed.startsWith("http://") && !hrefTrimmed.startsWith("https://")) return
+  if (textTrimmed !== hrefTrimmed) return
+
+  const nextHref = trimAutolinkAtBoundary(hrefTrimmed)
+  if (!nextHref || nextHref === hrefTrimmed) return
+
+  try {
+    const parsed = new URL(nextHref)
+    return {
+      href: parsed.toString(),
+      text: trimAutolinkAtBoundary(textTrimmed),
+    }
+  } catch {
+    return
+  }
+}
+
 registerCustomTheme("OpenCode", () => {
   return Promise.resolve({
     name: "OpenCode",
@@ -398,6 +459,20 @@ function stripMathHtml(text: string): string {
     .trim()
 }
 
+function normalizeDisplayMath(markdown: string): string {
+  const block = /(```[\s\S]*?```|~~~[\s\S]*?~~~)/g
+  const parts = markdown.split(block)
+
+  return parts
+    .map((part, i) => {
+      if (i % 2 === 1) return part
+      return part
+        .replace(/\$\$([\s\S]*?)\$\$/g, (_, math) => `\n$$\n${math.trim()}\n$$\n`)
+        .replace(/\\\[([\s\S]*?)\\\]/g, (_, math) => `\n\\[\n${math.trim()}\n\\]\n`)
+    })
+    .join("")
+}
+
 function renderMathInText(text: string): string {
   const render = (math: string, displayMode: boolean, fallback: string) => {
     try {
@@ -496,8 +571,11 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
       {
         renderer: {
           link({ href, title, text }) {
+            const normalized = href ? normalizeAutolink(href, text) : undefined
+            const safeHref = normalized?.href ?? href
+            const safeText = normalized?.text ?? text
             const titleAttr = title ? ` title="${title}"` : ""
-            return `<a href="${href}"${titleAttr} class="external-link" target="_blank" rel="noopener noreferrer">${text}</a>`
+            return `<a href="${safeHref}"${titleAttr} class="external-link" target="_blank" rel="noopener noreferrer">${safeText}</a>`
           },
         },
       },
@@ -534,6 +612,11 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
       }
     }
 
-    return jsParser
+    return {
+      async parse(markdown: string): Promise<string> {
+        const html = await jsParser.parse(normalizeDisplayMath(markdown))
+        return renderMathExpressions(html)
+      },
+    }
   },
 })

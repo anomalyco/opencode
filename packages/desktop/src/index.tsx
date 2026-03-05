@@ -453,8 +453,6 @@ const createPlatform = (): Platform => {
       await commands.setDisplayBackend(backend)
     },
 
-    parseMarkdown: (markdown: string) => commands.parseMarkdownCommand(markdown),
-
     webviewZoom,
 
     checkAppExists: async (appName: string) => {

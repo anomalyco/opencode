@@ -93,7 +93,12 @@
   }
 
   li::marker {
-    color: var(--markdown-list-item, var(--text-weak));
+    color: currentColor;
+  }
+
+  .katex .katex-error,
+  .katex-error {
+    color: var(--text-weak) !important;
   }
 
   /* Nested lists spacing */
