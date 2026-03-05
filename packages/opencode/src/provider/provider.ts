@@ -708,7 +708,7 @@ export namespace Provider {
       family: model.family,
       api: {
         id: model.id,
-        url: model.provider?.api ?? provider.api!,
+        url: model.provider?.api ?? provider.api ?? "",
         npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible",
       },
       status: model.status ?? "active",
@@ -767,16 +767,12 @@ export namespace Provider {
     return m
   }
 
-  const DEFAULT_API: Record<string, string> = {
-    gitlab: "https://gitlab.com",
-  }
-
   export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
     return {
       id: provider.id,
       source: "custom",
       name: provider.name,
-      api: provider.api ?? DEFAULT_API[provider.id],
+      api: provider.api,
       env: provider.env ?? [],
       options: {},
       models: mapValues(provider.models, (model) => fromModelsDevModel(provider, model)),
@@ -1003,6 +999,15 @@ export namespace Provider {
         const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
         if (result.api) patch.api = result.api
         mergeProvider(providerID, patch)
+      }
+    }
+
+    // backfill model api urls that were empty at database construction time
+    // because the provider-level url was only resolved by custom loaders above
+    for (const provider of Object.values(providers)) {
+      if (!provider.api) continue
+      for (const model of Object.values(provider.models)) {
+        if (!model.api.url) model.api.url = provider.api
       }
     }
 
