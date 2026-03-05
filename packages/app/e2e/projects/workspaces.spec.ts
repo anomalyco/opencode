@@ -437,6 +437,11 @@ test("workspace pinning is isolated per project", async ({ page, withProject }) 
   const other = await createTestProject()
   const otherSlug = dirSlug(other)
   const dirs = [] as string[]
+  const key = (slug: string) =>
+    base64Decode(slug)
+      .replace(/[\\/]+/g, "/")
+      .replace(/\/+$/, "")
+      .toLowerCase()
 
   try {
     await withProject(
@@ -458,6 +463,7 @@ test("workspace pinning is isolated per project", async ({ page, withProject }) 
 
         const pinnedSlug = slugFromUrl(page.url())
         dirs.push(base64Decode(pinnedSlug))
+        const pinnedKey = key(pinnedSlug)
 
         await openSidebar(page)
         await setWorkspacePinned(page, pinnedSlug, true)
@@ -504,7 +510,15 @@ test("workspace pinning is isolated per project", async ({ page, withProject }) 
         await rootButton.click()
 
         await openSidebar(page)
-        const rootMenu = await openWorkspaceMenu(page, pinnedSlug)
+        const slugs = await page
+          .locator('[data-component="sidebar-nav-desktop"] [data-component="workspace-item"]')
+          .evaluateAll((els) => {
+            return els.map((el) => el.getAttribute("data-workspace") ?? "").filter((x) => x.length > 0)
+          })
+        const rootSlug = slugs.find((slug) => key(slug) === pinnedKey)
+        if (!rootSlug) throw new Error("Could not find pinned workspace in original project")
+
+        const rootMenu = await openWorkspaceMenu(page, rootSlug)
         await expect(
           rootMenu
             .getByRole("menuitem")
