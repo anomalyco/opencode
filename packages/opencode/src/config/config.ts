@@ -32,7 +32,7 @@ import { Glob } from "../util/glob"
 import { PackageRegistry } from "@/bun/registry"
 import { proxied } from "@/util/proxied"
 import { iife } from "@/util/iife"
-import { Control } from "@/control"
+import { Account } from "@/account"
 import { ConfigPaths } from "./paths"
 import { Filesystem } from "@/util/filesystem"
 
@@ -108,10 +108,6 @@ export namespace Config {
       }
     }
 
-    const token = await Control.token()
-    if (token) {
-    }
-
     // Global user config overrides remote config.
     result = mergeConfigConcatArrays(result, await global())
 
@@ -176,6 +172,15 @@ export namespace Config {
         }),
       )
       log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
+    }
+
+    const active = Account.active()
+    if (active?.workspace_id) {
+      const config = await Account.config(active.id, active.workspace_id)
+      result = mergeConfigConcatArrays(result, config ?? {})
+      const token = await Account.token(active.id)
+      // TODO: this is bad
+      process.env["OPENCODE_CONTROL_TOKEN"] = token
     }
 
     // Load managed config files last (highest priority) - enterprise admin-controlled
