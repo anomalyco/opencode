@@ -467,6 +467,7 @@ export const LocalWorkspace = (props: {
   project: LocalProject
   sortNow: Accessor<number>
   mobile?: boolean
+  header?: JSX.Element
 }): JSX.Element => {
   const globalSync = useGlobalSync()
   const language = useLanguage()
@@ -488,9 +489,14 @@ export const LocalWorkspace = (props: {
   return (
     <div
       ref={(el) => props.ctx.setScrollContainerRef(el, props.mobile)}
-      class="size-full flex flex-col py-2 overflow-y-auto no-scrollbar [overflow-anchor:none]"
+      class="size-full flex flex-col overflow-y-auto no-scrollbar [overflow-anchor:none]"
     >
-      <nav class="flex flex-col gap-1 px-2">
+      <Show when={props.header}>
+        <div class="sticky top-0 z-20 pointer-events-none bg-[linear-gradient(to_bottom,var(--background-stronger)_calc(100%_-_24px),transparent)] pt-4 pb-6 px-3">
+          <div class="pointer-events-auto">{props.header}</div>
+        </div>
+      </Show>
+      <nav class="flex flex-col gap-1 px-2 pb-2" classList={{ "pt-2": !props.header }}>
         <Show when={loading()}>
           <SessionSkeleton />
         </Show>
