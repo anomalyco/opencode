@@ -875,10 +875,20 @@ export namespace MessageV2 {
           {
             message: parsed.message,
             statusCode: parsed.statusCode,
-            isRetryable: parsed.isRetryable,
+            isRetryable:
+              (parsed.statusCode !== undefined && parsed.statusCode >= 500) ||
+              parsed.isRetryable,
             responseHeaders: parsed.responseHeaders,
             responseBody: parsed.responseBody,
             metadata: parsed.metadata,
+          },
+          { cause: e },
+        ).toObject()
+      case e instanceof Error && e.name === "AI_TypeValidationError":
+        return new MessageV2.APIError(
+          {
+            message: `Type validation error: ${e.message}`,
+            isRetryable: true,
           },
           { cause: e },
         ).toObject()

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { NamedError } from "@opencode-ai/util/error"
 import { APICallError } from "ai"
+import { TypeValidationError } from "@ai-sdk/provider"
 import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
 
@@ -170,6 +171,56 @@ describe("session.message-v2.fromError", () => {
     const retryable = SessionRetry.retryable(error)
     expect(retryable).toBeDefined()
     expect(retryable).toBe("Connection reset by server")
+  })
+
+  test("converts AI_TypeValidationError from Cerebras 500 to retryable APIError", () => {
+    // Reproduce exact error shape from production: Cerebras returns a 500,
+    // AI SDK can't parse it and throws AI_TypeValidationError
+    const cerebras500Value = {
+      status_code: 500,
+      error: {
+        message: "Encountered a server error, please try again.",
+        type: "server_error",
+        param: "",
+        code: "",
+        id: "",
+      },
+    }
+    const zodErrors = [
+      {
+        code: "invalid_union",
+        errors: [
+          [{ expected: "array", code: "invalid_type", path: ["choices"], message: "Invalid input: expected array, received undefined" }],
+          [
+            { expected: "string", code: "invalid_type", path: ["message"], message: "Invalid input: expected string, received undefined" },
+            { expected: "string", code: "invalid_type", path: ["type"], message: "Invalid input: expected string, received undefined" },
+          ],
+        ],
+        path: [],
+        message: "Invalid input",
+      },
+    ]
+    const error = new TypeValidationError({ value: cerebras500Value, cause: zodErrors })
+
+    // Verify the error has the expected shape
+    expect(error.name).toBe("AI_TypeValidationError")
+    expect(error).toBeInstanceOf(Error)
+
+    // fromError should classify it as a retryable APIError
+    const result = MessageV2.fromError(error, { providerID: "cerebras" })
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+    expect((result as MessageV2.APIError).data.message).toContain("Type validation error")
+
+    // retryable should return a retry message (not undefined)
+    const retry = SessionRetry.retryable(result)
+    expect(retry).toBeDefined()
+    expect(retry).toContain("Type validation error")
+  })
+
+  test("AI_TypeValidationError is NOT caught by APICallError.isInstance", () => {
+    const error = new TypeValidationError({ value: { status_code: 500 }, cause: "bad" })
+    expect(APICallError.isInstance(error)).toBe(false)
   })
 
   test("marks OpenAI 404 status codes as retryable", () => {
