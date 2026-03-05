@@ -1878,8 +1878,10 @@ function Read(props: ToolProps<typeof ReadTool>) {
       </InlineTool>
       <For each={loaded()}>
         {(filepath) => (
-          <box paddingLeft={5}>
-            <text fg={theme.textMuted}>⤷ Loaded {normalizePath(filepath)}</text>
+          <box paddingLeft={3}>
+            <text paddingLeft={3} fg={theme.textMuted}>
+              ↳ Loaded {normalizePath(filepath)}
+            </text>
           </box>
         )}
       </For>
