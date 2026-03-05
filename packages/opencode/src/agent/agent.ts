@@ -21,16 +21,31 @@ import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
 
 export namespace Agent {
+  const alias: Record<string, string> = {
+    docs: "documentation",
+    planning: "plan",
+    triage: "troubleshooting",
+  }
+
+  function canonical(name: string) {
+    return alias[name] ?? name
+  }
+
   export const Info = z
     .object({
       name: z.string(),
       description: z.string().optional(),
+      title: z.string().optional(),
       mode: z.enum(["subagent", "primary", "all"]),
       native: z.boolean().optional(),
       hidden: z.boolean().optional(),
       topP: z.number().optional(),
       temperature: z.number().optional(),
       color: z.string().optional(),
+      summary: z.string().optional(),
+      category: z.string().optional(),
+      icon: z.string().optional(),
+      tags: z.array(z.string()).optional(),
       permission: PermissionNext.Ruleset,
       model: z
         .object({
@@ -202,7 +217,8 @@ export namespace Agent {
       },
     }
 
-    for (const [key, value] of Object.entries(cfg.agent ?? {})) {
+    for (const [raw, value] of Object.entries(cfg.agent ?? {})) {
+      const key = canonical(raw)
       if (value.disable) {
         delete result[key]
         continue
@@ -220,6 +236,11 @@ export namespace Agent {
       item.variant = value.variant ?? item.variant
       item.prompt = value.prompt ?? item.prompt
       item.description = value.description ?? item.description
+      item.title = value.title ?? item.title
+      item.summary = value.summary ?? item.summary
+      item.category = value.category ?? item.category
+      item.icon = value.icon ?? item.icon
+      item.tags = value.tags ?? item.tags
       item.temperature = value.temperature ?? item.temperature
       item.topP = value.top_p ?? item.topP
       item.mode = value.mode ?? item.mode
@@ -251,7 +272,7 @@ export namespace Agent {
   })
 
   export async function get(agent: string) {
-    return state().then((x) => x[agent])
+    return state().then((x) => x[canonical(agent)])
   }
 
   export async function list() {
@@ -259,7 +280,7 @@ export namespace Agent {
     return pipe(
       await state(),
       values(),
-      sortBy([(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "build"), "desc"]),
+      sortBy([(x) => (cfg.default_agent ? x.name === canonical(cfg.default_agent) : x.name === "build"), "desc"]),
     )
   }
 
@@ -268,7 +289,8 @@ export namespace Agent {
     const agents = await state()
 
     if (cfg.default_agent) {
-      const agent = agents[cfg.default_agent]
+      const key = canonical(cfg.default_agent)
+      const agent = agents[key]
       if (!agent) throw new Error(`default agent "${cfg.default_agent}" not found`)
       if (agent.mode === "subagent") throw new Error(`default agent "${cfg.default_agent}" is a subagent`)
       if (agent.hidden === true) throw new Error(`default agent "${cfg.default_agent}" is hidden`)

@@ -335,8 +335,15 @@ export namespace Config {
     return ext.length ? file.slice(0, -ext.length) : file
   }
 
+  function leaf(file: string) {
+    const name = trim(file)
+    const parts = name.split(/[\\/]/g).filter(Boolean)
+    return parts.at(-1) ?? name
+  }
+
   async function loadCommand(dir: string) {
     const result: Record<string, Command> = {}
+    const names: string[] = []
     for (const item of await Glob.scan("{command,commands}/**/*.md", {
       cwd: dir,
       absolute: true,
@@ -366,10 +373,24 @@ export namespace Config {
       const parsed = Command.safeParse(config)
       if (parsed.success) {
         result[config.name] = parsed.data
+        names.push(config.name)
         continue
       }
       throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
     }
+
+    const count = new Map<string, number>()
+    for (const name of names) {
+      const key = leaf(name)
+      count.set(key, (count.get(key) ?? 0) + 1)
+    }
+    for (const name of names) {
+      const key = leaf(name)
+      if ((count.get(key) ?? 0) !== 1) continue
+      if (result[key]) continue
+      result[key] = result[name]!
+    }
+
     return result
   }
 
@@ -647,7 +668,12 @@ export namespace Config {
 
   export const Command = z.object({
     template: z.string(),
+    title: z.string().optional(),
     description: z.string().optional(),
+    summary: z.string().optional(),
+    category: z.string().optional(),
+    icon: z.string().optional(),
+    tags: z.array(z.string()).optional(),
     agent: z.string().optional(),
     model: ModelId.optional(),
     subtask: z.boolean().optional(),
@@ -676,6 +702,11 @@ export namespace Config {
       tools: z.record(z.string(), z.boolean()).optional().describe("@deprecated Use 'permission' field instead"),
       disable: z.boolean().optional(),
       description: z.string().optional().describe("Description of when to use the agent"),
+      title: z.string().optional().describe("Human-readable label for agent pickers"),
+      summary: z.string().optional().describe("Short summary for agent pickers"),
+      category: z.string().optional().describe("Grouping label for agent pickers"),
+      icon: z.string().optional().describe("Emoji or icon marker for agent pickers"),
+      tags: z.array(z.string()).optional().describe("Search tags for agent pickers"),
       mode: z.enum(["subagent", "primary", "all"]).optional(),
       hidden: z
         .boolean()
@@ -706,6 +737,11 @@ export namespace Config {
         "variant",
         "prompt",
         "description",
+        "title",
+        "summary",
+        "category",
+        "icon",
+        "tags",
         "temperature",
         "top_p",
         "mode",

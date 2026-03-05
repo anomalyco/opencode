@@ -583,6 +583,38 @@ Nested command template`,
   })
 })
 
+test("adds flat command aliases for unique nested command names", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const root = path.join(dir, ".opencode", "command")
+      await fs.mkdir(path.join(root, "ai"), { recursive: true })
+      await Filesystem.write(
+        path.join(root, "ai", "audit.md"),
+        `---
+description: AI audit
+---
+Run ai audit`,
+      )
+      await fs.mkdir(path.join(root, "x"), { recursive: true })
+      await fs.mkdir(path.join(root, "y"), { recursive: true })
+      await Filesystem.write(path.join(root, "x", "shared.md"), "---\ndescription: x\n---\nx")
+      await Filesystem.write(path.join(root, "y", "shared.md"), "---\ndescription: y\n---\ny")
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.command?.["ai/audit"]).toBeDefined()
+      expect(config.command?.["audit"]).toEqual(config.command?.["ai/audit"])
+      expect(config.command?.["x/shared"]).toBeDefined()
+      expect(config.command?.["y/shared"]).toBeDefined()
+      expect(config.command?.["shared"]).toBeUndefined()
+    },
+  })
+})
+
 test("updates config and writes to file", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({

@@ -24,7 +24,12 @@ export namespace Command {
   export const Info = z
     .object({
       name: z.string(),
+      title: z.string().optional(),
       description: z.string().optional(),
+      summary: z.string().optional(),
+      category: z.string().optional(),
+      icon: z.string().optional(),
+      tags: z.array(z.string()).optional(),
       agent: z.string().optional(),
       model: z.string().optional(),
       source: z.enum(["command", "mcp", "skill"]).optional(),
@@ -84,9 +89,14 @@ export namespace Command {
     for (const [name, command] of Object.entries(cfg.command ?? {})) {
       result[name] = {
         name,
+        title: command.title,
         agent: command.agent,
         model: command.model,
         description: command.description,
+        summary: command.summary,
+        category: command.category,
+        icon: command.icon,
+        tags: command.tags,
         source: "command",
         get template() {
           return command.template

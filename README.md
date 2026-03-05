@@ -39,27 +39,71 @@
 </p>
 
 > [!NOTE]
+>
 > ## Welcome to the `opencode-macros` fork
-> We love upstream OpenCode and keep this README mostly intact. This fork simply adds a friendlier prompt workflow for teams that rely on reusable prompt libraries.
 >
-> ### What’s new here
-> - **Prompt Library panel in the Desktop app** (right side) with search, categories, and quick folder access.
-> - **Prompt Library panel in the TUI** with the same prompt categories and custom prompt loading.
-> - **Built-in + user prompts shown together**, so you always get a solid default library plus project-specific prompts.
-> - **Project prompt packs** in `.opencode/prompts/*.json` (and optional personal prompts in `.opencode/prompts/custom/`).
-> - **TUI prompt insert mode**: clicking a prompt fills the composer but does **not** auto-send, so you can review and edit first.
+> We love upstream OpenCode and keep this README mostly intact. This fork focuses on a reusable **Library** workflow built on first-class **commands** and **agents**.
 >
-> ### Prompt packs included in this fork
-> - `code-review.json`
-> - `engineering.json`
-> - `qa.json`
-> - `troubleshooting.json`
-> - `performance.json`
-> - `web-design.json`
-> - `documentation.json`
-> - `delivery.json`
+> ### What this fork adds
 >
-> For prompt format and authoring tips, see `.opencode/prompts/README.md`.
+> - **Desktop Library panel** for command browsing with:
+>   - category grouping and search
+>   - agent selection via pulldown
+>   - hover details and quick folder actions
+>   - root shortcuts for `Create a New Command` and `Create a New Agent`
+> - **TUI Library panel** with command and agent browsing plus insert mode.
+> - **Command library on disk** in `.opencode/command/**/*.md`.
+> - **Agent profiles on disk** in `.opencode/agent/**/*.md`.
+> - **Safe insert behavior**: selecting a command fills the composer and keeps you in control (no auto-send).
+>
+> ### Documentation in this repo
+>
+> - Command authoring guide: `.opencode/command/README.md`
+> - Agent authoring guide: `.opencode/agent/README.md`
+>
+> ### Quick start: create from the Library UI
+>
+> 1. Open **Library** in the desktop app.
+> 2. Use the bottom actions:
+>    - `+ Create a New Command`
+>    - `+ Create a New Agent`
+> 3. Replace the user-input placeholder in the inserted template.
+> 4. Send, review the generated markdown file, and refine as needed.
+>
+> Prompt snippet to edit:
+>
+> ```text
+> User input (replace this line before sending):
+> <<ENTER USER REQUEST HERE>>
+> ```
+>
+> ### Behavior changes from older fork versions
+>
+> - **Prompt JSON packs are removed.**
+>   - Old `.opencode/prompts/*.json` files are no longer the source of truth.
+>   - The supported format is markdown commands/agents only.
+> - **Command naming is folder-friendly and backward-compatible.**
+>   - Nested commands keep path names (example: `ai/ai-model-routing-strategy`).
+>   - When a nested command leaf name is unique, a flat alias is also available.
+> - **Agent naming is backward-compatible for common legacy names.**
+>   - `docs` -> `documentation`
+>   - `planning` -> `plan`
+>   - `triage` -> `troubleshooting`
+>
+> ### Library categories included in this fork
+>
+> - `ai`
+> - `code-review`
+> - `engineering`
+> - `qa`
+> - `troubleshooting`
+> - `performance`
+> - `security`
+> - `planning`
+> - `web-design`
+> - `documentation`
+> - `delivery`
+> - `general`
 
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
 

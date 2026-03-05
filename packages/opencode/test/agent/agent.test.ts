@@ -196,6 +196,46 @@ test("agent disable removes agent from list", async () => {
   })
 })
 
+test("agent aliases resolve to canonical agent names", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      default_agent: "docs",
+      agent: {
+        planning: {
+          title: "Planning Alias",
+          description: "Old planning alias",
+        },
+        docs: {
+          title: "Docs Alias",
+          description: "Old docs alias",
+        },
+        documentation: {
+          title: "Documentation",
+          description: "Canonical docs agent",
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const docs = await Agent.get("docs")
+      const canonical = await Agent.get("documentation")
+      const planning = await Agent.get("planning")
+      const plan = await Agent.get("plan")
+      expect(docs?.name).toBe("documentation")
+      expect(canonical?.name).toBe("documentation")
+      expect(planning?.name).toBe("plan")
+      expect(plan?.name).toBe("plan")
+      expect(await Agent.defaultAgent()).toBe("documentation")
+      const list = await Agent.list()
+      const names = list.map((item) => item.name)
+      expect(names.filter((name) => name === "documentation").length).toBe(1)
+      expect(names).not.toContain("docs")
+    },
+  })
+})
+
 test("agent permission config merges with defaults", async () => {
   await using tmp = await tmpdir({
     config: {

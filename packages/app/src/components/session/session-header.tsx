@@ -702,12 +702,12 @@ export function SessionHeader() {
                     </Button>
                   </TooltipKeybind>
 
-                  <Tooltip value="Toggle prompt library" placement="bottom" gutter={8}>
+                  <Tooltip value="Toggle library" placement="bottom" gutter={8}>
                     <Button
                       variant="ghost"
                       class="titlebar-icon w-8 h-6 p-0 box-border"
                       onClick={() => layout.fileTree.togglePrompt()}
-                      aria-label="Toggle prompt library"
+                      aria-label="Toggle library"
                       aria-expanded={layout.fileTree.promptOpened()}
                       aria-controls="prompt-library-panel"
                     >
