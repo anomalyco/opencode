@@ -116,8 +116,6 @@ export const ReadTool = Tool.define("read", {
     }
 
     const instructions = await InstructionPrompt.resolve(ctx.messages, filepath, ctx.messageID)
-    const loaded = instructions.map((i) => i.filepath)
-    await ctx.metadata({ metadata: { loaded } })
 
     // Exclude SVG (XML-based) and vnd.fastbidsheet (.fbs extension, commonly FlatBuffers schema files)
     const mime = Filesystem.mimeType(filepath)
@@ -131,7 +129,7 @@ export const ReadTool = Tool.define("read", {
         metadata: {
           preview: msg,
           truncated: false,
-          loaded,
+          loaded: instructions.map((i) => i.filepath),
         },
         attachments: [
           {
@@ -228,7 +226,7 @@ export const ReadTool = Tool.define("read", {
       metadata: {
         preview,
         truncated,
-        loaded,
+        loaded: instructions.map((i) => i.filepath),
       },
     }
   },
