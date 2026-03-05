@@ -1,5 +1,6 @@
 import { $, semver } from "bun"
 import path from "path"
+import { previewVersion, sanitizeChannel, sanitizePreviewVersion } from "./version"
 
 const rootPkgPath = path.resolve(import.meta.dir, "../../../package.json")
 const rootPkg = await Bun.file(rootPkgPath).json()
@@ -22,17 +23,18 @@ const env = {
   OPENCODE_VERSION: process.env["OPENCODE_VERSION"],
   OPENCODE_RELEASE: process.env["OPENCODE_RELEASE"],
 }
-const CHANNEL = await (async () => {
+const RAW_CHANNEL = await (async () => {
   if (env.OPENCODE_CHANNEL) return env.OPENCODE_CHANNEL
   if (env.OPENCODE_BUMP) return "latest"
   if (env.OPENCODE_VERSION && !env.OPENCODE_VERSION.startsWith("0.0.0-")) return "latest"
   return await $`git branch --show-current`.text().then((x) => x.trim())
 })()
+const CHANNEL = RAW_CHANNEL === "latest" ? RAW_CHANNEL : sanitizeChannel(RAW_CHANNEL)
 const IS_PREVIEW = CHANNEL !== "latest"
 
 const VERSION = await (async () => {
-  if (env.OPENCODE_VERSION) return env.OPENCODE_VERSION
-  if (IS_PREVIEW) return `0.0.0-${CHANNEL}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
+  if (env.OPENCODE_VERSION) return sanitizePreviewVersion(env.OPENCODE_VERSION)
+  if (IS_PREVIEW) return previewVersion(CHANNEL)
   const version = await fetch("https://registry.npmjs.org/opencode-ai/latest")
     .then((res) => {
       if (!res.ok) throw new Error(res.statusText)

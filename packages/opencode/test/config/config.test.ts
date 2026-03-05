@@ -1600,6 +1600,19 @@ test("wellknown URL with trailing slash is normalized", async () => {
   }
 })
 
+describe("pluginVersion", () => {
+  test("keeps valid versions", () => {
+    expect(Config.pluginVersion("1.2.3")).toBe("1.2.3")
+    expect(Config.pluginVersion("0.0.0-opencode-jolly-river-202603042256")).toBe(
+      "0.0.0-opencode-jolly-river-202603042256",
+    )
+  })
+
+  test("falls back for invalid versions", () => {
+    expect(Config.pluginVersion("0.0.0-opencode/jolly-river-202603042256")).toBe("*")
+  })
+})
+
 describe("getPluginName", () => {
   test("extracts name from file:// URL", () => {
     expect(Config.getPluginName("file:///path/to/plugin/foo.js")).toBe("foo")

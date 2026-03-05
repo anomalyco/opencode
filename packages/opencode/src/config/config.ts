@@ -245,9 +245,16 @@ export namespace Config {
     await Promise.all(deps)
   }
 
+  const semver = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/
+
+  export function pluginVersion(value: string) {
+    if (semver.test(value)) return value
+    return "*"
+  }
+
   export async function installDependencies(dir: string) {
     const pkg = path.join(dir, "package.json")
-    const targetVersion = Installation.isLocal() ? "*" : Installation.VERSION
+    const targetVersion = Installation.isLocal() ? "*" : pluginVersion(Installation.VERSION)
 
     const json = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => ({
       dependencies: {},
