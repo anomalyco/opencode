@@ -20,7 +20,6 @@ import { createStore } from "solid-js/store"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Select } from "@opencode-ai/ui/select"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
-import { Mark } from "@opencode-ai/ui/logo"
 import { base64Encode, checksum } from "@opencode-ai/util/encode"
 import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
@@ -727,23 +726,28 @@ export default function Page() {
   const changesOptions = ["session", "turn"] as const
   const changesOptionsList = [...changesOptions]
 
-  const changesTitle = () => (
-    <Select
-      options={changesOptionsList}
-      current={store.changes}
-      label={(option) =>
-        option === "session" ? language.t("ui.sessionReview.title") : language.t("ui.sessionReview.title.lastTurn")
-      }
-      onSelect={(option) => option && setStore("changes", option)}
-      variant="ghost"
-      size="small"
-      valueClass="text-14-medium"
-    />
-  )
+  const changesTitle = () => {
+    if (!hasReview()) {
+      return null
+    }
+
+    return (
+      <Select
+        options={changesOptionsList}
+        current={store.changes}
+        label={(option) =>
+          option === "session" ? language.t("ui.sessionReview.title") : language.t("ui.sessionReview.title.lastTurn")
+        }
+        onSelect={(option) => option && setStore("changes", option)}
+        variant="ghost"
+        size="small"
+        valueClass="text-14-medium"
+      />
+    )
+  }
 
   const emptyTurn = () => (
     <div class="h-full pb-30 flex flex-col items-center justify-center text-center gap-6">
-      <Mark class="w-14 opacity-10" />
       <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.noChanges")}</div>
     </div>
   )
@@ -811,7 +815,6 @@ export default function Page() {
                 emptyTurn()
               ) : (
                 <div class={input.emptyClass}>
-                  <Mark class="w-14 opacity-10" />
                   <div class="text-14-regular text-text-weak max-w-56">{language.t(reviewEmptyKey())}</div>
                 </div>
               )
