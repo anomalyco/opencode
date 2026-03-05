@@ -202,8 +202,8 @@ const createPlatform = (): Platform => {
       return window.api.getDefaultServerUrl().catch(() => null)
     },
 
-    setDefaultServerUrl: async (url: string | null) => {
-      await window.api.setDefaultServerUrl(url)
+    setDefaultServerUrl: async (config: import("@opencode-ai/app").DefaultServerConfig | null) => {
+      await window.api.setDefaultServerUrl(config)
     },
 
     getDisplayBackend: async () => {
