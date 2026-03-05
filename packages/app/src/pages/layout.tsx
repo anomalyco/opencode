@@ -44,6 +44,7 @@ import { playSound, soundSrc } from "@/utils/sound"
 import { createAim } from "@/utils/aim"
 import { setNavigate } from "@/utils/notification-click"
 import { Worktree as WorktreeState } from "@/utils/worktree"
+import { setSessionHandoff } from "@/pages/session/handoff"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
@@ -67,7 +68,12 @@ import {
   sortedRootSessions,
   workspaceKey,
 } from "./layout/helpers"
-import { collectOpenProjectDeepLinks, deepLinkEvent, drainPendingDeepLinks } from "./layout/deep-links"
+import {
+  collectNewSessionDeepLinks,
+  collectOpenProjectDeepLinks,
+  deepLinkEvent,
+  drainPendingDeepLinks,
+} from "./layout/deep-links"
 import { createInlineEditorController } from "./layout/inline-editor"
 import {
   LocalWorkspace,
@@ -1177,8 +1183,19 @@ export default function Layout(props: ParentProps) {
 
   const handleDeepLinks = (urls: string[]) => {
     if (!server.isLocal()) return
+
     for (const directory of collectOpenProjectDeepLinks(urls)) {
       openProject(directory)
+    }
+
+    for (const link of collectNewSessionDeepLinks(urls)) {
+      openProject(link.directory, false)
+      const slug = base64Encode(link.directory)
+      if (link.prompt) {
+        setSessionHandoff(slug, { prompt: link.prompt })
+      }
+      const href = link.prompt ? `/${slug}/session?prompt=${encodeURIComponent(link.prompt)}` : `/${slug}/session`
+      navigateWithSidebarReset(href)
     }
   }
 
