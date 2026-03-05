@@ -510,6 +510,10 @@ export const dict = {
   "common.close": "閉じる",
   "common.edit": "編集",
   "common.loadMore": "さらに読み込む",
+  "common.changelog": "更新履歴",
+  "common.noReleasesFound": "バージョンが見つかりません",
+  "changelog.tag.latest": "最新",
+
   "common.key.esc": "ESC",
   "sidebar.menu.toggle": "メニューを切り替え",
   "sidebar.nav.projectsAndSessions": "プロジェクトとセッション",
