@@ -401,8 +401,6 @@ export function MessageTimeline(props: {
             if (props.isDesktop) props.onScrollSpyScroll()
           }}
           onClick={(e) => {
-            const next = trigger(e.target)
-            if (next) props.onPreserveScrollAnchor(next)
             props.onAutoScrollInteraction(e)
           }}
           class="relative min-w-0 w-full h-full"

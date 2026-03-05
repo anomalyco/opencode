@@ -34,11 +34,6 @@ export function createAutoScroll(options: AutoScrollOptions) {
       }
     | undefined
 
-  const debug = (...args: unknown[]) => {
-    if (!import.meta.env.DEV) return
-    console.debug("[auto-scroll]", ...args)
-  }
-
   const threshold = () => options.bottomThreshold ?? 10
 
   const [store, setStore] = createStore({
@@ -62,11 +57,11 @@ export function createAutoScroll(options: AutoScrollOptions) {
   }
 
   const clearHold = (reason = "unknown") => {
+    void reason
     const next = hold
     if (!next) return
     if (next.frame !== undefined) cancelAnimationFrame(next.frame)
     hold = undefined
-    debug("anchor hold cleared", reason)
   }
 
   const tickHold = () => {
@@ -142,7 +137,6 @@ export function createAutoScroll(options: AutoScrollOptions) {
       quiet: 0,
       frame: undefined,
     }
-    debug("anchor hold start", { top, scrollTop: el.scrollTop })
     scheduleHold()
   }
 
@@ -243,7 +237,10 @@ export function createAutoScroll(options: AutoScrollOptions) {
     const el = scroll
     if (!el) return
 
-    if (hold) return
+    if (hold) {
+      if (Date.now() < programmaticUntil) return
+      clearHold("manual-scroll")
+    }
 
     if (!canScroll(el)) {
       if (store.userScrolled) setStore("userScrolled", false)

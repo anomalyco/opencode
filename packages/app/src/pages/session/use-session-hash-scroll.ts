@@ -1,6 +1,5 @@
 import type { UserMessage } from "@opencode-ai/sdk/v2"
-import { useLocation, useNavigate } from "@solidjs/router"
-import { createEffect, createMemo, onMount } from "solid-js"
+import { createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { messageIdFromHash } from "./message-id-from-hash"
 
 export { messageIdFromHash } from "./message-id-from-hash"
@@ -27,18 +26,13 @@ export const useSessionHashScroll = (input: {
   const messageIndex = createMemo(() => new Map(visibleUserMessages().map((m, i) => [m.id, i])))
   let pendingKey = ""
 
-  const location = useLocation()
-  const navigate = useNavigate()
-
   const clearMessageHash = () => {
-    if (!location.hash) return
-    navigate(location.pathname + location.search, { replace: true })
+    if (!window.location.hash) return
+    window.history.replaceState(null, "", window.location.pathname + window.location.search)
   }
 
   const updateHash = (id: string) => {
-    navigate(location.pathname + location.search + `#${input.anchor(id)}`, {
-      replace: true,
-    })
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${input.anchor(id)}`)
   }
 
   const scrollToElement = (el: HTMLElement, behavior: ScrollBehavior) => {
@@ -56,7 +50,6 @@ export const useSessionHashScroll = (input: {
   }
 
   const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
-    console.log({ message, behavior })
     if (input.currentMessageId() !== message.id) input.setActiveMessage(message)
 
     const index = messageIndex().get(message.id) ?? -1
@@ -104,7 +97,7 @@ export const useSessionHashScroll = (input: {
   }
 
   const applyHash = (behavior: ScrollBehavior) => {
-    const hash = location.hash.slice(1)
+    const hash = window.location.hash.slice(1)
     if (!hash) {
       input.autoScroll.snapToBottom()
       const el = input.scroller()
@@ -135,8 +128,21 @@ export const useSessionHashScroll = (input: {
     if (el) input.scheduleScrollState(el)
   }
 
+  onMount(() => {
+    if (typeof window !== "undefined" && "scrollRestoration" in window.history) {
+      window.history.scrollRestoration = "manual"
+    }
+
+    const handler = () => {
+      if (!input.sessionID() || !input.messagesReady()) return
+      requestAnimationFrame(() => applyHash("auto"))
+    }
+
+    window.addEventListener("hashchange", handler)
+    onCleanup(() => window.removeEventListener("hashchange", handler))
+  })
+
   createEffect(() => {
-    location.hash
     if (!input.sessionID() || !input.messagesReady()) return
     requestAnimationFrame(() => applyHash("auto"))
   })
@@ -160,7 +166,6 @@ export const useSessionHashScroll = (input: {
       }
     }
 
-    if (!targetId) targetId = messageIdFromHash(location.hash)
     if (!targetId) return
     if (input.currentMessageId() === targetId) return
 
@@ -170,12 +175,6 @@ export const useSessionHashScroll = (input: {
     if (input.pendingMessage() === targetId) input.setPendingMessage(undefined)
     input.autoScroll.pause()
     requestAnimationFrame(() => scrollToMessage(msg, "auto"))
-  })
-
-  onMount(() => {
-    if (typeof window !== "undefined" && "scrollRestoration" in window.history) {
-      window.history.scrollRestoration = "manual"
-    }
   })
 
   return {

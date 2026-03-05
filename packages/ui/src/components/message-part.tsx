@@ -642,7 +642,7 @@ export function AssistantParts(props: {
               </Show>
             </PartGrow>
             <Show when={ctx()}>
-              {(entry) => <ContextToolExpandedList parts={ctxParts()} expanded={!ctxPending() && contextOpen()} />}
+              <ContextToolExpandedList parts={ctxParts()} expanded={!ctxPending() && contextOpen()} />
             </Show>
             <ContextToolRollingResults parts={ctxParts()} pending={ctxPending()} />
           </>
