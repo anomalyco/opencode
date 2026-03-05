@@ -11,6 +11,8 @@ import { Process } from "../../util/process"
 import { EOL } from "os"
 import path from "path"
 import { which } from "../../util/which"
+import { Database, sql, eq, or, lt, isNull, not, and, desc } from "../../storage/db"
+import { SessionTable } from "../../session/session.sql"
 
 function pagerCmd(): string[] {
   const lessOptions = ["-R", "-S"]
@@ -42,7 +44,15 @@ function pagerCmd(): string[] {
 export const SessionCommand = cmd({
   command: "session",
   describe: "manage sessions",
-  builder: (yargs: Argv) => yargs.command(SessionListCommand).command(SessionDeleteCommand).demandCommand(),
+  builder: (yargs: Argv) =>
+    yargs
+      .command(SessionListCommand)
+      .command(SessionDeleteCommand)
+      .command(SessionArchiveCommand)
+      .command(SessionUnarchiveCommand)
+      .command(SessionStatsCommand)
+      .command(SessionPruneCommand)
+      .demandCommand(),
   async handler() {},
 })
 
@@ -156,4 +166,231 @@ function formatSessionJSON(sessions: Session.Info[]): string {
     directory: session.directory,
   }))
   return JSON.stringify(jsonData, null, 2)
+}
+
+export const SessionArchiveCommand = cmd({
+  command: "archive <sessionID>",
+  describe: "archive a session",
+  builder: (yargs: Argv) => {
+    return yargs.positional("sessionID", {
+      describe: "session ID to archive",
+      type: "string",
+      demandOption: true,
+    })
+  },
+  handler: async (args) => {
+    await bootstrap(process.cwd(), async () => {
+      try {
+        await Session.get(SessionID.make(args.sessionID))
+      } catch {
+        UI.error(`Session not found: ${args.sessionID}`)
+        process.exit(1)
+      }
+      await Session.setArchived({ sessionID: SessionID.make(args.sessionID), time: Date.now() })
+      UI.println(UI.Style.TEXT_SUCCESS_BOLD + `Session ${args.sessionID} archived` + UI.Style.TEXT_NORMAL)
+    })
+  },
+})
+
+export const SessionUnarchiveCommand = cmd({
+  command: "unarchive <sessionID>",
+  describe: "unarchive a session",
+  builder: (yargs: Argv) => {
+    return yargs.positional("sessionID", {
+      describe: "session ID to unarchive",
+      type: "string",
+      demandOption: true,
+    })
+  },
+  handler: async (args) => {
+    await bootstrap(process.cwd(), async () => {
+      try {
+        await Session.get(SessionID.make(args.sessionID))
+      } catch {
+        UI.error(`Session not found: ${args.sessionID}`)
+        process.exit(1)
+      }
+      await Session.setArchived({ sessionID: SessionID.make(args.sessionID), time: undefined })
+      UI.println(UI.Style.TEXT_SUCCESS_BOLD + `Session ${args.sessionID} unarchived` + UI.Style.TEXT_NORMAL)
+    })
+  },
+})
+
+function formatSize(bytes: number): string {
+  if (bytes >= 1_073_741_824) return (bytes / 1_073_741_824).toFixed(1) + " GB"
+  if (bytes >= 1_048_576) return (bytes / 1_048_576).toFixed(1) + " MB"
+  if (bytes >= 1024) return (bytes / 1024).toFixed(1) + " KB"
+  return bytes + " B"
+}
+
+export const SessionStatsCommand = cmd({
+  command: "stats",
+  describe: "show session storage statistics",
+  builder: (yargs: Argv) => yargs,
+  handler: async () => {
+    await bootstrap(process.cwd(), async () => {
+      const size = Number(Filesystem.stat(Database.Path)?.size ?? 0)
+      const wal = Number(Filesystem.stat(Database.Path + "-wal")?.size ?? 0)
+
+      const counts = Database.use((db) =>
+        db
+          .get<{
+            roots: number
+            children: number
+            archived: number
+            messages: number
+            parts: number
+          }>(
+            sql`SELECT
+              (SELECT COUNT(*) FROM session WHERE parent_id IS NULL) as roots,
+              (SELECT COUNT(*) FROM session WHERE parent_id IS NOT NULL) as children,
+              (SELECT COUNT(*) FROM session WHERE time_archived IS NOT NULL) as archived,
+              (SELECT COUNT(*) FROM message) as messages,
+              (SELECT COUNT(*) FROM part) as parts`,
+          )
+      )
+
+      const r = counts?.roots ?? 0
+      const c = counts?.children ?? 0
+
+      console.log("Session Storage Statistics")
+      console.log("─".repeat(40))
+      console.log(`Database size:     ${formatSize(size)}`)
+      if (wal > 0) console.log(`WAL file size:     ${formatSize(wal)}`)
+      console.log(`Total sessions:    ${r + c} (${r} root, ${c} child)`)
+      console.log(`Archived sessions: ${counts?.archived ?? 0}`)
+      console.log(`Total messages:    ${(counts?.messages ?? 0).toLocaleString()}`)
+      console.log(`Total parts:       ${(counts?.parts ?? 0).toLocaleString()}`)
+    })
+  },
+})
+
+export const SessionPruneCommand = cmd({
+  command: "prune",
+  describe: "delete old and archived sessions to reclaim storage",
+  builder: (yargs: Argv) =>
+    yargs
+      .option("older-than", {
+        describe: "prune sessions inactive for N days (default: 30)",
+        type: "number",
+        default: 30,
+      })
+      .option("children", {
+        describe: "also prune child sessions independently",
+        type: "boolean",
+        default: false,
+      })
+      .option("vacuum", {
+        describe: "run VACUUM after pruning",
+        type: "boolean",
+        default: false,
+      })
+      .option("dry-run", {
+        describe: "show what would be pruned without deleting",
+        type: "boolean",
+        default: false,
+      }),
+  handler: async (args) => {
+    await bootstrap(process.cwd(), async () => {
+      const cutoff = Date.now() - args.olderThan * 86_400_000
+      const BATCH = 100
+      const candidates: { id: SessionID; title: string; archived: boolean; parent: boolean }[] = []
+
+      // paginate through all prunable sessions in batches
+      let offset = 0
+      while (true) {
+        const rows = Database.use((db) => {
+          const conditions = [
+            or(
+              not(isNull(SessionTable.time_archived)),
+              lt(SessionTable.time_updated, cutoff),
+            ),
+          ]
+          if (!args.children) {
+            conditions.push(isNull(SessionTable.parent_id))
+          }
+          return db
+            .select({
+              id: SessionTable.id,
+              title: SessionTable.title,
+              time_archived: SessionTable.time_archived,
+              parent_id: SessionTable.parent_id,
+            })
+            .from(SessionTable)
+            .where(and(...conditions))
+            .orderBy(desc(SessionTable.time_updated), desc(SessionTable.id))
+            .limit(BATCH)
+            .offset(offset)
+            .all()
+        })
+        if (rows.length === 0) break
+        for (const row of rows) {
+          candidates.push({
+            id: row.id,
+            title: row.title,
+            archived: row.time_archived !== null,
+            parent: row.parent_id === null,
+          })
+        }
+        if (rows.length < BATCH) break
+        offset += BATCH
+      }
+
+      if (candidates.length === 0) {
+        UI.println("No sessions to prune")
+        return
+      }
+
+      // sort roots before children to avoid double-delete
+      candidates.sort((a, b) => (a.parent === b.parent ? 0 : a.parent ? -1 : 1))
+
+      if (args.dryRun) {
+        UI.println(`Would prune ${candidates.length} session(s):`)
+        for (const s of candidates) {
+          const tag = s.archived ? " [archived]" : ""
+          UI.println(`  ${s.id}  ${Locale.truncate(s.title, 40)}${tag}`)
+        }
+        return
+      }
+
+      const before = Number(Filesystem.stat(Database.Path)?.size ?? 0)
+      const deleted = new Set<string>()
+      for (const s of candidates) {
+        if (deleted.has(s.id)) continue
+        const descendants = collectDescendants(s.id)
+        await Session.remove(s.id)
+        deleted.add(s.id)
+        for (const d of descendants) deleted.add(d)
+      }
+      UI.println(UI.Style.TEXT_SUCCESS_BOLD + `Pruned ${deleted.size} session(s)` + UI.Style.TEXT_NORMAL)
+
+      if (args.vacuum) {
+        try {
+          Database.vacuum()
+          const after = Number(Filesystem.stat(Database.Path)?.size ?? 0)
+          const freed = before - after
+          if (freed > 0) UI.println(`Reclaimed ${formatSize(freed)}`)
+          else UI.println("Database vacuumed")
+        } catch {
+          UI.error("Database is busy or locked — try again when no sessions are active")
+        }
+      }
+    })
+  },
+})
+
+function collectDescendants(id: SessionID): SessionID[] {
+  const rows = Database.use((db) =>
+    db
+      .select({ id: SessionTable.id })
+      .from(SessionTable)
+      .where(eq(SessionTable.parent_id, id))
+      .all(),
+  )
+  const result: SessionID[] = []
+  for (const row of rows) {
+    result.push(row.id)
+    result.push(...collectDescendants(row.id))
+  }
+  return result
 }

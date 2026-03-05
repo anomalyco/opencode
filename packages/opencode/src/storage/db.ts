@@ -124,6 +124,19 @@ export namespace Database {
     Client.reset()
   }
 
+  export function vacuum() {
+    const sqlite = state.sqlite
+    if (!sqlite) return
+    sqlite.run("PRAGMA wal_checkpoint(TRUNCATE)")
+    sqlite.run("VACUUM")
+  }
+
+  export function checkpoint() {
+    const sqlite = state.sqlite
+    if (!sqlite) return
+    sqlite.run("PRAGMA wal_checkpoint(TRUNCATE)")
+  }
+
   export type TxOrDb = SQLiteTransaction<"sync", void, any, any> | Client
 
   const ctx = Context.create<{
