@@ -6,10 +6,8 @@ import {
   For,
   Match,
   on,
-  onMount,
   Show,
   Switch,
-  onCleanup,
   type JSX,
 } from "solid-js"
 import stripAnsi from "strip-ansi"
@@ -49,20 +47,13 @@ import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
 import { TextShimmer } from "./text-shimmer"
 import { list } from "./text-utils"
-import { AnimatedCountList } from "./tool-count-summary"
-import { ToolStatusTitle } from "./tool-status-title"
 import { GrowBox } from "./grow-box"
-import { RollingResults } from "./rolling-results"
 import {
-  animate,
-  type AnimationPlaybackControls,
-  clearFadeStyles,
-  clearMaskStyles,
   COLLAPSIBLE_SPRING,
-  GROW_SPRING,
-  WIPE_MASK,
 } from "./motion"
-import { useSpring } from "./motion-spring"
+import { busy, hold, createThrottledValue, useToolFade, useContextToolPending } from "./tool-utils"
+import { ContextToolGroupHeader, ContextToolExpandedList, ContextToolRollingResults } from "./context-tool-results"
+import { ShellRollingResults } from "./shell-rolling-results"
 
 interface Diagnostic {
   range: {
@@ -118,42 +109,6 @@ export interface MessagePartProps {
 export type PartComponent = Component<MessagePartProps>
 
 export const PART_MAPPING: Record<string, PartComponent | undefined> = {}
-
-const TEXT_RENDER_THROTTLE_MS = 100
-
-function createThrottledValue(getValue: () => string) {
-  const [value, setValue] = createSignal(getValue())
-  let timeout: ReturnType<typeof setTimeout> | undefined
-  let last = 0
-
-  createEffect(() => {
-    const next = getValue()
-    const now = Date.now()
-
-    const remaining = TEXT_RENDER_THROTTLE_MS - (now - last)
-    if (remaining <= 0) {
-      if (timeout) {
-        clearTimeout(timeout)
-        timeout = undefined
-      }
-      last = now
-      setValue(next)
-      return
-    }
-    if (timeout) clearTimeout(timeout)
-    timeout = setTimeout(() => {
-      last = Date.now()
-      setValue(next)
-      timeout = undefined
-    }, remaining)
-  })
-
-  onCleanup(() => {
-    if (timeout) clearTimeout(timeout)
-  })
-
-  return value
-}
 
 function relativizeProjectPath(path: string, directory?: string) {
   if (!path) return ""
@@ -302,12 +257,7 @@ function urls(text: string | undefined) {
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
 const HIDDEN_TOOLS = new Set(["todowrite", "todoread"])
 
-function busy(status: string | undefined) {
-  return status === "pending" || status === "running"
-}
-
 import { pageVisible } from "../hooks/use-page-visible"
-import { prefersReducedMotion } from "../hooks/use-reduced-motion"
 
 function createGroupOpenState() {
   const [state, setState] = createStore<Record<string, boolean>>({})
@@ -595,7 +545,8 @@ export function AssistantParts(props: {
           ctxPartsPrev = result
           return result
         })
-        const ctxPending = useContextToolPending(ctxParts, () => !!(props.working && ctx()?.tail))
+        const ctxPendingRaw = useContextToolPending(ctxParts, () => !!(props.working && ctx()?.tail))
+        const ctxPending = hold(ctxPendingRaw, 1000)
         const shell = createMemo(() => {
           const value = part()
           if (!value) return
@@ -665,18 +616,6 @@ function isContextGroupTool(part: PartType): part is ToolPart {
   return part.type === "tool" && CONTEXT_GROUP_TOOLS.has(part.tool)
 }
 
-function contextToolSummary(parts: ToolPart[]) {
-  let read = 0
-  let search = 0
-  let list = 0
-  for (const part of parts) {
-    if (part.tool === "read") read++
-    else if (part.tool === "glob" || part.tool === "grep") search++
-    else if (part.tool === "list") list++
-  }
-  return { read, search, list }
-}
-
 function ExaOutput(props: { output?: string }) {
   const links = createMemo(() => urls(props.output))
 
@@ -707,298 +646,6 @@ export function registerPartComponent(type: string, component: PartComponent) {
   PART_MAPPING[type] = component
 }
 
-function contextToolLabel(part: ToolPart): { action: string; detail: string } {
-  const state = part.state
-  const title = "title" in state ? (state.title as string | undefined) : undefined
-  const input = state.input
-  if (part.tool === "read") {
-    const path = input?.filePath as string | undefined
-    return { action: "Read", detail: title || (path ? getFilename(path) : "") }
-  }
-  if (part.tool === "grep") {
-    const pattern = input?.pattern as string | undefined
-    return { action: "Search", detail: title || (pattern ? `"${pattern}"` : "") }
-  }
-  if (part.tool === "glob") {
-    const pattern = input?.pattern as string | undefined
-    return { action: "Find", detail: title || (pattern ?? "") }
-  }
-  if (part.tool === "list") {
-    const path = input?.path as string | undefined
-    return { action: "List", detail: title || (path ? getFilename(path) : "") }
-  }
-  return { action: part.tool, detail: title || "" }
-}
-
-function useContextToolPending(parts: () => ToolPart[], working?: () => boolean) {
-  const anyRunning = createMemo(() => parts().some((part) => busy(part.state.status)))
-  const [settled, setSettled] = createSignal(false)
-  createEffect(() => {
-    if (!anyRunning() && !working?.()) setSettled(true)
-  })
-  return createMemo(() => !settled() && (!!working?.() || anyRunning()))
-}
-
-function hold(state: () => boolean, wait = 2000) {
-  const [live, setLive] = createSignal(state())
-  let timer: ReturnType<typeof setTimeout> | undefined
-
-  createEffect(() => {
-    if (state()) {
-      if (timer) clearTimeout(timer)
-      timer = undefined
-      setLive(true)
-      return
-    }
-
-    if (timer) clearTimeout(timer)
-    timer = setTimeout(() => {
-      timer = undefined
-      setLive(false)
-    }, wait)
-  })
-
-  onCleanup(() => {
-    if (timer) clearTimeout(timer)
-  })
-
-  return live
-}
-
-function ContextToolGroupHeader(props: {
-  parts: ToolPart[]
-  pending: boolean
-  open: boolean
-  onOpenChange: (value: boolean) => void
-}) {
-  const i18n = useI18n()
-  const summary = createMemo(() => contextToolSummary(props.parts))
-  return (
-    <ToolCall
-      variant="row"
-      icon="magnifying-glass-menu"
-      open={!props.pending && props.open}
-      showArrow={!props.pending}
-      onOpenChange={(v) => {
-        if (!props.pending) props.onOpenChange(v)
-      }}
-      trigger={
-        <div data-component="context-tool-group-trigger" data-pending={props.pending || undefined}>
-          <span
-            data-slot="context-tool-group-title"
-            class="min-w-0 flex items-center gap-2 text-14-medium text-text-strong"
-          >
-            <span data-slot="context-tool-group-label" class="shrink-0">
-              <ToolStatusTitle
-                active={props.pending}
-                activeText={i18n.t("ui.sessionTurn.status.gatheringContext")}
-                doneText={i18n.t("ui.sessionTurn.status.gatheredContext")}
-                split={false}
-              />
-            </span>
-            <span
-              data-slot="context-tool-group-summary"
-              class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-normal text-text-base"
-            >
-              <AnimatedCountList
-                items={[
-                  {
-                    key: "read",
-                    count: summary().read,
-                    one: i18n.t("ui.messagePart.context.read.one"),
-                    other: i18n.t("ui.messagePart.context.read.other"),
-                  },
-                  {
-                    key: "search",
-                    count: summary().search,
-                    one: i18n.t("ui.messagePart.context.search.one"),
-                    other: i18n.t("ui.messagePart.context.search.other"),
-                  },
-                  {
-                    key: "list",
-                    count: summary().list,
-                    one: i18n.t("ui.messagePart.context.list.one"),
-                    other: i18n.t("ui.messagePart.context.list.other"),
-                  },
-                ]}
-                fallback=""
-              />
-            </span>
-          </span>
-        </div>
-      }
-    />
-  )
-}
-
-function ContextToolExpandedList(props: { parts: ToolPart[]; expanded: boolean }) {
-  let contentRef: HTMLDivElement | undefined
-  let bodyRef: HTMLDivElement | undefined
-  let scrollRef: HTMLDivElement | undefined
-  let heightAnim: AnimationPlaybackControls | undefined
-  let fadeAnim: AnimationPlaybackControls | undefined
-
-  const FADE = 12
-
-  const updateMask = () => {
-    if (!scrollRef) return
-    const { scrollTop, scrollHeight, clientHeight } = scrollRef
-    const overflow = scrollHeight - clientHeight
-    if (overflow <= 1) {
-      scrollRef.style.maskImage = ""
-      scrollRef.style.webkitMaskImage = ""
-      return
-    }
-    const top = scrollTop > 1
-    const bottom = scrollTop < overflow - 1
-    const mask =
-      top && bottom
-        ? `linear-gradient(to bottom, transparent 0, black ${FADE}px, black calc(100% - ${FADE}px), transparent 100%)`
-        : top
-          ? `linear-gradient(to bottom, transparent 0, black ${FADE}px)`
-          : bottom
-            ? `linear-gradient(to bottom, black calc(100% - ${FADE}px), transparent 100%)`
-            : ""
-    scrollRef.style.maskImage = mask
-    scrollRef.style.webkitMaskImage = mask
-  }
-
-  createEffect(
-    on(
-      () => props.expanded,
-      (isOpen) => {
-        if (!contentRef || !bodyRef) return
-        heightAnim?.stop()
-        fadeAnim?.stop()
-        if (isOpen) {
-          contentRef.style.display = ""
-          bodyRef.style.opacity = "0"
-          bodyRef.style.filter = "blur(2px)"
-          const h = bodyRef.getBoundingClientRect().height
-          heightAnim = animate(contentRef, { height: ["0px", `${h}px`] }, COLLAPSIBLE_SPRING)
-          fadeAnim = animate(bodyRef, { opacity: [0, 1], filter: ["blur(2px)", "blur(0px)"] }, COLLAPSIBLE_SPRING)
-          heightAnim.finished
-            .catch(() => {})
-            .then(() => {
-              if (!contentRef || !props.expanded) return
-              contentRef.style.height = "auto"
-              updateMask()
-            })
-        } else {
-          const h = contentRef.getBoundingClientRect().height
-          heightAnim = animate(contentRef, { height: [`${h}px`, "0px"] }, COLLAPSIBLE_SPRING)
-          fadeAnim = animate(bodyRef, { opacity: [1, 0], filter: ["blur(0px)", "blur(2px)"] }, COLLAPSIBLE_SPRING)
-          heightAnim.finished
-            .catch(() => {})
-            .then(() => {
-              if (!contentRef || props.expanded) return
-              contentRef.style.display = "none"
-            })
-        }
-      },
-      { defer: true },
-    ),
-  )
-
-  onCleanup(() => {
-    heightAnim?.stop()
-    fadeAnim?.stop()
-  })
-
-  return (
-    <div ref={contentRef} style={{ overflow: "clip", height: "0px", display: "none" }}>
-      <div ref={bodyRef}>
-        <div ref={scrollRef} data-component="context-tool-expanded-list" onScroll={updateMask}>
-          <For each={props.parts}>
-            {(part) => {
-              const label = createMemo(() => contextToolLabel(part))
-              return (
-                <div data-component="context-tool-expanded-row">
-                  <span data-slot="context-tool-expanded-action">{label().action}</span>
-                  <span data-slot="context-tool-expanded-detail">{label().detail}</span>
-                </div>
-              )
-            }}
-          </For>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ContextToolRollingResults(props: { parts: ToolPart[]; pending: boolean }) {
-  const wiped = new Set<string>()
-  const [mounted, setMounted] = createSignal(false)
-  onMount(() => setMounted(true))
-  const reduce = prefersReducedMotion
-  const show = () => mounted() && props.pending
-  const opacity = useSpring(() => (show() ? 1 : 0), GROW_SPRING)
-  const blur = useSpring(() => (show() ? 0 : 2), GROW_SPRING)
-  return (
-    <div style={{ opacity: reduce() ? (show() ? 1 : 0) : opacity(), filter: `blur(${reduce() ? 0 : blur()}px)` }}>
-      <RollingResults
-        items={props.parts}
-        rows={3}
-        rowHeight={22}
-        rowGap={0}
-        open={props.pending}
-        animate
-        getKey={(part) => part.callID || part.id}
-        render={(part) => {
-          const label = () => contextToolLabel(part)
-          const k = part.callID || part.id
-          return (
-            <div data-component="context-tool-rolling-row">
-              <span data-slot="context-tool-rolling-action">{label().action}</span>
-              {(() => {
-                const [detailRef, setDetailRef] = createSignal<HTMLSpanElement>()
-                createEffect(() => {
-                  const el = detailRef()
-                  const d = label().detail
-                  if (!el || !d) return
-                  if (wiped.has(k)) return
-                  wiped.add(k)
-                  if (reduce()) return
-                  el.style.maskImage = WIPE_MASK
-                  el.style.webkitMaskImage = WIPE_MASK
-                  el.style.maskSize = "240% 100%"
-                  el.style.webkitMaskSize = "240% 100%"
-                  el.style.maskRepeat = "no-repeat"
-                  el.style.webkitMaskRepeat = "no-repeat"
-                  el.style.maskPosition = "100% 0%"
-                  el.style.webkitMaskPosition = "100% 0%"
-                  animate(
-                    el,
-                    {
-                      opacity: [0, 1],
-                      filter: ["blur(2px)", "blur(0px)"],
-                      transform: ["translateX(-0.06em)", "translateX(0)"],
-                      maskPosition: "0% 0%",
-                    },
-                    GROW_SPRING,
-                  ).finished.then(() => {
-                    if (!el) return
-                    clearFadeStyles(el)
-                    clearMaskStyles(el)
-                  })
-                })
-                return (
-                  <span
-                    ref={setDetailRef}
-                    data-slot="context-tool-rolling-detail"
-                    style={{ display: label().detail ? undefined : "none" }}
-                  >
-                    {label().detail}
-                  </span>
-                )
-              })()}
-            </div>
-          )
-        }}
-      />
-    </div>
-  )
-}
 
 export function UserMessageDisplay(props: {
   message: UserMessage
@@ -1573,74 +1220,6 @@ function useToolReveal(pending: () => boolean, animate?: () => boolean) {
   return () => enabled() && live()
 }
 
-function useToolFade(
-  ref: () => HTMLElement | undefined,
-  options?: { delay?: number; wipe?: boolean; animate?: boolean },
-) {
-  let anim: AnimationPlaybackControls | undefined
-  let frame: number | undefined
-  const delay = options?.delay ?? 0
-  const wipe = options?.wipe ?? false
-  const active = options?.animate !== false
-
-  onMount(() => {
-    if (!active) return
-
-    const el = ref()
-    if (!el || typeof window === "undefined") return
-    if (prefersReducedMotion()) return
-
-    const mask =
-      wipe &&
-      typeof CSS !== "undefined" &&
-      (CSS.supports("mask-image", "linear-gradient(to right, black, transparent)") ||
-        CSS.supports("-webkit-mask-image", "linear-gradient(to right, black, transparent)"))
-
-    el.style.opacity = "0"
-    el.style.filter = wipe ? "blur(3px)" : "blur(2px)"
-    el.style.transform = wipe ? "translateX(-0.06em)" : "translateY(0.04em)"
-
-    if (mask) {
-      el.style.maskImage = WIPE_MASK
-      el.style.webkitMaskImage = WIPE_MASK
-      el.style.maskSize = "240% 100%"
-      el.style.webkitMaskSize = "240% 100%"
-      el.style.maskRepeat = "no-repeat"
-      el.style.webkitMaskRepeat = "no-repeat"
-      el.style.maskPosition = "100% 0%"
-      el.style.webkitMaskPosition = "100% 0%"
-    }
-
-    frame = requestAnimationFrame(() => {
-      frame = undefined
-      const node = ref()
-      if (!node) return
-
-      anim = wipe
-        ? mask
-          ? animate(
-              node,
-              { opacity: 1, filter: "blur(0px)", transform: "translateX(0)", maskPosition: "0% 0%" },
-              { ...GROW_SPRING, delay },
-            )
-          : animate(node, { opacity: 1, filter: "blur(0px)", transform: "translateX(0)" }, { ...GROW_SPRING, delay })
-        : animate(node, { opacity: 1, filter: "blur(0px)", transform: "translateY(0)" }, { ...GROW_SPRING, delay })
-
-      anim?.finished.then(() => {
-        const value = ref()
-        if (!value) return
-        clearFadeStyles(value)
-        if (mask) clearMaskStyles(value)
-      })
-    })
-  })
-
-  onCleanup(() => {
-    if (frame !== undefined) cancelAnimationFrame(frame)
-    anim?.stop()
-  })
-}
-
 function WebfetchMeta(props: { url: string; animate?: boolean }) {
   let ref: HTMLSpanElement | undefined
   useToolFade(() => ref, { wipe: true, animate: props.animate })
@@ -1794,130 +1373,6 @@ function ShellText(props: { text: string; animate?: boolean }) {
         </span>
       </span>
     </span>
-  )
-}
-
-function firstLine(text: string) {
-  return text
-    .split(/\r\n|\n|\r/g)
-    .map((item) => item.trim())
-    .find((item) => item.length > 0)
-}
-
-function shellRows(output: string) {
-  const rows: { id: string; text: string }[] = []
-  const lines = output
-    .split(/\r\n|\n|\r/g)
-    .map((item) => item.trimEnd())
-    .filter((item) => item.length > 0)
-  const start = Math.max(0, lines.length - 80)
-  for (let i = start; i < lines.length; i++) {
-    rows.push({ id: `line:${i}`, text: lines[i]! })
-  }
-
-  return rows
-}
-
-function ShellRollingCommand(props: { text: string; animate?: boolean }) {
-  let ref: HTMLSpanElement | undefined
-  useToolFade(() => ref, { wipe: true, animate: props.animate })
-
-  return (
-    <div data-component="shell-rolling-command">
-      <span ref={ref} data-slot="shell-rolling-text">
-        <span data-slot="shell-rolling-prompt">$</span> {props.text}
-      </span>
-    </div>
-  )
-}
-
-function ShellRollingResults(props: { part: ToolPart; animate?: boolean }) {
-  const wiped = new Set<string>()
-  const [mounted, setMounted] = createSignal(false)
-  onMount(() => setMounted(true))
-  const state = createMemo(() => props.part.state as Record<string, any>)
-  const pending = createMemo(() => busy(props.part.state.status))
-  const open = hold(pending)
-  const command = createMemo(() => {
-    const value = state().input?.command ?? state().metadata?.command
-    if (typeof value === "string") return value
-    return ""
-  })
-  const output = createMemo(() => {
-    const value = state().output ?? state().metadata?.output
-    if (typeof value === "string") return value
-    return ""
-  })
-  const reduce = prefersReducedMotion
-  const show = () => mounted() && open()
-  const opacity = useSpring(() => (show() ? 1 : 0), GROW_SPRING)
-  const blur = useSpring(() => (show() ? 0 : 2), GROW_SPRING)
-  const line = createMemo(() => firstLine(command()))
-  const fixed = createMemo(() => {
-    const value = line()
-    if (!value) return
-    return <ShellRollingCommand text={value} animate={props.animate} />
-  })
-  const text = createThrottledValue(() => stripAnsi(output()))
-  const rows = createMemo(() => shellRows(text()))
-
-  return (
-    <div
-      data-component="shell-rolling-results"
-      style={{ opacity: reduce() ? (show() ? 1 : 0) : opacity(), filter: `blur(${reduce() ? 0 : blur()}px)` }}
-    >
-      <RollingResults
-        class="shell-rolling-output"
-        items={rows()}
-        fixed={fixed()}
-        fixedHeight={22}
-        rows={5}
-        rowHeight={22}
-        rowGap={0}
-        open={open()}
-        animate={props.animate !== false}
-        getKey={(row) => row.id}
-        render={(row) => {
-          const [textRef, setTextRef] = createSignal<HTMLSpanElement>()
-          createEffect(() => {
-            const el = textRef()
-            if (!el || !row.text) return
-            if (wiped.has(row.id)) return
-            wiped.add(row.id)
-            if (reduce()) return
-            el.style.maskImage = WIPE_MASK
-            el.style.webkitMaskImage = WIPE_MASK
-            el.style.maskSize = "240% 100%"
-            el.style.webkitMaskSize = "240% 100%"
-            el.style.maskRepeat = "no-repeat"
-            el.style.webkitMaskRepeat = "no-repeat"
-            el.style.maskPosition = "100% 0%"
-            el.style.webkitMaskPosition = "100% 0%"
-            animate(
-              el,
-              {
-                opacity: [0, 1],
-                filter: ["blur(2px)", "blur(0px)"],
-                transform: ["translateX(-0.06em)", "translateX(0)"],
-                maskPosition: "0% 0%",
-              },
-              GROW_SPRING,
-            ).finished.then(() => {
-              if (!el) return
-              clearFadeStyles(el)
-              clearMaskStyles(el)
-            })
-          })
-          return (
-            <div data-component="shell-rolling-row">
-              <span ref={setTextRef} data-slot="shell-rolling-text">
-                {row.text}
-              </span>
-            </div>
-          )
-        }}
-      />
-    </div>
   )
 }
 

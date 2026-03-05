@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, on, onCleanup, onMount, type JSX } from "solid-js"
-import { animate, GROW_SPRING, type AnimationPlaybackControls } from "./motion"
+import { animate, clearMaskStyles, GROW_SPRING, type AnimationPlaybackControls } from "./motion"
 import { prefersReducedMotion } from "../hooks/use-reduced-motion"
 
 export type RollingResultsProps<T> = {
@@ -22,6 +22,7 @@ export function RollingResults<T>(props: RollingResultsProps<T>) {
   let track: HTMLDivElement | undefined
   let shift: AnimationPlaybackControls | undefined
   let resize: AnimationPlaybackControls | undefined
+  let edgeFade: AnimationPlaybackControls | undefined
 
   const reducedMotion = prefersReducedMotion
 
@@ -109,6 +110,34 @@ export function RollingResults<T>(props: RollingResultsProps<T>) {
     ),
   )
 
+  const EDGE_MASK = "linear-gradient(to top, transparent 0%, black 8px)"
+  const applyEdge = () => {
+    if (!view) return
+    edgeFade?.stop()
+    edgeFade = undefined
+    view.style.maskImage = EDGE_MASK
+    view.style.webkitMaskImage = EDGE_MASK
+    view.style.maskSize = "100% 100%"
+    view.style.maskRepeat = "no-repeat"
+  }
+  const clearEdge = () => {
+    if (!view) return
+    if (!active()) {
+      clearMaskStyles(view)
+      return
+    }
+    edgeFade?.stop()
+    const anim = animate(view, { maskSize: "100% 200%" }, GROW_SPRING)
+    edgeFade = anim
+    anim.finished
+      .catch(() => {})
+      .then(() => {
+        if (edgeFade !== anim || !view) return
+        clearMaskStyles(view)
+        edgeFade = undefined
+      })
+  }
+
   createEffect(
     on(height, (next) => {
       if (!view) return
@@ -116,9 +145,11 @@ export function RollingResults<T>(props: RollingResultsProps<T>) {
         resize?.stop()
         resize = undefined
         setView(next)
+        clearEdge()
         return
       }
       resize?.stop()
+      applyEdge()
       const anim = animate(view, { height: `${next}px` }, GROW_SPRING)
       resize = anim
       anim.finished
@@ -127,6 +158,7 @@ export function RollingResults<T>(props: RollingResultsProps<T>) {
           if (resize !== anim) return
           setView(next)
           resize = undefined
+          clearEdge()
         })
     }),
   )
@@ -134,8 +166,10 @@ export function RollingResults<T>(props: RollingResultsProps<T>) {
   onCleanup(() => {
     shift?.stop()
     resize?.stop()
+    edgeFade?.stop()
     shift = undefined
     resize = undefined
+    edgeFade = undefined
   })
 
   return (
