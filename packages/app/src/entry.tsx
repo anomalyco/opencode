@@ -50,8 +50,25 @@ const setStorage = (key: string, value: string | null) => {
   }
 }
 
-const readDefaultServerUrl = () => getStorage(DEFAULT_SERVER_URL_KEY)
-const writeDefaultServerUrl = (url: string | null) => setStorage(DEFAULT_SERVER_URL_KEY, url)
+const readDefaultServerUrl = () => {
+  const value = getStorage(DEFAULT_SERVER_URL_KEY)
+  if (!value) return null
+  try {
+    const parsed = JSON.parse(value)
+    if (typeof parsed === "object" && parsed && "url" in parsed) {
+      return parsed as import("@/context/platform").DefaultServerConfig
+    }
+  } catch {}
+  return { url: value }
+}
+
+const writeDefaultServerUrl = (config: import("@/context/platform").DefaultServerConfig | null) => {
+  if (!config) {
+    setStorage(DEFAULT_SERVER_URL_KEY, null)
+    return
+  }
+  setStorage(DEFAULT_SERVER_URL_KEY, JSON.stringify(config))
+}
 
 const notify: Platform["notify"] = async (title, description, href) => {
   if (!("Notification" in window)) return

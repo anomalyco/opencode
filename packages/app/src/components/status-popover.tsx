@@ -83,7 +83,13 @@ const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, fetcher: typ
 }
 
 const useDefaultServerKey = (
-  get: (() => string | Promise<string | null | undefined> | null | undefined) | undefined,
+  get:
+    | (() =>
+        | import("@/context/platform").DefaultServerConfig
+        | Promise<import("@/context/platform").DefaultServerConfig | null | undefined>
+        | null
+        | undefined)
+    | undefined,
 ) => {
   const [url, setUrl] = createSignal<string | undefined>()
   const [tick, setTick] = createSignal(0)
@@ -97,6 +103,22 @@ const useDefaultServerKey = (
       onCleanup(() => {
         dead = true
       })
+      return
+    }
+
+    if (result instanceof Promise) {
+      void result.then((next) => {
+        if (dead) return
+        setUrl(next?.url ? normalizeServerUrl(next.url) : undefined)
+      })
+      onCleanup(() => {
+        dead = true
+      })
+      return
+    }
+
+    setUrl(normalizeServerUrl(result.url))
+  })
       return
     }
 
