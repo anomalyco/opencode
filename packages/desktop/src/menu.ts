@@ -70,6 +70,11 @@ export async function createMenu(trigger: (id: string) => void) {
             action: () => trigger("session.new"),
           }),
           await MenuItem.new({
+            text: "Clone Project...",
+            accelerator: "Shift+Cmd+O",
+            action: () => trigger("project.clone"),
+          }),
+          await MenuItem.new({
             text: t("desktop.menu.file.openProject"),
             accelerator: "Cmd+O",
             action: () => trigger("project.open"),

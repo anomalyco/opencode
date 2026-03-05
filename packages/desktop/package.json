@@ -6,6 +6,7 @@
   "license": "MIT",
   "scripts": {
     "typecheck": "tsgo -b",
+    "test:clone": "cargo test --manifest-path src-tauri/Cargo.toml test_clone_with_git_real_repository -- --nocapture",
     "predev": "bun ./scripts/predev.ts",
     "dev": "vite",
     "build": "bun run typecheck && vite build",

@@ -1,14 +1,18 @@
 use std::time::{Duration, Instant};
 
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_store::StoreExt;
 use tokio::task::JoinHandle;
+use tokio::time::timeout;
 
 use crate::{
     cli,
     cli::CommandChild,
-    constants::{DEFAULT_SERVER_URL_KEY, SETTINGS_STORE, WSL_ENABLED_KEY},
+    constants::{
+        DEFAULT_CLONE_DIRECTORY_KEY, DEFAULT_SERVER_URL_KEY, SETTINGS_STORE, WSL_ENABLED_KEY,
+    },
+    windows::MainWindow,
 };
 
 #[derive(Clone, serde::Serialize, serde::Deserialize, specta::Type, Debug, Default)]
@@ -85,17 +89,82 @@ pub fn set_wsl_config(app: AppHandle, config: WslConfig) -> Result<(), String> {
     Ok(())
 }
 
+fn clone_directory_default(app: &AppHandle) -> Result<String, String> {
+    let home = app
+        .path()
+        .home_dir()
+        .map_err(|e| format!("Failed to resolve home directory: {e}"))?;
+
+    #[cfg(target_os = "linux")]
+    {
+        return Ok(home.join("code").to_string_lossy().to_string());
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        Ok(home
+            .join("Documents")
+            .join("code")
+            .to_string_lossy()
+            .to_string())
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_default_clone_directory(app: AppHandle) -> Result<String, String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+    let configured = store
+        .get(DEFAULT_CLONE_DIRECTORY_KEY)
+        .and_then(|v| v.as_str().map(str::to_string))
+        .filter(|v| !v.trim().is_empty());
+    if let Some(configured) = configured {
+        return Ok(configured);
+    }
+    clone_directory_default(&app)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn set_default_clone_directory(app: AppHandle, directory: Option<String>) -> Result<(), String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+
+    if let Some(directory) = directory
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+    {
+        store.set(DEFAULT_CLONE_DIRECTORY_KEY, serde_json::Value::String(directory));
+    } else {
+        store.delete(DEFAULT_CLONE_DIRECTORY_KEY);
+    }
+
+    store
+        .save()
+        .map_err(|e| format!("Failed to save settings: {}", e))?;
+
+    Ok(())
+}
+
 pub async fn get_saved_server_url(app: &tauri::AppHandle) -> Option<String> {
     if let Some(url) = get_default_server_url(app.clone()).ok().flatten() {
         tracing::info!(%url, "Using desktop-specific custom URL");
         return Some(url);
     }
 
-    if let Some(cli_config) = cli::get_config(app).await
-        && let Some(url) = get_server_url_from_config(&cli_config)
+    let cli_config = timeout(Duration::from_secs(5), cli::get_config(app)).await;
+    if let Ok(Some(config)) = &cli_config
+        && let Some(url) = get_server_url_from_config(config)
     {
         tracing::info!(%url, "Using custom server URL from config");
         return Some(url);
+    }
+
+    if cli_config.is_err() {
+        tracing::warn!("Timed out reading CLI config, skipping custom server URL detection");
     }
 
     None
@@ -229,6 +298,11 @@ pub async fn check_health_or_ask_retry(app: &AppHandle, url: &str) -> bool {
     loop {
         if check_health(url, None).await {
             return true;
+        }
+
+        if app.get_webview_window(MainWindow::LABEL).is_none() {
+            tracing::warn!(%url, "Configured server is unavailable during startup; falling back to local server");
+            return false;
         }
 
         const RETRY: &str = "Retry";

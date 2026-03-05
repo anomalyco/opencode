@@ -114,6 +114,21 @@ const createPlatform = (): Platform => {
     openLink(url: string) {
       void shellOpen(url).catch(() => undefined)
     },
+    async normalizeProjectPath(path: string) {
+      if (os === "windows" && window.__OPENCODE__?.wsl) {
+        return commands.wslPath(path, "linux").catch(() => path)
+      }
+      return path
+    },
+    cloneGitRepository(url: string, directory?: string) {
+      return commands.cloneGitRepository(url, directory ?? null)
+    },
+    async getDefaultCloneDirectory() {
+      return commands.getDefaultCloneDirectory().catch(() => null)
+    },
+    async setDefaultCloneDirectory(path: string | null) {
+      await commands.setDefaultCloneDirectory(path)
+    },
     async openPath(path: string, app?: string) {
       await commands.openPath(path, app ?? null)
     },
