@@ -1979,6 +1979,160 @@ export type GlobalConfigUpdateResponses = {
 
 export type GlobalConfigUpdateResponse = GlobalConfigUpdateResponses[keyof GlobalConfigUpdateResponses]
 
+export type GlobalTuiKeybindUpdateData = {
+  body?:
+    | {
+        mode: "set"
+        action: string
+        keybind: string
+      }
+    | {
+        mode: "reset"
+        action: string
+      }
+    | {
+        mode: "reset_all"
+      }
+  path?: never
+  query?: never
+  url: "/global/tui/keybind"
+}
+
+export type GlobalTuiKeybindUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type GlobalTuiKeybindUpdateError = GlobalTuiKeybindUpdateErrors[keyof GlobalTuiKeybindUpdateErrors]
+
+export type GlobalTuiKeybindUpdateResponses = {
+  /**
+   * Successfully updated global tui keybind
+   */
+  200: {
+    $schema?: string
+    theme?: string
+    keybinds?: {
+      leader?: string
+      app_exit?: string
+      editor_open?: string
+      theme_list?: string
+      sidebar_toggle?: string
+      scrollbar_toggle?: string
+      username_toggle?: string
+      status_view?: string
+      session_export?: string
+      session_new?: string
+      session_list?: string
+      session_timeline?: string
+      session_fork?: string
+      session_rename?: string
+      session_delete?: string
+      stash_delete?: string
+      model_provider_list?: string
+      model_favorite_toggle?: string
+      session_share?: string
+      session_unshare?: string
+      session_interrupt?: string
+      session_compact?: string
+      messages_page_up?: string
+      messages_page_down?: string
+      messages_line_up?: string
+      messages_line_down?: string
+      messages_half_page_up?: string
+      messages_half_page_down?: string
+      messages_first?: string
+      messages_last?: string
+      messages_next?: string
+      messages_previous?: string
+      messages_last_user?: string
+      messages_copy?: string
+      messages_undo?: string
+      messages_redo?: string
+      messages_toggle_conceal?: string
+      tool_details?: string
+      model_list?: string
+      model_cycle_recent?: string
+      model_cycle_recent_reverse?: string
+      model_cycle_favorite?: string
+      model_cycle_favorite_reverse?: string
+      command_list?: string
+      agent_list?: string
+      agent_cycle?: string
+      agent_cycle_reverse?: string
+      variant_cycle?: string
+      input_clear?: string
+      input_paste?: string
+      input_submit?: string
+      input_newline?: string
+      input_move_left?: string
+      input_move_right?: string
+      input_move_up?: string
+      input_move_down?: string
+      input_select_left?: string
+      input_select_right?: string
+      input_select_up?: string
+      input_select_down?: string
+      input_line_home?: string
+      input_line_end?: string
+      input_select_line_home?: string
+      input_select_line_end?: string
+      input_visual_line_home?: string
+      input_visual_line_end?: string
+      input_select_visual_line_home?: string
+      input_select_visual_line_end?: string
+      input_buffer_home?: string
+      input_buffer_end?: string
+      input_select_buffer_home?: string
+      input_select_buffer_end?: string
+      input_delete_line?: string
+      input_delete_to_line_end?: string
+      input_delete_to_line_start?: string
+      input_backspace?: string
+      input_delete?: string
+      input_undo?: string
+      input_redo?: string
+      input_word_forward?: string
+      input_word_backward?: string
+      input_select_word_forward?: string
+      input_select_word_backward?: string
+      input_delete_word_forward?: string
+      input_delete_word_backward?: string
+      history_previous?: string
+      history_next?: string
+      session_child_first?: string
+      session_child_cycle?: string
+      session_child_cycle_reverse?: string
+      session_parent?: string
+      terminal_suspend?: string
+      terminal_title_toggle?: string
+      tips_toggle?: string
+      display_thinking?: string
+    }
+    /**
+     * TUI scroll speed
+     */
+    scroll_speed?: number
+    /**
+     * Scroll acceleration settings
+     */
+    scroll_acceleration?: {
+      /**
+       * Enable scroll acceleration
+       */
+      enabled: boolean
+    }
+    /**
+     * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
+     */
+    diff_style?: "auto" | "stacked"
+  }
+}
+
+export type GlobalTuiKeybindUpdateResponse = GlobalTuiKeybindUpdateResponses[keyof GlobalTuiKeybindUpdateResponses]
+
 export type GlobalDisposeData = {
   body?: never
   path?: never

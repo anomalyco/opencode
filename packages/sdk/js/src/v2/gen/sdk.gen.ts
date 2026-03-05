@@ -46,6 +46,8 @@ import type {
   GlobalDisposeResponses,
   GlobalEventResponses,
   GlobalHealthResponses,
+  GlobalTuiKeybindUpdateErrors,
+  GlobalTuiKeybindUpdateResponses,
   InstanceDisposeResponses,
   LspStatusResponses,
   McpAddErrors,
@@ -265,6 +267,55 @@ export class Config extends HeyApiClient {
   }
 }
 
+export class Keybind extends HeyApiClient {
+  /**
+   * Update global tui keybind
+   *
+   * Update a global keybind in tui.json.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters?: {
+      body?:
+        | {
+            mode: "set"
+            action: string
+            keybind: string
+          }
+        | {
+            mode: "reset"
+            action: string
+          }
+        | {
+            mode: "reset_all"
+          }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ key: "body", map: "body" }] }])
+    return (options?.client ?? this.client).patch<
+      GlobalTuiKeybindUpdateResponses,
+      GlobalTuiKeybindUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/global/tui/keybind",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Tui extends HeyApiClient {
+  private _keybind?: Keybind
+  get keybind(): Keybind {
+    return (this._keybind ??= new Keybind({ client: this.client }))
+  }
+}
+
 export class Global extends HeyApiClient {
   /**
    * Get health
@@ -305,6 +356,11 @@ export class Global extends HeyApiClient {
   private _config?: Config
   get config(): Config {
     return (this._config ??= new Config({ client: this.client }))
+  }
+
+  private _tui?: Tui
+  get tui(): Tui {
+    return (this._tui ??= new Tui({ client: this.client }))
   }
 }
 
@@ -3150,7 +3206,7 @@ export class Control extends HeyApiClient {
   }
 }
 
-export class Tui extends HeyApiClient {
+export class Tui2 extends HeyApiClient {
   /**
    * Append TUI prompt
    *
@@ -3947,9 +4003,9 @@ export class OpencodeClient extends HeyApiClient {
     return (this._mcp ??= new Mcp({ client: this.client }))
   }
 
-  private _tui?: Tui
-  get tui(): Tui {
-    return (this._tui ??= new Tui({ client: this.client }))
+  private _tui?: Tui2
+  get tui(): Tui2 {
+    return (this._tui ??= new Tui2({ client: this.client }))
   }
 
   private _instance?: Instance
