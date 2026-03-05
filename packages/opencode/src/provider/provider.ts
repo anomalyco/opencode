@@ -44,6 +44,7 @@ import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
+import { checkOllamaConnection } from "./ollama"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -798,6 +799,20 @@ export namespace Provider {
     const sdk = new Map<number, SDK>()
 
     log.info("init")
+
+    // OPENSACIA: Check Ollama connectivity if configured
+    if (config.provider?.ollama?.options?.baseURL) {
+      const baseURL = config.provider.ollama.options.baseURL
+      const isReachable = await checkOllamaConnection(baseURL)
+      if (!isReachable) {
+        log.warn("Ollama provider configured but not reachable", {
+          baseURL,
+          hint: "Ensure Ollama is running: ollama serve"
+        })
+      } else {
+        log.info("Ollama provider connected", { baseURL })
+      }
+    }
 
     const configProviders = Object.entries(config.provider ?? {})
 
