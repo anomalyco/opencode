@@ -39,6 +39,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "再試行中",
   "ui.sessionTurn.retry.inSeconds": "{{seconds}}秒後",
+  "ui.sessionTurn.retry.attempt": "{{attempt}}回目",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - {{attempt}}回目",
+  "ui.sessionTurn.retry.geminiHot": "gemini が混雑しています",
   "ui.sessionTurn.error.freeUsageExceeded": "無料使用制限に達しました",
   "ui.sessionTurn.error.addCredits": "クレジットを追加",
 
@@ -56,6 +59,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "次のステップを検討中",
 
   "ui.messagePart.questions.dismissed": "質問をスキップしました",
+  "ui.messagePart.compaction": "履歴を圧縮しました",
   "ui.messagePart.context.read.one": "{{count}} 件の読み取り",
   "ui.messagePart.context.read.other": "{{count}} 件の読み取り",
   "ui.messagePart.context.search.one": "{{count}} 件の検索",
@@ -121,6 +125,7 @@ export const dict = {
   "ui.message.copyResponse": "応答をコピー",
   "ui.message.copied": "コピーしました！",
   "ui.message.interrupted": "中断",
+  "ui.message.queued": "待機中",
   "ui.message.attachment.alt": "添付ファイル",
 
   "ui.patch.action.deleted": "削除済み",
