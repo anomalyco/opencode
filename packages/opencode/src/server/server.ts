@@ -560,19 +560,40 @@ export namespace Server {
         )
         .all("/*", async (c) => {
           const path = c.req.path
+          const appHost = Flag.OPENCODE_APP_URL || "https://app.opencode.ai"
+          const appHostname = (() => {
+            try {
+              return new URL(appHost).hostname
+            } catch {
+              return "app.opencode.ai"
+            }
+          })()
 
-          const response = await proxy(`https://app.opencode.ai${path}`, {
-            ...c.req,
-            headers: {
-              ...c.req.raw.headers,
-              host: "app.opencode.ai",
-            },
-          })
-          response.headers.set(
-            "Content-Security-Policy",
-            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:",
-          )
-          return response
+          try {
+            const response = await proxy(`${appHost}${path}`, {
+              ...c.req,
+              headers: {
+                ...c.req.raw.headers,
+                host: appHostname,
+              },
+            })
+            response.headers.set(
+              "Content-Security-Policy",
+              "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:",
+            )
+            return response
+          } catch (e) {
+            log.error("failed to proxy to app", {
+              url: `${appHost}${path}`,
+              error: e,
+            })
+            return c.json(
+              new NamedError.Unknown({
+                message: `Failed to load web UI from ${appHost}. Set OPENCODE_APP_URL to override the app URL or ensure ${appHost} is reachable.`,
+              }).toObject(),
+              { status: 502 },
+            )
+          }
         }) as unknown as Hono,
   )
 
