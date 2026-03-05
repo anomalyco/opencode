@@ -45,6 +45,12 @@ export namespace Flag {
   export const OPENSACIA_SERVER_USERNAME =
     process.env["OPENSACIA_SERVER_USERNAME"] ?? process.env["OPENCODE_SERVER_USERNAME"]
 
+  // OPENSACIA: Ollama provider configuration
+  export const OPENSACIA_OLLAMA_BASE_URL =
+    process.env["OPENSACIA_OLLAMA_BASE_URL"] ??
+    process.env["OPENCODE_OLLAMA_BASE_URL"] ??
+    "http://localhost:11434/v1"
+
   export const OPENCODE_ENABLE_QUESTION_TOOL = truthy("OPENCODE_ENABLE_QUESTION_TOOL")
 
   // Experimental
