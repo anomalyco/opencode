@@ -6,17 +6,45 @@ describe("createOpenReviewFile", () => {
     const calls: string[] = []
     const openReviewFile = createOpenReviewFile({
       showAllFiles: () => calls.push("show"),
+      openReviewPanel: () => calls.push("review"),
       tabForPath: (path) => {
         calls.push(`tab:${path}`)
         return `file://${path}`
       },
       openTab: (tab) => calls.push(`open:${tab}`),
+      setActive: (tab) => calls.push(`active:${tab}`),
+      setSelectedLines: (path, range) => calls.push(`select:${path}:${range ? `${range.start}-${range.end}` : "none"}`),
       loadFile: (path) => calls.push(`load:${path}`),
     })
 
     openReviewFile("src/a.ts")
 
-    expect(calls).toEqual(["show", "load:src/a.ts", "tab:src/a.ts", "open:file://src/a.ts"])
+    expect(calls).toEqual([
+      "tab:src/a.ts",
+      "show",
+      "review",
+      "load:src/a.ts",
+      "open:file://src/a.ts",
+      "active:file://src/a.ts",
+      "select:src/a.ts:none",
+    ])
+  })
+
+  test("selects the requested line when provided", () => {
+    const calls: string[] = []
+    const openReviewFile = createOpenReviewFile({
+      showAllFiles: () => calls.push("show"),
+      openReviewPanel: () => calls.push("review"),
+      tabForPath: (path) => `file://${path}`,
+      openTab: () => calls.push("open"),
+      setActive: () => calls.push("active"),
+      setSelectedLines: (_path, range) => calls.push(`select:${range?.start}-${range?.end}`),
+      loadFile: () => calls.push("load"),
+    })
+
+    openReviewFile("src/a.ts", 12)
+
+    expect(calls).toContain("select:12-12")
   })
 })
 
