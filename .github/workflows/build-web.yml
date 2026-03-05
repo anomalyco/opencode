@@ -1,10 +1,6 @@
 name: build-web
 
-on:
-  push:
-    branches:
-      - "claude/**"
-  workflow_dispatch:
+on: push
 
 jobs:
   build:
