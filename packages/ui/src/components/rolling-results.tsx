@@ -5,9 +5,11 @@ import { prefersReducedMotion } from "../hooks/use-reduced-motion"
 export type RollingResultsProps<T> = {
   items: T[]
   render: (item: T, index: number) => JSX.Element
+  fixed?: JSX.Element
   getKey?: (item: T, index: number) => string
   rows?: number
   rowHeight?: number
+  fixedHeight?: number
   rowGap?: number
   open?: boolean
   animate?: boolean
@@ -25,7 +27,9 @@ export function RollingResults<T>(props: RollingResultsProps<T>) {
 
   const rows = createMemo(() => Math.max(1, Math.round(props.rows ?? 3)))
   const rowHeight = createMemo(() => Math.max(16, Math.round(props.rowHeight ?? 22)))
+  const fixedHeight = createMemo(() => Math.max(0, Math.round(props.fixedHeight ?? rowHeight())))
   const rowGap = createMemo(() => Math.max(0, Math.round(props.rowGap ?? 0)))
+  const fixed = createMemo(() => props.fixed !== undefined)
   const list = createMemo(() => props.items ?? [])
   const count = createMemo(() => list().length)
   const backstop = createMemo(() => Math.max(rows() * 2, 12))
@@ -41,13 +45,22 @@ export function RollingResults<T>(props: RollingResultsProps<T>) {
   const shown = createMemo(() => Math.min(rows(), count()))
   const step = createMemo(() => rowHeight() + rowGap())
   const offset = createMemo(() => Math.max(0, count() - shown()) * step())
-  const height = createMemo(() => {
-    if (!open()) return 0
+  const body = createMemo(() => {
     if (shown() > 0) {
       return shown() * rowHeight() + Math.max(0, shown() - 1) * rowGap()
     }
     if (props.empty === undefined) return 0
     return rowHeight()
+  })
+  const gap = createMemo(() => {
+    if (!fixed()) return 0
+    if (body() <= 0) return 0
+    return rowGap()
+  })
+  const height = createMemo(() => {
+    if (!open()) return 0
+    if (!fixed()) return body()
+    return fixedHeight() + gap() + body()
   })
 
   const key = (item: T, index: number) => {
@@ -131,24 +144,34 @@ export function RollingResults<T>(props: RollingResultsProps<T>) {
       class={props.class}
       data-open={open() ? "true" : "false"}
       data-overflowing={overflowing() ? "true" : "false"}
+      data-fixed={fixed() ? "true" : "false"}
       style={{
         "--rolling-results-row-height": `${rowHeight()}px`,
+        "--rolling-results-fixed-height": `${fixed() ? fixedHeight() : 0}px`,
+        "--rolling-results-fixed-gap": `${gap()}px`,
         "--rolling-results-row-gap": `${rowGap()}px`,
         "--rolling-results-fade": `${Math.round(rowHeight() * 0.6)}px`,
       }}
     >
       <div ref={view} data-slot="rolling-results-viewport" aria-live="polite">
-        <Show when={list().length === 0 && props.empty !== undefined}>
-          <div data-slot="rolling-results-empty">{props.empty}</div>
+        <Show when={fixed()}>
+          <div data-slot="rolling-results-fixed">{props.fixed}</div>
         </Show>
-        <div ref={track} data-slot="rolling-results-track" style={{ "padding-top": `${skipped() * step()}px` }}>
-          <For each={rendered()}>
-            {(item, index) => (
-              <div data-slot="rolling-results-row" data-key={key(item, index())}>
-                {props.render(item, index())}
-              </div>
-            )}
-          </For>
+        <div data-slot="rolling-results-window">
+          <div data-slot="rolling-results-body">
+            <Show when={list().length === 0 && props.empty !== undefined}>
+              <div data-slot="rolling-results-empty">{props.empty}</div>
+            </Show>
+            <div ref={track} data-slot="rolling-results-track" style={{ "padding-top": `${skipped() * step()}px` }}>
+              <For each={rendered()}>
+                {(item, index) => (
+                  <div data-slot="rolling-results-row" data-key={key(item, index())}>
+                    {props.render(item, index())}
+                  </div>
+                )}
+              </For>
+            </div>
+          </div>
         </div>
       </div>
     </div>

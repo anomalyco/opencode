@@ -56,8 +56,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
     programmaticUntil = Date.now() + AUTO_SCROLL_GRACE_MS
   }
 
-  const clearHold = (reason = "unknown") => {
-    void reason
+  const clearHold = () => {
     const next = hold
     if (!next) return
     if (next.frame !== undefined) cancelAnimationFrame(next.frame)
@@ -69,17 +68,17 @@ export function createAutoScroll(options: AutoScrollOptions) {
     const el = scroll
     if (!next || !el) return false
     if (Date.now() > next.until) {
-      clearHold("timeout")
+      clearHold()
       return false
     }
     if (!next.el.isConnected) {
-      clearHold("detached")
+      clearHold()
       return false
     }
 
     const current = next.el.getBoundingClientRect().top
     if (!Number.isFinite(current)) {
-      clearHold("invalid-top")
+      clearHold()
       return false
     }
 
@@ -87,7 +86,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
     if (Math.abs(delta) <= AUTO_SCROLL_EPSILON) {
       next.quiet += 1
       if (next.quiet > MANUAL_ANCHOR_QUIET_FRAMES) {
-        clearHold("settled")
+        clearHold()
         return false
       }
       return true
@@ -129,7 +128,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
     const top = target.getBoundingClientRect().top
     if (!Number.isFinite(top)) return
 
-    clearHold("restart")
+    clearHold()
     hold = {
       el: target,
       top,
@@ -143,7 +142,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
   const scrollToBottom = (force: boolean) => {
     if (!force && !active()) return
 
-    clearHold("scroll-to-bottom")
+    clearHold()
 
     if (force && store.userScrolled) setStore("userScrolled", false)
 
@@ -197,7 +196,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
   }
 
   const stop = (input?: { hold?: boolean }) => {
-    if (input?.hold !== false) clearHold("stop")
+    if (input?.hold !== false) clearHold()
 
     const el = scroll
     if (!el) return
@@ -213,7 +212,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
   }
 
   const handleWheel = (e: WheelEvent) => {
-    if (e.deltaY !== 0) clearHold("wheel")
+    if (e.deltaY !== 0) clearHold()
 
     if (e.deltaY > 0) {
       const el = scroll
@@ -239,7 +238,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
     if (hold) {
       if (Date.now() < programmaticUntil) return
-      clearHold("manual-scroll")
+      clearHold()
     }
 
     if (!canScroll(el)) {
@@ -335,7 +334,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
   onCleanup(() => {
     if (settleTimer) clearTimeout(settleTimer)
-    clearHold("cleanup")
+    clearHold()
     cancelSmooth()
     if (cleanup) cleanup()
   })
@@ -350,7 +349,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
       scroll = el
 
       if (!el) {
-        clearHold("scroll-ref-detach")
+        clearHold()
         return
       }
 

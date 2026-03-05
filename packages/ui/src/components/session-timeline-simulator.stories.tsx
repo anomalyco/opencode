@@ -554,28 +554,132 @@ function buildReadEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
   }]
 }
 
-function buildBashEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
+// Bash output chunks — each press of `b` appends the next chunk to the running tool
+const bashCommands = [
+  { command: "bun run test -- --reporter=verbose", description: "Run tests" },
+  { command: "bun install", description: "Install dependencies" },
+  { command: "bunx tsc --noEmit", description: "Type check the project" },
+  { command: "git log --oneline -20", description: "Recent commits" },
+]
+
+const bashOutputChunks = [
+  // Test run chunks
+  [
+    "$ vitest run --reporter=verbose\n",
+    "\n ✓ session/manager.test.ts > creates a new session  12ms\n",
+    " ✓ session/manager.test.ts > resumes existing session  8ms\n",
+    " ✓ session/manager.test.ts > handles concurrent messages  23ms\n",
+    " ✓ session/manager.test.ts > applies tool results  5ms\n",
+    " ✓ session/manager.test.ts > compacts long conversations  147ms\n",
+    " ✓ session/manager.test.ts > tracks token usage  3ms\n",
+    " ✓ session/manager.test.ts > emits status events  11ms\n",
+    " ✓ session/manager.test.ts > cleans up on close  6ms\n",
+    "\n ✓ provider/anthropic.test.ts > sends messages  34ms\n",
+    " ✓ provider/anthropic.test.ts > handles streaming  89ms\n",
+    " ✓ provider/anthropic.test.ts > retries on 429  201ms\n",
+    " ✓ provider/anthropic.test.ts > maps tool calls  18ms\n",
+    "\n ✓ tool/bash.test.ts > executes command  42ms\n",
+    " ✓ tool/bash.test.ts > captures stderr  7ms\n",
+    " ✓ tool/bash.test.ts > respects timeout  1004ms\n",
+    " ✓ tool/bash.test.ts > sanitizes input  2ms\n",
+    "\nTest Files  3 passed (3)\n     Tests  16 passed (16)\n  Duration  2.41s\n",
+  ],
+  // Install chunks
+  [
+    "bun install v1.2.4 (ae194892)\n",
+    "\nResolving dependencies...\n",
+    " + @opencode-ai/sdk@0.3.1\n",
+    " + solid-js@1.9.5\n",
+    " + @solidjs/router@0.15.3\n",
+    " + @effect/platform@0.76.1\n",
+    " + effect@3.14.2\n",
+    " + @solidjs/start@1.1.0\n",
+    " + vite@6.2.1\n",
+    " + vitest@3.0.4\n",
+    " + typescript@5.7.3\n",
+    " + @anthropic-ai/sdk@0.39.0\n",
+    " + zod@3.24.2\n",
+    "\nLinking packages...\n",
+    " Compiled 12 native modules.\n",
+    "\n 184 packages installed [2.41s]\n",
+  ],
+  // Type check chunks
+  [
+    "Checking project...\n",
+    "\nsrc/tool/bash.ts(42,7): error TS2322: Type 'string | undefined' is not assignable to type 'string'.\n",
+    "  Type 'undefined' is not assignable to type 'string'.\n",
+    "\nsrc/provider/anthropic.ts(118,3): error TS2345: Argument of type 'Message' is not assignable.\n",
+    "  Expected 'CoreMessage', received 'Message'.\n",
+    "\nsrc/session/manager.ts(67,12): error TS2339: Property 'compact' does not exist on type 'Session'.\n",
+    "\nsrc/ui/components/message-part.tsx(234,5): error TS7006: Parameter 'props' implicitly has an 'any' type.\n",
+    "\nsrc/tool/edit.ts(89,21): error TS2769: No overload matches this call.\n",
+    "  Overload 1 of 2 gave the following error:\n",
+    "    Argument of type '{ path: string }' is not assignable to parameter of type 'EditOptions'.\n",
+    "      Property 'oldString' is missing.\n",
+    "\nsrc/config.ts(14,10): error TS2305: Module '\"effect\"' has no exported member 'ConfigProvider'.\n",
+    "\nFound 6 errors in 5 files.\n",
+  ],
+  // Git log chunks
+  [
+    "e11dcf7 fix(ui): align context tool row font size\n",
+    "02c6630 revert(opencode): roll back session guard changes\n",
+    "37da6c8 fix(ui): align Home/End scroll behavior\n",
+    "49aedd5 fix(app): stabilize session message navigation\n",
+    "2378ea8 fix(app): reserve space for timeline header\n",
+    "a1b2c3d feat(tools): add streaming bash output\n",
+    "d4e5f6a refactor(session): extract turn manager\n",
+    "f7a8b9c fix(ui): prevent flash on theme switch\n",
+    "1234abc chore: bump dependencies\n",
+    "5678def docs: update README\n",
+    "9abcdef fix(core): handle empty message array\n",
+    "b1c2d3e feat(ui): add copy button to code blocks\n",
+    "e4f5a6b perf(session): batch store updates\n",
+    "c7d8e9f fix(provider): respect rate limit headers\n",
+    "0a1b2c3 refactor(tool): unify tool state shape\n",
+    "d4e5f67 test: add integration tests for session flow\n",
+  ],
+]
+function buildBashStartEvents(turn: TurnState): [TimelineEvent[], RunningTool, number] {
   const t = Date.now()
-  const input = { command: 'cowsay "Hello from interactive mode!"', description: "cowsay greeting" }
+  const cmdIdx = Math.floor(Math.random() * bashCommands.length)
+  const cmd = bashCommands[cmdIdx]
+  const input = { command: cmd.command, description: cmd.description }
   const shellPart = mkTool(turn.asstMsgID, "bash", input)
-  const cowsay = ` ________________________________
-< Hello from interactive mode! >
- --------------------------------
-        \\   ^__^
-         \\  (oo)\\_______
-            (__)\\       )\\/\\
-                ||----w |
-                ||     ||`
+  const allChunks = bashOutputChunks[cmdIdx]
+  const fullOutput = allChunks.join("")
   const events: TimelineEvent[] = [
     { type: "part", part: shellPart },
-    { type: "delay", ms: 150 },
+    { type: "delay", ms: 120 },
     { type: "part-update", messageID: turn.asstMsgID, partID: shellPart.id, patch: toolRunning(shellPart, input.command, t) },
   ]
   return [events, {
     part: shellPart, turn, title: input.command, startTime: t,
-    completeOutput: cowsay,
-    completePatch: toolCompleted(shellPart, input.command, cowsay, t, t + 800),
-  }]
+    completeOutput: fullOutput,
+    completePatch: toolCompleted(shellPart, input.command, fullOutput, t, t + 2000),
+  }, cmdIdx]
+}
+
+function buildBashChunkEvents(
+  turn: TurnState,
+  part: ToolPart,
+  cmdIdx: number,
+  chunkIdx: number,
+  prevOutput: string,
+): [TimelineEvent[], string] {
+  const chunks = bashOutputChunks[cmdIdx]
+  const chunk = chunks[chunkIdx % chunks.length]
+  const newOutput = prevOutput + chunk
+  const events: TimelineEvent[] = [
+    {
+      type: "part-update",
+      messageID: turn.asstMsgID,
+      partID: part.id,
+      patch: {
+        state: { status: "running", input: part.state.input, title: part.state.input?.command, output: newOutput, time: { start: Date.now() } },
+      },
+    },
+  ]
+  return [events, newOutput]
 }
 
 function buildTextEvents(turn: TurnState): TimelineEvent[] {
@@ -800,6 +904,9 @@ function SessionTimelineSimulator() {
   const [currentTurn, setCurrentTurn] = createSignal<TurnState | null>(null)
   const [runningTool, setRunningTool] = createSignal<RunningTool | null>(null)
 
+  // Bash streaming state — tracks the current bash tool being streamed into
+  let bashState: { cmdIdx: number; chunkIdx: number; currentOutput: string; part: ToolPart; turn: TurnState } | null = null
+
   function startNewTurn() {
     turnCounter++
     const userMsgID = `msg-user-${turnCounter}`
@@ -825,6 +932,7 @@ function SessionTimelineSimulator() {
 
   // Complete the current running tool, returning its completion events
   function drainRunning(): TimelineEvent[] {
+    bashState = null
     const tool = runningTool()
     if (!tool) return []
     setRunningTool(null)
@@ -874,6 +982,7 @@ function SessionTimelineSimulator() {
     globIndex = 0
     listIndex = 0
     turnCounter = 0
+    bashState = null
     setTurns([])
     setCurrentTurn(null)
     setRunningTool(null)
@@ -884,7 +993,37 @@ function SessionTimelineSimulator() {
 
   const actions: Action[] = [
     { key: "e", label: "Explore", handler: () => triggerExplore() },
-    { key: "b", label: "Bash", handler: () => triggerTool(buildBashEvents) },
+    {
+      key: "b", label: "Bash", handler: () => {
+        if (bashState) {
+          // Already streaming — append next chunk
+          const chunks = bashOutputChunks[bashState.cmdIdx]
+          if (bashState.chunkIdx < chunks.length) {
+            const [chunkEvents, newOutput] = buildBashChunkEvents(
+              bashState.turn, bashState.part, bashState.cmdIdx, bashState.chunkIdx, bashState.currentOutput,
+            )
+            bashState.chunkIdx++
+            bashState.currentOutput = newOutput
+            // Update the running tool's completePatch to include all streamed output
+            const tool = runningTool()
+            if (tool) {
+              tool.completeOutput = newOutput
+              tool.completePatch = toolCompleted(tool.part, tool.title, newOutput, tool.startTime, Date.now())
+            }
+            pb.appendAndPlay(chunkEvents)
+          }
+          // If we've exhausted chunks, further presses are no-ops (still running until another key)
+          return
+        }
+        // First press — start a new bash tool
+        const drain = drainRunning()
+        const [turn, prefix] = ensureTurn()
+        const [toolEvents, running, cmdIdx] = buildBashStartEvents(turn)
+        setRunningTool(running)
+        bashState = { cmdIdx, chunkIdx: 0, currentOutput: "", part: running.part, turn }
+        pb.appendAndPlay([...drain, ...prefix, ...toolEvents])
+      },
+    },
     {
       key: "t", label: "Text", handler: () => {
         const drain = drainRunning()
@@ -972,7 +1111,7 @@ function SessionTimelineSimulator() {
         height: "100vh",
         margin: "-24px",
         outline: "none",
-        "background-color": "var(--background-base)",
+        "background-color": "var(--background-stronger)",
         color: "var(--text-base)",
         "font-family": "var(--font-family-sans)",
         "font-size": "var(--font-size-base)",
@@ -982,23 +1121,27 @@ function SessionTimelineSimulator() {
       <div style={{ flex: "1 1 0", "min-height": "0", overflow: "auto" }}>
         <DataProvider data={pb.data} directory="/Users/kit/project">
           <FileComponentProvider component={PlaceholderFile}>
-            <For each={turns()}>
-              {(turn) => (
-                <SessionTurn
-                  sessionID={SESSION_ID}
-                  messageID={turn.userMsgID}
-                  active={currentTurn()?.userMsgID === turn.userMsgID}
-                  animate={animateEnabled()}
-                  showReasoningSummaries={showReasoningSummaries()}
-                  shellToolDefaultOpen={shellOpen()}
-                  classes={{
-                    root: "min-w-0 w-full relative",
-                    content: "flex flex-col justify-between",
-                    container: "w-full px-5",
-                  }}
-                />
-              )}
-            </For>
+            <div class="flex flex-col gap-0 items-start justify-start pb-16 w-full max-w-200 mx-auto 2xl:max-w-[1000px]">
+              <For each={turns()}>
+                {(turn) => (
+                  <div class="min-w-0 w-full max-w-full max-w-200 2xl:max-w-[1000px]">
+                    <SessionTurn
+                      sessionID={SESSION_ID}
+                      messageID={turn.userMsgID}
+                      active={currentTurn()?.userMsgID === turn.userMsgID}
+                      animate={animateEnabled()}
+                      showReasoningSummaries={showReasoningSummaries()}
+                      shellToolDefaultOpen={shellOpen()}
+                      classes={{
+                        root: "min-w-0 w-full relative",
+                        content: "flex flex-col justify-between !overflow-visible",
+                        container: "w-full px-4 md:px-5",
+                      }}
+                    />
+                  </div>
+                )}
+              </For>
+            </div>
             {/* Empty state */}
             {turns().length === 0 && (
               <div
@@ -1168,7 +1311,7 @@ Flat control panel — each action auto-completes the previous running tool.
 | Key | Action |
 |-----|--------|
 | e | Explore (random read/grep/glob/list, stays running) |
-| b | Bash tool (stays running) |
+| b | Bash tool (keep pressing to stream output, other key completes) |
 | t | Stream text |
 | d | Edit tool (stays running) |
 | x | Error tool |

@@ -737,6 +737,51 @@
   }
 }
 
+[data-component="shell-rolling-results"] {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+[data-component="shell-rolling-output"] {
+  width: 100%;
+  min-width: 0;
+}
+
+[data-component="shell-rolling-command"],
+[data-component="shell-rolling-row"] {
+  display: inline-flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  padding-left: 12px;
+}
+
+[data-slot="shell-rolling-text"] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-family-mono);
+  font-feature-settings: var(--font-family-mono--font-feature-settings);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-large);
+}
+
+[data-component="shell-rolling-command"] [data-slot="shell-rolling-text"] {
+  color: var(--text-base);
+}
+
+[data-component="shell-rolling-command"] [data-slot="shell-rolling-prompt"] {
+  color: var(--text-weaker);
+}
+
+[data-component="shell-rolling-row"] [data-slot="shell-rolling-text"] {
+  color: var(--text-weak);
+}
+
 [data-component="diagnostics"] {
   display: flex;
   flex-direction: column;
