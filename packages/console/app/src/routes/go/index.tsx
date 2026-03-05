@@ -1,7 +1,7 @@
 import "./index.css"
 import { createAsync, query, redirect } from "@solidjs/router"
 import { Title, Meta } from "@solidjs/meta"
-import { For, createSignal, onCleanup, onMount } from "solid-js"
+import { For, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 //import { HttpHeader } from "@solidjs/start"
 import goLogoLight from "../../asset/go-ornate-light.svg"
 import goLogoDark from "../../asset/go-ornate-dark.svg"
@@ -19,8 +19,7 @@ import { LocaleLinks } from "~/component/locale-links"
 
 const checkLoggedIn = query(async () => {
   "use server"
-  const workspaceID = await getLastSeenWorkspaceID().catch(() => {})
-  if (workspaceID) throw redirect(`/workspace/${workspaceID}`)
+  return await getLastSeenWorkspaceID().catch(() => undefined)
 }, "checkLoggedIn.get")
 
 function LimitsGraph(props: { href: string }) {
@@ -205,7 +204,8 @@ function LimitsGraph(props: { href: string }) {
 }
 
 export default function Home() {
-  const loggedin = createAsync(() => checkLoggedIn())
+  const workspaceID = createAsync(() => checkLoggedIn())
+  const subscribeUrl = createMemo(() => (workspaceID() ? `/workspace/${workspaceID()}/billing` : "/auth"))
   const i18n = useI18n()
   const language = useLanguage()
   return (
@@ -223,7 +223,7 @@ export default function Home() {
       <Meta name="twitter:title" content={i18n.t("go.title")} />
       <Meta name="twitter:description" content={i18n.t("go.meta.description")} />
       <Meta name="twitter:image" content="/social-share-black.png" />
-      <Meta name="opencode:auth" content={loggedin() ? "true" : "false"} />
+      <Meta name="opencode:auth" content={workspaceID() ? "true" : "false"} />
 
       <div data-component="container">
         <Header go hideGetStarted />
@@ -310,7 +310,7 @@ export default function Home() {
                 </div>
                 */}
               </div>
-              <a href="/auth">
+              <a href={subscribeUrl()}>
                 <span>
                   <For
                     each={i18n
@@ -420,7 +420,7 @@ export default function Home() {
                   {i18n.t("go.faq.a4.p1.beforePricing")}{" "}
                   <a href={language.route("/docs/go/#pricing")}>{i18n.t("go.faq.a4.p1.pricingLink")}</a>{" "}
                   {i18n.t("go.faq.a4.p1.afterPricing")} {i18n.t("go.faq.a4.p2.beforeAccount")}{" "}
-                  <a href="/auth">{i18n.t("go.faq.a4.p2.accountLink")}</a>. {i18n.t("go.faq.a4.p3")}
+                  <a href={subscribeUrl()}>{i18n.t("go.faq.a4.p2.accountLink")}</a>. {i18n.t("go.faq.a4.p3")}
                 </Faq>
               </li>
               <li>
