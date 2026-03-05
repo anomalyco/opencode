@@ -7,11 +7,21 @@ import { ActivationController } from "./vscode/activation"
 
 const TERMINAL_NAME = "opencode"
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
   const output = vscode.window.createOutputChannel("OpenCode")
   context.subscriptions.push(output)
   output.appendLine("OpenCode extension activate()")
   output.show(true)
+  // write an activation marker in test-results for e2e verification
+  try {
+    // attempt best-effort write to package-local test-results so test runner can detect activation
+    const fsp = require('fs').promises
+    const path = require('path')
+    const safeTimestamp = () => new Date().toISOString().replace(/[:.]/g, '-')
+    const markerDir = path.join(context.extensionPath, 'test-results')
+    try { await fsp.mkdir(markerDir, { recursive: true }) } catch (e) {}
+    try { await fsp.writeFile(path.join(markerDir, `extension-activated-${safeTimestamp()}.txt`), new Date().toISOString(), 'utf8') } catch (e) {}
+  } catch (e) {}
   const session =
     typeof (vscode.chat as { registerChatSessionContentProvider?: unknown }).registerChatSessionContentProvider ===
     "function"
@@ -270,54 +280,60 @@ export function activate(context: vscode.ExtensionContext) {
   try {
     const os = require('os')
     const tmpDir = os.tmpdir()
+    const localTriggerDir = path.join(context.extensionPath, 'test-results', 'triggers')
+    try { await fsp.mkdir(localTriggerDir, { recursive: true }) } catch (e) {}
     setInterval(async () => {
       try {
-        const entries = await fsp.readdir(tmpDir)
-        for (const ent of entries) {
-          if (!ent.startsWith('opencode-capture-') || !ent.endsWith('.json')) continue
-          const triggerPath = path.join(tmpDir, ent)
-          let payload: any = {}
-          try { payload = JSON.parse(await fsp.readFile(triggerPath, 'utf8')) } catch (e) {}
-          const outPath = payload && payload.outPath
-          if (outPath) {
-            try {
-              // try Electron desktopCapturer
-              // eslint-disable-next-line @typescript-eslint/no-var-requires
-              const electron = (global as any).process ? require('electron') : null
-              const desktopCapturer = electron && (electron.desktopCapturer || (electron.remote && electron.remote.desktopCapturer))
-              if (desktopCapturer && typeof desktopCapturer.getSources === 'function') {
-                const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1280, height: 720 } })
-                if (sources && sources.length) {
-                  const s = sources[0]
-                  if (s.thumbnail && typeof s.thumbnail.toPNG === 'function') {
-                    const png = s.thumbnail.toPNG()
-                    await fsp.writeFile(outPath, png)
-                  } else if (s.thumbnail && typeof s.thumbnail.toDataURL === 'function') {
-                    const dataurl = s.thumbnail.toDataURL()
-                    const base64 = dataurl.split(',')[1]
-                    await fsp.writeFile(outPath, Buffer.from(base64, 'base64'))
+        const dirs = [tmpDir, localTriggerDir]
+        for (const dir of dirs) {
+          let entries: string[] = []
+          try { entries = await fsp.readdir(dir) } catch (e) { continue }
+          for (const ent of entries) {
+            if (!ent.startsWith('opencode-capture-') || !ent.endsWith('.json')) continue
+            const triggerPath = path.join(dir, ent)
+            let payload: any = {}
+            try { payload = JSON.parse(await fsp.readFile(triggerPath, 'utf8')) } catch (e) {}
+            const outPath = payload && payload.outPath
+            if (outPath) {
+              try {
+                // try Electron desktopCapturer
+                // eslint-disable-next-line @typescript-eslint/no-var-requires
+                const electron = (global as any).process ? require('electron') : null
+                const desktopCapturer = electron && (electron.desktopCapturer || (electron.remote && electron.remote.desktopCapturer))
+                if (desktopCapturer && typeof desktopCapturer.getSources === 'function') {
+                  const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1280, height: 720 } })
+                  if (sources && sources.length) {
+                    const s = sources[0]
+                    if (s.thumbnail && typeof s.thumbnail.toPNG === 'function') {
+                      const png = s.thumbnail.toPNG()
+                      await fsp.writeFile(outPath, png)
+                    } else if (s.thumbnail && typeof s.thumbnail.toDataURL === 'function') {
+                      const dataurl = s.thumbnail.toDataURL()
+                      const base64 = dataurl.split(',')[1]
+                      await fsp.writeFile(outPath, Buffer.from(base64, 'base64'))
+                    }
+                  }
+                } else {
+                  // Try webContents capture
+                  const remote = electron && electron.remote ? electron.remote : null
+                  const wc = remote && remote.getCurrentWindow && remote.getCurrentWindow().webContents
+                  if (wc && typeof wc.capturePage === 'function') {
+                    const img = await wc.capturePage()
+                    if (img && typeof img.toPNG === 'function') {
+                      await fsp.writeFile(outPath, img.toPNG())
+                    } else if (img && typeof img.toDataURL === 'function') {
+                      const dataurl = img.toDataURL()
+                      const base64 = dataurl.split(',')[1]
+                      await fsp.writeFile(outPath, Buffer.from(base64, 'base64'))
+                    }
                   }
                 }
-              } else {
-                // Try webContents capture
-                const remote = electron && electron.remote ? electron.remote : null
-                const wc = remote && remote.getCurrentWindow && remote.getCurrentWindow().webContents
-                if (wc && typeof wc.capturePage === 'function') {
-                  const img = await wc.capturePage()
-                  if (img && typeof img.toPNG === 'function') {
-                    await fsp.writeFile(outPath, img.toPNG())
-                  } else if (img && typeof img.toDataURL === 'function') {
-                    const dataurl = img.toDataURL()
-                    const base64 = dataurl.split(',')[1]
-                    await fsp.writeFile(outPath, Buffer.from(base64, 'base64'))
-                  }
-                }
+              } catch (e) {
+                try { await fsp.writeFile(path.join(dir, ent + '.error.txt'), String(e), 'utf8') } catch (e2) {}
               }
-            } catch (e) {
-              try { await fsp.writeFile(path.join(tmpDir, ent + '.error.txt'), String(e), 'utf8') } catch (e2) {}
             }
+            try { await fsp.unlink(triggerPath) } catch (e) {}
           }
-          try { await fsp.unlink(triggerPath) } catch (e) {}
         }
       } catch (e) {
         // ignore poll errors

@@ -7,7 +7,9 @@ function safeTimestamp() {
 }
 
 export async function initRunDir(base = 'test-results') {
-  const runDir = path.join(process.cwd(), base, `run-${safeTimestamp()}`)
+  // ensure run dirs are created under the package root so the extension host can access them
+  const pkgRoot = path.resolve(__dirname, '..', '..', '..')
+  const runDir = path.join(pkgRoot, base, `run-${safeTimestamp()}`)
   await fsp.mkdir(runDir, { recursive: true })
   return runDir
 }
@@ -183,6 +185,36 @@ export async function captureFailure(test: any, err: any, runDir?: string) {
         } catch (e) {
           // ignore
         }
+      }
+    } catch (e) {}
+
+    // If no screenshot was produced yet, create a trigger file in the OS tmp dir and in a package-local triggers dir that the extension polls for.
+    try {
+      const os = require('os')
+      const tmpDir = os.tmpdir()
+      const pkgRoot = path.resolve(__dirname, '..', '..', '..')
+      const localTriggerDir = path.join(pkgRoot, 'test-results', 'triggers')
+      try { await fsp.mkdir(localTriggerDir, { recursive: true }) } catch (e) {}
+      const png = path.join(out, 'screenshot.png')
+      if (!fs.existsSync(png)) {
+        const triggerName = `opencode-capture-${safeTimestamp()}.json`
+        const triggerPathOs = path.join(tmpDir, triggerName)
+        const triggerPathLocal = path.join(localTriggerDir, triggerName)
+        const payload = { outPath: png }
+        try { await fsp.writeFile(triggerPathOs, JSON.stringify(payload), 'utf8') } catch (e) {}
+        try { await fsp.writeFile(triggerPathLocal, JSON.stringify(payload), 'utf8') } catch (e) {}
+        try { await fsp.writeFile(path.join(out, 'vscode-capture-trigger.json'), JSON.stringify({ triggerPathOs, triggerPathLocal, payload }), 'utf8') } catch (e) {}
+        // wait up to 5s for the extension to produce the png
+        const deadline = Date.now() + 5000
+        let produced = false
+        while (Date.now() < deadline) {
+          if (fs.existsSync(png)) { produced = true; break }
+          await new Promise(r => setTimeout(r, 200))
+        }
+        try { await fsp.writeFile(path.join(out, produced ? 'vscode-capture-produced.txt' : 'vscode-capture-timeout.txt'), produced ? new Date().toISOString() : 'timeout', 'utf8') } catch (e) {}
+        // remove triggers if still present
+        try { await fsp.unlink(triggerPathOs) } catch (e) {}
+        try { await fsp.unlink(triggerPathLocal) } catch (e) {}
       }
     } catch (e) {}
 
