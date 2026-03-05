@@ -368,7 +368,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
 
               const raw = parent ?? filepath ?? derived
               const dir = normalizePath(raw)
-              const patterns = (props.request.patterns ?? []).filter((p): p is string => typeof p === "string")
+              const patterns = (props.request.patterns ?? []).filter((p: unknown): p is string => typeof p === "string")
 
               return {
                 icon: "←",
@@ -378,7 +378,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                     <box paddingLeft={1} gap={1}>
                       <text fg={theme.textMuted}>Patterns</text>
                       <box>
-                        <For each={patterns}>{(p) => <text fg={theme.text}>{"- " + p}</text>}</For>
+                        <For each={patterns}>{(p: string) => <text fg={theme.text}>{"- " + p}</text>}</For>
                       </box>
                     </box>
                   </Show>
@@ -389,20 +389,13 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
             if (permission === ".opencode") {
               const meta = props.request.metadata ?? {}
               const raw = typeof meta["path"] === "string" ? meta["path"] : props.request.patterns?.[0]
-              const dir = normalizePath(raw)
-              const patterns = (props.request.patterns ?? []).filter((x): x is string => typeof x === "string")
+              const dir = raw ? path.resolve(raw) : ""
               return {
-                icon: "◉",
-                title: `Load project .opencode from ${dir}`,
+                icon: "⚙",
+                title: "Allow .opencode config",
                 body: (
-                  <box paddingLeft={1} gap={1} flexDirection="column">
-                    <text fg={theme.textMuted}>{"Path: " + dir}</text>
-                    <Show when={patterns.length > 0}>
-                      <box gap={1} flexDirection="column">
-                        <text fg={theme.textMuted}>Patterns</text>
-                        <For each={patterns}>{(p) => <text fg={theme.text}>{"- " + p}</text>}</For>
-                      </box>
-                    </Show>
+                  <box paddingLeft={1}>
+                    <text fg={theme.textMuted}>{dir}</text>
                   </box>
                 ),
               }

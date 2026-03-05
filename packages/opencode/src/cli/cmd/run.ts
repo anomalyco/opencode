@@ -539,8 +539,11 @@ export const RunCommand = cmd({
           if (event.type === "permission.asked") {
             const permission = event.properties
             if (permission.sessionID !== sessionID) continue
-            const pattern = permission.patterns.join(", ")
-            const desc = permission.permission === ".opencode" ? `.opencode location: ${pattern}` : pattern
+            const patterns = permission.patterns
+            const desc =
+              permission.permission === ".opencode"
+                ? `.opencode location: ${patterns.map((x) => path.resolve(x)).join(", ")}`
+                : patterns.join(", ")
             UI.println(
               UI.Style.TEXT_WARNING_BOLD + "!",
               UI.Style.TEXT_NORMAL + `permission requested: ${permission.permission} (${desc}); auto-rejecting`,
