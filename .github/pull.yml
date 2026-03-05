@@ -1,7 +1,7 @@
 version: "1"
 rules:
   - base: lash
-    upstream: sst/opencode:dev
+    upstream: anomalyco/opencode:dev
     mergeMethod: merge
     assignees:
       - lacymorrow
