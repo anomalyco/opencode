@@ -550,227 +550,228 @@ export function MessageTimeline(props: {
             "--sticky-accordion-top": showHeader() ? "48px" : "0px",
           }}
         >
-          <Show when={showHeader()}>
-            <div
-              data-session-title
-              classList={{
-                "sticky top-0 z-30 bg-[linear-gradient(to_bottom,var(--background-stronger)_48px,transparent)]": true,
-                "w-full": true,
-                "pb-4": true,
-                "pl-2 pr-3 md:pl-4 md:pr-3": true,
-                "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
-              }}
-            >
-              <div class="h-12 w-full flex items-center justify-between gap-2">
-                <div class="flex items-center gap-1 min-w-0 flex-1 pr-3">
-                  <Show when={parentID()}>
-                    <IconButton
-                      tabIndex={-1}
-                      icon="arrow-left"
-                      variant="ghost"
-                      onClick={navigateParent}
-                      aria-label={language.t("common.goBack")}
-                    />
-                  </Show>
-                  <Show when={titleValue() || title.editing}>
-                    <Show
-                      when={title.editing}
-                      fallback={
-                        <h1
-                          class="text-14-medium text-text-strong truncate grow-1 min-w-0 pl-2"
-                          onDblClick={openTitleEditor}
-                        >
-                          {titleValue()}
-                        </h1>
-                      }
-                    >
-                      <InlineInput
-                        ref={(el) => {
-                          titleRef = el
-                        }}
-                        value={title.draft}
-                        disabled={title.saving}
-                        class="text-14-medium text-text-strong grow-1 min-w-0 pl-2 rounded-[6px]"
-                        style={{ "--inline-input-shadow": "var(--shadow-xs-border-select)" }}
-                        onInput={(event) => setTitle("draft", event.currentTarget.value)}
-                        onKeyDown={(event) => {
-                          event.stopPropagation()
-                          if (event.key === "Enter") {
-                            event.preventDefault()
-                            void saveTitleEditor()
-                            return
-                          }
-                          if (event.key === "Escape") {
-                            event.preventDefault()
-                            closeTitleEditor()
-                          }
-                        }}
-                        onBlur={closeTitleEditor}
+          <div ref={props.setContentRef} class="min-w-0 w-full">
+            <Show when={showHeader()}>
+              <div
+                data-session-title
+                classList={{
+                  "sticky top-0 z-30 bg-[linear-gradient(to_bottom,var(--background-stronger)_48px,transparent)]": true,
+                  "w-full": true,
+                  "pb-4": true,
+                  "pl-2 pr-3 md:pl-4 md:pr-3": true,
+                  "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
+                }}
+              >
+                <div class="h-12 w-full flex items-center justify-between gap-2">
+                  <div class="flex items-center gap-1 min-w-0 flex-1 pr-3">
+                    <Show when={parentID()}>
+                      <IconButton
+                        tabIndex={-1}
+                        icon="arrow-left"
+                        variant="ghost"
+                        onClick={navigateParent}
+                        aria-label={language.t("common.goBack")}
                       />
                     </Show>
+                    <Show when={titleValue() || title.editing}>
+                      <Show
+                        when={title.editing}
+                        fallback={
+                          <h1
+                            class="text-14-medium text-text-strong truncate grow-1 min-w-0 pl-2"
+                            onDblClick={openTitleEditor}
+                          >
+                            {titleValue()}
+                          </h1>
+                        }
+                      >
+                        <InlineInput
+                          ref={(el) => {
+                            titleRef = el
+                          }}
+                          value={title.draft}
+                          disabled={title.saving}
+                          class="text-14-medium text-text-strong grow-1 min-w-0 pl-2 rounded-[6px]"
+                          style={{ "--inline-input-shadow": "var(--shadow-xs-border-select)" }}
+                          onInput={(event) => setTitle("draft", event.currentTarget.value)}
+                          onKeyDown={(event) => {
+                            event.stopPropagation()
+                            if (event.key === "Enter") {
+                              event.preventDefault()
+                              void saveTitleEditor()
+                              return
+                            }
+                            if (event.key === "Escape") {
+                              event.preventDefault()
+                              closeTitleEditor()
+                            }
+                          }}
+                          onBlur={closeTitleEditor}
+                        />
+                      </Show>
+                    </Show>
+                  </div>
+                  <Show when={sessionID()}>
+                    {(id) => (
+                      <div class="shrink-0 flex items-center gap-3">
+                        <SessionContextUsage placement="bottom" />
+                        <DropdownMenu
+                          gutter={4}
+                          placement="bottom-end"
+                          open={title.menuOpen}
+                          onOpenChange={(open) => setTitle("menuOpen", open)}
+                        >
+                          <DropdownMenu.Trigger
+                            as={IconButton}
+                            icon="dot-grid"
+                            variant="ghost"
+                            class="size-6 rounded-md data-[expanded]:bg-surface-base-active"
+                            aria-label={language.t("common.moreOptions")}
+                          />
+                          <DropdownMenu.Portal>
+                            <DropdownMenu.Content
+                              style={{ "min-width": "104px" }}
+                              onCloseAutoFocus={(event) => {
+                                if (!title.pendingRename) return
+                                event.preventDefault()
+                                setTitle("pendingRename", false)
+                                openTitleEditor()
+                              }}
+                            >
+                              <DropdownMenu.Item
+                                onSelect={() => {
+                                  setTitle("pendingRename", true)
+                                  setTitle("menuOpen", false)
+                                }}
+                              >
+                                <DropdownMenu.ItemLabel>{language.t("common.rename")}</DropdownMenu.ItemLabel>
+                              </DropdownMenu.Item>
+                              <DropdownMenu.Item onSelect={() => void archiveSession(id())}>
+                                <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
+                              </DropdownMenu.Item>
+                              <DropdownMenu.Separator />
+                              <DropdownMenu.Item
+                                onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id()} />)}
+                              >
+                                <DropdownMenu.ItemLabel>{language.t("common.delete")}</DropdownMenu.ItemLabel>
+                              </DropdownMenu.Item>
+                            </DropdownMenu.Content>
+                          </DropdownMenu.Portal>
+                        </DropdownMenu>
+                      </div>
+                    )}
                   </Show>
                 </div>
-                <Show when={sessionID()}>
-                  {(id) => (
-                    <div class="shrink-0 flex items-center gap-3">
-                      <SessionContextUsage placement="bottom" />
-                      <DropdownMenu
-                        gutter={4}
-                        placement="bottom-end"
-                        open={title.menuOpen}
-                        onOpenChange={(open) => setTitle("menuOpen", open)}
-                      >
-                        <DropdownMenu.Trigger
-                          as={IconButton}
-                          icon="dot-grid"
-                          variant="ghost"
-                          class="size-6 rounded-md data-[expanded]:bg-surface-base-active"
-                          aria-label={language.t("common.moreOptions")}
-                        />
-                        <DropdownMenu.Portal>
-                          <DropdownMenu.Content
-                            style={{ "min-width": "104px" }}
-                            onCloseAutoFocus={(event) => {
-                              if (!title.pendingRename) return
-                              event.preventDefault()
-                              setTitle("pendingRename", false)
-                              openTitleEditor()
-                            }}
-                          >
-                            <DropdownMenu.Item
-                              onSelect={() => {
-                                setTitle("pendingRename", true)
-                                setTitle("menuOpen", false)
-                              }}
-                            >
-                              <DropdownMenu.ItemLabel>{language.t("common.rename")}</DropdownMenu.ItemLabel>
-                            </DropdownMenu.Item>
-                            <DropdownMenu.Item onSelect={() => void archiveSession(id())}>
-                              <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
-                            </DropdownMenu.Item>
-                            <DropdownMenu.Separator />
-                            <DropdownMenu.Item
-                              onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id()} />)}
-                            >
-                              <DropdownMenu.ItemLabel>{language.t("common.delete")}</DropdownMenu.ItemLabel>
-                            </DropdownMenu.Item>
-                          </DropdownMenu.Content>
-                        </DropdownMenu.Portal>
-                      </DropdownMenu>
-                    </div>
-                  )}
-                </Show>
-              </div>
-            </div>
-          </Show>
-
-          <div
-            ref={props.setContentRef}
-            role="log"
-            class="flex flex-col gap-12 items-start justify-start pb-16 transition-[margin]"
-            classList={{
-              "w-full": true,
-              "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
-              "mt-0.5": props.centered,
-              "mt-0": !props.centered,
-            }}
-          >
-            <Show when={props.turnStart > 0 || props.historyMore}>
-              <div class="w-full flex justify-center">
-                <Button
-                  variant="ghost"
-                  size="large"
-                  class="text-12-medium opacity-50"
-                  disabled={props.historyLoading}
-                  onClick={props.onLoadEarlier}
-                >
-                  {props.historyLoading
-                    ? language.t("session.messages.loadingEarlier")
-                    : language.t("session.messages.loadEarlier")}
-                </Button>
               </div>
             </Show>
-            <For each={rendered()}>
-              {(messageID) => {
-                const active = createMemo(() => activeMessageID() === messageID)
-                const queued = createMemo(() => {
-                  if (active()) return false
-                  const activeID = activeMessageID()
-                  if (activeID) return messageID > activeID
-                  return false
-                })
-                const comments = createMemo(() => messageComments(sync.data.part[messageID] ?? []), [], {
-                  equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
-                })
-                const commentCount = createMemo(() => comments().length)
-                return (
-                  <div
-                    id={props.anchor(messageID)}
-                    data-message-id={messageID}
-                    ref={(el) => {
-                      props.onRegisterMessage(el, messageID)
-                      onCleanup(() => props.onUnregisterMessage(messageID))
-                    }}
-                    classList={{
-                      "min-w-0 w-full max-w-full": true,
-                      "md:max-w-200 2xl:max-w-[1000px]": props.centered,
-                    }}
+
+            <div
+              role="log"
+              class="flex flex-col gap-12 items-start justify-start pb-16 transition-[margin]"
+              classList={{
+                "w-full": true,
+                "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
+                "mt-0.5": props.centered,
+                "mt-0": !props.centered,
+              }}
+            >
+              <Show when={props.turnStart > 0 || props.historyMore}>
+                <div class="w-full flex justify-center">
+                  <Button
+                    variant="ghost"
+                    size="large"
+                    class="text-12-medium opacity-50"
+                    disabled={props.historyLoading}
+                    onClick={props.onLoadEarlier}
                   >
-                    <Show when={commentCount() > 0}>
-                      <div class="w-full px-4 md:px-5 pb-2">
-                        <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
-                          <div class="flex w-max min-w-full justify-end gap-2">
-                            <Index each={comments()}>
-                              {(commentAccessor: () => MessageComment) => {
-                                const comment = createMemo(() => commentAccessor())
-                                return (
-                                  <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
-                                    <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
-                                      <FileIcon
-                                        node={{ path: comment().path, type: "file" }}
-                                        class="size-3.5 shrink-0"
-                                      />
-                                      <span class="truncate">{getFilename(comment().path)}</span>
-                                      <Show when={comment().selection}>
-                                        {(selection) => (
-                                          <span class="shrink-0 text-text-weak">
-                                            {selection().startLine === selection().endLine
-                                              ? `:${selection().startLine}`
-                                              : `:${selection().startLine}-${selection().endLine}`}
-                                          </span>
-                                        )}
-                                      </Show>
+                    {props.historyLoading
+                      ? language.t("session.messages.loadingEarlier")
+                      : language.t("session.messages.loadEarlier")}
+                  </Button>
+                </div>
+              </Show>
+              <For each={rendered()}>
+                {(messageID) => {
+                  const active = createMemo(() => activeMessageID() === messageID)
+                  const queued = createMemo(() => {
+                    if (active()) return false
+                    const activeID = activeMessageID()
+                    if (activeID) return messageID > activeID
+                    return false
+                  })
+                  const comments = createMemo(() => messageComments(sync.data.part[messageID] ?? []), [], {
+                    equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+                  })
+                  const commentCount = createMemo(() => comments().length)
+                  return (
+                    <div
+                      id={props.anchor(messageID)}
+                      data-message-id={messageID}
+                      ref={(el) => {
+                        props.onRegisterMessage(el, messageID)
+                        onCleanup(() => props.onUnregisterMessage(messageID))
+                      }}
+                      classList={{
+                        "min-w-0 w-full max-w-full": true,
+                        "md:max-w-200 2xl:max-w-[1000px]": props.centered,
+                      }}
+                    >
+                      <Show when={commentCount() > 0}>
+                        <div class="w-full px-4 md:px-5 pb-2">
+                          <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
+                            <div class="flex w-max min-w-full justify-end gap-2">
+                              <Index each={comments()}>
+                                {(commentAccessor: () => MessageComment) => {
+                                  const comment = createMemo(() => commentAccessor())
+                                  return (
+                                    <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
+                                      <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
+                                        <FileIcon
+                                          node={{ path: comment().path, type: "file" }}
+                                          class="size-3.5 shrink-0"
+                                        />
+                                        <span class="truncate">{getFilename(comment().path)}</span>
+                                        <Show when={comment().selection}>
+                                          {(selection) => (
+                                            <span class="shrink-0 text-text-weak">
+                                              {selection().startLine === selection().endLine
+                                                ? `:${selection().startLine}`
+                                                : `:${selection().startLine}-${selection().endLine}`}
+                                            </span>
+                                          )}
+                                        </Show>
+                                      </div>
+                                      <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
+                                        {comment().comment}
+                                      </div>
                                     </div>
-                                    <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
-                                      {comment().comment}
-                                    </div>
-                                  </div>
-                                )
-                              }}
-                            </Index>
+                                  )
+                                }}
+                              </Index>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </Show>
-                    <SessionTurn
-                      sessionID={sessionID() ?? ""}
-                      messageID={messageID}
-                      active={active()}
-                      queued={queued()}
-                      status={active() ? sessionStatus() : undefined}
-                      showReasoningSummaries={settings.general.showReasoningSummaries()}
-                      shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
-                      editToolDefaultOpen={settings.general.editToolPartsExpanded()}
-                      classes={{
-                        root: "min-w-0 w-full relative",
-                        content: "flex flex-col justify-between !overflow-visible",
-                        container: "w-full px-4 md:px-5",
-                      }}
-                    />
-                  </div>
-                )
-              }}
-            </For>
+                      </Show>
+                      <SessionTurn
+                        sessionID={sessionID() ?? ""}
+                        messageID={messageID}
+                        active={active()}
+                        queued={queued()}
+                        status={active() ? sessionStatus() : undefined}
+                        showReasoningSummaries={settings.general.showReasoningSummaries()}
+                        shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
+                        editToolDefaultOpen={settings.general.editToolPartsExpanded()}
+                        classes={{
+                          root: "min-w-0 w-full relative",
+                          content: "flex flex-col justify-between !overflow-visible",
+                          container: "w-full px-4 md:px-5",
+                        }}
+                      />
+                    </div>
+                  )
+                }}
+              </For>
+            </div>
           </div>
         </ScrollView>
       </div>
