@@ -8,6 +8,12 @@ type OpenFilePickerOptions = { title?: string; multiple?: boolean }
 type SaveFilePickerOptions = { title?: string; defaultPath?: string }
 type UpdateInfo = { updateAvailable: boolean; version?: string }
 
+export type DefaultServerConfig = {
+  url: string
+  username?: string
+  password?: string
+}
+
 export type Platform = {
   /** Platform discriminator */
   platform: "web" | "desktop"
@@ -58,10 +64,10 @@ export type Platform = {
   fetch?: typeof fetch
 
   /** Get the configured default server URL (platform-specific) */
-  getDefaultServerUrl?(): Promise<string | null>
+  getDefaultServerUrl?(): Promise<DefaultServerConfig | null>
 
   /** Set the default server URL to use on app startup (platform-specific) */
-  setDefaultServerUrl?(url: string | null): Promise<void> | void
+  setDefaultServerUrl?(config: DefaultServerConfig | null): Promise<void> | void
 
   /** Get the configured WSL integration (desktop only) */
   getWslEnabled?(): Promise<boolean>

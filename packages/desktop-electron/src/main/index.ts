@@ -128,9 +128,9 @@ function setInitStep(step: InitStep) {
 async function setupServerConnection(): Promise<ServerConnection> {
   const customUrl = await getSavedServerUrl()
 
-  if (customUrl && (await checkHealthOrAskRetry(customUrl))) {
-    serverReady.resolve({ url: customUrl, password: null })
-    return { variant: "existing", url: customUrl }
+  if (customUrl && (await checkHealthOrAskRetry(customUrl.url, customUrl.username, customUrl.password))) {
+    serverReady.resolve({ url: customUrl.url, password: null })
+    return { variant: "existing", url: customUrl.url }
   }
 
   const port = await getSidecarPort()

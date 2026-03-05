@@ -45,9 +45,9 @@ function useDefaultServer(platform: ReturnType<typeof usePlatform>, language: Re
   const [defaultUrl, defaultUrlActions] = createResource(
     async () => {
       try {
-        const url = await platform.getDefaultServerUrl?.()
-        if (!url) return null
-        return normalizeServerUrl(url) ?? null
+        const config = await platform.getDefaultServerUrl?.()
+        if (!config) return null
+        return config.url
       } catch (err) {
         showRequestError(language, err)
         return null
@@ -57,10 +57,17 @@ function useDefaultServer(platform: ReturnType<typeof usePlatform>, language: Re
   )
 
   const canDefault = createMemo(() => !!platform.getDefaultServerUrl && !!platform.setDefaultServerUrl)
-  const setDefault = async (url: string | null) => {
+  const setDefault = async (conn: ServerConnection.Http | null) => {
     try {
-      await platform.setDefaultServerUrl?.(url)
-      defaultUrlActions.mutate(url)
+      const config = conn
+        ? {
+            url: conn.http.url,
+            username: conn.http.username,
+            password: conn.http.password,
+          }
+        : null
+      await platform.setDefaultServerUrl?.(config)
+      defaultUrlActions.mutate(conn?.http.url ?? null)
     } catch (err) {
       showRequestError(language, err)
     }
@@ -494,7 +501,8 @@ export function DialogSelectServer() {
 
   async function handleRemove(url: ServerConnection.Key) {
     server.remove(url)
-    if ((await platform.getDefaultServerUrl?.()) === url) {
+    const defaultConfig = await platform.getDefaultServerUrl?.()
+    if (defaultConfig?.url === url) {
       platform.setDefaultServerUrl?.(null)
     }
   }
@@ -585,7 +593,12 @@ export function DialogSelectServer() {
                               <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.edit")}</DropdownMenu.ItemLabel>
                             </DropdownMenu.Item>
                             <Show when={canDefault() && defaultUrl() !== i.http.url}>
-                              <DropdownMenu.Item onSelect={() => setDefault(i.http.url)}>
+                              <DropdownMenu.Item
+                                onSelect={() => {
+                                  if (i.type !== "http") return
+                                  setDefault(i)
+                                }}
+                              >
                                 <DropdownMenu.ItemLabel>
                                   {language.t("dialog.server.menu.default")}
                                 </DropdownMenu.ItemLabel>

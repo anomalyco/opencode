@@ -9,14 +9,20 @@ export type SqliteMigrationProgress = { type: "InProgress"; value: number } | { 
 
 export type WslConfig = { enabled: boolean }
 
+export type DefaultServerConfig = {
+  url: string
+  username?: string
+  password?: string
+}
+
 export type LinuxDisplayBackend = "wayland" | "auto"
 
 export type ElectronAPI = {
   killSidecar: () => Promise<void>
   installCli: () => Promise<string>
   awaitInitialization: (onStep: (step: InitStep) => void) => Promise<ServerReadyData>
-  getDefaultServerUrl: () => Promise<string | null>
-  setDefaultServerUrl: (url: string | null) => Promise<void>
+  getDefaultServerUrl: () => Promise<DefaultServerConfig | null>
+  setDefaultServerUrl: (config: DefaultServerConfig | null) => Promise<void>
   getWslConfig: () => Promise<WslConfig>
   setWslConfig: (config: WslConfig) => Promise<void>
   getDisplayBackend: () => Promise<LinuxDisplayBackend | null>

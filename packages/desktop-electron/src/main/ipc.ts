@@ -2,15 +2,21 @@ import { execFile } from "node:child_process"
 import { BrowserWindow, Notification, app, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 
-import type { InitStep, ServerReadyData, SqliteMigrationProgress, WslConfig } from "../preload/types"
+import type {
+  InitStep,
+  ServerReadyData,
+  SqliteMigrationProgress,
+  WslConfig,
+  DefaultServerConfig,
+} from "../preload/types"
 import { getStore } from "./store"
 
 type Deps = {
   killSidecar: () => void
   installCli: () => Promise<string>
   awaitInitialization: (sendStep: (step: InitStep) => void) => Promise<ServerReadyData>
-  getDefaultServerUrl: () => Promise<string | null> | string | null
-  setDefaultServerUrl: (url: string | null) => Promise<void> | void
+  getDefaultServerUrl: () => Promise<DefaultServerConfig | null> | DefaultServerConfig | null
+  setDefaultServerUrl: (config: DefaultServerConfig | null) => Promise<void> | void
   getWslConfig: () => Promise<WslConfig>
   setWslConfig: (config: WslConfig) => Promise<void> | void
   getDisplayBackend: () => Promise<string | null>
@@ -33,8 +39,8 @@ export function registerIpcHandlers(deps: Deps) {
     return deps.awaitInitialization(send)
   })
   ipcMain.handle("get-default-server-url", () => deps.getDefaultServerUrl())
-  ipcMain.handle("set-default-server-url", (_event: IpcMainInvokeEvent, url: string | null) =>
-    deps.setDefaultServerUrl(url),
+  ipcMain.handle("set-default-server-url", (_event: IpcMainInvokeEvent, config: DefaultServerConfig | null) =>
+    deps.setDefaultServerUrl(config),
   )
   ipcMain.handle("get-wsl-config", () => deps.getWslConfig())
   ipcMain.handle("set-wsl-config", (_event: IpcMainInvokeEvent, config: WslConfig) => deps.setWslConfig(config))

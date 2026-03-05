@@ -8,14 +8,26 @@ export type WslConfig = { enabled: boolean }
 
 export type HealthCheck = { wait: Promise<void> }
 
-export function getDefaultServerUrl(): string | null {
-  const value = store.get(DEFAULT_SERVER_URL_KEY)
-  return typeof value === "string" ? value : null
+export type DefaultServerConfig = {
+  url: string
+  username?: string
+  password?: string
 }
 
-export function setDefaultServerUrl(url: string | null) {
-  if (url) {
-    store.set(DEFAULT_SERVER_URL_KEY, url)
+export function getDefaultServerUrl(): DefaultServerConfig | null {
+  const value = store.get(DEFAULT_SERVER_URL_KEY)
+  if (typeof value === "string") {
+    return { url: value }
+  }
+  if (value && typeof value === "object" && "url" in value) {
+    return value as DefaultServerConfig
+  }
+  return null
+}
+
+export function setDefaultServerUrl(config: DefaultServerConfig | null) {
+  if (config) {
+    store.set(DEFAULT_SERVER_URL_KEY, config)
     return
   }
 
@@ -31,13 +43,14 @@ export function setWslConfig(config: WslConfig) {
   store.set(WSL_ENABLED_KEY, config.enabled)
 }
 
-export async function getSavedServerUrl(): Promise<string | null> {
+export async function getSavedServerUrl(): Promise<DefaultServerConfig | null> {
   const direct = getDefaultServerUrl()
   if (direct) return direct
 
   const config = await getConfig().catch(() => null)
   if (!config) return null
-  return getServerUrlFromConfig(config)
+  const url = getServerUrlFromConfig(config)
+  return url ? { url } : null
 }
 
 export function spawnLocalServer(hostname: string, port: number, password: string) {
@@ -94,9 +107,10 @@ export async function checkHealth(url: string, password?: string | null): Promis
   }
 }
 
-export async function checkHealthOrAskRetry(url: string): Promise<boolean> {
+export async function checkHealthOrAskRetry(url: string, username?: string, password?: string): Promise<boolean> {
   while (true) {
-    if (await checkHealth(url)) return true
+    const auth = username && password ? Buffer.from(`${username}:${password}`).toString("base64") : password
+    if (await checkHealth(url, auth)) return true
 
     const result = await dialog.showMessageBox({
       type: "warning",
