@@ -1,0 +1,48 @@
+diff --git a/index-4sjb8n0n.js b/index-4sjb8n0n.js
+index 052afc9d6..e19908fb2 100644
+--- a/index-4sjb8n0n.js
++++ b/index-4sjb8n0n.js
+@@ -16210,6 +16210,7 @@ class CliRenderer extends EventEmitter9 {
+   lastTime = 0;
+   frameCount = 0;
+   lastFpsTime = 0;
++  now = typeof performance !== "undefined" && typeof performance.now === "function" ? () => performance.now() : () => Date.now();
+   currentFps = 0;
+   targetFrameTime = 1000 / this.targetFps;
+   minTargetFrameTime = 1000 / this.maxFps;
+@@ -16521,8 +16522,8 @@ Captured output:
+     }
+     if (!this.updateScheduled && !this.renderTimeout) {
+       this.updateScheduled = true;
+-      const now = Date.now();
+-      const elapsed = now - this.lastTime;
++      const now = this.now();
++      const elapsed = Math.max(now - this.lastTime, 0);
+       const delay = Math.max(this.minTargetFrameTime - elapsed, 0);
+       if (delay === 0) {
+         process.nextTick(() => this.activateFrame());
+@@ -17398,7 +17399,7 @@ Captured output:
+   startRenderLoop() {
+     if (!this._isRunning)
+       return;
+-    this.lastTime = Date.now();
++    this.lastTime = this.now();
+     this.frameCount = 0;
+     this.lastFpsTime = this.lastTime;
+     this.currentFps = 0;
+@@ -17414,12 +17415,12 @@ Captured output:
+       this.renderTimeout = null;
+     }
+     try {
+-      const now = Date.now();
+-      const elapsed = now - this.lastTime;
++      const now = this.now();
++      const elapsed = Math.max(now - this.lastTime, 0);
+       const deltaTime = elapsed;
+       this.lastTime = now;
+       this.frameCount++;
+-      if (now - this.lastFpsTime >= 1000) {
++      if (Math.max(now - this.lastFpsTime, 0) >= 1000) {
+         this.currentFps = this.frameCount;
+         this.frameCount = 0;
+         this.lastFpsTime = now;

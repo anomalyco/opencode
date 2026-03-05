@@ -9,6 +9,7 @@ import solidPlugin from "../node_modules/@opentui/solid/scripts/solid-plugin"
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const dir = path.resolve(__dirname, "..")
+const repoRoot = path.resolve(dir, "../..")
 
 process.chdir(dir)
 
@@ -144,8 +145,7 @@ await $`rm -rf dist`
 
 const binaries: Record<string, string> = {}
 if (!skipInstall) {
-  await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
-  await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
+  await $`bun install --os="*" --cpu="*"`.cwd(repoRoot)
 }
 for (const item of targets) {
   const name = [
