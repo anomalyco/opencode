@@ -355,8 +355,6 @@ export const SessionReview = (props: SessionReviewProps) => {
     if (typeof window === "undefined") return
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return
-
       const mod = event.metaKey || event.ctrlKey
       if (!mod) return
 

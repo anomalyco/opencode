@@ -51,22 +51,22 @@ export function NewSessionView(props: NewSessionViewProps) {
   return (
     <div class={ROOT_CLASS}>
       <div class="text-20-medium text-text-weaker">{language.t("command.session.new")}</div>
-      <div class="flex justify-center items-center gap-3">
-        <Icon name="folder" size="small" />
-        <div class="text-12-medium text-text-weak select-text">
+      <div class="flex justify-center items-start gap-3 min-h-5">
+        <Icon name="folder" size="small" class="mt-0.5 shrink-0" />
+        <div class="text-12-medium text-text-weak select-text leading-5">
           {getDirectory(projectRoot())}
           <span class="text-text-strong">{getFilename(projectRoot())}</span>
         </div>
       </div>
-      <div class="flex justify-center items-center gap-1">
-        <Icon name="branch" size="small" />
-        <div class="text-12-medium text-text-weak select-text ml-2">{label(current())}</div>
+      <div class="flex justify-center items-start gap-3 min-h-5">
+        <Icon name="branch" size="small" class="mt-0.5 shrink-0" />
+        <div class="text-12-medium text-text-weak select-text leading-5">{label(current())}</div>
       </div>
       <Show when={sync.project}>
         {(project) => (
-          <div class="flex justify-center items-center gap-3">
-            <Icon name="pencil-line" size="small" />
-            <div class="text-12-medium text-text-weak">
+          <div class="flex justify-center items-start gap-3 min-h-5">
+            <Icon name="pencil-line" size="small" class="mt-0.5 shrink-0" />
+            <div class="text-12-medium text-text-weak leading-5">
               {language.t("session.new.lastModified")}&nbsp;
               <span class="text-text-strong">
                 {DateTime.fromMillis(project().time.updated ?? project().time.created)
