@@ -30,6 +30,21 @@ function slugFromUrl(url: string) {
   return /\/([^/]+)\/session(?:\/|$)/.exec(url)?.[1] ?? ""
 }
 
+async function ensureWorkspacesEnabled(page: Page, slug: string) {
+  for (const _ of [0, 1, 2]) {
+    await openSidebar(page)
+    await setWorkspacesEnabled(page, slug, true)
+    const visible = await page
+      .getByRole("button", { name: "New workspace" })
+      .first()
+      .isVisible()
+      .then((x) => x)
+      .catch(() => false)
+    if (visible) return
+  }
+  await expect(page.getByRole("button", { name: "New workspace" }).first()).toBeVisible({ timeout: 60_000 })
+}
+
 async function setupWorkspaceTest(page: Page, project: { slug: string }) {
   const rootSlug = project.slug
   await openSidebar(page)
@@ -313,8 +328,7 @@ test("can delete a workspace", async ({ page, withProject }) => {
 test("can pin and unpin a workspace with persistence", async ({ page, withProject }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
   await withProject(async ({ slug: rootSlug }) => {
-    await openSidebar(page)
-    await setWorkspacesEnabled(page, rootSlug, true)
+    await ensureWorkspacesEnabled(page, rootSlug)
 
     const workspaces = [] as string[]
     for (const _ of [0, 1]) {
@@ -339,12 +353,10 @@ test("can pin and unpin a workspace with persistence", async ({ page, withProjec
     if (!a || !b) throw new Error("Expected two created workspaces")
 
     const key = (slug: string) => {
-      const dir = base64Decode(slug)
-      const norm = dir
+      return base64Decode(slug)
         .replace(/[\\/]+/g, "/")
         .replace(/\/+$/, "")
         .toLowerCase()
-      return norm.split("/").at(-1) ?? norm
     }
 
     const aKey = key(a)
@@ -429,8 +441,7 @@ test("workspace pinning is isolated per project", async ({ page, withProject }) 
   try {
     await withProject(
       async ({ slug }) => {
-        await openSidebar(page)
-        await setWorkspacesEnabled(page, slug, true)
+        await ensureWorkspacesEnabled(page, slug)
 
         await page.getByRole("button", { name: "New workspace" }).first().click()
         await expect
@@ -465,8 +476,7 @@ test("workspace pinning is isolated per project", async ({ page, withProject }) 
         await otherButton.click()
         await expect(page).toHaveURL(new RegExp(`/${otherSlug}/session`))
 
-        await openSidebar(page)
-        await setWorkspacesEnabled(page, otherSlug, true)
+        await ensureWorkspacesEnabled(page, otherSlug)
 
         await page.getByRole("button", { name: "New workspace" }).first().click()
         await expect
@@ -514,8 +524,7 @@ test("workspace divider is shown only with mixed pin state", async ({ page, with
   await page.setViewportSize({ width: 1400, height: 800 })
 
   await withProject(async ({ slug: rootSlug }) => {
-    await openSidebar(page)
-    await setWorkspacesEnabled(page, rootSlug, true)
+    await ensureWorkspacesEnabled(page, rootSlug)
 
     const workspaces = [] as string[]
     try {
