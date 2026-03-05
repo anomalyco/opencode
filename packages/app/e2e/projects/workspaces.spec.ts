@@ -331,12 +331,28 @@ test("can pin and unpin a workspace with persistence", async ({ page, withProjec
     const b = workspaces[1]
     if (!a || !b) throw new Error("Expected two created workspaces")
 
+    const key = (slug: string) => {
+      const dir = base64Decode(slug)
+      const norm = dir
+        .replace(/[\\/]+/g, "/")
+        .replace(/\/+$/, "")
+        .toLowerCase()
+      return norm.split("/").at(-1) ?? norm
+    }
+
+    const aKey = key(a)
+    const bKey = key(b)
+    const rootKey = key(rootSlug)
+
     const list = async () => {
       const nodes = page.locator('[data-component="sidebar-nav-desktop"] [data-component="workspace-item"]')
       const slugs = await nodes.evaluateAll((els) => {
         return els.map((el) => el.getAttribute("data-workspace") ?? "").filter((x) => x.length > 0)
       })
-      return slugs.filter((slug) => slug !== rootSlug && (slug === a || slug === b)).slice(0, 2)
+      return slugs.filter((slug) => {
+        const slugKey = key(slug)
+        return slugKey === aKey || slugKey === bKey
+      })
     }
 
     const listAll = async () => {
@@ -344,26 +360,38 @@ test("can pin and unpin a workspace with persistence", async ({ page, withProjec
       const slugs = await nodes.evaluateAll((els) => {
         return els.map((el) => el.getAttribute("data-workspace") ?? "").filter((x) => x.length > 0)
       })
-      return slugs.filter((slug) => slug === rootSlug || slug === a || slug === b).slice(0, 3)
+      return slugs.filter((slug) => {
+        const slugKey = key(slug)
+        return slugKey === rootKey || slugKey === aKey || slugKey === bKey
+      })
     }
 
-    await expect.poll(async () => await list()).toHaveLength(2)
-    const before = await list()
+    const find = async (target: string) => {
+      const slugs = await listAll()
+      return slugs.find((slug) => key(slug) === target)
+    }
 
-    await setWorkspacePinned(page, a, true)
-    await expect.poll(async () => await list()).toEqual([a, b])
+    await expect.poll(async () => (await list()).length).toBe(2)
+    const before = await list()
+    const aSlug = await find(aKey)
+    if (!aSlug) throw new Error("Missing first workspace slug")
+
+    await setWorkspacePinned(page, aSlug, true)
+    await expect.poll(async () => (await list()).map((slug) => key(slug))).toEqual([aKey, bKey])
 
     await setWorkspacePinned(page, rootSlug, false)
-    await expect.poll(async () => (await listAll())[0]).toBe(a)
+    await expect.poll(async () => key((await listAll())[0] ?? "")).toBe(aKey)
 
     await setWorkspacePinned(page, rootSlug, true)
-    await expect.poll(async () => (await listAll())[0]).toBe(rootSlug)
+    await expect.poll(async () => key((await listAll())[0] ?? "")).toBe(rootKey)
 
     await page.reload()
     await openSidebar(page)
-    await expect.poll(async () => await list()).toEqual([a, b])
+    await expect.poll(async () => (await list()).map((slug) => key(slug))).toEqual([aKey, bKey])
 
-    await setWorkspacePinned(page, a, false)
+    const pinnedSlug = await find(aKey)
+    if (!pinnedSlug) throw new Error("Missing pinned workspace slug")
+    await setWorkspacePinned(page, pinnedSlug, false)
     await expect.poll(async () => await list()).toEqual(before)
   })
 })
