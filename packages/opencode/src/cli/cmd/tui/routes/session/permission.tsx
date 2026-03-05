@@ -386,6 +386,28 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               }
             }
 
+            if (permission === ".opencode") {
+              const meta = props.request.metadata ?? {}
+              const raw = typeof meta["path"] === "string" ? meta["path"] : props.request.patterns?.[0]
+              const dir = normalizePath(raw)
+              const patterns = (props.request.patterns ?? []).filter((x): x is string => typeof x === "string")
+              return {
+                icon: "◉",
+                title: `Load project .opencode from ${dir}`,
+                body: (
+                  <box paddingLeft={1} gap={1} flexDirection="column">
+                    <text fg={theme.textMuted}>{"Path: " + dir}</text>
+                    <Show when={patterns.length > 0}>
+                      <box gap={1} flexDirection="column">
+                        <text fg={theme.textMuted}>Patterns</text>
+                        <For each={patterns}>{(p) => <text fg={theme.text}>{"- " + p}</text>}</For>
+                      </box>
+                    </Show>
+                  </box>
+                ),
+              }
+            }
+
             if (permission === "doom_loop") {
               return {
                 icon: "⟳",
