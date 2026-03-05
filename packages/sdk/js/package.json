@@ -27,8 +27,5 @@
     "typescript": "catalog:",
     "@typescript/native-preview": "catalog:"
   },
-  "dependencies": {},
-  "publishConfig": {
-    "directory": "dist"
-  }
+  "dependencies": {}
 }
