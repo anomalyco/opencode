@@ -383,6 +383,7 @@ export const SortableWorkspace = (props: {
             class="group/workspace relative"
             data-component="workspace-item"
             data-workspace={base64Encode(props.directory)}
+            data-workspace-divider={props.divider ? "true" : undefined}
           >
             <div class="flex items-center gap-1">
               <Show

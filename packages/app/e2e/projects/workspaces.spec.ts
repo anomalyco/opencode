@@ -8,6 +8,7 @@ import { test, expect } from "../fixtures"
 
 test.describe.configure({ mode: "serial" })
 import {
+  createTestProject,
   cleanupTestProject,
   clickMenuItem,
   confirmDialog,
@@ -16,7 +17,13 @@ import {
   setWorkspacePinned,
   setWorkspacesEnabled,
 } from "../actions"
-import { dropdownMenuContentSelector, inlineInputSelector, workspaceItemSelector } from "../selectors"
+import {
+  dropdownMenuContentSelector,
+  inlineInputSelector,
+  projectSwitchSelector,
+  workspaceDividerSelector,
+  workspaceItemSelector,
+} from "../selectors"
 import { createSdk, dirSlug } from "../utils"
 
 function slugFromUrl(url: string) {
@@ -409,6 +416,140 @@ test("can pin and unpin a workspace with persistence", async ({ page, withProjec
     if (!pinnedSlug) throw new Error("Missing pinned workspace slug")
     await setWorkspacePinned(page, pinnedSlug, false)
     await expect.poll(async () => await list()).toEqual(before)
+  })
+})
+
+test("workspace pinning is isolated per project", async ({ page, withProject }) => {
+  await page.setViewportSize({ width: 1400, height: 800 })
+
+  const other = await createTestProject()
+  const otherSlug = dirSlug(other)
+  const dirs = [] as string[]
+
+  try {
+    await withProject(
+      async ({ slug }) => {
+        await openSidebar(page)
+        await setWorkspacesEnabled(page, slug, true)
+
+        await page.getByRole("button", { name: "New workspace" }).first().click()
+        await expect
+          .poll(
+            () => {
+              const next = slugFromUrl(page.url())
+              if (!next) return ""
+              if (next === slug) return ""
+              return next
+            },
+            { timeout: 45_000 },
+          )
+          .not.toBe("")
+
+        const pinnedSlug = slugFromUrl(page.url())
+        dirs.push(base64Decode(pinnedSlug))
+
+        await openSidebar(page)
+        await setWorkspacePinned(page, pinnedSlug, true)
+
+        const pinnedMenu = await openWorkspaceMenu(page, pinnedSlug)
+        await expect(
+          pinnedMenu
+            .getByRole("menuitem")
+            .filter({ hasText: /^Unpin$/i })
+            .first(),
+        ).toBeVisible()
+        await page.keyboard.press("Escape")
+
+        const otherButton = page.locator(projectSwitchSelector(otherSlug)).first()
+        await expect(otherButton).toBeVisible()
+        await otherButton.click()
+        await expect(page).toHaveURL(new RegExp(`/${otherSlug}/session`))
+
+        await openSidebar(page)
+        await setWorkspacesEnabled(page, otherSlug, true)
+
+        await page.getByRole("button", { name: "New workspace" }).first().click()
+        await expect
+          .poll(
+            () => {
+              const next = slugFromUrl(page.url())
+              if (!next) return ""
+              if (next === otherSlug) return ""
+              return next
+            },
+            { timeout: 45_000 },
+          )
+          .not.toBe("")
+
+        const otherWorkspace = slugFromUrl(page.url())
+        dirs.push(base64Decode(otherWorkspace))
+
+        await openSidebar(page)
+        const otherMenu = await openWorkspaceMenu(page, otherWorkspace)
+        await expect(otherMenu.getByRole("menuitem").filter({ hasText: /^Pin$/i }).first()).toBeVisible()
+        await page.keyboard.press("Escape")
+
+        const rootButton = page.locator(projectSwitchSelector(slug)).first()
+        await expect(rootButton).toBeVisible()
+        await rootButton.click()
+
+        await openSidebar(page)
+        const rootMenu = await openWorkspaceMenu(page, pinnedSlug)
+        await expect(
+          rootMenu
+            .getByRole("menuitem")
+            .filter({ hasText: /^Unpin$/i })
+            .first(),
+        ).toBeVisible()
+      },
+      { extra: [other] },
+    )
+  } finally {
+    await Promise.all(dirs.map((dir) => cleanupTestProject(dir)))
+    await cleanupTestProject(other)
+  }
+})
+
+test("workspace divider is shown only with mixed pin state", async ({ page, withProject }) => {
+  await page.setViewportSize({ width: 1400, height: 800 })
+
+  await withProject(async ({ slug: rootSlug }) => {
+    await openSidebar(page)
+    await setWorkspacesEnabled(page, rootSlug, true)
+
+    const workspaces = [] as string[]
+    try {
+      for (const _ of [0, 1]) {
+        const prev = slugFromUrl(page.url())
+        await page.getByRole("button", { name: "New workspace" }).first().click()
+        await expect
+          .poll(
+            () => {
+              const slug = slugFromUrl(page.url())
+              return slug.length > 0 && slug !== rootSlug && slug !== prev
+            },
+            { timeout: 45_000 },
+          )
+          .toBe(true)
+
+        workspaces.push(slugFromUrl(page.url()))
+        await openSidebar(page)
+      }
+
+      const a = workspaces[0]
+      const b = workspaces[1]
+      if (!a || !b) throw new Error("Expected two created workspaces")
+
+      await setWorkspacePinned(page, rootSlug, false)
+      await setWorkspacePinned(page, a, true)
+      await setWorkspacePinned(page, b, false)
+      await expect.poll(async () => await page.locator(workspaceDividerSelector).count()).toBeGreaterThan(0)
+
+      await setWorkspacePinned(page, a, false)
+      await expect.poll(async () => await page.locator(workspaceDividerSelector).count()).toBe(0)
+    } finally {
+      await Promise.all(workspaces.map((slug) => cleanupTestProject(base64Decode(slug))))
+    }
   })
 })
 
