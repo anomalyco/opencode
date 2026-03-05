@@ -648,7 +648,13 @@ export const RunCommand = cmd({
     }
 
     if (args.attach) {
-      const sdk = createOpencodeClient({ baseUrl: args.attach, directory })
+      // Build auth headers from env vars (same as attach.ts)
+      const password = process.env.OPENCODE_SERVER_PASSWORD
+      const username = process.env.OPENCODE_SERVER_USERNAME ?? "opencode"
+      const headers = password
+        ? { Authorization: `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}` }
+        : undefined
+      const sdk = createOpencodeClient({ baseUrl: args.attach, directory, headers })
       return await execute(sdk)
     }
 
