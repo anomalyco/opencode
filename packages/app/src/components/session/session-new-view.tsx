@@ -70,7 +70,7 @@ export function NewSessionView(props: NewSessionViewProps) {
               {language.t("session.new.lastModified")}&nbsp;
               <span class="text-text-strong">
                 {DateTime.fromMillis(project().time.updated ?? project().time.created)
-                  .setLocale(language.locale())
+                  .setLocale(language.intl())
                   .toRelative()}
               </span>
             </div>
