@@ -616,6 +616,53 @@ If a provider appears in both `enabled_providers` and `disabled_providers`, the 
 
 ---
 
+### Disabled models
+
+You can disable specific models for a provider through the `blacklist` option. This is useful when you want to prevent certain models from being used.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "blacklist": ["claude-haiku-4-5", "claude-opus-4-0"]
+    }
+  }
+}
+```
+
+The `blacklist` option accepts an array of model IDs. When a model is blacklisted:
+
+- It won't appear in the model selection list.
+- It can't be used even if explicitly specified.
+
+---
+
+### Enabled models
+
+You can specify an allowlist of models for a provider through the `whitelist` option. When set, only the specified models will be available for that provider.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "whitelist": ["claude-haiku-4-5", "claude-opus-4-0"]
+    }
+  }
+}
+```
+
+This is useful when you want to restrict a provider to only use specific models rather than disabling them one by one.
+
+:::note
+The `blacklist` takes priority over `whitelist`.
+:::
+
+If a model appears in both `whitelist` and `blacklist`, the `blacklist` takes priority.
+
+---
+
 ### Experimental
 
 The `experimental` key contains options that are under active development.
