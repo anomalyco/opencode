@@ -11,7 +11,6 @@ import { NamedError } from "@opencode-ai/util/error"
 import z from "zod"
 import path from "path"
 import { readFileSync, readdirSync, existsSync } from "fs"
-import * as schema from "./schema"
 
 declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number }[] | undefined
 
@@ -26,10 +25,8 @@ const log = Log.create({ service: "db" })
 
 export namespace Database {
   export const Path = path.join(Global.Path.data, "opencode.db")
-  type Schema = typeof schema
-  export type Transaction = SQLiteTransaction<"sync", void, Schema>
 
-  type Client = SQLiteBunDatabase<Schema>
+  type Client = SQLiteBunDatabase
 
   type Journal = { sql: string; timestamp: number }[]
 
@@ -82,7 +79,7 @@ export namespace Database {
     sqlite.run("PRAGMA foreign_keys = ON")
     sqlite.run("PRAGMA wal_checkpoint(PASSIVE)")
 
-    const db = drizzle({ client: sqlite, schema })
+    const db = drizzle({ client: sqlite })
 
     // Apply schema migrations
     const entries =
@@ -108,7 +105,7 @@ export namespace Database {
     Client.reset()
   }
 
-  export type TxOrDb = Transaction | Client
+  export type TxOrDb = SQLiteTransaction<"sync", void, any, any> | Client
 
   const ctx = Context.create<{
     tx: TxOrDb
