@@ -3,11 +3,11 @@ title: Tuş atamaları
 description: Tuş bağlantılarınızı özelleştirin.
 ---
 
-opencode, opencode yapılandırması aracılığıyla özelleştirebileceğiniz bir tuş bağlantıları listesine sahiptir.
+opencode, `tui.json` aracılığıyla özelleştirebileceğiniz bir tuş bağlantıları listesine sahiptir.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -119,9 +119,9 @@ Tuş atamalarınız için lider anahtar kullanmanıza gerek yoktur ancak bunu ya
 
 Anahtarı yapılandırmanıza "none" değeriyle ekleyerek bir tuş atamasını devre dışı bırakabilirsiniz.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "session_compact": "none"
   }
