@@ -12,6 +12,35 @@ import type {
   VCSFile,
 } from "../provider"
 
+export type RetryOptions = {
+  maxAttempts?: number
+  baseDelay?: number
+}
+
+export async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  options: RetryOptions = {}
+): Promise<T> {
+  const maxAttempts = options.maxAttempts ?? 3
+  const baseDelay = options.baseDelay ?? 100
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn()
+    } catch (error) {
+      if (attempt === maxAttempts) {
+        throw error
+      }
+
+      // Exponential backoff
+      const delay = baseDelay * Math.pow(2, attempt - 1)
+      await new Promise((resolve) => setTimeout(resolve, delay))
+    }
+  }
+
+  throw new Error("retryWithBackoff: Unexpected state")
+}
+
 export interface GitLabConfig {
   baseUrl: string
   token: string
@@ -155,12 +184,14 @@ export class GitLabProvider implements IVCSProvider {
         throw new Error("Project ID is required and was not provided or configured")
       }
 
-      const response = await this.octokit.request<GitLabResponses.MergeRequestSingleResponse>(
-        "GET /projects/{project_id}/merge_requests/{mr_iid}",
-        {
-          project_id: effectiveProjectId,
-          mr_iid: mrIid,
-        }
+      const response = await retryWithBackoff(() =>
+        this.octokit.request<GitLabResponses.MergeRequestSingleResponse>(
+          "GET /projects/{project_id}/merge_requests/{mr_iid}",
+          {
+            project_id: effectiveProjectId,
+            mr_iid: mrIid,
+          }
+        )
       )
 
       const data = response.data
@@ -196,12 +227,14 @@ export class GitLabProvider implements IVCSProvider {
         throw new Error("Project ID is required and was not provided or configured")
       }
 
-      const response = await this.octokit.request<GitLabResponses.MergeRequestListResponse[]>(
-        "GET /projects/{project_id}/merge_requests",
-        {
-          project_id: effectiveProjectId,
-          state: filters?.state ?? "opened",
-        }
+      const response = await retryWithBackoff(() =>
+        this.octokit.request<GitLabResponses.MergeRequestListResponse[]>(
+          "GET /projects/{project_id}/merge_requests",
+          {
+            project_id: effectiveProjectId,
+            state: filters?.state ?? "opened",
+          }
+        )
       )
 
       return response.data.map((mr) => ({
@@ -236,12 +269,14 @@ export class GitLabProvider implements IVCSProvider {
         throw new Error("Project ID is required and was not provided or configured")
       }
 
-      const response = await this.octokit.request<GitLabResponses.MergeRequestChanges>(
-        "GET /projects/{project_id}/merge_requests/{mr_iid}/changes",
-        {
-          project_id: effectiveProjectId,
-          mr_iid: mrIid,
-        }
+      const response = await retryWithBackoff(() =>
+        this.octokit.request<GitLabResponses.MergeRequestChanges>(
+          "GET /projects/{project_id}/merge_requests/{mr_iid}/changes",
+          {
+            project_id: effectiveProjectId,
+            mr_iid: mrIid,
+          }
+        )
       )
 
       const data = response.data
@@ -299,12 +334,14 @@ export class GitLabProvider implements IVCSProvider {
         throw new Error("Project ID is required and was not provided or configured")
       }
 
-      const response = await this.octokit.request<GitLabResponses.NotesListResponse[]>(
-        "GET /projects/{project_id}/merge_requests/{mr_iid}/notes",
-        {
-          project_id: effectiveProjectId,
-          mr_iid: mrIid,
-        }
+      const response = await retryWithBackoff(() =>
+        this.octokit.request<GitLabResponses.NotesListResponse[]>(
+          "GET /projects/{project_id}/merge_requests/{mr_iid}/notes",
+          {
+            project_id: effectiveProjectId,
+            mr_iid: mrIid,
+          }
+        )
       )
 
       return response.data.map((note) => ({
@@ -333,13 +370,15 @@ export class GitLabProvider implements IVCSProvider {
         throw new Error("Project ID is required and was not provided or configured")
       }
 
-      const response = await this.octokit.request<GitLabResponses.NoteSingleResponse>(
-        "POST /projects/{project_id}/merge_requests/{mr_iid}/notes",
-        {
-          project_id: effectiveProjectId,
-          mr_iid: mrIid,
-          body,
-        }
+      const response = await retryWithBackoff(() =>
+        this.octokit.request<GitLabResponses.NoteSingleResponse>(
+          "POST /projects/{project_id}/merge_requests/{mr_iid}/notes",
+          {
+            project_id: effectiveProjectId,
+            mr_iid: mrIid,
+            body,
+          }
+        )
       )
 
       const note = response.data
@@ -369,12 +408,14 @@ export class GitLabProvider implements IVCSProvider {
         throw new Error("Project ID is required and was not provided or configured")
       }
 
-      const response = await this.octokit.request<GitLabResponses.DiscussionsListResponse[]>(
-        "GET /projects/{project_id}/merge_requests/{mr_iid}/discussions",
-        {
-          project_id: effectiveProjectId,
-          mr_iid: mrIid,
-        }
+      const response = await retryWithBackoff(() =>
+        this.octokit.request<GitLabResponses.DiscussionsListResponse[]>(
+          "GET /projects/{project_id}/merge_requests/{mr_iid}/discussions",
+          {
+            project_id: effectiveProjectId,
+            mr_iid: mrIid,
+          }
+        )
       )
 
       return response.data.map((discussion) => ({
@@ -411,21 +452,23 @@ export class GitLabProvider implements IVCSProvider {
         throw new Error("Project ID is required and was not provided or configured")
       }
 
-      const response = await this.octokit.request<GitLabResponses.DiscussionSingleResponse>(
-        "POST /projects/{project_id}/merge_requests/{mr_iid}/discussions",
-        {
-          project_id: effectiveProjectId,
-          mr_iid: mrIid,
-          body,
-          position: {
-            base_sha: position.baseSha,
-            start_sha: position.startSha,
-            head_sha: position.headSha,
-            position_type: position.positionType,
-            new_path: position.newPath,
-            new_line: position.newLine,
-          },
-        }
+      const response = await retryWithBackoff(() =>
+        this.octokit.request<GitLabResponses.DiscussionSingleResponse>(
+          "POST /projects/{project_id}/merge_requests/{mr_iid}/discussions",
+          {
+            project_id: effectiveProjectId,
+            mr_iid: mrIid,
+            body,
+            position: {
+              base_sha: position.baseSha,
+              start_sha: position.startSha,
+              head_sha: position.headSha,
+              position_type: position.positionType,
+              new_path: position.newPath,
+              new_line: position.newLine,
+            },
+          }
+        )
       )
 
       const discussion = response.data
