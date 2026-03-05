@@ -78,8 +78,6 @@ export const AttachCommand = cmd({
           sessionID: args.session,
           fork: args.fork,
         },
-        directory,
-        headers,
       })
     } finally {
       unguard?.()
