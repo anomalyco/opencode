@@ -127,7 +127,7 @@ export namespace Clipboard {
     }
 
     if (os === "win32") {
-      console.log("clipboard: using powershell")
+      console.log("clipboard: using windows runtime")
       return async (text: string) => {
         // Pipe via stdin to avoid PowerShell string interpolation ($env:FOO, $(), etc.)
         const proc = Process.spawn(
@@ -136,7 +136,7 @@ export namespace Clipboard {
             "-NonInteractive",
             "-NoProfile",
             "-Command",
-            "[Console]::InputEncoding = [System.Text.Encoding]::UTF8; Set-Clipboard -Value ([Console]::In.ReadToEnd())",
+            "[Console]::InputEncoding = [System.Text.Encoding]::UTF8; $null = [Windows.ApplicationModel.DataTransfer.DataPackage, Windows.ApplicationModel.DataTransfer, ContentType=WindowsRuntime]; $null = [Windows.ApplicationModel.DataTransfer.Clipboard, Windows.ApplicationModel.DataTransfer, ContentType=WindowsRuntime]; $pkg = New-Object Windows.ApplicationModel.DataTransfer.DataPackage; $pkg.SetText([Console]::In.ReadToEnd()); [Windows.ApplicationModel.DataTransfer.Clipboard]::SetContent($pkg); [Windows.ApplicationModel.DataTransfer.Clipboard]::Flush()",
           ],
           {
             stdin: "pipe",
