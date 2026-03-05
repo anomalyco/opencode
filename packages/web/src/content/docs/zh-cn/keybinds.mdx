@@ -3,11 +3,11 @@ title: 快捷键
 description: 自定义您的快捷键。
 ---
 
-OpenCode 提供了一系列快捷键，您可以通过 OpenCode 配置进行自定义。
+OpenCode 提供了一系列快捷键，您可以通过 `tui.json` 进行自定义。
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -117,11 +117,11 @@ OpenCode 的大多数快捷键使用 `leader`（前导键）。这可以避免�
 
 ## 禁用快捷键
 
-您可以通过在配置中将对应的键值设置为 "none" 来禁用某个快捷键。
+您可以通过将键值添加到 `tui.json` 并设置为 "none" 来禁用某个快捷键。
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "session_compact": "none"
   }

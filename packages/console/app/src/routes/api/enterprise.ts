@@ -1,5 +1,7 @@
 import type { APIEvent } from "@solidjs/start/server"
 import { AWS } from "@opencode-ai/console-core/aws.js"
+import { i18n } from "~/i18n"
+import { localeFromRequest } from "~/lib/language"
 
 interface EnterpriseFormData {
   name: string
@@ -9,18 +11,19 @@ interface EnterpriseFormData {
 }
 
 export async function POST(event: APIEvent) {
+  const dict = i18n(localeFromRequest(event.request))
   try {
     const body = (await event.request.json()) as EnterpriseFormData
 
     // Validate required fields
     if (!body.name || !body.role || !body.email || !body.message) {
-      return Response.json({ error: "All fields are required" }, { status: 400 })
+      return Response.json({ error: dict["enterprise.form.error.allFieldsRequired"] }, { status: 400 })
     }
 
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(body.email)) {
-      return Response.json({ error: "Invalid email format" }, { status: 400 })
+      return Response.json({ error: dict["enterprise.form.error.invalidEmailFormat"] }, { status: 400 })
     }
 
     // Create email content
@@ -39,9 +42,9 @@ ${body.email}`.trim()
       replyTo: body.email,
     })
 
-    return Response.json({ success: true, message: "Form submitted successfully" }, { status: 200 })
+    return Response.json({ success: true, message: dict["enterprise.form.success.submitted"] }, { status: 200 })
   } catch (error) {
     console.error("Error processing enterprise form:", error)
-    return Response.json({ error: "Internal server error" }, { status: 500 })
+    return Response.json({ error: dict["enterprise.form.error.internalServer"] }, { status: 500 })
   }
 }
