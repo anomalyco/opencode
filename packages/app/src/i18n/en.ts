@@ -585,6 +585,7 @@ export const dict = {
   "common.rename": "Rename",
   "common.reset": "Reset",
   "common.archive": "Archive",
+  "common.unarchive": "Unarchive",
   "common.delete": "Delete",
   "common.close": "Close",
   "common.edit": "Edit",
@@ -613,6 +614,7 @@ export const dict = {
 
   "settings.section.desktop": "Desktop",
   "settings.section.server": "Server",
+  "settings.section.data": "Data",
   "settings.tab.general": "General",
   "settings.tab.shortcuts": "Shortcuts",
   "settings.desktop.section.wsl": "WSL",
@@ -844,4 +846,10 @@ export const dict = {
   "workspace.reset.archived.one": "1 session will be archived.",
   "workspace.reset.archived.many": "{{count}} sessions will be archived.",
   "workspace.reset.note": "This will reset the workspace to match the default branch.",
+
+  "settings.archive.title": "Archived Sessions",
+  "settings.archive.description": "Restore archived sessions to make them visible in the sidebar.",
+  "settings.archive.none": "No archived sessions.",
+  "settings.archive.scope.all": "All projects",
+  "settings.archive.scope.current": "Current project",
 }

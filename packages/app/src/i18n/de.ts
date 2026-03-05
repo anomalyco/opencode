@@ -751,6 +751,12 @@ export const dict = {
   "workspace.reset.archived.one": "1 Sitzung wird archiviert.",
   "workspace.reset.archived.many": "{{count}} Sitzungen werden archiviert.",
   "workspace.reset.note": "Dadurch wird der Arbeitsbereich auf den Standard-Branch zurückgesetzt.",
+
+  "settings.archive.title": "Archivierte Sitzungen",
+  "settings.archive.description": "Archivierte Sitzungen wiederherstellen, um sie in der Seitenleiste anzuzeigen.",
+  "settings.archive.none": "Keine archivierten Sitzungen.",
+  "settings.archive.scope.all": "Alle Projekte",
+  "settings.archive.scope.current": "Aktuelles Projekt",
   "common.open": "Öffnen",
   "dialog.releaseNotes.action.getStarted": "Loslegen",
   "dialog.releaseNotes.action.next": "Weiter",

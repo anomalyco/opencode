@@ -738,6 +738,12 @@ export const dict = {
   "workspace.reset.archived.one": "1개의 세션이 보관됩니다.",
   "workspace.reset.archived.many": "{{count}}개의 세션이 보관됩니다.",
   "workspace.reset.note": "이 작업은 작업 공간을 기본 브랜치와 일치하도록 재설정합니다.",
+
+  "settings.archive.title": "보관된 세션",
+  "settings.archive.description": "보관된 세션을 복원하여 사이드바에 표시합니다.",
+  "settings.archive.none": "보관된 세션이 없습니다.",
+  "settings.archive.scope.all": "모든 프로젝트",
+  "settings.archive.scope.current": "현재 프로젝트",
   "common.open": "열기",
   "dialog.releaseNotes.action.getStarted": "시작하기",
   "dialog.releaseNotes.action.next": "다음",
