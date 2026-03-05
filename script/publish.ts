@@ -69,8 +69,6 @@ if (Script.release) {
 
   await import(`../packages/desktop/scripts/finalize-latest-json.ts`)
   await import(`../packages/desktop-electron/scripts/finalize-latest-yml.ts`)
-
-  await $`gh release edit v${Script.version} --draft=false --repo ${process.env.GH_REPO}`
 }
 
 console.log("\n=== cli ===\n")
@@ -81,6 +79,10 @@ await import(`../packages/sdk/js/script/publish.ts`)
 
 console.log("\n=== plugin ===\n")
 await import(`../packages/plugin/script/publish.ts`)
+
+if (Script.release) {
+  await $`gh release edit v${Script.version} --draft=false --repo ${process.env.GH_REPO}`
+}
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
