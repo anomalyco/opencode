@@ -6,6 +6,8 @@ import { Instance } from "../../src/project/instance"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 import { Session } from "../../src/session"
+import { MessageV2 } from "../../src/session/message-v2"
+import { Identifier } from "../../src/id/id"
 import type { Provider } from "../../src/provider/provider"
 
 Log.init({ print: false })
@@ -222,6 +224,274 @@ describe("session.compaction.isOverflow", () => {
         const model = createModel({ context: 100_000, output: 32_000 })
         const tokens = { input: 75_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
         expect(await SessionCompaction.isOverflow({ tokens, model })).toBe(false)
+      },
+    })
+  })
+})
+
+describe("session.compaction.prune", () => {
+  test("clears output and attachments on pruned parts", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const sid = session.id
+
+        // We need 3+ user turns so prune skips the latest 2.
+        // Tool outputs in the oldest turn must exceed PRUNE_PROTECT (40k tokens)
+        // and the pruned portion must exceed PRUNE_MINIMUM (20k tokens).
+        // Token estimate = chars / 4, so 200k chars ≈ 50k tokens.
+        const big = "x".repeat(200_000)
+
+        // Turn 1 (oldest) — will be pruned
+        const user1 = await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: sid,
+          agent: "default",
+          model: { providerID: "openai", modelID: "gpt-4" },
+          time: { created: Date.now() },
+        })
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: user1.id,
+          sessionID: sid,
+          type: "text",
+          text: "first",
+        })
+        const asst1: MessageV2.Assistant = {
+          id: Identifier.ascending("message"),
+          role: "assistant",
+          sessionID: sid,
+          mode: "default",
+          agent: "default",
+          path: { cwd: tmp.path, root: tmp.path },
+          cost: 0,
+          tokens: { output: 0, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          modelID: "gpt-4",
+          providerID: "openai",
+          parentID: user1.id,
+          time: { created: Date.now() },
+          finish: "end_turn",
+        }
+        await Session.updateMessage(asst1)
+        const toolPart = await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: asst1.id,
+          sessionID: sid,
+          type: "tool",
+          callID: "call-1",
+          tool: "read",
+          state: {
+            status: "completed",
+            input: {},
+            output: big,
+            title: "Read",
+            metadata: {},
+            time: { start: Date.now(), end: Date.now() },
+            attachments: [
+              {
+                id: Identifier.ascending("part"),
+                messageID: asst1.id,
+                sessionID: sid,
+                type: "file",
+                mime: "image/png",
+                url: "data:image/png;base64,abc",
+              },
+            ],
+          },
+        } satisfies MessageV2.ToolPart)
+
+        // Turn 2
+        const user2 = await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: sid,
+          agent: "default",
+          model: { providerID: "openai", modelID: "gpt-4" },
+          time: { created: Date.now() },
+        })
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: user2.id,
+          sessionID: sid,
+          type: "text",
+          text: "second",
+        })
+        const asst2: MessageV2.Assistant = {
+          id: Identifier.ascending("message"),
+          role: "assistant",
+          sessionID: sid,
+          mode: "default",
+          agent: "default",
+          path: { cwd: tmp.path, root: tmp.path },
+          cost: 0,
+          tokens: { output: 0, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          modelID: "gpt-4",
+          providerID: "openai",
+          parentID: user2.id,
+          time: { created: Date.now() },
+          finish: "end_turn",
+        }
+        await Session.updateMessage(asst2)
+
+        // Turn 3 (latest)
+        const user3 = await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: sid,
+          agent: "default",
+          model: { providerID: "openai", modelID: "gpt-4" },
+          time: { created: Date.now() },
+        })
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: user3.id,
+          sessionID: sid,
+          type: "text",
+          text: "third",
+        })
+
+        // Run prune
+        await SessionCompaction.prune({ sessionID: sid })
+
+        // Verify the tool part was pruned with output and attachments cleared
+        const msgs = await Session.messages({ sessionID: sid })
+        const pruned = msgs
+          .flatMap((m) => m.parts)
+          .find((p) => p.type === "tool" && p.id === toolPart.id)
+        expect(pruned).toBeDefined()
+        if (pruned?.type === "tool" && pruned.state.status === "completed") {
+          expect(pruned.state.time.compacted).toBeNumber()
+          expect(pruned.state.output).toBe("")
+          expect(pruned.state.attachments).toBeUndefined()
+        } else {
+          throw new Error("expected completed tool part")
+        }
+
+        await Session.remove(sid)
+      },
+    })
+  })
+
+  test("respects disabled config (compaction.prune = false)", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({ compaction: { prune: false } }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const sid = session.id
+        const big = "x".repeat(200_000)
+
+        // Turn 1 (oldest)
+        const user1 = await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: sid,
+          agent: "default",
+          model: { providerID: "openai", modelID: "gpt-4" },
+          time: { created: Date.now() },
+        })
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: user1.id,
+          sessionID: sid,
+          type: "text",
+          text: "first",
+        })
+        const asst1: MessageV2.Assistant = {
+          id: Identifier.ascending("message"),
+          role: "assistant",
+          sessionID: sid,
+          mode: "default",
+          agent: "default",
+          path: { cwd: tmp.path, root: tmp.path },
+          cost: 0,
+          tokens: { output: 0, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          modelID: "gpt-4",
+          providerID: "openai",
+          parentID: user1.id,
+          time: { created: Date.now() },
+          finish: "end_turn",
+        }
+        await Session.updateMessage(asst1)
+        const toolPart = await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: asst1.id,
+          sessionID: sid,
+          type: "tool",
+          callID: "call-1",
+          tool: "read",
+          state: {
+            status: "completed",
+            input: {},
+            output: big,
+            title: "Read",
+            metadata: {},
+            time: { start: Date.now(), end: Date.now() },
+          },
+        } satisfies MessageV2.ToolPart)
+
+        // Turn 2
+        const user2 = await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: sid,
+          agent: "default",
+          model: { providerID: "openai", modelID: "gpt-4" },
+          time: { created: Date.now() },
+        })
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: user2.id,
+          sessionID: sid,
+          type: "text",
+          text: "second",
+        })
+
+        // Turn 3 (latest)
+        const user3 = await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: sid,
+          agent: "default",
+          model: { providerID: "openai", modelID: "gpt-4" },
+          time: { created: Date.now() },
+        })
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: user3.id,
+          sessionID: sid,
+          type: "text",
+          text: "third",
+        })
+
+        // Run prune with config disabled
+        await SessionCompaction.prune({ sessionID: sid })
+
+        // Verify the tool part was NOT pruned
+        const msgs = await Session.messages({ sessionID: sid })
+        const part = msgs
+          .flatMap((m) => m.parts)
+          .find((p) => p.type === "tool" && p.id === toolPart.id)
+        expect(part).toBeDefined()
+        if (part?.type === "tool" && part.state.status === "completed") {
+          expect(part.state.time.compacted).toBeUndefined()
+          expect(part.state.output).toBe(big)
+        } else {
+          throw new Error("expected completed tool part")
+        }
+
+        await Session.remove(sid)
       },
     })
   })

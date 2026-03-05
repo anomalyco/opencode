@@ -539,6 +539,7 @@ export namespace SessionPrompt {
         continue
       }
 
+      await SessionCompaction.prune({ sessionID })
       // context overflow, needs compaction
       if (
         lastFinished &&
@@ -703,6 +704,7 @@ export namespace SessionPrompt {
 
       if (result === "stop") break
       if (result === "compact") {
+        await SessionCompaction.prune({ sessionID })
         await SessionCompaction.create({
           sessionID,
           agent: lastUser.agent,
