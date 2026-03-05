@@ -14,6 +14,7 @@ import {
 import { animate, type AnimationPlaybackControls, tunableSpringValue, COLLAPSIBLE_SPRING } from "./motion"
 import { Collapsible } from "./collapsible"
 import { TextShimmer } from "./text-shimmer"
+import { hold } from "./tool-utils"
 
 export type TriggerTitle = {
   title: string
@@ -121,7 +122,8 @@ function ToolCallTriggerBody(props: {
 function ToolCallPanel(props: ToolCallPanelBaseProps) {
   const [open, setOpen] = createSignal(props.defaultOpen ?? false)
   const [ready, setReady] = createSignal(open())
-  const pending = () => props.status === "pending" || props.status === "running"
+  const pendingRaw = () => props.status === "pending" || props.status === "running"
+  const pending = hold(pendingRaw, 1000)
   const watchDetails = () => props.watchDetails !== false
 
   let frame: number | undefined
