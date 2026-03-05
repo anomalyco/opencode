@@ -97,7 +97,7 @@ export const TuiThreadCommand = cmd({
       })
       .option("command", {
         type: "string",
-        describe: "command to run (for advanced users, rarely needed)",
+        describe: "command to run (use with --prompt for command message)",
       }),
   handler: async (args) => {
     // Keep ENABLE_PROCESSED_INPUT cleared even if other code flips it.
