@@ -87,6 +87,21 @@ export function SessionSidePanel(props: {
     return out
   })
 
+  const empty = (msg: string) => (
+    <div class="h-full flex flex-col">
+      <div class="h-12 shrink-0" aria-hidden />
+      <div class="flex-1 pb-30 flex items-center justify-center text-center">
+        <div class="text-12-regular text-text-weak">{msg}</div>
+      </div>
+    </div>
+  )
+
+  const nofiles = createMemo(() => {
+    const state = file.tree.state("")
+    if (!state?.loaded) return false
+    return file.tree.children("").length === 0
+  })
+
   const normalizeTab = (tab: string) => {
     if (!tab.startsWith("file://")) return tab
     return file.tab(tab)
@@ -390,11 +405,7 @@ export function SessionSidePanel(props: {
                         />
                       </Show>
                     </Match>
-                    <Match when={true}>
-                      <div class="mt-8 text-center text-12-regular text-text-weak">
-                        {language.t("session.review.noChanges")}
-                      </div>
-                    </Match>
+                    <Match when={true}>{empty(language.t("session.review.noChanges"))}</Match>
                   </Switch>
                 </Tabs.Content>
                 <Tabs.Content
@@ -403,12 +414,17 @@ export function SessionSidePanel(props: {
                   onScroll={(e: UIEvent & { currentTarget: HTMLDivElement }) => syncFileTreeScrolled(e.currentTarget)}
                   class="bg-background-stronger px-3 py-0"
                 >
-                  <FileTree
-                    path=""
-                    modified={diffFiles()}
-                    kinds={kinds()}
-                    onFileClick={(node) => openTab(file.tab(node.path))}
-                  />
+                  <Switch>
+                    <Match when={nofiles()}>{empty(language.t("session.files.empty"))}</Match>
+                    <Match when={true}>
+                      <FileTree
+                        path=""
+                        modified={diffFiles()}
+                        kinds={kinds()}
+                        onFileClick={(node) => openTab(file.tab(node.path))}
+                      />
+                    </Match>
+                  </Switch>
                 </Tabs.Content>
               </Tabs>
             </div>
