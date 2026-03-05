@@ -19,7 +19,7 @@ const downloadNames: Record<string, string> = {
 
 export async function GET({ params: { platform, channel } }: APIEvent) {
   const assetName = assetNames[platform]
-  if (!assetName) return new Response("Not Found", { status: 404 })
+  if (!assetName) return new Response(null, { status: 404 })
 
   const resp = await fetch(
     `https://github.com/anomalyco/${channel === "stable" ? "opencode" : "opencode-beta"}/releases/latest/download/${assetName}`,
