@@ -932,13 +932,13 @@ function getSyntaxRules(theme: Theme) {
       },
     },
     {
-      scope: ["markup.raw", "markup.raw.block"],
+      scope: ["markup.raw.block"],
       style: {
-        foreground: theme.markdownCode,
+        foreground: theme.markdownCodeBlock,
       },
     },
     {
-      scope: ["markup.raw.inline"],
+      scope: ["markup.raw", "markup.raw.inline"],
       style: {
         foreground: theme.markdownCode,
         background: theme.background,
