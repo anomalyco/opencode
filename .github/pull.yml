@@ -1,0 +1,7 @@
+version: "1"
+rules:
+  - base: lash
+    upstream: sst/opencode:dev
+    mergeMethod: merge
+    assignees:
+      - lacymorrow
