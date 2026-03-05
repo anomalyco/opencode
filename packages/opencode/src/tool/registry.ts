@@ -30,36 +30,104 @@ import { Truncate } from "./truncation"
 import { ApplyPatchTool } from "./apply_patch"
 import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
+import { PermissionNext } from "@/permission/next"
+import { Global } from "@/global"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
 
   export const state = Instance.state(async () => {
-    const custom = [] as Tool.Info[]
-
-    const matches = await Config.directories().then((dirs) =>
-      dirs.flatMap((dir) =>
-        Glob.scanSync("{tool,tools}/*.{js,ts}", { cwd: dir, absolute: true, dot: true, symlink: true }),
-      ),
-    )
-    if (matches.length) await Config.waitForDependencies()
-    for (const match of matches) {
-      const namespace = path.basename(match, path.extname(match))
-      const mod = await import(pathToFileURL(match).href)
-      for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
-        custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
-      }
+    return {
+      custom: [] as Tool.Info[],
+      loaded: false,
+      loading: undefined as Promise<void> | undefined,
     }
-
-    const plugins = await Plugin.list()
-    for (const plugin of plugins) {
-      for (const [id, def] of Object.entries(plugin.tool ?? {})) {
-        custom.push(fromPlugin(id, def))
-      }
-    }
-
-    return { custom }
   })
+
+  function project(dir: string) {
+    const root = path.resolve(Instance.worktree)
+    const cur = path.resolve(dir)
+    if (!dir.endsWith(".opencode")) return false
+    if (!cur.startsWith(root + path.sep)) return false
+    if (dir === Flag.OPENCODE_CONFIG_DIR) return false
+    if (dir === Global.Path.config) return false
+    return cur !== path.join(Global.Path.home, ".opencode")
+  }
+
+  async function load(sessionID?: string) {
+    const s = await state()
+    if (s.loaded) return
+    if (s.loading) return s.loading
+
+    s.loading = Config.directories()
+      .then((dirs) =>
+        dirs.flatMap((dir) =>
+          Glob.scanSync("{tool,tools}/*.{js,ts}", { cwd: dir, absolute: true, dot: true, symlink: true }).map(
+            (file) => ({
+              dir,
+              file,
+            }),
+          ),
+        ),
+      )
+      .then(async (entries) => {
+        if (entries.length) await Config.waitForDependencies()
+        const gate = new Map<string, boolean>()
+
+        for (const item of entries) {
+          if (project(item.dir)) {
+            const ok = gate.get(item.dir)
+            if (ok === false) continue
+            if (ok !== true) {
+              if (!sessionID) {
+                log.warn("skipping project custom tools", {
+                  path: item.dir,
+                  reason: "no active session for permission prompt",
+                })
+                gate.set(item.dir, false)
+                continue
+              }
+              const err = await PermissionNext.ask({
+                permission: ".opencode",
+                patterns: [item.dir],
+                always: [item.dir],
+                sessionID,
+                metadata: {
+                  path: item.dir,
+                  file: item.file,
+                },
+                ruleset: [],
+              }).catch((x) => x)
+              if (err instanceof Error) {
+                log.warn("project custom tools denied", { path: item.dir })
+                gate.set(item.dir, false)
+                continue
+              }
+              gate.set(item.dir, true)
+            }
+          }
+
+          const namespace = path.basename(item.file, path.extname(item.file))
+          const mod = await import(pathToFileURL(item.file).href)
+          for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
+            s.custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
+          }
+        }
+
+        const plugins = await Plugin.list()
+        for (const plugin of plugins) {
+          for (const [id, def] of Object.entries(plugin.tool ?? {})) {
+            s.custom.push(fromPlugin(id, def))
+          }
+        }
+        s.loaded = true
+      })
+      .finally(() => {
+        s.loading = undefined
+      })
+
+    return s.loading
+  }
 
   function fromPlugin(id: string, def: ToolDefinition): Tool.Info {
     return {
@@ -86,6 +154,7 @@ export namespace ToolRegistry {
   }
 
   export async function register(tool: Tool.Info) {
+    await load()
     const { custom } = await state()
     const idx = custom.findIndex((t) => t.id === tool.id)
     if (idx >= 0) {
@@ -95,7 +164,8 @@ export namespace ToolRegistry {
     custom.push(tool)
   }
 
-  async function all(): Promise<Tool.Info[]> {
+  async function all(sessionID?: string): Promise<Tool.Info[]> {
+    await load(sessionID)
     const custom = await state().then((x) => x.custom)
     const config = await Config.get()
     const question = ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
@@ -134,8 +204,9 @@ export namespace ToolRegistry {
       modelID: string
     },
     agent?: Agent.Info,
+    sessionID?: string,
   ) {
-    const tools = await all()
+    const tools = await all(sessionID)
     const result = await Promise.all(
       tools
         .filter((t) => {

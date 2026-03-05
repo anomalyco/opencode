@@ -783,6 +783,7 @@ export namespace SessionPrompt {
     for (const item of await ToolRegistry.tools(
       { modelID: input.model.api.id, providerID: input.model.providerID },
       input.agent,
+      input.session.id,
     )) {
       const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
       tools[item.id] = tool({
