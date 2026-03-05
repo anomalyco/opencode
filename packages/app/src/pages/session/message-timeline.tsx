@@ -407,7 +407,7 @@ export function MessageTimeline(props: {
           }}
           class="relative min-w-0 w-full h-full"
           style={{
-            "--session-title-height": showHeader() ? "40px" : "0px",
+            "--session-title-height": showHeader() ? "72px" : "0px",
             "--sticky-accordion-top": showHeader() ? "48px" : "0px",
           }}
         >
@@ -416,6 +416,7 @@ export function MessageTimeline(props: {
               ref={props.setContentRef}
               role="log"
               class="flex flex-col gap-0 items-start justify-start pb-16 transition-[margin]"
+              style={{ "padding-top": "var(--session-title-height)" }}
               classList={{
                 "w-full": true,
                 "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
