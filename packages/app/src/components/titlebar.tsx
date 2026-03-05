@@ -157,6 +157,7 @@ export function Titlebar() {
     <header
       class="h-10 shrink-0 bg-background-base relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-center"
       style={{ "min-height": minHeight() }}
+      data-tauri-drag-region
       onMouseDown={drag}
       onDblClick={maximize}
     >
@@ -276,6 +277,7 @@ export function Titlebar() {
           "flex items-center min-w-0 justify-end": true,
           "pr-2": !windows(),
         }}
+        data-tauri-drag-region
         onMouseDown={drag}
       >
         <div id="opencode-titlebar-right" class="flex items-center gap-1 shrink-0 justify-end" />

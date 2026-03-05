@@ -279,7 +279,10 @@ export namespace SessionProcessor {
                     sessionID: input.sessionID,
                     messageID: input.assistantMessage.parentID,
                   })
-                  if (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model })) {
+                  if (
+                    !input.assistantMessage.summary &&
+                    (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model }))
+                  ) {
                     needsCompaction = true
                   }
                   break
@@ -354,27 +357,32 @@ export namespace SessionProcessor {
             })
             const error = MessageV2.fromError(e, { providerID: input.model.providerID })
             if (MessageV2.ContextOverflowError.isInstance(error)) {
-              // TODO: Handle context overflow error
-            }
-            const retry = SessionRetry.retryable(error)
-            if (retry !== undefined) {
-              attempt++
-              const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
-              SessionStatus.set(input.sessionID, {
-                type: "retry",
-                attempt,
-                message: retry,
-                next: Date.now() + delay,
+              needsCompaction = true
+              Bus.publish(Session.Event.Error, {
+                sessionID: input.sessionID,
+                error,
               })
-              await SessionRetry.sleep(delay, input.abort).catch(() => {})
-              continue
+            } else {
+              const retry = SessionRetry.retryable(error)
+              if (retry !== undefined) {
+                attempt++
+                const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
+                SessionStatus.set(input.sessionID, {
+                  type: "retry",
+                  attempt,
+                  message: retry,
+                  next: Date.now() + delay,
+                })
+                await SessionRetry.sleep(delay, input.abort).catch(() => {})
+                continue
+              }
+              input.assistantMessage.error = error
+              Bus.publish(Session.Event.Error, {
+                sessionID: input.assistantMessage.sessionID,
+                error: input.assistantMessage.error,
+              })
+              SessionStatus.set(input.sessionID, { type: "idle" })
             }
-            input.assistantMessage.error = error
-            Bus.publish(Session.Event.Error, {
-              sessionID: input.assistantMessage.sessionID,
-              error: input.assistantMessage.error,
-            })
-            SessionStatus.set(input.sessionID, { type: "idle" })
           }
           if (snapshot) {
             const patch = await Snapshot.patch(snapshot)

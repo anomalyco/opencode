@@ -171,7 +171,7 @@
 
     [data-slot="tabs-trigger-wrapper"] {
       height: var(--tabs-compact-pill-height);
-      margin-block: calc((var(--tabs-bar-height) - var(--tabs-compact-pill-height)) / 2);
+      margin-block: 0;
       max-width: 320px;
       padding-inline: var(--tabs-compact-pill-padding-x);
       box-sizing: border-box;
@@ -229,20 +229,40 @@
         }
       }
 
-      [data-component="file-icon"] {
-        filter: grayscale(1) !important;
-        transition: filter 120ms ease;
-      }
-
-      &:has([data-selected]) {
-        [data-component="file-icon"] {
-          filter: grayscale(0) !important;
-        }
-      }
-
       &:hover:not(:disabled):not(:has([data-selected])) {
         color: var(--text-base);
         background-color: var(--surface-base-hover);
+      }
+
+      /*
+        File tabs: use monochrome icon by default.
+        Full-color icon is shown on hover/selected.
+      */
+      [data-slot="tabs-trigger"] {
+        .tab-fileicon-color,
+        .tab-fileicon-mono {
+          pointer-events: none;
+        }
+
+        .tab-fileicon-color {
+          display: none;
+        }
+
+        .tab-fileicon-mono {
+          display: block;
+          color: currentColor;
+        }
+
+        &[data-selected],
+        &:hover {
+          .tab-fileicon-color {
+            display: block;
+          }
+
+          .tab-fileicon-mono {
+            display: none;
+          }
+        }
       }
     }
   }
@@ -386,6 +406,12 @@
       gap: 8px;
       align-items: center;
       background-color: var(--background-stronger);
+      box-sizing: border-box;
+      border-bottom: 1px solid transparent;
+
+      &[data-scrolled] {
+        border-bottom-color: var(--border-weak-base);
+      }
     }
 
     [data-slot="tabs-trigger-wrapper"] {
