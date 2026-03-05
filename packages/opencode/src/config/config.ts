@@ -1,4 +1,5 @@
 import { Log } from "../util/log"
+import defaults from "../config/defaults.json"
 import path from "path"
 import { pathToFileURL, fileURLToPath } from "url"
 import { createRequire } from "module"
@@ -1177,8 +1178,9 @@ export namespace Config {
   export type Info = z.output<typeof Info>
 
   export const global = lazy(async () => {
+    // OPENSACIA: Start with default configuration
     let result: Info = pipe(
-      {},
+      defaults,
       mergeDeep(await loadFile(path.join(Global.Path.config, "config.json"))),
       mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.json"))),
       mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
