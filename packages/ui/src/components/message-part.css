@@ -812,7 +812,7 @@
   [data-slot="question-body"] {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 0;
     flex: 1;
     min-height: 0;
     padding: 8px 8px 0;
@@ -892,7 +892,7 @@
     font-weight: var(--font-weight-medium);
     line-height: var(--line-height-large);
     color: var(--text-strong);
-    padding: 0 10px;
+    padding: 16px 10px 0;
   }
 
   [data-slot="question-hint"] {
@@ -1046,6 +1046,14 @@
       text-overflow: clip;
       white-space: normal;
       overflow-wrap: anywhere;
+    }
+
+    &[data-picked="true"] {
+      [data-slot="question-custom-input"]:focus-visible {
+        outline: none;
+        outline-offset: 0;
+        border-radius: 0;
+      }
     }
   }
 
