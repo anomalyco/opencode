@@ -566,6 +566,10 @@ export const dict = {
   "common.close": "关闭",
   "common.edit": "编辑",
   "common.loadMore": "加载更多",
+  "common.changelog": "更新日志",
+  "common.noReleasesFound": "未找到版本",
+  "changelog.tag.latest": "最新",
+
   "common.key.esc": "ESC",
 
   "sidebar.menu.toggle": "切换菜单",

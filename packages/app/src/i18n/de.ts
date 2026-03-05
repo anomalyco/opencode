@@ -520,6 +520,10 @@ export const dict = {
   "common.close": "Schließen",
   "common.edit": "Bearbeiten",
   "common.loadMore": "Mehr laden",
+  "common.changelog": "Neuerungen",
+  "common.noReleasesFound": "Keine Versionen gefunden",
+  "changelog.tag.latest": "Neueste",
+
   "common.key.esc": "ESC",
   "sidebar.menu.toggle": "Menü umschalten",
   "sidebar.nav.projectsAndSessions": "Projekte und Sitzungen",

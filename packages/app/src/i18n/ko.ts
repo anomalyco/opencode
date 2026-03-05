@@ -511,6 +511,10 @@ export const dict = {
   "common.close": "닫기",
   "common.edit": "편집",
   "common.loadMore": "더 불러오기",
+  "common.changelog": "새로운 기능",
+  "common.noReleasesFound": "버전을 찾을 수 없음",
+  "changelog.tag.latest": "최신",
+
   "common.key.esc": "ESC",
   "sidebar.menu.toggle": "메뉴 토글",
   "sidebar.nav.projectsAndSessions": "프로젝트 및 세션",

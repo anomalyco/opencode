@@ -575,6 +575,10 @@ export const dict = {
   "common.close": "Cerrar",
   "common.edit": "Editar",
   "common.loadMore": "Cargar más",
+  "common.changelog": "Novedades",
+  "common.noReleasesFound": "No se encontraron versiones",
+  "changelog.tag.latest": "Último",
+
   "common.key.esc": "ESC",
 
   "sidebar.menu.toggle": "Alternar menú",

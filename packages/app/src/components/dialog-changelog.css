@@ -1,0 +1,150 @@
+.dialog-changelog {
+  min-height: 500px;
+  display: flex;
+  flex-direction: column;
+}
+
+.dialog-changelog [data-slot="dialog-body"] {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.dialog-changelog-list {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.dialog-changelog-list [data-slot="list-scroll"] {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-weak-base) transparent;
+}
+
+.dialog-changelog-list [data-slot="list-scroll"]::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.dialog-changelog-list [data-slot="list-scroll"]::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 5px;
+}
+
+.dialog-changelog-list [data-slot="list-scroll"]::-webkit-scrollbar-thumb {
+  background: var(--border-weak-base);
+  border-radius: 5px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+.dialog-changelog-list [data-slot="list-scroll"]::-webkit-scrollbar-thumb:hover {
+  background: var(--border-weak-base);
+}
+
+.dialog-changelog-header {
+  padding: 8px 12px 8px 8px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--surface-raised-stronger-non-alpha);
+}
+
+.dialog-changelog-header::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: 16px;
+  background: linear-gradient(to bottom, var(--surface-raised-stronger-non-alpha), transparent);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.dialog-changelog-header[data-stuck="true"]::after {
+  opacity: 1;
+}
+
+
+
+.dialog-changelog-version {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.dialog-changelog-date {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-weak);
+}
+
+.dialog-changelog-list [data-slot="list-item"] {
+  margin-bottom: 32px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: default;
+  display: block;
+  text-align: left;
+}
+
+.dialog-changelog-list [data-slot="list-item"]:hover {
+  background: transparent;
+}
+
+.dialog-changelog-list [data-slot="list-item"]:focus {
+  outline: none;
+}
+
+.dialog-changelog-list [data-slot="list-item"]:focus-visible {
+  outline: 2px solid var(--focus-base);
+  outline-offset: 2px;
+}
+
+.dialog-changelog-content {
+  padding: 0 8px 24px;
+}
+
+.dialog-changelog-markdown h2 {
+  border-bottom: 1px solid var(--border-weak-base);
+  padding-bottom: 4px;
+  margin: 32px 0 12px 0;
+  font-size: 14px;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.dialog-changelog-markdown h2:first-child {
+  margin-top: 16px;
+}
+
+.dialog-changelog-markdown a.external-link {
+  color: var(--text-interactive-base);
+  font-weight: 500;
+}
+
+.dialog-changelog-markdown a.external-link[href^="https://github.com/anomalyco/opencode/pull/"],
+.dialog-changelog-markdown a.external-link[href^="https://github.com/anomalyco/opencode/issues/"],
+.dialog-changelog-markdown a.external-link[href^="https://github.com/"]
+{
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.dialog-changelog-markdown a.external-link[href^="https://github.com/anomalyco/opencode/pull/"]:hover,
+.dialog-changelog-markdown a.external-link[href^="https://github.com/anomalyco/opencode/issues/"]:hover,
+.dialog-changelog-markdown a.external-link[href^="https://github.com/"]:hover
+{
+  background: var(--surface-weak-base);
+}

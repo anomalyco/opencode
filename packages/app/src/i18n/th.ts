@@ -567,6 +567,9 @@ export const dict = {
   "common.close": "ปิด",
   "common.edit": "แก้ไข",
   "common.loadMore": "โหลดเพิ่มเติม",
+  "common.changelog": "อัปเดต",
+  "common.noReleasesFound": "ไม่พบเวอร์ชัน",
+  "changelog.tag.latest": "ล่าสุด",
   "common.key.esc": "ESC",
 
   "sidebar.menu.toggle": "สลับเมนู",
