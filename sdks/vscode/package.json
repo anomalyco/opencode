@@ -100,6 +100,10 @@
       {
         "command": "opencode.addFilepathToTerminal",
         "title": "Add Filepath to Terminal"
+      },
+      {
+        "command": "opencode.captureEvidence",
+        "title": "OpenCode: Capture Evidence (test helper)"
       }
     ],
     "menus": {

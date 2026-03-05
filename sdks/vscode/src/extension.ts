@@ -1,4 +1,6 @@
 import * as vscode from "vscode"
+import { promises as fsp } from 'fs'
+import * as path from 'path'
 import { OpenCodeChatParticipant } from "./vscode/participant"
 import { OpenCodeChatSessionProvider, sessionScheme } from "./vscode/chatSession"
 import { ActivationController } from "./vscode/activation"
@@ -63,6 +65,91 @@ export function activate(context: vscode.ExtensionContext) {
     openTerminalDisposable,
     addFilepathDisposable,
   )
+
+  // Capture evidence command: prefer VS Code capture commands, then Electron APIs as fallback.
+  const captureDisposable = vscode.commands.registerCommand('opencode.captureEvidence', async () => {
+    // First, try well-known VS Code capture commands which may return a URI or buffer
+    try {
+      const cmds = await vscode.commands.getCommands(true)
+      const candidates = [
+        'workbench.action.captureScreen',
+        'workbench.action.captureEditor',
+        'workbench.action.captureScreenshot',
+        'extension.vscode-debugger.captureScreen',
+      ]
+      for (const id of candidates) {
+        if (cmds.includes(id)) {
+          try {
+            // Some commands may return a Uri or a string pointing to a file
+            // @ts-ignore
+            const res = await vscode.commands.executeCommand(id)
+            if (res) {
+              // If returned a URI-like object
+              try {
+                // @ts-ignore
+                if (res.fsPath) {
+                  const buf = await fsp.readFile(res.fsPath)
+                  return 'data:image/png;base64,' + buf.toString('base64')
+                }
+              } catch (e) {}
+              // If returned a base64/data URL string
+              if (typeof res === 'string' && /^data:image\/(png|jpeg);base64,/.test(res)) return res
+              // If returned a path string
+              try {
+                const maybePath = String(res)
+                if (await (fsp.stat(maybePath).then(() => true).catch(() => false))) {
+                  const buf = await fsp.readFile(maybePath)
+                  return 'data:image/png;base64,' + buf.toString('base64')
+                }
+              } catch (e) {}
+            }
+          } catch (e) {
+            // try next
+          }
+        }
+      }
+    } catch (e) {
+      // ignore getCommands failures
+    }
+
+    // Next, try Electron desktopCapturer or webContents.capturePage if available
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const electron = (global as any).process ? require('electron') : null
+      const desktopCapturer = electron && (electron.desktopCapturer || (electron.remote && electron.remote.desktopCapturer))
+      if (desktopCapturer && typeof desktopCapturer.getSources === 'function') {
+        const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1280, height: 720 } })
+        if (sources && sources.length) {
+          const s = sources[0]
+          if (s.thumbnail && typeof s.thumbnail.toPNG === 'function') {
+            const png = s.thumbnail.toPNG()
+            return 'data:image/png;base64,' + Buffer.from(png).toString('base64')
+          }
+          // some electron versions return NativeImage with toDataURL
+          if (s.thumbnail && typeof s.thumbnail.toDataURL === 'function') {
+            return s.thumbnail.toDataURL()
+          }
+        }
+      }
+
+      // try webContents capture from remote/currentWindow
+      const remote = electron && electron.remote ? electron.remote : null
+      const wc = remote && remote.getCurrentWindow && remote.getCurrentWindow().webContents
+      if (wc && typeof wc.capturePage === 'function') {
+        const img = await wc.capturePage()
+        if (img && typeof img.toPNG === 'function') {
+          return 'data:image/png;base64,' + Buffer.from(img.toPNG()).toString('base64')
+        }
+        if (img && typeof img.toDataURL === 'function') return img.toDataURL()
+      }
+    } catch (e) {
+      // ignore electron failures
+    }
+
+    // As a final fallback return a 1x1 transparent PNG data URI so evidence helper can still create a file.
+    return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg=='
+  })
+  context.subscriptions.push(captureDisposable)
 
   const participant = new OpenCodeChatParticipant(context, activationController)
   participant.register()

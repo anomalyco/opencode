@@ -71,6 +71,16 @@ export async function captureFailure(test: any, err: any, runDir?: string) {
             // some capture commands may open a file or return a uri; record whatever is returned
             const res = await vscode.commands.executeCommand(captureCmd)
             await fsp.writeFile(path.join(out, 'vscode-capture-cmd.txt'), String(res || captureCmd), 'utf8')
+            // If command returned a data URL for an image, save it as screenshot.png
+            try {
+              if (typeof res === 'string' && /^data:image\/(png|jpeg);base64,/.test(res)) {
+                const base64 = res.split(',')[1]
+                const buf = Buffer.from(base64, 'base64')
+                await fsp.writeFile(path.join(out, 'screenshot.png'), buf)
+              }
+            } catch (e) {
+              // ignore write failures
+            }
           } catch (e) {
             // attempt well-known command ids, ignore errors
             try { await vscode.commands.executeCommand('workbench.action.captureScreen') } catch (e) {}

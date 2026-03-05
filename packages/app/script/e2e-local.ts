@@ -71,8 +71,12 @@ const serverEnv = {
   OPENCODE_E2E_PROJECT_DIR: repoDir,
   OPENCODE_E2E_SESSION_TITLE: "E2E Session",
   OPENCODE_E2E_MESSAGE: "Seeded for UI e2e",
-  OPENCODE_E2E_MODEL: "opencode/gpt-5-nano",
+  OPENCODE_E2E_MODEL: "opencode/big-pickle",
   OPENCODE_CLIENT: "app",
+  OPENCODE_CONFIG_CONTENT: JSON.stringify({
+    model: "opencode/big-pickle",
+    small_model: "opencode/big-pickle",
+  }),
 } satisfies Record<string, string>
 
 const runnerEnv = {
@@ -82,6 +86,7 @@ const runnerEnv = {
   VITE_OPENCODE_SERVER_HOST: "127.0.0.1",
   VITE_OPENCODE_SERVER_PORT: String(serverPort),
   PLAYWRIGHT_PORT: String(webPort),
+  XDG_CACHE_HOME: process.env.XDG_CACHE_HOME ?? path.join(os.homedir(), ".cache"),
 } satisfies Record<string, string>
 
 let seed: ReturnType<typeof Bun.spawn> | undefined

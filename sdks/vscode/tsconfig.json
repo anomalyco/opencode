@@ -10,5 +10,5 @@
     "strict": true,
     "skipLibCheck": true
   },
-  "exclude": ["node_modules", "out", "dist", "playwright.config.ts", "src/e2e", "archive"]
+  "exclude": ["node_modules", "out", "dist", "playwright.config.ts", "src/e2e", "archive", "test"]
 }

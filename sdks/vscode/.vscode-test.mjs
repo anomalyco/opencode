@@ -5,7 +5,7 @@ export default defineConfig([
     label: "e2e-stable",
     files: "out/test/e2e/**/*.test.js",
     version: "stable",
-    launchArgs: ["--enable-proposed-api=sst-dev.opencode", "--verbose"],
+    launchArgs: ["--enable-proposed-api=sst-dev.opencode", "--verbose", "--remote-debugging-port=9222"],
     mocha: {
       ui: "tdd",
       timeout: 60000,
@@ -24,7 +24,7 @@ export default defineConfig([
     label: "e2e-insiders",
     files: "out/test/e2e/**/*.test.js",
     version: "insiders",
-    launchArgs: ["--enable-proposed-api=sst-dev.opencode", "--verbose"],
+    launchArgs: ["--enable-proposed-api=sst-dev.opencode", "--verbose", "--remote-debugging-port=9222"],
     mocha: {
       ui: "tdd",
       timeout: 60000,
