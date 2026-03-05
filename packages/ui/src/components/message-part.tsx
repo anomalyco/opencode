@@ -546,7 +546,7 @@ export function AssistantParts(props: {
           return result
         })
         const ctxPendingRaw = useContextToolPending(ctxParts, () => !!(props.working && ctx()?.tail))
-        const ctxPending = hold(ctxPendingRaw, 1000)
+        const ctxPending = hold(ctxPendingRaw)
         const shell = createMemo(() => {
           const value = part()
           if (!value) return

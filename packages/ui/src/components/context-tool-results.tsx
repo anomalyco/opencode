@@ -227,7 +227,7 @@ export function ContextToolRollingResults(props: { parts: ToolPart[]; pending: b
     <div style={{ opacity: reduce() ? (show() ? 1 : 0) : opacity(), filter: `blur(${reduce() ? 0 : blur()}px)` }}>
       <RollingResults
         items={props.parts}
-        rows={3}
+        rows={5}
         rowHeight={22}
         rowGap={0}
         open={props.pending}

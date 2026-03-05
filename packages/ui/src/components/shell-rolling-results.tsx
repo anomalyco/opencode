@@ -53,7 +53,7 @@ export function ShellRollingResults(props: { part: ToolPart; animate?: boolean }
   onMount(() => setMounted(true))
   const state = createMemo(() => props.part.state as Record<string, any>)
   const pending = createMemo(() => busy(props.part.state.status))
-  const open = hold(pending, 1000)
+  const open = hold(pending)
   const command = createMemo(() => {
     const value = state().input?.command ?? state().metadata?.command
     if (typeof value === "string") return value
