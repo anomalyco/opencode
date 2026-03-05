@@ -1,0 +1,57 @@
+[data-component="rolling-results"] {
+  --rolling-results-row-height: 22px;
+  --rolling-results-row-gap: 0px;
+
+  display: block;
+  width: 100%;
+  min-width: 0;
+
+  [data-slot="rolling-results-viewport"] {
+    position: relative;
+    min-width: 0;
+    height: 0;
+    overflow: clip;
+  }
+
+  &[data-overflowing="true"] [data-slot="rolling-results-viewport"] {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      black var(--rolling-results-fade),
+      black calc(100% - calc(var(--rolling-results-fade) * 0.5)),
+      transparent 100%
+    );
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      black var(--rolling-results-fade),
+      black calc(100% - calc(var(--rolling-results-fade) * 0.5)),
+      transparent 100%
+    );
+  }
+
+  [data-slot="rolling-results-track"] {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: var(--rolling-results-row-gap);
+    will-change: transform;
+  }
+
+  [data-slot="rolling-results-row"],
+  [data-slot="rolling-results-empty"] {
+    min-width: 0;
+    height: var(--rolling-results-row-height);
+    min-height: var(--rolling-results-row-height);
+    display: flex;
+    align-items: center;
+  }
+
+  [data-slot="rolling-results-row"] {
+    color: var(--text-base);
+  }
+
+  [data-slot="rolling-results-empty"] {
+    color: var(--text-weaker);
+  }
+}

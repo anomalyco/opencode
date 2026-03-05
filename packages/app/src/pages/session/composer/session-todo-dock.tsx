@@ -6,8 +6,14 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { TextStrikethrough } from "@opencode-ai/ui/text-strikethrough"
+import { useElementHeight } from "@opencode-ai/ui/hooks"
 import { Index, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
+
+const COLLAPSE_SPRING = { visualDuration: 0.3, bounce: 0 }
+export const COLLAPSED_HEIGHT = 78
+const SUBTITLE = { duration: 600, travel: 25, edge: 17 }
+const COUNT = { duration: 600, mask: 18, maskHeight: 0, widthDuration: 560 }
 
 function dot(status: Todo["status"]) {
   if (status !== "in_progress") return undefined
@@ -40,19 +46,6 @@ export function SessionTodoDock(props: {
   collapseLabel: string
   expandLabel: string
   dockProgress?: number
-  visualDuration?: number
-  bounce?: number
-  expandVisualDuration?: number
-  expandBounce?: number
-  collapseVisualDuration?: number
-  collapseBounce?: number
-  subtitleDuration?: number
-  subtitleTravel?: number
-  subtitleEdge?: number
-  countDuration?: number
-  countMask?: number
-  countMaskHeight?: number
-  countWidthDuration?: number
 }) {
   const [store, setStore] = createStore({
     collapsed: false,
@@ -73,39 +66,12 @@ export function SessionTodoDock(props: {
   )
 
   const preview = createMemo(() => active()?.content ?? "")
-  const config = createMemo(() =>
-    store.collapsed
-      ? {
-          visualDuration: props.collapseVisualDuration ?? props.visualDuration ?? 0.3,
-          bounce: props.collapseBounce ?? props.bounce ?? 0,
-        }
-      : {
-          visualDuration: props.expandVisualDuration ?? props.visualDuration ?? 0.3,
-          bounce: props.expandBounce ?? props.bounce ?? 0,
-        },
-  )
-  const collapse = useSpring(() => (store.collapsed ? 1 : 0), config)
-  const dock = createMemo(() => Math.max(0, Math.min(1, props.dockProgress ?? 1)))
-  const shut = createMemo(() => 1 - dock())
-  const value = createMemo(() => Math.max(0, Math.min(1, collapse())))
-  const hide = createMemo(() => Math.max(value(), shut()))
-  const off = createMemo(() => hide() > 0.98)
-  const turn = createMemo(() => Math.max(0, Math.min(1, value())))
-  const [height, setHeight] = createSignal(320)
-  const full = createMemo(() => Math.max(78, height()))
+  const collapse = useSpring(() => (store.collapsed ? 1 : 0), COLLAPSE_SPRING)
+  const shut = createMemo(() => 1 - (props.dockProgress ?? 1))
+  const hide = createMemo(() => Math.max(collapse(), shut()))
   let contentRef: HTMLDivElement | undefined
-
-  createEffect(() => {
-    const el = contentRef
-    if (!el) return
-    const update = () => {
-      setHeight(el.getBoundingClientRect().height)
-    }
-    update()
-    const observer = new ResizeObserver(update)
-    observer.observe(el)
-    onCleanup(() => observer.disconnect())
-  })
+  const height = useElementHeight(() => contentRef, 320)
+  const full = createMemo(() => Math.max(COLLAPSED_HEIGHT, height()))
 
   return (
     <DockTray
@@ -113,7 +79,7 @@ export function SessionTodoDock(props: {
       style={{
         "overflow-x": "visible",
         "overflow-y": "hidden",
-        "max-height": `${Math.max(78, full() - value() * (full() - 78))}px`,
+        "max-height": `${Math.max(COLLAPSED_HEIGHT, full() - collapse() * (full() - COLLAPSED_HEIGHT))}px`,
       }}
     >
       <div ref={contentRef}>
@@ -133,12 +99,12 @@ export function SessionTodoDock(props: {
             class="text-14-regular text-text-strong cursor-default inline-flex items-baseline shrink-0 whitespace-nowrap overflow-visible"
             aria-label={label()}
             style={{
-              "--tool-motion-odometer-ms": `${props.countDuration ?? 600}ms`,
-              "--tool-motion-mask": `${props.countMask ?? 18}%`,
-              "--tool-motion-mask-height": `${props.countMaskHeight ?? 0}px`,
-              "--tool-motion-spring-ms": `${props.countWidthDuration ?? 560}ms`,
-              opacity: `${Math.max(0, Math.min(1, 1 - shut()))}`,
-              filter: `blur(${Math.max(0, Math.min(1, shut())) * 2}px)`,
+              "--tool-motion-odometer-ms": `${COUNT.duration}ms`,
+              "--tool-motion-mask": `${COUNT.mask}%`,
+              "--tool-motion-mask-height": `${COUNT.maskHeight}px`,
+              "--tool-motion-spring-ms": `${COUNT.widthDuration}ms`,
+              opacity: `${1 - shut()}`,
+              filter: shut() > 0.01 ? `blur(${shut() * 2}px)` : "none",
             }}
           >
             <AnimatedNumber value={done()} />
@@ -157,9 +123,9 @@ export function SessionTodoDock(props: {
             <TextReveal
               class="text-14-regular text-text-base cursor-default"
               text={store.collapsed ? preview() : undefined}
-              duration={props.subtitleDuration ?? 600}
-              travel={props.subtitleTravel ?? 25}
-              edge={props.subtitleEdge ?? 17}
+              duration={SUBTITLE.duration}
+              travel={SUBTITLE.travel}
+              edge={SUBTITLE.edge}
               spring="cubic-bezier(0.34, 1, 0.64, 1)"
               springSoft="cubic-bezier(0.34, 1, 0.64, 1)"
               growOnly
@@ -173,7 +139,7 @@ export function SessionTodoDock(props: {
               icon="chevron-down"
               size="normal"
               variant="ghost"
-              style={{ transform: `rotate(${turn() * 180}deg)` }}
+              style={{ transform: `rotate(${collapse() * 180}deg)` }}
               onMouseDown={(event) => {
                 event.preventDefault()
                 event.stopPropagation()
@@ -189,14 +155,15 @@ export function SessionTodoDock(props: {
 
         <div
           data-slot="session-todo-list"
-          aria-hidden={store.collapsed || off()}
+          class="pb-2"
+          aria-hidden={store.collapsed}
           classList={{
             "pointer-events-none": hide() > 0.1,
           }}
           style={{
-            visibility: off() ? "hidden" : "visible",
-            opacity: `${Math.max(0, Math.min(1, 1 - hide()))}`,
-            filter: `blur(${Math.max(0, Math.min(1, hide())) * 2}px)`,
+            opacity: `${1 - hide()}`,
+            filter: hide() > 0.01 ? `blur(${hide() * 2}px)` : "none",
+            visibility: hide() > 0.98 ? "hidden" : "visible",
           }}
         >
           <TodoList todos={props.todos} open={!store.collapsed} />
@@ -282,7 +249,7 @@ function TodoList(props: { todos: Todo[]; open: boolean }) {
                 "--checkbox-align": "flex-start",
                 "--checkbox-offset": "1px",
                 transition: "opacity 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1))",
-                opacity: todo().status === "pending" ? "0.94" : "1",
+                opacity: todo().status === "pending" ? "0.5" : "1",
               }}
             >
               <TextStrikethrough
@@ -292,12 +259,11 @@ function TodoList(props: { todos: Todo[]; open: boolean }) {
                 style={{
                   "line-height": "var(--line-height-normal)",
                   transition:
-                    "color 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)), opacity 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1))",
+                    "color 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1))",
                   color:
                     todo().status === "completed" || todo().status === "cancelled"
                       ? "var(--text-weak)"
                       : "var(--text-strong)",
-                  opacity: todo().status === "pending" ? "0.92" : "1",
                 }}
               />
             </Checkbox>

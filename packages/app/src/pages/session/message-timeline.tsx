@@ -1,4 +1,15 @@
-import { For, createEffect, createMemo, on, onCleanup, Show, startTransition, Index, type JSX } from "solid-js"
+import {
+  For,
+  Index,
+  createEffect,
+  createMemo,
+  createSignal,
+  on,
+  onCleanup,
+  Show,
+  startTransition,
+  type JSX,
+} from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { useNavigate, useParams } from "@solidjs/router"
 import { Button } from "@opencode-ai/ui/button"
@@ -10,11 +21,13 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
+import { animate, type AnimationPlaybackControls, clearFadeStyles, FAST_SPRING } from "@opencode-ai/ui/motion"
 import type { AssistantMessage, Message as MessageType, Part, TextPart, UserMessage } from "@opencode-ai/sdk/v2"
 import { showToast } from "@opencode-ai/ui/toast"
 import { Binary } from "@opencode-ai/util/binary"
 import { getFilename } from "@opencode-ai/util/path"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
+import { errorMessage } from "@/pages/layout/helpers"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
@@ -33,7 +46,9 @@ type MessageComment = {
 }
 
 const emptyMessages: MessageType[] = []
-const idle = { type: "idle" as const }
+
+const isDefaultSessionTitle = (title?: string) =>
+  !!title && /^(New session - |Child session - )\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(title)
 
 const messageComments = (parts: Part[]): MessageComment[] =>
   parts.flatMap((part) => {
@@ -110,6 +125,8 @@ function createTimelineStaging(input: TimelineStageInput) {
     completedSession: "",
     count: 0,
   })
+  const [readySession, setReadySession] = createSignal("")
+  let active = ""
 
   const stagedCount = createMemo(() => {
     const total = input.messages().length
@@ -134,23 +151,46 @@ function createTimelineStaging(input: TimelineStageInput) {
     cancelAnimationFrame(frame)
     frame = undefined
   }
+  const scheduleReady = (sessionKey: string) => {
+    if (input.sessionKey() !== sessionKey) return
+    if (readySession() === sessionKey) return
+    setReadySession(sessionKey)
+  }
 
   createEffect(
     on(
       () => [input.sessionKey(), input.turnStart() > 0, input.messages().length] as const,
       ([sessionKey, isWindowed, total]) => {
+        const switched = active !== sessionKey
+        if (switched) {
+          active = sessionKey
+          setReadySession("")
+        }
+
+        const staging = state.activeSession === sessionKey && state.completedSession !== sessionKey
+        const shouldStage = isWindowed && total > input.config.init && state.completedSession !== sessionKey
+
+        if (staging && !switched && shouldStage && frame !== undefined) return
+
         cancel()
-        const shouldStage =
-          isWindowed &&
-          total > input.config.init &&
-          state.completedSession !== sessionKey &&
-          state.activeSession !== sessionKey
+
+        if (shouldStage) setReadySession("")
         if (!shouldStage) {
-          setState({ activeSession: "", count: total })
+          setState({
+            activeSession: "",
+            completedSession: isWindowed ? sessionKey : state.completedSession,
+            count: total,
+          })
+          if (total <= 0) {
+            setReadySession("")
+            return
+          }
+          if (readySession() !== sessionKey) scheduleReady(sessionKey)
           return
         }
 
         let count = Math.min(total, input.config.init)
+        if (staging) count = Math.min(total, Math.max(count, state.count))
         setState({ activeSession: sessionKey, count })
 
         const step = () => {
@@ -164,6 +204,7 @@ function createTimelineStaging(input: TimelineStageInput) {
           if (count >= currentTotal) {
             setState({ completedSession: sessionKey, activeSession: "" })
             frame = undefined
+            scheduleReady(sessionKey)
             return
           }
           frame = requestAnimationFrame(step)
@@ -177,9 +218,12 @@ function createTimelineStaging(input: TimelineStageInput) {
     const key = input.sessionKey()
     return state.activeSession === key && state.completedSession !== key
   })
+  const ready = createMemo(() => readySession() === input.sessionKey())
 
-  onCleanup(cancel)
-  return { messages: stagedUserMessages, isStaging }
+  onCleanup(() => {
+    cancel()
+  })
+  return { messages: stagedUserMessages, isStaging, ready }
 }
 
 export function MessageTimeline(props: {
@@ -196,6 +240,7 @@ export function MessageTimeline(props: {
   onScrollSpyScroll: () => void
   onTurnBackfillScroll: () => void
   onAutoScrollInteraction: (event: MouseEvent) => void
+  onPreserveScrollAnchor: (target: HTMLElement) => void
   centered: boolean
   setContentRef: (el: HTMLDivElement) => void
   turnStart: number
@@ -217,7 +262,15 @@ export function MessageTimeline(props: {
   const dialog = useDialog()
   const language = useLanguage()
 
-  const rendered = createMemo(() => props.renderedUserMessages.map((message) => message.id))
+  const trigger = (target: EventTarget | null) => {
+    const next =
+      target instanceof Element
+        ? target.closest('[data-slot="collapsible-trigger"], [data-slot="accordion-trigger"]')
+        : undefined
+    if (!(next instanceof HTMLElement)) return
+    return next
+  }
+
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const sessionID = createMemo(() => params.id)
   const sessionMessages = createMemo(() => {
@@ -230,28 +283,20 @@ export function MessageTimeline(props: {
       (item): item is AssistantMessage => item.role === "assistant" && typeof item.time.completed !== "number",
     ),
   )
-  const sessionStatus = createMemo(() => {
-    const id = sessionID()
-    if (!id) return idle
-    return sync.data.session_status[id] ?? idle
-  })
+  const sessionStatus = createMemo(() => sync.data.session_status[sessionID() ?? ""]?.type ?? "idle")
   const activeMessageID = createMemo(() => {
-    const parentID = pending()?.parentID
-    if (parentID) {
-      const messages = sessionMessages()
-      const result = Binary.search(messages, parentID, (message) => message.id)
-      const message = result.found ? messages[result.index] : messages.find((item) => item.id === parentID)
-      if (message && message.role === "user") return message.id
+    const messages = sessionMessages()
+    const message = pending()
+    if (message?.parentID) {
+      const result = Binary.search(messages, message.parentID, (item) => item.id)
+      const parent = result.found ? messages[result.index] : messages.find((item) => item.id === message.parentID)
+      if (parent?.role === "user") return parent.id
     }
 
-    const status = sessionStatus()
-    if (status.type !== "idle") {
-      const messages = sessionMessages()
-      for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].role === "user") return messages[i].id
-      }
+    if (sessionStatus() === "idle") return undefined
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "user") return messages[i].id
     }
-
     return undefined
   })
   const info = createMemo(() => {
@@ -259,9 +304,19 @@ export function MessageTimeline(props: {
     if (!id) return
     return sync.session.get(id)
   })
-  const titleValue = createMemo(() => info()?.title)
+  const titleValue = createMemo(() => {
+    const title = info()?.title
+    if (!title) return
+    if (isDefaultSessionTitle(title)) return language.t("command.session.new")
+    return title
+  })
+  const defaultTitle = createMemo(() => isDefaultSessionTitle(info()?.title))
+  const headerTitle = createMemo(
+    () => titleValue() ?? (props.renderedUserMessages.length ? language.t("command.session.new") : undefined),
+  )
+  const placeholderTitle = createMemo(() => defaultTitle() || (!info()?.title && props.renderedUserMessages.length > 0))
   const parentID = createMemo(() => info()?.parentID)
-  const showHeader = createMemo(() => !!(titleValue() || parentID()))
+  const showHeader = createMemo(() => !!(headerTitle() || parentID()))
   const stageCfg = { init: 1, batch: 3 }
   const staging = createTimelineStaging({
     sessionKey,
@@ -269,6 +324,7 @@ export function MessageTimeline(props: {
     messages: () => props.renderedUserMessages,
     config: stageCfg,
   })
+  const rendered = createMemo(() => staging.messages().map((message) => message.id))
 
   const [title, setTitle] = createStore({
     draft: "",
@@ -277,16 +333,167 @@ export function MessageTimeline(props: {
     menuOpen: false,
     pendingRename: false,
   })
+  const [headerText, setHeaderText] = createStore({
+    session: sessionKey(),
+    value: headerTitle(),
+    prev: undefined as string | undefined,
+    muted: placeholderTitle(),
+    prevMuted: false,
+  })
+  let titleFrame: number | undefined
+  let headerAnim: AnimationPlaybackControls | undefined
+  let enterAnim: AnimationPlaybackControls | undefined
+  let leaveAnim: AnimationPlaybackControls | undefined
   let titleRef: HTMLInputElement | undefined
+  let headerRef: HTMLDivElement | undefined
+  let enterRef: HTMLSpanElement | undefined
+  let leaveRef: HTMLSpanElement | undefined
 
-  const errorMessage = (err: unknown) => {
-    if (err && typeof err === "object" && "data" in err) {
-      const data = (err as { data?: { message?: string } }).data
-      if (data?.message) return data.message
-    }
-    if (err instanceof Error) return err.message
-    return language.t("common.requestFailed")
+  const clearHeaderAnim = () => {
+    headerAnim?.stop()
+    headerAnim = undefined
   }
+
+  const animateHeader = () => {
+    const el = headerRef
+    if (!el) return
+
+    clearHeaderAnim()
+    // Only animate for new sessions (placeholder title); snap for existing sessions
+    if (headerText.muted) {
+      headerAnim = animate(el, { opacity: [0, 1] }, { type: "spring", visualDuration: 1.0, bounce: 0 })
+      headerAnim.finished.then(() => {
+        if (headerRef !== el) return
+        clearFadeStyles(el)
+      })
+    } else {
+      el.style.opacity = "1"
+    }
+  }
+
+  const clearTitleAnims = () => {
+    if (titleFrame !== undefined) {
+      cancelAnimationFrame(titleFrame)
+      titleFrame = undefined
+    }
+    enterAnim?.stop()
+    enterAnim = undefined
+    leaveAnim?.stop()
+    leaveAnim = undefined
+  }
+
+  const settleTitleEnter = () => {
+    if (enterRef) clearFadeStyles(enterRef)
+  }
+
+  const hideLeave = () => {
+    if (!leaveRef) return
+    leaveRef.style.opacity = "0"
+    leaveRef.style.filter = ""
+    leaveRef.style.transform = ""
+  }
+
+  const animateEnterSpan = () => {
+    if (!enterRef) return
+    enterAnim = animate(
+      enterRef,
+      { opacity: [0, 1], filter: ["blur(2px)", "blur(0px)"], transform: ["translateY(-2px)", "translateY(0)"] },
+      FAST_SPRING,
+    )
+    enterAnim.finished.then(() => settleTitleEnter())
+  }
+
+  const crossfadeTitle = (nextTitle: string, nextMuted: boolean) => {
+    clearTitleAnims()
+
+    // snapshot old text into leave span before updating store
+    setHeaderText({ prev: headerText.value, prevMuted: headerText.muted })
+
+    // update to new text
+    setHeaderText({ value: nextTitle, muted: nextMuted })
+
+    // fade out leave span
+    if (leaveRef) {
+      leaveAnim = animate(
+        leaveRef,
+        { opacity: [1, 0], filter: ["blur(0px)", "blur(2px)"], transform: ["translateY(0)", "translateY(2px)"] },
+        FAST_SPRING,
+      )
+      leaveAnim.finished.then(() => {
+        setHeaderText({ prev: undefined, prevMuted: false })
+        hideLeave()
+      })
+    }
+
+    animateEnterSpan()
+  }
+
+  const fadeInTitle = (nextTitle: string, nextMuted: boolean) => {
+    clearTitleAnims()
+    setHeaderText({ value: nextTitle, muted: nextMuted, prev: undefined, prevMuted: false })
+    animateEnterSpan()
+  }
+
+  const snapTitle = (nextTitle: string | undefined, nextMuted: boolean) => {
+    clearTitleAnims()
+    setHeaderText({ value: nextTitle, muted: nextMuted, prev: undefined, prevMuted: false })
+    settleTitleEnter()
+  }
+
+  createEffect(
+    on(showHeader, (show, prev) => {
+      if (!show) {
+        clearHeaderAnim()
+        return
+      }
+
+      if (show === prev) return
+      animateHeader()
+    }),
+  )
+
+  createEffect(
+    on(
+      () => [sessionKey(), headerTitle(), placeholderTitle()] as const,
+      ([nextSession, nextTitle, nextMuted]) => {
+        // new session — snap immediately
+        if (nextSession !== headerText.session) {
+          setHeaderText("session", nextSession)
+          if (nextTitle && nextMuted) {
+            fadeInTitle(nextTitle, nextMuted)
+          } else {
+            snapTitle(nextTitle, nextMuted)
+          }
+          return
+        }
+        if (nextTitle === headerText.value && nextMuted === headerText.muted) {
+          return
+        }
+        if (!nextTitle) {
+          snapTitle(undefined, false)
+          return
+        }
+        // first title appearing
+        if (!headerText.value) {
+          fadeInTitle(nextTitle, nextMuted)
+          return
+        }
+        // manual rename — snap
+        if (title.saving || title.editing) {
+          snapTitle(nextTitle, nextMuted)
+          return
+        }
+        // normal swap — crossfade
+        crossfadeTitle(nextTitle, nextMuted)
+      },
+    ),
+  )
+  onCleanup(() => {
+    clearHeaderAnim()
+    clearTitleAnims()
+  })
+
+  const toastError = (err: unknown) => errorMessage(err, language.t("common.requestFailed"))
 
   createEffect(
     on(
@@ -337,7 +544,7 @@ export function MessageTimeline(props: {
         setTitle("saving", false)
         showToast({
           title: language.t("common.requestFailed"),
-          description: errorMessage(err),
+          description: toastError(err),
         })
       })
   }
@@ -377,7 +584,7 @@ export function MessageTimeline(props: {
       .catch((err) => {
         showToast({
           title: language.t("common.requestFailed"),
-          description: errorMessage(err),
+          description: toastError(err),
         })
       })
   }
@@ -396,7 +603,7 @@ export function MessageTimeline(props: {
       .catch((err) => {
         showToast({
           title: language.t("session.delete.failed.title"),
-          description: errorMessage(err),
+          description: toastError(err),
         })
         return false
       })
@@ -498,6 +705,137 @@ export function MessageTimeline(props: {
             <Icon name="arrow-down-to-line" />
           </button>
         </div>
+        <Show when={showHeader()}>
+          <div
+            data-session-title
+            ref={(el) => {
+              headerRef = el
+              el.style.opacity = "0"
+            }}
+            class="pointer-events-none absolute inset-x-0 top-0 z-30"
+          >
+            <div
+              classList={{
+                "bg-[linear-gradient(to_bottom,var(--background-stronger)_38px,transparent)]": true,
+                "w-full": true,
+                "pb-10": true,
+                "pl-2 pr-3 md:pl-4 md:pr-3": true,
+                "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
+              }}
+            >
+              <div class="pointer-events-auto h-12 w-full flex items-center justify-between gap-2">
+                <div class="flex items-center gap-1 min-w-0 flex-1 pr-3">
+                  <Show when={parentID()}>
+                    <div>
+                      <IconButton
+                        tabIndex={-1}
+                        icon="arrow-left"
+                        variant="ghost"
+                        onClick={navigateParent}
+                        aria-label={language.t("common.goBack")}
+                      />
+                    </div>
+                  </Show>
+                  <Show when={!!headerText.value || title.editing}>
+                    <Show
+                      when={title.editing}
+                      fallback={
+                        <h1 class="text-14-medium text-text-strong grow-1 min-w-0 pl-2" onDblClick={openTitleEditor}>
+                          <span class="grid min-w-0" style={{ overflow: "clip" }}>
+                            <span ref={enterRef} class="col-start-1 row-start-1 min-w-0 truncate">
+                              <span classList={{ "opacity-60": headerText.muted }}>{headerText.value}</span>
+                            </span>
+                            <span
+                              ref={leaveRef}
+                              class="col-start-1 row-start-1 min-w-0 truncate pointer-events-none"
+                              style={{ opacity: "0" }}
+                            >
+                              <span classList={{ "opacity-60": headerText.prevMuted }}>{headerText.prev}</span>
+                            </span>
+                          </span>
+                        </h1>
+                      }
+                    >
+                      <InlineInput
+                        ref={(el) => {
+                          titleRef = el
+                        }}
+                        value={title.draft}
+                        disabled={title.saving}
+                        class="text-14-medium text-text-strong grow-1 min-w-0 pl-2 rounded-[6px]"
+                        style={{ "--inline-input-shadow": "var(--shadow-xs-border-select)" }}
+                        onInput={(event) => setTitle("draft", event.currentTarget.value)}
+                        onKeyDown={(event) => {
+                          event.stopPropagation()
+                          if (event.key === "Enter") {
+                            event.preventDefault()
+                            void saveTitleEditor()
+                            return
+                          }
+                          if (event.key === "Escape") {
+                            event.preventDefault()
+                            closeTitleEditor()
+                          }
+                        }}
+                        onBlur={closeTitleEditor}
+                      />
+                    </Show>
+                  </Show>
+                </div>
+                <Show when={sessionID()}>
+                  {(id) => (
+                    <div class="shrink-0 flex items-center gap-3">
+                      <SessionContextUsage placement="bottom" />
+                      <DropdownMenu
+                        gutter={4}
+                        placement="bottom-end"
+                        open={title.menuOpen}
+                        onOpenChange={(open) => setTitle("menuOpen", open)}
+                      >
+                        <DropdownMenu.Trigger
+                          as={IconButton}
+                          icon="dot-grid"
+                          variant="ghost"
+                          class="size-6 rounded-md data-[expanded]:bg-surface-base-active"
+                          aria-label={language.t("common.moreOptions")}
+                        />
+                        <DropdownMenu.Portal>
+                          <DropdownMenu.Content
+                            style={{ "min-width": "104px" }}
+                            onCloseAutoFocus={(event) => {
+                              if (!title.pendingRename) return
+                              event.preventDefault()
+                              setTitle("pendingRename", false)
+                              openTitleEditor()
+                            }}
+                          >
+                            <DropdownMenu.Item
+                              onSelect={() => {
+                                setTitle("pendingRename", true)
+                                setTitle("menuOpen", false)
+                              }}
+                            >
+                              <DropdownMenu.ItemLabel>{language.t("common.rename")}</DropdownMenu.ItemLabel>
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Item onSelect={() => void archiveSession(id())}>
+                              <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Separator />
+                            <DropdownMenu.Item
+                              onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id()} />)}
+                            >
+                              <DropdownMenu.ItemLabel>{language.t("common.delete")}</DropdownMenu.ItemLabel>
+                            </DropdownMenu.Item>
+                          </DropdownMenu.Content>
+                        </DropdownMenu.Portal>
+                      </DropdownMenu>
+                    </div>
+                  )}
+                </Show>
+              </div>
+            </div>
+          </div>
+        </Show>
         <ScrollView
           viewportRef={props.setScrollRef}
           onWheel={(e) => {
@@ -532,8 +870,17 @@ export function MessageTimeline(props: {
             touchGesture = undefined
           }}
           onPointerDown={(e) => {
+            const next = trigger(e.target)
+            if (next) props.onPreserveScrollAnchor(next)
+
             if (e.target !== e.currentTarget) return
             props.onMarkScrollGesture(e.currentTarget)
+          }}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter" && e.key !== " ") return
+            const next = trigger(e.target)
+            if (!next) return
+            props.onPreserveScrollAnchor(next)
           }}
           onScroll={(e) => {
             props.onScheduleScrollState(e.currentTarget)
@@ -543,131 +890,22 @@ export function MessageTimeline(props: {
             props.onMarkScrollGesture(e.currentTarget)
             if (props.isDesktop) props.onScrollSpyScroll()
           }}
-          onClick={props.onAutoScrollInteraction}
+          onClick={(e) => {
+            const next = trigger(e.target)
+            if (next) props.onPreserveScrollAnchor(next)
+            props.onAutoScrollInteraction(e)
+          }}
           class="relative min-w-0 w-full h-full"
           style={{
             "--session-title-height": showHeader() ? "40px" : "0px",
             "--sticky-accordion-top": showHeader() ? "48px" : "0px",
           }}
         >
-          <div ref={props.setContentRef} class="min-w-0 w-full">
-            <Show when={showHeader()}>
-              <div
-                data-session-title
-                classList={{
-                  "sticky top-0 z-30 bg-[linear-gradient(to_bottom,var(--background-stronger)_48px,transparent)]": true,
-                  "w-full": true,
-                  "pb-4": true,
-                  "pl-2 pr-3 md:pl-4 md:pr-3": true,
-                  "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
-                }}
-              >
-                <div class="h-12 w-full flex items-center justify-between gap-2">
-                  <div class="flex items-center gap-1 min-w-0 flex-1 pr-3">
-                    <Show when={parentID()}>
-                      <IconButton
-                        tabIndex={-1}
-                        icon="arrow-left"
-                        variant="ghost"
-                        onClick={navigateParent}
-                        aria-label={language.t("common.goBack")}
-                      />
-                    </Show>
-                    <Show when={titleValue() || title.editing}>
-                      <Show
-                        when={title.editing}
-                        fallback={
-                          <h1
-                            class="text-14-medium text-text-strong truncate grow-1 min-w-0 pl-2"
-                            onDblClick={openTitleEditor}
-                          >
-                            {titleValue()}
-                          </h1>
-                        }
-                      >
-                        <InlineInput
-                          ref={(el) => {
-                            titleRef = el
-                          }}
-                          value={title.draft}
-                          disabled={title.saving}
-                          class="text-14-medium text-text-strong grow-1 min-w-0 pl-2 rounded-[6px]"
-                          style={{ "--inline-input-shadow": "var(--shadow-xs-border-select)" }}
-                          onInput={(event) => setTitle("draft", event.currentTarget.value)}
-                          onKeyDown={(event) => {
-                            event.stopPropagation()
-                            if (event.key === "Enter") {
-                              event.preventDefault()
-                              void saveTitleEditor()
-                              return
-                            }
-                            if (event.key === "Escape") {
-                              event.preventDefault()
-                              closeTitleEditor()
-                            }
-                          }}
-                          onBlur={closeTitleEditor}
-                        />
-                      </Show>
-                    </Show>
-                  </div>
-                  <Show when={sessionID()}>
-                    {(id) => (
-                      <div class="shrink-0 flex items-center gap-3">
-                        <SessionContextUsage placement="bottom" />
-                        <DropdownMenu
-                          gutter={4}
-                          placement="bottom-end"
-                          open={title.menuOpen}
-                          onOpenChange={(open) => setTitle("menuOpen", open)}
-                        >
-                          <DropdownMenu.Trigger
-                            as={IconButton}
-                            icon="dot-grid"
-                            variant="ghost"
-                            class="size-6 rounded-md data-[expanded]:bg-surface-base-active"
-                            aria-label={language.t("common.moreOptions")}
-                          />
-                          <DropdownMenu.Portal>
-                            <DropdownMenu.Content
-                              style={{ "min-width": "104px" }}
-                              onCloseAutoFocus={(event) => {
-                                if (!title.pendingRename) return
-                                event.preventDefault()
-                                setTitle("pendingRename", false)
-                                openTitleEditor()
-                              }}
-                            >
-                              <DropdownMenu.Item
-                                onSelect={() => {
-                                  setTitle("pendingRename", true)
-                                  setTitle("menuOpen", false)
-                                }}
-                              >
-                                <DropdownMenu.ItemLabel>{language.t("common.rename")}</DropdownMenu.ItemLabel>
-                              </DropdownMenu.Item>
-                              <DropdownMenu.Item onSelect={() => void archiveSession(id())}>
-                                <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
-                              </DropdownMenu.Item>
-                              <DropdownMenu.Separator />
-                              <DropdownMenu.Item
-                                onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id()} />)}
-                              >
-                                <DropdownMenu.ItemLabel>{language.t("common.delete")}</DropdownMenu.ItemLabel>
-                              </DropdownMenu.Item>
-                            </DropdownMenu.Content>
-                          </DropdownMenu.Portal>
-                        </DropdownMenu>
-                      </div>
-                    )}
-                  </Show>
-                </div>
-              </div>
-            </Show>
-
+          <div>
             <div
+              ref={props.setContentRef}
               role="log"
-              class="flex flex-col gap-12 items-start justify-start pb-16 transition-[margin]"
+              class="flex flex-col gap-0 items-start justify-start pb-16 transition-[margin]"
               classList={{
                 "w-full": true,
                 "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
@@ -692,6 +930,15 @@ export function MessageTimeline(props: {
               </Show>
               <For each={rendered()}>
                 {(messageID) => {
+                  // Capture at creation time: animate only messages added after the
+                  // timeline finishes its initial backfill staging, plus the first
+                  // turn while a brand new session is still using its default title.
+                  const isNew =
+                    staging.ready() ||
+                    (defaultTitle() &&
+                      sessionStatus() !== "idle" &&
+                      props.renderedUserMessages.length === 1 &&
+                      messageID === props.renderedUserMessages[0]?.id)
                   const active = createMemo(() => activeMessageID() === messageID)
                   const queued = createMemo(() => {
                     if (active()) return false
@@ -700,7 +947,10 @@ export function MessageTimeline(props: {
                     return false
                   })
                   const comments = createMemo(() => messageComments(sync.data.part[messageID] ?? []), [], {
-                    equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+                    equals: (a, b) => {
+                      if (a.length !== b.length) return false
+                      return a.every((x, i) => x.path === b[i].path && x.comment === b[i].comment)
+                    },
                   })
                   const commentCount = createMemo(() => comments().length)
                   return (
@@ -757,7 +1007,7 @@ export function MessageTimeline(props: {
                         messageID={messageID}
                         active={active()}
                         queued={queued()}
-                        status={active() ? sessionStatus() : undefined}
+                        animate={isNew || active()}
                         showReasoningSummaries={settings.general.showReasoningSummaries()}
                         shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
                         editToolDefaultOpen={settings.general.editToolPartsExpanded()}

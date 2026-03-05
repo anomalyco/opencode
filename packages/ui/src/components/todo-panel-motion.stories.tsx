@@ -131,22 +131,7 @@ export const Playground = {
     const global = useGlobalSync()
     const [open, setOpen] = createSignal(true)
     const [step, setStep] = createSignal(1)
-    const [dockOpenDuration, setDockOpenDuration] = createSignal(0.3)
-    const [dockOpenBounce, setDockOpenBounce] = createSignal(0)
     const [dockCloseDuration, setDockCloseDuration] = createSignal(0.3)
-    const [dockCloseBounce, setDockCloseBounce] = createSignal(0)
-    const [drawerExpandDuration, setDrawerExpandDuration] = createSignal(0.3)
-    const [drawerExpandBounce, setDrawerExpandBounce] = createSignal(0)
-    const [drawerCollapseDuration, setDrawerCollapseDuration] = createSignal(0.3)
-    const [drawerCollapseBounce, setDrawerCollapseBounce] = createSignal(0)
-    const [subtitleDuration, setSubtitleDuration] = createSignal(600)
-    const [subtitleAuto, setSubtitleAuto] = createSignal(true)
-    const [subtitleTravel, setSubtitleTravel] = createSignal(25)
-    const [subtitleEdge, setSubtitleEdge] = createSignal(17)
-    const [countDuration, setCountDuration] = createSignal(600)
-    const [countMask, setCountMask] = createSignal(18)
-    const [countMaskHeight, setCountMaskHeight] = createSignal(0)
-    const [countWidthDuration, setCountWidthDuration] = createSignal(560)
     const state = createSessionComposerState({ closeMs: () => Math.round(dockCloseDuration() * 1000) })
     let frame
     let composerRef
@@ -256,21 +241,6 @@ export const Playground = {
                     onSubmit={() => {}}
                     onResponseSubmit={pin}
                     setPromptDockRef={() => {}}
-                    dockOpenVisualDuration={dockOpenDuration()}
-                    dockOpenBounce={dockOpenBounce()}
-                    dockCloseVisualDuration={dockCloseDuration()}
-                    dockCloseBounce={dockCloseBounce()}
-                    drawerExpandVisualDuration={drawerExpandDuration()}
-                    drawerExpandBounce={drawerExpandBounce()}
-                    drawerCollapseVisualDuration={drawerCollapseDuration()}
-                    drawerCollapseBounce={drawerCollapseBounce()}
-                    subtitleDuration={subtitleDuration()}
-                    subtitleTravel={subtitleAuto() ? undefined : subtitleTravel()}
-                    subtitleEdge={subtitleAuto() ? undefined : subtitleEdge()}
-                    countDuration={countDuration()}
-                    countMask={countMask()}
-                    countMaskHeight={countMaskHeight()}
-                    countWidthDuration={countWidthDuration()}
                   />
                 </div>
               </div>
@@ -279,62 +249,21 @@ export const Playground = {
         </div>
 
         <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
-          <button onClick={toggleDock} style={btn(dockOpen())}>
-            {dockOpen() ? "Animate close" : "Animate open"}
-          </button>
-          <button onClick={toggleDrawer} style={btn(dockOpen() && collapsed())}>
-            {dockOpen() && collapsed() ? "Expand todo dock" : "Collapse todo dock"}
-          </button>
-          <button onClick={cycle} style={btn(step() > 0)}>
-            Cycle progress ({step()}/3 done)
-          </button>
-          {[0, 1, 2, 3].map((value) => (
-            <button onClick={() => setStep(value)} style={btn(step() === value)}>
-              {value} done
+          {(
+            [
+              ["Toggle dock", toggleDock],
+              ["Toggle drawer", toggleDrawer],
+              ["Cycle todos", cycle],
+            ] as const
+          ).map(([label, fn]) => (
+            <button type="button" style={btn()} onClick={fn}>
+              {label}
             </button>
           ))}
         </div>
 
         <div style={{ display: "grid", gap: "10px", "max-width": "560px" }}>
-          <div style={{ "font-size": "12px", color: "var(--color-text-secondary, #a3a3a3)" }}>Dock open</div>
-          <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-            <span style={{ width: "110px", "font-size": "13px", color: "var(--color-text-secondary, #a3a3a3)" }}>
-              duration
-            </span>
-            <input
-              type="range"
-              min="0.1"
-              max="1"
-              step="0.01"
-              value={dockOpenDuration()}
-              onInput={(event) => setDockOpenDuration(event.currentTarget.valueAsNumber)}
-              style={{ flex: 1 }}
-            />
-            <span style={{ width: "64px", "text-align": "right", "font-size": "13px" }}>
-              {Math.round(dockOpenDuration() * 1000)}ms
-            </span>
-          </label>
-          <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-            <span style={{ width: "110px", "font-size": "13px", color: "var(--color-text-secondary, #a3a3a3)" }}>
-              bounce
-            </span>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.01"
-              value={dockOpenBounce()}
-              onInput={(event) => setDockOpenBounce(event.currentTarget.valueAsNumber)}
-              style={{ flex: 1 }}
-            />
-            <span style={{ width: "64px", "text-align": "right", "font-size": "13px" }}>
-              {dockOpenBounce().toFixed(2)}
-            </span>
-          </label>
-
-          <div style={{ "font-size": "12px", color: "var(--color-text-secondary, #a3a3a3)", "margin-top": "4px" }}>
-            Dock close
-          </div>
+          <div style={{ "font-size": "12px", color: "var(--color-text-secondary, #a3a3a3)" }}>Dock close</div>
           <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
             <span style={{ width: "110px", "font-size": "13px", color: "var(--color-text-secondary, #a3a3a3)" }}>
               duration
@@ -350,231 +279,6 @@ export const Playground = {
             />
             <span style={{ width: "64px", "text-align": "right", "font-size": "13px" }}>
               {Math.round(dockCloseDuration() * 1000)}ms
-            </span>
-          </label>
-          <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-            <span style={{ width: "110px", "font-size": "13px", color: "var(--color-text-secondary, #a3a3a3)" }}>
-              bounce
-            </span>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.01"
-              value={dockCloseBounce()}
-              onInput={(event) => setDockCloseBounce(event.currentTarget.valueAsNumber)}
-              style={{ flex: 1 }}
-            />
-            <span style={{ width: "64px", "text-align": "right", "font-size": "13px" }}>
-              {dockCloseBounce().toFixed(2)}
-            </span>
-          </label>
-
-          <div style={{ "font-size": "12px", color: "var(--color-text-secondary, #a3a3a3)", "margin-top": "4px" }}>
-            Drawer expand
-          </div>
-          <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-            <span style={{ width: "110px", "font-size": "13px", color: "var(--color-text-secondary, #a3a3a3)" }}>
-              duration
-            </span>
-            <input
-              type="range"
-              min="0.1"
-              max="1"
-              step="0.01"
-              value={drawerExpandDuration()}
-              onInput={(event) => setDrawerExpandDuration(event.currentTarget.valueAsNumber)}
-              style={{ flex: 1 }}
-            />
-            <span style={{ width: "64px", "text-align": "right", "font-size": "13px" }}>
-              {Math.round(drawerExpandDuration() * 1000)}ms
-            </span>
-          </label>
-          <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-            <span style={{ width: "110px", "font-size": "13px", color: "var(--color-text-secondary, #a3a3a3)" }}>
-              bounce
-            </span>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.01"
-              value={drawerExpandBounce()}
-              onInput={(event) => setDrawerExpandBounce(event.currentTarget.valueAsNumber)}
-              style={{ flex: 1 }}
-            />
-            <span style={{ width: "64px", "text-align": "right", "font-size": "13px" }}>
-              {drawerExpandBounce().toFixed(2)}
-            </span>
-          </label>
-
-          <div style={{ "font-size": "12px", color: "var(--color-text-secondary, #a3a3a3)", "margin-top": "4px" }}>
-            Drawer collapse
-          </div>
-          <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-            <span style={{ width: "110px", "font-size": "13px", color: "var(--color-text-secondary, #a3a3a3)" }}>
-              duration
-            </span>
-            <input
-              type="range"
-              min="0.1"
-              max="1"
-              step="0.01"
-              value={drawerCollapseDuration()}
-              onInput={(event) => setDrawerCollapseDuration(event.currentTarget.valueAsNumber)}
-              style={{ flex: 1 }}
-            />
-            <span style={{ width: "64px", "text-align": "right", "font-size": "13px" }}>
-              {Math.round(drawerCollapseDuration() * 1000)}ms
-            </span>
-          </label>
-          <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-            <span style={{ width: "110px", "font-size": "13px", color: "var(--color-text-secondary, #a3a3a3)" }}>
-              bounce
-            </span>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.01"
-              value={drawerCollapseBounce()}
-              onInput={(event) => setDrawerCollapseBounce(event.currentTarget.valueAsNumber)}
-              style={{ flex: 1 }}
-            />
-            <span style={{ width: "64px", "text-align": "right", "font-size": "13px" }}>
-              {drawerCollapseBounce().toFixed(2)}
-            </span>
-          </label>
-
-          <div style={{ "font-size": "12px", color: "var(--color-text-secondary, #a3a3a3)", "margin-top": "4px" }}>
-            Subtitle odometer
-          </div>
-          <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-            <span style={{ width: "110px", "font-size": "13px", color: "var(--color-text-secondary, #a3a3a3)" }}>
-              duration
-            </span>
-            <input
-              type="range"
-              min="120"
-              max="1400"
-              step="10"
-              value={subtitleDuration()}
-              onInput={(event) => setSubtitleDuration(event.currentTarget.valueAsNumber)}
-              style={{ flex: 1 }}
-            />
-            <span style={{ width: "64px", "text-align": "right", "font-size": "13px" }}>
-              {Math.round(subtitleDuration())}ms
-            </span>
-          </label>
-          <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-            <span style={{ width: "110px", "font-size": "13px", color: "var(--color-text-secondary, #a3a3a3)" }}>
-              auto fit
-            </span>
-            <input
-              type="checkbox"
-              checked={subtitleAuto()}
-              onInput={(event) => setSubtitleAuto(event.currentTarget.checked)}
-            />
-            <span style={{ width: "64px", "text-align": "right", "font-size": "13px" }}>
-              {subtitleAuto() ? "on" : "off"}
-            </span>
-          </label>
-          <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-            <span style={{ width: "110px", "font-size": "13px", color: "var(--color-text-secondary, #a3a3a3)" }}>
-              travel
-            </span>
-            <input
-              type="range"
-              min="0"
-              max="40"
-              step="1"
-              value={subtitleTravel()}
-              onInput={(event) => setSubtitleTravel(event.currentTarget.valueAsNumber)}
-              style={{ flex: 1 }}
-            />
-            <span style={{ width: "64px", "text-align": "right", "font-size": "13px" }}>{subtitleTravel()}px</span>
-          </label>
-          <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-            <span style={{ width: "110px", "font-size": "13px", color: "var(--color-text-secondary, #a3a3a3)" }}>
-              edge
-            </span>
-            <input
-              type="range"
-              min="1"
-              max="40"
-              step="1"
-              value={subtitleEdge()}
-              onInput={(event) => setSubtitleEdge(event.currentTarget.valueAsNumber)}
-              style={{ flex: 1 }}
-            />
-            <span style={{ width: "64px", "text-align": "right", "font-size": "13px" }}>{subtitleEdge()}%</span>
-          </label>
-
-          <div style={{ "font-size": "12px", color: "var(--color-text-secondary, #a3a3a3)", "margin-top": "4px" }}>
-            Count odometer
-          </div>
-          <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-            <span style={{ width: "110px", "font-size": "13px", color: "var(--color-text-secondary, #a3a3a3)" }}>
-              duration
-            </span>
-            <input
-              type="range"
-              min="120"
-              max="1400"
-              step="10"
-              value={countDuration()}
-              onInput={(event) => setCountDuration(event.currentTarget.valueAsNumber)}
-              style={{ flex: 1 }}
-            />
-            <span style={{ width: "64px", "text-align": "right", "font-size": "13px" }}>
-              {Math.round(countDuration())}ms
-            </span>
-          </label>
-          <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-            <span style={{ width: "110px", "font-size": "13px", color: "var(--color-text-secondary, #a3a3a3)" }}>
-              mask
-            </span>
-            <input
-              type="range"
-              min="4"
-              max="40"
-              step="1"
-              value={countMask()}
-              onInput={(event) => setCountMask(event.currentTarget.valueAsNumber)}
-              style={{ flex: 1 }}
-            />
-            <span style={{ width: "64px", "text-align": "right", "font-size": "13px" }}>{countMask()}%</span>
-          </label>
-          <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-            <span style={{ width: "110px", "font-size": "13px", color: "var(--color-text-secondary, #a3a3a3)" }}>
-              mask height
-            </span>
-            <input
-              type="range"
-              min="0"
-              max="14"
-              step="1"
-              value={countMaskHeight()}
-              onInput={(event) => setCountMaskHeight(event.currentTarget.valueAsNumber)}
-              style={{ flex: 1 }}
-            />
-            <span style={{ width: "64px", "text-align": "right", "font-size": "13px" }}>{countMaskHeight()}px</span>
-          </label>
-          <label style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-            <span style={{ width: "110px", "font-size": "13px", color: "var(--color-text-secondary, #a3a3a3)" }}>
-              width spring
-            </span>
-            <input
-              type="range"
-              min="0"
-              max="1200"
-              step="10"
-              value={countWidthDuration()}
-              onInput={(event) => setCountWidthDuration(event.currentTarget.valueAsNumber)}
-              style={{ flex: 1 }}
-            />
-            <span style={{ width: "64px", "text-align": "right", "font-size": "13px" }}>
-              {Math.round(countWidthDuration())}ms
             </span>
           </label>
         </div>

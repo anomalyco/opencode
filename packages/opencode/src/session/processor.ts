@@ -15,10 +15,16 @@ import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
-
+import { NotFoundError } from "@/storage/db"
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
   const log = Log.create({ service: "session.processor" })
+
+  const stale = (error: unknown) => {
+    if (NotFoundError.isInstance(error)) return true
+    if (error instanceof Error && error.message.includes("FOREIGN KEY constraint failed")) return true
+    return false
+  }
 
   export type Info = Awaited<ReturnType<typeof create>>
   export type Result = Awaited<ReturnType<Info["process"]>>
@@ -351,6 +357,10 @@ export namespace SessionProcessor {
               if (needsCompaction) break
             }
           } catch (e: any) {
+            if (stale(e)) {
+              SessionStatus.set(input.sessionID, { type: "idle" })
+              return "stop"
+            }
             log.error("process", {
               error: e,
               stack: JSON.stringify(e.stack),
@@ -384,39 +394,47 @@ export namespace SessionProcessor {
               SessionStatus.set(input.sessionID, { type: "idle" })
             }
           }
-          if (snapshot) {
-            const patch = await Snapshot.patch(snapshot)
-            if (patch.files.length) {
-              await Session.updatePart({
-                id: Identifier.ascending("part"),
-                messageID: input.assistantMessage.id,
-                sessionID: input.sessionID,
-                type: "patch",
-                hash: patch.hash,
-                files: patch.files,
-              })
+          try {
+            if (snapshot) {
+              const patch = await Snapshot.patch(snapshot)
+              if (patch.files.length) {
+                await Session.updatePart({
+                  id: Identifier.ascending("part"),
+                  messageID: input.assistantMessage.id,
+                  sessionID: input.sessionID,
+                  type: "patch",
+                  hash: patch.hash,
+                  files: patch.files,
+                })
+              }
+              snapshot = undefined
             }
-            snapshot = undefined
-          }
-          const p = await MessageV2.parts(input.assistantMessage.id)
-          for (const part of p) {
-            if (part.type === "tool" && part.state.status !== "completed" && part.state.status !== "error") {
-              await Session.updatePart({
-                ...part,
-                state: {
-                  ...part.state,
-                  status: "error",
-                  error: "Tool execution aborted",
-                  time: {
-                    start: Date.now(),
-                    end: Date.now(),
+            const p = await MessageV2.parts(input.assistantMessage.id)
+            for (const part of p) {
+              if (part.type === "tool" && part.state.status !== "completed" && part.state.status !== "error") {
+                await Session.updatePart({
+                  ...part,
+                  state: {
+                    ...part.state,
+                    status: "error",
+                    error: "Tool execution aborted",
+                    time: {
+                      start: Date.now(),
+                      end: Date.now(),
+                    },
                   },
-                },
-              })
+                })
+              }
             }
+            input.assistantMessage.time.completed = Date.now()
+            await Session.updateMessage(input.assistantMessage)
+          } catch (e) {
+            if (stale(e)) {
+              SessionStatus.set(input.sessionID, { type: "idle" })
+              return "stop"
+            }
+            throw e
           }
-          input.assistantMessage.time.completed = Date.now()
-          await Session.updateMessage(input.assistantMessage)
           if (needsCompaction) return "compact"
           if (blocked) return "stop"
           if (input.assistantMessage.error) return "stop"

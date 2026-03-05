@@ -1,3 +1,12 @@
+export function isEditableTarget(target: EventTarget | null | undefined) {
+  if (!(target instanceof HTMLElement)) return false
+  if (/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName)) return true
+  if (target.isContentEditable) return true
+  if (target.closest("[contenteditable='true']")) return true
+  if (target.closest("input, textarea, select")) return true
+  return false
+}
+
 export function getCharacterOffsetInLine(lineElement: Element, targetNode: Node, offset: number): number {
   const r = document.createRange()
   r.selectNodeContents(lineElement)

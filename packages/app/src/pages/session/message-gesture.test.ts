@@ -49,11 +49,11 @@ describe("shouldMarkBoundaryGesture", () => {
     ).toBe(true)
   })
 
-  test("does not mark when nested scroller can consume movement", () => {
+  test("does not mark when scroller can consume movement", () => {
     expect(
       shouldMarkBoundaryGesture({
         delta: 20,
-        scrollTop: 200,
+        scrollTop: 300,
         scrollHeight: 1000,
         clientHeight: 400,
       }),
