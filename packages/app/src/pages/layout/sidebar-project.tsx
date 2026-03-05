@@ -28,6 +28,9 @@ export type ProjectSidebarContext = {
   navigateToProject: (directory: string) => void
   openSidebar: () => void
   closeProject: (directory: string) => void
+  addSubProject: (project: LocalProject) => void
+  removeSubProject: (project: LocalProject) => void
+  hasParentProject: (project: LocalProject) => boolean
   showEditProjectDialog: (project: LocalProject) => void
   toggleProjectWorkspaces: (project: LocalProject) => void
   workspacesEnabled: (project: LocalProject) => boolean
@@ -67,6 +70,9 @@ const ProjectTile = (props: {
   onProjectMouseLeave: (worktree: string) => void
   onProjectFocus: (worktree: string) => void
   navigateToProject: (directory: string) => void
+  addSubProject: (project: LocalProject) => void
+  removeSubProject: (project: LocalProject) => void
+  hasParentProject: (project: LocalProject) => boolean
   showEditProjectDialog: (project: LocalProject) => void
   toggleProjectWorkspaces: (project: LocalProject) => void
   workspacesEnabled: (project: LocalProject) => boolean
@@ -142,6 +148,26 @@ const ProjectTile = (props: {
           <ContextMenu.Item onSelect={() => props.showEditProjectDialog(props.project)}>
             <ContextMenu.ItemLabel>{props.language.t("common.edit")}</ContextMenu.ItemLabel>
           </ContextMenu.Item>
+          <Show
+            when={props.hasParentProject(props.project)}
+            fallback={
+              <ContextMenu.Item
+                data-action="project-add-subproject"
+                data-project={base64Encode(props.project.worktree)}
+                onSelect={() => props.addSubProject(props.project)}
+              >
+                <ContextMenu.ItemLabel>{props.language.t("sidebar.project.addSubProject")}</ContextMenu.ItemLabel>
+              </ContextMenu.Item>
+            }
+          >
+            <ContextMenu.Item
+              data-action="project-remove-subproject"
+              data-project={base64Encode(props.project.worktree)}
+              onSelect={() => props.removeSubProject(props.project)}
+            >
+              <ContextMenu.ItemLabel>{props.language.t("sidebar.project.removeSubProject")}</ContextMenu.ItemLabel>
+            </ContextMenu.Item>
+          </Show>
           <ContextMenu.Item
             data-action="project-workspaces-toggle"
             data-project={base64Encode(props.project.worktree)}
@@ -362,6 +388,9 @@ export const SortableProject = (props: {
       toggleProjectWorkspaces={props.ctx.toggleProjectWorkspaces}
       workspacesEnabled={props.ctx.workspacesEnabled}
       closeProject={props.ctx.closeProject}
+      addSubProject={props.ctx.addSubProject}
+      removeSubProject={props.ctx.removeSubProject}
+      hasParentProject={props.ctx.hasParentProject}
       setMenu={(value) => setState("menu", value)}
       setOpen={(value) => setState("open", value)}
       setSuppressHover={(value) => setState("suppressHover", value)}

@@ -70,6 +70,12 @@ const createPlatform = (): Platform => {
     return commands.wslPath("~", "windows").catch(() => undefined)
   }
 
+  const wslDialogPath = async (path?: string) => {
+    if (!path) return wslHome()
+    if (os !== "windows" || !window.__OPENCODE__?.wsl) return path
+    return commands.wslPath(path, "windows").catch(() => path)
+  }
+
   const handleWslPicker = async <T extends string | string[]>(result: T | null): Promise<T | null> => {
     if (!result || !window.__OPENCODE__?.wsl) return result
     if (Array.isArray(result)) {
@@ -84,7 +90,7 @@ const createPlatform = (): Platform => {
     version: pkg.version,
 
     async openDirectoryPickerDialog(opts) {
-      const defaultPath = await wslHome()
+      const defaultPath = await wslDialogPath(opts?.defaultPath)
       const result = await open({
         directory: true,
         multiple: opts?.multiple ?? false,

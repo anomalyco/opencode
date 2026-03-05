@@ -2,11 +2,14 @@ import { describe, expect, test } from "bun:test"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import { collectOpenProjectDeepLinks, drainPendingDeepLinks, parseDeepLink } from "./deep-links"
 import {
+  createProjectGroups,
   displayName,
   errorMessage,
   getDraggableId,
   hasProjectPermissions,
   latestRootSession,
+  projectGroupID,
+  projectGroupLabel,
   syncWorkspaceOrder,
   workspaceKey,
 } from "./helpers"
@@ -186,5 +189,45 @@ describe("layout workspace helpers", () => {
     expect(errorMessage({ data: { message: "boom" } }, "fallback")).toBe("boom")
     expect(errorMessage(new Error("broken"), "fallback")).toBe("broken")
     expect(errorMessage("unknown", "fallback")).toBe("fallback")
+  })
+
+  test("builds a stable project group id", () => {
+    expect(projectGroupID("/work/company/repo-a")).toBe("/work/company")
+    expect(projectGroupID("C:\\work\\company\\repo-a")).toBe("C:/work/company")
+  })
+
+  test("formats project group labels", () => {
+    expect(projectGroupLabel("/work/company")).toBe("company")
+    expect(projectGroupLabel("/")).toBe("/")
+    expect(projectGroupLabel("C:/")).toBe("C:")
+  })
+
+  test("creates an all-projects group and parent groups", () => {
+    const groups = createProjectGroups([
+      { worktree: "/work/company/repo-a" },
+      { worktree: "/work/company/repo-b" },
+      { worktree: "/work/personal/repo-c" },
+    ])
+
+    expect(groups.map((group) => group.id)).toEqual(["all", "/work/company", "/work/personal"])
+    expect(groups[0]?.projects.length).toBe(3)
+    expect(groups[1]?.projects.map((project) => project.worktree)).toEqual([
+      "/work/company/repo-a",
+      "/work/company/repo-b",
+    ])
+  })
+
+  test("groups sub-projects under their selected core project", () => {
+    const groups = createProjectGroups(
+      [{ worktree: "/work/sub-a" }, { worktree: "/work/sub-b" }, { worktree: "/work/core", name: "Core" }],
+      {
+        "/work/sub-a": "/work/core",
+        "/work/sub-b": "/work/core",
+      },
+    )
+
+    expect(groups.map((group) => group.id)).toEqual(["all", "project:/work/core"])
+    expect(groups[1]?.label).toBe("Core")
+    expect(groups[1]?.projects.map((project) => project.worktree)).toEqual(["/work/core", "/work/sub-a", "/work/sub-b"])
   })
 })

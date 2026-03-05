@@ -85,6 +85,8 @@ export default function Layout(props: ParentProps) {
       lastProjectSession: {} as { [directory: string]: { directory: string; id: string; at: number } },
       activeProject: undefined as string | undefined,
       activeWorkspace: undefined as string | undefined,
+      expandedProject: undefined as string | undefined,
+      projectParent: {} as Record<string, string>,
       workspaceOrder: {} as Record<string, string[]>,
       workspaceName: {} as Record<string, string>,
       workspaceBranchName: {} as Record<string, Record<string, string>>,
@@ -192,9 +194,86 @@ export default function Layout(props: ParentProps) {
     return layout.projects.list().find((project) => project.worktree === id)
   })
 
+  const projectParent = createMemo(() => {
+    const projects = layout.projects.list().map((project) => workspaceKey(project.worktree))
+    const set = new Set(projects)
+    return Object.entries(store.projectParent).reduce(
+      (acc, [child, parent]) => {
+        const key = workspaceKey(child)
+        const root = workspaceKey(parent)
+        if (!set.has(key) || !set.has(root) || key === root) return acc
+        acc[key] = root
+        return acc
+      },
+      {} as Record<string, string>,
+    )
+  })
+
+  const projectParentSet = createMemo(() => new Set(Object.values(projectParent())))
+  const subProjectSet = createMemo(() => new Set(Object.keys(projectParent())))
+
+  const subProjectsByParent = createMemo(() => {
+    const map = new Map<string, LocalProject[]>()
+    for (const project of layout.projects.list()) {
+      const key = workspaceKey(project.worktree)
+      const parent = projectParent()[key]
+      if (!parent) continue
+      const list = map.get(parent)
+      if (list) {
+        list.push(project)
+        continue
+      }
+      map.set(parent, [project])
+    }
+    return map
+  })
+
+  const groupedProjects = createMemo(() => {
+    const expanded = store.expandedProject ? workspaceKey(store.expandedProject) : undefined
+    return layout.projects.list().flatMap((project) => {
+      const key = workspaceKey(project.worktree)
+      if (subProjectSet().has(key)) return []
+      const children = subProjectsByParent().get(key) ?? []
+      if (expanded !== key) return [project]
+      return [project, ...children]
+    })
+  })
+
   createEffect(() => {
     if (!layout.sidebar.opened()) return
     setHoverProject(undefined)
+  })
+
+  createEffect(() => {
+    const projects = new Set(layout.projects.list().map((project) => workspaceKey(project.worktree)))
+    const next = Object.entries(store.projectParent).reduce(
+      (acc, [child, parent]) => {
+        const key = workspaceKey(child)
+        const root = workspaceKey(parent)
+        if (!projects.has(key) || !projects.has(root) || key === root) return acc
+        acc[key] = root
+        return acc
+      },
+      {} as Record<string, string>,
+    )
+
+    const current = Object.entries(store.projectParent).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    const cleaned = Object.entries(next).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    if (JSON.stringify(current) === JSON.stringify(cleaned)) return
+    setStore("projectParent", next)
+  })
+
+  createEffect(() => {
+    const expanded = store.expandedProject
+    if (!expanded) return
+    const key = workspaceKey(expanded)
+    if (!projectParentSet().has(key)) {
+      setStore("expandedProject", undefined)
+      return
+    }
+    const visible = layout.projects.list().some((project) => workspaceKey(project.worktree) === key)
+    if (visible) return
+    setStore("expandedProject", undefined)
   })
 
   const autoselecting = createMemo(() => {
@@ -1097,6 +1176,10 @@ export default function Layout(props: ParentProps) {
   async function navigateToProject(directory: string | undefined) {
     if (!directory) return
     const root = projectRoot(directory)
+    const key = workspaceKey(root)
+    const parent = projectParent()[key]
+    const expanded = parent ?? (projectParentSet().has(key) ? key : undefined)
+    setStore("expandedProject", expanded)
     server.projects.touch(root)
     const project = layout.projects.list().find((item) => item.worktree === root)
     const dirs = Array.from(new Set([root, ...(store.workspaceOrder[root] ?? []), ...(project?.sandboxes ?? [])]))
@@ -1214,30 +1297,71 @@ export default function Layout(props: ParentProps) {
 
   const showEditProjectDialog = (project: LocalProject) => dialog.show(() => <DialogEditProject project={project} />)
 
-  async function chooseProject() {
-    function resolve(result: string | string[] | null) {
-      if (Array.isArray(result)) {
-        for (const directory of result) {
-          openProject(directory, false)
-        }
-        navigateToProject(result[0])
-      } else if (result) {
-        openProject(result)
-      }
+  async function pickProjects(title: string, onSelect: (result: string[]) => void, opts?: { defaultPath?: string }) {
+    const resolve = (result: string | string[] | null) => {
+      if (!result) return
+      const list = Array.isArray(result) ? result : [result]
+      if (list.length === 0) return
+      onSelect(list)
     }
 
     if (platform.openDirectoryPickerDialog && server.isLocal()) {
       const result = await platform.openDirectoryPickerDialog?.({
-        title: language.t("command.project.open"),
+        title,
         multiple: true,
+        defaultPath: opts?.defaultPath,
       })
       resolve(result)
-    } else {
-      dialog.show(
-        () => <DialogSelectDirectory multiple={true} onSelect={resolve} />,
-        () => resolve(null),
-      )
+      return
     }
+
+    dialog.show(
+      () => <DialogSelectDirectory multiple={true} onSelect={resolve} />,
+      () => resolve(null),
+    )
+  }
+
+  async function chooseProject() {
+    await pickProjects(language.t("command.project.open"), (result) => {
+      for (const directory of result) {
+        openProject(directory, false)
+      }
+      navigateToProject(result[0])
+    })
+  }
+
+  async function addSubProject(parent: LocalProject) {
+    const root = workspaceKey(parent.worktree)
+    await pickProjects(
+      language.t("sidebar.project.addSubProject"),
+      (result) => {
+        for (const directory of result) {
+          const key = workspaceKey(directory)
+          if (key === root) continue
+          layout.projects.open(directory)
+          setStore("projectParent", key, root)
+        }
+        setStore("expandedProject", root)
+        navigateToProject(result[0])
+      },
+      { defaultPath: parent.worktree },
+    )
+  }
+
+  function removeSubProject(project: LocalProject) {
+    const key = workspaceKey(project.worktree)
+    const parent = projectParent()[key]
+    if (!parent) return
+    const siblings = Object.entries(projectParent()).some(
+      ([child, value]) => workspaceKey(child) !== key && value === parent,
+    )
+    setStore(
+      "projectParent",
+      produce((draft) => {
+        delete draft[key]
+      }),
+    )
+    if (!siblings) setStore("expandedProject", undefined)
   }
 
   const deleteWorkspace = async (root: string, directory: string) => {
@@ -1712,6 +1836,9 @@ export default function Layout(props: ParentProps) {
     navigateToProject,
     openSidebar: () => layout.sidebar.open(),
     closeProject,
+    addSubProject,
+    removeSubProject,
+    hasParentProject: (project) => !!projectParent()[workspaceKey(project.worktree)],
     showEditProjectDialog,
     toggleProjectWorkspaces,
     workspacesEnabled: (project) => project.vcs === "git" && layout.sidebar.workspaces(project.worktree)(),
@@ -1997,7 +2124,8 @@ export default function Layout(props: ParentProps) {
             <SidebarContent
               opened={() => layout.sidebar.opened()}
               aimMove={aim.move}
-              projects={() => layout.projects.list()}
+              projects={groupedProjects}
+              isSubProject={(project) => subProjectSet().has(workspaceKey(project.worktree))}
               renderProject={(project) => (
                 <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} />
               )}
@@ -2062,7 +2190,8 @@ export default function Layout(props: ParentProps) {
               mobile
               opened={() => layout.sidebar.opened()}
               aimMove={aim.move}
-              projects={() => layout.projects.list()}
+              projects={groupedProjects}
+              isSubProject={(project) => subProjectSet().has(workspaceKey(project.worktree))}
               renderProject={(project) => (
                 <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} mobile />
               )}

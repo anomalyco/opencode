@@ -1,1 +1,16 @@
 @import "@opencode-ai/ui/styles/tailwind";
+
+@keyframes sidebar-subproject-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.sidebar-subproject-enter {
+  animation: sidebar-subproject-enter 180ms ease-out;
+}

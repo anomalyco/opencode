@@ -18,6 +18,7 @@ export const SidebarContent = (props: {
   opened: Accessor<boolean>
   aimMove: (event: MouseEvent) => void
   projects: Accessor<LocalProject[]>
+  isSubProject?: (project: LocalProject) => boolean
   renderProject: (project: LocalProject) => JSX.Element
   handleDragStart: (event: unknown) => void
   handleDragEnd: () => void
@@ -35,6 +36,7 @@ export const SidebarContent = (props: {
 }): JSX.Element => {
   const expanded = createMemo(() => sidebarExpanded(props.mobile, props.opened()))
   const placement = () => (props.mobile ? "bottom" : "right")
+  const projects = createMemo(() => props.projects())
 
   return (
     <div class="flex h-full w-full overflow-hidden">
@@ -52,8 +54,25 @@ export const SidebarContent = (props: {
             <DragDropSensors />
             <ConstrainDragXAxis />
             <div class="h-full w-full flex flex-col items-center gap-3 px-3 py-3 overflow-y-auto no-scrollbar">
-              <SortableProvider ids={props.projects().map((p) => p.worktree)}>
-                <For each={props.projects()}>{(project) => props.renderProject(project)}</For>
+              <SortableProvider ids={projects().map((p) => p.worktree)}>
+                <For each={projects()}>
+                  {(project, index) => (
+                    <>
+                      <Show
+                        when={
+                          !!props.isSubProject?.(project) &&
+                          index() > 0 &&
+                          !props.isSubProject?.(projects()[index() - 1] as LocalProject)
+                        }
+                      >
+                        <div class="w-full h-px bg-border-weak-base my-0.5" />
+                      </Show>
+                      <div classList={{ "sidebar-subproject-enter": !!props.isSubProject?.(project) }}>
+                        {props.renderProject(project)}
+                      </div>
+                    </>
+                  )}
+                </For>
               </SortableProvider>
               <Tooltip
                 placement={placement()}
