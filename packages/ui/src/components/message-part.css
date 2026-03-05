@@ -1194,6 +1194,27 @@
     flex-shrink: 0;
   }
 
+  button[data-slot="apply-patch-filename"] {
+    appearance: none;
+    border: none;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    text-align: left;
+    color: inherit;
+    font: inherit;
+    line-height: inherit;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+
+    &:focus-visible {
+      outline: 1px solid var(--border-interactive-base);
+      outline-offset: 2px;
+      border-radius: 2px;
+    }
+  }
+
   [data-slot="apply-patch-trigger-actions"] {
     flex-shrink: 0;
     display: flex;

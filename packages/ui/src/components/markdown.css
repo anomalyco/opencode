@@ -258,3 +258,22 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+[data-component="markdown"] button.file-link {
+  appearance: none;
+  border: none;
+  background: transparent;
+  display: inline;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  white-space: normal;
+  cursor: pointer;
+}
+
+[data-component="markdown"] button.file-link:hover > code {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
