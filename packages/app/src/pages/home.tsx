@@ -48,7 +48,10 @@ export default function Home() {
     return "bg-border-weak-base"
   })
 
+  // LATER OVERRIDE: Guard against invalid project directories (e.g. "/").
+  // Upstream `openProject` has no guard — keep this check on merge.
   function openProject(directory: string) {
+    if (!directory || !directory.startsWith(PROJECTS_DIR + "/")) return
     layout.projects.open(directory)
     server.projects.touch(directory)
     navigate(`/${base64Encode(directory)}`)
