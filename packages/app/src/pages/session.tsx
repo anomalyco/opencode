@@ -416,7 +416,10 @@ export default function Page() {
       () => {
         const msg = lastUserMessage()
         if (!msg) return
-        if (msg.agent) local.agent.set(msg.agent)
+        if (msg.agent) {
+          local.agent.set(msg.agent)
+          if (local.agent.current()?.model) return
+        }
         if (msg.model) local.model.set(msg.model)
       },
     ),

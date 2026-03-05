@@ -1846,7 +1846,7 @@ export default function Layout(props: ParentProps) {
         }}
         style={{ width: panelProps.mobile ? undefined : `${Math.max(layout.sidebar.width() - 64, 0)}px` }}
       >
-        <Show when={panelProps.project}>
+        <Show when={panelProps.project} keyed>
           {(p) => (
             <>
               <div class="shrink-0 px-2 py-1">
@@ -1855,7 +1855,7 @@ export default function Layout(props: ParentProps) {
                     <InlineEditor
                       id={`project:${projectId()}`}
                       value={projectName}
-                      onSave={(next) => renameProject(p(), next)}
+                      onSave={(next) => renameProject(p, next)}
                       class="text-14-medium text-text-strong truncate"
                       displayClass="text-14-medium text-text-strong truncate"
                       stopPropagation
@@ -1864,7 +1864,7 @@ export default function Layout(props: ParentProps) {
                     <Tooltip
                       placement="bottom"
                       gutter={2}
-                      value={p().worktree}
+                      value={p.worktree}
                       class="shrink-0"
                       contentStyle={{
                         "max-width": "640px",
@@ -1872,7 +1872,7 @@ export default function Layout(props: ParentProps) {
                       }}
                     >
                       <span class="text-12-regular text-text-base truncate select-text">
-                        {p().worktree.replace(homedir(), "~")}
+                        {p.worktree.replace(homedir(), "~")}
                       </span>
                     </Tooltip>
                   </div>
@@ -1883,7 +1883,7 @@ export default function Layout(props: ParentProps) {
                       icon="dot-grid"
                       variant="ghost"
                       data-action="project-menu"
-                      data-project={base64Encode(p().worktree)}
+                      data-project={base64Encode(p.worktree)}
                       class="shrink-0 size-6 rounded-md data-[expanded]:bg-surface-base-active"
                       classList={{
                         "opacity-0 group-hover/project:opacity-100 data-[expanded]:opacity-100": !panelProps.mobile,
@@ -1892,24 +1892,24 @@ export default function Layout(props: ParentProps) {
                     />
                     <DropdownMenu.Portal mount={!panelProps.mobile ? state.nav : undefined}>
                       <DropdownMenu.Content class="mt-1">
-                        <DropdownMenu.Item onSelect={() => showEditProjectDialog(p())}>
+                        <DropdownMenu.Item onSelect={() => showEditProjectDialog(p)}>
                           <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Item
                           data-action="project-workspaces-toggle"
-                          data-project={base64Encode(p().worktree)}
-                          disabled={p().vcs !== "git" && !layout.sidebar.workspaces(p().worktree)()}
-                          onSelect={() => toggleProjectWorkspaces(p())}
+                          data-project={base64Encode(p.worktree)}
+                          disabled={p.vcs !== "git" && !layout.sidebar.workspaces(p.worktree)()}
+                          onSelect={() => toggleProjectWorkspaces(p)}
                         >
                           <DropdownMenu.ItemLabel>
-                            {layout.sidebar.workspaces(p().worktree)()
+                            {layout.sidebar.workspaces(p.worktree)()
                               ? language.t("sidebar.workspaces.disable")
                               : language.t("sidebar.workspaces.enable")}
                           </DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Item
                           data-action="project-clear-notifications"
-                          data-project={base64Encode(p().worktree)}
+                          data-project={base64Encode(p.worktree)}
                           disabled={unseenCount() === 0}
                           onSelect={clearNotifications}
                         >
@@ -1920,8 +1920,8 @@ export default function Layout(props: ParentProps) {
                         <DropdownMenu.Separator />
                         <DropdownMenu.Item
                           data-action="project-close-menu"
-                          data-project={base64Encode(p().worktree)}
-                          onSelect={() => closeProject(p().worktree)}
+                          data-project={base64Encode(p.worktree)}
+                          onSelect={() => closeProject(p.worktree)}
                         >
                           <DropdownMenu.ItemLabel>{language.t("common.close")}</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
@@ -1946,7 +1946,7 @@ export default function Layout(props: ParentProps) {
                             size="large"
                             icon="plus-small"
                             class="w-full"
-                            onClick={() => navigateWithSidebarReset(`/${base64Encode(p().worktree)}/session`)}
+                            onClick={() => navigateWithSidebarReset(`/${base64Encode(p.worktree)}/session`)}
                           >
                             {language.t("command.session.new")}
                           </Button>
@@ -1955,7 +1955,7 @@ export default function Layout(props: ParentProps) {
                       <div class="flex-1 min-h-0">
                         <LocalWorkspace
                           ctx={workspaceSidebarCtx}
-                          project={p()}
+                          project={p}
                           sortNow={sortNow}
                           mobile={panelProps.mobile}
                         />
@@ -1970,7 +1970,7 @@ export default function Layout(props: ParentProps) {
                         keybind={command.keybind("workspace.new")}
                         placement="top"
                       >
-                        <Button size="large" icon="plus-small" class="w-full" onClick={() => createWorkspace(p())}>
+                        <Button size="large" icon="plus-small" class="w-full" onClick={() => createWorkspace(p)}>
                           {language.t("workspace.new")}
                         </Button>
                       </TooltipKeybind>
@@ -1996,7 +1996,7 @@ export default function Layout(props: ParentProps) {
                                 <SortableWorkspace
                                   ctx={workspaceSidebarCtx}
                                   directory={directory}
-                                  project={p()}
+                                  project={p}
                                   sortNow={sortNow}
                                   mobile={panelProps.mobile}
                                 />
