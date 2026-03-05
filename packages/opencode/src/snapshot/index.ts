@@ -88,13 +88,16 @@ export namespace Snapshot {
   export async function patch(hash: string): Promise<Patch> {
     const git = gitdir()
     await add(git)
+    return delta(git, hash)
+  }
+
+  async function delta(git: string, hash: string): Promise<Patch> {
     const result =
       await $`git -c core.autocrlf=false -c core.longpaths=true -c core.symlinks=true -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --name-only ${hash} -- .`
         .quiet()
         .cwd(Instance.directory)
         .nothrow()
 
-    // If git diff fails, return empty patch
     if (result.exitCode !== 0) {
       log.warn("failed to get diff", { hash, exitCode: result.exitCode })
       return { hash, files: [] }
@@ -110,6 +113,43 @@ export namespace Snapshot {
         .filter(Boolean)
         .map((x) => path.join(Instance.worktree, x).replaceAll("\\", "/")),
     }
+  }
+
+  // Runs add once, then write-tree and diff concurrently.
+  export async function trackAndPatch(from?: string): Promise<{ hash?: string; patch?: Patch }> {
+    if (Instance.project.vcs !== "git" || Flag.OPENCODE_CLIENT === "acp") return {}
+    const cfg = await Config.get()
+    if (cfg.snapshot === false) return {}
+    const git = gitdir()
+    if (await fs.mkdir(git, { recursive: true })) {
+      await $`git init`
+        .env({
+          ...process.env,
+          GIT_DIR: git,
+          GIT_WORK_TREE: Instance.worktree,
+        })
+        .quiet()
+        .nothrow()
+      await $`git --git-dir ${git} config core.autocrlf false`.quiet().nothrow()
+      await $`git --git-dir ${git} config core.longpaths true`.quiet().nothrow()
+      await $`git --git-dir ${git} config core.symlinks true`.quiet().nothrow()
+      await $`git --git-dir ${git} config core.fsmonitor false`.quiet().nothrow()
+      log.info("initialized")
+    }
+    await add(git)
+
+    const [tree, patch] = await Promise.all([
+      $`git --git-dir ${git} --work-tree ${Instance.worktree} write-tree`
+        .quiet()
+        .cwd(Instance.directory)
+        .nothrow()
+        .text(),
+      from ? delta(git, from) : Promise.resolve(undefined),
+    ])
+
+    const hash = tree.trim() || undefined
+    log.info("tracking", { hash, cwd: Instance.directory, git })
+    return { hash, patch }
   }
 
   export async function restore(snapshot: string) {

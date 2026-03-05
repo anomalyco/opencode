@@ -250,10 +250,11 @@ export namespace SessionProcessor {
                   input.assistantMessage.finish = value.finishReason
                   input.assistantMessage.cost += usage.cost
                   input.assistantMessage.tokens = usage.tokens
+                  const tracked = await Snapshot.trackAndPatch(snapshot)
                   await Session.updatePart({
                     id: Identifier.ascending("part"),
                     reason: value.finishReason,
-                    snapshot: await Snapshot.track(),
+                    snapshot: tracked.hash,
                     messageID: input.assistantMessage.id,
                     sessionID: input.assistantMessage.sessionID,
                     type: "step-finish",
@@ -261,20 +262,17 @@ export namespace SessionProcessor {
                     cost: usage.cost,
                   })
                   await Session.updateMessage(input.assistantMessage)
-                  if (snapshot) {
-                    const patch = await Snapshot.patch(snapshot)
-                    if (patch.files.length) {
-                      await Session.updatePart({
-                        id: Identifier.ascending("part"),
-                        messageID: input.assistantMessage.id,
-                        sessionID: input.sessionID,
-                        type: "patch",
-                        hash: patch.hash,
-                        files: patch.files,
-                      })
-                    }
-                    snapshot = undefined
+                  if (tracked.patch && tracked.patch.files.length) {
+                    await Session.updatePart({
+                      id: Identifier.ascending("part"),
+                      messageID: input.assistantMessage.id,
+                      sessionID: input.sessionID,
+                      type: "patch",
+                      hash: tracked.patch.hash,
+                      files: tracked.patch.files,
+                    })
                   }
+                  snapshot = undefined
                   SessionSummary.summarize({
                     sessionID: input.sessionID,
                     messageID: input.assistantMessage.parentID,
