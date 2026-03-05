@@ -684,12 +684,15 @@ export namespace ProviderTransform {
     providerOptions?: Record<string, any>
   }): Record<string, any> {
     const result: Record<string, any> = {}
+    const wire = input.providerOptions?.["wireApi"] ?? input.providerOptions?.["wire_api"]
+    const openaiCompatResponses = input.model.api.npm === "@ai-sdk/openai-compatible" && wire === "responses"
 
     // openai and providers using openai package should set store to false by default.
     if (
       input.model.providerID === "openai" ||
       input.model.api.npm === "@ai-sdk/openai" ||
-      input.model.api.npm === "@ai-sdk/github-copilot"
+      input.model.api.npm === "@ai-sdk/github-copilot" ||
+      openaiCompatResponses
     ) {
       result["store"] = false
     }
@@ -759,7 +762,7 @@ export namespace ProviderTransform {
     if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
       if (!input.model.api.id.includes("gpt-5-pro")) {
         result["reasoningEffort"] = "medium"
-        if (input.model.api.npm !== "@ai-sdk/openai-compatible") {
+        if (input.model.api.npm !== "@ai-sdk/openai-compatible" || openaiCompatResponses) {
           result["reasoningSummary"] = "auto"
         }
       }
@@ -839,7 +842,7 @@ export namespace ProviderTransform {
     amazon: "bedrock",
   }
 
-  export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
+  export function providerOptions(model: Provider.Model, options: { [x: string]: any }, provider?: Provider.Info) {
     if (model.api.npm === "@ai-sdk/gateway") {
       // Gateway providerOptions are split across two namespaces:
       // - `gateway`: gateway-native routing/caching controls (order, only, byok, etc.)
@@ -870,7 +873,11 @@ export namespace ProviderTransform {
       return result
     }
 
-    const key = sdkKey(model.api.npm) ?? model.providerID
+    const wire = provider?.options?.["wireApi"] ?? provider?.options?.["wire_api"]
+    const key =
+      model.api.npm === "@ai-sdk/openai-compatible" && wire === "responses"
+        ? "openai"
+        : sdkKey(model.api.npm) ?? model.providerID
     return { [key]: options }
   }
 

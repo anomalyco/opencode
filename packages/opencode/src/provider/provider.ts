@@ -1067,6 +1067,8 @@ export namespace Provider {
       const s = await state()
       const provider = s.providers[model.providerID]
       const options = { ...provider.options }
+      const wire = options["wireApi"] ?? options["wire_api"]
+      const openaiCompatResponses = model.api.npm === "@ai-sdk/openai-compatible" && wire === "responses"
 
       if (model.providerID === "google-vertex" && !model.api.npm.includes("@ai-sdk/openai-compatible")) {
         delete options.fetch
@@ -1110,7 +1112,7 @@ export namespace Provider {
         // Codex uses #[serde(skip_serializing)] on id fields for all item types:
         // Message, Reasoning, FunctionCall, LocalShellCall, CustomToolCall, WebSearchCall
         // IDs are only re-attached for Azure with store=true
-        if (model.api.npm === "@ai-sdk/openai" && opts.body && opts.method === "POST") {
+        if ((model.api.npm === "@ai-sdk/openai" || openaiCompatResponses) && opts.body && opts.method === "POST") {
           const body = JSON.parse(opts.body as string)
           const isAzure = model.providerID.includes("azure")
           const keepIds = isAzure && body.store === true
@@ -1129,6 +1131,18 @@ export namespace Provider {
           // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
           timeout: false,
         })
+      }
+
+      if (openaiCompatResponses) {
+        log.info("using openai responses for openai-compatible provider", {
+          providerID: model.providerID,
+        })
+        const loaded = createOpenAI({
+          name: model.providerID,
+          ...options,
+        })
+        s.sdk.set(key, loaded)
+        return loaded as SDK
       }
 
       const bundledFn = BUNDLED_PROVIDERS[model.api.npm]
@@ -1195,10 +1209,14 @@ export namespace Provider {
 
     const provider = s.providers[model.providerID]
     const sdk = await getSDK(model)
+    const wire = provider.options?.["wireApi"] ?? provider.options?.["wire_api"]
+    const openaiCompatResponses = model.api.npm === "@ai-sdk/openai-compatible" && wire === "responses"
 
     try {
       const language = s.modelLoaders[model.providerID]
         ? await s.modelLoaders[model.providerID](sdk, model.api.id, provider.options)
+        : openaiCompatResponses && (sdk as any).responses
+          ? (sdk as any).responses(model.api.id)
         : sdk.languageModel(model.api.id)
       s.models.set(key, language)
       return language

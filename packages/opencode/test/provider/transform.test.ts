@@ -211,6 +211,18 @@ describe("ProviderTransform.options - gpt-5 reasoning defaults", () => {
     expect(result.reasoningSummary).toBeUndefined()
   })
 
+  test("openai-compatible gpt-5 with responses wire sets reasoningSummary", () => {
+    const model = createModel("@ai-sdk/openai-compatible")
+    const result = ProviderTransform.options({
+      model,
+      sessionID,
+      providerOptions: { wireApi: "responses" },
+    })
+    expect(result.store).toBe(false)
+    expect(result.reasoningEffort).toBe("medium")
+    expect(result.reasoningSummary).toBe("auto")
+  })
+
   test("openai gpt-5 still sets reasoningSummary", () => {
     const model = createModel("@ai-sdk/openai")
     const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
@@ -413,6 +425,36 @@ describe("ProviderTransform.providerOptions", () => {
 
     expect(ProviderTransform.providerOptions(model, { reasoningFormat: "parsed" })).toEqual({
       groq: { reasoningFormat: "parsed" },
+    })
+  })
+
+  test("routes openai-compatible responses wire options under openai key", () => {
+    const model = createModel({
+      providerID: "packycode-k1",
+      api: {
+        id: "gpt-5-codex",
+        url: "https://api.packycode.com/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    })
+    const result = ProviderTransform.providerOptions(
+      model,
+      { reasoningEffort: "high", reasoningSummary: "auto" },
+      {
+        id: "packycode-k1",
+        name: "PackyCode",
+        npm: "@ai-sdk/openai-compatible",
+        env: [],
+        options: { wireApi: "responses" },
+        models: {},
+      } as any,
+    )
+
+    expect(result).toEqual({
+      openai: {
+        reasoningEffort: "high",
+        reasoningSummary: "auto",
+      },
     })
   })
 })
