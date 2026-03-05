@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "child_process"
+import { spawn, type ChildProcess } from "child_process"
 import path from "path"
 import os from "os"
 import { Global } from "../global"
@@ -22,7 +22,7 @@ export namespace LSPServer {
       .catch(() => false)
 
   export interface Handle {
-    process: ChildProcessWithoutNullStreams
+    process: ChildProcess
     initialization?: Record<string, any>
   }
 
@@ -83,6 +83,7 @@ export namespace LSPServer {
       return {
         process: spawn(deno, ["lsp"], {
           cwd: root,
+          stdio: ["pipe", "pipe", "ignore"],
         }),
       }
     },
@@ -105,6 +106,7 @@ export namespace LSPServer {
           ...process.env,
           BUN_BE_BUN: "1",
         },
+        stdio: ["pipe", "pipe", "ignore"],
       })
       return {
         process: proc,
@@ -156,6 +158,7 @@ export namespace LSPServer {
           ...process.env,
           BUN_BE_BUN: "1",
         },
+        stdio: ["pipe", "pipe", "ignore"],
       })
       return {
         process: proc,
@@ -216,6 +219,7 @@ export namespace LSPServer {
           ...process.env,
           BUN_BE_BUN: "1",
         },
+        stdio: ["pipe", "pipe", "ignore"],
       })
 
       return {
@@ -273,6 +277,7 @@ export namespace LSPServer {
             return {
               process: spawn(lintBin, ["--lsp"], {
                 cwd: root,
+                stdio: ["pipe", "pipe", "ignore"],
               }),
             }
           }
@@ -288,6 +293,7 @@ export namespace LSPServer {
         return {
           process: spawn(serverBin, [], {
             cwd: root,
+            stdio: ["pipe", "pipe", "ignore"],
           }),
         }
       }
@@ -351,6 +357,7 @@ export namespace LSPServer {
           ...process.env,
           BUN_BE_BUN: "1",
         },
+        stdio: ["pipe", "pipe", "ignore"],
       })
 
       return {
@@ -395,6 +402,7 @@ export namespace LSPServer {
       return {
         process: spawn(bin!, {
           cwd: root,
+          stdio: ["pipe", "pipe", "ignore"],
         }),
       }
     },
@@ -435,6 +443,7 @@ export namespace LSPServer {
       return {
         process: spawn(bin!, ["--lsp"], {
           cwd: root,
+          stdio: ["pipe", "pipe", "ignore"],
         }),
       }
     },
@@ -495,6 +504,7 @@ export namespace LSPServer {
 
       const proc = spawn(binary, ["server"], {
         cwd: root,
+        stdio: ["pipe", "pipe", "ignore"],
       })
 
       return {
@@ -550,6 +560,7 @@ export namespace LSPServer {
           ...process.env,
           BUN_BE_BUN: "1",
         },
+        stdio: ["pipe", "pipe", "ignore"],
       })
       return {
         process: proc,
@@ -615,6 +626,7 @@ export namespace LSPServer {
       return {
         process: spawn(binary, {
           cwd: root,
+          stdio: ["pipe", "pipe", "ignore"],
         }),
       }
     },
@@ -727,6 +739,7 @@ export namespace LSPServer {
       return {
         process: spawn(bin, {
           cwd: root,
+          stdio: ["pipe", "pipe", "ignore"],
         }),
       }
     },
@@ -766,6 +779,7 @@ export namespace LSPServer {
       return {
         process: spawn(bin, {
           cwd: root,
+          stdio: ["pipe", "pipe", "ignore"],
         }),
       }
     },
@@ -805,6 +819,7 @@ export namespace LSPServer {
       return {
         process: spawn(bin, {
           cwd: root,
+          stdio: ["pipe", "pipe", "ignore"],
         }),
       }
     },
@@ -822,6 +837,7 @@ export namespace LSPServer {
         return {
           process: spawn(sourcekit, {
             cwd: root,
+            stdio: ["pipe", "pipe", "ignore"],
           }),
         }
       }
@@ -839,6 +855,7 @@ export namespace LSPServer {
       return {
         process: spawn(bin, {
           cwd: root,
+          stdio: ["pipe", "pipe", "ignore"],
         }),
       }
     },
@@ -885,6 +902,7 @@ export namespace LSPServer {
       return {
         process: spawn(bin, {
           cwd: root,
+          stdio: ["pipe", "pipe", "ignore"],
         }),
       }
     },
@@ -901,6 +919,7 @@ export namespace LSPServer {
         return {
           process: spawn(fromPath, args, {
             cwd: root,
+            stdio: ["pipe", "pipe", "ignore"],
           }),
         }
       }
@@ -911,6 +930,7 @@ export namespace LSPServer {
         return {
           process: spawn(direct, args, {
             cwd: root,
+            stdio: ["pipe", "pipe", "ignore"],
           }),
         }
       }
@@ -924,6 +944,7 @@ export namespace LSPServer {
           return {
             process: spawn(candidate, args, {
               cwd: root,
+              stdio: ["pipe", "pipe", "ignore"],
             }),
           }
         }
@@ -1031,6 +1052,7 @@ export namespace LSPServer {
       return {
         process: spawn(bin, args, {
           cwd: root,
+          stdio: ["pipe", "pipe", "ignore"],
         }),
       }
     },
@@ -1068,6 +1090,7 @@ export namespace LSPServer {
           ...process.env,
           BUN_BE_BUN: "1",
         },
+        stdio: ["pipe", "pipe", "ignore"],
       })
       return {
         process: proc,
@@ -1115,6 +1138,7 @@ export namespace LSPServer {
           ...process.env,
           BUN_BE_BUN: "1",
         },
+        stdio: ["pipe", "pipe", "ignore"],
       })
       return {
         process: proc,
@@ -1222,6 +1246,7 @@ export namespace LSPServer {
           ],
           {
             cwd: root,
+            stdio: ["pipe", "pipe", "ignore"],
           },
         ),
       }
@@ -1314,6 +1339,7 @@ export namespace LSPServer {
       return {
         process: spawn(launcherScript, ["--stdio"], {
           cwd: root,
+          stdio: ["pipe", "pipe", "ignore"],
         }),
       }
     },
@@ -1360,6 +1386,7 @@ export namespace LSPServer {
           ...process.env,
           BUN_BE_BUN: "1",
         },
+        stdio: ["pipe", "pipe", "ignore"],
       })
       return {
         process: proc,
@@ -1502,6 +1529,7 @@ export namespace LSPServer {
       return {
         process: spawn(bin, {
           cwd: root,
+          stdio: ["pipe", "pipe", "ignore"],
         }),
       }
     },
@@ -1539,6 +1567,7 @@ export namespace LSPServer {
           ...process.env,
           BUN_BE_BUN: "1",
         },
+        stdio: ["pipe", "pipe", "ignore"],
       })
       return {
         process: proc,
@@ -1564,6 +1593,7 @@ export namespace LSPServer {
       return {
         process: spawn(prisma, ["language-server"], {
           cwd: root,
+          stdio: ["pipe", "pipe", "ignore"],
         }),
       }
     },
@@ -1582,6 +1612,7 @@ export namespace LSPServer {
       return {
         process: spawn(dart, ["language-server", "--lsp"], {
           cwd: root,
+          stdio: ["pipe", "pipe", "ignore"],
         }),
       }
     },
@@ -1600,6 +1631,7 @@ export namespace LSPServer {
       return {
         process: spawn(bin, {
           cwd: root,
+          stdio: ["pipe", "pipe", "ignore"],
         }),
       }
     },
@@ -1636,6 +1668,7 @@ export namespace LSPServer {
           ...process.env,
           BUN_BE_BUN: "1",
         },
+        stdio: ["pipe", "pipe", "ignore"],
       })
       return {
         process: proc,
@@ -1715,6 +1748,7 @@ export namespace LSPServer {
       return {
         process: spawn(bin, ["serve"], {
           cwd: root,
+          stdio: ["pipe", "pipe", "ignore"],
         }),
         initialization: {
           experimentalFeatures: {
@@ -1811,6 +1845,7 @@ export namespace LSPServer {
       return {
         process: spawn(bin, {
           cwd: root,
+          stdio: ["pipe", "pipe", "ignore"],
         }),
       }
     },
@@ -1848,6 +1883,7 @@ export namespace LSPServer {
           ...process.env,
           BUN_BE_BUN: "1",
         },
+        stdio: ["pipe", "pipe", "ignore"],
       })
       return {
         process: proc,
@@ -1868,6 +1904,7 @@ export namespace LSPServer {
       return {
         process: spawn(gleam, ["lsp"], {
           cwd: root,
+          stdio: ["pipe", "pipe", "ignore"],
         }),
       }
     },
@@ -1889,6 +1926,7 @@ export namespace LSPServer {
       return {
         process: spawn(bin, ["listen"], {
           cwd: root,
+          stdio: ["pipe", "pipe", "ignore"],
         }),
       }
     },
@@ -1920,6 +1958,7 @@ export namespace LSPServer {
           env: {
             ...process.env,
           },
+          stdio: ["pipe", "pipe", "ignore"],
         }),
       }
     },
@@ -2014,7 +2053,7 @@ export namespace LSPServer {
       }
 
       return {
-        process: spawn(bin, { cwd: root }),
+        process: spawn(bin, { cwd: root, stdio: ["pipe", "pipe", "ignore"] }),
       }
     },
   }
@@ -2032,6 +2071,7 @@ export namespace LSPServer {
       return {
         process: spawn(bin, ["--lsp"], {
           cwd: root,
+          stdio: ["pipe", "pipe", "ignore"],
         }),
       }
     },
@@ -2050,6 +2090,7 @@ export namespace LSPServer {
       return {
         process: spawn(julia, ["--startup-file=no", "--history-file=no", "-e", "using LanguageServer; runserver()"], {
           cwd: root,
+          stdio: ["pipe", "pipe", "ignore"],
         }),
       }
     },

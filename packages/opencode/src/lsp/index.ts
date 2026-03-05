@@ -118,6 +118,7 @@ export namespace LSP {
                   ...process.env,
                   ...item.env,
                 },
+                stdio: ["pipe", "pipe", "ignore"],
               }),
               initialization: item.initialization,
             }
