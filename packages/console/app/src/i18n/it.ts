@@ -15,6 +15,7 @@ export const dict = {
   "nav.home": "Home",
   "nav.openMenu": "Apri menu",
   "nav.getStartedFree": "Inizia gratis",
+  "nav.logoAlt": "OpenCode",
 
   "nav.context.copyLogo": "Copia il logo come SVG",
   "nav.context.copyWordmark": "Copia il wordmark come SVG",
@@ -42,8 +43,12 @@ export const dict = {
   "notFound.docs": "Documentazione",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
+  "notFound.logoLightAlt": "logo chiaro di opencode",
+  "notFound.logoDarkAlt": "logo scuro di opencode",
 
   "user.logout": "Esci",
+
+  "auth.callback.error.codeMissing": "Nessun codice di autorizzazione trovato.",
 
   "workspace.select": "Seleziona workspace",
   "workspace.createNew": "+ Crea nuovo workspace",
@@ -76,6 +81,8 @@ export const dict = {
   "error.reloadAmountMin": "L'importo della ricarica deve essere almeno ${{amount}}",
   "error.reloadTriggerMin": "La soglia del saldo deve essere almeno ${{amount}}",
 
+  "app.meta.description": "OpenCode - L'agente di programmazione open source.",
+
   "home.title": "OpenCode | L'agente di coding IA open source",
 
   "temp.title": "opencode | Agente di coding IA costruito per il terminale",
@@ -91,6 +98,8 @@ export const dict = {
   "temp.feature.models.afterLink": ", inclusi modelli locali",
   "temp.screenshot.caption": "OpenCode TUI con il tema tokyonight",
   "temp.screenshot.alt": "OpenCode TUI con tema tokyonight",
+  "temp.logoLightAlt": "logo chiaro di opencode",
+  "temp.logoDarkAlt": "logo scuro di opencode",
 
   "home.banner.badge": "Nuovo",
   "home.banner.text": "App desktop disponibile in beta",
@@ -239,6 +248,24 @@ export const dict = {
   "zen.privacy.beforeExceptions":
     "Tutti i modelli Zen sono ospitati negli Stati Uniti. I provider seguono una policy di zero-retention e non usano i tuoi dati per l'addestramento dei modelli, con le",
   "zen.privacy.exceptionsLink": "seguenti eccezioni",
+
+  "zen.api.error.rateLimitExceeded": "Limite di richieste superato. Riprova più tardi.",
+  "zen.api.error.modelNotSupported": "Modello {{model}} non supportato",
+  "zen.api.error.modelFormatNotSupported": "Modello {{model}} non supportato per il formato {{format}}",
+  "zen.api.error.noProviderAvailable": "Nessun provider disponibile",
+  "zen.api.error.providerNotSupported": "Provider {{provider}} non supportato",
+  "zen.api.error.missingApiKey": "Chiave API mancante.",
+  "zen.api.error.invalidApiKey": "Chiave API non valida.",
+  "zen.api.error.subscriptionQuotaExceeded": "Quota dell'abbonamento superata. Riprova tra {{retryIn}}.",
+  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
+    "Quota dell'abbonamento superata. Puoi continuare a utilizzare modelli gratuiti.",
+  "zen.api.error.noPaymentMethod": "Nessun metodo di pagamento. Aggiungi un metodo di pagamento qui: {{billingUrl}}",
+  "zen.api.error.insufficientBalance": "Saldo insufficiente. Gestisci la tua fatturazione qui: {{billingUrl}}",
+  "zen.api.error.workspaceMonthlyLimitReached":
+    "La tua area di lavoro ha raggiunto il limite di spesa mensile di ${{amount}}. Gestisci i tuoi limiti qui: {{billingUrl}}",
+  "zen.api.error.userMonthlyLimitReached":
+    "Hai raggiunto il tuo limite di spesa mensile di ${{amount}}. Gestisci i tuoi limiti qui: {{membersUrl}}",
+  "zen.api.error.modelDisabled": "Il modello è disabilitato",
 
   "black.meta.title": "OpenCode Black | Accedi ai migliori modelli di coding al mondo",
   "black.meta.description":
@@ -451,6 +478,7 @@ export const dict = {
   "workspace.reload.updatePaymentMethod": "Aggiorna il tuo metodo di pagamento e riprova.",
   "workspace.reload.retrying": "Riprovo...",
   "workspace.reload.retry": "Riprova",
+  "workspace.reload.error.paymentFailed": "Pagamento fallito.",
 
   "workspace.payments.title": "Cronologia Pagamenti",
   "workspace.payments.subtitle": "Transazioni di pagamento recenti.",
@@ -569,6 +597,10 @@ export const dict = {
   "enterprise.form.send": "Invia",
   "enterprise.form.sending": "Invio...",
   "enterprise.form.success": "Messaggio inviato, ti contatteremo presto.",
+  "enterprise.form.success.submitted": "Modulo inviato con successo.",
+  "enterprise.form.error.allFieldsRequired": "Tutti i campi sono obbligatori.",
+  "enterprise.form.error.invalidEmailFormat": "Formato email non valido.",
+  "enterprise.form.error.internalServer": "Errore interno del server.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "Cos'è OpenCode Enterprise?",
   "enterprise.faq.a1":
@@ -601,6 +633,7 @@ export const dict = {
   "bench.list.table.agent": "Agente",
   "bench.list.table.model": "Modello",
   "bench.list.table.score": "Punteggio",
+  "bench.submission.error.allFieldsRequired": "Tutti i campi sono obbligatori.",
 
   "bench.detail.title": "Benchmark - {{task}}",
   "bench.detail.notFound": "Task non trovato",
