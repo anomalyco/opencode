@@ -93,6 +93,7 @@ export namespace Agent {
       security: {
         name: "security",
         description: "Agente de ciberseguridad de OPENSACIA. Ejecuta auditorías de seguridad autónomas usando herramientas de Kali Linux en contenedores Docker. Soporta auditorías web, de red, Active Directory, código fuente y sistemas OT/ICS.",
+        options: {},
         permission: PermissionNext.merge(
           defaults,
           PermissionNext.fromConfig({

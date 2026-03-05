@@ -139,6 +139,8 @@ export const OpensaciaCommand = cmd({
         thinking: false,
         command: undefined,
         ["--"]: [],
+        _: [],
+        $0: "opensacia",
       })
     })
   },
