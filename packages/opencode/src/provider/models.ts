@@ -93,7 +93,8 @@ export namespace ModelsDev {
       .then((m) => m.snapshot as Record<string, unknown>)
       .catch(() => undefined)
     if (snapshot) return snapshot
-    if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return {}
+    // Only fetch from remote if explicitly opted in via OPENCODE_MODELS_URL
+    if (!Flag.OPENCODE_MODELS_URL) return {}
     try {
       const json = await fetch(`${url()}/api.json`).then((x) => x.text())
       return JSON.parse(json)
@@ -126,7 +127,8 @@ export namespace ModelsDev {
   }
 }
 
-if (!Flag.OPENCODE_DISABLE_MODELS_FETCH && !process.argv.includes("--get-yargs-completions")) {
+// Only auto-refresh if explicitly opted in via OPENCODE_MODELS_URL
+if (Flag.OPENCODE_MODELS_URL && !process.argv.includes("--get-yargs-completions")) {
   ModelsDev.refresh()
   setInterval(
     async () => {
