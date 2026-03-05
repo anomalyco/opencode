@@ -14,6 +14,7 @@ import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { ProviderTransform } from "@/provider/transform"
+import { Todo } from "./todo"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -165,6 +166,7 @@ export namespace SessionCompaction {
       abort: input.abort,
     })
     // Allow plugins to inject context or replace compaction prompt
+    const todos = Todo.get(input.sessionID)
     const compacting = await Plugin.trigger(
       "experimental.session.compacting",
       { sessionID: input.sessionID },
@@ -196,9 +198,36 @@ When constructing the summary, try to stick to this template:
 ## Relevant files / directories
 
 [Construct a structured list of relevant files that have been read, edited, or created that pertain to the task at hand. If all the files in a directory are relevant, include the path to the directory.]
+
+## Current status (when compaction triggered)
+
+[What you were actively doing right before compaction: current file/function, last attempted step, current hypothesis, last error/output]
+
+## Remaining tasks
+
+- [ ] [Explicit checklist of what is left]
+- [ ] [...]
+
+## Next actions (do these first)
+
+1. [Immediate next step]
+2. [Next]
+3. [Next]
+
+## Open questions / info needed from user (only if blocked)
+
+- [Ask only what is strictly necessary to proceed]
 ---`
 
-    const promptText = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
+    const todoSection =
+      todos.length
+        ? [
+            "\nCurrent session todo list (authoritative):",
+            ...todos.map((t) => `- [${t.status}] ${t.content}`),
+          ].join("\n")
+        : ""
+    const base = compacting.prompt ?? [defaultPrompt, ...compacting.context].filter(Boolean).join("\n\n")
+    const promptText = todoSection ? [base, todoSection].join("\n\n") : base
     const result = await processor.process({
       user: userMessage,
       agent,
@@ -269,11 +298,27 @@ When constructing the summary, try to stick to this template:
           agent: userMessage.agent,
           model: userMessage.model,
         })
+        const left = todos.filter((t) => t.status !== "completed" && t.status !== "cancelled")
+        const todoList =
+          left.length
+            ? [
+                "",
+                "Incomplete todos:",
+                ...left.map((t) => `- [${t.status}] ${t.content}`),
+                "",
+                "Resume the [in_progress] item if present; otherwise start the first [pending] item.",
+              ].join("\n")
+            : ""
         const text =
           (input.overflow
             ? "The previous request exceeded the provider's size limit due to large media attachments. The conversation was compacted and media files were removed from context. If the user was asking about attached images or files, explain that the attachments were too large to process and suggest they try again with smaller or fewer files.\n\n"
             : "") +
-          "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed."
+          [
+            "The conversation above was compacted to fit the provider's context window.",
+            "Read the compaction summary and continue the task from where you left off.",
+            "Take the next concrete step now. Only ask the user a question if you are blocked on missing information that you cannot infer safely.",
+          ].join("\n") +
+          todoList
         await Session.updatePart({
           id: PartID.ascending(),
           messageID: continueMsg.id,
