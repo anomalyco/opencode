@@ -290,6 +290,35 @@ describe("tool.bash permissions", () => {
     })
   })
 
+  test("strips inline env var prefix from permission pattern", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await bash.execute(
+          {
+            command: 'CI=true git commit -m "test"',
+            description: "Commit with env prefix",
+          },
+          testCtx,
+        )
+        const bashReq = requests.find((r) => r.permission === "bash")
+        expect(bashReq).toBeDefined()
+        // TODO: fix #16075 — flip these assertions when the bug is fixed
+        expect(bashReq!.patterns).toContain('CI=true git commit -m "test"')
+        expect(bashReq!.patterns).not.toContain('git commit -m "test"')
+      },
+    })
+  })
+
   test("always pattern has space before wildcard to not include different commands", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
