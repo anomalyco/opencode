@@ -608,29 +608,8 @@
   cursor: pointer;
 
   [data-slot="context-tool-group-title"] {
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-family: var(--font-family-sans);
-    font-size: 14px;
-    font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
-    color: var(--text-strong);
-  }
-
-  [data-slot="context-tool-group-label"] {
-    flex-shrink: 0;
-  }
-
-  [data-slot="context-tool-group-summary"] {
     flex-shrink: 1;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-weight: var(--font-weight-regular);
-    color: var(--text-base);
   }
 
   [data-slot="collapsible-arrow"] {
