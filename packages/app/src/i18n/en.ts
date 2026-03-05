@@ -31,6 +31,7 @@ export const dict = {
   "command.session.previous.unseen": "Previous unread session",
   "command.session.next.unseen": "Next unread session",
   "command.session.archive": "Archive session",
+  "command.session.unarchive": "Unarchive session",
 
   "command.palette": "Command palette",
 
@@ -440,6 +441,8 @@ export const dict = {
   "toast.session.unshare.success.description": "Session unshared successfully!",
   "toast.session.unshare.failed.title": "Failed to unshare session",
   "toast.session.unshare.failed.description": "An error occurred while unsharing the session",
+  "toast.session.archive.success.title": "Session archived",
+  "toast.session.archive.success.description": "Use Undo to restore it.",
 
   "toast.session.listFailed.title": "Failed to load sessions for {{project}}",
   "toast.project.reloadFailed.title": "Failed to reload {{project}}",

@@ -579,6 +579,14 @@ export default function Layout(props: ParentProps) {
     return result
   })
 
+  const selectedSession = createMemo(() => {
+    if (!params.dir || !params.id) return
+    const directory = decode64(params.dir)
+    if (!directory) return
+    const [store] = globalSync.child(directory, { bootstrap: false })
+    return store.session.find((s) => s.id === params.id)
+  })
+
   type PrefetchQueue = {
     inflight: Set<string>
     pending: string[]
@@ -834,25 +842,71 @@ export default function Layout(props: ParentProps) {
     const sessions = store.session ?? []
     const index = sessions.findIndex((s) => s.id === session.id)
     const nextSession = sessions[index + 1] ?? sessions[index - 1]
+    const active = session.id === params.id
 
-    await globalSDK.client.session.update({
-      directory: session.directory,
-      sessionID: session.id,
-      time: { archived: Date.now() },
-    })
+    const archived = await globalSDK.client.session
+      .update({
+        directory: session.directory,
+        sessionID: session.id,
+        time: { archived: Date.now() },
+      })
+      .then(() => true)
+      .catch((err) => {
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: errorMessage(err, language.t("common.requestFailed")),
+        })
+        return false
+      })
+    if (!archived) return
     setStore(
       produce((draft) => {
         const match = Binary.search(draft.session, session.id, (s) => s.id)
         if (match.found) draft.session.splice(match.index, 1)
       }),
     )
-    if (session.id === params.id) {
+    if (active) {
       if (nextSession) {
         navigate(`/${params.dir}/session/${nextSession.id}`)
       } else {
         navigate(`/${params.dir}/session`)
       }
     }
+
+    showToast({
+      title: language.t("toast.session.archive.success.title"),
+      description: language.t("toast.session.archive.success.description"),
+      actions: [
+        {
+          label: language.t("command.session.undo"),
+          onClick: () => {
+            void unarchiveSession(session, session.time.updated ?? session.time.created)
+              .then(() => {
+                if (!active) return
+                navigate(`/${base64Encode(session.directory)}/session/${session.id}`)
+              })
+              .catch((err) => {
+                showToast({
+                  title: language.t("common.requestFailed"),
+                  description: errorMessage(err, language.t("common.requestFailed")),
+                })
+              })
+          },
+        },
+        {
+          label: language.t("common.dismiss"),
+          onClick: "dismiss",
+        },
+      ],
+    })
+  }
+
+  async function unarchiveSession(session: Session, updated?: number) {
+    await globalSDK.client.session.update({
+      directory: session.directory,
+      sessionID: session.id,
+      time: { archived: null, updated },
+    })
   }
 
   command.register("layout", () => {
@@ -923,10 +977,21 @@ export default function Layout(props: ParentProps) {
         title: language.t("command.session.archive"),
         category: language.t("command.category.session"),
         keybind: "mod+shift+backspace",
-        disabled: !params.dir || !params.id,
+        disabled: !selectedSession() || !!selectedSession()?.time?.archived,
         onSelect: () => {
-          const session = currentSessions().find((s) => s.id === params.id)
+          const session = selectedSession()
           if (session) archiveSession(session)
+        },
+      },
+      {
+        id: "session.unarchive",
+        title: language.t("command.session.unarchive"),
+        category: language.t("command.category.session"),
+        keybind: "mod+shift+u",
+        disabled: !selectedSession()?.time?.archived,
+        onSelect: () => {
+          const session = selectedSession()
+          if (session) unarchiveSession(session, session.time.updated ?? session.time.created)
         },
       },
       {

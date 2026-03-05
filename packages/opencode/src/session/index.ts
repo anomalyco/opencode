@@ -395,16 +395,16 @@ export namespace Session {
   export const setArchived = fn(
     z.object({
       sessionID: Identifier.schema("session"),
-      time: z.number().optional(),
+      time: z.number().nullable().optional(),
+      updated: z.number().optional(),
     }),
     async (input) => {
       return Database.use((db) => {
-        const row = db
-          .update(SessionTable)
-          .set({ time_archived: input.time })
-          .where(eq(SessionTable.id, input.sessionID))
-          .returning()
-          .get()
+        const set =
+          input.updated === undefined
+            ? { time_archived: input.time }
+            : { time_archived: input.time, time_updated: input.updated }
+        const row = db.update(SessionTable).set(set).where(eq(SessionTable.id, input.sessionID)).returning().get()
         if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
         const info = fromRow(row)
         Database.effect(() => Bus.publish(Event.Updated, { info }))

@@ -349,6 +349,8 @@ export function MessageTimeline(props: {
   const archiveSession = async (sessionID: string) => {
     const session = sync.session.get(sessionID)
     if (!session) return
+    const active = params.id === sessionID
+    const updated = session.time.updated ?? session.time.created
 
     const sessions = sync.data.session ?? []
     const index = sessions.findIndex((s) => s.id === sessionID)
@@ -364,6 +366,33 @@ export function MessageTimeline(props: {
           }),
         )
         navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
+        showToast({
+          title: language.t("toast.session.archive.success.title"),
+          description: language.t("toast.session.archive.success.description"),
+          actions: [
+            {
+              label: language.t("command.session.undo"),
+              onClick: () => {
+                void sdk.client.session
+                  .update({ sessionID, time: { archived: null, updated } })
+                  .then(() => {
+                    if (!active) return
+                    navigate(`/${params.dir}/session/${sessionID}`)
+                  })
+                  .catch((err) => {
+                    showToast({
+                      title: language.t("common.requestFailed"),
+                      description: errorMessage(err),
+                    })
+                  })
+              },
+            },
+            {
+              label: language.t("common.dismiss"),
+              onClick: "dismiss",
+            },
+          ],
+        })
       })
       .catch((err) => {
         showToast({

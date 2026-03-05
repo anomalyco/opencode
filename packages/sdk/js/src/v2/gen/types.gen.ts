@@ -2877,7 +2877,8 @@ export type SessionUpdateData = {
   body?: {
     title?: string
     time?: {
-      archived?: number
+      archived?: number | null
+      updated?: number
     }
   }
   path: {
