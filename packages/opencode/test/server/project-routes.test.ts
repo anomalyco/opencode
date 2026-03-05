@@ -32,4 +32,34 @@ describe("project routes", () => {
 
     expect(response.status).toBe(400)
   })
+
+  test("DELETE /project/:projectID removes a project", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    const app = Server.App()
+    const createResponse = await app.request("/project", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ directory: tmp.path }),
+    })
+    expect(createResponse.status).toBe(200)
+
+    const created = await createResponse.json()
+    const projectID = created.id as string
+    expect(projectID).toBeDefined()
+
+    const deleteResponse = await app.request(`/project/${projectID}`, {
+      method: "DELETE",
+    })
+    expect(deleteResponse.status).toBe(200)
+    expect(await deleteResponse.json()).toBe(true)
+
+    const listResponse = await app.request("/project", {
+      method: "GET",
+    })
+    expect(listResponse.status).toBe(200)
+    const projects = (await listResponse.json()) as Array<{ id: string; worktree: string }>
+    expect(projects.find((p) => p.id === projectID)).toBeUndefined()
+    expect(projects.find((p) => p.worktree === tmp.path)).toBeUndefined()
+  })
 })
