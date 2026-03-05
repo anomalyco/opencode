@@ -175,6 +175,50 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
   })
 })
 
+describe("ProviderTransform.options - gpt-5 reasoning defaults", () => {
+  const sessionID = "test-session-123"
+
+  const createModel = (npm: string) =>
+    ({
+      id: "test/gpt-5-codex",
+      providerID: "test",
+      api: {
+        id: "gpt-5-codex",
+        url: "https://api.test.com",
+        npm,
+      },
+      name: "gpt-5-codex",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0.03, output: 0.06, cache: { read: 0.001, write: 0.002 } },
+      limit: { context: 128000, output: 4096 },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  test("openai-compatible gpt-5 does not set reasoningSummary", () => {
+    const model = createModel("@ai-sdk/openai-compatible")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.reasoningEffort).toBe("medium")
+    expect(result.reasoningSummary).toBeUndefined()
+  })
+
+  test("openai gpt-5 still sets reasoningSummary", () => {
+    const model = createModel("@ai-sdk/openai")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.reasoningEffort).toBe("medium")
+    expect(result.reasoningSummary).toBe("auto")
+  })
+})
+
 describe("ProviderTransform.options - gateway", () => {
   const sessionID = "test-session-123"
 
