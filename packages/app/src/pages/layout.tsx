@@ -1936,45 +1936,34 @@ export default function Layout(props: ParentProps) {
                   when={workspacesEnabled()}
                   fallback={
                     <>
-                      <div class="shrink-0 py-4 px-3">
-                        <TooltipKeybind
-                          title={language.t("command.session.new")}
-                          keybind={command.keybind("session.new")}
-                          placement="top"
-                        >
-                          <Button
-                            size="large"
-                            icon="plus-small"
-                            class="w-full"
-                            onClick={() => navigateWithSidebarReset(`/${base64Encode(p().worktree)}/session`)}
-                          >
-                            {language.t("command.session.new")}
-                          </Button>
-                        </TooltipKeybind>
-                      </div>
                       <div class="flex-1 min-h-0">
                         <LocalWorkspace
                           ctx={workspaceSidebarCtx}
                           project={p()}
                           sortNow={sortNow}
                           mobile={panelProps.mobile}
+                          header={
+                            <TooltipKeybind
+                              title={language.t("command.session.new")}
+                              keybind={command.keybind("session.new")}
+                              placement="top"
+                            >
+                              <Button
+                                size="large"
+                                icon="plus-small"
+                                class="w-full"
+                                onClick={() => navigateWithSidebarReset(`/${base64Encode(p().worktree)}/session`)}
+                              >
+                                {language.t("command.session.new")}
+                              </Button>
+                            </TooltipKeybind>
+                          }
                         />
                       </div>
                     </>
                   }
                 >
                   <>
-                    <div class="shrink-0 py-4 px-3">
-                      <TooltipKeybind
-                        title={language.t("workspace.new")}
-                        keybind={command.keybind("workspace.new")}
-                        placement="top"
-                      >
-                        <Button size="large" icon="plus-small" class="w-full" onClick={() => createWorkspace(p())}>
-                          {language.t("workspace.new")}
-                        </Button>
-                      </TooltipKeybind>
-                    </div>
                     <div class="relative flex-1 min-h-0">
                       <DragDropProvider
                         onDragStart={handleWorkspaceDragStart}
@@ -1988,21 +1977,41 @@ export default function Layout(props: ParentProps) {
                           ref={(el) => {
                             if (!panelProps.mobile) scrollContainerRef = el
                           }}
-                          class="size-full flex flex-col py-2 gap-4 overflow-y-auto no-scrollbar [overflow-anchor:none]"
+                          class="size-full flex flex-col overflow-y-auto no-scrollbar [overflow-anchor:none]"
                         >
-                          <SortableProvider ids={workspaces()}>
-                            <For each={workspaces()}>
-                              {(directory) => (
-                                <SortableWorkspace
-                                  ctx={workspaceSidebarCtx}
-                                  directory={directory}
-                                  project={p()}
-                                  sortNow={sortNow}
-                                  mobile={panelProps.mobile}
-                                />
-                              )}
-                            </For>
-                          </SortableProvider>
+                          <div class="sticky top-0 z-20 pointer-events-none bg-[linear-gradient(to_bottom,var(--background-stronger)_calc(100%_-_24px),transparent)] pt-4 pb-6 px-3">
+                            <div class="pointer-events-auto">
+                              <TooltipKeybind
+                                title={language.t("workspace.new")}
+                                keybind={command.keybind("workspace.new")}
+                                placement="top"
+                              >
+                                <Button
+                                  size="large"
+                                  icon="plus-small"
+                                  class="w-full"
+                                  onClick={() => createWorkspace(p())}
+                                >
+                                  {language.t("workspace.new")}
+                                </Button>
+                              </TooltipKeybind>
+                            </div>
+                          </div>
+                          <div class="flex flex-col gap-4 py-2">
+                            <SortableProvider ids={workspaces()}>
+                              <For each={workspaces()}>
+                                {(directory) => (
+                                  <SortableWorkspace
+                                    ctx={workspaceSidebarCtx}
+                                    directory={directory}
+                                    project={p()}
+                                    sortNow={sortNow}
+                                    mobile={panelProps.mobile}
+                                  />
+                                )}
+                              </For>
+                            </SortableProvider>
+                          </div>
                         </div>
                         <DragOverlay>
                           <WorkspaceDragOverlay
