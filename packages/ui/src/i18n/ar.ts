@@ -3,6 +3,9 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "تغييرات آخر دور",
   "ui.sessionReview.diffStyle.unified": "موحد",
   "ui.sessionReview.diffStyle.split": "منقسم",
+  "ui.sessionReview.openFile": "فتح ملف",
+  "ui.sessionReview.selection.line": "سطر {{line}}",
+  "ui.sessionReview.selection.lines": "الأسطر {{start}}-{{end}}",
   "ui.sessionReview.expandAll": "توسيع الكل",
   "ui.sessionReview.collapseAll": "طي الكل",
   "ui.sessionReview.change.added": "مضاف",
@@ -37,6 +40,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "إعادة المحاولة",
   "ui.sessionTurn.retry.inSeconds": "خلال {{seconds}} ثواني",
+  "ui.sessionTurn.retry.attempt": "المحاولة رقم {{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - المحاولة رقم {{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini مزدحم حاليا",
   "ui.sessionTurn.error.freeUsageExceeded": "تم تجاوز حد الاستخدام المجاني",
   "ui.sessionTurn.error.addCredits": "إضافة رصيد",
 
@@ -53,6 +59,14 @@ export const dict = {
   "ui.sessionTurn.status.gatheringThoughts": "جمع الأفكار",
   "ui.sessionTurn.status.consideringNextSteps": "النظر في الخطوات التالية",
 
+  "ui.messagePart.questions.dismissed": "تم رفض الأسئلة",
+  "ui.messagePart.compaction": "تم ضغط السجل",
+  "ui.messagePart.context.read.one": "{{count}} قراءة",
+  "ui.messagePart.context.read.other": "{{count}} قراءات",
+  "ui.messagePart.context.search.one": "{{count}} بحث",
+  "ui.messagePart.context.search.other": "{{count}} عمليات بحث",
+  "ui.messagePart.context.list.one": "{{count}} قائمة",
+  "ui.messagePart.context.list.other": "{{count}} قوائم",
   "ui.messagePart.diagnostic.error": "خطأ",
   "ui.messagePart.title.edit": "تحرير",
   "ui.messagePart.title.write": "كتابة",
@@ -72,6 +86,7 @@ export const dict = {
   "ui.textField.copied": "تم النسخ",
 
   "ui.imagePreview.alt": "معاينة الصورة",
+  "ui.scrollView.ariaLabel": "محتوى قابل للتمرير",
 
   "ui.tool.read": "قراءة",
   "ui.tool.loaded": "تم التحميل",
@@ -111,6 +126,7 @@ export const dict = {
   "ui.message.copyResponse": "نسخ الرد",
   "ui.message.copied": "تم النسخ!",
   "ui.message.interrupted": "تمت المقاطعة",
+  "ui.message.queued": "في الانتظار",
   "ui.message.attachment.alt": "مرفق",
 
   "ui.patch.action.deleted": "محذوف",
