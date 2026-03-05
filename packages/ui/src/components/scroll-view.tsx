@@ -1,5 +1,7 @@
 import { createSignal, onCleanup, onMount, splitProps, type ComponentProps, Show } from "solid-js"
+import { animate, type AnimationPlaybackControls } from "motion"
 import { useI18n } from "../context/i18n"
+import { FAST_SPRING } from "./motion"
 
 export interface ScrollViewProps extends ComponentProps<"div"> {
   viewportRef?: (el: HTMLDivElement) => void
@@ -25,6 +27,7 @@ export function ScrollView(props: ScrollViewProps) {
 
   let viewportRef!: HTMLDivElement
   let thumbRef!: HTMLDivElement
+  let anim: AnimationPlaybackControls | undefined
 
   const [isHovered, setIsHovered] = createSignal(false)
   const [isDragging, setIsDragging] = createSignal(false)
@@ -82,6 +85,7 @@ export function ScrollView(props: ScrollViewProps) {
     }
 
     onCleanup(() => {
+      stop()
       observer.disconnect()
     })
 
@@ -123,6 +127,30 @@ export function ScrollView(props: ScrollViewProps) {
     thumbRef.addEventListener("pointerup", onPointerUp)
   }
 
+  const stop = () => {
+    if (!anim) return
+    anim.stop()
+    anim = undefined
+  }
+
+  const limit = (top: number) => {
+    const max = viewportRef.scrollHeight - viewportRef.clientHeight
+    return Math.max(-max, Math.min(0, top))
+  }
+
+  const glide = (top: number) => {
+    stop()
+    anim = animate(viewportRef.scrollTop, limit(top), {
+      ...FAST_SPRING,
+      onUpdate: (v) => {
+        viewportRef.scrollTop = v
+      },
+      onComplete: () => {
+        anim = undefined
+      },
+    })
+  }
+
   // Keybinds implementation
   // We ensure the viewport has a tabindex so it can receive focus
   // We can also explicitly catch PageUp/Down if we want smooth scroll or specific behavior,
@@ -148,12 +176,12 @@ export function ScrollView(props: ScrollViewProps) {
       case "Home":
         e.preventDefault()
         // With column-reverse, top of content = -(scrollHeight - clientHeight)
-        viewportRef.scrollTo({ top: -(viewportRef.scrollHeight - viewportRef.clientHeight), behavior: "smooth" })
+        glide(-(viewportRef.scrollHeight - viewportRef.clientHeight))
         break
       case "End":
         e.preventDefault()
         // With column-reverse, bottom of content = 0
-        viewportRef.scrollTo({ top: 0, behavior: "smooth" })
+        glide(0)
         break
       case "ArrowUp":
         e.preventDefault()
@@ -182,12 +210,21 @@ export function ScrollView(props: ScrollViewProps) {
           updateThumb()
           if (typeof events.onScroll === "function") events.onScroll(e as any)
         }}
-        onWheel={events.onWheel as any}
-        onTouchStart={events.onTouchStart as any}
+        onWheel={(e) => {
+          if (e.deltaY) stop()
+          if (typeof events.onWheel === "function") events.onWheel(e as any)
+        }}
+        onTouchStart={(e) => {
+          stop()
+          if (typeof events.onTouchStart === "function") events.onTouchStart(e as any)
+        }}
         onTouchMove={events.onTouchMove as any}
         onTouchEnd={events.onTouchEnd as any}
         onTouchCancel={events.onTouchCancel as any}
-        onPointerDown={events.onPointerDown as any}
+        onPointerDown={(e) => {
+          stop()
+          if (typeof events.onPointerDown === "function") events.onPointerDown(e as any)
+        }}
         onClick={events.onClick as any}
         tabIndex={0}
         role="region"
