@@ -51,6 +51,18 @@ export namespace Flag {
     process.env["OPENCODE_OLLAMA_BASE_URL"] ??
     "http://localhost:11434/v1"
 
+  // OPENSACIA: GitLab VCS provider configuration
+  export const OPENSACIA_VCS_PROVIDER =
+    process.env["OPENSACIA_VCS_PROVIDER"] ?? process.env["OPENCODE_VCS_PROVIDER"] ?? "gitlab"
+  export const OPENSACIA_GITLAB_BASE_URL =
+    process.env["OPENSACIA_GITLAB_BASE_URL"] ??
+    process.env["OPENCODE_GITLAB_BASE_URL"] ??
+    "https://hera.tics.inta/api/v4"
+  export const OPENSACIA_GITLAB_TOKEN =
+    process.env["OPENSACIA_GITLAB_TOKEN"] ?? process.env["OPENCODE_GITLAB_TOKEN"]
+  export const OPENSACIA_GITLAB_PROJECT_ID =
+    process.env["OPENSACIA_GITLAB_PROJECT_ID"] ?? process.env["OPENCODE_GITLAB_PROJECT_ID"]
+
   export const OPENCODE_ENABLE_QUESTION_TOOL = truthy("OPENCODE_ENABLE_QUESTION_TOOL")
 
   // Experimental
