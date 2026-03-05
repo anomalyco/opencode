@@ -15,6 +15,15 @@ process.chdir(dir)
 import { Script } from "@opencode-ai/script"
 import pkg from "../package.json"
 
+// Build the web app if not already built
+const appDir = path.resolve(dir, "../app")
+const appDistDir = path.join(appDir, "dist")
+if (!fs.existsSync(path.join(appDistDir, "index.html"))) {
+  console.log("Building web app...")
+  await $`bun run build`.cwd(appDir)
+}
+console.log("Web app dist ready at", appDistDir)
+
 const modelsUrl = process.env.OPENCODE_MODELS_URL || "https://models.dev"
 // Fetch and generate models.dev snapshot
 const modelsData = process.env.MODELS_DEV_API_JSON
@@ -195,6 +204,8 @@ for (const item of targets) {
   })
 
   await $`rm -rf ./dist/${name}/bin/tui`
+  // Copy web app dist alongside the binary
+  await $`cp -r ${appDistDir} ./dist/${name}/bin/app`
   await Bun.file(`dist/${name}/package.json`).write(
     JSON.stringify(
       {

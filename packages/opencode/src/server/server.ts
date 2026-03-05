@@ -5,7 +5,7 @@ import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler 
 import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { streamSSE } from "hono/streaming"
-import { proxy } from "hono/proxy"
+import path from "path"
 import { basicAuth } from "hono/basic-auth"
 import z from "zod"
 import { Provider } from "../provider/provider"
@@ -559,41 +559,54 @@ export namespace Server {
           },
         )
         .all("/*", async (c) => {
-          const path = c.req.path
-          const appHost = Flag.OPENCODE_APP_URL || "https://app.opencode.ai"
-          const appHostname = (() => {
-            try {
-              return new URL(appHost).hostname
-            } catch {
-              return "app.opencode.ai"
-            }
-          })()
-
-          try {
-            const response = await proxy(`${appHost}${path}`, {
-              ...c.req,
-              headers: {
-                ...c.req.raw.headers,
-                host: appHostname,
-              },
-            })
-            response.headers.set(
-              "Content-Security-Policy",
-              "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:",
-            )
-            return response
-          } catch (e) {
-            log.error("failed to proxy to app", {
-              url: `${appHost}${path}`,
-              error: e,
-            })
+          // Resolve app directory: env override > bundled app/ next to binary > error
+          const appDir =
+            Flag.OPENCODE_APP_URL || (() => {
+              const bundled = path.join(path.dirname(process.execPath), "app")
+              try {
+                if (Bun.file(path.join(bundled, "index.html")).size) return bundled
+              } catch {}
+              return undefined
+            })()
+          if (!appDir) {
             return c.json(
               new NamedError.Unknown({
-                message: `Failed to load web UI from ${appHost}. Set OPENCODE_APP_URL to override the app URL or ensure ${appHost} is reachable.`,
+                message:
+                  "Web UI assets not found. Set OPENCODE_APP_URL to the path of a built @opencode-ai/app dist directory, or place the built app in an 'app' directory next to the opencode binary.",
               }).toObject(),
-              { status: 502 },
+              { status: 500 },
             )
           }
+
+          // Try to serve the requested file
+          const reqPath = c.req.path === "/" ? "/index.html" : c.req.path
+          const filePath = path.join(appDir, reqPath)
+
+          // Prevent directory traversal
+          if (!path.resolve(filePath).startsWith(path.resolve(appDir))) {
+            return c.notFound()
+          }
+
+          let file = Bun.file(filePath)
+          if (!(await file.exists())) {
+            // SPA fallback: serve index.html for client-side routes
+            file = Bun.file(path.join(appDir, "index.html"))
+            if (!(await file.exists())) {
+              return c.json(
+                new NamedError.Unknown({
+                  message: `Web UI directory not found or missing index.html: ${appDir}. Build the app first: cd packages/app && bun run build`,
+                }).toObject(),
+                { status: 500 },
+              )
+            }
+            c.header("Content-Type", "text/html; charset=utf-8")
+          }
+
+          c.header(
+            "Content-Security-Policy",
+            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:",
+          )
+          return c.body(file.stream(), 200)
         }) as unknown as Hono,
   )
 

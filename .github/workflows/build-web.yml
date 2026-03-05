@@ -1,0 +1,28 @@
+name: build-web
+
+on:
+  push:
+    branches:
+      - "claude/**"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Build web app
+        run: bun run build
+        working-directory: packages/app
+
+      - name: Build CLI (current platform)
+        run: ./packages/opencode/script/build.ts --single
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-web-linux-x64
+          path: packages/opencode/dist/*/
