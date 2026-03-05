@@ -648,12 +648,7 @@ export const RunCommand = cmd({
     }
 
     if (args.attach) {
-      const headers = (() => {
-        const password = Flag.OPENCODE_SERVER_PASSWORD
-        if (!password) return undefined
-        const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
-        return { Authorization: `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}` }
-      })()
+      const headers = getAttachHeaders(Flag.OPENCODE_SERVER_PASSWORD, Flag.OPENCODE_SERVER_USERNAME)
       const sdk = createOpencodeClient({ baseUrl: args.attach, directory, headers })
       return await execute(sdk)
     }
@@ -668,3 +663,9 @@ export const RunCommand = cmd({
     })
   },
 })
+
+export function getAttachHeaders(password?: string, username?: string) {
+  if (!password) return undefined
+  const auth = `Basic ${Buffer.from(`${username ?? "opencode"}:${password}`).toString("base64")}`
+  return { Authorization: auth }
+}
