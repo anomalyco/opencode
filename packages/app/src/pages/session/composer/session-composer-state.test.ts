@@ -55,6 +55,28 @@ describe("sessionPermissionRequest", () => {
 
     expect(sessionPermissionRequest(sessions, permissions, "root")).toBeUndefined()
   })
+
+  test("skips filtered permissions in the current tree", () => {
+    const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" })]
+    const permissions = {
+      root: [permission("perm-root", "root")],
+      child: [permission("perm-child", "child")],
+    }
+
+    expect(sessionPermissionRequest(sessions, permissions, "root", (item) => item.id !== "perm-root"))?.toMatchObject({
+      id: "perm-child",
+    })
+  })
+
+  test("returns undefined when all tree permissions are filtered out", () => {
+    const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" })]
+    const permissions = {
+      root: [permission("perm-root", "root")],
+      child: [permission("perm-child", "child")],
+    }
+
+    expect(sessionPermissionRequest(sessions, permissions, "root", () => false)).toBeUndefined()
+  })
 })
 
 describe("sessionQuestionRequest", () => {
