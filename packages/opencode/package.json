@@ -5,6 +5,10 @@
   "type": "module",
   "license": "MIT",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anomalyco/opencode.git"
+  },
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "test": "bun test --timeout 30000",
