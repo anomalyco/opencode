@@ -61,6 +61,14 @@ export async function captureFailure(test: any, err: any, runDir?: string) {
         await fsp.writeFile(path.join(out, 'editor.txt'), text, 'utf8')
       }
 
+      // Try to activate this extension so its commands are registered
+      try {
+        const ext = vscode.extensions.getExtension('sst-dev.opencode')
+        if (ext && !ext.isActive) {
+          try { await ext.activate() } catch (e) {}
+        }
+      } catch (e) {}
+
       // Attempt to use VS Code's capture-related commands if present.
       try {
         const cmds: string[] = await vscode.commands.getCommands(true)
@@ -91,6 +99,50 @@ export async function captureFailure(test: any, err: any, runDir?: string) {
       } catch (e) {
         // getCommands may fail in some hosts
       }
+
+      // Try extension-specific capture command as a fallback (opencode.captureEvidence) with retries
+      try {
+        const maxAttempts = 5
+        let attempt = 0
+        let got = null
+        while (attempt < maxAttempts) {
+          attempt++
+          try {
+            // try to activate extension before executing
+            try {
+              const ext = vscode.extensions.getExtension('sst-dev.opencode')
+              if (ext && !ext.isActive) {
+                try { await ext.activate() } catch (e) {}
+              }
+            } catch (e) {}
+
+            // @ts-ignore
+            const res2 = await vscode.commands.executeCommand('opencode.captureEvidence')
+            try { await fsp.writeFile(path.join(out, `vscode-capture-cmd-opencode-attempt-${attempt}.txt`), String(res2 || 'opencode.captureEvidence'), 'utf8') } catch (e) {}
+            try { await fsp.writeFile(path.join(out, `vscode-capture-opencode-raw-attempt-${attempt}.txt`), JSON.stringify(res2), 'utf8') } catch (e) {}
+            if (res2) { got = res2; break }
+          } catch (e) {
+            try { await new Promise(r => setTimeout(r, 500)) } catch (e) {}
+          }
+        }
+        if (got) {
+          const res2 = got
+          if (typeof res2 === 'string' && /^data:image\/(png|jpeg);base64,/.test(res2)) {
+            const base642 = res2.split(',')[1]
+            const buf2 = Buffer.from(base642, 'base64')
+            await fsp.writeFile(path.join(out, 'screenshot.png'), buf2)
+          } else {
+            try {
+              const maybePath = String(res2)
+              if (await (fsp.stat(maybePath).then(() => true).catch(() => false))) {
+                await fsp.copyFile(maybePath, path.join(out, 'screenshot.png'))
+              }
+            } catch (e) {}
+          }
+        } else {
+          try { await fsp.writeFile(path.join(out, 'vscode-capture-opencode-not-found.txt'), 'no-result-after-retries', 'utf8') } catch (e) {}
+        }
+      } catch (e) {}
     } catch (e) {}
 
     // copy mochawesome outputs if present in test-results dir

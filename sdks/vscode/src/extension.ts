@@ -87,10 +87,13 @@ export function activate(context: vscode.ExtensionContext) {
               // If returned a URI-like object
               try {
                 // @ts-ignore
-                if (res.fsPath) {
-                  const buf = await fsp.readFile(res.fsPath)
-                  return 'data:image/png;base64,' + buf.toString('base64')
-                }
+                try {
+                  const fsPath = (res as any).fsPath || (res as any).path
+                  if (fsPath && typeof fsPath === 'string') {
+                    const buf = await fsp.readFile(fsPath)
+                    return 'data:image/png;base64,' + buf.toString('base64')
+                  }
+                } catch (e) {}
               } catch (e) {}
               // If returned a base64/data URL string
               if (typeof res === 'string' && /^data:image\/(png|jpeg);base64,/.test(res)) return res
@@ -262,6 +265,65 @@ export function activate(context: vscode.ExtensionContext) {
 
     return filepathWithAt
   }
+
+  // Background poller to respond to test-triggered capture requests placed in the OS tmp dir.
+  try {
+    const os = require('os')
+    const tmpDir = os.tmpdir()
+    setInterval(async () => {
+      try {
+        const entries = await fsp.readdir(tmpDir)
+        for (const ent of entries) {
+          if (!ent.startsWith('opencode-capture-') || !ent.endsWith('.json')) continue
+          const triggerPath = path.join(tmpDir, ent)
+          let payload: any = {}
+          try { payload = JSON.parse(await fsp.readFile(triggerPath, 'utf8')) } catch (e) {}
+          const outPath = payload && payload.outPath
+          if (outPath) {
+            try {
+              // try Electron desktopCapturer
+              // eslint-disable-next-line @typescript-eslint/no-var-requires
+              const electron = (global as any).process ? require('electron') : null
+              const desktopCapturer = electron && (electron.desktopCapturer || (electron.remote && electron.remote.desktopCapturer))
+              if (desktopCapturer && typeof desktopCapturer.getSources === 'function') {
+                const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1280, height: 720 } })
+                if (sources && sources.length) {
+                  const s = sources[0]
+                  if (s.thumbnail && typeof s.thumbnail.toPNG === 'function') {
+                    const png = s.thumbnail.toPNG()
+                    await fsp.writeFile(outPath, png)
+                  } else if (s.thumbnail && typeof s.thumbnail.toDataURL === 'function') {
+                    const dataurl = s.thumbnail.toDataURL()
+                    const base64 = dataurl.split(',')[1]
+                    await fsp.writeFile(outPath, Buffer.from(base64, 'base64'))
+                  }
+                }
+              } else {
+                // Try webContents capture
+                const remote = electron && electron.remote ? electron.remote : null
+                const wc = remote && remote.getCurrentWindow && remote.getCurrentWindow().webContents
+                if (wc && typeof wc.capturePage === 'function') {
+                  const img = await wc.capturePage()
+                  if (img && typeof img.toPNG === 'function') {
+                    await fsp.writeFile(outPath, img.toPNG())
+                  } else if (img && typeof img.toDataURL === 'function') {
+                    const dataurl = img.toDataURL()
+                    const base64 = dataurl.split(',')[1]
+                    await fsp.writeFile(outPath, Buffer.from(base64, 'base64'))
+                  }
+                }
+              }
+            } catch (e) {
+              try { await fsp.writeFile(path.join(tmpDir, ent + '.error.txt'), String(e), 'utf8') } catch (e2) {}
+            }
+          }
+          try { await fsp.unlink(triggerPath) } catch (e) {}
+        }
+      } catch (e) {
+        // ignore poll errors
+      }
+    }, 500)
+  } catch (e) {}
 }
 
 export function deactivate() {}
