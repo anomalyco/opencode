@@ -694,7 +694,7 @@
 
   [data-slot="context-tool-expanded-action"] {
     flex-shrink: 0;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     font-weight: 500;
     color: var(--text-base);
   }
@@ -704,7 +704,7 @@
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     color: var(--text-base);
     opacity: 0.75;
   }
@@ -722,7 +722,7 @@
 
   [data-slot="context-tool-rolling-action"] {
     flex-shrink: 0;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     font-weight: 500;
     color: var(--text-base);
   }
@@ -732,7 +732,7 @@
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     color: var(--text-weak);
   }
 }
