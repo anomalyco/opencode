@@ -8,7 +8,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { usePlatform } from "@/context/platform"
 import { DateTime } from "luxon"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { DialogSelectDirectory } from "@/overrides/dialog-select-directory"
+import { DialogSelectDirectory, PROJECTS_DIR } from "@/overrides/dialog-select-directory"
 import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useServer } from "@/context/server"
 import { useGlobalSync } from "@/context/global-sync"
@@ -35,8 +35,9 @@ export default function Home() {
   // and update to match the new signatures.
   createEffect(() => {
     const projects = recent()
-    if (projects.length > 0) {
-      openProject(projects[0].worktree)
+    const valid = projects.find((p) => p.worktree.startsWith(PROJECTS_DIR + "/"))
+    if (valid) {
+      openProject(valid.worktree)
     }
   })
 
@@ -47,7 +48,10 @@ export default function Home() {
     return "bg-border-weak-base"
   })
 
+  // LATER OVERRIDE: Guard against invalid project directories (e.g. "/").
+  // Upstream `openProject` has no guard — keep this check on merge.
   function openProject(directory: string) {
+    if (!directory || !directory.startsWith(PROJECTS_DIR + "/")) return
     layout.projects.open(directory)
     server.projects.touch(directory)
     navigate(`/${base64Encode(directory)}`)
