@@ -3,9 +3,9 @@ import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import { DataProvider } from "@opencode-ai/ui/context"
 import { FileComponentProvider } from "@opencode-ai/ui/context/file"
-import { WorkerPoolProvider, type WorkerPools } from "@opencode-ai/ui/context/worker-pool"
+import { WorkerPoolProvider } from "@opencode-ai/ui/context/worker-pool"
 import { createAsync, query, useParams } from "@solidjs/router"
-import { createMemo, createSignal, ErrorBoundary, For, Match, onMount, ParentProps, Show, Switch } from "solid-js"
+import { createMemo, createSignal, ErrorBoundary, For, Match, Show, Switch } from "solid-js"
 import { Share } from "~/core/share"
 import { Logo, Mark } from "@opencode-ai/ui/logo"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -20,24 +20,18 @@ import NotFound from "../[...404]"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { MessageNav } from "@opencode-ai/ui/message-nav"
 import { FileSSR } from "@opencode-ai/ui/file-ssr"
+import { clientOnly } from "@solidjs/start"
 import { Meta, Title } from "@solidjs/meta"
 import { Base64 } from "js-base64"
 import { getRequestEvent } from "solid-js/web"
 
-function WorkerProvider(props: ParentProps) {
-  const [pools, setPools] = createSignal<WorkerPools>({
-    unified: undefined,
-    split: undefined,
-  })
-
-  onMount(() => {
-    import("@opencode-ai/ui/pierre/worker").then((m) => {
-      setPools(m.getWorkerPools())
-    })
-  })
-
-  return <WorkerPoolProvider pools={pools()}>{props.children}</WorkerPoolProvider>
-}
+const ClientOnlyWorkerPoolProvider = clientOnly(() =>
+  import("@opencode-ai/ui/pierre/worker").then((m) => ({
+    default: (props: { children: any }) => (
+      <WorkerPoolProvider pools={m.getWorkerPools()}>{props.children}</WorkerPoolProvider>
+    ),
+  })),
+)
 
 const SessionDataMissingError = NamedError.create(
   "SessionDataMissingError",
@@ -182,7 +176,7 @@ export default function () {
               <Meta name="description" content="opencode - The AI coding agent built for the terminal." />
               <Meta property="og:image" content={ogImage()} />
               <Meta name="twitter:image" content={ogImage()} />
-              <WorkerProvider>
+              <ClientOnlyWorkerPoolProvider>
                 <FileComponentProvider component={FileSSR}>
                   <DataProvider data={data()} directory={info().directory}>
                     {iife(() => {
@@ -393,7 +387,7 @@ export default function () {
                     })}
                   </DataProvider>
                 </FileComponentProvider>
-              </WorkerProvider>
+              </ClientOnlyWorkerPoolProvider>
             </>
           )
         }}
