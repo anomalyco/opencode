@@ -63,6 +63,17 @@ export namespace Flag {
   export const OPENSACIA_GITLAB_PROJECT_ID =
     process.env["OPENSACIA_GITLAB_PROJECT_ID"] ?? process.env["OPENCODE_GITLAB_PROJECT_ID"]
 
+  // OPENSACIA: Security Agent configuration
+  export const OPENSACIA_KALI_IMAGE =
+    process.env["OPENSACIA_KALI_IMAGE"] ?? "kalilinux/kali-rolling:latest"
+  export const OPENSACIA_DOCKER_NETWORK = process.env["OPENSACIA_DOCKER_NETWORK"] ?? "host"
+  export const OPENSACIA_REPORT_PATH =
+    process.env["OPENSACIA_REPORT_PATH"] ?? "/tmp/opensacia-reports"
+  export const OPENSACIA_DEFAULT_TIMEOUT = number("OPENSACIA_DEFAULT_TIMEOUT") ?? 300
+  export const OPENSACIA_DEFAULT_MODE =
+    (process.env["OPENSACIA_DEFAULT_MODE"] ?? "mixed") as "auto" | "assisted" | "mixed"
+  export const OPENSACIA_AUTO_CLEANUP = truthy("OPENSACIA_AUTO_CLEANUP")
+
   export const OPENCODE_ENABLE_QUESTION_TOOL = truthy("OPENCODE_ENABLE_QUESTION_TOOL")
 
   // Experimental

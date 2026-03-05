@@ -1,8 +1,7 @@
 // packages/opencode/src/security/kali/container.ts
 import { $ } from "bun"
 import { randomBytes } from "crypto"
-
-const KALI_IMAGE = "kalilinux/kali-rolling:latest"
+import { Flag } from "@/flag/flag"
 
 export interface ExecResult {
   stdout: string
@@ -45,15 +44,15 @@ export class KaliContainer {
 
   async createOneShot(): Promise<string> {
     const id = KaliContainer.generateId()
-    await $`docker create --name ${id} ${KALI_IMAGE}`.quiet()
-    await $`docker network connect host ${id}`.quiet()
+    await $`docker create --name ${id} ${Flag.OPENSACIA_KALI_IMAGE}`.quiet()
+    await $`docker network connect ${Flag.OPENSACIA_DOCKER_NETWORK} ${id}`.quiet()
     await $`docker start ${id}`.quiet()
     this.containers.set(id, { id, created: new Date(), persistent: false })
     return id
   }
 
   async createPersistent(name: string): Promise<string> {
-    await $`docker run -d --name ${name} --network host ${KALI_IMAGE} tail -f /dev/null`.quiet()
+    await $`docker run -d --name ${name} --network ${Flag.OPENSACIA_DOCKER_NETWORK} ${Flag.OPENSACIA_KALI_IMAGE} tail -f /dev/null`.quiet()
     this.containers.set(name, { id: name, created: new Date(), persistent: true })
     return name
   }
