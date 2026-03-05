@@ -52,6 +52,7 @@ import { TextShimmer } from "./text-shimmer"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
 import { animate } from "motion"
+import { useLocation } from "@solidjs/router"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -1471,6 +1472,7 @@ ToolRegistry.register({
   render(props) {
     const data = useData()
     const i18n = useI18n()
+    const location = useLocation()
     const childSessionId = () => props.metadata.sessionId as string | undefined
     const title = createMemo(() => i18n.t("ui.tool.agent", { type: props.input.subagent_type || props.tool }))
     const description = createMemo(() => {
@@ -1487,33 +1489,11 @@ ToolRegistry.register({
       const direct = data.sessionHref?.(sessionId)
       if (direct) return direct
 
-      if (typeof window === "undefined") return
-      const path = window.location.pathname
+      const path = location.pathname
       const idx = path.indexOf("/session")
       if (idx === -1) return
       return `${path.slice(0, idx)}/session/${sessionId}`
     })
-
-    const handleLinkClick = (e: MouseEvent) => {
-      const sessionId = childSessionId()
-      const url = href()
-      if (!sessionId || !url) return
-
-      e.stopPropagation()
-
-      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
-
-      const nav = data.navigateToSession
-      if (!nav || typeof window === "undefined") return
-
-      e.preventDefault()
-      const before = window.location.pathname + window.location.search + window.location.hash
-      nav(sessionId)
-      setTimeout(() => {
-        const after = window.location.pathname + window.location.search + window.location.hash
-        if (after === before) window.location.assign(url)
-      }, 50)
-    }
 
     const titleContent = () => <TextShimmer text={title()} active={running()} />
 
@@ -1531,7 +1511,7 @@ ToolRegistry.register({
                     data-slot="basic-tool-tool-subtitle"
                     class="clickable subagent-link"
                     href={url()}
-                    onClick={handleLinkClick}
+                    onClick={(e) => e.stopPropagation()}
                   >
                     {description()}
                   </a>
