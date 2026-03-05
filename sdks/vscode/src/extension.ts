@@ -332,6 +332,11 @@ export async function activate(context: vscode.ExtensionContext) {
                 try { await fsp.writeFile(path.join(dir, ent + '.error.txt'), String(e), 'utf8') } catch (e2) {}
               }
             }
+            // write a processed marker so test-runner can see we handled the trigger
+            try {
+              const wrote = await (fsp.stat(outPath).then(() => true).catch(() => false))
+              try { await fsp.writeFile(path.join(dir, ent + '.processed.json'), JSON.stringify({ outPath, wrote, timestamp: new Date().toISOString() }), 'utf8') } catch (e) {}
+            } catch (e) {}
             try { await fsp.unlink(triggerPath) } catch (e) {}
           }
         }
