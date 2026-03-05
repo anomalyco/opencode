@@ -98,6 +98,8 @@ export const dict = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webfetch",
+  "ui.tool.websearch": "网络搜索",
+  "ui.tool.codesearch": "代码搜索",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "补丁",
   "ui.tool.todos": "待办",
@@ -130,6 +132,7 @@ export const dict = {
   "ui.message.copyResponse": "复制回复",
   "ui.message.copied": "已复制！",
   "ui.message.interrupted": "已中断",
+  "ui.message.queued": "排队中",
   "ui.message.attachment.alt": "附件",
 
   "ui.patch.action.deleted": "已删除",

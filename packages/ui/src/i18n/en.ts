@@ -95,6 +95,8 @@ export const dict: Record<string, string> = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webfetch",
+  "ui.tool.websearch": "Web Search",
+  "ui.tool.codesearch": "Code Search",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "To-dos",
@@ -127,6 +129,7 @@ export const dict: Record<string, string> = {
   "ui.message.copyResponse": "Copy response",
   "ui.message.copied": "Copied",
   "ui.message.interrupted": "Interrupted",
+  "ui.message.queued": "Queued",
   "ui.message.attachment.alt": "attachment",
 
   "ui.patch.action.deleted": "Deleted",

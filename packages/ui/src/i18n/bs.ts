@@ -98,6 +98,8 @@ export const dict = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Web preuzimanje",
+  "ui.tool.websearch": "Pretraga weba",
+  "ui.tool.codesearch": "Pretraga koda",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Lista zadataka",
@@ -130,6 +132,7 @@ export const dict = {
   "ui.message.copyResponse": "Kopiraj odgovor",
   "ui.message.copied": "Kopirano!",
   "ui.message.interrupted": "Prekinuto",
+  "ui.message.queued": "U redu",
   "ui.message.attachment.alt": "prilog",
 
   "ui.patch.action.deleted": "Obrisano",

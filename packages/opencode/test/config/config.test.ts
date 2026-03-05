@@ -1535,6 +1535,71 @@ test("project config overrides remote well-known config", async () => {
   }
 })
 
+test("wellknown URL with trailing slash is normalized", async () => {
+  const originalFetch = globalThis.fetch
+  let fetchedUrl: string | undefined
+  const mockFetch = mock((url: string | URL | Request) => {
+    const urlStr = url.toString()
+    if (urlStr.includes(".well-known/opencode")) {
+      fetchedUrl = urlStr
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            config: {
+              mcp: {
+                slack: {
+                  type: "remote",
+                  url: "https://slack.example.com/mcp",
+                  enabled: true,
+                },
+              },
+            },
+          }),
+          { status: 200 },
+        ),
+      )
+    }
+    return originalFetch(url)
+  })
+  globalThis.fetch = mockFetch as unknown as typeof fetch
+
+  const originalAuthAll = Auth.all
+  Auth.all = mock(() =>
+    Promise.resolve({
+      "https://example.com/": {
+        type: "wellknown" as const,
+        key: "TEST_TOKEN",
+        token: "test-token",
+      },
+    }),
+  )
+
+  try {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        await Filesystem.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await Config.get()
+        // Trailing slash should be stripped — no double slash in the fetch URL
+        expect(fetchedUrl).toBe("https://example.com/.well-known/opencode")
+      },
+    })
+  } finally {
+    globalThis.fetch = originalFetch
+    Auth.all = originalAuthAll
+  }
+})
+
 describe("getPluginName", () => {
   test("extracts name from file:// URL", () => {
     expect(Config.getPluginName("file:///path/to/plugin/foo.js")).toBe("foo")

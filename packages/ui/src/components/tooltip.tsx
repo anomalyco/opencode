@@ -47,7 +47,7 @@ export function Tooltip(props: TooltipProps) {
     <Switch>
       <Match when={local.inactive}>{local.children}</Match>
       <Match when={true}>
-        <KobalteTooltip gutter={4} {...others} open={local.forceOpen || open()} onOpenChange={setOpen}>
+        <KobalteTooltip gutter={4} {...others} closeDelay={0} open={local.forceOpen || open()} onOpenChange={setOpen}>
           <KobalteTooltip.Trigger as={"div"} data-component="tooltip-trigger" class={local.class}>
             {local.children}
           </KobalteTooltip.Trigger>

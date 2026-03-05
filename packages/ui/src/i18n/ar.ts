@@ -94,6 +94,8 @@ export const dict = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "جلب الويب",
+  "ui.tool.websearch": "بحث الويب",
+  "ui.tool.codesearch": "بحث الكود",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "تصحيح",
   "ui.tool.todos": "المهام",
@@ -126,6 +128,7 @@ export const dict = {
   "ui.message.copyResponse": "نسخ الرد",
   "ui.message.copied": "تم النسخ!",
   "ui.message.interrupted": "تمت المقاطعة",
+  "ui.message.queued": "في الانتظار",
   "ui.message.attachment.alt": "مرفق",
 
   "ui.patch.action.deleted": "محذوف",
