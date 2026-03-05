@@ -5,6 +5,7 @@ import z from "zod"
 import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
 import { lazy } from "@/util/lazy"
+import { Filesystem } from "../util/filesystem"
 
 const MAMMOUTH_API_BASE = "https://api.mammouth.ai"
 
@@ -62,7 +63,7 @@ export namespace ModelsDev {
     status: z.enum(["alpha", "beta", "deprecated"]).optional(),
     options: z.record(z.string(), z.any()),
     headers: z.record(z.string(), z.string()).optional(),
-    provider: z.object({ npm: z.string() }).optional(),
+    provider: z.object({ npm: z.string().optional(), api: z.string().optional() }).optional(),
     variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
   })
   export type Model = z.infer<typeof Model>
@@ -201,8 +202,7 @@ export namespace ModelsDev {
   }
 
   export const Data = lazy(async () => {
-    const file = Bun.file(Flag.OPENCODE_MODELS_PATH ?? filepath)
-    const result = await file.json().catch(() => {})
+    const result = await Filesystem.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).catch(() => {})
     if (result) return result
     // @ts-ignore
     const snapshot = await import("./models-snapshot")
@@ -247,7 +247,7 @@ export namespace ModelsDev {
   }
 }
 
-if (!Flag.OPENCODE_DISABLE_MODELS_FETCH) {
+if (!Flag.OPENCODE_DISABLE_MODELS_FETCH && !process.argv.includes("--get-yargs-completions")) {
   ModelsDev.refresh()
   setInterval(
     async () => {

@@ -10,9 +10,10 @@ function env(key: string, fallback?: string) {
 export namespace Flag {
   export const OPENCODE_AUTO_SHARE = truthy("MAMMOUTH_AUTO_SHARE")
   export const OPENCODE_GIT_BASH_PATH = process.env["MAMMOUTH_GIT_BASH_PATH"]
-  export const OPENCODE_CONFIG = env("MAMMOUTH_CONFIG", "OPENCODE_CONFIG")
+  export const OPENCODE_CONFIG = process.env["MAMMOUTH_CONFIG"]
+  export declare const OPENCODE_TUI_CONFIG: string | undefined
   export declare const OPENCODE_CONFIG_DIR: string | undefined
-  export const OPENCODE_CONFIG_CONTENT = env("MAMMOUTH_CONFIG_CONTENT", "OPENCODE_CONFIG_CONTENT")
+  export const OPENCODE_CONFIG_CONTENT = env("MAMMOUTH_CONFIG_CONTENT", "MAMMOUTH_CONFIG_CONTENT")
   export const OPENCODE_DISABLE_AUTOUPDATE = truthy("MAMMOUTH_DISABLE_AUTOUPDATE")
   export const OPENCODE_DISABLE_PRUNE = truthy("MAMMOUTH_DISABLE_PRUNE")
   export const OPENCODE_DISABLE_TERMINAL_TITLE = truthy("MAMMOUTH_DISABLE_TERMINAL_TITLE")
@@ -34,6 +35,7 @@ export namespace Flag {
   export declare const OPENCODE_CLIENT: string
   export const OPENCODE_SERVER_PASSWORD = process.env["MAMMOUTH_SERVER_PASSWORD"]
   export const OPENCODE_SERVER_USERNAME = process.env["MAMMOUTH_SERVER_USERNAME"]
+  export const OPENCODE_ENABLE_QUESTION_TOOL = truthy("MAMMOUTH_ENABLE_QUESTION_TOOL")
 
   // Experimental
   export const OPENCODE_EXPERIMENTAL = truthy("MAMMOUTH_EXPERIMENTAL")
@@ -41,7 +43,10 @@ export namespace Flag {
   export const OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER = truthy("MAMMOUTH_EXPERIMENTAL_DISABLE_FILEWATCHER")
   export const OPENCODE_EXPERIMENTAL_ICON_DISCOVERY =
     OPENCODE_EXPERIMENTAL || truthy("MAMMOUTH_EXPERIMENTAL_ICON_DISCOVERY")
-  export const OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT = truthy("MAMMOUTH_EXPERIMENTAL_DISABLE_COPY_ON_SELECT")
+
+  const copy = process.env["MAMMOUTH_EXPERIMENTAL_DISABLE_COPY_ON_SELECT"]
+  export const OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT =
+    copy === undefined ? process.platform === "win32" : truthy("MAMMOUTH_EXPERIMENTAL_DISABLE_COPY_ON_SELECT")
   export const OPENCODE_ENABLE_EXA =
     truthy("MAMMOUTH_ENABLE_EXA") || OPENCODE_EXPERIMENTAL || truthy("MAMMOUTH_EXPERIMENTAL_EXA")
   export const OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS = number("MAMMOUTH_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS")
@@ -69,6 +74,17 @@ export namespace Flag {
 Object.defineProperty(Flag, "OPENCODE_DISABLE_PROJECT_CONFIG", {
   get() {
     return truthy("MAMMOUTH_DISABLE_PROJECT_CONFIG") || truthy("OPENCODE_DISABLE_PROJECT_CONFIG")
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+// Dynamic getter for OPENCODE_TUI_CONFIG
+// This must be evaluated at access time, not module load time,
+// because tests and external tooling may set this env var at runtime
+Object.defineProperty(Flag, "OPENCODE_TUI_CONFIG", {
+  get() {
+    return env("MAMMOUTH_TUI_CONFIG", "OPENCODE_TUI_CONFIG")
   },
   enumerable: true,
   configurable: false,

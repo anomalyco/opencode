@@ -1,9 +1,5 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  // "enterprise": {
-  //   "url": "https://enterprise.dev.opencode.ai",
-  // },
-  "theme": "mammouth",
   "provider": {
     "opencode": {
       "options": {},
