@@ -7,6 +7,7 @@ import { Flag } from "../../flag/flag"
 import { bootstrap } from "../bootstrap"
 import { EOL } from "os"
 import { Filesystem } from "../../util/filesystem"
+import { getAuthorizationHeader } from "../../util/auth"
 import { createOpencodeClient, type Message, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
@@ -648,7 +649,8 @@ export const RunCommand = cmd({
     }
 
     if (args.attach) {
-      const headers = getAttachHeaders(Flag.OPENCODE_SERVER_PASSWORD, Flag.OPENCODE_SERVER_USERNAME)
+      const auth = getAuthorizationHeader()
+      const headers = auth ? { Authorization: auth } : undefined
       const sdk = createOpencodeClient({ baseUrl: args.attach, directory, headers })
       return await execute(sdk)
     }
@@ -663,9 +665,3 @@ export const RunCommand = cmd({
     })
   },
 })
-
-export function getAttachHeaders(password?: string, username?: string) {
-  if (!password) return undefined
-  const auth = `Basic ${Buffer.from(`${username ?? "opencode"}:${password}`).toString("base64")}`
-  return { Authorization: auth }
-}
