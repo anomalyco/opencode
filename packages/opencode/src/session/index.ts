@@ -10,7 +10,7 @@ import { Flag } from "../flag/flag"
 import { Identifier } from "../id/id"
 import { Installation } from "../installation"
 
-import { Database, NotFoundError, eq, and, or, gte, isNull, desc, like, inArray, lt } from "../storage/db"
+import { Database, NotFoundError, eq, and, gte, isNull, desc, like, inArray, lt } from "../storage/db"
 import type { SQL } from "../storage/db"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
@@ -654,11 +654,18 @@ export namespace Session {
     return rows.map(fromRow)
   })
 
+  // finds ALL children regardless of project — used by remove() for safe cascading
+  function childrenAll(parentID: string) {
+    const rows = Database.use((db) =>
+      db.select().from(SessionTable).where(eq(SessionTable.parent_id, parentID)).all(),
+    )
+    return rows.map(fromRow)
+  }
+
   export const remove = fn(Identifier.schema("session"), async (sessionID) => {
-    const project = Instance.project
     try {
       const session = await get(sessionID)
-      for (const child of await children(sessionID)) {
+      for (const child of childrenAll(sessionID)) {
         await remove(child.id)
       }
       await unshare(sessionID).catch(() => {})

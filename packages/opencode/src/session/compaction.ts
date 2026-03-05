@@ -62,7 +62,7 @@ export namespace SessionCompaction {
     const msgs = await Session.messages({ sessionID: input.sessionID })
     let total = 0
     let pruned = 0
-    const toPrune = []
+    const toPrune: MessageV2.ToolPart[] = []
     let turns = 0
 
     loop: for (let msgIndex = msgs.length - 1; msgIndex >= 0; msgIndex--) {
@@ -88,13 +88,18 @@ export namespace SessionCompaction {
     }
     log.info("found", { pruned, total })
     if (pruned > PRUNE_MINIMUM) {
+      const reclaim = config.compaction?.reclaim !== false
       for (const part of toPrune) {
         if (part.state.status === "completed") {
           part.state.time.compacted = Date.now()
+          if (reclaim) {
+            part.state.output = "[reclaimed]"
+            part.state.attachments = []
+          }
           await Session.updatePart(part)
         }
       }
-      log.info("pruned", { count: toPrune.length })
+      log.info("pruned", { count: toPrune.length, reclaim })
     }
   }
 
@@ -290,6 +295,21 @@ When constructing the summary, try to stick to this template:
     }
     if (processor.message.error) return "stop"
     Bus.publish(Event.Compacted, { sessionID: input.sessionID })
+    // retroactive reclamation: clear output/attachments from previously compacted parts
+    const cfg = await Config.get()
+    if (cfg.compaction?.reclaim !== false) {
+      for (const msg of input.messages) {
+        for (const part of msg.parts) {
+          if (part.type !== "tool") continue
+          if (part.state.status !== "completed") continue
+          if (!part.state.time.compacted) continue
+          if (part.state.output === "[reclaimed]") continue
+          part.state.output = "[reclaimed]"
+          part.state.attachments = []
+          await Session.updatePart(part)
+        }
+      }
+    }
     return "continue"
   }
 
