@@ -103,5 +103,30 @@ export const ProjectRoutes = lazy(() =>
         const project = await Project.update({ ...body, projectID })
         return c.json(project)
       },
+    )
+    .delete(
+      "/:projectID",
+      describeRoute({
+        summary: "Delete project",
+        description: "Delete a project by ID.",
+        operationId: "project.delete",
+        responses: {
+          200: {
+            description: "Project deleted",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ projectID: z.string() })),
+      async (c) => {
+        const projectID = c.req.valid("param").projectID
+        await Project.remove({ projectID })
+        return c.json(true)
+      },
     ),
 )
