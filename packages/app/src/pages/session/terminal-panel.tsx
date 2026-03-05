@@ -56,9 +56,9 @@ export function TerminalPanel() {
     on(
       () => terminal.all().length,
       (count, prevCount) => {
-        if (prevCount !== undefined && prevCount > 0 && count === 0) {
-          if (opened()) view().terminal.toggle()
-        }
+        if (prevCount === undefined || prevCount <= 0 || count !== 0) return
+        if (!opened()) return
+        close()
       },
     ),
   )
@@ -102,7 +102,7 @@ export function TerminalPanel() {
 
   const all = createMemo(() => terminal.all())
   const ids = createMemo(() => all().map((pty) => pty.id))
-  const byId = createMemo(() => new Map(all().map((pty) => [pty.id, pty])))
+  const byId = createMemo(() => new Map(all().map((pty) => [pty.id, { ...pty }])))
 
   const handleTerminalDragStart = (event: unknown) => {
     const id = getDraggableId(event)
@@ -189,7 +189,13 @@ export function TerminalPanel() {
               >
                 <Tabs.List class="h-10">
                   <SortableProvider ids={ids()}>
-                    <For each={all()}>{(pty) => <SortableTerminalTab terminal={pty} onClose={close} />}</For>
+                    <For each={ids()}>
+                      {(id) => (
+                        <Show when={byId().get(id)}>
+                          {(pty) => <SortableTerminalTab terminal={pty()} onClose={close} />}
+                        </Show>
+                      )}
+                    </For>
                   </SortableProvider>
                   <div class="h-full flex items-center justify-center">
                     <TooltipKeybind
