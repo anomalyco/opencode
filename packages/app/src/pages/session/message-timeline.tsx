@@ -688,7 +688,7 @@ export function MessageTimeline(props: {
       when={!props.mobileChanges}
       fallback={<div class="relative h-full overflow-hidden">{props.mobileFallback}</div>}
     >
-      <div class="relative w-full h-full min-w-0">
+      <div class="relative w-full h-full min-w-0 flex flex-col min-h-0">
         <div
           class="absolute left-1/2 -translate-x-1/2 bottom-6 z-[60] pointer-events-none transition-all duration-200 ease-out"
           classList={{
@@ -712,17 +712,9 @@ export function MessageTimeline(props: {
               headerRef = el
               el.style.opacity = "0"
             }}
-            class="pointer-events-none absolute inset-x-0 top-0 z-30"
+            class="shrink-0 z-30 w-full bg-[linear-gradient(to_bottom,var(--background-stronger)_38px,transparent)] pl-2 pr-3 md:pl-4 md:pr-3"
+            classList={{ "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered }}
           >
-            <div
-              classList={{
-                "bg-[linear-gradient(to_bottom,var(--background-stronger)_38px,transparent)]": true,
-                "w-full": true,
-                "pb-10": true,
-                "pl-2 pr-3 md:pl-4 md:pr-3": true,
-                "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
-              }}
-            >
               <div class="pointer-events-auto h-12 w-full flex items-center justify-between gap-2">
                 <div class="flex items-center gap-1 min-w-0 flex-1 pr-3">
                   <Show when={parentID()}>
@@ -833,7 +825,6 @@ export function MessageTimeline(props: {
                   )}
                 </Show>
               </div>
-            </div>
           </div>
         </Show>
         <ScrollView
@@ -895,7 +886,7 @@ export function MessageTimeline(props: {
             if (next) props.onPreserveScrollAnchor(next)
             props.onAutoScrollInteraction(e)
           }}
-          class="relative min-w-0 w-full h-full"
+          class="flex-1 min-h-0 relative min-w-0 w-full h-full"
           style={{
             "--session-title-height": showHeader() ? "40px" : "0px",
             "--sticky-accordion-top": showHeader() ? "48px" : "0px",
