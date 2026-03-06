@@ -527,19 +527,15 @@ export function AssistantParts(props: {
 
                 return (
                   <Show when={message()}>
-                    {(msg) => (
-                      <Show when={part()}>
-                        {(p) => (
-                          <Part
-                            part={p()}
-                            message={msg()}
-                            showAssistantCopyPartID={props.showAssistantCopyPartID}
-                            turnDurationMs={props.turnDurationMs}
-                            defaultOpen={partDefaultOpen(p(), props.shellToolDefaultOpen, props.editToolDefaultOpen)}
-                          />
-                        )}
-                      </Show>
-                    )}
+                    <Show when={part()}>
+                      <Part
+                        part={part()!}
+                        message={message()!}
+                        showAssistantCopyPartID={props.showAssistantCopyPartID}
+                        turnDurationMs={props.turnDurationMs}
+                        defaultOpen={partDefaultOpen(part()!, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
+                      />
+                    </Show>
                   </Show>
                 )
               })()}
@@ -741,13 +737,11 @@ export function AssistantMessageDisplay(props: {
 
                 return (
                   <Show when={part()}>
-                    {(p) => (
-                      <Part
-                        part={p()}
-                        message={props.message}
-                        showAssistantCopyPartID={props.showAssistantCopyPartID}
-                      />
-                    )}
+                    <Part
+                      part={part()!}
+                      message={props.message}
+                      showAssistantCopyPartID={props.showAssistantCopyPartID}
+                    />
                   </Show>
                 )
               })()}
@@ -1410,11 +1404,9 @@ ToolRegistry.register({
         trigger={{ title: i18n.t("ui.tool.list"), subtitle: getDirectory(props.input.path || "/") }}
       >
         <Show when={props.output}>
-          {(output) => (
-            <div data-component="tool-output" data-scrollable>
-              <Markdown text={output()} />
-            </div>
-          )}
+          <div data-component="tool-output" data-scrollable>
+            <Markdown text={props.output!} />
+          </div>
         </Show>
       </BasicTool>
     )
@@ -1436,11 +1428,9 @@ ToolRegistry.register({
         }}
       >
         <Show when={props.output}>
-          {(output) => (
-            <div data-component="tool-output" data-scrollable>
-              <Markdown text={output()} />
-            </div>
-          )}
+          <div data-component="tool-output" data-scrollable>
+            <Markdown text={props.output!} />
+          </div>
         </Show>
       </BasicTool>
     )
@@ -1465,11 +1455,9 @@ ToolRegistry.register({
         }}
       >
         <Show when={props.output}>
-          {(output) => (
-            <div data-component="tool-output" data-scrollable>
-              <Markdown text={output()} />
-            </div>
-          )}
+          <div data-component="tool-output" data-scrollable>
+            <Markdown text={props.output!} />
+          </div>
         </Show>
       </BasicTool>
     )
@@ -1613,16 +1601,14 @@ ToolRegistry.register({
           <Show when={description()}>
             <Switch>
               <Match when={href()}>
-                {(url) => (
-                  <a
-                    data-slot="basic-tool-tool-subtitle"
-                    class="clickable subagent-link"
-                    href={url()}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {description()}
-                  </a>
-                )}
+                <a
+                  data-slot="basic-tool-tool-subtitle"
+                  class="clickable subagent-link"
+                  href={href()!}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {description()}
+                </a>
               </Match>
               <Match when={true}>
                 <span data-slot="basic-tool-tool-subtitle">{description()}</span>
@@ -1747,7 +1733,9 @@ ToolRegistry.register({
             <ToolFileAccordion
               path={path()}
               actions={
-                <Show when={!pending() && props.metadata.filediff}>{(diff) => <DiffChanges changes={diff()} />}</Show>
+                <Show when={!pending() && props.metadata.filediff}>
+                  <DiffChanges changes={props.metadata.filediff!} />
+                </Show>
               }
             >
               <div data-component="edit-content">
@@ -1974,74 +1962,72 @@ ToolRegistry.register({
           </div>
         }
       >
-        {(file) => (
-          <div data-component="apply-patch-tool">
-            <BasicTool
-              {...props}
-              icon="code-lines"
-              defer
-              trigger={
-                <div data-component="edit-trigger">
-                  <div data-slot="message-part-title-area">
-                    <div data-slot="message-part-title">
-                      <span data-slot="message-part-title-text">
-                        <TextShimmer text={i18n.t("ui.tool.patch")} active={pending()} />
-                      </span>
-                      <Show when={!pending()}>
-                        <span data-slot="message-part-title-filename">{getFilename(file().relativePath)}</span>
-                      </Show>
-                    </div>
-                    <Show when={!pending() && file().relativePath.includes("/")}>
-                      <div data-slot="message-part-path">
-                        <span data-slot="message-part-directory">{getDirectory(file().relativePath)}</span>
-                      </div>
-                    </Show>
-                  </div>
-                  <div data-slot="message-part-actions">
+        <div data-component="apply-patch-tool">
+          <BasicTool
+            {...props}
+            icon="code-lines"
+            defer
+            trigger={
+              <div data-component="edit-trigger">
+                <div data-slot="message-part-title-area">
+                  <div data-slot="message-part-title">
+                    <span data-slot="message-part-title-text">
+                      <TextShimmer text={i18n.t("ui.tool.patch")} active={pending()} />
+                    </span>
                     <Show when={!pending()}>
-                      <DiffChanges changes={{ additions: file().additions, deletions: file().deletions }} />
+                      <span data-slot="message-part-title-filename">{getFilename(single()!.relativePath)}</span>
                     </Show>
                   </div>
+                  <Show when={!pending() && single()!.relativePath.includes("/")}>
+                    <div data-slot="message-part-path">
+                      <span data-slot="message-part-directory">{getDirectory(single()!.relativePath)}</span>
+                    </div>
+                  </Show>
                 </div>
+                <div data-slot="message-part-actions">
+                  <Show when={!pending()}>
+                    <DiffChanges changes={{ additions: single()!.additions, deletions: single()!.deletions }} />
+                  </Show>
+                </div>
+              </div>
+            }
+          >
+            <ToolFileAccordion
+              path={single()!.relativePath}
+              actions={
+                <Switch>
+                  <Match when={single()!.type === "add"}>
+                    <span data-slot="apply-patch-change" data-type="added">
+                      {i18n.t("ui.patch.action.created")}
+                    </span>
+                  </Match>
+                  <Match when={single()!.type === "delete"}>
+                    <span data-slot="apply-patch-change" data-type="removed">
+                      {i18n.t("ui.patch.action.deleted")}
+                    </span>
+                  </Match>
+                  <Match when={single()!.type === "move"}>
+                    <span data-slot="apply-patch-change" data-type="modified">
+                      {i18n.t("ui.patch.action.moved")}
+                    </span>
+                  </Match>
+                  <Match when={true}>
+                    <DiffChanges changes={{ additions: single()!.additions, deletions: single()!.deletions }} />
+                  </Match>
+                </Switch>
               }
             >
-              <ToolFileAccordion
-                path={file().relativePath}
-                actions={
-                  <Switch>
-                    <Match when={file().type === "add"}>
-                      <span data-slot="apply-patch-change" data-type="added">
-                        {i18n.t("ui.patch.action.created")}
-                      </span>
-                    </Match>
-                    <Match when={file().type === "delete"}>
-                      <span data-slot="apply-patch-change" data-type="removed">
-                        {i18n.t("ui.patch.action.deleted")}
-                      </span>
-                    </Match>
-                    <Match when={file().type === "move"}>
-                      <span data-slot="apply-patch-change" data-type="modified">
-                        {i18n.t("ui.patch.action.moved")}
-                      </span>
-                    </Match>
-                    <Match when={true}>
-                      <DiffChanges changes={{ additions: file().additions, deletions: file().deletions }} />
-                    </Match>
-                  </Switch>
-                }
-              >
-                <div data-component="apply-patch-file-diff">
-                  <Dynamic
-                    component={fileComponent}
-                    mode="diff"
-                    before={{ name: file().filePath, contents: file().before }}
-                    after={{ name: file().movePath ?? file().filePath, contents: file().after }}
-                  />
-                </div>
-              </ToolFileAccordion>
-            </BasicTool>
-          </div>
-        )}
+              <div data-component="apply-patch-file-diff">
+                <Dynamic
+                  component={fileComponent}
+                  mode="diff"
+                  before={{ name: single()!.filePath, contents: single()!.before }}
+                  after={{ name: single()!.movePath ?? single()!.filePath, contents: single()!.after }}
+                />
+              </div>
+            </ToolFileAccordion>
+          </BasicTool>
+        </div>
       </Show>
     )
   },
