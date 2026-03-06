@@ -1872,7 +1872,6 @@ export default function Layout(props: ParentProps) {
 
   const SidebarPanel = (panelProps: { project: LocalProject | undefined; mobile?: boolean; merged?: boolean }) => {
     const merged = createMemo(() => panelProps.mobile || (panelProps.merged ?? layout.sidebar.opened()))
-    const pad = createMemo(() => (merged() && !panelProps.mobile ? 8 : 0))
     const projectName = createMemo(() => {
       const project = panelProps.project
       if (!project) return ""
@@ -1898,7 +1897,7 @@ export default function Layout(props: ParentProps) {
     return (
       <div
         classList={{
-          "flex flex-col min-h-0 rounded-tl-[12px]": true,
+          "flex flex-col min-h-0 rounded-tl-[12px] px-2": true,
           "border border-b-0 border-border-weak-base": !merged(),
           "border-l border-t border-border-weaker-base": merged(),
           "bg-background-base": merged(),
@@ -1906,7 +1905,7 @@ export default function Layout(props: ParentProps) {
           "flex-1 min-w-0": panelProps.mobile,
         }}
         style={{
-          width: panelProps.mobile ? undefined : `${Math.max(layout.sidebar.width() - 64 - pad(), 0)}px`,
+          width: panelProps.mobile ? undefined : `${Math.max(Math.max(layout.sidebar.width(), 244) - 64, 0)}px`,
         }}
       >
         <Show when={panelProps.project}>
