@@ -245,6 +245,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     mode: "normal" | "shell"
     applyingHistory: boolean
     pendingAutoAccept: boolean
+    slashStart: number
   }>({
     popover: null,
     historyIndex: -1,
@@ -254,6 +255,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     mode: "normal",
     applyingHistory: false,
     pendingAutoAccept: false,
+    slashStart: 0,
   })
 
   const buttonsSpring = useSpring(() => (store.mode === "normal" ? 1 : 0), { visualDuration: 0.2, bounce: 0 })
@@ -583,17 +585,55 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!cmd) return
     closePopover()
 
+    const cursorPosition = getCursorPosition(editorRef)
+    const rawText = prompt
+      .current()
+      .map((p) => ("content" in p ? p.content : ""))
+      .join("")
+    const slashStart = store.slashStart
+    const hasContext = slashStart > 0 || cursorPosition < rawText.length
+
     if (cmd.type === "custom") {
-      const text = `/${cmd.trigger} `
-      setEditorText(text)
-      prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
-      focusEditorEnd()
+      if (hasContext) {
+        const replacement = `/${cmd.trigger} `
+        const newText = rawText.substring(0, slashStart) + replacement + rawText.substring(cursorPosition)
+        const newCursor = slashStart + replacement.length
+        setEditorText(newText)
+        prompt.set([{ type: "text", content: newText, start: 0, end: newText.length }], newCursor)
+        requestAnimationFrame(() => {
+          editorRef.focus()
+          setCursorPosition(editorRef, newCursor)
+        })
+      } else {
+        const text = `/${cmd.trigger} `
+        setEditorText(text)
+        prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
+        focusEditorEnd()
+      }
       return
     }
 
-    clearEditor()
-    prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
-    command.trigger(cmd.id, "slash")
+    if (hasContext) {
+      // Remove the /trigger fragment but keep surrounding text
+      const newText = rawText.substring(0, slashStart) + rawText.substring(cursorPosition)
+      const newCursor = slashStart
+      if (newText.trim()) {
+        setEditorText(newText)
+        prompt.set([{ type: "text", content: newText, start: 0, end: newText.length }], newCursor)
+        requestAnimationFrame(() => {
+          editorRef.focus()
+          setCursorPosition(editorRef, newCursor)
+        })
+      } else {
+        clearEditor()
+        prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
+      }
+      command.trigger(cmd.id, "slash")
+    } else {
+      clearEditor()
+      prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
+      command.trigger(cmd.id, "slash")
+    }
   }
 
   const {
@@ -817,14 +857,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const shellMode = store.mode === "shell"
 
     if (!shellMode) {
-      const atMatch = rawText.substring(0, cursorPosition).match(/@(\S*)$/)
-      const slashMatch = rawText.match(/^\/(\S*)$/)
+      const textBeforeCursor = rawText.substring(0, cursorPosition)
+      const atMatch = textBeforeCursor.match(/@(\S*)$/)
+      const slashMatch = textBeforeCursor.match(/(^|\s)\/(\S*)$/)
 
       if (atMatch) {
         atOnInput(atMatch[1])
         setStore("popover", "at")
       } else if (slashMatch) {
-        slashOnInput(slashMatch[1])
+        const slashStart = slashMatch.index! + slashMatch[1].length
+        setStore("slashStart", slashStart)
+        slashOnInput(slashMatch[2])
         setStore("popover", "slash")
       } else {
         closePopover()
