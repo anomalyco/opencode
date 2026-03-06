@@ -17,10 +17,10 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   const noInk = colors.compact && !hasInk
   const shadow = noInk && !isDark ? generateNeutralScale(colors.neutral, true) : neutral
   const amber = generateScale(
-    shift(colors.warning, isDark ? { h: -15, l: -0.055, c: 1.1 } : { h: -21, l: -0.08, c: 0.9 }),
+    shift(colors.warning, isDark ? { h: -16, l: -0.058, c: 1.14 } : { h: -22, l: -0.082, c: 0.94 }),
     isDark,
   )
-  const blue = generateScale(shift(colors.interactive, { h: -12, l: 0.13, c: 1.08 }), isDark)
+  const blue = generateScale(shift(colors.interactive, { h: -12, l: 0.128, c: 1.12 }), isDark)
   const brandl = noInk && isDark ? generateScale(colors.primary, false) : primary
   const successl = noInk && isDark ? generateScale(colors.success, false) : success
   const warningl = noInk && isDark ? generateScale(colors.warning, false) : warning
@@ -100,7 +100,7 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   const borderTone = (light: number, dark: number) =>
     alphaTone(
       ink,
-      isDark ? Math.min(1, dark + 0.015 + (colors.compact && hasInk ? 0.08 : 0)) : Math.min(1, light + 0.015),
+      isDark ? Math.min(1, dark + 0.024 + (colors.compact && hasInk ? 0.08 : 0)) : Math.min(1, light + 0.024),
     )
   const diffHiddenSurface = noInk
     ? {
@@ -202,14 +202,14 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
 
   tokens["text-base"] = hasInk ? ink : noInk ? (isDark ? neutralAlpha[10] : neutral[10]) : neutral[10]
   tokens["text-weak"] = hasInk
-    ? shift(ink, { l: isDark ? -0.16 : 0.14, c: 0.84 })
+    ? shift(ink, { l: isDark ? -0.18 : 0.16, c: 0.88 })
     : noInk
       ? isDark
         ? neutralAlpha[8]
         : neutral[8]
       : neutral[8]
   tokens["text-weaker"] = hasInk
-    ? shift(ink, { l: isDark ? -0.27 : 0.23, c: isDark ? 0.7 : 0.64 })
+    ? shift(ink, { l: isDark ? -0.3 : 0.26, c: isDark ? 0.74 : 0.68 })
     : noInk
       ? isDark
         ? neutralAlpha[7]
@@ -218,12 +218,18 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["text-strong"] = hasInk
     ? isDark && colors.compact
       ? blend("#ffffff", ink, 0.82)
-      : shift(ink, { l: isDark ? 0.05 : -0.08, c: 1 })
+      : shift(ink, { l: isDark ? 0.06 : -0.09, c: 1 })
     : noInk
       ? isDark
         ? neutralAlpha[11]
         : neutral[11]
       : neutral[11]
+  if (noInk && isDark) {
+    tokens["text-base"] = withAlpha("#ffffff", 0.618) as ColorValue
+    tokens["text-weak"] = withAlpha("#ffffff", 0.422) as ColorValue
+    tokens["text-weaker"] = withAlpha("#ffffff", 0.284) as ColorValue
+    tokens["text-strong"] = withAlpha("#ffffff", 0.936) as ColorValue
+  }
   tokens["text-invert-base"] = isDark ? neutral[10] : neutral[1]
   tokens["text-invert-weak"] = isDark ? neutral[8] : neutral[2]
   tokens["text-invert-weaker"] = isDark ? neutral[7] : neutral[3]
@@ -312,7 +318,7 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
       tokens["input-hover"] = neutral[1]
     }
 
-    tokens["surface-base-interactive-active"] = withAlpha(colors.interactive, isDark ? 0.11 : 0.082) as ColorValue
+    tokens["surface-base-interactive-active"] = withAlpha(colors.interactive, isDark ? 0.125 : 0.09) as ColorValue
   }
 
   tokens["border-base"] = hasInk ? borderTone(0.22, 0.16) : neutralAlpha[6]
@@ -336,14 +342,14 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["border-strong-hover"] = hasInk ? borderTone(0.4, 0.28) : neutralAlpha[7]
   tokens["border-strong-active"] = hasInk ? borderTone(0.46, 0.32) : neutralAlpha[isDark ? 7 : 6]
   tokens["border-strong-selected"] = noInk
-    ? (withAlpha(colors.interactive, isDark ? 0.58 : 0.29) as ColorValue)
+    ? (withAlpha(colors.interactive, isDark ? 0.62 : 0.31) as ColorValue)
     : (withAlpha(interactive[5], 0.6) as ColorValue)
   tokens["border-strong-disabled"] = hasInk ? borderTone(0.14, 0.1) : neutralAlpha[5]
   tokens["border-strong-focus"] = hasInk ? borderTone(0.46, 0.32) : neutralAlpha[isDark ? 7 : 6]
   tokens["border-weak-hover"] = hasInk ? borderTone(0.16, 0.12) : neutralAlpha[isDark ? 6 : 5]
   tokens["border-weak-active"] = hasInk ? borderTone(0.22, 0.16) : neutralAlpha[isDark ? 7 : 6]
   tokens["border-weak-selected"] = noInk
-    ? (withAlpha(colors.interactive, isDark ? 0.58 : 0.22) as ColorValue)
+    ? (withAlpha(colors.interactive, isDark ? 0.62 : 0.24) as ColorValue)
     : (withAlpha(interactive[4], isDark ? 0.6 : 0.5) as ColorValue)
   tokens["border-weak-disabled"] = hasInk ? borderTone(0.08, 0.06) : neutralAlpha[5]
   tokens["border-weak-focus"] = hasInk ? borderTone(0.22, 0.16) : neutralAlpha[isDark ? 7 : 6]
@@ -354,6 +360,15 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
         ? blend(neutral[1], neutral[2], 0.5)
         : blend(neutral[2], neutral[3], 0.5)
       : neutralAlpha[2]
+
+  if (noInk) {
+    const line = (l: number, d: number) => alphaTone((isDark ? "#ffffff" : "#000000") as HexColor, isDark ? d : l)
+    tokens["border-base"] = line(0.162, 0.195)
+    tokens["border-hover"] = line(0.236, 0.284)
+    tokens["border-active"] = line(0.46, 0.418)
+    tokens["border-disabled"] = tokens["border-hover"]
+    tokens["border-focus"] = tokens["border-active"]
+  }
 
   tokens["border-interactive-base"] = (noInk && isDark ? interl : interactive)[6]
   tokens["border-interactive-hover"] = (noInk && isDark ? interl : interactive)[7]
@@ -376,12 +391,12 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["border-info-selected"] = (noInk && isDark ? infol : info)[8]
   tokens["border-color"] = "#ffffff"
 
-  tokens["icon-base"] = neutral[isDark ? 9 : 8]
-  tokens["icon-hover"] = neutral[10]
-  tokens["icon-active"] = neutral[11]
-  tokens["icon-selected"] = neutral[11]
+  tokens["icon-base"] = hasInk && !isDark ? tokens["text-weak"] : neutral[isDark ? 9 : 8]
+  tokens["icon-hover"] = hasInk && !isDark ? tokens["text-base"] : neutral[10]
+  tokens["icon-active"] = hasInk && !isDark ? tokens["text-strong"] : neutral[11]
+  tokens["icon-selected"] = hasInk && !isDark ? tokens["text-strong"] : neutral[11]
   tokens["icon-disabled"] = neutral[isDark ? 6 : 7]
-  tokens["icon-focus"] = neutral[11]
+  tokens["icon-focus"] = hasInk && !isDark ? tokens["text-strong"] : neutral[11]
   tokens["icon-invert-base"] = isDark ? neutral[0] : "#ffffff"
   tokens["icon-weak-base"] = neutral[isDark ? 5 : 6]
   tokens["icon-weak-hover"] = noInk && isDark ? blend(neutral[11], neutral[10], 0.74) : neutral[isDark ? 11 : 7]
