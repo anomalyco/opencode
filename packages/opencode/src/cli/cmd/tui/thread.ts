@@ -3,6 +3,7 @@ import { tui } from "./app"
 import { Rpc } from "@/util/rpc"
 import { type rpc } from "./worker"
 import path from "path"
+import { text as streamText } from "node:stream/consumers"
 import { fileURLToPath } from "url"
 import { UI } from "@/cli/ui"
 import { Log } from "@/util/log"
@@ -53,13 +54,7 @@ async function target() {
 }
 
 async function input(value?: string) {
-  const piped = process.stdin.isTTY
-    ? undefined
-    : await new Promise<string>((resolve) => {
-        const chunks: Buffer[] = []
-        process.stdin.on("data", (chunk) => chunks.push(chunk))
-        process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")))
-      })
+  const piped = process.stdin.isTTY ? undefined : await streamText(process.stdin)
   if (!value) return piped
   if (!piped) return value
   return piped + "\n" + value
