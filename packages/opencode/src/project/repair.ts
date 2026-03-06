@@ -11,6 +11,8 @@ import { cachePath, canonical, commonDir, gitpath, legacy, writeCache } from "./
 
 type Row = typeof ProjectTable.$inferSelect
 type Info = Project.Info
+type PermData = (typeof PermissionTable.$inferInsert)["data"]
+type Group = { tops: Set<string>; sessions: Set<string>; workspaces: Set<string> }
 
 function duplicateWorktrees() {
   return Database.use((db) =>
@@ -113,8 +115,6 @@ function merge(existing: Info, dupes: Row[]) {
   }
 }
 
-type PermData = (typeof PermissionTable.$inferInsert)["data"]
-
 function moveSessionsByProject(db: Database.TxOrDb, from: string[], to: string) {
   db.update(SessionTable).set({ project_id: to }).where(inArray(SessionTable.project_id, from)).run()
 }
@@ -157,8 +157,6 @@ function deletePermissions(db: Database.TxOrDb, ids: string[]) {
 function deleteProjects(db: Database.TxOrDb, ids: string[]) {
   db.delete(ProjectTable).where(inArray(ProjectTable.id, ids)).run()
 }
-
-type Group = { tops: Set<string>; sessions: Set<string>; workspaces: Set<string> }
 
 function within(root: string, dir: string) {
   const rel = path.relative(root, dir)
@@ -284,13 +282,14 @@ function moveWorkspaces(db: Database.TxOrDb, ids: string[], project: string) {
   db.update(WorkspaceTable).set({ project_id: project }).where(inArray(WorkspaceTable.id, ids)).run()
 }
 
-async function repairLegacy(worktree: string) {
+async function legacyInput(worktree: string) {
   if (!isgit(worktree)) return
 
-  const projects = Database.use((db) =>
-    db.select().from(ProjectTable).where(eq(ProjectTable.worktree, worktree)).all(),
-  ).filter((p) => p.vcs === "git")
-  const olds = projects.map((p) => p.id).filter((x): x is string => !!legacy(x))
+  const projects = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.worktree, worktree)).all())
+  const olds = projects
+    .filter((p) => p.vcs === "git")
+    .map((p) => p.id)
+    .filter((x): x is string => !!legacy(x))
   if (olds.length === 0) return
 
   const sessions = Database.use((db) =>
@@ -316,29 +315,15 @@ async function repairLegacy(worktree: string) {
   const perm = Database.use((db) =>
     db.select().from(PermissionTable).where(eq(PermissionTable.project_id, olds[0]!)).get(),
   )
-
   if (sessions.length === 0 && workspaces.length === 0 && !perm) return
 
   const groups = await legacyGroups({ baseRoot, sessions, workspaces, perm: !!perm })
   if (!groups) return
 
-  for (const [root, group] of groups) {
-    const resolved = await resolveId(root)
-    if (!resolved) continue
+  return { olds, src, perm, groups }
+}
 
-    const ids = [...group.sessions]
-    const ws = [...group.workspaces]
-
-    Database.transaction((db) => {
-      const now = Date.now()
-
-      ensureProject(db, { id: resolved.id, root, src, tops: group.tops, now })
-      if (ids.length > 0) moveSessionsById(db, ids, resolved.id)
-      if (ws.length > 0) moveWorkspaces(db, ws, resolved.id)
-      if (perm) ensurePermission(db, { target: resolved.id, now, data: perm.data })
-    })
-  }
-
+function legacyCleanup(olds: string[]) {
   const remaining = Database.use(
     (db) =>
       db
@@ -348,12 +333,36 @@ async function repairLegacy(worktree: string) {
         .get()?.count,
   )
 
-  if ((remaining ?? 0) === 0) {
+  if ((remaining ?? 0) !== 0) return
+
+  Database.transaction((db) => {
+    deletePermissions(db, olds)
+    deleteProjects(db, olds)
+  })
+}
+
+async function repairLegacy(worktree: string) {
+  const input = await legacyInput(worktree)
+  if (!input) return
+
+  for (const [root, group] of input.groups) {
+    const resolved = await resolveId(root)
+    if (!resolved) continue
+
+    const ids = [...group.sessions]
+    const ws = [...group.workspaces]
+
     Database.transaction((db) => {
-      deletePermissions(db, olds)
-      deleteProjects(db, olds)
+      const now = Date.now()
+
+      ensureProject(db, { id: resolved.id, root, src: input.src, tops: group.tops, now })
+      if (ids.length > 0) moveSessionsById(db, ids, resolved.id)
+      if (ws.length > 0) moveWorkspaces(db, ws, resolved.id)
+      if (input.perm) ensurePermission(db, { target: resolved.id, now, data: input.perm.data })
     })
   }
+
+  legacyCleanup(input.olds)
 }
 
 async function repairWorktree(worktree: string) {
