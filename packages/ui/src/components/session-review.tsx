@@ -145,7 +145,7 @@ export const SessionReview = (props: SessionReviewProps) => {
   const searchHandles = new Map<string, FileSearchHandle>()
   const readyFiles = new Set<string>()
   const [store, setStore] = createStore<{ open: string[]; force: Record<string, boolean> }>({
-    open: props.diffs.length > 10 ? [] : props.diffs.map((d) => d.file),
+    open: [],
     force: {},
   })
 

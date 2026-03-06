@@ -12,8 +12,10 @@ import z from "zod"
 import path from "path"
 import { readFileSync, readdirSync, existsSync } from "fs"
 import * as schema from "./schema"
+import { Installation } from "../installation"
+import { Flag } from "../flag/flag"
 
-declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number }[] | undefined
+declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number; name: string }[] | undefined
 
 export const NotFoundError = NamedError.create(
   "NotFoundError",
@@ -25,13 +27,20 @@ export const NotFoundError = NamedError.create(
 const log = Log.create({ service: "db" })
 
 export namespace Database {
-  export const Path = path.join(Global.Path.data, "opencode.db")
+  export const Path = (() => {
+    const name =
+      Installation.CHANNEL !== "latest" && !Flag.OPENCODE_DISABLE_CHANNEL_DB
+        ? `opencode-${Installation.CHANNEL}.db`
+        : "opencode.db"
+    return path.join(Global.Path.data, name)
+  })()
+
   type Schema = typeof schema
   export type Transaction = SQLiteTransaction<"sync", void, Schema>
 
   type Client = SQLiteBunDatabase<Schema>
 
-  type Journal = { sql: string; timestamp: number }[]
+  type Journal = { sql: string; timestamp: number; name: string }[]
 
   const state = {
     sqlite: undefined as BunDatabase | undefined,
@@ -62,6 +71,7 @@ export namespace Database {
         return {
           sql: readFileSync(file, "utf-8"),
           timestamp: time(name),
+          name,
         }
       })
       .filter(Boolean) as Journal
@@ -70,9 +80,9 @@ export namespace Database {
   }
 
   export const Client = lazy(() => {
-    log.info("opening database", { path: path.join(Global.Path.data, "opencode.db") })
+    log.info("opening database", { path: Path })
 
-    const sqlite = new BunDatabase(path.join(Global.Path.data, "opencode.db"), { create: true })
+    const sqlite = new BunDatabase(Path, { create: true })
     state.sqlite = sqlite
 
     sqlite.run("PRAGMA journal_mode = WAL")
@@ -143,7 +153,7 @@ export namespace Database {
     } catch (err) {
       if (err instanceof Context.NotFound) {
         const effects: (() => void | Promise<void>)[] = []
-        const result = Client().transaction((tx) => {
+        const result = (Client().transaction as any)((tx: TxOrDb) => {
           return ctx.provide({ tx, effects }, () => callback(tx))
         })
         for (const effect of effects) effect()
