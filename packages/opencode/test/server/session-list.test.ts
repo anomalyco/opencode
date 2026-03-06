@@ -1,8 +1,11 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import path from "path"
 import { Instance } from "../../src/project/instance"
+import { Server } from "../../src/server/server"
 import { Session } from "../../src/session"
+import { SessionPrompt } from "../../src/session/prompt"
 import { Log } from "../../src/util/log"
+import { tmpdir } from "../fixture/fixture"
 
 const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
@@ -86,5 +89,64 @@ describe("Session.list", () => {
         expect(sessions.length).toBe(2)
       },
     })
+  })
+
+  test("manual summarize bumps updated time and reorders list", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const loop = spyOn(SessionPrompt, "loop").mockImplementation(async () => undefined as never)
+
+    try {
+      const one = await Instance.provide({
+        directory: tmp.path,
+        fn: async () => Session.create({ title: "one" }),
+      })
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      const two = await Instance.provide({
+        directory: tmp.path,
+        fn: async () => Session.create({ title: "two" }),
+      })
+
+      const before = await Instance.provide({
+        directory: tmp.path,
+        fn: async () => Session.get(one.id),
+      })
+      const initial = await Instance.provide({
+        directory: tmp.path,
+        fn: async () => [...Session.list({ directory: tmp.path, limit: 2 })],
+      })
+      expect(initial[0].id).toBe(two.id)
+
+      await new Promise((resolve) => setTimeout(resolve, 5))
+
+      const app = Server.App()
+      const response = await app.request(`/session/${one.id}/summarize`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-opencode-directory": tmp.path,
+        },
+        body: JSON.stringify({
+          providerID: "test",
+          modelID: "test",
+          auto: false,
+        }),
+      })
+
+      expect(response.status).toBe(200)
+      expect(await response.json()).toBe(true)
+
+      const after = await Instance.provide({
+        directory: tmp.path,
+        fn: async () => Session.get(one.id),
+      })
+      const sessions = await Instance.provide({
+        directory: tmp.path,
+        fn: async () => [...Session.list({ directory: tmp.path, limit: 2 })],
+      })
+      expect(after.time.updated).toBeGreaterThan(before.time.updated)
+      expect(sessions[0].id).toBe(one.id)
+    } finally {
+      loop.mockRestore()
+    }
   })
 })

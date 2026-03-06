@@ -536,6 +536,7 @@ export const SessionRoutes = lazy(() =>
           },
           auto: body.auto,
         })
+        await Session.touch(sessionID)
         await SessionPrompt.loop({ sessionID })
         return c.json(true)
       },
