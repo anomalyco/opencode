@@ -109,6 +109,16 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     const sdk = useSDK()
 
+    // Helper to refresh team tasks
+    const refreshTeamTasks = (teamID: string) => {
+      sdk.client.team
+        ?.tasks?.({ teamID })
+        .then((x) => {
+          if (x.data) setStore("team_task", teamID, x.data)
+        })
+        .catch((e) => Log.Default.error("Failed to load team tasks", { teamID, error: e }))
+    }
+
     sdk.event.listen((e) => {
       const event = e.details
       switch (event.type) {
@@ -347,13 +357,18 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
 
         case "team.task.completed": {
-          const teamID = event.properties.teamID
-          sdk.client.team
-            ?.tasks?.({ teamID })
-            .then((x) => {
-              if (x.data) setStore("team_task", teamID, x.data)
-            })
-            .catch((e) => Log.Default.error("Failed to load team tasks", { teamID, error: e }))
+          refreshTeamTasks(event.properties.teamID)
+          break
+        }
+
+        default: {
+          // Handle team.task.created and team.task.claimed events
+          // These have the same structure as team.task.completed
+          const type = event.type as string
+          if (type === "team.task.created" || type === "team.task.claimed") {
+            const props = event.properties as { teamID: string }
+            refreshTeamTasks(props.teamID)
+          }
           break
         }
       }

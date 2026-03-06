@@ -5,12 +5,23 @@ Use the `team` tool to create a team and spawn multiple teammates to work on dif
 ## Task
 $ARGUMENTS
 
+## Available Agents
+
+Choose the most appropriate agent for each subtask:
+
+- **explore**: Fast agent for exploring codebases - finding files, searching code, answering questions about the codebase. Use for: code analysis, finding patterns, understanding architecture.
+- **build**: Default agent that can read/write files and run commands. Use for: implementing features, fixing bugs, writing code.
+- **plan**: Planning agent that analyzes but doesn't modify files. Use for: architecture design, code review, technical analysis.
+- **general**: General-purpose agent for research and multi-step tasks. Use for: complex investigations, documentation research.
+
 ## Workflow
 
 1. **Analyze** the task and break it down into 2-5 parallel subtasks
 2. **Create** a team using: team({ action: "create", name: "task-team" })
-3. **Spawn** teammates for each subtask:
-   - team({ action: "spawn", agent: "build", prompt: "subtask description" })
+3. **Spawn** teammates for each subtask, choosing the appropriate agent:
+   - team({ action: "spawn", agent: "explore", prompt: "search for all API endpoints" })
+   - team({ action: "spawn", agent: "build", prompt: "implement the new feature" })
+   - team({ action: "spawn", agent: "plan", prompt: "analyze the architecture" })
    - Spawn multiple teammates before calling wait
 4. **Wait** for all teammates to complete: team({ action: "wait" })
 5. **Review** the collected results and synthesize a final response
@@ -18,8 +29,9 @@ $ARGUMENTS
 
 ## Guidelines
 
+- **Choose the right agent**: Use `explore` for read-only searches, `build` for code changes, `plan` for analysis
 - Each teammate runs in its own context, so be specific in the prompts
-- Teammates can read/write files and run commands independently
+- Teammates can read/write files and run commands independently (based on their agent type)
 - Use 2-5 teammates for most tasks (more teammates = more tokens)
 - If subtasks have dependencies, consider using team tasks (tasks sub-action)
 

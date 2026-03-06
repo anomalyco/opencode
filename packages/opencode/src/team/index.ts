@@ -67,6 +67,21 @@ export namespace Team {
         sessionID: z.string(),
       }),
     ),
+    TaskCreated: BusEvent.define(
+      "team.task.created",
+      z.object({
+        teamID: z.string(),
+        taskID: z.string(),
+      }),
+    ),
+    TaskClaimed: BusEvent.define(
+      "team.task.claimed",
+      z.object({
+        teamID: z.string(),
+        taskID: z.string(),
+        sessionID: z.string(),
+      }),
+    ),
   }
 
   function fromRow(row: typeof TeamTable.$inferSelect): Info {

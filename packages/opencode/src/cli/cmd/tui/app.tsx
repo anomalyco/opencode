@@ -695,6 +695,21 @@ function App() {
 
   sdk.event.on(SessionApi.Event.Deleted.type, (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
+      const deletedSession = evt.properties.info
+
+      // If deleted session is a team member, try to switch to lead session instead of going home
+      if (deletedSession.teamID && deletedSession.teamRole === "member") {
+        const leadSession = sync.data.session.find((s) => s.teamID === deletedSession.teamID && s.teamRole === "lead")
+        if (leadSession) {
+          route.navigate({ type: "session", sessionID: leadSession.id })
+          toast.show({
+            variant: "info",
+            message: "Teammate session removed, switched to lead session",
+          })
+          return
+        }
+      }
+
       route.navigate({ type: "home" })
       toast.show({
         variant: "info",

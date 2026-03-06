@@ -13,9 +13,15 @@ Actions:
 - shutdown: Request a teammate to shut down gracefully
 - cleanup: Archive the team, delete teammate sessions, and clean up (lead only, all teammates must be idle)
 
+Available agent types for spawn:
+- explore: Fast read-only agent for searching code, finding files, understanding architecture
+- build: Default agent that can read/write files and run commands
+- plan: Analysis agent that examines code but doesn't modify files
+- general: General-purpose agent for research and multi-step tasks
+
 Typical workflow:
 1. create a team
-2. spawn teammate A with task X
+2. spawn teammate A with task X (choose appropriate agent type)
 3. spawn teammate B with task Y (both now running in parallel)
 4. spawn teammate C with task Z
 5. wait → collects results from A, B, C when they all finish
