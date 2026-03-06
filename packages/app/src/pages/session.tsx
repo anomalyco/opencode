@@ -1,4 +1,17 @@
-import { onCleanup, Show, Match, Switch, createMemo, createEffect, on, onMount } from "solid-js"
+import type { UserMessage } from "@opencode-ai/sdk/v2"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import {
+  onCleanup,
+  Show,
+  Match,
+  Switch,
+  createMemo,
+  createEffect,
+  createComputed,
+  on,
+  onMount,
+  untrack,
+} from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLocal } from "@/context/local"
@@ -8,29 +21,235 @@ import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Select } from "@opencode-ai/ui/select"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { Mark } from "@opencode-ai/ui/logo"
-
-import { useSync } from "@/context/sync"
-import { useLayout } from "@/context/layout"
-import { checksum, base64Encode } from "@opencode-ai/util/encode"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { useLanguage } from "@/context/language"
-import { useNavigate, useParams } from "@solidjs/router"
-import { UserMessage } from "@opencode-ai/sdk/v2"
-import { useSDK } from "@/context/sdk"
-import { usePrompt } from "@/context/prompt"
+import { base64Encode, checksum } from "@opencode-ai/util/encode"
+import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
+import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
-import { SessionHeader, NewSessionView } from "@/components/session"
-import { same } from "@/utils/same"
+import { useLanguage } from "@/context/language"
+import { useLayout } from "@/context/layout"
+import { usePrompt } from "@/context/prompt"
+import { useSDK } from "@/context/sdk"
+import { useSync } from "@/context/sync"
+import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
 import { createOpenReviewFile } from "@/pages/session/helpers"
-import { createScrollSpy } from "@/pages/session/scroll-spy"
-import { SessionReviewTab, type DiffStyle, type SessionReviewTabProps } from "@/pages/session/review-tab"
-import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { MessageTimeline } from "@/pages/session/message-timeline"
-import { useSessionCommands } from "@/pages/session/use-session-commands"
-import { SessionComposerRegion, createSessionComposerState } from "@/pages/session/composer"
+import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
+import { createScrollSpy } from "@/pages/session/scroll-spy"
 import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
+import { TerminalPanel } from "@/pages/session/terminal-panel"
+import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
+import { same } from "@/utils/same"
+
+const emptyUserMessages: UserMessage[] = []
+
+type SessionHistoryWindowInput = {
+  sessionID: () => string | undefined
+  messagesReady: () => boolean
+  visibleUserMessages: () => UserMessage[]
+  historyMore: () => boolean
+  historyLoading: () => boolean
+  loadMore: (sessionID: string) => Promise<void>
+  userScrolled: () => boolean
+  scroller: () => HTMLDivElement | undefined
+}
+
+/**
+ * Maintains the rendered history window for a session timeline.
+ *
+ * It keeps initial paint bounded to recent turns, reveals cached turns in
+ * small batches while scrolling upward, and prefetches older history near top.
+ */
+function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
+  const turnInit = 10
+  const turnBatch = 8
+  const turnScrollThreshold = 200
+  const turnPrefetchBuffer = 16
+  const prefetchCooldownMs = 400
+  const prefetchNoGrowthLimit = 2
+
+  const [state, setState] = createStore({
+    turnID: undefined as string | undefined,
+    turnStart: 0,
+    prefetchUntil: 0,
+    prefetchNoGrowth: 0,
+  })
+
+  const initialTurnStart = (len: number) => (len > turnInit ? len - turnInit : 0)
+
+  const turnStart = createMemo(() => {
+    const id = input.sessionID()
+    const len = input.visibleUserMessages().length
+    if (!id || len <= 0) return 0
+    if (state.turnID !== id) return initialTurnStart(len)
+    if (state.turnStart <= 0) return 0
+    if (state.turnStart >= len) return initialTurnStart(len)
+    return state.turnStart
+  })
+
+  const setTurnStart = (start: number) => {
+    const id = input.sessionID()
+    const next = start > 0 ? start : 0
+    if (!id) {
+      setState({ turnID: undefined, turnStart: next })
+      return
+    }
+    setState({ turnID: id, turnStart: next })
+  }
+
+  const renderedUserMessages = createMemo(
+    () => {
+      const msgs = input.visibleUserMessages()
+      const start = turnStart()
+      if (start <= 0) return msgs
+      return msgs.slice(start)
+    },
+    emptyUserMessages,
+    {
+      equals: same,
+    },
+  )
+
+  const preserveScroll = (fn: () => void) => {
+    const el = input.scroller()
+    if (!el) {
+      fn()
+      return
+    }
+    const beforeTop = el.scrollTop
+    const beforeHeight = el.scrollHeight
+    fn()
+    requestAnimationFrame(() => {
+      const delta = el.scrollHeight - beforeHeight
+      if (!delta) return
+      el.scrollTop = beforeTop + delta
+    })
+  }
+
+  const backfillTurns = () => {
+    const start = turnStart()
+    if (start <= 0) return
+
+    const next = start - turnBatch
+    const nextStart = next > 0 ? next : 0
+
+    preserveScroll(() => setTurnStart(nextStart))
+  }
+
+  /** Button path: reveal all cached turns, fetch older history, reveal one batch. */
+  const loadAndReveal = async () => {
+    const id = input.sessionID()
+    if (!id) return
+
+    const start = turnStart()
+    const beforeVisible = input.visibleUserMessages().length
+
+    if (start > 0) setTurnStart(0)
+
+    if (!input.historyMore() || input.historyLoading()) return
+
+    await input.loadMore(id)
+    if (input.sessionID() !== id) return
+
+    const afterVisible = input.visibleUserMessages().length
+    const growth = afterVisible - beforeVisible
+    if (state.prefetchNoGrowth) setState("prefetchNoGrowth", 0)
+    if (growth <= 0) return
+    if (turnStart() !== 0) return
+
+    const target = Math.min(afterVisible, Math.max(beforeVisible, renderedUserMessages().length) + turnBatch)
+    const nextStart = Math.max(0, afterVisible - target)
+    preserveScroll(() => setTurnStart(nextStart))
+  }
+
+  /** Scroll/prefetch path: fetch older history from server. */
+  const fetchOlderMessages = async (opts?: { prefetch?: boolean }) => {
+    const id = input.sessionID()
+    if (!id) return
+    if (!input.historyMore() || input.historyLoading()) return
+
+    if (opts?.prefetch) {
+      const now = Date.now()
+      if (state.prefetchUntil > now) return
+      if (state.prefetchNoGrowth >= prefetchNoGrowthLimit) return
+      setState("prefetchUntil", now + prefetchCooldownMs)
+    }
+
+    const start = turnStart()
+    const beforeVisible = input.visibleUserMessages().length
+    const beforeRendered = start <= 0 ? beforeVisible : renderedUserMessages().length
+
+    await input.loadMore(id)
+    if (input.sessionID() !== id) return
+
+    const afterVisible = input.visibleUserMessages().length
+    const growth = afterVisible - beforeVisible
+
+    if (opts?.prefetch) {
+      setState("prefetchNoGrowth", growth > 0 ? 0 : state.prefetchNoGrowth + 1)
+    } else if (growth > 0 && state.prefetchNoGrowth) {
+      setState("prefetchNoGrowth", 0)
+    }
+
+    if (growth <= 0) return
+    if (turnStart() !== start) return
+
+    const reveal = !opts?.prefetch
+    const currentRendered = renderedUserMessages().length
+    const base = Math.max(beforeRendered, currentRendered)
+    const target = reveal ? Math.min(afterVisible, base + turnBatch) : base
+    const nextStart = Math.max(0, afterVisible - target)
+    preserveScroll(() => setTurnStart(nextStart))
+  }
+
+  const onScrollerScroll = () => {
+    if (!input.userScrolled()) return
+    const el = input.scroller()
+    if (!el) return
+    if (el.scrollTop >= turnScrollThreshold) return
+
+    const start = turnStart()
+    if (start > 0) {
+      if (start <= turnPrefetchBuffer) {
+        void fetchOlderMessages({ prefetch: true })
+      }
+      backfillTurns()
+      return
+    }
+
+    void fetchOlderMessages()
+  }
+
+  createEffect(
+    on(
+      input.sessionID,
+      () => {
+        setState({ prefetchUntil: 0, prefetchNoGrowth: 0 })
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => [input.sessionID(), input.messagesReady()] as const,
+      ([id, ready]) => {
+        if (!id || !ready) return
+        setTurnStart(initialTurnStart(input.visibleUserMessages().length))
+      },
+      { defer: true },
+    ),
+  )
+
+  return {
+    turnStart,
+    setTurnStart,
+    renderedUserMessages,
+    loadAndReveal,
+    onScrollerScroll,
+  }
+}
 
 export default function Page() {
   const layout = useLayout()
@@ -44,6 +263,19 @@ export default function Page() {
   const sdk = useSDK()
   const prompt = usePrompt()
   const comments = useComments()
+  const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
+
+  createEffect(() => {
+    if (!untrack(() => prompt.ready())) return
+    prompt.ready()
+    untrack(() => {
+      if (params.id || !prompt.ready()) return
+      const text = searchParams.prompt
+      if (!text) return
+      prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
+      setSearchParams({ ...searchParams, prompt: undefined })
+    })
+  })
 
   const [ui, setUi] = createStore({
     pendingMessage: undefined as string | undefined,
@@ -138,24 +370,6 @@ export default function Page() {
     if (path) file.load(path)
   })
 
-  createEffect(() => {
-    const current = tabs().all()
-    if (current.length === 0) return
-
-    const next = normalizeTabs(current)
-    if (same(current, next)) return
-
-    tabs().setAll(next)
-
-    const active = tabs().active()
-    if (!active) return
-    if (!active.startsWith("file://")) return
-
-    const normalized = normalizeTab(active)
-    if (active === normalized) return
-    tabs().setActive(normalized)
-  })
-
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
   const reviewCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
@@ -178,7 +392,6 @@ export default function Page() {
     return sync.session.history.loading(id)
   })
 
-  const emptyUserMessages: UserMessage[] = []
   const userMessages = createMemo(
     () => messages().filter((m) => m.role === "user") as UserMessage[],
     emptyUserMessages,
@@ -203,7 +416,10 @@ export default function Page() {
       () => {
         const msg = lastUserMessage()
         if (!msg) return
-        if (msg.agent) local.agent.set(msg.agent)
+        if (msg.agent) {
+          local.agent.set(msg.agent)
+          if (local.agent.current()?.model) return
+        }
         if (msg.model) local.model.set(msg.model)
       },
     ),
@@ -211,28 +427,25 @@ export default function Page() {
 
   const [store, setStore] = createStore({
     messageId: undefined as string | undefined,
-    turnStart: 0,
     mobileTab: "session" as "session" | "changes",
     changes: "session" as "session" | "turn",
     newSessionWorktree: "main",
+    deferRender: false,
   })
+
+  createComputed((prev) => {
+    const key = sessionKey()
+    if (key !== prev) {
+      setStore("deferRender", true)
+      requestAnimationFrame(() => {
+        setTimeout(() => setStore("deferRender", false), 0)
+      })
+    }
+    return key
+  }, sessionKey())
 
   const turnDiffs = createMemo(() => lastUserMessage()?.summary?.diffs ?? [])
   const reviewDiffs = createMemo(() => (store.changes === "session" ? diffs() : turnDiffs()))
-
-  const renderedUserMessages = createMemo(
-    () => {
-      const msgs = visibleUserMessages()
-      const start = store.turnStart
-      if (start <= 0) return msgs
-      if (start >= msgs.length) return emptyUserMessages
-      return msgs.slice(start)
-    },
-    emptyUserMessages,
-    {
-      equals: same,
-    },
-  )
 
   const newSessionWorktree = createMemo(() => {
     if (store.newSessionWorktree === "create") return "create"
@@ -302,13 +515,15 @@ export default function Page() {
 
   const hasScrollGesture = () => Date.now() - ui.scrollGesture < scrollGestureWindowMs
 
-  createEffect(() => {
-    sdk.directory
-    const id = params.id
-    if (!id) return
-    void sync.session.sync(id)
-    void sync.session.todo(id)
-  })
+  createEffect(
+    on([() => sdk.directory, () => params.id] as const, ([, id]) => {
+      if (!id) return
+      untrack(() => {
+        void sync.session.sync(id)
+        void sync.session.todo(id)
+      })
+    }),
+  )
 
   createEffect(
     on(
@@ -478,7 +693,11 @@ export default function Page() {
     on(
       sessionKey,
       () => {
-        setTree({ reviewScroll: undefined, pendingDiff: undefined, activeDiff: undefined })
+        setTree({
+          reviewScroll: undefined,
+          pendingDiff: undefined,
+          activeDiff: undefined,
+        })
       },
       { defer: true },
     ),
@@ -501,6 +720,7 @@ export default function Page() {
     showAllFiles,
     tabForPath: file.tab,
     openTab: tabs().open,
+    setActive: tabs().setActive,
     loadFile: file.load,
   })
 
@@ -535,35 +755,12 @@ export default function Page() {
     loadingClass: string
     emptyClass: string
   }) => (
-    <Switch>
-      <Match when={store.changes === "turn" && !!params.id}>
-        <SessionReviewTab
-          title={changesTitle()}
-          empty={emptyTurn()}
-          diffs={reviewDiffs}
-          view={view}
-          diffStyle={input.diffStyle}
-          onDiffStyleChange={input.onDiffStyleChange}
-          onScrollRef={(el) => setTree("reviewScroll", el)}
-          focusedFile={tree.activeDiff}
-          onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-          onLineCommentUpdate={updateCommentInContext}
-          onLineCommentDelete={removeCommentFromContext}
-          lineCommentActions={reviewCommentActions()}
-          comments={comments.all()}
-          focusedComment={comments.focus()}
-          onFocusedCommentChange={comments.setFocus}
-          onViewFile={openReviewFile}
-          classes={input.classes}
-        />
-      </Match>
-      <Match when={hasReview()}>
-        <Show
-          when={diffsReady()}
-          fallback={<div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>}
-        >
+    <Show when={!store.deferRender}>
+      <Switch>
+        <Match when={store.changes === "turn" && !!params.id}>
           <SessionReviewTab
             title={changesTitle()}
+            empty={emptyTurn()}
             diffs={reviewDiffs}
             view={view}
             diffStyle={input.diffStyle}
@@ -580,39 +777,64 @@ export default function Page() {
             onViewFile={openReviewFile}
             classes={input.classes}
           />
-        </Show>
-      </Match>
-      <Match when={true}>
-        <SessionReviewTab
-          title={changesTitle()}
-          empty={
-            store.changes === "turn" ? (
-              emptyTurn()
-            ) : (
-              <div class={input.emptyClass}>
-                <Mark class="w-14 opacity-10" />
-                <div class="text-14-regular text-text-weak max-w-56">{language.t(reviewEmptyKey())}</div>
-              </div>
-            )
-          }
-          diffs={reviewDiffs}
-          view={view}
-          diffStyle={input.diffStyle}
-          onDiffStyleChange={input.onDiffStyleChange}
-          onScrollRef={(el) => setTree("reviewScroll", el)}
-          focusedFile={tree.activeDiff}
-          onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-          onLineCommentUpdate={updateCommentInContext}
-          onLineCommentDelete={removeCommentFromContext}
-          lineCommentActions={reviewCommentActions()}
-          comments={comments.all()}
-          focusedComment={comments.focus()}
-          onFocusedCommentChange={comments.setFocus}
-          onViewFile={openReviewFile}
-          classes={input.classes}
-        />
-      </Match>
-    </Switch>
+        </Match>
+        <Match when={hasReview()}>
+          <Show
+            when={diffsReady()}
+            fallback={<div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>}
+          >
+            <SessionReviewTab
+              title={changesTitle()}
+              diffs={reviewDiffs}
+              view={view}
+              diffStyle={input.diffStyle}
+              onDiffStyleChange={input.onDiffStyleChange}
+              onScrollRef={(el) => setTree("reviewScroll", el)}
+              focusedFile={tree.activeDiff}
+              onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+              onLineCommentUpdate={updateCommentInContext}
+              onLineCommentDelete={removeCommentFromContext}
+              lineCommentActions={reviewCommentActions()}
+              comments={comments.all()}
+              focusedComment={comments.focus()}
+              onFocusedCommentChange={comments.setFocus}
+              onViewFile={openReviewFile}
+              classes={input.classes}
+            />
+          </Show>
+        </Match>
+        <Match when={true}>
+          <SessionReviewTab
+            title={changesTitle()}
+            empty={
+              store.changes === "turn" ? (
+                emptyTurn()
+              ) : (
+                <div class={input.emptyClass}>
+                  <Mark class="w-14 opacity-10" />
+                  <div class="text-14-regular text-text-weak max-w-56">{language.t(reviewEmptyKey())}</div>
+                </div>
+              )
+            }
+            diffs={reviewDiffs}
+            view={view}
+            diffStyle={input.diffStyle}
+            onDiffStyleChange={input.onDiffStyleChange}
+            onScrollRef={(el) => setTree("reviewScroll", el)}
+            focusedFile={tree.activeDiff}
+            onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+            onLineCommentUpdate={updateCommentInContext}
+            onLineCommentDelete={removeCommentFromContext}
+            lineCommentActions={reviewCommentActions()}
+            comments={comments.all()}
+            focusedComment={comments.focus()}
+            onFocusedCommentChange={comments.setFocus}
+            onViewFile={openReviewFile}
+            classes={input.classes}
+          />
+        </Match>
+      </Switch>
+    </Show>
   )
 
   const reviewPanel = () => (
@@ -894,88 +1116,16 @@ export default function Page() {
     },
   )
 
-  const turnInit = 20
-  const turnBatch = 20
-  let turnHandle: number | undefined
-  let turnIdle = false
-
-  function cancelTurnBackfill() {
-    const handle = turnHandle
-    if (handle === undefined) return
-    turnHandle = undefined
-
-    if (turnIdle && window.cancelIdleCallback) {
-      window.cancelIdleCallback(handle)
-      return
-    }
-
-    clearTimeout(handle)
-  }
-
-  function scheduleTurnBackfill() {
-    if (turnHandle !== undefined) return
-    if (store.turnStart <= 0) return
-
-    if (window.requestIdleCallback) {
-      turnIdle = true
-      turnHandle = window.requestIdleCallback(() => {
-        turnHandle = undefined
-        backfillTurns()
-      })
-      return
-    }
-
-    turnIdle = false
-    turnHandle = window.setTimeout(() => {
-      turnHandle = undefined
-      backfillTurns()
-    }, 0)
-  }
-
-  function backfillTurns() {
-    const start = store.turnStart
-    if (start <= 0) return
-
-    const next = start - turnBatch
-    const nextStart = next > 0 ? next : 0
-
-    const el = scroller
-    if (!el) {
-      setStore("turnStart", nextStart)
-      scheduleTurnBackfill()
-      return
-    }
-
-    const beforeTop = el.scrollTop
-    const beforeHeight = el.scrollHeight
-
-    setStore("turnStart", nextStart)
-
-    requestAnimationFrame(() => {
-      const delta = el.scrollHeight - beforeHeight
-      if (!delta) return
-      el.scrollTop = beforeTop + delta
-    })
-
-    scheduleTurnBackfill()
-  }
-
-  createEffect(
-    on(
-      () => [params.id, messagesReady()] as const,
-      ([id, ready]) => {
-        cancelTurnBackfill()
-        setStore("turnStart", 0)
-        if (!id || !ready) return
-
-        const len = visibleUserMessages().length
-        const start = len > turnInit ? len - turnInit : 0
-        setStore("turnStart", start)
-        scheduleTurnBackfill()
-      },
-      { defer: true },
-    ),
-  )
+  const historyWindow = createSessionHistoryWindow({
+    sessionID: () => params.id,
+    messagesReady,
+    visibleUserMessages,
+    historyMore,
+    historyLoading,
+    loadMore: (sessionID) => sync.session.history.loadMore(sessionID),
+    userScrolled: autoScroll.userScrolled,
+    scroller: () => scroller,
+  })
 
   createResizeObserver(
     () => promptDock,
@@ -986,7 +1136,9 @@ export default function Page() {
 
       const el = scroller
       const delta = next - dockHeight
-      const stick = el ? el.scrollHeight - el.clientHeight - el.scrollTop < 10 + Math.max(0, delta) : false
+      const stick = el
+        ? !autoScroll.userScrolled() || el.scrollHeight - el.clientHeight - el.scrollTop < 10 + Math.max(0, delta)
+        : false
 
       dockHeight = next
 
@@ -1002,13 +1154,12 @@ export default function Page() {
     sessionID: () => params.id,
     messagesReady,
     visibleUserMessages,
-    turnStart: () => store.turnStart,
+    turnStart: historyWindow.turnStart,
     currentMessageId: () => store.messageId,
     pendingMessage: () => ui.pendingMessage,
     setPendingMessage: (value) => setUi("pendingMessage", value),
     setActiveMessage,
-    setTurnStart: (value) => setStore("turnStart", value),
-    scheduleTurnBackfill,
+    setTurnStart: historyWindow.setTurnStart,
     autoScroll,
     scroller: () => scroller,
     anchor,
@@ -1021,7 +1172,6 @@ export default function Page() {
   })
 
   onCleanup(() => {
-    cancelTurnBackfill()
     document.removeEventListener("keydown", handleKeyDown)
     scrollSpy.destroy()
     if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)
@@ -1076,6 +1226,7 @@ export default function Page() {
                     hasScrollGesture={hasScrollGesture}
                     isDesktop={isDesktop()}
                     onScrollSpyScroll={scrollSpy.onScroll}
+                    onTurnBackfillScroll={historyWindow.onScrollerScroll}
                     onAutoScrollInteraction={autoScroll.handleInteraction}
                     centered={centered()}
                     setContentRef={(el) => {
@@ -1085,21 +1236,16 @@ export default function Page() {
                       const root = scroller
                       if (root) scheduleScrollState(root)
                     }}
-                    turnStart={store.turnStart}
-                    onRenderEarlier={() => setStore("turnStart", 0)}
+                    turnStart={historyWindow.turnStart()}
                     historyMore={historyMore()}
                     historyLoading={historyLoading()}
                     onLoadEarlier={() => {
-                      const id = params.id
-                      if (!id) return
-                      setStore("turnStart", 0)
-                      sync.session.history.loadMore(id)
+                      void historyWindow.loadAndReveal()
                     }}
-                    renderedUserMessages={renderedUserMessages()}
+                    renderedUserMessages={historyWindow.renderedUserMessages()}
                     anchor={anchor}
                     onRegisterMessage={scrollSpy.register}
                     onUnregisterMessage={scrollSpy.unregister}
-                    lastUserMessageID={lastUserMessage()?.id}
                   />
                 </Show>
               </Match>
@@ -1127,6 +1273,7 @@ export default function Page() {
 
           <SessionComposerRegion
             state={composer}
+            ready={!store.deferRender && messagesReady()}
             centered={centered()}
             inputRef={(el) => {
               inputRef = el

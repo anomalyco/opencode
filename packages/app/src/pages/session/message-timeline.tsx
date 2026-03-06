@@ -1,4 +1,4 @@
-import { For, createEffect, createMemo, on, onCleanup, Show, type JSX } from "solid-js"
+import { For, createEffect, createMemo, on, onCleanup, Show, Index, type JSX } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { useNavigate, useParams } from "@solidjs/router"
 import { Button } from "@opencode-ai/ui/button"
@@ -10,8 +10,9 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
-import type { Part, TextPart, UserMessage } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Message as MessageType, Part, TextPart, UserMessage } from "@opencode-ai/sdk/v2"
 import { showToast } from "@opencode-ai/ui/toast"
+import { Binary } from "@opencode-ai/util/binary"
 import { getFilename } from "@opencode-ai/util/path"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 import { SessionContextUsage } from "@/components/session-context-usage"
@@ -30,6 +31,9 @@ type MessageComment = {
     endLine: number
   }
 }
+
+const emptyMessages: MessageType[] = []
+const idle = { type: "idle" as const }
 
 const messageComments = (parts: Part[]): MessageComment[] =>
   parts.flatMap((part) => {
@@ -81,6 +85,103 @@ const markBoundaryGesture = (input: {
   }
 }
 
+type StageConfig = {
+  init: number
+  batch: number
+}
+
+type TimelineStageInput = {
+  sessionKey: () => string
+  turnStart: () => number
+  messages: () => UserMessage[]
+  config: StageConfig
+}
+
+/**
+ * Defer-mounts small timeline windows so revealing older turns does not
+ * block first paint with a large DOM mount.
+ *
+ * Once staging completes for a session it never re-stages — backfill and
+ * new messages render immediately.
+ */
+function createTimelineStaging(input: TimelineStageInput) {
+  const [state, setState] = createStore({
+    activeSession: "",
+    completedSession: "",
+    count: 0,
+  })
+
+  const stagedCount = createMemo(() => {
+    const total = input.messages().length
+    if (input.turnStart() <= 0) return total
+    if (state.completedSession === input.sessionKey()) return total
+    const init = Math.min(total, input.config.init)
+    if (state.count <= init) return init
+    if (state.count >= total) return total
+    return state.count
+  })
+
+  const stagedUserMessages = createMemo(() => {
+    const list = input.messages()
+    const count = stagedCount()
+    if (count >= list.length) return list
+    return list.slice(Math.max(0, list.length - count))
+  })
+
+  let frame: number | undefined
+  const cancel = () => {
+    if (frame === undefined) return
+    cancelAnimationFrame(frame)
+    frame = undefined
+  }
+
+  createEffect(
+    on(
+      () => [input.sessionKey(), input.turnStart() > 0, input.messages().length] as const,
+      ([sessionKey, isWindowed, total]) => {
+        cancel()
+        const shouldStage =
+          isWindowed &&
+          total > input.config.init &&
+          state.completedSession !== sessionKey &&
+          state.activeSession !== sessionKey
+        if (!shouldStage) {
+          setState({ activeSession: "", count: total })
+          return
+        }
+
+        let count = Math.min(total, input.config.init)
+        setState({ activeSession: sessionKey, count })
+
+        const step = () => {
+          if (input.sessionKey() !== sessionKey) {
+            frame = undefined
+            return
+          }
+          const currentTotal = input.messages().length
+          count = Math.min(currentTotal, count + input.config.batch)
+          setState("count", count)
+          if (count >= currentTotal) {
+            setState({ completedSession: sessionKey, activeSession: "" })
+            frame = undefined
+            return
+          }
+          frame = requestAnimationFrame(step)
+        }
+        frame = requestAnimationFrame(step)
+      },
+    ),
+  )
+
+  const isStaging = createMemo(() => {
+    const key = input.sessionKey()
+    return state.activeSession === key && state.completedSession !== key
+  })
+
+  onCleanup(cancel)
+  return { messages: stagedUserMessages, isStaging }
+}
+
 export function MessageTimeline(props: {
   mobileChanges: boolean
   mobileFallback: JSX.Element
@@ -93,11 +194,11 @@ export function MessageTimeline(props: {
   hasScrollGesture: () => boolean
   isDesktop: boolean
   onScrollSpyScroll: () => void
+  onTurnBackfillScroll: () => void
   onAutoScrollInteraction: (event: MouseEvent) => void
   centered: boolean
   setContentRef: (el: HTMLDivElement) => void
   turnStart: number
-  onRenderEarlier: () => void
   historyMore: boolean
   historyLoading: boolean
   onLoadEarlier: () => void
@@ -105,7 +206,6 @@ export function MessageTimeline(props: {
   anchor: (id: string) => string
   onRegisterMessage: (el: HTMLDivElement, id: string) => void
   onUnregisterMessage: (id: string) => void
-  lastUserMessageID?: string
 }) {
   let touchGesture: number | undefined
 
@@ -117,8 +217,43 @@ export function MessageTimeline(props: {
   const dialog = useDialog()
   const language = useLanguage()
 
+  const rendered = createMemo(() => props.renderedUserMessages.map((message) => message.id))
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const sessionID = createMemo(() => params.id)
+  const sessionMessages = createMemo(() => {
+    const id = sessionID()
+    if (!id) return emptyMessages
+    return sync.data.message[id] ?? emptyMessages
+  })
+  const pending = createMemo(() =>
+    sessionMessages().findLast(
+      (item): item is AssistantMessage => item.role === "assistant" && typeof item.time.completed !== "number",
+    ),
+  )
+  const sessionStatus = createMemo(() => {
+    const id = sessionID()
+    if (!id) return idle
+    return sync.data.session_status[id] ?? idle
+  })
+  const activeMessageID = createMemo(() => {
+    const parentID = pending()?.parentID
+    if (parentID) {
+      const messages = sessionMessages()
+      const result = Binary.search(messages, parentID, (message) => message.id)
+      const message = result.found ? messages[result.index] : messages.find((item) => item.id === parentID)
+      if (message && message.role === "user") return message.id
+    }
+
+    const status = sessionStatus()
+    if (status.type !== "idle") {
+      const messages = sessionMessages()
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === "user") return messages[i].id
+      }
+    }
+
+    return undefined
+  })
   const info = createMemo(() => {
     const id = sessionID()
     if (!id) return
@@ -127,6 +262,13 @@ export function MessageTimeline(props: {
   const titleValue = createMemo(() => info()?.title)
   const parentID = createMemo(() => info()?.parentID)
   const showHeader = createMemo(() => !!(titleValue() || parentID()))
+  const stageCfg = { init: 1, batch: 3 }
+  const staging = createTimelineStaging({
+    sessionKey,
+    turnStart: () => props.turnStart,
+    messages: () => props.renderedUserMessages,
+    config: stageCfg,
+  })
 
   const [title, setTitle] = createStore({
     draft: "",
@@ -343,8 +485,10 @@ export function MessageTimeline(props: {
         <div
           class="absolute left-1/2 -translate-x-1/2 bottom-6 z-[60] pointer-events-none transition-all duration-200 ease-out"
           classList={{
-            "opacity-100 translate-y-0 scale-100": props.scroll.overflow && !props.scroll.bottom,
-            "opacity-0 translate-y-2 scale-95 pointer-events-none": !props.scroll.overflow || props.scroll.bottom,
+            "opacity-100 translate-y-0 scale-100":
+              props.scroll.overflow && !props.scroll.bottom && !staging.isStaging(),
+            "opacity-0 translate-y-2 scale-95 pointer-events-none":
+              !props.scroll.overflow || props.scroll.bottom || staging.isStaging(),
           }}
         >
           <button
@@ -393,6 +537,7 @@ export function MessageTimeline(props: {
           }}
           onScroll={(e) => {
             props.onScheduleScrollState(e.currentTarget)
+            props.onTurnBackfillScroll()
             if (!props.hasScrollGesture()) return
             props.onAutoScrollHandleScroll()
             props.onMarkScrollGesture(e.currentTarget)
@@ -405,216 +550,228 @@ export function MessageTimeline(props: {
             "--sticky-accordion-top": showHeader() ? "48px" : "0px",
           }}
         >
-          <Show when={showHeader()}>
-            <div
-              data-session-title
-              classList={{
-                "sticky top-0 z-30 bg-[linear-gradient(to_bottom,var(--background-stronger)_48px,transparent)]": true,
-                "w-full": true,
-                "pb-4": true,
-                "pl-2 pr-3 md:pl-4 md:pr-3": true,
-                "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
-              }}
-            >
-              <div class="h-12 w-full flex items-center justify-between gap-2">
-                <div class="flex items-center gap-1 min-w-0 flex-1 pr-3">
-                  <Show when={parentID()}>
-                    <IconButton
-                      tabIndex={-1}
-                      icon="arrow-left"
-                      variant="ghost"
-                      onClick={navigateParent}
-                      aria-label={language.t("common.goBack")}
-                    />
-                  </Show>
-                  <Show when={titleValue() || title.editing}>
-                    <Show
-                      when={title.editing}
-                      fallback={
-                        <h1
-                          class="text-14-medium text-text-strong truncate grow-1 min-w-0 pl-2"
-                          onDblClick={openTitleEditor}
-                        >
-                          {titleValue()}
-                        </h1>
-                      }
-                    >
-                      <InlineInput
-                        ref={(el) => {
-                          titleRef = el
-                        }}
-                        value={title.draft}
-                        disabled={title.saving}
-                        class="text-14-medium text-text-strong grow-1 min-w-0 pl-2 rounded-[6px]"
-                        style={{ "--inline-input-shadow": "var(--shadow-xs-border-select)" }}
-                        onInput={(event) => setTitle("draft", event.currentTarget.value)}
-                        onKeyDown={(event) => {
-                          event.stopPropagation()
-                          if (event.key === "Enter") {
-                            event.preventDefault()
-                            void saveTitleEditor()
-                            return
-                          }
-                          if (event.key === "Escape") {
-                            event.preventDefault()
-                            closeTitleEditor()
-                          }
-                        }}
-                        onBlur={closeTitleEditor}
+          <div ref={props.setContentRef} class="min-w-0 w-full">
+            <Show when={showHeader()}>
+              <div
+                data-session-title
+                classList={{
+                  "sticky top-0 z-30 bg-[linear-gradient(to_bottom,var(--background-stronger)_48px,transparent)]": true,
+                  "w-full": true,
+                  "pb-4": true,
+                  "pl-2 pr-3 md:pl-4 md:pr-3": true,
+                  "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
+                }}
+              >
+                <div class="h-12 w-full flex items-center justify-between gap-2">
+                  <div class="flex items-center gap-1 min-w-0 flex-1 pr-3">
+                    <Show when={parentID()}>
+                      <IconButton
+                        tabIndex={-1}
+                        icon="arrow-left"
+                        variant="ghost"
+                        onClick={navigateParent}
+                        aria-label={language.t("common.goBack")}
                       />
                     </Show>
-                  </Show>
-                </div>
-                <Show when={sessionID()}>
-                  {(id) => (
-                    <div class="shrink-0 flex items-center gap-3">
-                      <SessionContextUsage placement="bottom" />
-                      <DropdownMenu
-                        gutter={4}
-                        placement="bottom-end"
-                        open={title.menuOpen}
-                        onOpenChange={(open) => setTitle("menuOpen", open)}
-                      >
-                        <DropdownMenu.Trigger
-                          as={IconButton}
-                          icon="dot-grid"
-                          variant="ghost"
-                          class="size-6 rounded-md data-[expanded]:bg-surface-base-active"
-                          aria-label={language.t("common.moreOptions")}
-                        />
-                        <DropdownMenu.Portal>
-                          <DropdownMenu.Content
-                            style={{ "min-width": "104px" }}
-                            onCloseAutoFocus={(event) => {
-                              if (!title.pendingRename) return
-                              event.preventDefault()
-                              setTitle("pendingRename", false)
-                              openTitleEditor()
-                            }}
+                    <Show when={titleValue() || title.editing}>
+                      <Show
+                        when={title.editing}
+                        fallback={
+                          <h1
+                            class="text-14-medium text-text-strong truncate grow-1 min-w-0 pl-2"
+                            onDblClick={openTitleEditor}
                           >
-                            <DropdownMenu.Item
-                              onSelect={() => {
-                                setTitle("pendingRename", true)
-                                setTitle("menuOpen", false)
+                            {titleValue()}
+                          </h1>
+                        }
+                      >
+                        <InlineInput
+                          ref={(el) => {
+                            titleRef = el
+                          }}
+                          value={title.draft}
+                          disabled={title.saving}
+                          class="text-14-medium text-text-strong grow-1 min-w-0 pl-2 rounded-[6px]"
+                          style={{ "--inline-input-shadow": "var(--shadow-xs-border-select)" }}
+                          onInput={(event) => setTitle("draft", event.currentTarget.value)}
+                          onKeyDown={(event) => {
+                            event.stopPropagation()
+                            if (event.key === "Enter") {
+                              event.preventDefault()
+                              void saveTitleEditor()
+                              return
+                            }
+                            if (event.key === "Escape") {
+                              event.preventDefault()
+                              closeTitleEditor()
+                            }
+                          }}
+                          onBlur={closeTitleEditor}
+                        />
+                      </Show>
+                    </Show>
+                  </div>
+                  <Show when={sessionID()} keyed>
+                    {(id) => (
+                      <div class="shrink-0 flex items-center gap-3">
+                        <SessionContextUsage placement="bottom" />
+                        <DropdownMenu
+                          gutter={4}
+                          placement="bottom-end"
+                          open={title.menuOpen}
+                          onOpenChange={(open) => setTitle("menuOpen", open)}
+                        >
+                          <DropdownMenu.Trigger
+                            as={IconButton}
+                            icon="dot-grid"
+                            variant="ghost"
+                            class="size-6 rounded-md data-[expanded]:bg-surface-base-active"
+                            aria-label={language.t("common.moreOptions")}
+                          />
+                          <DropdownMenu.Portal>
+                            <DropdownMenu.Content
+                              style={{ "min-width": "104px" }}
+                              onCloseAutoFocus={(event) => {
+                                if (!title.pendingRename) return
+                                event.preventDefault()
+                                setTitle("pendingRename", false)
+                                openTitleEditor()
                               }}
                             >
-                              <DropdownMenu.ItemLabel>{language.t("common.rename")}</DropdownMenu.ItemLabel>
-                            </DropdownMenu.Item>
-                            <DropdownMenu.Item onSelect={() => void archiveSession(id())}>
-                              <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
-                            </DropdownMenu.Item>
-                            <DropdownMenu.Separator />
-                            <DropdownMenu.Item
-                              onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id()} />)}
-                            >
-                              <DropdownMenu.ItemLabel>{language.t("common.delete")}</DropdownMenu.ItemLabel>
-                            </DropdownMenu.Item>
-                          </DropdownMenu.Content>
-                        </DropdownMenu.Portal>
-                      </DropdownMenu>
-                    </div>
-                  )}
-                </Show>
+                              <DropdownMenu.Item
+                                onSelect={() => {
+                                  setTitle("pendingRename", true)
+                                  setTitle("menuOpen", false)
+                                }}
+                              >
+                                <DropdownMenu.ItemLabel>{language.t("common.rename")}</DropdownMenu.ItemLabel>
+                              </DropdownMenu.Item>
+                              <DropdownMenu.Item onSelect={() => void archiveSession(id)}>
+                                <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
+                              </DropdownMenu.Item>
+                              <DropdownMenu.Separator />
+                              <DropdownMenu.Item
+                                onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id} />)}
+                              >
+                                <DropdownMenu.ItemLabel>{language.t("common.delete")}</DropdownMenu.ItemLabel>
+                              </DropdownMenu.Item>
+                            </DropdownMenu.Content>
+                          </DropdownMenu.Portal>
+                        </DropdownMenu>
+                      </div>
+                    )}
+                  </Show>
+                </div>
               </div>
-            </div>
-          </Show>
+            </Show>
 
-          <div
-            ref={props.setContentRef}
-            role="log"
-            class="flex flex-col gap-12 items-start justify-start pb-16 transition-[margin]"
-            classList={{
-              "w-full": true,
-              "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
-              "mt-0.5": props.centered,
-              "mt-0": !props.centered,
-            }}
-          >
-            <Show when={props.turnStart > 0}>
-              <div class="w-full flex justify-center">
-                <Button variant="ghost" size="large" class="text-12-medium opacity-50" onClick={props.onRenderEarlier}>
-                  {language.t("session.messages.renderEarlier")}
-                </Button>
-              </div>
-            </Show>
-            <Show when={props.historyMore}>
-              <div class="w-full flex justify-center">
-                <Button
-                  variant="ghost"
-                  size="large"
-                  class="text-12-medium opacity-50"
-                  disabled={props.historyLoading}
-                  onClick={props.onLoadEarlier}
-                >
-                  {props.historyLoading
-                    ? language.t("session.messages.loadingEarlier")
-                    : language.t("session.messages.loadEarlier")}
-                </Button>
-              </div>
-            </Show>
-            <For each={props.renderedUserMessages}>
-              {(message) => {
-                const comments = createMemo(() => messageComments(sync.data.part[message.id] ?? []))
-                return (
-                  <div
-                    id={props.anchor(message.id)}
-                    data-message-id={message.id}
-                    ref={(el) => {
-                      props.onRegisterMessage(el, message.id)
-                      onCleanup(() => props.onUnregisterMessage(message.id))
-                    }}
-                    classList={{
-                      "min-w-0 w-full max-w-full": true,
-                      "md:max-w-200 2xl:max-w-[1000px]": props.centered,
-                    }}
+            <div
+              role="log"
+              class="flex flex-col gap-12 items-start justify-start pb-16 transition-[margin]"
+              classList={{
+                "w-full": true,
+                "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
+                "mt-0.5": props.centered,
+                "mt-0": !props.centered,
+              }}
+            >
+              <Show when={props.turnStart > 0 || props.historyMore}>
+                <div class="w-full flex justify-center">
+                  <Button
+                    variant="ghost"
+                    size="large"
+                    class="text-12-medium opacity-50"
+                    disabled={props.historyLoading}
+                    onClick={props.onLoadEarlier}
                   >
-                    <Show when={comments().length > 0}>
-                      <div class="w-full px-4 md:px-5 pb-2">
-                        <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
-                          <div class="flex w-max min-w-full justify-end gap-2">
-                            <For each={comments()}>
-                              {(comment) => (
-                                <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
-                                  <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
-                                    <FileIcon node={{ path: comment.path, type: "file" }} class="size-3.5 shrink-0" />
-                                    <span class="truncate">{getFilename(comment.path)}</span>
-                                    <Show when={comment.selection}>
-                                      {(selection) => (
-                                        <span class="shrink-0 text-text-weak">
-                                          {selection().startLine === selection().endLine
-                                            ? `:${selection().startLine}`
-                                            : `:${selection().startLine}-${selection().endLine}`}
-                                        </span>
-                                      )}
-                                    </Show>
-                                  </div>
-                                  <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
-                                    {comment.comment}
-                                  </div>
-                                </div>
-                              )}
-                            </For>
+                    {props.historyLoading
+                      ? language.t("session.messages.loadingEarlier")
+                      : language.t("session.messages.loadEarlier")}
+                  </Button>
+                </div>
+              </Show>
+              <For each={rendered()}>
+                {(messageID) => {
+                  const active = createMemo(() => activeMessageID() === messageID)
+                  const queued = createMemo(() => {
+                    if (active()) return false
+                    const activeID = activeMessageID()
+                    if (activeID) return messageID > activeID
+                    return false
+                  })
+                  const comments = createMemo(() => messageComments(sync.data.part[messageID] ?? []), [], {
+                    equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+                  })
+                  const commentCount = createMemo(() => comments().length)
+                  return (
+                    <div
+                      id={props.anchor(messageID)}
+                      data-message-id={messageID}
+                      ref={(el) => {
+                        props.onRegisterMessage(el, messageID)
+                        onCleanup(() => props.onUnregisterMessage(messageID))
+                      }}
+                      classList={{
+                        "min-w-0 w-full max-w-full": true,
+                        "md:max-w-200 2xl:max-w-[1000px]": props.centered,
+                      }}
+                    >
+                      <Show when={commentCount() > 0}>
+                        <div class="w-full px-4 md:px-5 pb-2">
+                          <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
+                            <div class="flex w-max min-w-full justify-end gap-2">
+                              <Index each={comments()}>
+                                {(commentAccessor: () => MessageComment) => {
+                                  const comment = createMemo(() => commentAccessor())
+                                  return (
+                                    <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
+                                      <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
+                                        <FileIcon
+                                          node={{ path: comment().path, type: "file" }}
+                                          class="size-3.5 shrink-0"
+                                        />
+                                        <span class="truncate">{getFilename(comment().path)}</span>
+                                        <Show when={comment().selection}>
+                                          {(selection) => (
+                                            <span class="shrink-0 text-text-weak">
+                                              {selection().startLine === selection().endLine
+                                                ? `:${selection().startLine}`
+                                                : `:${selection().startLine}-${selection().endLine}`}
+                                            </span>
+                                          )}
+                                        </Show>
+                                      </div>
+                                      <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
+                                        {comment().comment}
+                                      </div>
+                                    </div>
+                                  )
+                                }}
+                              </Index>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </Show>
-                    <SessionTurn
-                      sessionID={sessionID() ?? ""}
-                      messageID={message.id}
-                      lastUserMessageID={props.lastUserMessageID}
-                      showReasoningSummaries={settings.general.showReasoningSummaries()}
-                      shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
-                      editToolDefaultOpen={settings.general.editToolPartsExpanded()}
-                      classes={{
-                        root: "min-w-0 w-full relative",
-                        content: "flex flex-col justify-between !overflow-visible",
-                        container: "w-full px-4 md:px-5",
-                      }}
-                    />
-                  </div>
-                )
-              }}
-            </For>
+                      </Show>
+                      <SessionTurn
+                        sessionID={sessionID() ?? ""}
+                        messageID={messageID}
+                        active={active()}
+                        queued={queued()}
+                        status={active() ? sessionStatus() : undefined}
+                        showReasoningSummaries={settings.general.showReasoningSummaries()}
+                        shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
+                        editToolDefaultOpen={settings.general.editToolPartsExpanded()}
+                        classes={{
+                          root: "min-w-0 w-full relative",
+                          content: "flex flex-col justify-between !overflow-visible",
+                          container: "w-full px-4 md:px-5",
+                        }}
+                      />
+                    </div>
+                  )
+                }}
+              </For>
+            </div>
           </div>
         </ScrollView>
       </div>

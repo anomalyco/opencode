@@ -37,5 +37,5 @@ export function autoRespondsPermission(
   const value = sessionLineage(session, permission.sessionID)
     .map((id) => accepted(autoAccept, id, directory))
     .find((item): item is boolean => item !== undefined)
-  return value ?? true
+  return value ?? false
 }
