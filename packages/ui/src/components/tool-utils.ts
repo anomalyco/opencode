@@ -248,7 +248,10 @@ export function useRowWipe(opts: {
     })
 
     onCleanup(() => {
-      if (frame !== undefined) cancelAnimationFrame(frame)
+      if (frame !== undefined) {
+        cancelAnimationFrame(frame)
+        clear()
+      }
     })
   })
 }

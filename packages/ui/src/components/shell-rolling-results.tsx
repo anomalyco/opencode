@@ -276,6 +276,7 @@ export function ShellRollingResults(props: { part: ToolPart; animate?: boolean }
       >
         <RollingResults
           class="shell-rolling-output"
+          noFadeOnCollapse
           items={rows()}
           fixed={fixed()}
           fixedHeight={22}
