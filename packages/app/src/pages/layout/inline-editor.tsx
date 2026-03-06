@@ -28,7 +28,9 @@ export function createInlineEditorController() {
   }
 
   const editorKeyDown = (event: KeyboardEvent, callback: (next: string) => void) => {
-    if (event.key === "Enter") {
+    const isImeConfirm = event.isComposing || event.keyCode === 229
+
+    if (event.key === "Enter" && !isImeConfirm) {
       event.preventDefault()
       saveEditor(callback)
       return
