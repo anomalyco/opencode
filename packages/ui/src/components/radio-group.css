@@ -48,9 +48,9 @@
     transition:
       opacity 200ms ease-out,
       box-shadow 100ms ease-in-out,
-      width 200ms ease-out,
-      height 200ms ease-out,
-      transform 200ms ease-out;
+      width 200ms cubic-bezier(0.22, 1.2, 0.36, 1),
+      height 200ms cubic-bezier(0.22, 1.2, 0.36, 1),
+      transform 300ms cubic-bezier(0.22, 1.2, 0.36, 1);
     will-change: transform;
     z-index: 0;
   }

@@ -24,13 +24,20 @@ export const createOpenReviewFile = (input: {
   showAllFiles: () => void
   tabForPath: (path: string) => string
   openTab: (tab: string) => void
-  loadFile: (path: string) => void
+  setActive: (tab: string) => void
+  loadFile: (path: string) => any | Promise<void>
 }) => {
   return (path: string) => {
     batch(() => {
       input.showAllFiles()
-      input.openTab(input.tabForPath(path))
-      input.loadFile(path)
+      const maybePromise = input.loadFile(path)
+      const open = () => {
+        const tab = input.tabForPath(path)
+        input.openTab(tab)
+        input.setActive(tab)
+      }
+      if (maybePromise instanceof Promise) maybePromise.then(open)
+      else open()
     })
   }
 }
