@@ -5,7 +5,7 @@ import fs from "fs/promises"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
 import { lazy } from "../util/lazy"
-import { $ } from "bun"
+
 import { Filesystem } from "../util/filesystem"
 import { Process } from "../util/process"
 import { which } from "../util/which"
@@ -338,7 +338,7 @@ export namespace Ripgrep {
     limit?: number
     follow?: boolean
   }) {
-    const args = [`${await filepath()}`, "--json", "--hidden", "--glob='!.git/*'"]
+    const args = [`${await filepath()}`, "--json", "--hidden", "--glob=!.git/*"]
     if (input.follow) args.push("--follow")
 
     if (input.glob) {
@@ -354,14 +354,16 @@ export namespace Ripgrep {
     args.push("--")
     args.push(input.pattern)
 
-    const command = args.join(" ")
-    const result = await $`${{ raw: command }}`.cwd(input.cwd).quiet().nothrow()
-    if (result.exitCode !== 0) {
+    const result = await Process.text(args, {
+      cwd: input.cwd,
+      nothrow: true,
+    })
+    if (result.code !== 0) {
       return []
     }
 
     // Handle both Unix (\n) and Windows (\r\n) line endings
-    const lines = result.text().trim().split(/\r?\n/).filter(Boolean)
+    const lines = result.text.trim().split(/\r?\n/).filter(Boolean)
     // Parse JSON lines from ripgrep output
 
     return lines
