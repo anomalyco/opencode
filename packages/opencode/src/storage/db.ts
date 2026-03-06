@@ -40,7 +40,8 @@ export namespace Database {
 
   type Client = SQLiteBunDatabase<Schema>
 
-  type Journal = { sql: string; timestamp: number; name: string }[]
+  type MigrationEntry = { sql: string; timestamp: number; name: string }
+  type Journal = MigrationEntry[]
 
   const state = {
     sqlite: undefined as BunDatabase | undefined,
@@ -79,6 +80,23 @@ export namespace Database {
     return sql.sort((a, b) => a.timestamp - b.timestamp)
   }
 
+  function validMigrationEntries(entries: Journal): Journal {
+    const valid = entries.filter(
+      (entry) =>
+        typeof entry.sql === "string" &&
+        entry.sql.trim().length > 0 &&
+        typeof entry.name === "string" &&
+        entry.name.trim().length > 0,
+    )
+
+    const skipped = entries.length - valid.length
+    if (skipped > 0) {
+      log.warn("skipping invalid migration entries", { skipped, total: entries.length })
+    }
+
+    return valid
+  }
+
   export const Client = lazy(() => {
     log.info("opening database", { path: Path })
 
@@ -95,10 +113,11 @@ export namespace Database {
     const db = drizzle({ client: sqlite, schema })
 
     // Apply schema migrations
-    const entries =
+    const rawEntries =
       typeof OPENCODE_MIGRATIONS !== "undefined"
         ? OPENCODE_MIGRATIONS
         : migrations(path.join(import.meta.dirname, "../../migration"))
+    const entries = validMigrationEntries(rawEntries)
     if (entries.length > 0) {
       log.info("applying migrations", {
         count: entries.length,
