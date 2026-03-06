@@ -16,6 +16,7 @@ import { Identifier } from "@/utils/id"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { buildRequestParts } from "./build-request-parts"
 import { setCursorPosition } from "./editor-dom"
+import { formatServerError } from "@/utils/server-errors"
 
 type PendingPrompt = {
   abort: AbortController
@@ -286,7 +287,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           .catch((err) => {
             showToast({
               title: language.t("prompt.toast.commandSendFailed.title"),
-              description: errorMessage(err),
+              description: formatServerError(err, language.t, language.t("common.requestFailed")),
             })
             restoreInput()
           })

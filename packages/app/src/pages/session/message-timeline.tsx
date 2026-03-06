@@ -1,4 +1,4 @@
-import { For, createEffect, createMemo, on, onCleanup, Show, startTransition, Index, type JSX } from "solid-js"
+import { For, createEffect, createMemo, on, onCleanup, Show, Index, type JSX } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { useNavigate, useParams } from "@solidjs/router"
 import { Button } from "@opencode-ai/ui/button"
@@ -160,7 +160,7 @@ function createTimelineStaging(input: TimelineStageInput) {
           }
           const currentTotal = input.messages().length
           count = Math.min(currentTotal, count + input.config.batch)
-          startTransition(() => setState("count", count))
+          setState("count", count)
           if (count >= currentTotal) {
             setState({ completedSession: sessionKey, activeSession: "" })
             frame = undefined
@@ -611,7 +611,7 @@ export function MessageTimeline(props: {
                       </Show>
                     </Show>
                   </div>
-                  <Show when={sessionID()}>
+                  <Show when={sessionID()} keyed>
                     {(id) => (
                       <div class="shrink-0 flex items-center gap-3">
                         <SessionContextUsage placement="bottom" />
@@ -646,12 +646,12 @@ export function MessageTimeline(props: {
                               >
                                 <DropdownMenu.ItemLabel>{language.t("common.rename")}</DropdownMenu.ItemLabel>
                               </DropdownMenu.Item>
-                              <DropdownMenu.Item onSelect={() => void archiveSession(id())}>
+                              <DropdownMenu.Item onSelect={() => void archiveSession(id)}>
                                 <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
                               </DropdownMenu.Item>
                               <DropdownMenu.Separator />
                               <DropdownMenu.Item
-                                onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id()} />)}
+                                onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id} />)}
                               >
                                 <DropdownMenu.ItemLabel>{language.t("common.delete")}</DropdownMenu.ItemLabel>
                               </DropdownMenu.Item>
