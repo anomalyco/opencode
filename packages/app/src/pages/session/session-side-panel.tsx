@@ -208,7 +208,7 @@ export function SessionSidePanel(props: {
       <aside
         id="review-panel"
         aria-label={language.t("session.panel.reviewAndFiles")}
-        class="relative min-w-0 h-full border-l border-border-weak-base flex"
+        class="relative min-w-0 h-full border-l border-border-weaker-base flex"
         classList={{
           "flex-1": reviewOpen(),
           "shrink-0": !reviewOpen(),
@@ -346,7 +346,7 @@ export function SessionSidePanel(props: {
           <div id="file-tree-panel" class="relative shrink-0 h-full" style={{ width: `${layout.fileTree.width()}px` }}>
             <div
               class="h-full flex flex-col overflow-hidden group/filetree"
-              classList={{ "border-l border-border-weak-base": reviewOpen() }}
+              classList={{ "border-l border-border-weaker-base": reviewOpen() }}
             >
               <Tabs
                 variant="pill"
