@@ -15,6 +15,7 @@ import { existsSync } from "fs"
 import { git } from "../util/git"
 import { EOL } from "os"
 import { Glob } from "../util/glob"
+import { which } from "../util/which"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
@@ -413,7 +414,7 @@ export namespace Project {
       if (dotgit) {
         let sandbox = path.dirname(dotgit)
 
-        const gitBinary = Bun.which("git")
+        const gitBinary = which("git")
 
         // cached id calculation (fallback for non-git environments)
         let id = await Bun.file(path.join(dotgit, "opencode"))
