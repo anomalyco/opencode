@@ -146,7 +146,7 @@
       --tabs-review-fade: 16px;
       gap: var(--tabs-review-gap);
       background-color: var(--background-stronger);
-      border-bottom: 1px solid var(--border-weak-base);
+      border-bottom: 1px solid var(--border-weaker-base);
 
       &::after {
         display: none;
