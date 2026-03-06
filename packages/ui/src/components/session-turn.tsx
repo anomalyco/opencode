@@ -17,6 +17,7 @@ import { Icon } from "./icon"
 import { TextShimmer } from "./text-shimmer"
 import { SessionRetry } from "./session-retry"
 import { TextReveal } from "./text-reveal"
+import { accordionValue, pinSticky } from "./sticky-accordion"
 import { createAutoScroll } from "../hooks"
 import { useI18n } from "../context/i18n"
 
@@ -252,6 +253,29 @@ export function SessionTurn(
   const edited = createMemo(() => diffs().length)
   const [open, setOpen] = createSignal(false)
   const [expanded, setExpanded] = createSignal<string[]>([])
+  const refs = new Map<string, HTMLDivElement>()
+
+  const onOpenChange = (value: boolean) => {
+    if (value || !open()) {
+      setOpen(value)
+      return
+    }
+
+    pinSticky(refs.get("root-trigger"), () => setOpen(value))
+  }
+
+  const onExpandChange = (value: string | string[] | undefined) => {
+    const next = accordionValue(value)
+    const prev = expanded()
+    const key = prev.find((item) => !next.includes(item))
+
+    if (!key) {
+      setExpanded(next)
+      return
+    }
+
+    pinSticky(refs.get(`head:${key}`), () => setExpanded(next))
+  }
 
   createEffect(
     on(
@@ -431,9 +455,12 @@ export function SessionTurn(
               <SessionRetry status={status()} show={active()} />
               <Show when={edited() > 0 && !working()}>
                 <div data-slot="session-turn-diffs">
-                  <Collapsible open={open()} onOpenChange={setOpen} variant="ghost">
+                  <Collapsible open={open()} onOpenChange={onOpenChange} variant="ghost">
                     <Collapsible.Trigger>
-                      <div data-component="session-turn-diffs-trigger">
+                      <div
+                        ref={(el: HTMLDivElement) => refs.set("root-trigger", el)}
+                        data-component="session-turn-diffs-trigger"
+                      >
                         <div data-slot="session-turn-diffs-title">
                           <span data-slot="session-turn-diffs-label">{i18n.t("ui.sessionReview.change.modified")}</span>
                           <span data-slot="session-turn-diffs-count">
@@ -453,7 +480,7 @@ export function SessionTurn(
                             multiple
                             style={{ "--sticky-accordion-offset": "40px" }}
                             value={expanded()}
-                            onChange={(value) => setExpanded(Array.isArray(value) ? value : value ? [value] : [])}
+                            onChange={onExpandChange}
                           >
                             <For each={diffs()}>
                               {(diff) => {
@@ -480,7 +507,7 @@ export function SessionTurn(
 
                                 return (
                                   <Accordion.Item value={diff.file}>
-                                    <StickyAccordionHeader>
+                                    <StickyAccordionHeader ref={(el) => refs.set(`head:${diff.file}`, el)}>
                                       <Accordion.Trigger>
                                         <div data-slot="session-turn-diff-trigger">
                                           <span data-slot="session-turn-diff-path">

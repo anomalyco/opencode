@@ -7,6 +7,7 @@ import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
 import { IconButton } from "./icon-button"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
+import { accordionValue, pinSticky } from "./sticky-accordion"
 import { Tooltip } from "./tooltip"
 import { ScrollView } from "./scroll-view"
 import { FileSearchBar } from "./file-search"
@@ -142,6 +143,7 @@ export const SessionReview = (props: SessionReviewProps) => {
   const i18n = useI18n()
   const fileComponent = useFileComponent()
   const anchors = new Map<string, HTMLElement>()
+  const heads = new Map<string, HTMLDivElement>()
   const searchHandles = new Map<string, FileSearchHandle>()
   const readyFiles = new Set<string>()
   const [store, setStore] = createStore<{ open: string[]; force: Record<string, boolean> }>({
@@ -169,6 +171,16 @@ export const SessionReview = (props: SessionReviewProps) => {
     props.onOpenChange?.(open)
     if (props.open !== undefined) return
     setStore("open", open)
+  }
+
+  const handleAccordionChange = (value: string | string[] | undefined) => {
+    const next = accordionValue(value)
+    const key = open().find((item) => !next.includes(item))
+    if (!key) {
+      handleChange(next)
+      return
+    }
+    pinSticky(heads.get(key), () => handleChange(next))
   }
 
   const handleExpandOrCollapseAll = () => {
@@ -622,7 +634,7 @@ export const SessionReview = (props: SessionReviewProps) => {
         <div data-slot="session-review-container" class={props.classes?.container}>
           <Show when={hasDiffs()} fallback={props.empty}>
             <div class="pb-6">
-              <Accordion multiple value={open()} onChange={handleChange}>
+              <Accordion multiple value={open()} onChange={handleAccordionChange}>
                 <For each={files()}>
                   {(file) => {
                     let wrapper: HTMLDivElement | undefined
@@ -720,6 +732,7 @@ export const SessionReview = (props: SessionReviewProps) => {
 
                     onCleanup(() => {
                       anchors.delete(file)
+                      heads.delete(file)
                       readyFiles.delete(file)
                       searchHandles.delete(file)
                       if (highlightedFile === file) highlightedFile = undefined
@@ -743,7 +756,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                         data-slot="session-review-accordion-item"
                         data-selected={props.focusedFile === file ? "" : undefined}
                       >
-                        <StickyAccordionHeader>
+                        <StickyAccordionHeader ref={(el) => heads.set(file, el)}>
                           <Accordion.Trigger>
                             <div data-slot="session-review-trigger-content">
                               <div data-slot="session-review-file-info">

@@ -51,6 +51,7 @@ import { IconButton } from "./icon-button"
 import { TextShimmer } from "./text-shimmer"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
+import { accordionValue, pinSticky } from "./sticky-accordion"
 import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
 
@@ -1112,16 +1113,28 @@ export const ToolRegistry = {
 
 function ToolFileAccordion(props: { path: string; actions?: JSX.Element; children: JSX.Element }) {
   const value = createMemo(() => props.path || "tool-file")
+  const [open, setOpen] = createSignal<string[]>([value()])
+  let head: HTMLDivElement | undefined
+
+  const change = (value: string | string[] | undefined) => {
+    const next = accordionValue(value)
+    if (next.length > 0 || open().length === 0) {
+      setOpen(next)
+      return
+    }
+    pinSticky(head, () => setOpen(next))
+  }
 
   return (
     <Accordion
       multiple
       data-scope="apply-patch"
       style={{ "--sticky-accordion-offset": "40px" }}
-      defaultValue={[value()]}
+      value={open()}
+      onChange={change}
     >
       <Accordion.Item value={value()}>
-        <StickyAccordionHeader>
+        <StickyAccordionHeader ref={(el) => (head = el)}>
           <Accordion.Trigger>
             <div data-slot="apply-patch-trigger-content">
               <div data-slot="apply-patch-file-info">
@@ -1845,6 +1858,7 @@ ToolRegistry.register({
       return list[0]
     })
     const [expanded, setExpanded] = createSignal<string[]>([])
+    const heads = new Map<string, HTMLDivElement>()
     let seeded = false
 
     createEffect(() => {
@@ -1881,7 +1895,15 @@ ToolRegistry.register({
                   data-scope="apply-patch"
                   style={{ "--sticky-accordion-offset": "40px" }}
                   value={expanded()}
-                  onChange={(value) => setExpanded(Array.isArray(value) ? value : value ? [value] : [])}
+                  onChange={(value) => {
+                    const next = accordionValue(value)
+                    const key = expanded().find((item) => !next.includes(item))
+                    if (!key) {
+                      setExpanded(next)
+                      return
+                    }
+                    pinSticky(heads.get(key), () => setExpanded(next))
+                  }}
                 >
                   <For each={files()}>
                     {(file) => {
@@ -1902,7 +1924,7 @@ ToolRegistry.register({
 
                       return (
                         <Accordion.Item value={file.filePath} data-type={file.type}>
-                          <StickyAccordionHeader>
+                          <StickyAccordionHeader ref={(el) => heads.set(file.filePath, el)}>
                             <Accordion.Trigger>
                               <div data-slot="apply-patch-trigger-content">
                                 <div data-slot="apply-patch-file-info">
