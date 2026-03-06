@@ -260,9 +260,9 @@ function FileSection(props: {
   return (
     <Show when={props.files.length > 0}>
       <div class="border-b border-border-base last:border-b-0">
-        <button
+        <div
           class="w-full flex items-center justify-between px-2 py-1 text-12-medium text-text-weak
-                 hover:bg-surface-base-hover"
+                 hover:bg-surface-base-hover cursor-pointer"
           onClick={props.onToggle}
         >
           <div class="flex items-center gap-1">
@@ -281,7 +281,7 @@ function FileSection(props: {
           >
             {props.action === "stage" ? "Stage All" : "Unstage All"}
           </button>
-        </button>
+        </div>
         <Show when={props.open}>
           <For each={props.files}>
             {(file) => {
