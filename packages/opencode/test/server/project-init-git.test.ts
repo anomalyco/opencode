@@ -73,8 +73,8 @@ describe("project.initGit endpoint", () => {
     }
   })
 
-  test("does not reload again when the project is already git", async () => {
-    await using tmp = await tmpdir()
+  test("does not reload when the project is already git", async () => {
+    await using tmp = await tmpdir({ git: true })
     const app = Server.App()
     const seen: { directory?: string; payload: { type: string } }[] = []
     const fn = (evt: { directory?: string; payload: { type: string } }) => {
@@ -85,36 +85,32 @@ describe("project.initGit endpoint", () => {
     GlobalBus.on("event", fn)
 
     try {
-      const first = await app.request("/project/git/init", {
+      const init = await app.request("/project/git/init", {
         method: "POST",
         headers: {
           "x-opencode-directory": tmp.path,
         },
       })
-      expect(first.status).toBe(200)
-      const before = seen.filter(
-        (evt) => evt.directory === tmp.path && evt.payload.type === "server.instance.disposed",
-      ).length
-      expect(reloadSpy).toHaveBeenCalledTimes(1)
-
-      const second = await app.request("/project/git/init", {
-        method: "POST",
-        headers: {
-          "x-opencode-directory": tmp.path,
-        },
-      })
-      expect(second.status).toBe(200)
-      expect(await second.json()).toMatchObject({
-        id: "global",
+      expect(init.status).toBe(200)
+      expect(await init.json()).toMatchObject({
         vcs: "git",
         worktree: tmp.path,
       })
+      expect(
+        seen.filter((evt) => evt.directory === tmp.path && evt.payload.type === "server.instance.disposed").length,
+      ).toBe(0)
+      expect(reloadSpy).toHaveBeenCalledTimes(0)
 
-      const after = seen.filter(
-        (evt) => evt.directory === tmp.path && evt.payload.type === "server.instance.disposed",
-      ).length
-      expect(after).toBe(before)
-      expect(reloadSpy).toHaveBeenCalledTimes(1)
+      const current = await app.request("/project/current", {
+        headers: {
+          "x-opencode-directory": tmp.path,
+        },
+      })
+      expect(current.status).toBe(200)
+      expect(await current.json()).toMatchObject({
+        vcs: "git",
+        worktree: tmp.path,
+      })
     } finally {
       reloadSpy.mockRestore()
       GlobalBus.off("event", fn)
