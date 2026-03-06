@@ -105,6 +105,7 @@ const INTL: Record<Locale, string> = {
   br: "pt-BR",
   th: "th",
   bs: "bs",
+  ca: "ca",
   tr: "tr",
 }
 
