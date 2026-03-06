@@ -8,14 +8,7 @@ import { Icon } from "./icon"
 import { IconButton } from "./icon-button"
 import { TextShimmer } from "./text-shimmer"
 import { Tooltip } from "./tooltip"
-import {
-  animate,
-  clearFadeStyles,
-  clearMaskStyles,
-  FAST_SPRING,
-  GROW_SPRING,
-  WIPE_MASK,
-} from "./motion"
+import { animate, clearFadeStyles, clearMaskStyles, FAST_SPRING, GROW_SPRING, WIPE_MASK } from "./motion"
 import { useSpring } from "./motion-spring"
 import { busy, createThrottledValue, useToolFade } from "./tool-utils"
 
@@ -78,14 +71,16 @@ export function ShellRollingResults(props: { part: ToolPart; animate?: boolean }
   // a 2s timer sets it false to trigger the collapse. This avoids the flash caused by
   // holdOpen being set in a late-running effect.
   const [autoOpen, setAutoOpen] = createSignal(pending())
-  createEffect(on(pending, (isPending, wasPending) => {
-    if (isPending) {
-      setAutoOpen(true)
-    } else if (wasPending && !userToggled()) {
-      const timer = setTimeout(() => setAutoOpen(false), 2000)
-      onCleanup(() => clearTimeout(timer))
-    }
-  }))
+  createEffect(
+    on(pending, (isPending, wasPending) => {
+      if (isPending) {
+        setAutoOpen(true)
+      } else if (wasPending && !userToggled()) {
+        const timer = setTimeout(() => setAutoOpen(false), 2000)
+        onCleanup(() => clearTimeout(timer))
+      }
+    }),
+  )
   const effectiveOpen = createMemo(() => {
     if (pending()) return true
     if (userToggled()) return userOpen()
@@ -164,9 +159,7 @@ export function ShellRollingResults(props: { part: ToolPart; animate?: boolean }
           <span data-slot="shell-rolling-title">
             <TextShimmer text={i18n.t("ui.tool.shell")} active={pending()} />
           </span>
-          <Show when={subtitle()}>
-            {(text) => <ShellRollingSubtitle text={text()} animate={props.animate} />}
-          </Show>
+          <Show when={subtitle()}>{(text) => <ShellRollingSubtitle text={text()} animate={props.animate} />}</Show>
           <Show when={!pending()}>
             <span data-slot="shell-rolling-actions">
               <Tooltip
@@ -196,7 +189,7 @@ export function ShellRollingResults(props: { part: ToolPart; animate?: boolean }
         items={rows()}
         fixed={fixed()}
         fixedHeight={22}
-        rows={5}
+        rows={userToggled() && userOpen() ? 10 : 5}
         rowHeight={22}
         rowGap={0}
         open={effectiveOpen()}
