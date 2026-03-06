@@ -203,6 +203,41 @@ export function BasicTool(props: BasicToolProps) {
   )
 }
 
-export function GenericTool(props: { tool: string; status?: string; hideDetails?: boolean }) {
-  return <BasicTool icon="mcp" status={props.status} trigger={{ title: props.tool }} hideDetails={props.hideDetails} />
+function label(input: Record<string, unknown> | undefined) {
+  const keys = ["description", "query", "url", "filePath", "path", "pattern", "name"]
+  return keys.map((key) => input?.[key]).find((value): value is string => typeof value === "string" && value.length > 0)
+}
+
+function args(input: Record<string, unknown> | undefined) {
+  if (!input) return []
+  const skip = new Set(["description", "query", "url", "filePath", "path", "pattern", "name"])
+  return Object.entries(input)
+    .filter(([key]) => !skip.has(key))
+    .flatMap(([key, value]) => {
+      if (typeof value === "string") return [`${key}=${value}`]
+      if (typeof value === "number") return [`${key}=${value}`]
+      if (typeof value === "boolean") return [`${key}=${value}`]
+      return []
+    })
+    .slice(0, 3)
+}
+
+export function GenericTool(props: {
+  tool: string
+  status?: string
+  hideDetails?: boolean
+  input?: Record<string, unknown>
+}) {
+  return (
+    <BasicTool
+      icon="mcp"
+      status={props.status}
+      trigger={{
+        title: `Called \`${props.tool}\``,
+        subtitle: label(props.input),
+        args: args(props.input),
+      }}
+      hideDetails={props.hideDetails}
+    />
+  )
 }
