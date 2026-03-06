@@ -43,6 +43,27 @@ export namespace Plugin {
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Plugin") {}
 
+  // Extract package name from a plugin specifier for dedup.
+  // "github:owner/repo#branch" → "repo"
+  // "@scope/pkg@version" → "@scope/pkg"
+  // "pkg@version" → "pkg"
+  export function pluginRepo(spec: string): string {
+    if (spec.startsWith("github:")) {
+      const repo = spec.replace(/^github:/, "").split("#")[0]
+      return repo.split("/").pop()!
+    }
+    const last = spec.lastIndexOf("@")
+    if (last > 0) return spec.substring(0, last)
+    return spec
+  }
+
+  // Merge BUILTIN and user plugins, dropping any BUILTIN whose
+  // package name is already provided by a user plugin.
+  export function dedup(builtin: string[], user: string[]): string[] {
+    const names = new Set(user.map(pluginRepo))
+    return [...builtin.filter((b) => !names.has(pluginRepo(b))), ...user]
+  }
+
   // Built-in plugins that are directly imported (not installed from npm)
   const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin, GitlabAuthPlugin, PoeAuthPlugin]
 
@@ -91,7 +112,7 @@ export namespace Plugin {
               if (init) hooks.push(init)
             }
 
-            let plugins = cfg.plugin ?? []
+            const plugins = dedup([], cfg.plugin ?? [])
             if (plugins.length) await Config.waitForDependencies()
 
             for (let plugin of plugins) {
