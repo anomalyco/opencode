@@ -60,7 +60,7 @@ export function NewSessionView(props: NewSessionViewProps) {
                 <span class="text-text-strong">{getFilename(projectRoot())}</span>
               </div>
             </div>
-            <div class="flex items-start justify-center gap-3 min-h-5">
+            <div class="flex items-start justify-center gap-1.5 min-h-5">
               <Icon name="branch" size="small" class="mt-0.5 shrink-0" />
               <div class="text-12-medium text-text-weak select-text leading-5 min-w-0 max-w-160 break-words text-center">
                 {label(current())}
