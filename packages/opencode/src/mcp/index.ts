@@ -396,8 +396,13 @@ export namespace MCP {
         } catch (error) {
           lastError = error instanceof Error ? error : new Error(String(error))
 
+          const msg = lastError.message.toLowerCase()
+          const looksLikeAuthFailure =
+            error instanceof UnauthorizedError ||
+            (name === "StreamableHTTP" && !oauthDisabled && (msg.includes("401") || msg.includes("unauthorized")))
+
           // Handle OAuth-specific errors
-          if (error instanceof UnauthorizedError) {
+          if (looksLikeAuthFailure) {
             log.info("mcp server requires authentication", { key, transport: name })
 
             // Check if this is a "needs registration" error
