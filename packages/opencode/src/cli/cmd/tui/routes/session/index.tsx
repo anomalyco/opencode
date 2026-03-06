@@ -1571,7 +1571,7 @@ type ToolProps<T extends Tool.Info> = {
 function GenericTool(props: ToolProps<any>) {
   const { theme } = useTheme()
   const ctx = use()
-  const output = createMemo(() => props.output?.trim() ?? "")
+  const output = createMemo(() => stripAnsi(props.output?.trim() ?? ""))
   const [expanded, setExpanded] = createSignal(false)
   const lines = createMemo(() => output().split("\n"))
   const maxLines = 3
