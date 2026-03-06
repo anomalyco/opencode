@@ -3,7 +3,19 @@ import { Clipboard } from "@tui/util/clipboard"
 import { Selection } from "@tui/util/selection"
 import { MouseButton, TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
+import {
+  Switch,
+  Match,
+  createEffect,
+  untrack,
+  ErrorBoundary,
+  createSignal,
+  onMount,
+  onCleanup,
+  batch,
+  Show,
+  on,
+} from "solid-js"
 import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./win32"
 import { Installation } from "@/installation"
 import { Flag } from "@/flag/flag"
@@ -285,6 +297,41 @@ function App() {
 
   const args = useArgs()
   onMount(() => {
+    const repaint = () => {
+      process.stdout.write("\x1b[2J\x1b[H")
+      renderer.currentRenderBuffer.clear()
+      renderer.requestRender()
+      setTimeout(() => renderer.requestRender(), 16)
+    }
+    const refresh = () => {
+      renderer.resume()
+      process.kill(process.pid, "SIGWINCH")
+      setTimeout(() => process.kill(process.pid, "SIGWINCH"), 120)
+      repaint()
+      setTimeout(repaint, 64)
+      setTimeout(repaint, 160)
+      setTimeout(repaint, 260)
+    }
+    const resize = () => {
+      repaint()
+    }
+    process.on("SIGCONT", refresh)
+    process.on("SIGWINCH", resize)
+    let cols = process.stdout.columns
+    let rows = process.stdout.rows
+    const interval = setInterval(() => {
+      if (process.stdout.columns === cols && process.stdout.rows === rows) return
+      cols = process.stdout.columns
+      rows = process.stdout.rows
+      repaint()
+    }, 120)
+    interval.unref?.()
+    onCleanup(() => {
+      process.off("SIGCONT", refresh)
+      process.off("SIGWINCH", resize)
+      clearInterval(interval)
+    })
+
     batch(() => {
       if (args.agent) local.agent.set(args.agent)
       if (args.model) {
@@ -614,13 +661,13 @@ function App() {
       category: "System",
       hidden: true,
       onSelect: () => {
-        process.once("SIGCONT", () => {
-          renderer.resume()
-        })
-
         renderer.suspend()
-        // pid=0 means send the signal to all processes in the process group
-        process.kill(0, "SIGTSTP")
+        // Give terminal state writes (leaving alt screen/raw mode) a chance to flush
+        // before suspending the whole process group.
+        process.stdout.write("", () => {
+          // pid=0 means send the signal to all processes in the process group
+          process.kill(0, "SIGTSTP")
+        })
       },
     },
     {
