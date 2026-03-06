@@ -93,6 +93,7 @@ export default function Layout(props: ParentProps) {
       workspaceName: {} as Record<string, string>,
       workspaceBranchName: {} as Record<string, Record<string, string>>,
       workspaceExpanded: {} as Record<string, boolean>,
+      gettingStartedDismissed: false,
     }),
   )
 
@@ -2006,25 +2007,31 @@ export default function Layout(props: ParentProps) {
         </Show>
 
         <div
-          class="shrink-0 px-2 py-3 border-t border-border-weak-base"
+          class="shrink-0 px-3 py-3"
           classList={{
-            hidden: !(providers.all().length > 0 && providers.paid().length === 0),
+            hidden: store.gettingStartedDismissed || !(providers.all().length > 0 && providers.paid().length === 0),
           }}
         >
-          <div class="rounded-md bg-background-base shadow-xs-border-base">
-            <div class="p-3 flex flex-col gap-2">
-              <div class="text-12-medium text-text-strong">{language.t("sidebar.gettingStarted.title")}</div>
-              <div class="text-text-base">{language.t("sidebar.gettingStarted.line1")}</div>
-              <div class="text-text-base">{language.t("sidebar.gettingStarted.line2")}</div>
+          <div class="rounded-xl bg-background-base shadow-xs-border-base" data-component="getting-started">
+            <div class="p-3 flex flex-col gap-6">
+              <div class="flex flex-col gap-2">
+                <div class="text-14-medium text-text-strong">{language.t("sidebar.gettingStarted.title")}</div>
+                <div class="text-14-regular text-text-base" style={{ "line-height": "var(--line-height-normal)" }}>
+                  {language.t("sidebar.gettingStarted.line1")}
+                </div>
+                <div class="text-14-regular text-text-base" style={{ "line-height": "var(--line-height-normal)" }}>
+                  {language.t("sidebar.gettingStarted.line2")}
+                </div>
+              </div>
+              <div data-component="getting-started-actions">
+                <Button size="large" icon="plus-small" onClick={connectProvider}>
+                  {language.t("command.provider.connect")}
+                </Button>
+                <Button size="large" variant="ghost" onClick={() => setStore("gettingStartedDismissed", true)}>
+                  Not yet
+                </Button>
+              </div>
             </div>
-            <Button
-              class="flex w-full text-left justify-start text-12-medium text-text-strong stroke-[1.5px] rounded-md rounded-t-none shadow-none border-t border-border-weak-base px-3"
-              size="large"
-              icon="plus"
-              onClick={connectProvider}
-            >
-              {language.t("command.provider.connect")}
-            </Button>
           </div>
         </div>
       </div>
