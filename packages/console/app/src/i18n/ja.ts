@@ -15,6 +15,7 @@ export const dict = {
   "nav.home": "ホーム",
   "nav.openMenu": "メニューを開く",
   "nav.getStartedFree": "無料ではじめる",
+  "nav.logoAlt": "OpenCode",
 
   "nav.context.copyLogo": "ロゴをSVGでコピー",
   "nav.context.copyWordmark": "ワードマークをSVGでコピー",
@@ -42,8 +43,12 @@ export const dict = {
   "notFound.docs": "ドキュメント",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
+  "notFound.logoLightAlt": "opencodeのロゴ（ライト）",
+  "notFound.logoDarkAlt": "opencodeのロゴ（ダーク）",
 
   "user.logout": "ログアウト",
+
+  "auth.callback.error.codeMissing": "認証コードが見つかりません。",
 
   "workspace.select": "ワークスペースを選択",
   "workspace.createNew": "+ 新しいワークスペースを作成",
@@ -76,6 +81,8 @@ export const dict = {
   "error.reloadAmountMin": "リロード額は少なくとも ${{amount}} である必要があります",
   "error.reloadTriggerMin": "残高トリガーは少なくとも ${{amount}} である必要があります",
 
+  "app.meta.description": "OpenCode - オープンソースのコーディングエージェント。",
+
   "home.title": "OpenCode | オープンソースのAIコーディングエージェント",
 
   "temp.title": "OpenCode | ターミナル向けに構築されたAIコーディングエージェント",
@@ -91,6 +98,8 @@ export const dict = {
   "temp.feature.models.afterLink": "を通じて75以上のLLMプロバイダーをサポート",
   "temp.screenshot.caption": "tokyonight テーマを使用した OpenCode TUI",
   "temp.screenshot.alt": "tokyonight テーマの OpenCode TUI",
+  "temp.logoLightAlt": "opencodeのロゴ（ライト）",
+  "temp.logoDarkAlt": "opencodeのロゴ（ダーク）",
 
   "home.banner.badge": "新着",
   "home.banner.text": "デスクトップアプリのベータ版が利用可能",
@@ -238,6 +247,126 @@ export const dict = {
   "zen.privacy.beforeExceptions":
     "すべてのZenモデルは米国でホストされています。プロバイダーはゼロ保持ポリシーに従い、モデルのトレーニングにデータを使用しません（",
   "zen.privacy.exceptionsLink": "以下の例外",
+
+  "go.title": "OpenCode Go | すべての人のための低価格なコーディングモデル",
+  "go.meta.description":
+    "Goは、GLM-5、Kimi K2.5、MiniMax M2.5を5時間ごとの十分なリクエスト制限で利用できる月額$10のサブスクリプションです。",
+  "go.hero.title": "すべての人のための低価格なコーディングモデル",
+  "go.hero.body":
+    "Goは、世界中のプログラマーにエージェント型コーディングをもたらします。最も高性能なオープンソースモデルへの十分な制限と安定したアクセスを提供し、コストや可用性を気にすることなく強力なエージェントで構築できます。",
+
+  "go.cta.start": "Goを購読する",
+  "go.cta.template": "{{text}} {{price}}",
+  "go.cta.text": "Goを購読する",
+  "go.cta.price": "$10/月",
+  "go.pricing.body": "任意のエージェントで利用可能。必要に応じてクレジットを追加。いつでもキャンセル可能。",
+  "go.graph.free": "無料",
+  "go.graph.freePill": "Big Pickleと無料モデル",
+  "go.graph.go": "Go",
+  "go.graph.label": "5時間あたりのリクエスト数",
+  "go.graph.usageLimits": "利用制限",
+  "go.graph.tick": "{{n}}倍",
+  "go.graph.aria": "5時間あたりのリクエスト数: {{free}} 対 {{go}}",
+
+  "go.testimonials.brand.zen": "Zen",
+  "go.testimonials.brand.go": "Go",
+  "go.testimonials.handle": "@OpenCode",
+  "go.testimonials.dax.name": "Dax Raad",
+  "go.testimonials.dax.title": "元CEO, Terminal Products",
+  "go.testimonials.dax.quoteAfter": "は人生を変えるものでした。本当に迷う必要はありません。",
+  "go.testimonials.jay.name": "Jay V",
+  "go.testimonials.jay.title": "元創業者, SEED, PM, Melt, Pop, Dapt, Cadmus, ViewPoint",
+  "go.testimonials.jay.quoteBefore": "チームの5人中4人が",
+  "go.testimonials.jay.quoteAfter": "の使用を気に入っています。",
+  "go.testimonials.adam.name": "Adam Elmore",
+  "go.testimonials.adam.title": "元Hero, AWS",
+  "go.testimonials.adam.quoteBefore": "私は",
+  "go.testimonials.adam.quoteAfter": "をどれだけ推薦してもしきれません。真剣に、本当に良いです。",
+  "go.testimonials.david.name": "David Hill",
+  "go.testimonials.david.title": "元デザイン責任者, Laravel",
+  "go.testimonials.david.quoteBefore": "",
+  "go.testimonials.david.quoteAfter":
+    "を使えば、すべてのモデルがテスト済みでコーディングエージェントに最適だと確信できます。",
+  "go.testimonials.frank.name": "Frank Wang",
+  "go.testimonials.frank.title": "元インターン, Nvidia (4回)",
+  "go.testimonials.frank.quote": "まだNvidiaにいられたらよかったのに。",
+  "go.problem.title": "Goはどのような問題を解決していますか？",
+  "go.problem.body":
+    "私たちは、OpenCodeの体験をできるだけ多くの人々に届けることに注力しています。OpenCode Goは、世界中のプログラマーにエージェント型コーディングをもたらすために設計された低価格（$10/月）のサブスクリプションです。最も高性能なオープンソースモデルへの十分な制限と安定したアクセスを提供します。",
+  "go.problem.subtitle": " ",
+  "go.problem.item1": "低価格なサブスクリプション料金",
+  "go.problem.item2": "十分な制限と安定したアクセス",
+  "go.problem.item3": "できるだけ多くのプログラマーのために構築",
+  "go.problem.item4": "GLM-5、Kimi K2.5、MiniMax M2.5を含む",
+  "go.how.title": "Goの仕組み",
+  "go.how.body": "Goは、OpenCodeまたは任意のエージェントで使用できる月額$10のサブスクリプションです。",
+  "go.how.step1.title": "アカウントを作成",
+  "go.how.step1.beforeLink": "",
+  "go.how.step1.link": "セットアップ手順はこちら",
+  "go.how.step2.title": "Goを購読する",
+  "go.how.step2.link": "$10/月",
+  "go.how.step2.afterLink": "（十分な制限付き）",
+  "go.how.step3.title": "コーディングを開始",
+  "go.how.step3.body": "オープンソースモデルへの安定したアクセスで",
+  "go.privacy.title": "あなたのプライバシーは私たちにとって重要です",
+  "go.privacy.body":
+    "このプランは主に海外ユーザー向けに設計されており、米国、EU、シンガポールでホストされたモデルにより安定したグローバルアクセスを提供します。",
+  "go.privacy.contactAfter": "ご質問がございましたら。",
+  "go.privacy.beforeExceptions":
+    "Goのモデルは米国でホストされています。プロバイダーはゼロ保持ポリシーに従い、モデルのトレーニングにデータを使用しません（",
+  "go.privacy.exceptionsLink": "以下の例外",
+  "go.faq.q1": "OpenCode Goとは？",
+  "go.faq.a1":
+    "Goは、エージェント型コーディングのための有能なオープンソースモデルへの安定したアクセスを提供する低価格なサブスクリプションです。",
+  "go.faq.q2": "Goにはどのモデルが含まれますか？",
+  "go.faq.a2": "Goには、GLM-5、Kimi K2.5、MiniMax M2.5が含まれており、十分な制限と安定したアクセスが提供されます。",
+  "go.faq.q3": "GoはZenと同じですか？",
+  "go.faq.a3":
+    "いいえ。Zenは従量課金制ですが、Goは月額$10のサブスクリプションで、GLM-5、Kimi K2.5、MiniMax M2.5といったオープンソースモデルへの十分な制限と安定したアクセスを提供します。",
+  "go.faq.q4": "Goの料金は？",
+  "go.faq.a4.p1.beforePricing": "Goは",
+  "go.faq.a4.p1.pricingLink": "月額$10",
+  "go.faq.a4.p1.afterPricing": "で、十分な制限が含まれます。",
+  "go.faq.a4.p2.beforeAccount": "管理画面：",
+  "go.faq.a4.p2.accountLink": "アカウント",
+  "go.faq.a4.p3": "いつでもキャンセル可能です。",
+  "go.faq.q5": "データとプライバシーは？",
+  "go.faq.a5.body":
+    "このプランは主に海外ユーザー向けに設計されており、米国、EU、シンガポールでホストされたモデルにより安定したグローバルアクセスを提供します。",
+  "go.faq.a5.contactAfter": "ご質問がございましたら。",
+  "go.faq.a5.beforeExceptions":
+    "Goのモデルは米国でホストされています。プロバイダーはゼロ保持ポリシーに従い、モデルのトレーニングにデータを使用しません（",
+  "go.faq.a5.exceptionsLink": "以下の例外",
+  "go.faq.q6": "クレジットをチャージできますか？",
+  "go.faq.a6": "利用枠を追加したい場合は、アカウントでクレジットをチャージできます。",
+  "go.faq.q7": "キャンセルできますか？",
+  "go.faq.a7": "はい、いつでもキャンセル可能です。",
+  "go.faq.q8": "他のコーディングエージェントでGoを使えますか？",
+  "go.faq.a8":
+    "はい、Goは任意のエージェントで使用できます。お使いのコーディングエージェントのセットアップ手順に従ってください。",
+
+  "go.faq.q9": "無料モデルとGoの違いは何ですか？",
+  "go.faq.a9":
+    "無料モデルにはBig Pickleと、その時点で利用可能なプロモーションモデルが含まれ、1日200リクエストの制限があります。GoにはGLM-5、Kimi K2.5、MiniMax M2.5が含まれ、ローリングウィンドウ（5時間、週間、月間）全体でより高いリクエスト制限が適用されます。これは概算で5時間あたり$12、週間$30、月間$60相当です（実際のリクエスト数はモデルと使用状況により異なります）。",
+
+  "zen.api.error.rateLimitExceeded": "レート制限を超えました。後でもう一度お試しください。",
+  "zen.api.error.modelNotSupported": "モデル {{model}} はサポートされていません",
+  "zen.api.error.modelFormatNotSupported": "フォーマット {{format}} ではモデル {{model}} はサポートされていません",
+  "zen.api.error.noProviderAvailable": "利用可能なプロバイダーがありません",
+  "zen.api.error.providerNotSupported": "プロバイダー {{provider}} はサポートされていません",
+  "zen.api.error.missingApiKey": "APIキーがありません。",
+  "zen.api.error.invalidApiKey": "無効なAPIキーです。",
+  "zen.api.error.subscriptionQuotaExceeded":
+    "サブスクリプションの制限を超えました。{{retryIn}} 後に再試行してください。",
+  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
+    "サブスクリプションの制限を超えました。無料モデルは引き続きご利用いただけます。",
+  "zen.api.error.noPaymentMethod": "お支払い方法がありません。こちらからお支払い方法を追加してください: {{billingUrl}}",
+  "zen.api.error.insufficientBalance": "残高が不足しています。こちらから請求を管理してください: {{billingUrl}}",
+  "zen.api.error.workspaceMonthlyLimitReached":
+    "ワークスペースが月額の利用上限 ${{amount}} に達しました。こちらから上限を管理してください: {{billingUrl}}",
+  "zen.api.error.userMonthlyLimitReached":
+    "月額の利用上限 ${{amount}} に達しました。こちらから上限を管理してください: {{membersUrl}}",
+  "zen.api.error.modelDisabled": "モデルが無効です",
 
   "black.meta.title": "OpenCode Black | 世界最高峰のコーディングモデルすべてにアクセス",
   "black.meta.description": "OpenCode Black サブスクリプションプランで、Claude、GPT、Gemini などにアクセス。",
@@ -448,6 +577,7 @@ export const dict = {
   "workspace.reload.updatePaymentMethod": "支払い方法を更新して、もう一度お試しください。",
   "workspace.reload.retrying": "再試行中...",
   "workspace.reload.retry": "再試行",
+  "workspace.reload.error.paymentFailed": "支払いに失敗しました。",
 
   "workspace.payments.title": "支払い履歴",
   "workspace.payments.subtitle": "最近の支払い取引。",
@@ -568,6 +698,10 @@ export const dict = {
   "enterprise.form.send": "送信",
   "enterprise.form.sending": "送信中...",
   "enterprise.form.success": "送信しました。まもなくご連絡いたします。",
+  "enterprise.form.success.submitted": "フォームが正常に送信されました。",
+  "enterprise.form.error.allFieldsRequired": "すべての項目は必須です。",
+  "enterprise.form.error.invalidEmailFormat": "無効なメール形式です。",
+  "enterprise.form.error.internalServer": "内部サーバーエラー。",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "OpenCode Enterpriseとは？",
   "enterprise.faq.a1":
@@ -600,6 +734,7 @@ export const dict = {
   "bench.list.table.agent": "エージェント",
   "bench.list.table.model": "モデル",
   "bench.list.table.score": "スコア",
+  "bench.submission.error.allFieldsRequired": "すべての項目は必須です。",
 
   "bench.detail.title": "ベンチマーク - {{task}}",
   "bench.detail.notFound": "タスクが見つかりません",
