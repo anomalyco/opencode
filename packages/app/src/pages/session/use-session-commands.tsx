@@ -79,6 +79,30 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     return lines.slice(0, 2).join("\n")
   }
 
+  const write = (value: string) => {
+    const body = typeof document === "undefined" ? undefined : document.body
+    if (body) {
+      const textarea = document.createElement("textarea")
+      textarea.value = value
+      textarea.setAttribute("readonly", "")
+      textarea.style.position = "fixed"
+      textarea.style.opacity = "0"
+      textarea.style.pointerEvents = "none"
+      body.appendChild(textarea)
+      textarea.select()
+      const copied = document.execCommand("copy")
+      body.removeChild(textarea)
+      if (copied) return Promise.resolve(true)
+    }
+
+    const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard
+    if (!clipboard?.writeText) return Promise.resolve(false)
+    return clipboard.writeText(value).then(
+      () => true,
+      () => false,
+    )
+  }
+
   const addSelectionToContext = (path: string, selection: FileSelection) => {
     const preview = selectionPreview(path, selection)
     prompt.context.add({ type: "file", path, selection, preview })
@@ -368,6 +392,31 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: () => dialog.show(() => <DialogFork />),
     }),
+    sessionCommand({
+      id: "session.copyID",
+      title: language.t("command.session.copyID"),
+      description: language.t("command.session.copyID.description"),
+      slash: "id",
+      disabled: !params.id,
+      onSelect: async () => {
+        const id = params.id
+        if (!id) return
+        const ok = await write(id)
+        if (!ok) {
+          showToast({
+            title: language.t("toast.session.copyID.failed.title"),
+            variant: "error",
+          })
+          return
+        }
+
+        showToast({
+          title: language.t("session.share.copy.copied"),
+          description: id,
+          variant: "success",
+        })
+      },
+    }),
   ])
 
   const shareCommands = createMemo(() => {
@@ -383,30 +432,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         disabled: !params.id,
         onSelect: async () => {
           if (!params.id) return
-
-          const write = (value: string) => {
-            const body = typeof document === "undefined" ? undefined : document.body
-            if (body) {
-              const textarea = document.createElement("textarea")
-              textarea.value = value
-              textarea.setAttribute("readonly", "")
-              textarea.style.position = "fixed"
-              textarea.style.opacity = "0"
-              textarea.style.pointerEvents = "none"
-              body.appendChild(textarea)
-              textarea.select()
-              const copied = document.execCommand("copy")
-              body.removeChild(textarea)
-              if (copied) return Promise.resolve(true)
-            }
-
-            const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard
-            if (!clipboard?.writeText) return Promise.resolve(false)
-            return clipboard.writeText(value).then(
-              () => true,
-              () => false,
-            )
-          }
 
           const copy = async (url: string, existing: boolean) => {
             const ok = await write(url)

@@ -343,6 +343,22 @@ export function SessionHeader() {
       .catch((err: unknown) => showRequestError(language, err))
   }
 
+  const copySessionID = () => {
+    const id = params.id
+    if (!id) return
+    navigator.clipboard
+      .writeText(id)
+      .then(() => {
+        showToast({
+          variant: "success",
+          icon: "circle-check",
+          title: language.t("session.share.copy.copied"),
+          description: id,
+        })
+      })
+      .catch((err: unknown) => showRequestError(language, err))
+  }
+
   const share = useSessionShare({
     globalSDK,
     currentSession,
@@ -407,6 +423,20 @@ export function SessionHeader() {
                             {language.t("session.header.open.copyPath")}
                           </span>
                         </Button>
+                        <Show when={params.id}>
+                          <div class="self-stretch w-px bg-border-weak-base" />
+                          <Button
+                            variant="ghost"
+                            class="rounded-none h-full py-0 pr-3 pl-0.5 gap-1.5 border-none shadow-none"
+                            onClick={copySessionID}
+                            aria-label={language.t("session.header.open.copySessionID")}
+                          >
+                            <Icon name="copy" size="small" class="text-icon-base" />
+                            <span class="text-12-regular text-text-strong">
+                              {language.t("session.header.open.copySessionID")}
+                            </span>
+                          </Button>
+                        </Show>
                       </div>
                     }
                   >
@@ -495,6 +525,20 @@ export function SessionHeader() {
                                 </div>
                                 <DropdownMenu.ItemLabel>
                                   {language.t("session.header.open.copyPath")}
+                                </DropdownMenu.ItemLabel>
+                              </DropdownMenu.Item>
+                              <DropdownMenu.Item
+                                onSelect={() => {
+                                  setMenu("open", false)
+                                  copySessionID()
+                                }}
+                                disabled={!params.id}
+                              >
+                                <div class="flex size-5 shrink-0 items-center justify-center">
+                                  <Icon name="copy" size="small" class="text-icon-weak" />
+                                </div>
+                                <DropdownMenu.ItemLabel>
+                                  {language.t("session.header.open.copySessionID")}
                                 </DropdownMenu.ItemLabel>
                               </DropdownMenu.Item>
                             </DropdownMenu.Content>
