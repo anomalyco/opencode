@@ -1,15 +1,4 @@
-import {
-  Component,
-  createEffect,
-  createMemo,
-  createSignal,
-  For,
-  Match,
-  on,
-  Show,
-  Switch,
-  type JSX,
-} from "solid-js"
+import { Component, createEffect, createMemo, createSignal, For, Match, on, Show, Switch, type JSX } from "solid-js"
 import stripAnsi from "strip-ansi"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
@@ -48,9 +37,7 @@ import { IconButton } from "./icon-button"
 import { TextShimmer } from "./text-shimmer"
 import { list } from "./text-utils"
 import { GrowBox } from "./grow-box"
-import {
-  COLLAPSIBLE_SPRING,
-} from "./motion"
+import { COLLAPSIBLE_SPRING } from "./motion"
 import { busy, hold, createThrottledValue, useToolFade, useContextToolPending } from "./tool-utils"
 import { ContextToolGroupHeader, ContextToolExpandedList, ContextToolRollingResults } from "./context-tool-results"
 import { ShellRollingResults } from "./shell-rolling-results"
@@ -453,163 +440,186 @@ export function AssistantParts(props: {
   const last = createMemo(() => grouped().keys.at(-1))
 
   return (
-    <For each={grouped().keys}>
-      {(key, idx) => {
-        const item = createMemo(() => grouped().items[key])
-        const ctx = createMemo(() => {
-          const value = item()
-          if (!value) return
-          if (value.type !== "context") return
-          return value
-        })
-        const part = createMemo(() => {
-          const value = item()
-          if (!value) return
-          if (value.type !== "part") return
-          return value
-        })
-        const tail = createMemo(() => last() === key)
-        const tool = createMemo(() => {
-          const value = part()
-          if (!value) return false
-          return value.part.type === "tool"
-        })
-        const context = createMemo(() => !!part()?.context)
-        const contextSpring = createMemo(() => {
-          const entry = part()
-          if (!entry?.context) return undefined
-          if (!groupState.controlled(entry.groupKey)) return undefined
-          return COLLAPSIBLE_SPRING
-        })
-        const contextOpen = createMemo(() => {
-          const collapse = (
-            afterTool?: boolean,
-            groupTail?: boolean,
-            group?: { part: ToolPart; message: AssistantMessage }[],
-          ) =>
-            shouldCollapseGroup(group?.map((item) => item.part.state.status) ?? [], {
-              afterTool,
-              groupTail,
-              working: props.working,
-            })
-          const value = ctx()
-          if (value) return groupState.read(value.groupKey, collapse(value.afterTool, value.tail, value.parts))
-          const entry = part()
-          return groupState.read(entry?.groupKey, collapse(entry?.afterTool, entry?.groupTail, entry?.groupParts))
-        })
-        const visible = createMemo(() => {
-          if (!context()) return true
-          // The context group header is always visible (it has its own expand arrow).
-          if (ctx()) return true
-          // Individual context parts are rendered inside the header's collapsible content,
-          // so they're always hidden at this level.
-          return false
-        })
+    <div data-component="assistant-parts">
+      <For each={grouped().keys}>
+        {(key) => {
+          const item = createMemo(() => grouped().items[key])
+          const ctx = createMemo(() => {
+            const value = item()
+            if (!value) return
+            if (value.type !== "context") return
+            return value
+          })
+          const part = createMemo(() => {
+            const value = item()
+            if (!value) return
+            if (value.type !== "part") return
+            return value
+          })
+          const tail = createMemo(() => last() === key)
+          const tool = createMemo(() => {
+            const value = part()
+            if (!value) return false
+            return value.part.type === "tool"
+          })
+          const context = createMemo(() => !!part()?.context)
+          const contextSpring = createMemo(() => {
+            const entry = part()
+            if (!entry?.context) return undefined
+            if (!groupState.controlled(entry.groupKey)) return undefined
+            return COLLAPSIBLE_SPRING
+          })
+          const contextOpen = createMemo(() => {
+            const collapse = (
+              afterTool?: boolean,
+              groupTail?: boolean,
+              group?: { part: ToolPart; message: AssistantMessage }[],
+            ) =>
+              shouldCollapseGroup(group?.map((item) => item.part.state.status) ?? [], {
+                afterTool,
+                groupTail,
+                working: props.working,
+              })
+            const value = ctx()
+            if (value) return groupState.read(value.groupKey, collapse(value.afterTool, value.tail, value.parts))
+            const entry = part()
+            return groupState.read(entry?.groupKey, collapse(entry?.afterTool, entry?.groupTail, entry?.groupParts))
+          })
+          const visible = createMemo(() => {
+            if (!context()) return true
+            if (ctx()) return true
+            return false
+          })
 
-        const turnSummary = createMemo(() => {
-          const value = part()
-          if (!value) return false
-          if (value.part.type !== "text") return false
-          if (!props.showTurnDiffSummary) return false
-          return props.showAssistantCopyPartID === value.part.id
-        })
-        const fade = createMemo(() => {
-          if (ctx()) return true
-          return tool()
-        })
-        const edge = createMemo(() => {
-          const entry = part()
-          if (!entry) return false
-          if (entry.part.type !== "text") return false
-          if (!props.working) return false
-          return tail()
-        })
-        const watch = createMemo(() => !context() && !tool() && tail() && !turnSummary())
-        const ctxPartsCache = new Map<string, ToolPart>()
-        let ctxPartsPrev: ToolPart[] = []
-        const ctxParts = createMemo(() => {
-          const parts = ctx()?.parts ?? []
-          // Guard against transient empty flash during store recomputation
-          if (parts.length === 0 && ctxPartsPrev.length > 0) return ctxPartsPrev
-          const result: ToolPart[] = []
-          for (const item of parts) {
-            const k = item.part.callID || item.part.id
-            const cached = ctxPartsCache.get(k)
-            if (cached) {
-              result.push(cached)
-            } else {
-              ctxPartsCache.set(k, item.part)
-              result.push(item.part)
+          const turnSummary = createMemo(() => {
+            const value = part()
+            if (!value) return false
+            if (value.part.type !== "text") return false
+            if (!props.showTurnDiffSummary) return false
+            return props.showAssistantCopyPartID === value.part.id
+          })
+          const fade = createMemo(() => {
+            if (ctx()) return true
+            return tool()
+          })
+          const edge = createMemo(() => {
+            const entry = part()
+            if (!entry) return false
+            if (entry.part.type !== "text") return false
+            if (!props.working) return false
+            return tail()
+          })
+          const watch = createMemo(() => !context() && !tool() && tail() && !turnSummary())
+          const ctxPartsCache = new Map<string, ToolPart>()
+          let ctxPartsPrev: ToolPart[] = []
+          const ctxParts = createMemo(() => {
+            const parts = ctx()?.parts ?? []
+            if (parts.length === 0 && ctxPartsPrev.length > 0) return ctxPartsPrev
+            const result: ToolPart[] = []
+            for (const item of parts) {
+              const k = item.part.callID || item.part.id
+              const cached = ctxPartsCache.get(k)
+              if (cached) {
+                result.push(cached)
+              } else {
+                ctxPartsCache.set(k, item.part)
+                result.push(item.part)
+              }
             }
-          }
-          ctxPartsPrev = result
-          return result
-        })
-        const ctxPendingRaw = useContextToolPending(ctxParts, () => !!(props.working && ctx()?.tail))
-        const ctxPending = ctxPendingRaw
-        const ctxHoldOpen = hold(ctxPendingRaw)
-        const shell = createMemo(() => {
-          const value = part()
-          if (!value) return
-          if (value.part.type !== "tool") return
-          if (value.part.tool !== "bash") return
-          return value.part
-        })
-        return (
-          <>
-            <PartGrow
-              animate={props.animate}
-              gap={idx() === 0 || fade() ? 0 : 8}
-              fade={fade()}
-              edge={edge()}
-              edgeHeight={20}
-              edgeOpacity={0.95}
-              edgeIdle={100}
-              edgeFade={0.6}
-              edgeRise={0.1}
-              grow
-              watch={watch()}
-              animateToggle
-              open={visible()}
-              toggleSpring={contextSpring()}
-            >
-              <Show when={ctx()}>
-                {(entry) => (
-                  <ContextToolGroupHeader
-                    parts={ctxParts()}
-                    pending={ctxPending()}
-                    open={contextOpen()}
-                    onOpenChange={(value: boolean) => groupState.write(entry().groupKey, value)}
-                  />
-                )}
-              </Show>
-              <Show when={!shell() ? part() : undefined}>
-                {(entry) => (
-                  <div data-component={entry().context ? "context-tool-step" : undefined}>
-                    <Part
-                      part={entry().part}
-                      message={entry().message}
-                      showAssistantCopyPartID={props.showAssistantCopyPartID}
-                      showTurnDiffSummary={props.showTurnDiffSummary}
-                      turnDiffSummary={props.turnDiffSummary}
-                      defaultOpen={partDefaultOpen(entry().part, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
-                      hideDetails={entry().context}
-                      animate={props.animate}
-                      working={props.working}
-                    />
-                  </div>
-                )}
-              </Show>
-            </PartGrow>
-            <Show when={ctx()}>
-              <ContextToolExpandedList parts={ctxParts()} expanded={!ctxPending() && contextOpen()} />
+            ctxPartsPrev = result
+            return result
+          })
+          const ctxPendingRaw = useContextToolPending(ctxParts, () => !!(props.working && ctx()?.tail))
+          const ctxPending = ctxPendingRaw
+          const ctxHoldOpen = hold(ctxPendingRaw)
+          const shell = createMemo(() => {
+            const value = part()
+            if (!value) return
+            if (value.part.type !== "tool") return
+            if (value.part.tool !== "bash") return
+            return value.part
+          })
+          const kind = createMemo(() => {
+            if (ctx()) return "context"
+            if (shell()) return "shell"
+            const value = part()
+            if (!value) return "part"
+            return value.part.type
+          })
+          const shown = createMemo(() => {
+            if (ctx()) return true
+            if (shell()) return true
+            const entry = part()
+            if (!entry) return false
+            return !entry.context
+          })
+          const partGrowProps = () => ({
+            animate: props.animate,
+            gap: 0,
+            fade: fade(),
+            edge: edge(),
+            edgeHeight: 20,
+            edgeOpacity: 0.95,
+            edgeIdle: 100,
+            edgeFade: 0.6,
+            edgeRise: 0.1,
+            grow: true,
+            watch: watch(),
+            animateToggle: true,
+            open: visible(),
+            toggleSpring: contextSpring(),
+          })
+          return (
+            <Show when={shown()}>
+              <div data-component="assistant-part-item" data-kind={kind()} data-last={tail() ? "true" : "false"}>
+                <Show when={ctx()}>
+                  {(entry) => (
+                    <>
+                      <PartGrow {...partGrowProps()}>
+                        <ContextToolGroupHeader
+                          parts={ctxParts()}
+                          pending={ctxPending()}
+                          open={contextOpen()}
+                          onOpenChange={(value: boolean) => groupState.write(entry().groupKey, value)}
+                        />
+                      </PartGrow>
+                      <ContextToolExpandedList parts={ctxParts()} expanded={!ctxPending() && contextOpen()} />
+                      <ContextToolRollingResults parts={ctxParts()} pending={ctxHoldOpen()} />
+                    </>
+                  )}
+                </Show>
+                <Show when={shell()}>{(value) => <ShellRollingResults part={value()} animate={props.animate} />}</Show>
+                <Show when={!shell() ? part() : undefined}>
+                  {(entry) => (
+                    <Show when={!entry().context}>
+                      <PartGrow {...partGrowProps()}>
+                        <div>
+                          <Part
+                            part={entry().part}
+                            message={entry().message}
+                            showAssistantCopyPartID={props.showAssistantCopyPartID}
+                            showTurnDiffSummary={props.showTurnDiffSummary}
+                            turnDiffSummary={props.turnDiffSummary}
+                            defaultOpen={partDefaultOpen(
+                              entry().part,
+                              props.shellToolDefaultOpen,
+                              props.editToolDefaultOpen,
+                            )}
+                            hideDetails={false}
+                            animate={props.animate}
+                            working={props.working}
+                          />
+                        </div>
+                      </PartGrow>
+                    </Show>
+                  )}
+                </Show>
+              </div>
             </Show>
-            <ContextToolRollingResults parts={ctxParts()} pending={ctxHoldOpen()} />
-            <Show when={shell()}>{(value) => <ShellRollingResults part={value()} animate={props.animate} />}</Show>
-          </>
-        )
-      }}
-    </For>
+          )
+        }}
+      </For>
+    </div>
   )
 }
 
@@ -646,7 +656,6 @@ function ExaOutput(props: { output?: string }) {
 export function registerPartComponent(type: string, component: PartComponent) {
   PART_MAPPING[type] = component
 }
-
 
 export function UserMessageDisplay(props: {
   message: UserMessage
@@ -1638,7 +1647,7 @@ ToolRegistry.register({
           variant="panel"
           {...props}
           icon="code-lines"
-          springContent
+          defer
           trigger={
             <div data-component="edit-trigger">
               <div data-slot="message-part-title-area">
@@ -1709,7 +1718,7 @@ ToolRegistry.register({
           variant="panel"
           {...props}
           icon="code-lines"
-          springContent
+          defer
           trigger={
             <div data-component="write-trigger">
               <div data-slot="message-part-title-area">

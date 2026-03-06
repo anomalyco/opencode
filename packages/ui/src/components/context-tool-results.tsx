@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, onMount } from "solid-js"
+import { createMemo, createSignal, For, onMount } from "solid-js"
 import type { ToolPart } from "@opencode-ai/sdk/v2"
 import { getFilename } from "@opencode-ai/util/path"
 import { useI18n } from "../context/i18n"
@@ -7,15 +7,9 @@ import { ToolCall } from "./basic-tool"
 import { ToolStatusTitle } from "./tool-status-title"
 import { AnimatedCountList } from "./tool-count-summary"
 import { RollingResults } from "./rolling-results"
-import {
-  animate,
-  clearFadeStyles,
-  clearMaskStyles,
-  GROW_SPRING,
-  WIPE_MASK,
-} from "./motion"
+import { GROW_SPRING } from "./motion"
 import { useSpring } from "./motion-spring"
-import { busy, updateScrollMask, useCollapsible } from "./tool-utils"
+import { busy, updateScrollMask, useCollapsible, useRowWipe } from "./tool-utils"
 
 function contextToolLabel(part: ToolPart): { action: string; detail: string } {
   const state = part.state
@@ -180,35 +174,11 @@ export function ContextToolRollingResults(props: { parts: ToolPart[]; pending: b
               <span data-slot="context-tool-rolling-action">{label().action}</span>
               {(() => {
                 const [detailRef, setDetailRef] = createSignal<HTMLSpanElement>()
-                createEffect(() => {
-                  const el = detailRef()
-                  const d = label().detail
-                  if (!el || !d) return
-                  if (wiped.has(k)) return
-                  wiped.add(k)
-                  if (reduce()) return
-                  el.style.maskImage = WIPE_MASK
-                  el.style.webkitMaskImage = WIPE_MASK
-                  el.style.maskSize = "240% 100%"
-                  el.style.webkitMaskSize = "240% 100%"
-                  el.style.maskRepeat = "no-repeat"
-                  el.style.webkitMaskRepeat = "no-repeat"
-                  el.style.maskPosition = "100% 0%"
-                  el.style.webkitMaskPosition = "100% 0%"
-                  animate(
-                    el,
-                    {
-                      opacity: [0, 1],
-                      filter: ["blur(2px)", "blur(0px)"],
-                      transform: ["translateX(-0.06em)", "translateX(0)"],
-                      maskPosition: "0% 0%",
-                    },
-                    GROW_SPRING,
-                  ).finished.then(() => {
-                    if (!el) return
-                    clearFadeStyles(el)
-                    clearMaskStyles(el)
-                  })
+                useRowWipe({
+                  id: () => k,
+                  text: () => label().detail,
+                  ref: detailRef,
+                  seen: wiped,
                 })
                 return (
                   <span

@@ -17,6 +17,7 @@ export type RollingResultsProps<T> = {
   animate?: boolean
   class?: string
   empty?: JSX.Element
+  noFadeOnCollapse?: boolean
 }
 
 export function RollingResults<T>(props: RollingResultsProps<T>) {
@@ -54,6 +55,7 @@ export function RollingResults<T>(props: RollingResultsProps<T>) {
   })
   const open = createMemo(() => props.open !== false)
   const active = createMemo(() => (props.animate !== false || props.spring !== undefined) && !reducedMotion())
+  const noFade = () => props.noFadeOnCollapse === true
   const overflowing = createMemo(() => count() > rows())
   const shown = createMemo(() => Math.min(rows(), count()))
   const step = createMemo(() => rowHeight() + rowGap())
@@ -142,22 +144,24 @@ export function RollingResults<T>(props: RollingResultsProps<T>) {
         }
         // Wait for the current offset animation to settle (if any).
         const done = shift?.finished ?? Promise.resolve()
-        done.catch(() => {}).then(() => {
-          if (props.scrollable !== true) return
+        done
+          .catch(() => {})
+          .then(() => {
+            if (props.scrollable !== true) return
 
-          // Batch the signal update — Solid updates the DOM synchronously:
-          // rendered() returns all items, skipped() returns 0, padding-top removed,
-          // data-scrollable becomes "true".
-          batch(() => setScrollReady(true))
+            // Batch the signal update — Solid updates the DOM synchronously:
+            // rendered() returns all items, skipped() returns 0, padding-top removed,
+            // data-scrollable becomes "true".
+            batch(() => setScrollReady(true))
 
-          // Now the DOM has all items. Safe to switch layout strategy.
-          // CSS handles `transform: none !important` on [data-scrollable="true"].
-          if (windowEl) {
-            windowEl.style.overflowY = "auto"
-            windowEl.scrollTop = windowEl.scrollHeight
-          }
-          updateScrollMask()
-        })
+            // Now the DOM has all items. Safe to switch layout strategy.
+            // CSS handles `transform: none !important` on [data-scrollable="true"].
+            if (windowEl) {
+              windowEl.style.overflowY = "auto"
+              windowEl.scrollTop = windowEl.scrollHeight
+            }
+            updateScrollMask()
+          })
       },
     ),
   )
@@ -239,26 +243,28 @@ export function RollingResults<T>(props: RollingResultsProps<T>) {
         resize?.stop()
         resize = undefined
         setView(next)
+        view.style.opacity = ""
         clearEdge()
         return
       }
       const collapsing = next === 0 && prev !== undefined && prev > 0
       const expanding = prev === 0 && next > 0
       resize?.stop()
+      view.style.opacity = ""
       applyEdge()
       const spring = props.spring ?? GROW_SPRING
       const anim = collapsing
-        ? animate(view, { height: `${next}px`, opacity: 0 }, spring)
+        ? animate(view, noFade() ? { height: `${next}px` } : { height: `${next}px`, opacity: 0 }, spring)
         : expanding
-          ? animate(view, { height: `${next}px`, opacity: [0, 1] }, spring)
+          ? animate(view, noFade() ? { height: `${next}px` } : { height: `${next}px`, opacity: [0, 1] }, spring)
           : animate(view, { height: `${next}px` }, spring)
       resize = anim
       anim.finished
         .catch(() => {})
         .finally(() => {
+          view.style.opacity = ""
           if (resize !== anim) return
           setView(next)
-          if (collapsing || expanding) view!.style.opacity = ""
           resize = undefined
           clearEdge()
         })
@@ -299,7 +305,11 @@ export function RollingResults<T>(props: RollingResultsProps<T>) {
             <Show when={list().length === 0 && props.empty !== undefined}>
               <div data-slot="rolling-results-empty">{props.empty}</div>
             </Show>
-            <div ref={track} data-slot="rolling-results-track" style={{ "padding-top": scrollReady() ? undefined : `${skipped() * step()}px` }}>
+            <div
+              ref={track}
+              data-slot="rolling-results-track"
+              style={{ "padding-top": scrollReady() ? undefined : `${skipped() * step()}px` }}
+            >
               <For each={rendered()}>
                 {(item, index) => (
                   <div data-slot="rolling-results-row" data-key={key(item, index())}>

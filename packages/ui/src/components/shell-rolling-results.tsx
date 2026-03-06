@@ -8,15 +8,17 @@ import { Icon } from "./icon"
 import { IconButton } from "./icon-button"
 import { TextShimmer } from "./text-shimmer"
 import { Tooltip } from "./tooltip"
-import {
-  animate,
-  clearFadeStyles,
-  clearMaskStyles,
-  GROW_SPRING,
-  WIPE_MASK,
-} from "./motion"
+import { GROW_SPRING } from "./motion"
 import { useSpring } from "./motion-spring"
-import { busy, createThrottledValue, hold, updateScrollMask, useCollapsible, useToolFade } from "./tool-utils"
+import {
+  busy,
+  createThrottledValue,
+  hold,
+  updateScrollMask,
+  useCollapsible,
+  useRowWipe,
+  useToolFade,
+} from "./tool-utils"
 
 function ShellRollingSubtitle(props: { text: string; animate?: boolean }) {
   let ref: HTMLSpanElement | undefined
@@ -65,7 +67,6 @@ function ShellRollingCommand(props: { text: string; animate?: boolean }) {
 
 function ShellExpanded(props: { cmd: string; out: string; open: boolean }) {
   const i18n = useI18n()
-  const fade = 12
   const rows = 10
   const rowHeight = 22
   const max = rows * rowHeight
@@ -78,7 +79,7 @@ function ShellExpanded(props: { cmd: string; out: string; open: boolean }) {
   const [cap, setCap] = createSignal(max)
 
   const updateMask = () => {
-    if (scrollRef) updateScrollMask(scrollRef, fade)
+    if (scrollRef) updateScrollMask(scrollRef)
   }
 
   const resize = () => {
@@ -286,42 +287,11 @@ export function ShellRollingResults(props: { part: ToolPart; animate?: boolean }
           getKey={(row) => row.id}
           render={(row) => {
             const [textRef, setTextRef] = createSignal<HTMLSpanElement>()
-            createEffect(() => {
-              const el = textRef()
-              if (!el || !row.text) return
-              if (wiped.has(row.id)) return
-              wiped.add(row.id)
-              if (reduce()) return
-              el.style.maskImage = WIPE_MASK
-              el.style.webkitMaskImage = WIPE_MASK
-              el.style.maskSize = "240% 100%"
-              el.style.webkitMaskSize = "240% 100%"
-              el.style.maskRepeat = "no-repeat"
-              el.style.webkitMaskRepeat = "no-repeat"
-              el.style.maskPosition = "100% 0%"
-              el.style.webkitMaskPosition = "100% 0%"
-              let done = false
-              const clear = () => {
-                if (done) return
-                done = true
-                clearFadeStyles(el)
-                clearMaskStyles(el)
-              }
-              const anim = animate(
-                el,
-                {
-                  opacity: [0, 1],
-                  filter: ["blur(2px)", "blur(0px)"],
-                  transform: ["translateX(-0.06em)", "translateX(0)"],
-                  maskPosition: "0% 0%",
-                },
-                GROW_SPRING,
-              )
-              anim.finished.catch(() => {}).finally(clear)
-              onCleanup(() => {
-                anim.stop()
-                clear()
-              })
+            useRowWipe({
+              id: () => row.id,
+              text: () => row.text,
+              ref: textRef,
+              seen: wiped,
             })
             return (
               <div data-component="shell-rolling-row">

@@ -108,54 +108,59 @@ export function useCollapsible(options: {
 }) {
   let heightAnim: AnimationPlaybackControls | undefined
   let fadeAnim: AnimationPlaybackControls | undefined
+  let gen = 0
 
   createEffect(
-    on(options.open, (isOpen) => {
-      const content = options.content()
-      const body = options.body()
-      if (!content || !body) return
-      heightAnim?.stop()
-      fadeAnim?.stop()
-      if (isOpen) {
-        content.style.display = ""
-        content.style.height = "0px"
-        body.style.opacity = "0"
-        body.style.filter = "blur(2px)"
-        fadeAnim = animate(body, { opacity: [0, 1], filter: ["blur(2px)", "blur(0px)"] }, COLLAPSIBLE_SPRING)
-        queueMicrotask(() => {
-          if (!options.open()) return
-          const c = options.content()
-          if (!c) return
-          const h = options.measure?.() ?? Math.ceil(body.getBoundingClientRect().height)
-          heightAnim = animate(c, { height: ["0px", `${h}px`] }, COLLAPSIBLE_SPRING)
-          heightAnim.finished
-            .catch(() => {})
-            .then(() => {
-              if (!options.open()) return
-              const el = options.content()
-              if (!el) return
-              el.style.height = "auto"
-              options.onOpen?.()
-            })
-        })
-        return
-      }
+    on(
+      options.open,
+      (isOpen) => {
+        const content = options.content()
+        const body = options.body()
+        if (!content || !body) return
+        heightAnim?.stop()
+        fadeAnim?.stop()
+        const id = ++gen
+        if (isOpen) {
+          content.style.display = ""
+          content.style.height = "0px"
+          body.style.opacity = "0"
+          body.style.filter = "blur(2px)"
+          fadeAnim = animate(body, { opacity: [0, 1], filter: ["blur(2px)", "blur(0px)"] }, COLLAPSIBLE_SPRING)
+          queueMicrotask(() => {
+            if (gen !== id) return
+            const c = options.content()
+            if (!c) return
+            const h = options.measure?.() ?? Math.ceil(body.getBoundingClientRect().height)
+            heightAnim = animate(c, { height: ["0px", `${h}px`] }, COLLAPSIBLE_SPRING)
+            heightAnim.finished.then(
+              () => {
+                if (gen !== id) return
+                c.style.height = "auto"
+                options.onOpen?.()
+              },
+              () => {},
+            )
+          })
+          return
+        }
 
-      const h = content.getBoundingClientRect().height
-      heightAnim = animate(content, { height: [`${h}px`, "0px"] }, COLLAPSIBLE_SPRING)
-      fadeAnim = animate(body, { opacity: [1, 0], filter: ["blur(0px)", "blur(2px)"] }, COLLAPSIBLE_SPRING)
-      heightAnim.finished
-        .catch(() => {})
-        .then(() => {
-          if (options.open()) return
-          const el = options.content()
-          if (!el) return
-          el.style.display = "none"
-        })
-    }, { defer: true }),
+        const h = content.getBoundingClientRect().height
+        heightAnim = animate(content, { height: [`${h}px`, "0px"] }, COLLAPSIBLE_SPRING)
+        fadeAnim = animate(body, { opacity: [1, 0], filter: ["blur(0px)", "blur(2px)"] }, COLLAPSIBLE_SPRING)
+        heightAnim.finished.then(
+          () => {
+            if (gen !== id) return
+            content.style.display = "none"
+          },
+          () => {},
+        )
+      },
+      { defer: true },
+    ),
   )
 
   onCleanup(() => {
+    ++gen
     heightAnim?.stop()
     fadeAnim?.stop()
   })
@@ -168,6 +173,84 @@ export function useContextToolPending(parts: () => ToolPart[], working?: () => b
     if (!anyRunning() && !working?.()) setSettled(true)
   })
   return createMemo(() => !settled() && (!!working?.() || anyRunning()))
+}
+
+export function useRowWipe(opts: {
+  id: () => string
+  text: () => string | undefined
+  ref: () => HTMLElement | undefined
+  seen: Set<string>
+}) {
+  const reduce = prefersReducedMotion
+
+  createEffect(() => {
+    const id = opts.id()
+    const txt = opts.text()
+    const el = opts.ref()
+    if (!el) return
+    if (!txt) {
+      clearFadeStyles(el)
+      clearMaskStyles(el)
+      return
+    }
+    if (reduce() || typeof window === "undefined") {
+      clearFadeStyles(el)
+      clearMaskStyles(el)
+      return
+    }
+    if (opts.seen.has(id)) {
+      clearFadeStyles(el)
+      clearMaskStyles(el)
+      return
+    }
+    opts.seen.add(id)
+
+    el.style.maskImage = WIPE_MASK
+    el.style.webkitMaskImage = WIPE_MASK
+    el.style.maskSize = "240% 100%"
+    el.style.webkitMaskSize = "240% 100%"
+    el.style.maskRepeat = "no-repeat"
+    el.style.webkitMaskRepeat = "no-repeat"
+    el.style.maskPosition = "100% 0%"
+    el.style.webkitMaskPosition = "100% 0%"
+    el.style.opacity = "0"
+    el.style.filter = "blur(2px)"
+    el.style.transform = "translateX(-0.06em)"
+
+    let done = false
+    const clear = () => {
+      if (done) return
+      done = true
+      clearFadeStyles(el)
+      clearMaskStyles(el)
+    }
+    if (typeof requestAnimationFrame !== "function") {
+      clear()
+      return
+    }
+    let anim: AnimationPlaybackControls | undefined
+    let frame: number | undefined = requestAnimationFrame(() => {
+      frame = undefined
+      const node = opts.ref()
+      if (!node) return
+      anim = animate(
+        node,
+        {
+          opacity: [0, 1],
+          filter: ["blur(2px)", "blur(0px)"],
+          transform: ["translateX(-0.06em)", "translateX(0)"],
+          maskPosition: "0% 0%",
+        },
+        GROW_SPRING,
+      )
+
+      anim.finished.catch(() => {}).finally(clear)
+    })
+
+    onCleanup(() => {
+      if (frame !== undefined) cancelAnimationFrame(frame)
+    })
+  })
 }
 
 export function useToolFade(

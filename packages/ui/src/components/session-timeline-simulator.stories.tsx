@@ -549,15 +549,26 @@ function buildReadEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
   const events: TimelineEvent[] = [
     { type: "part", part: readPart },
     { type: "delay", ms: 60 },
-    { type: "part-update", messageID: turn.asstMsgID, partID: readPart.id, patch: { state: { status: "pending", input: { filePath }, raw: JSON.stringify({ filePath }) } } },
+    {
+      type: "part-update",
+      messageID: turn.asstMsgID,
+      partID: readPart.id,
+      patch: { state: { status: "pending", input: { filePath }, raw: JSON.stringify({ filePath }) } },
+    },
     { type: "delay", ms: 60 },
     { type: "part-update", messageID: turn.asstMsgID, partID: readPart.id, patch: toolRunning(readPart, fileName, t) },
   ]
-  return [events, {
-    part: readPart, turn, title: fileName, startTime: t,
-    completeOutput: `// contents of ${fileName}`,
-    completePatch: toolCompleted(readPart, fileName, `// contents of ${fileName}`, t, t + 300),
-  }]
+  return [
+    events,
+    {
+      part: readPart,
+      turn,
+      title: fileName,
+      startTime: t,
+      completeOutput: `// contents of ${fileName}`,
+      completePatch: toolCompleted(readPart, fileName, `// contents of ${fileName}`, t, t + 300),
+    },
+  ]
 }
 
 // Bash output chunks — each press of `b` appends the next chunk to the running tool
@@ -656,13 +667,25 @@ function buildBashStartEvents(turn: TurnState): [TimelineEvent[], RunningTool, n
   const events: TimelineEvent[] = [
     { type: "part", part: shellPart },
     { type: "delay", ms: 120 },
-    { type: "part-update", messageID: turn.asstMsgID, partID: shellPart.id, patch: toolRunning(shellPart, input.command, t) },
+    {
+      type: "part-update",
+      messageID: turn.asstMsgID,
+      partID: shellPart.id,
+      patch: toolRunning(shellPart, input.command, t),
+    },
   ]
-  return [events, {
-    part: shellPart, turn, title: input.command, startTime: t,
-    completeOutput: fullOutput,
-    completePatch: toolCompleted(shellPart, input.command, fullOutput, t, t + 2000),
-  }, cmdIdx]
+  return [
+    events,
+    {
+      part: shellPart,
+      turn,
+      title: input.command,
+      startTime: t,
+      completeOutput: fullOutput,
+      completePatch: toolCompleted(shellPart, input.command, fullOutput, t, t + 2000),
+    },
+    cmdIdx,
+  ]
 }
 
 function buildBashChunkEvents(
@@ -681,7 +704,13 @@ function buildBashChunkEvents(
       messageID: turn.asstMsgID,
       partID: part.id,
       patch: {
-        state: { status: "running", input: part.state.input, title: part.state.input?.command, output: newOutput, time: { start: Date.now() } },
+        state: {
+          status: "running",
+          input: part.state.input,
+          title: part.state.input?.command,
+          output: newOutput,
+          time: { start: Date.now() },
+        },
       },
     },
   ]
@@ -723,15 +752,26 @@ function buildGrepEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
   const events: TimelineEvent[] = [
     { type: "part", part: grepPart },
     { type: "delay", ms: 60 },
-    { type: "part-update", messageID: turn.asstMsgID, partID: grepPart.id, patch: { state: { status: "pending", input, raw: JSON.stringify(input) } } },
+    {
+      type: "part-update",
+      messageID: turn.asstMsgID,
+      partID: grepPart.id,
+      patch: { state: { status: "pending", input, raw: JSON.stringify(input) } },
+    },
     { type: "delay", ms: 60 },
     { type: "part-update", messageID: turn.asstMsgID, partID: grepPart.id, patch: toolRunning(grepPart, title, t) },
   ]
-  return [events, {
-    part: grepPart, turn, title, startTime: t,
-    completeOutput: "14 matches found",
-    completePatch: toolCompleted(grepPart, title, "14 matches found", t, t + 400),
-  }]
+  return [
+    events,
+    {
+      part: grepPart,
+      turn,
+      title,
+      startTime: t,
+      completeOutput: "14 matches found",
+      completePatch: toolCompleted(grepPart, title, "14 matches found", t, t + 400),
+    },
+  ]
 }
 
 const globPatterns = ["**/*.ts", "**/*.tsx", "src/**/*.css", "packages/*/package.json", "**/*.test.ts"]
@@ -745,15 +785,26 @@ function buildGlobEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
   const events: TimelineEvent[] = [
     { type: "part", part: globPart },
     { type: "delay", ms: 60 },
-    { type: "part-update", messageID: turn.asstMsgID, partID: globPart.id, patch: { state: { status: "pending", input, raw: JSON.stringify(input) } } },
+    {
+      type: "part-update",
+      messageID: turn.asstMsgID,
+      partID: globPart.id,
+      patch: { state: { status: "pending", input, raw: JSON.stringify(input) } },
+    },
     { type: "delay", ms: 60 },
     { type: "part-update", messageID: turn.asstMsgID, partID: globPart.id, patch: toolRunning(globPart, pattern, t) },
   ]
-  return [events, {
-    part: globPart, turn, title: pattern, startTime: t,
-    completeOutput: "23 files matched",
-    completePatch: toolCompleted(globPart, pattern, "23 files matched", t, t + 200),
-  }]
+  return [
+    events,
+    {
+      part: globPart,
+      turn,
+      title: pattern,
+      startTime: t,
+      completeOutput: "23 files matched",
+      completePatch: toolCompleted(globPart, pattern, "23 files matched", t, t + 200),
+    },
+  ]
 }
 
 const listPaths = [
@@ -773,15 +824,26 @@ function buildListEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
   const events: TimelineEvent[] = [
     { type: "part", part: listPart },
     { type: "delay", ms: 60 },
-    { type: "part-update", messageID: turn.asstMsgID, partID: listPart.id, patch: { state: { status: "pending", input, raw: JSON.stringify(input) } } },
+    {
+      type: "part-update",
+      messageID: turn.asstMsgID,
+      partID: listPart.id,
+      patch: { state: { status: "pending", input, raw: JSON.stringify(input) } },
+    },
     { type: "delay", ms: 60 },
     { type: "part-update", messageID: turn.asstMsgID, partID: listPart.id, patch: toolRunning(listPart, dirName, t) },
   ]
-  return [events, {
-    part: listPart, turn, title: dirName, startTime: t,
-    completeOutput: "12 entries",
-    completePatch: toolCompleted(listPart, dirName, "12 entries", t, t + 150),
-  }]
+  return [
+    events,
+    {
+      part: listPart,
+      turn,
+      title: dirName,
+      startTime: t,
+      completeOutput: "12 entries",
+      completePatch: toolCompleted(listPart, dirName, "12 entries", t, t + 150),
+    },
+  ]
 }
 
 const fetchUrls = [
@@ -801,15 +863,26 @@ function buildWebFetchEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
   const events: TimelineEvent[] = [
     { type: "part", part: fetchPart },
     { type: "delay", ms: 60 },
-    { type: "part-update", messageID: turn.asstMsgID, partID: fetchPart.id, patch: { state: { status: "pending", input, raw: JSON.stringify(input) } } },
+    {
+      type: "part-update",
+      messageID: turn.asstMsgID,
+      partID: fetchPart.id,
+      patch: { state: { status: "pending", input, raw: JSON.stringify(input) } },
+    },
     { type: "delay", ms: 80 },
     { type: "part-update", messageID: turn.asstMsgID, partID: fetchPart.id, patch: toolRunning(fetchPart, url, t) },
   ]
-  return [events, {
-    part: fetchPart, turn, title: url, startTime: t,
-    completeOutput: "Fetched 24.3 KB",
-    completePatch: toolCompleted(fetchPart, url, "Fetched 24.3 KB", t, t + 1200),
-  }]
+  return [
+    events,
+    {
+      part: fetchPart,
+      turn,
+      title: url,
+      startTime: t,
+      completeOutput: "Fetched 24.3 KB",
+      completePatch: toolCompleted(fetchPart, url, "Fetched 24.3 KB", t, t + 1200),
+    },
+  ]
 }
 
 function buildEditEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
@@ -831,8 +904,17 @@ function buildEditEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
     { type: "part", part: editPart },
     { type: "delay", ms: 100 },
     {
-      type: "part-update", messageID: turn.asstMsgID, partID: editPart.id, patch: {
-        state: { status: "running", input: editPart.state.input, title: "bash.ts", metadata: { filediff, diagnostics: {} }, time: { start: t } },
+      type: "part-update",
+      messageID: turn.asstMsgID,
+      partID: editPart.id,
+      patch: {
+        state: {
+          status: "running",
+          input: editPart.state.input,
+          title: "bash.ts",
+          metadata: { filediff, diagnostics: {} },
+          time: { start: t },
+        },
       },
     },
   ]
@@ -845,11 +927,134 @@ function buildEditEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
       time: { start: t, end: t + 300 },
     },
   }
-  return [events, {
-    part: editPart, turn, title: "bash.ts", startTime: t,
-    completeOutput: "",
-    completePatch,
-  }]
+  return [
+    events,
+    {
+      part: editPart,
+      turn,
+      title: "bash.ts",
+      startTime: t,
+      completeOutput: "",
+      completePatch,
+    },
+  ]
+}
+
+function buildWriteEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
+  const t = Date.now()
+  const writeInput = {
+    filePath: "/Users/kit/project/packages/opencode/src/util/helpers.ts",
+    content: `export function sanitize(cmd: string): string {\n  return cmd.replace(/[;&|]/g, "")\n}\n`,
+  }
+  const writePart = mkTool(turn.asstMsgID, "write", writeInput)
+  const events: TimelineEvent[] = [
+    { type: "part", part: writePart },
+    { type: "delay", ms: 100 },
+    {
+      type: "part-update",
+      messageID: turn.asstMsgID,
+      partID: writePart.id,
+      patch: {
+        state: {
+          status: "running",
+          input: writePart.state.input,
+          title: "helpers.ts",
+          metadata: {},
+          time: { start: t },
+        },
+      },
+    },
+  ]
+  const completePatch = {
+    state: {
+      status: "completed",
+      input: writeInput,
+      title: "Created helpers.ts",
+      metadata: {},
+      time: { start: t, end: t + 300 },
+    },
+  }
+  return [
+    events,
+    {
+      part: writePart,
+      turn,
+      title: "helpers.ts",
+      startTime: t,
+      completeOutput: "",
+      completePatch,
+    },
+  ]
+}
+
+function buildApplyPatchEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
+  const t = Date.now()
+  const patchInput = {
+    patch: `--- a/packages/opencode/src/tool/bash.ts\n+++ b/packages/opencode/src/tool/bash.ts\n@@ -1,3 +1,4 @@\n+import { sanitize } from "../util/helpers"\n const cmd = input.command\n const result = await run(cmd)\n return result\n--- a/packages/opencode/src/util/helpers.ts\n+++ b/packages/opencode/src/util/helpers.ts\n@@ -1,3 +1,5 @@\n export function sanitize(cmd: string): string {\n-  return cmd.replace(/[;&|]/g, "")\n+  return cmd\n+    .replace(/[;&|]/g, "")\n+    .trim()\n }\n`,
+  }
+  const patchPart = mkTool(turn.asstMsgID, "apply_patch", patchInput)
+  const files = [
+    {
+      filePath: "/Users/kit/project/packages/opencode/src/tool/bash.ts",
+      relativePath: "packages/opencode/src/tool/bash.ts",
+      type: "update",
+      diff: "",
+      before: "const cmd = input.command\nconst result = await run(cmd)\nreturn result",
+      after:
+        'import { sanitize } from "../util/helpers"\nconst cmd = input.command\nconst result = await run(cmd)\nreturn result',
+      additions: 1,
+      deletions: 0,
+    },
+    {
+      filePath: "/Users/kit/project/packages/opencode/src/util/helpers.ts",
+      relativePath: "packages/opencode/src/util/helpers.ts",
+      type: "update",
+      diff: "",
+      before: 'export function sanitize(cmd: string): string {\n  return cmd.replace(/[;&|]/g, "")\n}',
+      after:
+        'export function sanitize(cmd: string): string {\n  return cmd\n    .replace(/[;&|]/g, "")\n    .trim()\n}',
+      additions: 3,
+      deletions: 1,
+    },
+  ]
+  const events: TimelineEvent[] = [
+    { type: "part", part: patchPart },
+    { type: "delay", ms: 100 },
+    {
+      type: "part-update",
+      messageID: turn.asstMsgID,
+      partID: patchPart.id,
+      patch: {
+        state: {
+          status: "running",
+          input: patchPart.state.input,
+          title: "2 files",
+          metadata: { files },
+          time: { start: t },
+        },
+      },
+    },
+  ]
+  const completePatch = {
+    state: {
+      status: "completed",
+      input: patchInput,
+      title: "Applied patch to 2 files",
+      metadata: { files },
+      time: { start: t, end: t + 500 },
+    },
+  }
+  return [
+    events,
+    {
+      part: patchPart,
+      turn,
+      title: "2 files",
+      startTime: t,
+      completeOutput: "",
+      completePatch,
+    },
+  ]
 }
 
 function buildErrorEvents(turn: TurnState): TimelineEvent[] {
@@ -859,7 +1064,12 @@ function buildErrorEvents(turn: TurnState): TimelineEvent[] {
   return [
     { type: "part", part: errPart },
     { type: "delay", ms: 100 },
-    { type: "part-update", messageID: turn.asstMsgID, partID: errPart.id, patch: toolRunning(errPart, input.command, t) },
+    {
+      type: "part-update",
+      messageID: turn.asstMsgID,
+      partID: errPart.id,
+      patch: toolRunning(errPart, input.command, t),
+    },
     { type: "delay", ms: 200 },
     {
       type: "part-update",
@@ -941,7 +1151,8 @@ function SessionTimelineSimulator() {
   const [runningTool, setRunningTool] = createSignal<RunningTool | null>(null)
 
   // Bash streaming state — tracks the current bash tool being streamed into
-  let bashState: { cmdIdx: number; chunkIdx: number; currentOutput: string; part: ToolPart; turn: TurnState } | null = null
+  let bashState: { cmdIdx: number; chunkIdx: number; currentOutput: string; part: ToolPart; turn: TurnState } | null =
+    null
 
   function startNewTurn() {
     turnCounter++
@@ -1009,6 +1220,71 @@ function SessionTimelineSimulator() {
     triggerTool(builder)
   }
 
+  function flow(turn: TurnState, build: (turn: TurnState) => [TimelineEvent[], RunningTool]) {
+    const [evts, run] = build(turn)
+    return [
+      ...evts,
+      { type: "delay", ms: 120 },
+      { type: "part-update", messageID: turn.asstMsgID, partID: run.part.id, patch: run.completePatch },
+      { type: "delay", ms: 80 },
+    ]
+  }
+
+  function shell(turn: TurnState) {
+    const [evts, run, idx] = buildBashStartEvents(turn)
+    const [a, out] = buildBashChunkEvents(turn, run.part, idx, 0, "")
+    const [b] = buildBashChunkEvents(turn, run.part, idx, 1, out)
+    return [
+      ...evts,
+      { type: "delay", ms: 120 },
+      ...a,
+      { type: "delay", ms: 80 },
+      ...b,
+      { type: "delay", ms: 80 },
+      { type: "part-update", messageID: turn.asstMsgID, partID: run.part.id, patch: run.completePatch },
+      { type: "delay", ms: 100 },
+    ]
+  }
+
+  function pattern() {
+    const prev = currentTurn()
+    const turn = startNewTurn()
+    const prompt = "Can you run one pass with every tool so I can preview the full timeline UI?"
+    const evts: TimelineEvent[] = [...drainRunning()]
+    if (prev) {
+      evts.push(
+        { type: "message", message: mkAssistant(prev.asstMsgID, prev.userMsgID, Date.now()) },
+        { type: "status", status: { type: "idle" } },
+        { type: "delay", ms: 80 },
+      )
+    }
+    evts.push(
+      { type: "status", status: { type: "busy" } },
+      { type: "message", message: mkUser(turn.userMsgID) },
+      { type: "part", part: mkText(turn.userMsgID, prompt) },
+      { type: "delay", ms: 120 },
+      { type: "message", message: mkAssistant(turn.asstMsgID, turn.userMsgID) },
+      { type: "delay", ms: 100 },
+      ...flow(turn, buildReadEvents),
+      ...flow(turn, buildGrepEvents),
+      ...flow(turn, buildGlobEvents),
+      ...flow(turn, buildListEvents),
+      ...shell(turn),
+      ...flow(turn, buildWebFetchEvents),
+      ...flow(turn, buildEditEvents),
+      ...flow(turn, buildWriteEvents),
+      ...flow(turn, buildApplyPatchEvents),
+      ...buildTextEvents(turn),
+      { type: "delay", ms: 120 },
+      { type: "message", message: mkAssistant(turn.asstMsgID, turn.userMsgID, Date.now()) },
+      { type: "status", status: { type: "idle" } },
+    )
+    setCurrentTurn(null)
+    setRunningTool(null)
+    bashState = null
+    pb.appendAndPlay(evts)
+  }
+
   function completeTurn() {
     const turn = currentTurn()
     if (!turn) return
@@ -1042,15 +1318,22 @@ function SessionTimelineSimulator() {
   // --- Flat action list ---
 
   const actions: Action[] = [
+    { key: "p", label: "Pattern", handler: () => pattern() },
     { key: "e", label: "Explore", handler: () => triggerExplore() },
     {
-      key: "b", label: "Bash", handler: () => {
+      key: "b",
+      label: "Bash",
+      handler: () => {
         if (bashState) {
           // Already streaming — append next chunk
           const chunks = bashOutputChunks[bashState.cmdIdx]
           if (bashState.chunkIdx < chunks.length) {
             const [chunkEvents, newOutput] = buildBashChunkEvents(
-              bashState.turn, bashState.part, bashState.cmdIdx, bashState.chunkIdx, bashState.currentOutput,
+              bashState.turn,
+              bashState.part,
+              bashState.cmdIdx,
+              bashState.chunkIdx,
+              bashState.currentOutput,
             )
             bashState.chunkIdx++
             bashState.currentOutput = newOutput
@@ -1075,23 +1358,40 @@ function SessionTimelineSimulator() {
       },
     },
     {
-      key: "t", label: "Text", handler: () => {
+      key: "t",
+      label: "Text",
+      handler: () => {
         const drain = drainRunning()
         const turn = ensureTurn()
         pb.appendAndPlay([...drain, ...buildTextEvents(turn)])
       },
     },
-    { key: "d", label: "Edit", handler: () => triggerTool(buildEditEvents) },
+    {
+      key: "d",
+      label: "Edit/Write/Patch",
+      handler: (() => {
+        const builders = [buildEditEvents, buildWriteEvents, buildApplyPatchEvents]
+        let idx = 0
+        return () => {
+          triggerTool(builders[idx % builders.length]!)
+          idx++
+        }
+      })(),
+    },
     { key: "w", label: "WebFetch", handler: () => triggerTool(buildWebFetchEvents) },
     {
-      key: "x", label: "Error", handler: () => {
+      key: "x",
+      label: "Error",
+      handler: () => {
         const drain = drainRunning()
         const turn = ensureTurn()
         pb.appendAndPlay([...drain, ...buildErrorEvents(turn)])
       },
     },
     {
-      key: "u", label: "User", handler: () => {
+      key: "u",
+      label: "User",
+      handler: () => {
         const prev = currentTurn()
         const drain = drainRunning()
         // Complete previous turn if needed
@@ -1306,7 +1606,9 @@ function SessionTimelineSimulator() {
 
           {/* Speed */}
           <div style={{ display: "flex", "align-items": "center", gap: "4px", "flex-shrink": "0" }}>
-            <span style={{ "font-size": "var(--font-size-small)", color: "var(--text-weak)", "margin-right": "2px" }}>Speed</span>
+            <span style={{ "font-size": "var(--font-size-small)", color: "var(--text-weak)", "margin-right": "2px" }}>
+              Speed
+            </span>
             <For each={[0.25, 0.5, 1, 2, 4]}>
               {(s) => (
                 <button
@@ -1316,8 +1618,7 @@ function SessionTimelineSimulator() {
                     "font-size": "var(--font-size-small)",
                     "font-family": "var(--font-family-mono)",
                     "border-radius": "4px",
-                    border:
-                      "1px solid " + (pb.speed() === s ? "var(--color-blue, #3b82f6)" : "var(--border-base)"),
+                    border: "1px solid " + (pb.speed() === s ? "var(--color-blue, #3b82f6)" : "var(--border-base)"),
                     background: pb.speed() === s ? "var(--color-blue, #3b82f6)" : "transparent",
                     color: pb.speed() === s ? "white" : "var(--text-base)",
                     cursor: "pointer",
@@ -1333,9 +1634,7 @@ function SessionTimelineSimulator() {
         {/* Trigger buttons */}
         <div style={{ display: "flex", gap: "6px", "flex-wrap": "wrap" }}>
           <For each={actions}>
-            {(action) => (
-              <TriggerBtn key={action.key} label={action.label} onClick={action.handler} />
-            )}
+            {(action) => <TriggerBtn key={action.key} label={action.label} onClick={action.handler} />}
           </For>
         </div>
 
@@ -1371,10 +1670,11 @@ Flat control panel — each action auto-completes the previous running tool.
 
 | Key | Action |
 |-----|--------|
+| p | Full pattern (user + every tool + text + completion) |
 | e | Explore (random read/grep/glob/list, stays running) |
 | b | Bash tool (keep pressing to stream output, other key completes) |
 | t | Stream text |
-| d | Edit tool (stays running) |
+| d | Edit/Write/Patch (cycles, stays running) |
 | x | Error tool |
 | u | New user turn |
 | c | Complete assistant turn |
