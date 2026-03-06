@@ -677,6 +677,12 @@ export namespace SessionPrompt {
         toolChoice: format.type === "json_schema" ? "required" : undefined,
       })
 
+      // Release conversation data and hint GC to reclaim memory.
+      // Bun/JSC reserves large virtual memory regions that accumulate
+      // without explicit collection, eventually triggering the OOM killer.
+      msgs = [] as any
+      Bun.gc(true)
+
       // If structured output was captured, save it and exit immediately
       // This takes priority because the StructuredOutput tool was called successfully
       if (structuredOutput !== undefined) {
@@ -714,6 +720,10 @@ export namespace SessionPrompt {
       continue
     }
     SessionCompaction.prune({ sessionID })
+
+    // Final GC pass to reclaim memory from the entire processing loop
+    Bun.gc(true)
+
     for await (const item of MessageV2.stream(sessionID)) {
       if (item.info.role === "user") continue
       const queued = state()[sessionID]?.callbacks ?? []

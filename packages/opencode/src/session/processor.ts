@@ -47,9 +47,9 @@ export namespace SessionProcessor {
         needsCompaction = false
         const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
         while (true) {
+          let currentText: MessageV2.TextPart | undefined
+          let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
           try {
-            let currentText: MessageV2.TextPart | undefined
-            let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
             const stream = await LLM.stream(streamInput)
 
             for await (const value of stream.fullStream) {
@@ -285,6 +285,9 @@ export namespace SessionProcessor {
                   ) {
                     needsCompaction = true
                   }
+                  // Incremental GC between steps to curb virtual memory growth
+                  // during multi-tool-call sequences.
+                  Bun.gc(false)
                   break
 
                 case "text-start":
@@ -374,6 +377,9 @@ export namespace SessionProcessor {
                   next: Date.now() + delay,
                 })
                 await SessionRetry.sleep(delay, input.abort).catch(() => {})
+                // Release stream references before retry
+                currentText = undefined
+                for (const key of Object.keys(reasoningMap)) delete reasoningMap[key]
                 continue
               }
               input.assistantMessage.error = error
@@ -384,6 +390,9 @@ export namespace SessionProcessor {
               SessionStatus.set(input.sessionID, { type: "idle" })
             }
           }
+          // Release stream-scoped references
+          currentText = undefined
+          for (const key of Object.keys(reasoningMap)) delete reasoningMap[key]
           if (snapshot) {
             const patch = await Snapshot.patch(snapshot)
             if (patch.files.length) {
@@ -417,6 +426,8 @@ export namespace SessionProcessor {
           }
           input.assistantMessage.time.completed = Date.now()
           await Session.updateMessage(input.assistantMessage)
+          // Release tool call references to allow GC of part data
+          for (const key of Object.keys(toolcalls)) delete toolcalls[key]
           if (needsCompaction) return "compact"
           if (blocked) return "stop"
           if (input.assistantMessage.error) return "stop"
