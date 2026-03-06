@@ -61,9 +61,9 @@ export async function closeDialog(page: Page, dialog: Locator) {
 }
 
 export async function isSidebarClosed(page: Page) {
-  const main = page.locator("main")
-  const classes = (await main.getAttribute("class")) ?? ""
-  return classes.includes("xl:border-l")
+  const button = page.getByRole("button", { name: /toggle sidebar/i }).first()
+  await expect(button).toBeVisible()
+  return (await button.getAttribute("aria-expanded")) !== "true"
 }
 
 export async function toggleSidebar(page: Page) {
@@ -75,48 +75,34 @@ export async function openSidebar(page: Page) {
   if (!(await isSidebarClosed(page))) return
 
   const button = page.getByRole("button", { name: /toggle sidebar/i }).first()
-  const visible = await button
-    .isVisible()
-    .then((x) => x)
-    .catch(() => false)
+  await button.click()
 
-  if (visible) await button.click()
-  if (!visible) await toggleSidebar(page)
-
-  const main = page.locator("main")
-  const opened = await expect(main)
-    .not.toHaveClass(/xl:border-l/, { timeout: 1500 })
+  const opened = await expect(button)
+    .toHaveAttribute("aria-expanded", "true", { timeout: 1500 })
     .then(() => true)
     .catch(() => false)
 
   if (opened) return
 
   await toggleSidebar(page)
-  await expect(main).not.toHaveClass(/xl:border-l/)
+  await expect(button).toHaveAttribute("aria-expanded", "true")
 }
 
 export async function closeSidebar(page: Page) {
   if (await isSidebarClosed(page)) return
 
   const button = page.getByRole("button", { name: /toggle sidebar/i }).first()
-  const visible = await button
-    .isVisible()
-    .then((x) => x)
-    .catch(() => false)
+  await button.click()
 
-  if (visible) await button.click()
-  if (!visible) await toggleSidebar(page)
-
-  const main = page.locator("main")
-  const closed = await expect(main)
-    .toHaveClass(/xl:border-l/, { timeout: 1500 })
+  const closed = await expect(button)
+    .toHaveAttribute("aria-expanded", "false", { timeout: 1500 })
     .then(() => true)
     .catch(() => false)
 
   if (closed) return
 
   await toggleSidebar(page)
-  await expect(main).toHaveClass(/xl:border-l/)
+  await expect(button).toHaveAttribute("aria-expanded", "false")
 }
 
 export async function openSettings(page: Page) {
@@ -608,9 +594,9 @@ export async function setWorkspacesEnabled(page: Page, projectSlug: string, enab
 
   if (current === enabled) return
 
-  await openProjectMenu(page, projectSlug)
+  const menu = await openProjectMenu(page, projectSlug)
 
-  const toggle = page.locator(projectWorkspacesToggleSelector(projectSlug)).first()
+  const toggle = menu.locator(projectWorkspacesToggleSelector(projectSlug)).first()
   await expect(toggle).toBeVisible()
   await toggle.click({ force: true })
 
