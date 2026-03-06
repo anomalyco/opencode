@@ -158,6 +158,8 @@ describe("tool.read env file permissions", () => {
     [".env.local", true],
     [".env.production", true],
     [".env.development.local", true],
+    ["appsettings.json", true],
+    ["appsettings.Development.json", true],
     [".env.example", false],
     [".envrc", false],
     ["environment.ts", false],
