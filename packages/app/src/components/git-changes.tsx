@@ -16,7 +16,7 @@ type VcsStatus = {
   untracked: FileStatus[]
 }
 
-function createFetchJSON(directory: string) {
+function createFetchJSON(directory: string, authHeaders: Record<string, string>) {
   const encodedDirectory = encodeURIComponent(directory)
   return async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
     const res = await fetch(url, {
@@ -24,6 +24,7 @@ function createFetchJSON(directory: string) {
       headers: {
         "Content-Type": "application/json",
         "x-opencode-directory": encodedDirectory,
+        ...authHeaders,
         ...init?.headers,
       },
     })
@@ -55,7 +56,7 @@ function statusColor(icon: string): string {
 
 export function GitChangesPanel() {
   const sdk = useSDK()
-  const fetchJSON = createFetchJSON(sdk.directory)
+  const fetchJSON = createFetchJSON(sdk.directory, sdk.authHeaders)
 
   const [status, setStatus] = createSignal<VcsStatus>({ staged: [], unstaged: [], untracked: [] })
   const [commitMessage, setCommitMessage] = createSignal("")
@@ -311,7 +312,7 @@ function FileSection(props: {
 
 export function GitChangesBadge() {
   const sdk = useSDK()
-  const fetchJSON = createFetchJSON(sdk.directory)
+  const fetchJSON = createFetchJSON(sdk.directory, sdk.authHeaders)
   const [count, setCount] = createSignal(0)
 
   async function refresh() {
