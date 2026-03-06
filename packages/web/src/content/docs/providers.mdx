@@ -20,6 +20,65 @@ To add a provider you need to:
 When you add a provider's API keys with the `/connect` command, they are stored
 in `~/.local/share/opencode/auth.json`.
 
+For `type: "api"` auth entries, you can also include an optional `options`
+object. These values are merged into the provider's runtime options.
+
+```json title="~/.local/share/opencode/auth.json"
+{
+  "anthropic": {
+    "type": "api",
+    "key": "your-api-key",
+    "options": {
+      "baseURL": "https://proxy.example.com/v1",
+      "timeout": false,
+      "headers": {
+        "x-test": "1"
+      }
+    }
+  }
+}
+```
+
+This is useful when a provider needs connection settings in addition to an API
+key, such as a proxy `baseURL`, custom headers, or mTLS files.
+
+For example, if you run Anthropic through Azure Foundry or another enterprise
+gateway that requires client certificates, you can keep the API key and
+connection-specific options together in `auth.json`:
+
+```json title="~/.local/share/opencode/auth.json"
+{
+  "my-anthropic-proxy": {
+    "type": "api",
+    "key": "your-api-key",
+    "options": {
+      "baseURL": "https://fabric.example.com/openai-proxy-api/claude/v1",
+      "tls": {
+        "key": "/path/to/client.key",
+        "cert": "/path/to/client.crt",
+        "ca": "/path/to/ca.pem"
+      }
+    }
+  }
+}
+```
+
+Supported `options` fields depend on the provider, but common ones include:
+
+- `baseURL` - Override the provider endpoint.
+- `headers` - Add custom request headers.
+- `timeout` - Override request timeout in milliseconds, or set `false` to disable it.
+- `tls.key` - Path to a client private key PEM file.
+- `tls.cert` - Path to a client certificate PEM file.
+- `tls.ca` - Path to a CA PEM file, or an array of CA file paths.
+
+:::note
+`auth.json` can override how an existing provider connects, but it does not
+define a brand new provider by itself. For a new custom provider ID, define the
+provider and model list in `opencode.json`, then put secrets and runtime
+connection overrides in `auth.json`.
+:::
+
 ---
 
 ### Config
@@ -1899,6 +1958,31 @@ You can use any OpenAI-compatible provider with opencode. Most modern AI provide
 
    More on the advanced options in the example below.
 
+   If you prefer, you can keep the API key and connection-specific runtime
+   options in `~/.local/share/opencode/auth.json` instead of `opencode.json`.
+   This is useful for endpoints that require mTLS or per-user credentials.
+
+   ```json title="~/.local/share/opencode/auth.json" ""myprovider""
+   {
+     "myprovider": {
+       "type": "api",
+       "key": "your-api-key",
+       "options": {
+         "baseURL": "https://api.myprovider.com/v1",
+         "tls": {
+           "key": "/path/to/client.key",
+           "cert": "/path/to/client.crt",
+           "ca": "/path/to/ca.pem"
+         }
+       }
+     }
+   }
+   ```
+
+   In this split:
+   - `opencode.json` defines the provider ID, SDK package, and model list.
+   - `auth.json` stores credentials and connection-specific overrides.
+
 5. Run the `/models` command and your custom provider and models will appear in the selection list.
 
 ---
@@ -1959,3 +2043,4 @@ If you are having trouble with configuring a provider, check the following:
    - Make sure the provider ID used in the `/connect` command matches the ID in your opencode config.
    - The right npm package is used for the provider. For example, use `@ai-sdk/cerebras` for Cerebras. And for all other OpenAI-compatible providers, use `@ai-sdk/openai-compatible`.
    - Check correct API endpoint is used in the `options.baseURL` field.
+   - If the provider requires mTLS, make sure `auth.json` points to readable `tls.key`, `tls.cert`, and `tls.ca` files.

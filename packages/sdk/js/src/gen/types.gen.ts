@@ -1031,6 +1031,7 @@ export type AgentConfig = {
 
 export type ProviderConfig = {
   api?: string
+  catalog?: string
   name?: string
   env?: Array<string>
   id?: string
@@ -1082,6 +1083,11 @@ export type ProviderConfig = {
   options?: {
     apiKey?: string
     baseURL?: string
+    tls?: {
+      key?: string
+      cert?: string
+      ca?: string | Array<string>
+    }
     /**
      * GitHub Enterprise URL for copilot authentication
      */
@@ -1666,6 +1672,30 @@ export type OAuth = {
 export type ApiAuth = {
   type: "api"
   key: string
+  options?: {
+    apiKey?: string
+    baseURL?: string
+    tls?: {
+      key?: string
+      cert?: string
+      ca?: string | Array<string>
+    }
+    enterpriseUrl?: string
+    setCacheKey?: boolean
+    timeout?: number | false
+    [key: string]:
+      | unknown
+      | string
+      | {
+          key?: string
+          cert?: string
+          ca?: string | Array<string>
+        }
+      | boolean
+      | number
+      | false
+      | undefined
+  }
 }
 
 export type WellKnownAuth = {

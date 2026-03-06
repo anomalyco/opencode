@@ -191,8 +191,8 @@ export function TerminalPanel() {
                   <SortableProvider ids={ids()}>
                     <For each={ids()}>
                       {(id) => (
-                        <Show when={byId().get(id)} keyed>
-                          {(pty) => <SortableTerminalTab terminal={pty} onClose={close} />}
+                        <Show when={byId().get(id)}>
+                          {(pty) => <SortableTerminalTab terminal={pty()} onClose={close} />}
                         </Show>
                       )}
                     </For>
@@ -217,10 +217,10 @@ export function TerminalPanel() {
               <div class="flex-1 min-h-0 relative">
                 <Show when={terminal.active()} keyed>
                   {(id) => (
-                    <Show when={byId().get(id)} keyed>
+                    <Show when={byId().get(id)}>
                       {(pty) => (
                         <div id={`terminal-wrapper-${id}`} class="absolute inset-0">
-                          <Terminal pty={pty} onCleanup={terminal.update} onConnectError={() => terminal.clone(id)} />
+                          <Terminal pty={pty()} onCleanup={terminal.update} onConnectError={() => terminal.clone(id)} />
                         </div>
                       )}
                     </Show>
@@ -229,14 +229,14 @@ export function TerminalPanel() {
               </div>
             </div>
             <DragOverlay>
-              <Show when={store.activeDraggable} keyed>
+              <Show when={store.activeDraggable}>
                 {(draggedId) => (
-                  <Show when={byId().get(draggedId)} keyed>
+                  <Show when={byId().get(draggedId())}>
                     {(t) => (
                       <div class="relative p-1 h-10 flex items-center bg-background-stronger text-14-regular">
                         {terminalTabLabel({
-                          title: t.title,
-                          titleNumber: t.titleNumber,
+                          title: t().title,
+                          titleNumber: t().titleNumber,
                           t: language.t as (key: string, vars?: Record<string, string | number | boolean>) => string,
                         })}
                       </div>

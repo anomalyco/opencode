@@ -85,6 +85,31 @@ export namespace Provider {
     })
   }
 
+  async function loadTLS(input: unknown) {
+    if (!input || typeof input !== "object" || Array.isArray(input)) return
+
+    const read = async (value: unknown) => {
+      if (typeof value !== "string") return
+      const file = path.isAbsolute(value) ? value : path.resolve(Instance.directory, value)
+      return Bun.file(file).text()
+    }
+
+    const info = input as Record<string, unknown>
+    const key = await read(info["key"])
+    const cert = await read(info["cert"])
+    const ca = Array.isArray(info["ca"])
+      ? (await Promise.all(info["ca"].map(read))).filter((item): item is string => typeof item === "string")
+      : await read(info["ca"])
+
+    if (!key && !cert && !ca) return
+
+    return {
+      ...(key ? { key } : {}),
+      ...(cert ? { cert } : {}),
+      ...(ca ? { ca } : {}),
+    }
+  }
+
   const BUNDLED_PROVIDERS: Record<string, (options: any) => SDK> = {
     "@ai-sdk/amazon-bedrock": createAmazonBedrock,
     "@ai-sdk/anthropic": createAnthropic,
@@ -931,6 +956,7 @@ export namespace Provider {
         mergeProvider(providerID, {
           source: "api",
           key: provider.key,
+          options: provider.options,
         })
       }
     }
@@ -1068,6 +1094,7 @@ export namespace Provider {
       const s = await state()
       const provider = s.providers[model.providerID]
       const options = { ...provider.options }
+      const tls = await loadTLS(options["tls"])
 
       if (model.providerID === "google-vertex" && !model.api.npm.includes("@ai-sdk/openai-compatible")) {
         delete options.fetch
@@ -1079,6 +1106,8 @@ export namespace Provider {
 
       const baseURL = loadBaseURL(model, options)
       if (baseURL !== undefined) options["baseURL"] = baseURL
+      if (tls) options["tls"] = tls
+      if (!tls && options["tls"] !== undefined) delete options["tls"]
       if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
       if (model.headers)
         options["headers"] = {
@@ -1127,6 +1156,7 @@ export namespace Provider {
 
         return fetchFn(input, {
           ...opts,
+          ...(options["tls"] ? { tls: options["tls"] } : {}),
           // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
           timeout: false,
         })

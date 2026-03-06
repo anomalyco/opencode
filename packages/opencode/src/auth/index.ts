@@ -2,6 +2,7 @@ import path from "path"
 import { Global } from "../global"
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
+import { Option } from "../provider/option"
 
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
@@ -21,6 +22,7 @@ export namespace Auth {
     .object({
       type: z.literal("api"),
       key: z.string(),
+      options: Option.optional(),
     })
     .meta({ ref: "ApiAuth" })
 

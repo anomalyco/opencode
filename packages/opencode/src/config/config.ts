@@ -35,6 +35,7 @@ import { iife } from "@/util/iife"
 import { Control } from "@/control"
 import { ConfigPaths } from "./paths"
 import { Filesystem } from "@/util/filesystem"
+import { Option as ProviderOption } from "../provider/option"
 
 export namespace Config {
   const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
@@ -951,30 +952,7 @@ export namespace Config {
           }),
         )
         .optional(),
-      options: z
-        .object({
-          apiKey: z.string().optional(),
-          baseURL: z.string().optional(),
-          enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
-          setCacheKey: z.boolean().optional().describe("Enable promptCacheKey for this provider (default false)"),
-          timeout: z
-            .union([
-              z
-                .number()
-                .int()
-                .positive()
-                .describe(
-                  "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
-                ),
-              z.literal(false).describe("Disable timeout for this provider entirely."),
-            ])
-            .optional()
-            .describe(
-              "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
-            ),
-        })
-        .catchall(z.any())
-        .optional(),
+      options: ProviderOption.optional(),
     })
     .strict()
     .meta({

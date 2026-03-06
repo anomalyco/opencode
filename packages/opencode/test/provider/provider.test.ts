@@ -2,9 +2,14 @@ import { test, expect } from "bun:test"
 import path from "path"
 
 import { tmpdir } from "../fixture/fixture"
+import { Auth } from "../../src/auth"
+import { LLM } from "../../src/session/llm"
 import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
+import { ProviderTransform } from "../../src/provider/transform"
+import type { Agent } from "../../src/agent/agent"
 import { Env } from "../../src/env"
+import type { MessageV2 } from "../../src/session/message-v2"
 
 test("provider loaded from env variable", async () => {
   await using tmp = await tmpdir({
@@ -56,6 +61,230 @@ test("provider loaded from config with apiKey option", async () => {
     fn: async () => {
       const providers = await Provider.list()
       expect(providers["anthropic"]).toBeDefined()
+    },
+  })
+})
+
+test("provider loaded from api auth with generic options", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      await Auth.set("anthropic", {
+        type: "api",
+        key: "auth-api-key",
+        options: {
+          baseURL: "https://example.com/v1",
+          headers: {
+            "x-test": "1",
+          },
+          timeout: false,
+        },
+      })
+    },
+    fn: async () => {
+      try {
+        const providers = await Provider.list()
+        expect(providers["anthropic"]).toBeDefined()
+        expect(providers["anthropic"].source).toBe("api")
+        expect(providers["anthropic"].options.baseURL).toBe("https://example.com/v1")
+        expect(providers["anthropic"].options.timeout).toBe(false)
+        expect(providers["anthropic"].options.headers).toEqual({
+          "anthropic-beta":
+            "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+          "x-test": "1",
+        })
+      } finally {
+        await Auth.remove("anthropic")
+      }
+    },
+  })
+})
+
+test("provider loaded from api auth with tls options", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      await Auth.set("anthropic", {
+        type: "api",
+        key: "auth-api-key",
+        options: {
+          baseURL: "https://example.com/v1",
+          tls: {
+            key: "./client-key.pem",
+            cert: "./client-cert.pem",
+            ca: "./ca.pem",
+          },
+        },
+      })
+    },
+    fn: async () => {
+      try {
+        const providers = await Provider.list()
+        expect(providers["anthropic"]).toBeDefined()
+        expect(providers["anthropic"].source).toBe("api")
+        expect(providers["anthropic"].options.baseURL).toBe("https://example.com/v1")
+        expect(providers["anthropic"].options.tls).toEqual({
+          key: "./client-key.pem",
+          cert: "./client-cert.pem",
+          ca: "./ca.pem",
+        })
+      } finally {
+        await Auth.remove("anthropic")
+      }
+    },
+  })
+})
+
+test("api auth forwards loaded tls material to fetch", async () => {
+  const key = "-----BEGIN PRIVATE KEY-----\nkey\n-----END PRIVATE KEY-----\n"
+  const cert = "-----BEGIN CERTIFICATE-----\ncert\n-----END CERTIFICATE-----\n"
+  const ca = "-----BEGIN CERTIFICATE-----\nca\n-----END CERTIFICATE-----\n"
+  const calls: Array<{ url: string; init?: RequestInit }> = []
+  const original = globalThis.fetch
+
+  const payload =
+    [
+      {
+        type: "message_start",
+        message: {
+          id: "msg-foundry-1",
+          model: "claude-3-5-sonnet-20241022",
+          usage: {
+            input_tokens: 3,
+            cache_creation_input_tokens: null,
+            cache_read_input_tokens: null,
+          },
+        },
+      },
+      {
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "text", text: "" },
+      },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: "Hello" },
+      },
+      { type: "content_block_stop", index: 0 },
+      {
+        type: "message_delta",
+        delta: { stop_reason: "end_turn", stop_sequence: null, container: null },
+        usage: {
+          input_tokens: 3,
+          output_tokens: 2,
+          cache_creation_input_tokens: null,
+          cache_read_input_tokens: null,
+        },
+      },
+      { type: "message_stop" },
+    ]
+      .map((item) => `data: ${JSON.stringify(item)}`)
+      .join("\n\n") + "\n\n"
+
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "client-key.pem"), key)
+      await Bun.write(path.join(dir, "client-cert.pem"), cert)
+      await Bun.write(path.join(dir, "ca.pem"), ca)
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          model: "anthropic/claude-3-5-sonnet-20241022",
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      await Auth.set("anthropic", {
+        type: "api",
+        key: "anthropic-key",
+        options: {
+          baseURL: "https://foundry.example.com/v1",
+          tls: {
+            key: "./client-key.pem",
+            cert: "./client-cert.pem",
+            ca: "./ca.pem",
+          },
+        },
+      })
+    },
+    fn: async () => {
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        calls.push({ url: String(input), init })
+        return new Response(new TextEncoder().encode(payload), {
+          headers: { "content-type": "text/event-stream" },
+        })
+      }) as typeof fetch
+
+      try {
+        const model = await Provider.getModel("anthropic", "claude-3-5-sonnet-20241022")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          temperature: 0.4,
+          topP: 0.9,
+        } satisfies Agent.Info
+        const user = {
+          id: "user-foundry",
+          sessionID: "session-foundry",
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: "anthropic", modelID: model.id },
+        } satisfies MessageV2.User
+
+        const stream = await LLM.stream({
+          user,
+          sessionID: "session-foundry",
+          model,
+          agent,
+          system: ["You are a helpful assistant."],
+          abort: new AbortController().signal,
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        for await (const _ of stream.fullStream) {
+        }
+
+        const call = calls.at(-1)
+        const body = JSON.parse(String(call?.init?.body ?? "{}")) as Record<string, unknown>
+
+        expect(call?.url.endsWith("/messages")).toBe(true)
+        expect(body.model).toBe(model.api.id)
+        expect(body.max_tokens).toBe(ProviderTransform.maxOutputTokens(model))
+        expect((call?.init as RequestInit & { tls?: unknown } | undefined)?.tls).toEqual({ key, cert, ca })
+      } finally {
+        globalThis.fetch = original
+        await Auth.remove("anthropic")
+      }
     },
   })
 })

@@ -1140,6 +1140,40 @@ export type AgentConfig = {
     | undefined
 }
 
+/**
+ * TLS client certificate settings for this provider
+ */
+export type ProviderTlsConfig = {
+  /**
+   * Path to a PEM-encoded client key
+   */
+  key?: string
+  /**
+   * Path to a PEM-encoded client certificate
+   */
+  cert?: string
+  ca?: string | Array<string>
+}
+
+export type ProviderOptions = {
+  apiKey?: string
+  baseURL?: string
+  tls?: ProviderTlsConfig
+  /**
+   * GitHub Enterprise URL for copilot authentication
+   */
+  enterpriseUrl?: string
+  /**
+   * Enable promptCacheKey for this provider (default false)
+   */
+  setCacheKey?: boolean
+  /**
+   * Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.
+   */
+  timeout?: number | false
+  [key: string]: unknown | string | ProviderTlsConfig | boolean | number | false | undefined
+}
+
 export type ProviderConfig = {
   api?: string
   name?: string
@@ -1208,25 +1242,13 @@ export type ProviderConfig = {
       }
     }
   }
+  /**
+   * Copy models from another provider without inheriting its auth or environment settings
+   */
+  catalog?: string
   whitelist?: Array<string>
   blacklist?: Array<string>
-  options?: {
-    apiKey?: string
-    baseURL?: string
-    /**
-     * GitHub Enterprise URL for copilot authentication
-     */
-    enterpriseUrl?: string
-    /**
-     * Enable promptCacheKey for this provider (default false)
-     */
-    setCacheKey?: boolean
-    /**
-     * Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.
-     */
-    timeout?: number | false
-    [key: string]: unknown | string | boolean | number | false | undefined
-  }
+  options?: ProviderOptions
 }
 
 export type McpLocalConfig = {
@@ -1519,6 +1541,7 @@ export type OAuth = {
 export type ApiAuth = {
   type: "api"
   key: string
+  options?: ProviderOptions
 }
 
 export type WellKnownAuth = {

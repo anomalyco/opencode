@@ -56,3 +56,34 @@ test("set and remove are no-ops on keys without trailing slashes", async () => {
   const after = await Auth.all()
   expect(after["anthropic"]).toBeUndefined()
 })
+
+test("api auth preserves provider options", async () => {
+  await Auth.set("anthropic", {
+    type: "api",
+    key: "sk-test",
+    options: {
+      baseURL: "https://example.com/v1",
+      tls: {
+        key: "./client-key.pem",
+        cert: "./client-cert.pem",
+      },
+      headers: {
+        "x-test": "1",
+      },
+    },
+  })
+  const data = await Auth.all()
+  expect(data["anthropic"]).toBeDefined()
+  expect(data["anthropic"].type).toBe("api")
+  if (data["anthropic"].type === "api") {
+    expect(data["anthropic"].options?.baseURL).toBe("https://example.com/v1")
+    expect(data["anthropic"].options?.tls).toEqual({
+      key: "./client-key.pem",
+      cert: "./client-cert.pem",
+    })
+    expect(data["anthropic"].options?.headers).toEqual({
+      "x-test": "1",
+    })
+  }
+  await Auth.remove("anthropic")
+})

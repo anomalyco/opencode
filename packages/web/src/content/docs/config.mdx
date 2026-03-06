@@ -260,6 +260,34 @@ Provider options can include `timeout` and `setCacheKey`:
 }
 ```
 
+If a provider uses `type: "api"` auth, you can also place runtime connection
+overrides in `~/.local/share/opencode/auth.json` under that provider's
+`options` object. This is useful for per-user settings like `baseURL`, custom
+headers, or mTLS files, while keeping the provider definition and model list in
+`opencode.json`.
+
+Example:
+
+```json title="~/.local/share/opencode/auth.json"
+{
+  "my-anthropic-proxy": {
+    "type": "api",
+    "key": "your-api-key",
+    "options": {
+      "baseURL": "https://fabric.example.com/openai-proxy-api/claude/v1",
+      "tls": {
+        "key": "/path/to/client.key",
+        "cert": "/path/to/client.crt",
+        "ca": "/path/to/ca.pem"
+      }
+    }
+  }
+}
+```
+
+OpenCode merges these auth-side `options` into the provider runtime options at
+startup.
+
 - `timeout` - Request timeout in milliseconds (default: 300000). Set to `false` to disable.
 - `setCacheKey` - Ensure a cache key is always set for designated provider.
 
