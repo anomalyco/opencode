@@ -396,15 +396,39 @@ export function SessionTurn(
                 data-slot="session-turn-message-container"
                 class={props.classes?.container}
               >
-                <Switch>
-                  <Match when={isShellMode()}>
-                    <Part part={shellModePart()!} message={msg()} defaultOpen />
-                  </Match>
-                  <Match when={true}>
-                    <Show when={attachmentParts().length > 0}>
-                      <div data-slot="session-turn-attachments" aria-live="off">
-                        <Message message={msg()} parts={attachmentParts()} />
-                      </div>
+                <div data-slot="session-turn-message-content" aria-live="off">
+                  <Message message={msg()} parts={parts()} interrupted={interrupted()} />
+                </div>
+                <Show when={compaction()}>
+                  {(part) => (
+                    <div data-slot="session-turn-compaction">
+                      <Part part={part()} message={msg()} hideDetails />
+                    </div>
+                  )}
+                </Show>
+                <Show when={assistantMessages().length > 0}>
+                  <div data-slot="session-turn-assistant-content" aria-hidden={working()}>
+                    <AssistantParts
+                      messages={assistantMessages()}
+                      showAssistantCopyPartID={assistantCopyPartID()}
+                      turnDurationMs={turnDurationMs()}
+                      working={working()}
+                      showReasoningSummaries={showReasoningSummaries()}
+                      shellToolDefaultOpen={props.shellToolDefaultOpen}
+                      editToolDefaultOpen={props.editToolDefaultOpen}
+                    />
+                  </div>
+                </Show>
+                <Show when={showThinking()}>
+                  <div data-slot="session-turn-thinking">
+                    <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
+                    <Show when={!showReasoningSummaries()}>
+                      <TextReveal
+                        text={reasoningHeading()}
+                        class="session-turn-thinking-heading"
+                        travel={25}
+                        duration={700}
+                      />
                     </Show>
                     <div data-slot="session-turn-sticky" ref={setStickyRef}>
                       {/* User Message */}
