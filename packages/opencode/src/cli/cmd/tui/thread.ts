@@ -121,10 +121,17 @@ export const TuiThreadCommand = cmd({
         return
       }
 
+      const env = Object.fromEntries(
+        Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+      )
+      const p = env.PATH ?? env.Path
+      if (p) {
+        env.PATH = p
+        env.Path = p
+      }
+
       const worker = new Worker(file, {
-        env: Object.fromEntries(
-          Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-        ),
+        env,
       })
       worker.onerror = (e) => {
         Log.Default.error(e)

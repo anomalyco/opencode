@@ -22,6 +22,13 @@ function env(PATH: string): NodeJS.ProcessEnv {
   }
 }
 
+function winenv(Path: string): NodeJS.ProcessEnv {
+  return {
+    Path,
+    PATHEXT: process.env["PATHEXT"],
+  }
+}
+
 function same(a: string | null, b: string) {
   if (process.platform === "win32") {
     expect(a?.toLowerCase()).toBe(b.toLowerCase())
@@ -78,5 +85,16 @@ describe("util.which", () => {
     await fs.writeFile(file, "@echo off\r\n")
 
     expect(which("pathext", { PATH: bin, PATHEXT: ".CMD" })).toBe(file)
+  })
+
+  test("uses Path on windows", async () => {
+    if (process.platform !== "win32") return
+
+    await using tmp = await tmpdir()
+    const bin = path.join(tmp.path, "bin")
+    await fs.mkdir(bin)
+    const file = await cmd(bin, "tool")
+
+    same(which("tool", winenv(bin)), file)
   })
 })
