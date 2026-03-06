@@ -136,6 +136,73 @@ export function Prompt(props: PromptProps) {
     extmarkToPartIndex: new Map(),
     interrupt: 0,
   })
+  const [modelInfo, setModelInfo] = createSignal<string[]>([])
+  const [modelLoading, setModelLoading] = createSignal(false)
+
+  onMount(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let disposed = false
+    let key = ""
+    let run = 0
+
+    const wait = (ms: number) => {
+      if (disposed) return
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => void tick(run), ms)
+    }
+
+    const tick = async (id: number) => {
+      const model = local.model.current()
+      const eligible = store.mode === "normal" && !!model
+      const response = await sdk
+        .call("/tui/footer-model", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            mode: store.mode,
+            model: model ?? undefined,
+          }),
+        })
+        .catch(() => undefined)
+      if (disposed || id !== run) return
+      if (!response) {
+        setModelInfo([])
+        setModelLoading(false)
+        wait(30_000)
+        return
+      }
+      if (!response.ok) {
+        setModelInfo([])
+        setModelLoading(false)
+        wait(30_000)
+        return
+      }
+      const output = await response.json().catch(() => ({ info: [], refresh_ms: 30_000 }))
+      if (disposed || id !== run) return
+      setModelInfo(output.info)
+      setModelLoading(false)
+      wait(output.refresh_ms ?? 30_000)
+    }
+
+    createEffect(() => {
+      const mode = store.mode
+      const model = local.model.current()
+      const next = `${mode}:${model?.providerID ?? ""}:${model?.modelID ?? ""}`
+      if (next === key) return
+      key = next
+      setModelInfo([])
+      setModelLoading(mode === "normal" && !!model)
+      run += 1
+      void tick(run)
+    })
+
+    onCleanup(() => {
+      disposed = true
+      if (timer) clearTimeout(timer)
+    })
+  })
 
   createEffect(
     on(
@@ -1006,6 +1073,14 @@ export function Prompt(props: PromptProps) {
                     {local.model.parsed().model}
                   </text>
                   <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
+                  <Show when={modelLoading() && modelInfo().length === 0}>
+                    <text fg={theme.textMuted}>·</text>
+                    <text fg={theme.textMuted}>Loading...</text>
+                  </Show>
+                  <Show when={modelInfo().length > 0}>
+                    <text fg={theme.textMuted}>·</text>
+                    <text fg={theme.textMuted}>{modelInfo().join(" · ")}</text>
+                  </Show>
                   <Show when={showVariant()}>
                     <text fg={theme.textMuted}>·</text>
                     <text>

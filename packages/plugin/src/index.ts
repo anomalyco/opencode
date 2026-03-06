@@ -227,6 +227,19 @@ export interface Hooks {
     input: { sessionID: string; messageID: string; partID: string },
     output: { text: string },
   ) => Promise<void>
+  "tui.footer.model"?: (
+    input: {
+      mode: "normal" | "shell"
+      model?: {
+        providerID: string
+        modelID: string
+      }
+    },
+    output: {
+      info: string[]
+      refresh_ms?: number
+    },
+  ) => Promise<void>
   /**
    * Modify tool definitions (description and parameters) sent to LLM
    */

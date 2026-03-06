@@ -162,6 +162,7 @@ import type {
   TuiControlResponseResponses,
   TuiExecuteCommandErrors,
   TuiExecuteCommandResponses,
+  TuiFooterModelResponses,
   TuiOpenHelpResponses,
   TuiOpenModelsResponses,
   TuiOpenSessionsResponses,
@@ -3182,6 +3183,46 @@ export class Control extends HeyApiClient {
 }
 
 export class Tui extends HeyApiClient {
+  /**
+   * Get TUI footer model info
+   *
+   * Get provider/plugin metadata for the composer model footer.
+   */
+  public footerModel<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      mode?: "normal" | "shell"
+      model?: {
+        providerID: string
+        modelID: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "mode" },
+            { in: "body", key: "model" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<TuiFooterModelResponses, unknown, ThrowOnError>({
+      url: "/tui/footer-model",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
   /**
    * Append TUI prompt
    *

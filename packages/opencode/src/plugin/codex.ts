@@ -11,8 +11,33 @@ const log = Log.create({ service: "plugin.codex" })
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const ISSUER = "https://auth.openai.com"
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
+const CODEX_USAGE_ENDPOINT = "https://chatgpt.com/backend-api/codex/usage"
 const OAUTH_PORT = 1455
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
+
+type CodexWindow = {
+  used_percent?: number
+  reset_after_seconds?: number
+}
+
+type CodexUsage = {
+  plan_type?: string
+  rate_limit?: {
+    primary_window?: CodexWindow
+    secondary_window?: CodexWindow
+  }
+}
+
+function formatTimeLeft(seconds?: number) {
+  if (!seconds || seconds <= 0) return "-"
+  const total = Math.ceil(seconds)
+  const days = Math.floor(total / 86400)
+  const hours = Math.floor((total % 86400) / 3600)
+  const minutes = Math.max(1, Math.floor((total % 3600) / 60))
+  if (days > 0) return `${days}d ${hours}h`
+  if (hours > 0) return `${hours}h ${minutes}m`
+  return `${minutes}m`
+}
 
 interface PkceCodes {
   verifier: string
@@ -459,7 +484,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
             const headers = new Headers()
             if (init?.headers) {
               if (init.headers instanceof Headers) {
-                init.headers.forEach((value, key) => headers.set(key, value))
+                init.headers.forEach((value, key) => void headers.set(key, value))
               } else if (Array.isArray(init.headers)) {
                 for (const [key, value] of init.headers) {
                   if (value !== undefined) headers.set(key, String(value))
@@ -621,6 +646,68 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
       output.headers.originator = "opencode"
       output.headers["User-Agent"] = `opencode/${Installation.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`
       output.headers.session_id = input.sessionID
+    },
+    "tui.footer.model": async (input, output) => {
+      if (input.mode !== "normal") return
+      if (!input.model) return
+      if (input.model.providerID !== "openai") return
+
+      const auth = await Auth.get("openai")
+      if (auth?.type !== "oauth") return
+
+      let oauth = auth
+      if (!oauth.access || oauth.expires < Date.now()) {
+        const tokens = await refreshAccessToken(oauth.refresh).catch(() => undefined)
+        if (!tokens?.access_token) return
+        const accountId = extractAccountId(tokens) || oauth.accountId
+        oauth = {
+          type: "oauth",
+          refresh: tokens.refresh_token || oauth.refresh,
+          access: tokens.access_token,
+          expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
+          ...(accountId && { accountId }),
+        }
+        await Auth.set("openai", oauth)
+      }
+
+      const headers = new Headers({
+        authorization: `Bearer ${oauth.access}`,
+        originator: "opencode",
+      })
+      if (oauth.accountId) headers.set("ChatGPT-Account-Id", oauth.accountId)
+
+      const response = await fetch(CODEX_USAGE_ENDPOINT, {
+        method: "GET",
+        headers,
+      }).catch(() => undefined)
+      if (!response?.ok) {
+        output.info.push("rate unavailable")
+        output.refresh_ms = 30_000
+        return
+      }
+
+      const data = (await response.json().catch(() => undefined)) as CodexUsage | undefined
+      const primary = data?.rate_limit?.primary_window
+      const secondary = data?.rate_limit?.secondary_window
+      if (typeof primary?.used_percent !== "number") {
+        output.info.push("rate unavailable")
+        output.refresh_ms = 30_000
+        return
+      }
+
+      const primary_percentage = `${Math.round(primary.used_percent)}%`
+      const secondary_percentage =
+        typeof secondary?.used_percent === "number" ? `${Math.round(secondary.used_percent)}%` : "-"
+      const primary_time_left = formatTimeLeft(primary.reset_after_seconds)
+      const secondary_time_left = formatTimeLeft(secondary?.reset_after_seconds)
+
+      output.info.push(
+        `${primary_percentage} (${primary_time_left}) · ${secondary_percentage} (${secondary_time_left})`,
+      )
+      output.refresh_ms =
+        typeof primary.reset_after_seconds === "number" && primary.reset_after_seconds > 0
+          ? Math.min(Math.max(primary.reset_after_seconds * 1000, 10_000), 60_000)
+          : 30_000
     },
   }
 }

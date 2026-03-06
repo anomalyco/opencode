@@ -7,10 +7,21 @@ import { TuiEvent } from "@/cli/cmd/tui/event"
 import { AsyncQueue } from "../../util/queue"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { Plugin } from "@/plugin"
 
 const TuiRequest = z.object({
   path: z.string(),
   body: z.any(),
+})
+
+const TuiFooterModel = z.object({
+  mode: z.enum(["normal", "shell"]),
+  model: z
+    .object({
+      providerID: z.string(),
+      modelID: z.string(),
+    })
+    .optional(),
 })
 
 type TuiRequest = z.infer<typeof TuiRequest>
@@ -77,6 +88,35 @@ const TuiControlRoutes = new Hono()
 
 export const TuiRoutes = lazy(() =>
   new Hono()
+    .post(
+      "/footer-model",
+      describeRoute({
+        summary: "Get TUI footer model info",
+        description: "Get provider/plugin metadata for the composer model footer.",
+        operationId: "tui.footerModel",
+        responses: {
+          200: {
+            description: "Footer model metadata",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    info: z.array(z.string()),
+                    refresh_ms: z.number().optional(),
+                  }),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      validator("json", TuiFooterModel),
+      async (c) => {
+        const body = c.req.valid("json")
+        const output = await Plugin.trigger("tui.footer.model", body, { info: [], refresh_ms: 30_000 })
+        return c.json(output)
+      },
+    )
     .post(
       "/append-prompt",
       describeRoute({

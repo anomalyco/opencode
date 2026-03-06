@@ -17,13 +17,26 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     events?: EventSource
   }) => {
     const abort = new AbortController()
+    const headers = new Headers(props.headers)
+    if (props.directory) headers.set("x-opencode-directory", encodeURIComponent(props.directory))
     const sdk = createOpencodeClient({
       baseUrl: props.url,
       signal: abort.signal,
       directory: props.directory,
       fetch: props.fetch,
-      headers: props.headers,
+      headers,
     })
+    const call = (path: string, init?: RequestInit) => {
+      const next = new Headers(headers)
+      new Headers(init?.headers).forEach((value, key) => {
+        next.set(key, value)
+      })
+      return (props.fetch ?? fetch)(new URL(path, props.url), {
+        ...init,
+        signal: abort.signal,
+        headers: next,
+      })
+    }
 
     const emitter = createGlobalEmitter<{
       [key in Event["type"]]: Extract<Event, { type: key }>
@@ -96,6 +109,6 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       if (timer) clearTimeout(timer)
     })
 
-    return { client: sdk, event: emitter, url: props.url }
+    return { client: sdk, event: emitter, url: props.url, call }
   },
 })

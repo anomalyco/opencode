@@ -4477,6 +4477,33 @@ export type McpDisconnectResponses = {
 
 export type McpDisconnectResponse = McpDisconnectResponses[keyof McpDisconnectResponses]
 
+export type TuiFooterModelData = {
+  body?: {
+    mode: "normal" | "shell"
+    model?: {
+      providerID: string
+      modelID: string
+    }
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/tui/footer-model"
+}
+
+export type TuiFooterModelResponses = {
+  /**
+   * Footer model metadata
+   */
+  200: {
+    info: Array<string>
+    refresh_ms?: number
+  }
+}
+
+export type TuiFooterModelResponse = TuiFooterModelResponses[keyof TuiFooterModelResponses]
+
 export type TuiAppendPromptData = {
   body?: {
     text: string
