@@ -34,6 +34,7 @@ describe("session.command /cd", () => {
           arguments: next.path,
           agent: "build",
         })
+        if (result.info.role !== "assistant") throw new Error("expected assistant message")
 
         const info = await Session.get(session.id)
         const messages = await MessageV2.get({
