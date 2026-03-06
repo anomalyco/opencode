@@ -6,6 +6,7 @@ import { MessageV2 } from "../session/message-v2"
 import { Identifier } from "../id/id"
 import { Agent } from "../agent/agent"
 import { SessionPrompt } from "../session/prompt"
+import { SessionStatus } from "../session/status"
 import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
@@ -22,7 +23,92 @@ const parameters = z.object({
     )
     .optional(),
   command: z.string().describe("The command that triggered this task").optional(),
+  background: z
+    .boolean()
+    .optional()
+    .describe("When true, launch the subagent in the background and return immediately"),
 })
+
+function output(sessionID: string, text: string) {
+  return [
+    `task_id: ${sessionID} (for resuming to continue this task if needed)`,
+    "",
+    "<task_result>",
+    text,
+    "</task_result>",
+  ].join("\n")
+}
+
+function backgroundOutput(sessionID: string) {
+  return [
+    `task_id: ${sessionID} (for polling this task with task_status)`,
+    "state: running",
+    "",
+    "<task_result>",
+    "Background task started. Continue your current work and call task_status when you need the result.",
+    "</task_result>",
+  ].join("\n")
+}
+
+function backgroundMessage(input: {
+  sessionID: string
+  description: string
+  state: "completed" | "error"
+  text: string
+}) {
+  const tag = input.state === "completed" ? "task_result" : "task_error"
+  const title =
+    input.state === "completed"
+      ? `Background task completed: ${input.description}`
+      : `Background task failed: ${input.description}`
+  return [title, `task_id: ${input.sessionID}`, `state: ${input.state}`, `<${tag}>`, input.text, `</${tag}>`].join("\n")
+}
+
+function errorText(error: unknown) {
+  if (error instanceof Error) return error.message
+  return String(error)
+}
+
+function resultTaskID(input: unknown) {
+  if (!input || typeof input !== "object") return
+  const taskID = Reflect.get(input, "task_id")
+  if (typeof taskID === "string") return taskID
+}
+
+function polled(input: { message: MessageV2.WithParts; taskID: string }) {
+  if (input.message.info.role !== "assistant") return false
+  return input.message.parts.some((part) => {
+    if (part.type !== "tool") return false
+    if (part.tool !== "task_status") return false
+    if (part.state.status !== "completed") return false
+    return resultTaskID(part.state.input) === input.taskID
+  })
+}
+
+async function latestUser(sessionID: string) {
+  const [message] = await Session.messages({
+    sessionID,
+    limit: 1,
+  })
+  if (!message) return
+  if (message.info.role !== "user") return
+  return message.info.id
+}
+
+async function continueParent(input: { parentID: string; userID: string; taskID: string }) {
+  const message =
+    SessionStatus.get(input.parentID).type === "idle"
+      ? undefined
+      : await SessionPrompt.loop({
+          sessionID: input.parentID,
+        }).catch(() => undefined)
+  if (message && polled({ message, taskID: input.taskID })) return
+  if (SessionStatus.get(input.parentID).type !== "idle") return
+  if ((await latestUser(input.parentID)) !== input.userID) return
+  await SessionPrompt.loop({
+    sessionID: input.parentID,
+  })
+}
 
 export const TaskTool = Tool.define("task", async (ctx) => {
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
@@ -103,62 +189,110 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
 
-      const model = agent.model ?? {
+      const parentModel = {
         modelID: msg.info.modelID,
         providerID: msg.info.providerID,
+      }
+      const model = agent.model ?? parentModel
+      const background = params.background === true
+      const metadata = {
+        sessionId: session.id,
+        model,
+        ...(background ? { background: true } : {}),
       }
 
       ctx.metadata({
         title: params.description,
-        metadata: {
-          sessionId: session.id,
-          model,
-        },
+        metadata,
       })
 
-      const messageID = Identifier.ascending("message")
+      const run = async () => {
+        const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
+        const result = await SessionPrompt.prompt({
+          messageID: Identifier.ascending("message"),
+          sessionID: session.id,
+          model: {
+            modelID: model.modelID,
+            providerID: model.providerID,
+          },
+          agent: agent.name,
+          tools: {
+            todowrite: false,
+            todoread: false,
+            ...(hasTaskPermission ? {} : { task: false }),
+            ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
+          },
+          parts: promptParts,
+        })
+        return result.parts.findLast((x) => x.type === "text")?.text ?? ""
+      }
+
+      if (background) {
+        const inject = (state: "completed" | "error", text: string) =>
+          SessionPrompt.prompt({
+            sessionID: ctx.sessionID,
+            noReply: true,
+            model: {
+              modelID: parentModel.modelID,
+              providerID: parentModel.providerID,
+            },
+            agent: ctx.agent,
+            parts: [
+              {
+                type: "text",
+                synthetic: true,
+                text: backgroundMessage({
+                  sessionID: session.id,
+                  description: params.description,
+                  state,
+                  text,
+                }),
+              },
+            ],
+          })
+
+        void run()
+          .then((text) =>
+            inject("completed", text)
+              .then((message) =>
+                continueParent({
+                  parentID: ctx.sessionID,
+                  userID: message.info.id,
+                  taskID: session.id,
+                }),
+              )
+              .catch(() => {}),
+          )
+          .catch((error) =>
+            inject("error", errorText(error))
+              .then((message) =>
+                continueParent({
+                  parentID: ctx.sessionID,
+                  userID: message.info.id,
+                  taskID: session.id,
+                }),
+              )
+              .catch(() => {}),
+          )
+
+        return {
+          title: params.description,
+          metadata,
+          output: backgroundOutput(session.id),
+        }
+      }
 
       function cancel() {
         SessionPrompt.cancel(session.id)
       }
       ctx.abort.addEventListener("abort", cancel)
       using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
-      const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
-
-      const result = await SessionPrompt.prompt({
-        messageID,
-        sessionID: session.id,
-        model: {
-          modelID: model.modelID,
-          providerID: model.providerID,
-        },
-        agent: agent.name,
-        tools: {
-          todowrite: false,
-          todoread: false,
-          ...(hasTaskPermission ? {} : { task: false }),
-          ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
-        },
-        parts: promptParts,
-      })
-
-      const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
-
-      const output = [
-        `task_id: ${session.id} (for resuming to continue this task if needed)`,
-        "",
-        "<task_result>",
-        text,
-        "</task_result>",
-      ].join("\n")
+      const text = await run()
 
       return {
         title: params.description,
-        metadata: {
-          sessionId: session.id,
-          model,
-        },
-        output,
+        metadata,
+        output: output(session.id, text),
       }
     },
   }
