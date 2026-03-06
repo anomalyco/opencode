@@ -4,6 +4,14 @@ export function accordionValue(value: string | string[] | undefined) {
   return []
 }
 
+function pick(list: (HTMLElement | undefined)[]) {
+  return list.reduce<HTMLElement | undefined>((best, el) => {
+    if (!el) return best
+    if (!best) return el
+    return el.getBoundingClientRect().top < best.getBoundingClientRect().top ? el : best
+  }, undefined)
+}
+
 function root(el: HTMLElement) {
   let node = el.parentElement
   while (node) {
@@ -70,4 +78,19 @@ export function pinSticky(head: HTMLElement | undefined, fn: () => void) {
 
   const timer = setTimeout(stop, 400)
   step()
+}
+
+export function pinStickyAccordionChange(
+  prev: string[],
+  value: string | string[] | undefined,
+  get: (key: string) => HTMLElement | undefined,
+  update: (next: string[]) => void,
+) {
+  const next = accordionValue(value)
+  const head = pick(prev.filter((item) => !next.includes(item)).map(get))
+  if (!head) {
+    update(next)
+    return
+  }
+  pinSticky(head, () => update(next))
 }

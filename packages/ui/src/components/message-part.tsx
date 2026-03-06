@@ -51,7 +51,7 @@ import { IconButton } from "./icon-button"
 import { TextShimmer } from "./text-shimmer"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
-import { accordionValue, pinSticky } from "./sticky-accordion"
+import { pinStickyAccordionChange } from "./sticky-accordion"
 import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
 
@@ -1116,14 +1116,7 @@ function ToolFileAccordion(props: { path: string; actions?: JSX.Element; childre
   const [open, setOpen] = createSignal<string[]>([value()])
   let head: HTMLDivElement | undefined
 
-  const change = (value: string | string[] | undefined) => {
-    const next = accordionValue(value)
-    if (next.length > 0 || open().length === 0) {
-      setOpen(next)
-      return
-    }
-    pinSticky(head, () => setOpen(next))
-  }
+  const change = (value: string | string[] | undefined) => pinStickyAccordionChange(open(), value, () => head, setOpen)
 
   return (
     <Accordion
@@ -1895,15 +1888,9 @@ ToolRegistry.register({
                   data-scope="apply-patch"
                   style={{ "--sticky-accordion-offset": "40px" }}
                   value={expanded()}
-                  onChange={(value) => {
-                    const next = accordionValue(value)
-                    const key = expanded().find((item) => !next.includes(item))
-                    if (!key) {
-                      setExpanded(next)
-                      return
-                    }
-                    pinSticky(heads.get(key), () => setExpanded(next))
-                  }}
+                  onChange={(value) =>
+                    pinStickyAccordionChange(expanded(), value, (key) => heads.get(key), setExpanded)
+                  }
                 >
                   <For each={files()}>
                     {(file) => {

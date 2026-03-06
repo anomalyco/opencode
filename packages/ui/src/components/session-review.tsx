@@ -7,7 +7,7 @@ import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
 import { IconButton } from "./icon-button"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
-import { accordionValue, pinSticky } from "./sticky-accordion"
+import { pinStickyAccordionChange } from "./sticky-accordion"
 import { Tooltip } from "./tooltip"
 import { ScrollView } from "./scroll-view"
 import { FileSearchBar } from "./file-search"
@@ -173,20 +173,11 @@ export const SessionReview = (props: SessionReviewProps) => {
     setStore("open", open)
   }
 
-  const handleAccordionChange = (value: string | string[] | undefined) => {
-    const next = accordionValue(value)
-    const key = open().find((item) => !next.includes(item))
-    if (!key) {
-      handleChange(next)
-      return
-    }
-    pinSticky(heads.get(key), () => handleChange(next))
-  }
+  const handleAccordionChange = (value: string | string[] | undefined) =>
+    pinStickyAccordionChange(open(), value, (key) => heads.get(key), handleChange)
 
-  const handleExpandOrCollapseAll = () => {
-    const next = open().length > 0 ? [] : files()
-    handleChange(next)
-  }
+  const handleExpandOrCollapseAll = () =>
+    pinStickyAccordionChange(open(), open().length > 0 ? [] : files(), (key) => heads.get(key), handleChange)
 
   const clearViewerSearch = () => {
     for (const handle of searchHandles.values()) handle.clear()

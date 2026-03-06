@@ -17,7 +17,7 @@ import { Icon } from "./icon"
 import { TextShimmer } from "./text-shimmer"
 import { SessionRetry } from "./session-retry"
 import { TextReveal } from "./text-reveal"
-import { accordionValue, pinSticky } from "./sticky-accordion"
+import { pinSticky, pinStickyAccordionChange } from "./sticky-accordion"
 import { createAutoScroll } from "../hooks"
 import { useI18n } from "../context/i18n"
 
@@ -264,18 +264,8 @@ export function SessionTurn(
     pinSticky(refs.get("root-trigger"), () => setOpen(value))
   }
 
-  const onExpandChange = (value: string | string[] | undefined) => {
-    const next = accordionValue(value)
-    const prev = expanded()
-    const key = prev.find((item) => !next.includes(item))
-
-    if (!key) {
-      setExpanded(next)
-      return
-    }
-
-    pinSticky(refs.get(`head:${key}`), () => setExpanded(next))
-  }
+  const onExpandChange = (value: string | string[] | undefined) =>
+    pinStickyAccordionChange(expanded(), value, (key) => refs.get(`head:${key}`), setExpanded)
 
   createEffect(
     on(
