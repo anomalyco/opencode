@@ -9,6 +9,7 @@ import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
 import path from "path"
 import { assertExternalDirectory } from "./external-directory"
+import { hashlineRef } from "./hashline"
 
 const MAX_LINE_LENGTH = 2000
 
@@ -129,7 +130,7 @@ export const GrepTool = Tool.define("grep", {
       }
       const truncatedLineText =
         match.lineText.length > MAX_LINE_LENGTH ? match.lineText.substring(0, MAX_LINE_LENGTH) + "..." : match.lineText
-      outputLines.push(`  Line ${match.lineNum}: ${truncatedLineText}`)
+      outputLines.push(`  ${hashlineRef(match.lineNum, match.lineText)}:${truncatedLineText}`)
     }
 
     if (truncated) {

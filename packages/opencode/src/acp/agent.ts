@@ -347,21 +347,13 @@ export namespace ACP {
                 ]
 
                 if (kind === "edit") {
-                  const input = part.state.input
-                  const filePath = typeof input["filePath"] === "string" ? input["filePath"] : ""
-                  const oldText = typeof input["oldString"] === "string" ? input["oldString"] : ""
-                  const newText =
-                    typeof input["newString"] === "string"
-                      ? input["newString"]
-                      : typeof input["content"] === "string"
-                        ? input["content"]
-                        : ""
-                  content.push({
-                    type: "diff",
-                    path: filePath,
-                    oldText,
-                    newText,
-                  })
+                  const diff = editDiff(part.state.input, part.state.metadata)
+                  if (diff) {
+                    content.push({
+                      type: "diff",
+                      ...diff,
+                    })
+                  }
                 }
 
                 if (part.tool === "todowrite") {
@@ -862,21 +854,13 @@ export namespace ACP {
               ]
 
               if (kind === "edit") {
-                const input = part.state.input
-                const filePath = typeof input["filePath"] === "string" ? input["filePath"] : ""
-                const oldText = typeof input["oldString"] === "string" ? input["oldString"] : ""
-                const newText =
-                  typeof input["newString"] === "string"
-                    ? input["newString"]
-                    : typeof input["content"] === "string"
-                      ? input["content"]
-                      : ""
-                content.push({
-                  type: "diff",
-                  path: filePath,
-                  oldText,
-                  newText,
-                })
+                const diff = editDiff(part.state.input, part.state.metadata)
+                if (diff) {
+                  content.push({
+                    type: "diff",
+                    ...diff,
+                  })
+                }
               }
 
               if (part.tool === "todowrite") {
@@ -1627,6 +1611,40 @@ export namespace ACP {
         type: "text",
         text: uri,
       }
+    }
+  }
+
+  function editDiff(input: Record<string, any>, metadata: unknown) {
+    const meta = typeof metadata === "object" && metadata ? (metadata as Record<string, any>) : undefined
+    const filediff =
+      meta && typeof meta["filediff"] === "object" && meta["filediff"]
+        ? (meta["filediff"] as Record<string, any>)
+        : undefined
+    const path =
+      typeof filediff?.["file"] === "string"
+        ? filediff["file"]
+        : typeof input["filePath"] === "string"
+          ? input["filePath"]
+          : ""
+    const oldText =
+      typeof filediff?.["before"] === "string"
+        ? filediff["before"]
+        : typeof input["oldString"] === "string"
+          ? input["oldString"]
+          : ""
+    const newText =
+      typeof filediff?.["after"] === "string"
+        ? filediff["after"]
+        : typeof input["newString"] === "string"
+          ? input["newString"]
+          : typeof input["content"] === "string"
+            ? input["content"]
+            : ""
+    if (!path && !oldText && !newText) return
+    return {
+      path,
+      oldText,
+      newText,
     }
   }
 

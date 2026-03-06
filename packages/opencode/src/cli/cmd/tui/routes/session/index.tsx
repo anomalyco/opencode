@@ -2071,7 +2071,7 @@ function Edit(props: ToolProps<typeof EditTool>) {
       </Match>
       <Match when={true}>
         <InlineTool icon="←" pending="Preparing edit..." complete={props.input.filePath} part={props.part}>
-          Edit {normalizePath(props.input.filePath!)} {input({ replaceAll: props.input.replaceAll })}
+          Edit {normalizePath(props.input.filePath!)} {input(props.input, ["edits", "filePath"])}
         </InlineTool>
       </Match>
     </Switch>
