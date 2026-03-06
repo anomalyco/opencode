@@ -5,8 +5,7 @@ test("smoke @mention inserts file pill token", async ({ page, gotoSession }) => 
   await gotoSession()
 
   await page.locator(promptSelector).click()
-  const sep = process.platform === "win32" ? "\\" : "/"
-  const file = ["packages", "app", "package.json"].join(sep)
+  const file = ["packages", "app", "package.json"].join("/")
   const filePattern = /packages[\\/]+app[\\/]+\s*package\.json/
 
   await page.keyboard.type(`@${file}`)
