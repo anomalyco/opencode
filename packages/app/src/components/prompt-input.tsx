@@ -244,7 +244,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: "image" | "@mention" | null
     mode: "normal" | "shell"
     applyingHistory: boolean
-    pendingAutoAccept: boolean
   }>({
     popover: null,
     historyIndex: -1,
@@ -253,7 +252,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: null,
     mode: "normal",
     applyingHistory: false,
-    pendingAutoAccept: false,
   })
 
   const buttonsSpring = useSpring(() => (store.mode === "normal" ? 1 : 0), { visualDuration: 0.2, bounce: 0 })
@@ -303,12 +301,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       example: suggest() ? language.t(EXAMPLES[store.placeholder]) : "",
       suggest: suggest(),
       t: (key, params) => language.t(key as Parameters<typeof language.t>[0], params as never),
-    }),
-  )
-
-  createEffect(
-    on(sessionKey, () => {
-      setStore("pendingAutoAccept", false)
     }),
   )
 
@@ -961,7 +953,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const variants = createMemo(() => ["default", ...local.model.variant.list()])
   const accepting = createMemo(() => {
     const id = params.id
-    if (!id) return store.pendingAutoAccept
+    if (!id) return permission.isAutoAcceptingDirectory(sdk.directory)
     return permission.isAutoAccepting(id, sdk.directory)
   })
 
@@ -1336,7 +1328,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   variant="ghost"
                   onClick={() => {
                     if (!params.id) {
-                      setStore("pendingAutoAccept", (value) => !value)
+                      permission.toggleAutoAcceptDirectory(sdk.directory)
                       return
                     }
                     permission.toggleAutoAccept(params.id, sdk.directory)
