@@ -205,4 +205,13 @@ export namespace Vcs {
     }
     return $`git diff`.quiet().nothrow().cwd(Instance.worktree).text()
   }
+
+  export async function show(file: string): Promise<string> {
+    return $`git show ${"HEAD:" + file}`
+      .quiet()
+      .nothrow()
+      .cwd(Instance.worktree)
+      .text()
+      .catch(() => "")
+  }
 }

@@ -3,6 +3,7 @@ import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { useParams } from "@solidjs/router"
 import { Tabs } from "@opencode-ai/ui/tabs"
+import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
@@ -13,7 +14,7 @@ import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 
 import FileTree from "@/components/file-tree"
-import { GitChangesPanel } from "@/components/git-changes"
+import { createGitStatus, gitDiffTab, pathFromGitDiffTab } from "@/components/git-changes"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { SessionContextTab, SortableTab, FileVisual } from "@/components/session"
@@ -24,6 +25,7 @@ import { useLayout } from "@/context/layout"
 import { useSync } from "@/context/sync"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
+import { GitDiffTabContent } from "@/pages/session/git-diff-tab"
 import { createOpenSessionFileTab, getTabReorderIndex } from "@/pages/session/helpers"
 import { StickyAddButton } from "@/pages/session/review-tab"
 import { setSessionHandoff } from "@/pages/session/handoff"
@@ -88,6 +90,8 @@ export function SessionSidePanel(props: {
     return out
   })
 
+  const git = createGitStatus()
+
   const normalizeTab = (tab: string) => {
     if (!tab.startsWith("file://")) return tab
     return file.tab(tab)
@@ -97,7 +101,7 @@ export function SessionSidePanel(props: {
     if (!view().reviewPanel.opened()) view().reviewPanel.open()
   }
 
-  const openTab = createOpenSessionFileTab({
+  const openFileTab = createOpenSessionFileTab({
     normalizeTab,
     openTab: tabs().open,
     pathFromTab: file.pathFromTab,
@@ -105,6 +109,16 @@ export function SessionSidePanel(props: {
     openReviewPanel,
     setActive: tabs().setActive,
   })
+
+  const openTab = (value: string) => {
+    if (pathFromGitDiffTab(value)) {
+      tabs().open(value)
+      tabs().setActive(value)
+      openReviewPanel()
+      return
+    }
+    openFileTab(value)
+  }
 
   const contextOpen = createMemo(() => tabs().active() === "context" || tabs().all().includes("context"))
   const openedTabs = createMemo(() =>
@@ -118,6 +132,7 @@ export function SessionSidePanel(props: {
     if (active === "context") return "context"
     if (active === "review" && reviewTab()) return "review"
     if (active && file.pathFromTab(active)) return normalizeTab(active)
+    if (active && pathFromGitDiffTab(active)) return active
 
     const first = openedTabs()[0]
     if (first) return first
@@ -135,7 +150,7 @@ export function SessionSidePanel(props: {
   const fileTreeTab = () => layout.fileTree.tab()
 
   const setFileTreeTabValue = (value: string) => {
-    if (value !== "changes" && value !== "all" && value !== "git") return
+    if (value !== "changes" && value !== "all") return
     layout.fileTree.setTab(value)
   }
 
@@ -147,6 +162,8 @@ export function SessionSidePanel(props: {
   const [store, setStore] = createStore({
     activeDraggable: undefined as string | undefined,
     fileTreeScrolled: false,
+    sessionOpen: true,
+    gitOpen: true,
   })
 
   let changesEl: HTMLDivElement | undefined
@@ -323,13 +340,22 @@ export function SessionSidePanel(props: {
                 </Show>
 
                 <Show when={activeFileTab()} keyed>
-                  {(tab) => <FileTabContent tab={tab} />}
+                  {(tab) => (
+                    <Switch>
+                      <Match when={pathFromGitDiffTab(tab)}>
+                        <GitDiffTabContent tab={tab} />
+                      </Match>
+                      <Match when={true}>
+                        <FileTabContent tab={tab} />
+                      </Match>
+                    </Switch>
+                  )}
                 </Show>
               </Tabs>
               <DragOverlay>
                 <Show when={store.activeDraggable} keyed>
                   {(tab) => {
-                    const path = createMemo(() => file.pathFromTab(tab))
+                    const path = createMemo(() => file.pathFromTab(tab) ?? pathFromGitDiffTab(tab))
                     return (
                       <div data-component="tabs-drag-preview">
                         <Show when={path()} keyed>
@@ -365,9 +391,6 @@ export function SessionSidePanel(props: {
                   <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
                     {language.t("session.files.all")}
                   </Tabs.Trigger>
-                  <Tabs.Trigger value="git" class="flex-1" classes={{ button: "w-full" }}>
-                    Git
-                  </Tabs.Trigger>
                 </Tabs.List>
                 <Tabs.Content
                   value="changes"
@@ -375,33 +398,69 @@ export function SessionSidePanel(props: {
                   onScroll={(e: UIEvent & { currentTarget: HTMLDivElement }) => syncFileTreeScrolled(e.currentTarget)}
                   class="bg-background-stronger px-3 py-0"
                 >
-                  <Switch>
-                    <Match when={hasReview()}>
-                      <Show
-                        when={diffsReady()}
-                        fallback={
-                          <div class="px-2 py-2 text-12-regular text-text-weak">
-                            {language.t("common.loading")}
-                            {language.t("common.loading.ellipsis")}
-                          </div>
-                        }
-                      >
-                        <FileTree
-                          path=""
-                          allowed={diffFiles()}
-                          kinds={kinds()}
-                          draggable={false}
-                          active={props.activeDiff}
-                          onFileClick={(node) => props.focusReviewDiff(node.path)}
-                        />
-                      </Show>
-                    </Match>
-                    <Match when={true}>
+                  <Show
+                    when={hasReview() || git.count() > 0}
+                    fallback={
                       <div class="mt-8 text-center text-12-regular text-text-weak">
                         {language.t("session.review.noChanges")}
                       </div>
-                    </Match>
-                  </Switch>
+                    }
+                  >
+                    <Show when={hasReview()}>
+                      <div class="mt-1">
+                        <button
+                          class="w-full flex items-center gap-1 px-1 py-1 hover:bg-surface-base-hover rounded-md cursor-pointer"
+                          onClick={() => setStore("sessionOpen", (v) => !v)}
+                        >
+                          <Icon name={store.sessionOpen ? "chevron-down" : "chevron-right"} size="small" class="text-icon-base shrink-0" />
+                          <span class="text-11-medium uppercase tracking-wider text-text-weak">Session</span>
+                          <span class="text-11-regular text-text-weak">{reviewCount()}</span>
+                        </button>
+                      </div>
+                      <Show when={store.sessionOpen}>
+                        <Show
+                          when={diffsReady()}
+                          fallback={
+                            <div class="px-2 py-2 text-12-regular text-text-weak">
+                              {language.t("common.loading")}
+                              {language.t("common.loading.ellipsis")}
+                            </div>
+                          }
+                        >
+                          <FileTree
+                            path=""
+                            allowed={diffFiles()}
+                            kinds={kinds()}
+                            draggable={false}
+                            active={props.activeDiff}
+                            onFileClick={(node) => props.focusReviewDiff(node.path)}
+                          />
+                        </Show>
+                      </Show>
+                    </Show>
+
+                    <Show when={git.count() > 0}>
+                      <div classList={{ "border-t border-border-base mt-1 pt-1": hasReview() }}>
+                        <button
+                          class="w-full flex items-center gap-1 px-1 py-1 hover:bg-surface-base-hover rounded-md cursor-pointer"
+                          onClick={() => setStore("gitOpen", (v) => !v)}
+                        >
+                          <Icon name={store.gitOpen ? "chevron-down" : "chevron-right"} size="small" class="text-icon-base shrink-0" />
+                          <span class="text-11-medium uppercase tracking-wider text-text-weak">Git</span>
+                          <span class="text-11-regular text-text-weak">{git.count()}</span>
+                        </button>
+                      </div>
+                      <Show when={store.gitOpen}>
+                        <FileTree
+                          path=""
+                          allowed={git.gitFiles()}
+                          kinds={git.gitKinds()}
+                          draggable={false}
+                          onFileClick={(node) => openTab(gitDiffTab(node.path))}
+                        />
+                      </Show>
+                    </Show>
+                  </Show>
                 </Tabs.Content>
                 <Tabs.Content
                   value="all"
@@ -415,9 +474,6 @@ export function SessionSidePanel(props: {
                     kinds={kinds()}
                     onFileClick={(node) => openTab(file.tab(node.path))}
                   />
-                </Tabs.Content>
-                <Tabs.Content value="git" class="bg-background-stronger h-full">
-                  <GitChangesPanel />
                 </Tabs.Content>
               </Tabs>
             </div>

@@ -218,5 +218,30 @@ export const VcsRoutes = lazy(() =>
         const diff = await Vcs.diff(file)
         return c.json({ diff })
       },
+    )
+    .get(
+      "/show",
+      describeRoute({
+        summary: "Get file at HEAD",
+        description: "Get the content of a file at the HEAD commit.",
+        operationId: "vcs.show",
+        responses: {
+          200: {
+            description: "File content at HEAD",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ content: z.string() })),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("query", z.object({ file: z.string() })),
+      async (c) => {
+        const { file } = c.req.valid("query")
+        const content = await Vcs.show(file)
+        return c.json({ content })
+      },
     ),
 )

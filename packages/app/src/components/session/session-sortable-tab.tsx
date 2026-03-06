@@ -9,6 +9,7 @@ import { getFilename } from "@opencode-ai/util/path"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useCommand } from "@/context/command"
+import { pathFromGitDiffTab } from "@/components/git-changes"
 
 export function FileVisual(props: { path: string; active?: boolean }): JSX.Element {
   return (
@@ -32,7 +33,7 @@ export function SortableTab(props: { tab: string; onTabClose: (tab: string) => v
   const language = useLanguage()
   const command = useCommand()
   const sortable = createSortable(props.tab)
-  const path = createMemo(() => file.pathFromTab(props.tab))
+  const path = createMemo(() => file.pathFromTab(props.tab) ?? pathFromGitDiffTab(props.tab))
   const content = createMemo(() => {
     const value = path()
     if (!value) return
