@@ -3,7 +3,6 @@
 import os from "os"
 import path from "path"
 import fs from "fs/promises"
-import { setTimeout as sleep } from "node:timers/promises"
 import { afterAll } from "bun:test"
 
 // Set XDG env vars FIRST, before any src/ imports
@@ -16,7 +15,7 @@ afterAll(async () => {
     typeof error === "object" && error !== null && "code" in error && error.code === "EBUSY"
   const rm = async (left: number): Promise<void> => {
     Bun.gc(true)
-    await sleep(100)
+    await Bun.sleep(100)
     return fs.rm(dir, { recursive: true, force: true }).catch((error) => {
       if (!busy(error)) throw error
       if (left <= 1) throw error

@@ -546,12 +546,6 @@ export const dict = {
   "settings.general.row.theme.description": "Dostosuj motyw OpenCode.",
   "settings.general.row.font.title": "Czcionka",
   "settings.general.row.font.description": "Dostosuj czcionkę mono używaną w blokach kodu",
-  "settings.general.row.shellToolPartsExpanded.title": "Rozwijaj elementy narzędzia shell",
-  "settings.general.row.shellToolPartsExpanded.description":
-    "Domyślnie pokazuj rozwinięte elementy narzędzia shell na osi czasu",
-  "settings.general.row.editToolPartsExpanded.title": "Rozwijaj elementy narzędzia edit",
-  "settings.general.row.editToolPartsExpanded.description":
-    "Domyślnie pokazuj rozwinięte elementy narzędzi edit, write i patch na osi czasu",
   "settings.general.row.wayland.title": "Użyj natywnego Wayland",
   "settings.general.row.wayland.description": "Wyłącz fallback X11 na Wayland. Wymaga restartu.",
   "settings.general.row.wayland.tooltip":

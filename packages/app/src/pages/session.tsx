@@ -31,16 +31,17 @@ import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
+import { same } from "@opencode-ai/util/array"
+import { isEditableTarget } from "@/utils/dom"
 import { createOpenReviewFile } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { createScrollSpy } from "@/pages/session/scroll-spy"
+import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
-import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
-import { same } from "@/utils/same"
 
 const emptyUserMessages: UserMessage[] = []
 
@@ -118,13 +119,13 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
       return
     }
     const beforeTop = el.scrollTop
-    const beforeHeight = el.scrollHeight
     fn()
-    requestAnimationFrame(() => {
-      const delta = el.scrollHeight - beforeHeight
-      if (!delta) return
-      el.scrollTop = beforeTop + delta
-    })
+    // SolidJS updates the DOM synchronously. Force reflow so the browser
+    // processes the new layout, then restore scrollTop before paint.
+    // With column-reverse + overflow-anchor:none the same scrollTop value
+    // keeps the same distance from the bottom — no delta math needed.
+    void el.scrollHeight
+    el.scrollTop = beforeTop
   }
 
   const backfillTurns = () => {
@@ -207,7 +208,8 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
     if (!input.userScrolled()) return
     const el = input.scroller()
     if (!el) return
-    if (el.scrollTop >= turnScrollThreshold) return
+    // With column-reverse, distance from top = scrollHeight - clientHeight + scrollTop
+    if (el.scrollHeight - el.clientHeight + el.scrollTop >= turnScrollThreshold) return
 
     const start = turnStart()
     if (start > 0) {
@@ -285,7 +287,6 @@ export default function Page() {
       bottom: true,
     },
   })
-
   const composer = createSessionComposerState()
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
@@ -430,19 +431,7 @@ export default function Page() {
     mobileTab: "session" as "session" | "changes",
     changes: "session" as "session" | "turn",
     newSessionWorktree: "main",
-    deferRender: false,
   })
-
-  createComputed((prev) => {
-    const key = sessionKey()
-    if (key !== prev) {
-      setStore("deferRender", true)
-      requestAnimationFrame(() => {
-        setTimeout(() => setStore("deferRender", false), 0)
-      })
-    }
-    return key
-  }, sessionKey())
 
   const turnDiffs = createMemo(() => lastUserMessage()?.summary?.diffs ?? [])
   const reviewDiffs = createMemo(() => (store.changes === "session" ? diffs() : turnDiffs()))
@@ -454,11 +443,6 @@ export default function Page() {
     return "main"
   })
 
-  const activeMessage = createMemo(() => {
-    if (!store.messageId) return lastUserMessage()
-    const found = visibleUserMessages()?.find((m) => m.id === store.messageId)
-    return found ?? lastUserMessage()
-  })
   const setActiveMessage = (message: UserMessage | undefined) => {
     setStore("messageId", message?.id)
   }
@@ -620,11 +604,6 @@ export default function Page() {
     saveLabel: language.t("common.save"),
   }))
 
-  const isEditableTarget = (target: EventTarget | null | undefined) => {
-    if (!(target instanceof HTMLElement)) return false
-    return /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName) || target.isContentEditable
-  }
-
   const deepActiveElement = () => {
     let current: Element | null = document.activeElement
     while (current instanceof HTMLElement && current.shadowRoot?.activeElement) {
@@ -755,12 +734,35 @@ export default function Page() {
     loadingClass: string
     emptyClass: string
   }) => (
-    <Show when={!store.deferRender}>
-      <Switch>
-        <Match when={store.changes === "turn" && !!params.id}>
+    <Switch>
+      <Match when={store.changes === "turn" && !!params.id}>
+        <SessionReviewTab
+          title={changesTitle()}
+          empty={emptyTurn()}
+          diffs={reviewDiffs}
+          view={view}
+          diffStyle={input.diffStyle}
+          onDiffStyleChange={input.onDiffStyleChange}
+          onScrollRef={(el) => setTree("reviewScroll", el)}
+          focusedFile={tree.activeDiff}
+          onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+          onLineCommentUpdate={updateCommentInContext}
+          onLineCommentDelete={removeCommentFromContext}
+          lineCommentActions={reviewCommentActions()}
+          comments={comments.all()}
+          focusedComment={comments.focus()}
+          onFocusedCommentChange={comments.setFocus}
+          onViewFile={openReviewFile}
+          classes={input.classes}
+        />
+      </Match>
+      <Match when={hasReview()}>
+        <Show
+          when={diffsReady()}
+          fallback={<div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>}
+        >
           <SessionReviewTab
             title={changesTitle()}
-            empty={emptyTurn()}
             diffs={reviewDiffs}
             view={view}
             diffStyle={input.diffStyle}
@@ -777,64 +779,39 @@ export default function Page() {
             onViewFile={openReviewFile}
             classes={input.classes}
           />
-        </Match>
-        <Match when={hasReview()}>
-          <Show
-            when={diffsReady()}
-            fallback={<div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>}
-          >
-            <SessionReviewTab
-              title={changesTitle()}
-              diffs={reviewDiffs}
-              view={view}
-              diffStyle={input.diffStyle}
-              onDiffStyleChange={input.onDiffStyleChange}
-              onScrollRef={(el) => setTree("reviewScroll", el)}
-              focusedFile={tree.activeDiff}
-              onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-              onLineCommentUpdate={updateCommentInContext}
-              onLineCommentDelete={removeCommentFromContext}
-              lineCommentActions={reviewCommentActions()}
-              comments={comments.all()}
-              focusedComment={comments.focus()}
-              onFocusedCommentChange={comments.setFocus}
-              onViewFile={openReviewFile}
-              classes={input.classes}
-            />
-          </Show>
-        </Match>
-        <Match when={true}>
-          <SessionReviewTab
-            title={changesTitle()}
-            empty={
-              store.changes === "turn" ? (
-                emptyTurn()
-              ) : (
-                <div class={input.emptyClass}>
-                  <Mark class="w-14 opacity-10" />
-                  <div class="text-14-regular text-text-weak max-w-56">{language.t(reviewEmptyKey())}</div>
-                </div>
-              )
-            }
-            diffs={reviewDiffs}
-            view={view}
-            diffStyle={input.diffStyle}
-            onDiffStyleChange={input.onDiffStyleChange}
-            onScrollRef={(el) => setTree("reviewScroll", el)}
-            focusedFile={tree.activeDiff}
-            onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-            onLineCommentUpdate={updateCommentInContext}
-            onLineCommentDelete={removeCommentFromContext}
-            lineCommentActions={reviewCommentActions()}
-            comments={comments.all()}
-            focusedComment={comments.focus()}
-            onFocusedCommentChange={comments.setFocus}
-            onViewFile={openReviewFile}
-            classes={input.classes}
-          />
-        </Match>
-      </Switch>
-    </Show>
+        </Show>
+      </Match>
+      <Match when={true}>
+        <SessionReviewTab
+          title={changesTitle()}
+          empty={
+            store.changes === "turn" ? (
+              emptyTurn()
+            ) : (
+              <div class={input.emptyClass}>
+                <Mark class="w-14 opacity-10" />
+                <div class="text-14-regular text-text-weak max-w-56">{language.t(reviewEmptyKey())}</div>
+              </div>
+            )
+          }
+          diffs={reviewDiffs}
+          view={view}
+          diffStyle={input.diffStyle}
+          onDiffStyleChange={input.onDiffStyleChange}
+          onScrollRef={(el) => setTree("reviewScroll", el)}
+          focusedFile={tree.activeDiff}
+          onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+          onLineCommentUpdate={updateCommentInContext}
+          onLineCommentDelete={removeCommentFromContext}
+          lineCommentActions={reviewCommentActions()}
+          comments={comments.all()}
+          focusedComment={comments.focus()}
+          onFocusedCommentChange={comments.setFocus}
+          onViewFile={openReviewFile}
+          classes={input.classes}
+        />
+      </Match>
+    </Switch>
   )
 
   const reviewPanel = () => (
@@ -1045,7 +1022,10 @@ export default function Page() {
   const updateScrollState = (el: HTMLDivElement) => {
     const max = el.scrollHeight - el.clientHeight
     const overflow = max > 1
-    const bottom = !overflow || el.scrollTop >= max - 2
+    // If auto-scroll is tracking the bottom, always report bottom: true
+    // to prevent the scroll-down arrow from flashing during height animations
+    // With column-reverse, scrollTop=0 is at the bottom
+    const bottom = !overflow || Math.abs(el.scrollTop) <= 2 || !autoScroll.userScrolled()
 
     if (ui.scroll.overflow === overflow && ui.scroll.bottom === bottom) return
     setUi("scroll", { overflow, bottom })
@@ -1068,7 +1048,7 @@ export default function Page() {
 
   const resumeScroll = () => {
     setStore("messageId", undefined)
-    autoScroll.forceScrollToBottom()
+    autoScroll.smoothScrollToBottom()
     clearMessageHash()
 
     const el = scroller
@@ -1136,9 +1116,8 @@ export default function Page() {
 
       const el = scroller
       const delta = next - dockHeight
-      const stick = el
-        ? !autoScroll.userScrolled() || el.scrollHeight - el.clientHeight - el.scrollTop < 10 + Math.max(0, delta)
-        : false
+      // With column-reverse, near bottom = scrollTop near 0
+      const stick = el ? Math.abs(el.scrollTop) < 10 + Math.max(0, delta) : false
 
       dockHeight = next
 
@@ -1204,50 +1183,49 @@ export default function Page() {
           <div class="flex-1 min-h-0 overflow-hidden">
             <Switch>
               <Match when={params.id}>
-                <Show when={activeMessage()}>
-                  <MessageTimeline
-                    mobileChanges={mobileChanges()}
-                    mobileFallback={reviewContent({
-                      diffStyle: "unified",
-                      classes: {
-                        root: "pb-8",
-                        header: "px-4",
-                        container: "px-4",
-                      },
-                      loadingClass: "px-4 py-4 text-text-weak",
-                      emptyClass: "h-full pb-30 flex flex-col items-center justify-center text-center gap-6",
-                    })}
-                    scroll={ui.scroll}
-                    onResumeScroll={resumeScroll}
-                    setScrollRef={setScrollRef}
-                    onScheduleScrollState={scheduleScrollState}
-                    onAutoScrollHandleScroll={autoScroll.handleScroll}
-                    onMarkScrollGesture={markScrollGesture}
-                    hasScrollGesture={hasScrollGesture}
-                    isDesktop={isDesktop()}
-                    onScrollSpyScroll={scrollSpy.onScroll}
-                    onTurnBackfillScroll={historyWindow.onScrollerScroll}
-                    onAutoScrollInteraction={autoScroll.handleInteraction}
-                    centered={centered()}
-                    setContentRef={(el) => {
-                      content = el
-                      autoScroll.contentRef(el)
+                <MessageTimeline
+                  mobileChanges={mobileChanges()}
+                  mobileFallback={reviewContent({
+                    diffStyle: "unified",
+                    classes: {
+                      root: "pb-8",
+                      header: "px-4",
+                      container: "px-4",
+                    },
+                    loadingClass: "px-4 py-4 text-text-weak",
+                    emptyClass: "h-full pb-30 flex flex-col items-center justify-center text-center gap-6",
+                  })}
+                  scroll={ui.scroll}
+                  onResumeScroll={resumeScroll}
+                  setScrollRef={setScrollRef}
+                  onScheduleScrollState={scheduleScrollState}
+                  onAutoScrollHandleScroll={autoScroll.handleScroll}
+                  onMarkScrollGesture={markScrollGesture}
+                  hasScrollGesture={hasScrollGesture}
+                  isDesktop={isDesktop()}
+                  onScrollSpyScroll={scrollSpy.onScroll}
+                  onTurnBackfillScroll={historyWindow.onScrollerScroll}
+                  onAutoScrollInteraction={autoScroll.handleInteraction}
+                  onPreserveScrollAnchor={autoScroll.preserve}
+                  centered={centered()}
+                  setContentRef={(el) => {
+                    content = el
+                    autoScroll.contentRef(el)
 
-                      const root = scroller
-                      if (root) scheduleScrollState(root)
-                    }}
-                    turnStart={historyWindow.turnStart()}
-                    historyMore={historyMore()}
-                    historyLoading={historyLoading()}
-                    onLoadEarlier={() => {
-                      void historyWindow.loadAndReveal()
-                    }}
-                    renderedUserMessages={historyWindow.renderedUserMessages()}
-                    anchor={anchor}
-                    onRegisterMessage={scrollSpy.register}
-                    onUnregisterMessage={scrollSpy.unregister}
-                  />
-                </Show>
+                    const root = scroller
+                    if (root) scheduleScrollState(root)
+                  }}
+                  turnStart={historyWindow.turnStart()}
+                  historyMore={historyMore()}
+                  historyLoading={historyLoading()}
+                  onLoadEarlier={() => {
+                    void historyWindow.loadAndReveal()
+                  }}
+                  renderedUserMessages={historyWindow.renderedUserMessages()}
+                  anchor={anchor}
+                  onRegisterMessage={scrollSpy.register}
+                  onUnregisterMessage={scrollSpy.unregister}
+                />
               </Match>
               <Match when={true}>
                 <NewSessionView
@@ -1273,7 +1251,6 @@ export default function Page() {
 
           <SessionComposerRegion
             state={composer}
-            ready={!store.deferRender && messagesReady()}
             centered={centered()}
             inputRef={(el) => {
               inputRef = el

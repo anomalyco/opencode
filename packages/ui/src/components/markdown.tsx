@@ -44,19 +44,6 @@ function sanitize(html: string) {
   return DOMPurify.sanitize(html, config)
 }
 
-function escape(text: string) {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&#39;")
-}
-
-function fallback(markdown: string) {
-  return escape(markdown).replace(/\r\n?/g, "\n").replace(/\n/g, "<br>")
-}
-
 type CopyLabels = {
   copy: string
   copied: string
@@ -250,7 +237,7 @@ export function Markdown(
   const [html] = createResource(
     () => local.text,
     async (markdown) => {
-      if (isServer) return fallback(markdown)
+      if (isServer) return ""
 
       const hash = checksum(markdown)
       const key = local.cacheKey ?? hash
@@ -268,7 +255,7 @@ export function Markdown(
       if (key && hash) touch(key, { hash, html: safe })
       return safe
     },
-    { initialValue: isServer ? fallback(local.text) : "" },
+    { initialValue: "" },
   )
 
   let copySetupTimer: ReturnType<typeof setTimeout> | undefined

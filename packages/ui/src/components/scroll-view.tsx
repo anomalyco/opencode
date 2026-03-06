@@ -1,17 +1,17 @@
-import { createSignal, onCleanup, onMount, splitProps, type ComponentProps, Show, mergeProps } from "solid-js"
+import { createSignal, onCleanup, onMount, splitProps, type ComponentProps, Show } from "solid-js"
+import { animate, type AnimationPlaybackControls } from "motion"
 import { useI18n } from "../context/i18n"
+import { FAST_SPRING } from "./motion"
 
 export interface ScrollViewProps extends ComponentProps<"div"> {
   viewportRef?: (el: HTMLDivElement) => void
-  orientation?: "vertical" | "horizontal" // currently only vertical is fully implemented for thumb
 }
 
 export function ScrollView(props: ScrollViewProps) {
   const i18n = useI18n()
-  const merged = mergeProps({ orientation: "vertical" }, props)
   const [local, events, rest] = splitProps(
-    merged,
-    ["class", "children", "viewportRef", "orientation", "style"],
+    props,
+    ["class", "children", "viewportRef", "style"],
     [
       "onScroll",
       "onWheel",
@@ -25,9 +25,9 @@ export function ScrollView(props: ScrollViewProps) {
     ],
   )
 
-  let rootRef!: HTMLDivElement
   let viewportRef!: HTMLDivElement
   let thumbRef!: HTMLDivElement
+  let anim: AnimationPlaybackControls | undefined
 
   const [isHovered, setIsHovered] = createSignal(false)
   const [isDragging, setIsDragging] = createSignal(false)
@@ -57,9 +57,12 @@ export function ScrollView(props: ScrollViewProps) {
     const maxScrollTop = scrollHeight - clientHeight
     const maxThumbTop = trackHeight - height
 
-    const top = maxScrollTop > 0 ? (scrollTop / maxScrollTop) * maxThumbTop : 0
+    // With column-reverse: scrollTop=0 is at bottom, negative = scrolled up
+    // Normalize so 0 = at top, maxScrollTop = at bottom
+    const normalizedScrollTop = maxScrollTop + scrollTop
+    const top = maxScrollTop > 0 ? (normalizedScrollTop / maxScrollTop) * maxThumbTop : 0
 
-    // Ensure thumb stays within bounds (shouldn't be necessary due to math above, but good for safety)
+    // Ensure thumb stays within bounds
     const boundedTop = trackPadding + Math.max(0, Math.min(top, maxThumbTop))
 
     setThumbHeight(height)
@@ -82,6 +85,7 @@ export function ScrollView(props: ScrollViewProps) {
     }
 
     onCleanup(() => {
+      stop()
       observer.disconnect()
     })
 
@@ -123,6 +127,30 @@ export function ScrollView(props: ScrollViewProps) {
     thumbRef.addEventListener("pointerup", onPointerUp)
   }
 
+  const stop = () => {
+    if (!anim) return
+    anim.stop()
+    anim = undefined
+  }
+
+  const limit = (top: number) => {
+    const max = viewportRef.scrollHeight - viewportRef.clientHeight
+    return Math.max(-max, Math.min(0, top))
+  }
+
+  const glide = (top: number) => {
+    stop()
+    anim = animate(viewportRef.scrollTop, limit(top), {
+      ...FAST_SPRING,
+      onUpdate: (v) => {
+        viewportRef.scrollTop = v
+      },
+      onComplete: () => {
+        anim = undefined
+      },
+    })
+  }
+
   // Keybinds implementation
   // We ensure the viewport has a tabindex so it can receive focus
   // We can also explicitly catch PageUp/Down if we want smooth scroll or specific behavior,
@@ -147,11 +175,13 @@ export function ScrollView(props: ScrollViewProps) {
         break
       case "Home":
         e.preventDefault()
-        viewportRef.scrollTo({ top: 0, behavior: "smooth" })
+        // With column-reverse, top of content = -(scrollHeight - clientHeight)
+        glide(-(viewportRef.scrollHeight - viewportRef.clientHeight))
         break
       case "End":
         e.preventDefault()
-        viewportRef.scrollTo({ top: viewportRef.scrollHeight, behavior: "smooth" })
+        // With column-reverse, bottom of content = 0
+        glide(0)
         break
       case "ArrowUp":
         e.preventDefault()
@@ -166,7 +196,6 @@ export function ScrollView(props: ScrollViewProps) {
 
   return (
     <div
-      ref={rootRef}
       class={`scroll-view ${local.class || ""}`}
       style={local.style}
       onPointerEnter={() => setIsHovered(true)}
@@ -181,12 +210,21 @@ export function ScrollView(props: ScrollViewProps) {
           updateThumb()
           if (typeof events.onScroll === "function") events.onScroll(e as any)
         }}
-        onWheel={events.onWheel as any}
-        onTouchStart={events.onTouchStart as any}
+        onWheel={(e) => {
+          if (e.deltaY) stop()
+          if (typeof events.onWheel === "function") events.onWheel(e as any)
+        }}
+        onTouchStart={(e) => {
+          stop()
+          if (typeof events.onTouchStart === "function") events.onTouchStart(e as any)
+        }}
         onTouchMove={events.onTouchMove as any}
         onTouchEnd={events.onTouchEnd as any}
         onTouchCancel={events.onTouchCancel as any}
-        onPointerDown={events.onPointerDown as any}
+        onPointerDown={(e) => {
+          stop()
+          if (typeof events.onPointerDown === "function") events.onPointerDown(e as any)
+        }}
         onClick={events.onClick as any}
         tabIndex={0}
         role="region"

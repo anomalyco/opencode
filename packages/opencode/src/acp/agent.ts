@@ -31,7 +31,6 @@ import {
 import { Log } from "../util/log"
 import { pathToFileURL } from "bun"
 import { Filesystem } from "../util/filesystem"
-import { Hash } from "../util/hash"
 import { ACPSessionManager } from "./session"
 import type { ACPConfig } from "./types"
 import { Provider } from "../provider/provider"
@@ -282,7 +281,7 @@ export namespace ACP {
                 const output = this.bashOutput(part)
                 const content: ToolCallContent[] = []
                 if (output) {
-                  const hash = Hash.fast(output)
+                  const hash = String(Bun.hash(output))
                   if (part.tool === "bash") {
                     if (this.bashSnapshots.get(part.callID) === hash) {
                       await this.connection

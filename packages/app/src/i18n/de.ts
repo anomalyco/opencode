@@ -556,12 +556,6 @@ export const dict = {
   "settings.general.row.theme.description": "Das Thema von OpenCode anpassen.",
   "settings.general.row.font.title": "Schriftart",
   "settings.general.row.font.description": "Die in Codeblöcken verwendete Monospace-Schriftart anpassen",
-  "settings.general.row.shellToolPartsExpanded.title": "Shell-Tool-Abschnitte ausklappen",
-  "settings.general.row.shellToolPartsExpanded.description":
-    "Shell-Tool-Abschnitte standardmäßig in der Timeline ausgeklappt anzeigen",
-  "settings.general.row.editToolPartsExpanded.title": "Edit-Tool-Abschnitte ausklappen",
-  "settings.general.row.editToolPartsExpanded.description":
-    "Edit-, Write- und Patch-Tool-Abschnitte standardmäßig in der Timeline ausgeklappt anzeigen",
   "settings.general.row.wayland.title": "Natives Wayland verwenden",
   "settings.general.row.wayland.description": "X11-Fallback unter Wayland deaktivieren. Erfordert Neustart.",
   "settings.general.row.wayland.tooltip":

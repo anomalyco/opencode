@@ -616,12 +616,6 @@ export const dict = {
   "settings.general.row.font.title": "Fuente",
   "settings.general.row.font.description": "Personaliza la fuente monoespaciada usada en bloques de código",
 
-  "settings.general.row.shellToolPartsExpanded.title": "Expandir partes de la herramienta shell",
-  "settings.general.row.shellToolPartsExpanded.description":
-    "Mostrar las partes de la herramienta shell expandidas por defecto en la línea de tiempo",
-  "settings.general.row.editToolPartsExpanded.title": "Expandir partes de la herramienta de edición",
-  "settings.general.row.editToolPartsExpanded.description":
-    "Mostrar las partes de las herramientas de edición, escritura y parcheado expandidas por defecto en la línea de tiempo",
   "settings.general.row.wayland.title": "Usar Wayland nativo",
   "settings.general.row.wayland.description": "Deshabilitar fallback a X11 en Wayland. Requiere reinicio.",
   "settings.general.row.wayland.tooltip":

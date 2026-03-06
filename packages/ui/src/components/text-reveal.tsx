@@ -1,4 +1,6 @@
 import { createEffect, createSignal, on, onCleanup, onMount } from "solid-js"
+import { animate, type AnimationPlaybackControls, clearFadeStyles, clearMaskStyles, GROW_SPRING, WIPE_MASK } from "./motion"
+import { prefersReducedMotion } from "../hooks/use-reduced-motion"
 
 const px = (value: number | string | undefined, fallback: number) => {
   if (typeof value === "number") return `${value}px`
@@ -15,6 +17,11 @@ const ms = (value: number | string | undefined, fallback: number) => {
 const pct = (value: number | undefined, fallback: number) => {
   const v = value ?? fallback
   return `${v}%`
+}
+
+const clearWipe = (el: HTMLElement) => {
+  clearFadeStyles(el)
+  clearMaskStyles(el)
 }
 
 export function TextReveal(props: {
@@ -39,10 +46,8 @@ export function TextReveal(props: {
   let outRef: HTMLSpanElement | undefined
   let rootRef: HTMLSpanElement | undefined
   let frame: number | undefined
-
   const win = () => inRef?.scrollWidth ?? 0
   const wout = () => outRef?.scrollWidth ?? 0
-
   const widen = (next: number) => {
     if (next <= 0) return
     if (props.growOnly ?? true) {
@@ -51,21 +56,14 @@ export function TextReveal(props: {
     }
     setWidth(`${next}px`)
   }
-
   createEffect(
     on(
       () => props.text,
       (next, prev) => {
         if (next === prev) return
-        if (typeof next === "string" && typeof prev === "string" && next.startsWith(prev)) {
-          setCur(next)
-          widen(win())
-          return
-        }
         setSwapping(true)
         setOld(prev)
         setCur(next)
-
         if (typeof requestAnimationFrame !== "function") {
           widen(Math.max(win(), wout()))
           rootRef?.offsetHeight
@@ -130,6 +128,97 @@ export function TextReveal(props: {
           {old() ?? "\u00A0"}
         </span>
       </span>
+    </span>
+  )
+}
+
+export function TextWipe(props: { text?: string; class?: string; delay?: number; animate?: boolean }) {
+  let ref: HTMLSpanElement | undefined
+  let frame: number | undefined
+  let anim: AnimationPlaybackControls | undefined
+
+  const run = () => {
+    if (props.animate === false) return
+    const el = ref
+    if (!el || !props.text || typeof window === "undefined") return
+    if (prefersReducedMotion()) return
+
+    const mask =
+      typeof CSS !== "undefined" &&
+      (CSS.supports("mask-image", "linear-gradient(to right, black, transparent)") ||
+        CSS.supports("-webkit-mask-image", "linear-gradient(to right, black, transparent)"))
+
+    anim?.stop()
+    if (frame !== undefined && typeof cancelAnimationFrame === "function") {
+      cancelAnimationFrame(frame)
+      frame = undefined
+    }
+
+    el.style.opacity = "0"
+    el.style.filter = "blur(3px)"
+    el.style.transform = "translateX(-0.06em)"
+
+    if (mask) {
+      el.style.maskImage = WIPE_MASK
+      el.style.webkitMaskImage = WIPE_MASK
+      el.style.maskSize = "240% 100%"
+      el.style.webkitMaskSize = "240% 100%"
+      el.style.maskRepeat = "no-repeat"
+      el.style.webkitMaskRepeat = "no-repeat"
+      el.style.maskPosition = "100% 0%"
+      el.style.webkitMaskPosition = "100% 0%"
+    }
+
+    if (typeof requestAnimationFrame !== "function") {
+      clearWipe(el)
+      return
+    }
+
+    frame = requestAnimationFrame(() => {
+      frame = undefined
+      const node = ref
+      if (!node) return
+      anim = mask
+        ? animate(
+            node,
+            { opacity: 1, filter: "blur(0px)", transform: "translateX(0)", maskPosition: "0% 0%" },
+            { ...GROW_SPRING, delay: props.delay ?? 0 },
+          )
+        : animate(
+            node,
+            { opacity: 1, filter: "blur(0px)", transform: "translateX(0)" },
+            { ...GROW_SPRING, delay: props.delay ?? 0 },
+          )
+
+      anim?.finished.then(() => {
+        const value = ref
+        if (!value) return
+        clearWipe(value)
+      })
+    })
+  }
+
+  createEffect(
+    on(
+      () => [props.text, props.animate] as const,
+      ([text, enabled]) => {
+        if (!text || enabled === false) {
+          if (ref) clearWipe(ref)
+          return
+        }
+        run()
+      },
+    ),
+  )
+
+  onCleanup(() => {
+    if (frame !== undefined && typeof cancelAnimationFrame === "function") cancelAnimationFrame(frame)
+    anim?.stop()
+  })
+
+  return (
+    <span ref={ref} class={props.class} aria-label={props.text ?? ""}>
+      {props.text ?? "\u00A0"}
     </span>
   )
 }

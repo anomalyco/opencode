@@ -546,12 +546,6 @@ export const dict = {
   "settings.general.row.theme.description": "OpenCode 테마 사용자 지정",
   "settings.general.row.font.title": "글꼴",
   "settings.general.row.font.description": "코드 블록에 사용되는 고정폭 글꼴 사용자 지정",
-  "settings.general.row.shellToolPartsExpanded.title": "shell 도구 파트 펼치기",
-  "settings.general.row.shellToolPartsExpanded.description":
-    "타임라인에서 기본적으로 shell 도구 파트를 펼친 상태로 표시합니다",
-  "settings.general.row.editToolPartsExpanded.title": "edit 도구 파트 펼치기",
-  "settings.general.row.editToolPartsExpanded.description":
-    "타임라인에서 기본적으로 edit, write, patch 도구 파트를 펼친 상태로 표시합니다",
   "settings.general.row.wayland.title": "네이티브 Wayland 사용",
   "settings.general.row.wayland.description": "Wayland에서 X11 폴백을 비활성화합니다. 다시 시작해야 합니다.",
   "settings.general.row.wayland.tooltip":

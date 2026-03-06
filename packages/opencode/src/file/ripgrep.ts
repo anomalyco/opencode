@@ -8,7 +8,6 @@ import { lazy } from "../util/lazy"
 import { $ } from "bun"
 import { Filesystem } from "../util/filesystem"
 import { Process } from "../util/process"
-import { which } from "../util/which"
 import { text } from "node:stream/consumers"
 
 import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"
@@ -127,7 +126,7 @@ export namespace Ripgrep {
   )
 
   const state = lazy(async () => {
-    const system = which("rg")
+    const system = Bun.which("rg")
     if (system) {
       const stat = await fs.stat(system).catch(() => undefined)
       if (stat?.isFile()) return { filepath: system }

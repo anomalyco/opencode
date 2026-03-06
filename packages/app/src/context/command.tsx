@@ -4,6 +4,7 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
+import { isEditableTarget } from "@/utils/dom"
 import { Persist, persisted } from "@/utils/persist"
 
 const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
@@ -175,14 +176,6 @@ export function formatKeybind(config: string): string {
   }
 
   return IS_MAC ? parts.join("") : parts.join("+")
-}
-
-function isEditableTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) return false
-  if (target.isContentEditable) return true
-  if (target.closest("[contenteditable='true']")) return true
-  if (target.closest("input, textarea, select")) return true
-  return false
 }
 
 export const { use: useCommand, provider: CommandProvider } = createSimpleContext({

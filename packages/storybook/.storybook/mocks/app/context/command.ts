@@ -4,8 +4,8 @@ const keybinds: Record<string, string> = {
   "prompt.mode.normal": "mod+shift+e",
   "permissions.autoaccept": "mod+shift+a",
   "agent.cycle": "mod+.",
-  "model.choose": "mod+m",
-  "model.variant.cycle": "mod+shift+m",
+  "model.choose": "mod+'",
+  "model.variant.cycle": "shift+mod+d",
 }
 
 export function useCommand() {

@@ -1,8 +1,9 @@
 import type { Message } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
+import { errorMessage } from "@/pages/layout/helpers"
 import { useNavigate, useParams } from "@solidjs/router"
-import type { Accessor } from "solid-js"
+import { batch, type Accessor } from "solid-js"
 import type { FileSelection } from "@/context/file"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
@@ -65,14 +66,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const language = useLanguage()
   const params = useParams()
 
-  const errorMessage = (err: unknown) => {
-    if (err && typeof err === "object" && "data" in err) {
-      const data = (err as { data?: { message?: string } }).data
-      if (data?.message) return data.message
-    }
-    if (err instanceof Error) return err.message
-    return language.t("common.requestFailed")
-  }
+  const toastError = (err: unknown) => errorMessage(err, language.t("common.requestFailed"))
 
   const abort = async () => {
     const sessionID = params.id
@@ -158,7 +152,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           .catch((err) => {
             showToast({
               title: language.t("prompt.toast.worktreeCreateFailed.title"),
-              description: errorMessage(err),
+              description: toastError(err),
             })
             return undefined
           })
@@ -197,7 +191,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         .catch((err) => {
           showToast({
             title: language.t("prompt.toast.sessionCreateFailed.title"),
-            description: errorMessage(err),
+            description: toastError(err),
           })
           return undefined
         })
@@ -255,7 +249,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         .catch((err) => {
           showToast({
             title: language.t("prompt.toast.shellSendFailed.title"),
-            description: errorMessage(err),
+            description: toastError(err),
           })
           restoreInput()
         })
@@ -333,9 +327,14 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         messageID,
       })
 
-    removeCommentItems(commentItems)
-    clearInput()
-    addOptimisticMessage()
+    batch(() => {
+      removeCommentItems(commentItems)
+      clearInput()
+      if (sessionDirectory === projectDirectory) {
+        sync.set("session_status", session.id, { type: "busy" })
+      }
+      addOptimisticMessage()
+    })
 
     const waitForWorktree = async () => {
       const worktree = WorktreeState.get(sessionDirectory)
@@ -412,7 +411,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       }
       showToast({
         title: language.t("prompt.toast.promptSendFailed.title"),
-        description: errorMessage(err),
+        description: toastError(err),
       })
       removeOptimisticMessage()
       restoreCommentItems(commentItems)

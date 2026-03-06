@@ -3,7 +3,6 @@ import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
 import { Process } from "../util/process"
-import { which } from "../util/which"
 import { Flag } from "@/flag/flag"
 
 export interface Info {
@@ -19,7 +18,7 @@ export const gofmt: Info = {
   command: ["gofmt", "-w", "$FILE"],
   extensions: [".go"],
   async enabled() {
-    return which("gofmt") !== null
+    return Bun.which("gofmt") !== null
   },
 }
 
@@ -28,7 +27,7 @@ export const mix: Info = {
   command: ["mix", "format", "$FILE"],
   extensions: [".ex", ".exs", ".eex", ".heex", ".leex", ".neex", ".sface"],
   async enabled() {
-    return which("mix") !== null
+    return Bun.which("mix") !== null
   },
 }
 
@@ -153,7 +152,7 @@ export const zig: Info = {
   command: ["zig", "fmt", "$FILE"],
   extensions: [".zig", ".zon"],
   async enabled() {
-    return which("zig") !== null
+    return Bun.which("zig") !== null
   },
 }
 
@@ -172,7 +171,7 @@ export const ktlint: Info = {
   command: ["ktlint", "-F", "$FILE"],
   extensions: [".kt", ".kts"],
   async enabled() {
-    return which("ktlint") !== null
+    return Bun.which("ktlint") !== null
   },
 }
 
@@ -181,7 +180,7 @@ export const ruff: Info = {
   command: ["ruff", "format", "$FILE"],
   extensions: [".py", ".pyi"],
   async enabled() {
-    if (!which("ruff")) return false
+    if (!Bun.which("ruff")) return false
     const configs = ["pyproject.toml", "ruff.toml", ".ruff.toml"]
     for (const config of configs) {
       const found = await Filesystem.findUp(config, Instance.directory, Instance.worktree)
@@ -211,7 +210,7 @@ export const rlang: Info = {
   command: ["air", "format", "$FILE"],
   extensions: [".R"],
   async enabled() {
-    const airPath = which("air")
+    const airPath = Bun.which("air")
     if (airPath == null) return false
 
     try {
@@ -240,7 +239,7 @@ export const uvformat: Info = {
   extensions: [".py", ".pyi"],
   async enabled() {
     if (await ruff.enabled()) return false
-    if (which("uv") !== null) {
+    if (Bun.which("uv") !== null) {
       const proc = Process.spawn(["uv", "format", "--help"], { stderr: "pipe", stdout: "pipe" })
       const code = await proc.exited
       return code === 0
@@ -254,7 +253,7 @@ export const rubocop: Info = {
   command: ["rubocop", "--autocorrect", "$FILE"],
   extensions: [".rb", ".rake", ".gemspec", ".ru"],
   async enabled() {
-    return which("rubocop") !== null
+    return Bun.which("rubocop") !== null
   },
 }
 
@@ -263,7 +262,7 @@ export const standardrb: Info = {
   command: ["standardrb", "--fix", "$FILE"],
   extensions: [".rb", ".rake", ".gemspec", ".ru"],
   async enabled() {
-    return which("standardrb") !== null
+    return Bun.which("standardrb") !== null
   },
 }
 
@@ -272,7 +271,7 @@ export const htmlbeautifier: Info = {
   command: ["htmlbeautifier", "$FILE"],
   extensions: [".erb", ".html.erb"],
   async enabled() {
-    return which("htmlbeautifier") !== null
+    return Bun.which("htmlbeautifier") !== null
   },
 }
 
@@ -281,7 +280,7 @@ export const dart: Info = {
   command: ["dart", "format", "$FILE"],
   extensions: [".dart"],
   async enabled() {
-    return which("dart") !== null
+    return Bun.which("dart") !== null
   },
 }
 
@@ -290,7 +289,7 @@ export const ocamlformat: Info = {
   command: ["ocamlformat", "-i", "$FILE"],
   extensions: [".ml", ".mli"],
   async enabled() {
-    if (!which("ocamlformat")) return false
+    if (!Bun.which("ocamlformat")) return false
     const items = await Filesystem.findUp(".ocamlformat", Instance.directory, Instance.worktree)
     return items.length > 0
   },
@@ -301,7 +300,7 @@ export const terraform: Info = {
   command: ["terraform", "fmt", "$FILE"],
   extensions: [".tf", ".tfvars"],
   async enabled() {
-    return which("terraform") !== null
+    return Bun.which("terraform") !== null
   },
 }
 
@@ -310,7 +309,7 @@ export const latexindent: Info = {
   command: ["latexindent", "-w", "-s", "$FILE"],
   extensions: [".tex"],
   async enabled() {
-    return which("latexindent") !== null
+    return Bun.which("latexindent") !== null
   },
 }
 
@@ -319,7 +318,7 @@ export const gleam: Info = {
   command: ["gleam", "format", "$FILE"],
   extensions: [".gleam"],
   async enabled() {
-    return which("gleam") !== null
+    return Bun.which("gleam") !== null
   },
 }
 
@@ -328,7 +327,7 @@ export const shfmt: Info = {
   command: ["shfmt", "-w", "$FILE"],
   extensions: [".sh", ".bash"],
   async enabled() {
-    return which("shfmt") !== null
+    return Bun.which("shfmt") !== null
   },
 }
 
@@ -337,7 +336,7 @@ export const nixfmt: Info = {
   command: ["nixfmt", "$FILE"],
   extensions: [".nix"],
   async enabled() {
-    return which("nixfmt") !== null
+    return Bun.which("nixfmt") !== null
   },
 }
 
@@ -346,7 +345,7 @@ export const rustfmt: Info = {
   command: ["rustfmt", "$FILE"],
   extensions: [".rs"],
   async enabled() {
-    return which("rustfmt") !== null
+    return Bun.which("rustfmt") !== null
   },
 }
 
@@ -373,7 +372,7 @@ export const ormolu: Info = {
   command: ["ormolu", "-i", "$FILE"],
   extensions: [".hs"],
   async enabled() {
-    return which("ormolu") !== null
+    return Bun.which("ormolu") !== null
   },
 }
 
@@ -382,7 +381,7 @@ export const cljfmt: Info = {
   command: ["cljfmt", "fix", "--quiet", "$FILE"],
   extensions: [".clj", ".cljs", ".cljc", ".edn"],
   async enabled() {
-    return which("cljfmt") !== null
+    return Bun.which("cljfmt") !== null
   },
 }
 
@@ -391,6 +390,6 @@ export const dfmt: Info = {
   command: ["dfmt", "-i", "$FILE"],
   extensions: [".d"],
   async enabled() {
-    return which("dfmt") !== null
+    return Bun.which("dfmt") !== null
   },
 }

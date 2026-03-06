@@ -25,12 +25,12 @@ export namespace UI {
 
   export function println(...message: string[]) {
     print(...message)
-    process.stderr.write(EOL)
+    Bun.stderr.write(EOL)
   }
 
   export function print(...message: string[]) {
     blank = false
-    process.stderr.write(message.join(" "))
+    Bun.stderr.write(message.join(" "))
   }
 
   let blank = false
@@ -44,7 +44,7 @@ export namespace UI {
     const result: string[] = []
     const reset = "\x1b[0m"
     const left = {
-      fg: "\x1b[90m",
+      fg: Bun.color("gray", "ansi") ?? "",
       shadow: "\x1b[38;5;235m",
       bg: "\x1b[48;5;235m",
     }

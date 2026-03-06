@@ -97,7 +97,8 @@ export const dict = {
   "ui.tool.todos": "Görevler",
   "ui.tool.todos.read": "Görevleri oku",
   "ui.tool.questions": "Sorular",
-  "ui.tool.agent": "{{type}} Ajan",
+  "ui.tool.skill": "Beceri",
+  "ui.tool.agent": "Ajan",
 
   "ui.common.file.one": "dosya",
   "ui.common.file.other": "dosya",
