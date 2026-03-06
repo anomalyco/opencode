@@ -35,6 +35,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const agent = (() => {
       const list = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden))
+      const models = useModels()
+
       const [store, setStore] = createStore<{
         current?: string
       }>({
@@ -53,11 +55,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             setStore("current", undefined)
             return
           }
-          if (name && available.some((x) => x.name === name)) {
-            setStore("current", name)
-            return
-          }
-          setStore("current", available[0].name)
+          const match = name ? available.find((x) => x.name === name) : undefined
+          const value = match ?? available[0]
+          if (!value) return
+          setStore("current", value.name)
+          if (!value.model) return
+          setModel({
+            providerID: value.model.providerID,
+            modelID: value.model.modelID,
+          })
+          if (value.variant)
+            models.variant.set({ providerID: value.model.providerID, modelID: value.model.modelID }, value.variant)
         },
         move(direction: 1 | -1) {
           const available = list()
@@ -71,11 +79,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const value = available[next]
           if (!value) return
           setStore("current", value.name)
-          if (value.model)
-            setModel({
-              providerID: value.model.providerID,
-              modelID: value.model.modelID,
-            })
+          if (!value.model) return
+          setModel({
+            providerID: value.model.providerID,
+            modelID: value.model.modelID,
+          })
+          if (value.variant)
+            models.variant.set({ providerID: value.model.providerID, modelID: value.model.modelID }, value.variant)
         },
       }
     })()
