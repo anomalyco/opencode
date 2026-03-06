@@ -2038,6 +2038,24 @@ export namespace LSPServer {
     },
   }
 
+  export const Metals: Info = {
+    id: "metals",
+    extensions: [".scala"],
+    root: NearestRoot(["build.sbt", "build.sc", ".scala-build"]),
+    async spawn(root) {
+      const bin = which("metals")
+      if (!bin) {
+        log.info("metals not found, please install metals first")
+        return
+      }
+      return {
+        process: spawn(bin, {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
   export const JuliaLS: Info = {
     id: "julials",
     extensions: [".jl"],
