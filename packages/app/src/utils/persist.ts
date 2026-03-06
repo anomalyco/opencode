@@ -1,6 +1,6 @@
 import { Platform, usePlatform } from "@/context/platform"
 import { makePersisted, type AsyncStorage, type SyncStorage } from "@solid-primitives/storage"
-import { checksum, base64Encode } from "@opencode-ai/util/encode"
+import { checksum } from "@opencode-ai/util/encode"
 import { createResource, type Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 
@@ -204,7 +204,10 @@ function normalize(defaults: unknown, raw: string, migrate?: (value: unknown) =>
 }
 
 function workspaceStorage(dir: string) {
-  const head = base64Encode(dir).slice(0, 12)
+  if (!dir) return "opencode.workspace.workspace.0.dat"
+  
+  const lastPart = dir.split(/[\\\/]/).pop() || "workspace"
+  const head = lastPart.slice(0, 12).replace(/[<>:"|?*\\\/]/g, "_")
   const sum = checksum(dir) ?? "0"
   return `opencode.workspace.${head}.${sum}.dat`
 }
