@@ -341,6 +341,15 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
       }
+
+      if ((event as { type: string }).type === "instance.directory.changed") {
+        const props = (event as unknown as { properties: { directory: string; worktree: string } }).properties
+        setStore("path", "directory", props.directory)
+        setStore("path", "worktree", props.worktree)
+        fullSyncedSessions.clear()
+        void Promise.all(Object.keys(store.message).map((sessionID) => result.session.sync(sessionID)))
+        void bootstrap()
+      }
     })
 
     const exit = useExit()

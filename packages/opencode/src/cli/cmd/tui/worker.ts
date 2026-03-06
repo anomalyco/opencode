@@ -35,18 +35,25 @@ process.on("uncaughtException", (e) => {
 // Subscribe to global events and forward them via RPC
 GlobalBus.on("event", (event) => {
   Rpc.emit("global.event", event)
+  if (event.payload.type !== "instance.directory.changed") return
+  if (event.payload.properties.previousDirectory !== state.directory) return
+  state.directory = event.payload.properties.directory
+  process.chdir(state.directory)
+  Rpc.emit("event", event.payload as Event)
+  startEventStream(state.directory)
 })
 
 let server: Bun.Server<BunWebSocketData> | undefined
 
-const eventStream = {
+const state = {
+  directory: process.cwd(),
   abort: undefined as AbortController | undefined,
 }
 
 const startEventStream = (directory: string) => {
-  if (eventStream.abort) eventStream.abort.abort()
+  if (state.abort) state.abort.abort()
   const abort = new AbortController()
-  eventStream.abort = abort
+  state.abort = abort
   const signal = abort.signal
 
   const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -94,16 +101,20 @@ const startEventStream = (directory: string) => {
   })
 }
 
-startEventStream(process.cwd())
+startEventStream(state.directory)
 
 export const rpc = {
   async fetch(input: { url: string; method: string; headers: Record<string, string>; body?: string }) {
     const headers = { ...input.headers }
+    const url = new URL(input.url)
+    url.searchParams.set("directory", state.directory)
+    headers["x-opencode-directory"] = state.directory
+    headers["X-Opencode-Directory"] = state.directory
     const auth = getAuthorizationHeader()
     if (auth && !headers["authorization"] && !headers["Authorization"]) {
       headers["Authorization"] = auth
     }
-    const request = new Request(input.url, {
+    const request = new Request(url, {
       method: input.method,
       headers,
       body: input.body,
@@ -136,7 +147,7 @@ export const rpc = {
   },
   async shutdown() {
     Log.Default.info("worker shutting down")
-    if (eventStream.abort) eventStream.abort.abort()
+    if (state.abort) state.abort.abort()
     await Instance.disposeAll()
     if (server) server.stop(true)
   },

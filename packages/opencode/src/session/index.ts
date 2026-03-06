@@ -434,6 +434,32 @@ export namespace Session {
     },
   )
 
+  export const setDirectory = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      directory: z.string(),
+      projectID: z.string(),
+    }),
+    async (input) => {
+      return Database.use((db) => {
+        const row = db
+          .update(SessionTable)
+          .set({
+            directory: input.directory,
+            project_id: input.projectID,
+            time_updated: Date.now(),
+          })
+          .where(eq(SessionTable.id, input.sessionID))
+          .returning()
+          .get()
+        if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
+        const info = fromRow(row)
+        Database.effect(() => Bus.publish(Event.Updated, { info }))
+        return info
+      })
+    },
+  )
+
   export const setRevert = fn(
     z.object({
       sessionID: Identifier.schema("session"),

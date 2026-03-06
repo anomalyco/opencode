@@ -17,11 +17,9 @@ import { DialogSelectMcp } from "@/components/dialog-select-mcp"
 import { DialogFork } from "@/components/dialog-fork"
 import { showToast } from "@opencode-ai/ui/toast"
 import { findLast } from "@opencode-ai/util/array"
-import { base64Encode } from "@opencode-ai/util/encode"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { canAddSelectionContext } from "@/pages/session/session-command-helpers"
-import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 
 export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
@@ -89,11 +87,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const navigateMessageByOffset = actions.navigateMessageByOffset
   const setActiveMessage = actions.setActiveMessage
   const focusInput = actions.focusInput
-  const openDir = (dir: string) => {
-    layout.projects.open(dir)
-    navigate(`/${base64Encode(dir)}/session`)
-  }
-
   const sessionCommand = withCategory(language.t("command.category.session"))
   const fileCommand = withCategory(language.t("command.category.file"))
   const contextCommand = withCategory(language.t("command.category.context"))
@@ -111,23 +104,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       keybind: "mod+shift+s",
       slash: "new",
       onSelect: () => navigate(`/${params.dir}/session`),
-    }),
-    sessionCommand({
-      id: "project.cd",
-      title: language.t("command.project.open"),
-      description: language.t("dialog.directory.search.placeholder"),
-      slash: "cd",
-      onSelect: () => {
-        dialog.show(() => (
-          <DialogSelectDirectory
-            title="/cd"
-            onSelect={(result) => {
-              if (!result || Array.isArray(result)) return
-              openDir(result)
-            }}
-          />
-        ))
-      },
     }),
   ])
 

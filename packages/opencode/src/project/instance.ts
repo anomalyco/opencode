@@ -5,6 +5,10 @@ import { State } from "./state"
 import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
 import { Filesystem } from "@/util/filesystem"
+import { BusEvent } from "@/bus/bus-event"
+import z from "zod"
+import fs from "fs/promises"
+import path from "path"
 
 interface Context {
   directory: string
@@ -16,6 +20,17 @@ const cache = new Map<string, Promise<Context>>()
 
 const disposal = {
   all: undefined as Promise<void> | undefined,
+}
+
+export namespace InstanceEvent {
+  export const DirectoryChanged = BusEvent.define(
+    "instance.directory.changed",
+    z.object({
+      directory: z.string(),
+      worktree: z.string(),
+      previousDirectory: z.string(),
+    }),
+  )
 }
 
 export const Instance = {
@@ -50,6 +65,43 @@ export const Instance = {
   },
   get project() {
     return context.use().project
+  },
+  async setDirectory(input: string) {
+    const ctx = context.use()
+    const prev = ctx.directory
+    const next = input.startsWith("~") ? path.join(process.env.HOME ?? "", input.slice(1)) : input
+    const dir = path.resolve(prev, next)
+    const stat = await fs.stat(dir).catch(() => undefined)
+    if (!stat?.isDirectory()) throw new Error(`Directory not found: ${input}`)
+    if (dir === prev) {
+      return {
+        directory: ctx.directory,
+        worktree: ctx.worktree,
+        previousDirectory: prev,
+      }
+    }
+
+    const { project, sandbox } = await Project.fromDirectory(dir)
+    await State.dispose(prev)
+    ctx.directory = dir
+    ctx.worktree = sandbox
+    ctx.project = project
+    cache.delete(prev)
+    cache.set(dir, Promise.resolve(ctx))
+
+    const result = {
+      directory: dir,
+      worktree: sandbox,
+      previousDirectory: prev,
+    }
+    GlobalBus.emit("event", {
+      directory: dir,
+      payload: {
+        type: InstanceEvent.DirectoryChanged.type,
+        properties: result,
+      },
+    })
+    return result
   },
   /**
    * Check if a path is within the project boundary.

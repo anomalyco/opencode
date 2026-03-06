@@ -34,6 +34,7 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { DialogCd } from "../dialog-cd"
 
 export type PromptProps = {
   sessionID?: string
@@ -330,6 +331,29 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
+        title: "Change directory",
+        value: "prompt.cd",
+        category: "Session",
+        slash: {
+          name: "cd",
+        },
+        onSelect: () => {
+          dialog.replace(() => (
+            <DialogCd
+              onSelect={(dir) => {
+                input.setText(`/cd ${dir}`)
+                setStore("prompt", {
+                  input: `/cd ${dir}`,
+                  parts: [],
+                })
+                input.gotoBufferEnd()
+                submit()
+              }}
+            />
+          ))
+        },
+      },
+      {
         title: "Skills",
         value: "prompt.skills",
         category: "Prompt",
@@ -534,8 +558,10 @@ export function Prompt(props: PromptProps) {
       exit()
       return
     }
+    const firstLine = store.prompt.input.split("\n")[0]
+    const slash = firstLine.startsWith("/") ? firstLine.split(" ")[0].slice(1) : ""
     const selectedModel = local.model.current()
-    if (!selectedModel) {
+    if (!selectedModel && slash !== "cd") {
       promptModelWarning()
       return
     }
@@ -576,8 +602,8 @@ export function Prompt(props: PromptProps) {
         sessionID,
         agent: local.agent.current().name,
         model: {
-          providerID: selectedModel.providerID,
-          modelID: selectedModel.modelID,
+          providerID: selectedModel!.providerID,
+          modelID: selectedModel!.modelID,
         },
         command: inputText,
       })
@@ -585,9 +611,8 @@ export function Prompt(props: PromptProps) {
     } else if (
       inputText.startsWith("/") &&
       iife(() => {
-        const firstLine = inputText.split("\n")[0]
         const command = firstLine.split(" ")[0].slice(1)
-        return sync.data.command.some((x) => x.name === command)
+        return command === "cd" || sync.data.command.some((x) => x.name === command)
       })
     ) {
       // Parse command from first line, preserve multi-line content in arguments
@@ -602,7 +627,7 @@ export function Prompt(props: PromptProps) {
         command: command.slice(1),
         arguments: args,
         agent: local.agent.current().name,
-        model: `${selectedModel.providerID}/${selectedModel.modelID}`,
+        model: selectedModel ? `${selectedModel.providerID}/${selectedModel.modelID}` : undefined,
         messageID,
         variant,
         parts: nonTextParts

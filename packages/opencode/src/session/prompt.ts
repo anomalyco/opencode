@@ -1745,6 +1745,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
   export async function command(input: CommandInput) {
     log.info("command", input)
+    if (input.command === "cd") return cd(input)
     const command = await Command.get(input.command)
     const agentName = command.agent ?? input.agent ?? (await Agent.defaultAgent())
 
@@ -1885,6 +1886,69 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     })
 
     return result
+  }
+
+  async function cd(input: CommandInput) {
+    const arg = input.arguments.trim()
+    if (!arg) throw new Error("Usage: /cd <path>")
+
+    const user = await createUserMessage({
+      sessionID: input.sessionID,
+      messageID: input.messageID,
+      agent: input.agent,
+      variant: input.variant,
+      parts: [
+        {
+          type: "text",
+          text: `/cd ${arg}`,
+        },
+      ],
+    })
+    const result = await Instance.setDirectory(arg)
+    await Session.setDirectory({
+      sessionID: input.sessionID,
+      directory: result.directory,
+      projectID: Instance.project.id,
+    })
+
+    const msg: MessageV2.Assistant = {
+      id: Identifier.ascending("message"),
+      sessionID: input.sessionID,
+      parentID: user.info.id,
+      mode: user.info.agent,
+      agent: user.info.agent,
+      cost: 0,
+      path: {
+        cwd: Instance.directory,
+        root: Instance.worktree,
+      },
+      time: {
+        created: Date.now(),
+        completed: Date.now(),
+      },
+      role: "assistant",
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
+      modelID: user.info.model.modelID,
+      providerID: user.info.model.providerID,
+      variant: user.info.variant,
+      finish: "stop",
+    }
+    await Session.updateMessage(msg)
+    const part = await Session.updatePart({
+      id: Identifier.ascending("part"),
+      messageID: msg.id,
+      sessionID: input.sessionID,
+      type: "text",
+      text: `Changed directory to ${result.directory}`,
+    })
+    await Session.touch(input.sessionID)
+    SessionStatus.set(input.sessionID, { type: "idle" })
+    return { info: msg, parts: [part] }
   }
 
   async function ensureTitle(input: {
