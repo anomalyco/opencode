@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test"
+import { test, expect, mock } from "bun:test"
 import path from "path"
 
 import { tmpdir } from "../fixture/fixture"
@@ -169,6 +169,53 @@ test("model blacklist excludes specific models", async () => {
       expect(models).not.toContain("claude-sonnet-4-20250514")
     },
   })
+})
+
+test("requesty provider filters models to account-approved list", async () => {
+  const originalFetch = globalThis.fetch
+  const mockFetch = mock(async (_url: string | URL | Request) => {
+    return new Response(
+      JSON.stringify({
+        data: [{ id: "openai/gpt-5" }, { id: "openai/gpt-5-mini" }],
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      },
+    )
+  })
+
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+
+  globalThis.fetch = mockFetch as unknown as typeof fetch
+
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        Env.set("REQUESTY_API_KEY", "requesty-test-key")
+      },
+      fn: async () => {
+        const providers = await Provider.list()
+        expect(providers["requesty"]).toBeDefined()
+        const models = Object.keys(providers["requesty"].models)
+        expect(models).toContain("openai/gpt-5")
+        expect(models).toContain("openai/gpt-5-mini")
+        expect(models).not.toContain("openai/gpt-4.1")
+      },
+    })
+  } finally {
+    globalThis.fetch = originalFetch
+  }
 })
 
 test("custom model alias via config", async () => {

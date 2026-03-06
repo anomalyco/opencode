@@ -368,6 +368,57 @@ export namespace Provider {
         },
       }
     },
+    requesty: async (input) => {
+      const apiKey = await (async () => {
+        const envKey = Env.get("REQUESTY_API_KEY")
+        if (envKey) return envKey
+
+        const auth = await Auth.get(input.id)
+        if (auth?.type === "api") return auth.key
+        if (auth?.type === "oauth") return auth.access
+
+        const config = await Config.get()
+        return config.provider?.requesty?.options?.apiKey
+      })()
+
+      if (!apiKey) return { autoload: false }
+
+      const modelIDs = new Set<string>()
+      const defaultBaseURL = Object.values(input.models)[0]?.api.url ?? "https://router.requesty.ai/v1"
+      const baseURL = String(defaultBaseURL).replace(/\/+$/, "")
+
+      try {
+        const response = await fetch(`${baseURL}/models`, {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+          },
+        })
+
+        if (response.ok) {
+          const json = (await response.json()) as any
+          const data = Array.isArray(json?.data) ? json.data : []
+          for (const item of data) {
+            if (item && typeof item.id === "string") modelIDs.add(item.id)
+          }
+
+          if (modelIDs.size > 0) {
+            for (const modelID of Object.keys(input.models)) {
+              if (!modelIDs.has(modelID)) {
+                delete input.models[modelID]
+              }
+            }
+          }
+        }
+      } catch (error) {
+        log.debug("failed to fetch requesty models", {
+          error,
+        })
+      }
+
+      return {
+        autoload: false,
+      }
+    },
     vercel: async () => {
       return {
         autoload: false,
