@@ -53,7 +53,13 @@ async function target() {
 }
 
 async function input(value?: string) {
-  const piped = process.stdin.isTTY ? undefined : await Bun.stdin.text()
+  const piped = process.stdin.isTTY
+    ? undefined
+    : await new Promise<string>((resolve) => {
+        const chunks: Buffer[] = []
+        process.stdin.on("data", (chunk) => chunks.push(chunk))
+        process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")))
+      })
   if (!value) return piped
   if (!piped) return value
   return piped + "\n" + value

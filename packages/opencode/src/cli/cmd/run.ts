@@ -337,7 +337,14 @@ export const RunCommand = cmd({
       }
     }
 
-    if (!process.stdin.isTTY) message += "\n" + (await Bun.stdin.text())
+    if (!process.stdin.isTTY) {
+      const stdinText = await new Promise<string>((resolve) => {
+        const chunks: Buffer[] = []
+        process.stdin.on("data", (chunk) => chunks.push(chunk))
+        process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")))
+      })
+      message += "\n" + stdinText
+    }
 
     if (message.trim().length === 0 && !args.command) {
       UI.error("You must provide a message or a command")
