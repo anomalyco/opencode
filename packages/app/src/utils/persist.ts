@@ -204,7 +204,9 @@ function normalize(defaults: unknown, raw: string, migrate?: (value: unknown) =>
 }
 
 function workspaceStorage(dir: string) {
-  const head = dir.slice(0, 12) || "workspace"
+  if (!dir) return "opencode.workspace.workspace.0.dat"
+  const lastPart = dir.split(/[\\\/]/).pop() || "workspace"
+  const head = lastPart.slice(0, 12).replace(/[<>:"|?*\\\/]/g, "_")
   const sum = checksum(dir) ?? "0"
   return `opencode.workspace.${head}.${sum}.dat`
 }
