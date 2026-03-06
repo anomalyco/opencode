@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { $ } from "bun"
 import path from "path"
 import fs from "fs/promises"
-import { loadProject } from "./setup"
+import { Project } from "../../src/project/project"
+import { Log } from "../../src/util/log"
 import { repairAll } from "../../src/project/repair"
 import { tmpdir } from "../fixture/fixture"
 import { Database, eq } from "../../src/storage/db"
@@ -10,9 +11,11 @@ import { ProjectTable } from "../../src/project/project.sql"
 import { PermissionTable, SessionTable } from "../../src/session/session.sql"
 import { WorkspaceTable } from "../../src/control-plane/workspace.sql"
 
-describe("Project.repairAll", () => {
+Log.init({ print: false })
+
+describe("repairAll", () => {
   test("repairs duplicate project IDs for the same worktree", async () => {
-    const p = await loadProject()
+    const p = Project
     await using tmp = await tmpdir({ git: true })
 
     const worktreePath = path.join(tmp.path, "..", path.basename(tmp.path) + "-worktree")
@@ -454,7 +457,7 @@ describe("Project.repairAll", () => {
   })
 
   test("migrates legacy git project ids during repairAll", async () => {
-    const p = await loadProject()
+    const p = Project
     await using tmp = await tmpdir({ git: true })
 
     const root = await $`git rev-list --max-parents=0 HEAD`
@@ -531,7 +534,7 @@ describe("Project.repairAll", () => {
   })
 
   test("splits legacy git project ids across separate clones during repairAll", async () => {
-    const p = await loadProject()
+    const p = Project
     await using tmp = await tmpdir({ git: true })
 
     const clonePath = path.join(tmp.path, "..", path.basename(tmp.path) + "-clone")
@@ -682,7 +685,7 @@ describe("Project.repairAll", () => {
   })
 
   test("reuses existing project id for a clone when splitting legacy ids", async () => {
-    const p = await loadProject()
+    const p = Project
     await using tmp = await tmpdir({ git: true })
 
     const clonePath = path.join(tmp.path, "..", path.basename(tmp.path) + "-clone")
@@ -762,7 +765,7 @@ describe("Project.repairAll", () => {
   })
 
   test("splits legacy ids across two clones while keeping worktrees attached to their clone", async () => {
-    const p = await loadProject()
+    const p = Project
     await using tmp = await tmpdir({ git: true })
 
     const clonePath = path.join(tmp.path, "..", path.basename(tmp.path) + "-clone")
