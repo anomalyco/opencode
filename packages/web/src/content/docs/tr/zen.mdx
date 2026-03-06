@@ -55,6 +55,7 @@ Modellerimize aşağıdaki API uç noktaları aracılığıyla da erişebilirsin
 
 | Model              | Model ID           | Endpoint                                           | AI SDK Package              |
 | ------------------ | ------------------ | -------------------------------------------------- | --------------------------- |
+| GPT 5.4            | gpt-5.4            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.3 Codex      | gpt-5.3-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.2            | gpt-5.2            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.2 Codex      | gpt-5.2-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
@@ -136,6 +137,7 @@ Kullandıkça öde modelini destekliyoruz. Aşağıda **1 milyon token başına*
 | Gemini 3 Pro (≤ 200K tokens)      | $2.00  | $12.00 | $0.20       | -            |
 | Gemini 3 Pro (> 200K tokens)      | $4.00  | $18.00 | $0.40       | -            |
 | Gemini 3 Flash                    | $0.50  | $3.00  | $0.05       | -            |
+| GPT 5.4                           | $2.50  | $15.00 | $0.25       | -            |
 | GPT 5.3 Codex                     | $1.75  | $14.00 | $0.175      | -            |
 | GPT 5.2                           | $1.75  | $14.00 | $0.175      | -            |
 | GPT 5.2 Codex                     | $1.75  | $14.00 | $0.175      | -            |
@@ -175,6 +177,19 @@ Otomatik yükleme tutarını değiştirebilirsiniz. Otomatik yüklemeyi tamamen 
 Ayrıca tüm çalışma alanı ve ekibinizin her üyesi için aylık kullanım limiti belirleyebilirsiniz.
 
 Örneğin, aylık kullanım limitini 20$ olarak ayarladığınızı varsayalım, Zen bir ayda 20$'dan fazla kullanmaz. Ancak otomatik yüklemeyi etkinleştirdiyseniz, bakiyeniz 5$'ın altına düşerse Zen sizden 20$'dan fazla ücret alabilir.
+
+---
+
+### Kullanımdan kaldırılan modeller
+
+| Model            | Kullanımdan kaldırılma tarihi |
+| ---------------- | ----------------------------- |
+| Qwen3 Coder 480B | 6 Şub 2026                    |
+| Kimi K2 Thinking | 6 Mar 2026                    |
+| Kimi K2          | 6 Mar 2026                    |
+| MiniMax M2.1     | 15 Mar 2026                   |
+| GLM 4.7          | 15 Mar 2026                   |
+| GLM 4.6          | 15 Mar 2026                   |
 
 ---
 
