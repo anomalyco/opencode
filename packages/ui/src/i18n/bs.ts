@@ -105,7 +105,8 @@ export const dict = {
   "ui.tool.todos": "Lista zadataka",
   "ui.tool.todos.read": "Čitanje liste zadataka",
   "ui.tool.questions": "Pitanja",
-  "ui.tool.agent": "{{type}} agent",
+  "ui.tool.skill": "Vještina",
+  "ui.tool.agent": "Agent",
 
   "ui.common.file.one": "datoteka",
   "ui.common.file.other": "datoteke",

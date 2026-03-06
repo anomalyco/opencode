@@ -14,8 +14,8 @@ export const shouldMarkBoundaryGesture = (input: {
   if (max <= 1) return true
   if (!input.delta) return false
 
-  if (input.delta < 0) return input.scrollTop + input.delta <= 0
-
-  const remaining = max - input.scrollTop
-  return input.delta > remaining
+  const top = Math.max(0, Math.min(max, input.scrollTop))
+  if (input.delta < 0) return -input.delta > top
+  const bottom = max - top
+  return input.delta > bottom
 }
