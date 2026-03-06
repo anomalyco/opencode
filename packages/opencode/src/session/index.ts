@@ -10,7 +10,7 @@ import { Flag } from "../flag/flag"
 import { Identifier } from "../id/id"
 import { Installation } from "../installation"
 
-import { Database, NotFoundError, eq, and, or, gte, isNull, desc, like, inArray, lt } from "../storage/db"
+import { Database, NotFoundError, eq, and, or, gte, isNull, desc, asc, like, inArray, lt } from "../storage/db"
 import type { SQL } from "../storage/db"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
@@ -244,31 +244,56 @@ export namespace Session {
         directory: Instance.directory,
         title,
       })
-      const msgs = await messages({ sessionID: input.sessionID })
-      const idMap = new Map<string, string>()
 
-      for (const msg of msgs) {
-        if (input.messageID && msg.info.id >= input.messageID) break
-        const newID = Identifier.ascending("message")
-        idMap.set(msg.info.id, newID)
+      Database.transaction((db) => {
+        const rows = db
+          .select()
+          .from(MessageTable)
+          .where(eq(MessageTable.session_id, input.sessionID))
+          .orderBy(asc(MessageTable.time_created))
+          .all()
 
-        const parentID = msg.info.role === "assistant" && msg.info.parentID ? idMap.get(msg.info.parentID) : undefined
-        const cloned = await updateMessage({
-          ...msg.info,
-          sessionID: session.id,
-          id: newID,
-          ...(parentID && { parentID }),
-        })
+        const idMap = new Map<string, string>()
 
-        for (const part of msg.parts) {
-          await updatePart({
-            ...part,
-            id: Identifier.ascending("part"),
-            messageID: cloned.id,
-            sessionID: session.id,
-          })
+        for (const row of rows) {
+          if (input.messageID && row.id >= input.messageID) break
+          const newID = Identifier.ascending("message")
+          idMap.set(row.id, newID)
+
+          const raw = row.data as Record<string, unknown>
+          const parentID = raw.role === "assistant" && typeof raw.parentID === "string" ? idMap.get(raw.parentID) : undefined
+          const data = parentID ? { ...row.data, parentID } : row.data
+
+          db.insert(MessageTable)
+            .values({
+              id: newID,
+              session_id: session.id,
+              time_created: row.time_created,
+              data: data as typeof row.data,
+            })
+            .run()
+
+          const parts = db
+            .select()
+            .from(PartTable)
+            .where(eq(PartTable.message_id, row.id))
+            .orderBy(asc(PartTable.id))
+            .all()
+
+          for (const part of parts) {
+            db.insert(PartTable)
+              .values({
+                id: Identifier.ascending("part"),
+                message_id: newID,
+                session_id: session.id,
+                time_created: part.time_created,
+                data: part.data,
+              })
+              .run()
+          }
         }
-      }
+      })
+
       return session
     },
   )
