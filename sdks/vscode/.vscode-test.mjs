@@ -12,7 +12,7 @@ export default defineConfig([
       reporter: "mochawesome",
       require: ["./out/test/bootstrap.js"],
       reporterOptions: {
-        reportDir: "test-results",
+        reportDir: "test-results/reports",
         reportFilename: "e2e-report",
         overwrite: true,
         html: true,
@@ -31,7 +31,7 @@ export default defineConfig([
       reporter: "mochawesome",
       require: ["./out/test/bootstrap.js"],
       reporterOptions: {
-        reportDir: "test-results",
+        reportDir: "test-results/reports",
         reportFilename: "e2e-report",
         overwrite: true,
         html: true,

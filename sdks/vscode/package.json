@@ -153,8 +153,8 @@
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
     "test": "vscode-test run --config .vscode-test.mjs",
-    "test:e2e:stable": "xvfb-run --auto-servernum --server-args='-screen 0 1280x720x24' vscode-test run --config .vscode-test.mjs --label e2e-stable -- --disable-gpu --headless",
-    "test:e2e:insiders": "xvfb-run --auto-servernum --server-args='-screen 0 1280x720x24' vscode-test run --config .vscode-test.mjs --label e2e-insiders --version insiders -- --disable-gpu --headless"
+    "test:e2e:stable": "node script/prepare-test-results.js && bun run pretest && xvfb-run --auto-servernum --server-args='-screen 0 1280x720x24' vscode-test run --config .vscode-test.mjs --label e2e-stable -- --disable-gpu --headless",
+    "test:e2e:insiders": "node script/prepare-test-results.js && bun run pretest && xvfb-run --auto-servernum --server-args='-screen 0 1280x720x24' vscode-test run --config .vscode-test.mjs --label e2e-insiders --version insiders -- --disable-gpu --headless"
   },
   "devDependencies": {
     "@types/vscode": "^1.94.0",

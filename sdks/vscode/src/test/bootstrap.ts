@@ -1,4 +1,6 @@
 import { initRunDir, captureFailure } from './helpers/evidence'
+import { promises as fsp } from 'fs'
+import path from 'path'
 
 // attempt to attach Playwright to the VS Code renderer so page.screenshot() is available
 async function attachPlaywrightToVSCode() {
@@ -92,6 +94,33 @@ console.error = (...args: any[]) => {
 ;(global as any).__EXT_LOGS__ = logs
 
 export const mochaHooks = {
+  async beforeEach(this: any) {
+    const t: any = this && this.currentTest
+    if (!t) return
+    const runDir = await runDirPromise
+    try {
+      const title = typeof t.fullTitle === 'function' ? t.fullTitle() : t.title || 'unknown_test'
+      const safeName = title.replace(/[^a-zA-Z0-9-_]/g, '_').slice(0, 200)
+      const out = path.join(runDir, safeName)
+      await fsp.mkdir(out, { recursive: true })
+      try {
+        // write buffered extension logs immediately so there is always a trace
+        const logs: string[] = (global as any).__EXT_LOGS__ || []
+        await fsp.writeFile(path.join(out, 'extension-logs.txt'), logs.join('\n'), 'utf8')
+      } catch (e) {}
+      try {
+        // capture editor snapshot if available at test start
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const vscode = require('vscode')
+        const editor = vscode.window.activeTextEditor
+        if (editor) {
+          const text = editor.document.getText()
+          await fsp.writeFile(path.join(out, 'editor.txt'), text, 'utf8')
+        }
+      } catch (e) {}
+      try { await fsp.writeFile(path.join(out, 'guaranteed-evidence.txt'), new Date().toISOString(), 'utf8') } catch (e) {}
+    } catch (e) {}
+  },
   async afterEach(this: any) {
     const t: any = this && this.currentTest
     if (!t) return

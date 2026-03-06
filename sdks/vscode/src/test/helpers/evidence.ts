@@ -6,7 +6,7 @@ function safeTimestamp() {
   return new Date().toISOString().replace(/[:.]/g, '-')
 }
 
-export async function initRunDir(base = 'test-results') {
+export async function initRunDir(base = 'test-results/artifacts') {
   // ensure run dirs are created under the package root so the extension host can access them
   const pkgRoot = path.resolve(__dirname, '..', '..', '..')
   const runDir = path.join(pkgRoot, base, `run-${safeTimestamp()}`)
@@ -104,10 +104,11 @@ export async function captureFailure(test: any, err: any, runDir?: string) {
 
       // Try extension-specific capture command as a fallback (opencode.captureEvidence) with retries
       try {
-        const maxAttempts = 5
+        const maxAttempts = 10
         let attempt = 0
         let got = null
         while (attempt < maxAttempts) {
+          try { await fsp.appendFile(path.join(out, `capture-attempt-${attempt}.log`), new Date().toISOString() + "\n", 'utf8') } catch (e) {}
           attempt++
           try {
             // try to activate extension before executing
@@ -205,7 +206,7 @@ export async function captureFailure(test: any, err: any, runDir?: string) {
         try { await fsp.writeFile(triggerPathLocal, JSON.stringify(payload), 'utf8') } catch (e) {}
         try { await fsp.writeFile(path.join(out, 'vscode-capture-trigger.json'), JSON.stringify({ triggerPathOs, triggerPathLocal, payload }), 'utf8') } catch (e) {}
         // wait up to 5s for the extension to produce the png
-        const deadline = Date.now() + 5000
+        const deadline = Date.now() + 10000 // wait up to 10s for extension-produced screenshot
         let produced = false
         while (Date.now() < deadline) {
           if (fs.existsSync(png)) { produced = true; break }
