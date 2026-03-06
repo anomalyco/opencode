@@ -6,6 +6,7 @@ import { tmpdir } from "os"
 import path from "path"
 import { Filesystem } from "../../../../util/filesystem"
 import { Process } from "../../../../util/process"
+import { which } from "../../../../util/which"
 
 /**
  * Writes text to clipboard via OSC 52 escape sequence.
@@ -76,7 +77,7 @@ export namespace Clipboard {
   const getCopyMethod = lazy(() => {
     const os = platform()
 
-    if (os === "darwin" && Bun.which("osascript")) {
+    if (os === "darwin" && which("osascript")) {
       console.log("clipboard: using osascript")
       return async (text: string) => {
         const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
@@ -85,7 +86,7 @@ export namespace Clipboard {
     }
 
     if (os === "linux") {
-      if (process.env["WAYLAND_DISPLAY"] && Bun.which("wl-copy")) {
+      if (process.env["WAYLAND_DISPLAY"] && which("wl-copy")) {
         console.log("clipboard: using wl-copy")
         return async (text: string) => {
           const proc = Process.spawn(["wl-copy"], { stdin: "pipe", stdout: "ignore", stderr: "ignore" })
@@ -95,7 +96,7 @@ export namespace Clipboard {
           await proc.exited.catch(() => {})
         }
       }
-      if (Bun.which("xclip")) {
+      if (which("xclip")) {
         console.log("clipboard: using xclip")
         return async (text: string) => {
           const proc = Process.spawn(["xclip", "-selection", "clipboard"], {
@@ -109,7 +110,7 @@ export namespace Clipboard {
           await proc.exited.catch(() => {})
         }
       }
-      if (Bun.which("xsel")) {
+      if (which("xsel")) {
         console.log("clipboard: using xsel")
         return async (text: string) => {
           const proc = Process.spawn(["xsel", "--clipboard", "--input"], {
