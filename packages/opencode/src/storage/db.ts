@@ -67,6 +67,20 @@ export namespace Database {
     return sql.sort((a, b) => a.timestamp - b.timestamp)
   }
 
+  function ensureAccountOrgIDColumn(sqlite: BunDatabase) {
+    const hasAccountTable = sqlite
+      .query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='account' LIMIT 1")
+      .get()
+    if (!hasAccountTable) return
+
+    const columns = sqlite.query("PRAGMA table_info(account)").all() as { name?: string }[]
+    const hasOrgID = columns.some((column) => column.name === "org_id")
+    if (hasOrgID) return
+
+    log.info("repairing account table schema", { missing: "org_id" })
+    sqlite.run("ALTER TABLE account ADD COLUMN org_id text")
+  }
+
   export const Client = lazy(() => {
     log.info("opening database", { path: Path })
 
@@ -94,6 +108,8 @@ export namespace Database {
       })
       migrate(db, entries)
     }
+
+    ensureAccountOrgIDColumn(sqlite)
 
     return db
   })
