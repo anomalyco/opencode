@@ -27,10 +27,14 @@ export const NotFoundError = NamedError.create(
 const log = Log.create({ service: "db" })
 
 export namespace Database {
+  function file(text: string) {
+    return text.replaceAll("/", "-")
+  }
+
   export const Path = (() => {
     const name =
       Installation.CHANNEL !== "latest" && !Flag.OPENCODE_DISABLE_CHANNEL_DB
-        ? `opencode-${Installation.CHANNEL}.db`
+        ? `opencode-${file(Installation.CHANNEL)}.db`
         : "opencode.db"
     return path.join(Global.Path.data, name)
   })()
