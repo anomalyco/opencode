@@ -290,8 +290,11 @@ export namespace LSP {
 
   export async function diagnostics() {
     const results: Record<string, LSPClient.Diagnostic[]> = {}
-    for (const result of await runAll(async (client) => client.diagnostics)) {
+    const clients = await state().then((x) => x.clients)
+    for (const client of clients) {
+      const result = await client.diagnostics
       for (const [path, diagnostics] of result.entries()) {
+        if (!path.startsWith(client.root)) continue
         const arr = results[path] || []
         arr.push(...diagnostics)
         results[path] = arr
