@@ -65,6 +65,8 @@ import {
   errorMessage,
   getDraggableId,
   latestRootSession,
+  nextRootStart,
+  staleSession,
   sortedRootSessions,
   workspaceKey,
 } from "./layout/helpers"
@@ -136,6 +138,7 @@ export default function Layout(props: ParentProps) {
     busyWorkspaces: {} as Record<string, boolean>,
     hoverSession: undefined as string | undefined,
     hoverProject: undefined as string | undefined,
+    switching: false,
     scrollSessionKey: undefined as string | undefined,
     nav: undefined as HTMLElement | undefined,
   })
@@ -200,6 +203,35 @@ export default function Layout(props: ParentProps) {
     return layout.projects.list().find((project) => project.worktree === id)
   })
 
+  let hoverDelay: ReturnType<typeof setTimeout> | undefined
+  let switchFrame: number | undefined
+  let switchFrameNext: number | undefined
+  let hoverUntil = 0
+  onCleanup(() => {
+    if (hoverDelay !== undefined) clearTimeout(hoverDelay)
+    if (switchFrame !== undefined) cancelAnimationFrame(switchFrame)
+    if (switchFrameNext !== undefined) cancelAnimationFrame(switchFrameNext)
+  })
+
+  createEffect(
+    on(
+      hoverProjectData,
+      (project) => {
+        if (hoverDelay !== undefined) {
+          clearTimeout(hoverDelay)
+          hoverDelay = undefined
+        }
+        if (!project) return
+        if (Date.now() < hoverUntil) return
+        hoverDelay = setTimeout(() => {
+          void globalSync.project.loadSessions(project.worktree)
+          hoverDelay = undefined
+        }, 320)
+      },
+      { defer: true },
+    ),
+  )
+
   createEffect(() => {
     if (!layout.sidebar.opened()) return
     setHoverProject(undefined)
@@ -237,9 +269,13 @@ export default function Layout(props: ParentProps) {
   }
 
   const navigateWithSidebarReset = (href: string) => {
-    clearSidebarHoverState()
     navigate(href)
-    layout.mobileSidebar.hide()
+    if (layout.mobileSidebar.opened()) {
+      layout.mobileSidebar.hide()
+    }
+    queueMicrotask(() => {
+      clearSidebarHoverState()
+    })
   }
 
   function cycleTheme(direction = 1) {
@@ -547,7 +583,8 @@ export default function Layout(props: ParentProps) {
     return layout.sidebar.workspaces(project.worktree)()
   })
 
-  const visibleSessionDirs = createMemo(() => {
+  const visibleSessionDirs = createMemo<string[]>((prev) => {
+    if (state.switching) return prev ?? []
     const project = currentProject()
     if (!project) return [] as string[]
     if (!workspaceSetting()) return [project.worktree]
@@ -558,7 +595,7 @@ export default function Layout(props: ParentProps) {
       const active = directory === activeDir
       return expanded || active
     })
-  })
+  }, [] as string[])
 
   createEffect(() => {
     if (!pageReady()) return
@@ -573,7 +610,8 @@ export default function Layout(props: ParentProps) {
     }
   })
 
-  const currentSessions = createMemo(() => {
+  const currentSessions = createMemo<Session[]>((prev) => {
+    if (state.switching) return prev ?? []
     const now = Date.now()
     const dirs = visibleSessionDirs()
     if (dirs.length === 0) return [] as Session[]
@@ -585,7 +623,7 @@ export default function Layout(props: ParentProps) {
       result.push(...dirSessions)
     }
     return result
-  })
+  }, [] as Session[])
 
   type PrefetchQueue = {
     inflight: Set<string>
@@ -746,28 +784,51 @@ export default function Layout(props: ParentProps) {
     pumpPrefetch(directory)
   }
 
-  createEffect(() => {
-    const sessions = currentSessions()
-    const id = params.id
-
-    if (!id) {
-      const first = sessions[0]
-      if (first) prefetchSession(first)
-
-      const second = sessions[1]
-      if (second) prefetchSession(second)
-      return
-    }
-
-    const index = sessions.findIndex((s) => s.id === id)
-    if (index === -1) return
-
-    const next = sessions[index + 1]
-    if (next) prefetchSession(next)
-
-    const prev = sessions[index - 1]
-    if (prev) prefetchSession(prev)
+  let prefetchDelay: ReturnType<typeof setTimeout> | undefined
+  onCleanup(() => {
+    if (prefetchDelay === undefined) return
+    clearTimeout(prefetchDelay)
   })
+
+  createEffect(
+    on(
+      () => ({
+        switching: state.switching,
+        id: params.id,
+        dir: currentDir(),
+        sig: visibleSessionDirs().join("\x00"),
+      }),
+      (value) => {
+        if (value.switching) return
+        if (prefetchDelay !== undefined) {
+          clearTimeout(prefetchDelay)
+          prefetchDelay = undefined
+        }
+        prefetchDelay = setTimeout(() => {
+          const sessions = currentSessions()
+          if (!value.id) {
+            const first = sessions[0]
+            if (first) prefetchSession(first)
+            const second = sessions[1]
+            if (second) prefetchSession(second)
+            prefetchDelay = undefined
+            return
+          }
+          const index = sessions.findIndex((s) => s.id === value.id)
+          if (index === -1) {
+            prefetchDelay = undefined
+            return
+          }
+          const next = sessions[index + 1]
+          if (next) prefetchSession(next)
+          const prev = sessions[index - 1]
+          if (prev) prefetchSession(prev)
+          prefetchDelay = undefined
+        }, 120)
+      },
+      { defer: true },
+    ),
+  )
 
   function navigateSessionByOffset(offset: number) {
     const sessions = currentSessions()
@@ -1072,12 +1133,22 @@ export default function Layout(props: ParentProps) {
   function touchProjectRoute() {
     const root = currentProject()?.worktree
     if (!root) return
-    if (server.projects.last() !== root) server.projects.touch(root)
+    if (server.projects.last() !== root) {
+      queueMicrotask(() => {
+        if (server.projects.last() === root) return
+        server.projects.touch(root)
+      })
+    }
     return root
   }
 
   function rememberSessionRoute(directory: string, id: string, root = activeProjectRoot(directory)) {
-    setStore("lastProjectSession", root, { directory, id, at: Date.now() })
+    const prev = store.lastProjectSession[root]
+    const now = Date.now()
+    if (prev?.directory === directory && prev.id === id && now - prev.at < 1_000) return root
+    queueMicrotask(() => {
+      setStore("lastProjectSession", root, { directory, id, at: now })
+    })
     return root
   }
 
@@ -1093,26 +1164,53 @@ export default function Layout(props: ParentProps) {
 
   function syncSessionRoute(directory: string, id: string, root = activeProjectRoot(directory)) {
     rememberSessionRoute(directory, id, root)
-    notification.session.markViewed(id)
-    const expanded = untrack(() => store.workspaceExpanded[directory])
-    if (expanded === false) {
-      setStore("workspaceExpanded", directory, true)
+    queueMicrotask(() => {
+      notification.session.markViewed(id)
+      const expanded = untrack(() => store.workspaceExpanded[directory])
+      if (expanded === false) {
+        setStore("workspaceExpanded", directory, true)
+      }
+    })
+    if (layout.sidebar.opened()) {
+      requestAnimationFrame(() => scrollToSession(id, `${directory}:${id}`))
     }
-    requestAnimationFrame(() => scrollToSession(id, `${directory}:${id}`))
     return root
   }
 
   async function navigateToProject(directory: string | undefined) {
     if (!directory) return
+    if (switchFrame !== undefined) cancelAnimationFrame(switchFrame)
+    if (switchFrameNext !== undefined) cancelAnimationFrame(switchFrameNext)
+    switchFrame = undefined
+    switchFrameNext = undefined
+    setState("switching", true)
+    hoverUntil = Date.now() + 600
+    if (hoverDelay !== undefined) {
+      clearTimeout(hoverDelay)
+      hoverDelay = undefined
+    }
     const root = projectRoot(directory)
-    server.projects.touch(root)
+    if (server.projects.last() !== root) {
+      queueMicrotask(() => {
+        if (server.projects.last() === root) return
+        server.projects.touch(root)
+      })
+    }
     const project = layout.projects.list().find((item) => item.worktree === root)
-    let dirs = project
-      ? effectiveWorkspaceOrder(root, [root, ...(project.sandboxes ?? [])], store.workspaceOrder[root])
-      : [root]
+    let dirs: string[] = []
+    let keys = new Set<string>()
+    const setDirs = (next: string[]) => {
+      dirs = next
+      keys = new Set(next.map((item) => workspaceKey(item)))
+    }
+    setDirs(
+      project
+        ? effectiveWorkspaceOrder(root, [root, ...(project.sandboxes ?? [])], store.workspaceOrder[root])
+        : [root],
+    )
     const canOpen = (value: string | undefined) => {
       if (!value) return false
-      return dirs.some((item) => workspaceKey(item) === workspaceKey(value))
+      return keys.has(workspaceKey(value))
     }
     const refreshDirs = async (target?: string) => {
       if (!target || target === root || canOpen(target)) return canOpen(target)
@@ -1120,55 +1218,108 @@ export default function Layout(props: ParentProps) {
         .list({ directory: root })
         .then((x) => x.data ?? [])
         .catch(() => [] as string[])
-      dirs = effectiveWorkspaceOrder(root, [root, ...listed], store.workspaceOrder[root])
+      setDirs(effectiveWorkspaceOrder(root, [root, ...listed], store.workspaceOrder[root]))
       return canOpen(target)
     }
-    const openSession = async (target: { directory: string; id: string }) => {
-      if (!canOpen(target.directory)) return false
+    const done = () => {
+      queueMicrotask(() => {
+        setHoverSession(undefined)
+        switchFrame = requestAnimationFrame(() => {
+          switchFrame = undefined
+          switchFrameNext = requestAnimationFrame(() => {
+            switchFrameNext = undefined
+            setState("switching", false)
+          })
+        })
+      })
+    }
+    const openKnown = (target: { directory: string; id: string }) => {
+      navigateWithSidebarReset(`/${base64Encode(target.directory)}/session/${target.id}`)
+      return true
+    }
+    const openSession = async (target: { directory: string; id: string }, verify = false) => {
+      if (!canOpen(target.directory)) return { ok: false, local: false }
+      if (!verify) {
+        return { ok: openKnown(target), local: true }
+      }
       const resolved = await globalSDK.client.session
         .get({ sessionID: target.id })
         .then((x) => x.data)
         .catch(() => undefined)
-      if (!resolved?.directory) return false
-      if (!canOpen(resolved.directory)) return false
-      setStore("lastProjectSession", root, { directory: resolved.directory, id: resolved.id, at: Date.now() })
-      navigateWithSidebarReset(`/${base64Encode(resolved.directory)}/session/${resolved.id}`)
-      return true
+      if (!resolved?.directory) return { ok: false, local: false }
+      if (!canOpen(resolved.directory)) return { ok: false, local: false }
+      return { ok: openKnown({ directory: resolved.directory, id: resolved.id }), local: false }
     }
 
+    const now = Date.now()
+    const verifyTTL = 300_000
     const projectSession = store.lastProjectSession[root]
     if (projectSession?.id) {
-      await refreshDirs(projectSession.directory)
-      const opened = await openSession(projectSession)
-      if (opened) return
+      const stale = staleSession(projectSession, now, verifyTTL)
+      if (!stale) {
+        openKnown(projectSession)
+        done()
+        if (!canOpen(projectSession.directory)) {
+          void refreshDirs(projectSession.directory)
+        }
+        return
+      }
+      const opened = await openSession(projectSession, stale)
+      if (opened.ok) {
+        done()
+        return
+      }
+      if (!canOpen(projectSession.directory)) {
+        await refreshDirs(projectSession.directory)
+        const retry = await openSession(projectSession, stale)
+        if (retry.ok) {
+          done()
+          return
+        }
+      }
       clearLastProjectSession(root)
     }
 
-    const latest = latestRootSession(
-      dirs.map((item) => globalSync.child(item, { bootstrap: false })[0]),
-      Date.now(),
-    )
-    if (latest && (await openSession(latest))) {
-      return
+    const stores = dirs.map((item) => globalSync.child(item, { bootstrap: false })[0])
+    const latest = latestRootSession(stores, now)
+    if (latest) {
+      const opened = await openSession(latest)
+      if (opened.ok) {
+        done()
+        return
+      }
     }
+
+    const starts = new Map<string, number>()
+    stores.forEach((item) => {
+      const start = nextRootStart(item, now)
+      if (start !== undefined) starts.set(item.path.directory, start)
+    })
 
     const fetched = latestRootSession(
       await Promise.all(
-        dirs.map(async (item) => ({
-          path: { directory: item },
-          session: await globalSDK.client.session
-            .list({ directory: item })
-            .then((x) => x.data ?? [])
-            .catch(() => []),
-        })),
+        dirs.map(async (item) => {
+          return {
+            path: { directory: item },
+            session: await globalSDK.client.session
+              .list({ directory: item, roots: true, start: starts.get(item), limit: 1 })
+              .then((x) => x.data ?? [])
+              .catch(() => []),
+          }
+        }),
       ),
       Date.now(),
     )
-    if (fetched && (await openSession(fetched))) {
-      return
+    if (fetched) {
+      const opened = await openSession(fetched)
+      if (opened.ok) {
+        done()
+        return
+      }
     }
 
     navigateWithSidebarReset(`/${base64Encode(root)}/session`)
+    done()
   }
 
   function navigateToSession(session: Session | undefined) {
@@ -1262,7 +1413,7 @@ export default function Layout(props: ParentProps) {
       layout.sidebar.toggleWorkspaces(project.worktree)
       return
     }
-    if (project.vcs !== "git") return
+    if (project.vcs && project.vcs !== "git") return
     layout.sidebar.toggleWorkspaces(project.worktree)
   }
 
@@ -1610,26 +1761,26 @@ export default function Layout(props: ParentProps) {
     document.documentElement.style.setProperty("--dialog-left-margin", `${sidebarWidth}px`)
   })
 
-  const loadedSessionDirs = new Set<string>()
+  const loadedSessionDirs = new Map<string, number>()
 
   createEffect(
     on(
       visibleSessionDirs,
       (dirs) => {
-        if (dirs.length === 0) {
-          loadedSessionDirs.clear()
-          return
-        }
-
-        const next = new Set(dirs)
-        for (const directory of next) {
-          if (loadedSessionDirs.has(directory)) continue
+        if (state.switching) return
+        const now = Date.now()
+        for (const directory of dirs) {
+          const prev = loadedSessionDirs.get(directory)
+          if (prev && now - prev < 300_000) continue
           globalSync.project.loadSessions(directory)
+          loadedSessionDirs.set(directory, now)
         }
 
+        if (loadedSessionDirs.size <= 24) return
+        const next = [...loadedSessionDirs.entries()].sort((a, b) => b[1] - a[1]).slice(0, 24)
         loadedSessionDirs.clear()
-        for (const directory of next) {
-          loadedSessionDirs.add(directory)
+        for (const [directory, at] of next) {
+          loadedSessionDirs.set(directory, at)
         }
       },
       { defer: true },
@@ -1677,9 +1828,7 @@ export default function Layout(props: ParentProps) {
 
   const sidebarProject = createMemo(() => {
     if (layout.sidebar.opened()) return currentProject()
-    const hovered = hoverProjectData()
-    if (hovered) return hovered
-    return currentProject()
+    return hoverProjectData() ?? currentProject()
   })
 
   function handleWorkspaceDragStart(event: unknown) {
@@ -1718,30 +1867,58 @@ export default function Layout(props: ParentProps) {
 
   const createWorkspace = async (project: LocalProject) => {
     clearSidebarHoverState()
-    const created = await globalSDK.client.worktree
-      .create({ directory: project.worktree })
-      .then((x) => x.data)
-      .catch((err) => {
-        showToast({
-          title: language.t("workspace.create.failed.title"),
-          description: errorMessage(err, language.t("common.requestFailed")),
+    const create = () =>
+      globalSDK.client.worktree
+        .create({ directory: project.worktree })
+        .then((x) => x.data)
+        .catch((err) => {
+          showToast({
+            title: language.t("workspace.create.failed.title"),
+            description: errorMessage(err, language.t("common.requestFailed")),
+          })
+          return undefined
         })
-        return undefined
-      })
 
-    if (!created?.directory) return
+    let created = await create()
+    let directory = created?.directory
+    let branch = created?.branch
+    if (directory && workspaceKey(directory) === workspaceKey(project.worktree)) {
+      directory = undefined
+      branch = undefined
+    }
 
-    setWorkspaceName(created.directory, created.branch, project.id, created.branch)
+    if (!directory) {
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      created = await create()
+      directory = created?.directory
+      branch = created?.branch
+      if (directory && workspaceKey(directory) === workspaceKey(project.worktree)) {
+        directory = undefined
+        branch = undefined
+      }
+    }
+    if (!directory) {
+      const list = await globalSDK.client.worktree
+        .list({ directory: project.worktree })
+        .then((x) => (x.data ?? []).filter((item) => workspaceKey(item) !== workspaceKey(project.worktree)))
+        .catch(() => [])
+      directory = list[0]
+      branch = directory ? getFilename(directory) : undefined
+    }
+    if (!directory) return
+
+    const name = branch ?? getFilename(directory)
+    setWorkspaceName(directory, name, project.id, name)
 
     const local = project.worktree
-    const key = workspaceKey(created.directory)
+    const key = workspaceKey(directory)
     const root = workspaceKey(local)
 
-    setBusy(created.directory, true)
-    WorktreeState.pending(created.directory)
+    setBusy(directory, true)
+    WorktreeState.pending(directory)
     setStore("workspaceExpanded", key, true)
-    if (key !== created.directory) {
-      setStore("workspaceExpanded", created.directory, true)
+    if (key !== directory) {
+      setStore("workspaceExpanded", directory, true)
     }
     setStore("workspaceOrder", project.worktree, (prev) => {
       const existing = prev ?? []
@@ -1749,11 +1926,11 @@ export default function Layout(props: ParentProps) {
         const id = workspaceKey(item)
         return id !== root && id !== key
       })
-      return [created.directory, ...next]
+      return [directory, ...next]
     })
 
-    globalSync.child(created.directory)
-    navigateWithSidebarReset(`/${base64Encode(created.directory)}/session`)
+    globalSync.child(directory)
+    navigateWithSidebarReset(`/${base64Encode(directory)}/session`)
   }
 
   const workspaceSidebarCtx: WorkspaceSidebarContext = {
@@ -1829,12 +2006,20 @@ export default function Layout(props: ParentProps) {
     const clearNotifications = () =>
       workspaces()
         .filter((directory) => notification.project.unseenCount(directory) > 0)
-        .forEach((directory) => notification.project.markViewed(directory))
+        .forEach((directory) => {
+          notification.project.markViewed(directory)
+        })
     const workspacesEnabled = createMemo(() => {
       const project = panelProps.project
       if (!project) return false
-      if (project.vcs !== "git") return false
-      return layout.sidebar.workspaces(project.worktree)()
+      if (layout.sidebar.workspaces(project.worktree)()) return true
+      return project.vcs === "git"
+    })
+    const canToggleWorkspaces = createMemo(() => {
+      const project = panelProps.project
+      if (!project) return false
+      if (layout.sidebar.workspaces(project.worktree)()) return true
+      return !project.vcs || project.vcs === "git"
     })
     const homedir = createMemo(() => globalSync.data.path.home)
 
@@ -1898,7 +2083,7 @@ export default function Layout(props: ParentProps) {
                         <DropdownMenu.Item
                           data-action="project-workspaces-toggle"
                           data-project={base64Encode(p.worktree)}
-                          disabled={p.vcs !== "git" && !layout.sidebar.workspaces(p.worktree)()}
+                          disabled={!canToggleWorkspaces()}
                           onSelect={() => toggleProjectWorkspaces(p)}
                         >
                           <DropdownMenu.ItemLabel>
@@ -2101,13 +2286,13 @@ export default function Layout(props: ParentProps) {
               helpLabel={() => language.t("sidebar.help")}
               onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
               renderPanel={() => (
-                <Show when={currentProject()} keyed>
-                  {(project) => <SidebarPanel project={project} />}
+                <Show when={layout.sidebar.opened() ? currentProject() : undefined}>
+                  {(project) => <SidebarPanel project={project()} />}
                 </Show>
               )}
             />
           </div>
-          <Show when={!layout.sidebar.opened() ? hoverProjectData()?.worktree : undefined} keyed>
+          <Show when={!state.switching && !layout.sidebar.opened() ? hoverProjectData()?.worktree : undefined} keyed>
             {(worktree) => (
               <div class="absolute inset-y-0 left-16 z-50 flex" onMouseEnter={aim.reset}>
                 <SidebarPanel project={hoverProjectData()} />

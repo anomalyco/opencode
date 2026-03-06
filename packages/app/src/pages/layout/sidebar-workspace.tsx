@@ -316,16 +316,19 @@ export const SortableWorkspace = (props: {
     pendingRename: false,
   })
   const slug = createMemo(() => base64Encode(props.directory))
-  const sessions = createMemo(() => sortedRootSessions(workspaceStore, props.sortNow()))
-  const children = createMemo(() => childMapByParent(workspaceStore.session))
   const local = createMemo(() => props.directory === props.project.worktree)
   const active = createMemo(() => props.ctx.currentDir() === props.directory)
+  const open = createMemo(() => props.ctx.workspaceExpanded(props.directory, local()))
+  const visible = createMemo(() => open() || active())
+  const sessions = createMemo(() => (visible() ? sortedRootSessions(workspaceStore, props.sortNow()) : []))
+  const children = createMemo(() =>
+    visible() ? childMapByParent(workspaceStore.session) : new Map<string, string[]>(),
+  )
   const workspaceValue = createMemo(() => {
     const branch = workspaceStore.vcs?.branch
     const name = branch ?? getFilename(props.directory)
     return props.ctx.workspaceName(props.directory, props.project.id, branch) ?? name
   })
-  const open = createMemo(() => props.ctx.workspaceExpanded(props.directory, local()))
   const boot = createMemo(() => open() || active())
   const booted = createMemo((prev) => prev || workspaceStore.status === "complete", false)
   const hasMore = createMemo(() => workspaceStore.sessionTotal > sessions().length)

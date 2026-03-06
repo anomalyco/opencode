@@ -13,7 +13,7 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { ProjectIcon, SessionItem, type SessionItemProps } from "./sidebar-items"
-import { childMapByParent, displayName, sortedRootSessions } from "./helpers"
+import { childMapByParent, displayName, topRootSessions } from "./helpers"
 import { projectSelected, projectTileActive } from "./sidebar-project-helpers"
 
 export type ProjectSidebarContext = {
@@ -86,7 +86,9 @@ const ProjectTile = (props: {
     props
       .dirs()
       .filter((directory) => notification.project.unseenCount(directory) > 0)
-      .forEach((directory) => notification.project.markViewed(directory))
+      .forEach((directory) => {
+        notification.project.markViewed(directory)
+      })
 
   return (
     <ContextMenu
@@ -183,9 +185,9 @@ const ProjectPreviewPanel = (props: {
   workspaceEnabled: Accessor<boolean>
   workspaces: Accessor<string[]>
   label: (directory: string) => string
-  projectSessions: Accessor<ReturnType<typeof sortedRootSessions>>
+  projectSessions: Accessor<ReturnType<typeof topRootSessions>>
   projectChildren: Accessor<Map<string, string[]>>
-  workspaceSessions: (directory: string) => ReturnType<typeof sortedRootSessions>
+  workspaceSessions: (directory: string) => ReturnType<typeof topRootSessions>
   workspaceChildren: (directory: string) => Map<string, string[]>
   setOpen: (value: boolean) => void
   ctx: ProjectSidebarContext
@@ -311,6 +313,7 @@ export const SortableProject = (props: {
       worktree: props.project.worktree,
     }),
   )
+  const panel = createMemo(() => preview() && state.open && !state.menu)
 
   createEffect(() => {
     if (preview()) return
@@ -333,13 +336,17 @@ export const SortableProject = (props: {
   }
 
   const projectStore = createMemo(() => globalSync.child(props.project.worktree, { bootstrap: false })[0])
-  const projectSessions = createMemo(() => sortedRootSessions(projectStore(), props.sortNow()).slice(0, 2))
-  const projectChildren = createMemo(() => childMapByParent(projectStore().session))
+  const projectSessions = createMemo(() => (panel() ? topRootSessions(projectStore(), props.sortNow(), 2) : []))
+  const projectChildren = createMemo(() =>
+    panel() ? childMapByParent(projectStore().session) : new Map<string, string[]>(),
+  )
   const workspaceSessions = (directory: string) => {
+    if (!panel()) return []
     const [data] = globalSync.child(directory, { bootstrap: false })
-    return sortedRootSessions(data, props.sortNow()).slice(0, 2)
+    return topRootSessions(data, props.sortNow(), 2)
   }
   const workspaceChildren = (directory: string) => {
+    if (!panel()) return new Map<string, string[]>()
     const [data] = globalSync.child(directory, { bootstrap: false })
     return childMapByParent(data.session)
   }

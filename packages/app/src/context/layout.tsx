@@ -401,6 +401,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       const base = {
         ...(metadata ?? {}),
         ...project,
+        vcs: metadata?.vcs ?? (childStore.vcs ? "git" : undefined),
         icon: {
           url: metadata?.icon?.url,
           override: metadata?.icon?.override ?? childStore.icon,

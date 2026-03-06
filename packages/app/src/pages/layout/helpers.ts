@@ -28,10 +28,49 @@ export const isRootVisibleSession = (session: Session, directory: string) =>
 export const sortedRootSessions = (store: { session: Session[]; path: { directory: string } }, now: number) =>
   store.session.filter((session) => isRootVisibleSession(session, store.path.directory)).sort(sortSessions(now))
 
-export const latestRootSession = (stores: { session: Session[]; path: { directory: string } }[], now: number) =>
-  stores
-    .flatMap((store) => store.session.filter((session) => isRootVisibleSession(session, store.path.directory)))
-    .sort(sortSessions(now))[0]
+export const topRootSessions = (
+  store: { session: Session[]; path: { directory: string } },
+  now: number,
+  limit: number,
+) => {
+  if (limit <= 0) return [] as Session[]
+  const sort = sortSessions(now)
+  return store.session.reduce((list, session) => {
+    if (!isRootVisibleSession(session, store.path.directory)) return list
+    const index = list.findIndex((item) => sort(session, item) < 0)
+    if (index === -1) {
+      if (list.length < limit) list.push(session)
+      return list
+    }
+    list.splice(index, 0, session)
+    if (list.length > limit) list.pop()
+    return list
+  }, [] as Session[])
+}
+
+export const nextRootStart = (store: { session: Session[]; path: { directory: string } }, now: number) => {
+  const latest = topRootSessions(store, now, 1)[0]
+  if (!latest) return undefined
+  return (latest.time.updated ?? latest.time.created) + 1
+}
+
+export const staleSession = (session: { at: number } | undefined, now: number, ttl: number) => {
+  if (!session) return true
+  return now - session.at > ttl
+}
+
+export const latestRootSession = (stores: { session: Session[]; path: { directory: string } }[], now: number) => {
+  const sort = sortSessions(now)
+  return stores.reduce(
+    (best, store) =>
+      store.session.reduce((next, session) => {
+        if (!isRootVisibleSession(session, store.path.directory)) return next
+        if (!next) return session
+        return sort(session, next) < 0 ? session : next
+      }, best),
+    undefined as Session | undefined,
+  )
+}
 
 export function hasProjectPermissions<T>(
   request: Record<string, T[] | undefined>,
