@@ -704,6 +704,25 @@ function App() {
         dialog.clear()
       },
     },
+    {
+      title: kv.get("scrollbar_visible", true) ? "Hide session scrollbar" : "Show session scrollbar",
+      value: "app.toggle.scrollbar",
+      keybind: "scrollbar_toggle",
+      category: "System",
+      onSelect: (dialog) => {
+        kv.set("scrollbar_visible", !kv.get("scrollbar_visible", true))
+        dialog.clear()
+      },
+    },
+    {
+      title: kv.get("generic_tool_output_visibility", false) ? "Hide generic tool output" : "Show generic tool output",
+      value: "app.toggle.generic_tool_output",
+      category: "System",
+      onSelect: (dialog) => {
+        kv.set("generic_tool_output_visibility", !kv.get("generic_tool_output_visibility", false))
+        dialog.clear()
+      },
+    },
   ])
 
   createEffect(() => {
