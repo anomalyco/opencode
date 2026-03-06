@@ -140,3 +140,33 @@ describe("step-finish token propagation via Bus event", () => {
     { timeout: 30000 },
   )
 })
+
+describe("session compacting state", () => {
+  test("publishes compacting lifecycle updates", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const session = await Session.create({})
+        const seen: Array<number | undefined> = []
+        const unsub = Bus.subscribe(Session.Event.Updated, (event) => {
+          if (event.properties.info.id !== session.id) return
+          seen.push(event.properties.info.time.compacting)
+        })
+
+        const time = Date.now()
+        await Session.setCompacting({ sessionID: session.id, time })
+        await Session.setCompacting({ sessionID: session.id })
+
+        await new Promise((resolve) => setTimeout(resolve, 100))
+
+        unsub()
+
+        expect(seen).toContain(time)
+        expect(seen.at(-1)).toBeUndefined()
+        expect((await Session.get(session.id)).time.compacting).toBeUndefined()
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+})

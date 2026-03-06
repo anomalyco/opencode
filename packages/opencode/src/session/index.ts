@@ -413,6 +413,27 @@ export namespace Session {
     },
   )
 
+  export const setCompacting = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      time: z.number().optional(),
+    }),
+    async (input) => {
+      return Database.use((db) => {
+        const row = db
+          .update(SessionTable)
+          .set({ time_compacting: input.time ?? null })
+          .where(eq(SessionTable.id, input.sessionID))
+          .returning()
+          .get()
+        if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
+        const info = fromRow(row)
+        Database.effect(() => Bus.publish(Event.Updated, { info }))
+        return info
+      })
+    },
+  )
+
   export const setPermission = fn(
     z.object({
       sessionID: Identifier.schema("session"),

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import path from "path"
 import { SessionCompaction } from "../../src/session/compaction"
 import { Token } from "../../src/util/token"
@@ -7,6 +7,11 @@ import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 import { Session } from "../../src/session"
 import type { Provider } from "../../src/provider/provider"
+import { Agent } from "../../src/agent/agent"
+import { Provider as ProviderRegistry } from "../../src/provider/provider"
+import { SessionProcessor } from "../../src/session/processor"
+import type { MessageV2 } from "../../src/session/message-v2"
+import { Identifier } from "../../src/id/id"
 
 Log.init({ print: false })
 
@@ -39,6 +44,10 @@ function createModel(opts: {
     options: {},
   } as Provider.Model
 }
+
+afterEach(() => {
+  mock.restore()
+})
 
 describe("session.compaction.isOverflow", () => {
   test("returns true when token count exceeds usable context", async () => {
@@ -240,6 +249,116 @@ describe("util.token.estimate", () => {
 
   test("returns 0 for empty string", () => {
     expect(Token.estimate("")).toBe(0)
+  })
+})
+
+describe("session.compaction.process", () => {
+  test("sets compacting during processing and clears it after success", async () => {
+    await using tmp = await tmpdir()
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const agent = await Agent.get("compaction")
+        const user = {
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: session.id,
+          time: { created: Date.now() },
+          agent: "build",
+          model: { providerID: "test", modelID: "test-model" },
+          tools: {},
+        } as MessageV2.User
+
+        await Session.updateMessage(user)
+
+        const model = createModel({ context: 100_000, output: 32_000 })
+        spyOn(Agent, "get").mockResolvedValue(agent)
+        spyOn(ProviderRegistry, "getModel").mockResolvedValue(model)
+        spyOn(SessionProcessor, "create").mockImplementation((input) => ({
+          get message() {
+            return input.assistantMessage
+          },
+          partFromToolCall(_callID: string) {
+            return undefined
+          },
+          async process() {
+            const time = (await Session.get(input.sessionID)).time.compacting
+            expect(typeof time).toBe("number")
+            input.assistantMessage.finish = "stop"
+            return "stop"
+          },
+        }))
+
+        const result = await SessionCompaction.process({
+          parentID: user.id,
+          messages: [{ info: user, parts: [] }],
+          sessionID: session.id,
+          abort: new AbortController().signal,
+          auto: false,
+        })
+
+        expect(result).toBe("continue")
+        expect((await Session.get(session.id)).time.compacting).toBeUndefined()
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("clears compacting after failure", async () => {
+    await using tmp = await tmpdir()
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const agent = await Agent.get("compaction")
+        const user = {
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: session.id,
+          time: { created: Date.now() },
+          agent: "build",
+          model: { providerID: "test", modelID: "test-model" },
+          tools: {},
+        } as MessageV2.User
+
+        await Session.updateMessage(user)
+
+        const model = createModel({ context: 100_000, output: 32_000 })
+        spyOn(Agent, "get").mockResolvedValue(agent)
+        spyOn(ProviderRegistry, "getModel").mockResolvedValue(model)
+        spyOn(SessionProcessor, "create").mockImplementation((input) => ({
+          get message() {
+            return input.assistantMessage
+          },
+          partFromToolCall(_callID: string) {
+            return undefined
+          },
+          async process() {
+            const time = (await Session.get(input.sessionID)).time.compacting
+            expect(typeof time).toBe("number")
+            throw new Error("boom")
+          },
+        }))
+
+        await expect(
+          SessionCompaction.process({
+            parentID: user.id,
+            messages: [{ info: user, parts: [] }],
+            sessionID: session.id,
+            abort: new AbortController().signal,
+            auto: false,
+          }),
+        ).rejects.toThrow("boom")
+
+        expect((await Session.get(session.id)).time.compacting).toBeUndefined()
+
+        await Session.remove(session.id)
+      },
+    })
   })
 })
 

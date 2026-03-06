@@ -14,6 +14,7 @@ import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { ProviderTransform } from "@/provider/transform"
+import { defer } from "@/util/defer"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -106,6 +107,11 @@ export namespace SessionCompaction {
     auto: boolean
     overflow?: boolean
   }) {
+    const time = Date.now()
+    await Session.setCompacting({ sessionID: input.sessionID, time })
+    await using _ = defer(async () => {
+      await Session.setCompacting({ sessionID: input.sessionID })
+    })
     const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
 
     let messages = input.messages
