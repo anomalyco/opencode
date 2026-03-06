@@ -83,8 +83,6 @@ export const dict = {
   "command.session.compact.description": "Summarize the session to reduce context size",
   "command.session.fork": "Fork from message",
   "command.session.fork.description": "Create a new session from a previous message",
-  "command.session.copyID": "Copy session ID",
-  "command.session.copyID.description": "Copy the current session ID to clipboard",
   "command.session.share": "Share session",
   "command.session.share.description": "Share this session and copy the URL to clipboard",
   "command.session.unshare": "Unshare session",
@@ -433,7 +431,6 @@ export const dict = {
   "toast.context.noLineSelection.description": "Select a line range in a file tab first.",
 
   "toast.session.share.copyFailed.title": "Failed to copy URL to clipboard",
-  "toast.session.copyID.failed.title": "Failed to copy session ID",
   "toast.session.share.success.title": "Session shared",
   "toast.session.share.success.description": "Share URL copied to clipboard!",
   "toast.session.share.failed.title": "Failed to share session",
