@@ -280,6 +280,28 @@ export namespace LSPServer {
         }
       }
 
+      // If `oxlint` is declared in the workspace but no directly executable binary
+      // was found, try Bun's package runner from the project root. This matches
+      // docs that describe project dependency-based enablement.
+      const packageJSON = path.join(root, "package.json")
+      if (await Filesystem.exists(packageJSON)) {
+        try {
+          const json = JSON.parse(await fs.readFile(packageJSON, "utf8")) as {
+            dependencies?: Record<string, string>
+            devDependencies?: Record<string, string>
+          }
+          if (json.dependencies?.oxlint || json.devDependencies?.oxlint) {
+            return {
+              process: spawn(BunProc.which(), ["x", "oxlint", "--lsp"], {
+                cwd: root,
+              }),
+            }
+          }
+        } catch {
+          // ignore invalid package.json
+        }
+      }
+
       let serverBin = await resolveBin(serverTarget)
       if (!serverBin) {
         const found = which("oxc_language_server")
