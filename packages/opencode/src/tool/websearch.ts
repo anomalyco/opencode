@@ -6,10 +6,10 @@ import { abortAfterAny } from "../util/abort"
 const API_CONFIG = {
   BASE_URL: "https://mcp.exa.ai",
   ENDPOINTS: {
-    SEARCH: "/mcp",
+    SEARCH: process.env.EXA_API_KEY ? `/mcp?exaApiKey=${process.env.EXA_API_KEY}` : "/mcp",
   },
   DEFAULT_NUM_RESULTS: 8,
-} as const
+}
 
 interface McpSearchRequest {
   jsonrpc: string
@@ -100,11 +100,7 @@ export const WebSearchTool = Tool.define("websearch", async () => {
           "content-type": "application/json",
         }
 
-        const exaKey = process.env.EXA_API_KEY
-        const searchUrl = exaKey
-          ? `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.SEARCH}?exaApiKey=${exaKey}`
-          : `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.SEARCH}`
-        const response = await fetch(searchUrl, {
+        const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.SEARCH}`, {
           method: "POST",
           headers,
           body: JSON.stringify(searchRequest),
