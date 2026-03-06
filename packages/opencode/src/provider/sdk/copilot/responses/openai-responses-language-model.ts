@@ -1100,19 +1100,19 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
                 }
               } else if (isResponseOutputItemDoneReasoningChunk(value)) {
                 const activeReasoningPart = activeReasoning[value.output_index]
-                for (const summaryIndex of activeReasoningPart?.summaryParts ?? []) {
-                  controller.enqueue({
-                    type: "reasoning-end",
-                    id: `${activeReasoningPart.canonicalId}:${summaryIndex}`,
-                    providerMetadata: {
-                      openai: {
-                        itemId: activeReasoningPart.canonicalId,
-                        reasoningEncryptedContent: value.item.encrypted_content ?? null,
-                      },
-                    },
-                  })
-                }
                 if (activeReasoningPart) {
+                  for (const summaryIndex of activeReasoningPart.summaryParts) {
+                    controller.enqueue({
+                      type: "reasoning-end",
+                      id: `${activeReasoningPart.canonicalId}:${summaryIndex}`,
+                      providerMetadata: {
+                        openai: {
+                          itemId: activeReasoningPart.canonicalId,
+                          reasoningEncryptedContent: value.item.encrypted_content ?? null,
+                        },
+                      },
+                    })
+                  }
                   delete activeReasoning[value.output_index]
                   if (currentReasoningOutputIndex === value.output_index) {
                     currentReasoningOutputIndex = null
