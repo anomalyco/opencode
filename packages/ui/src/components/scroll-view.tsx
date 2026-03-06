@@ -1,4 +1,5 @@
 import { createSignal, onCleanup, onMount, splitProps, type ComponentProps, Show, mergeProps } from "solid-js"
+import { useI18n } from "../context/i18n"
 
 export interface ScrollViewProps extends ComponentProps<"div"> {
   viewportRef?: (el: HTMLDivElement) => void
@@ -6,6 +7,7 @@ export interface ScrollViewProps extends ComponentProps<"div"> {
 }
 
 export function ScrollView(props: ScrollViewProps) {
+  const i18n = useI18n()
   const merged = mergeProps({ orientation: "vertical" }, props)
   const [local, events, rest] = splitProps(
     merged,
@@ -188,7 +190,7 @@ export function ScrollView(props: ScrollViewProps) {
         onClick={events.onClick as any}
         tabIndex={0}
         role="region"
-        aria-label="scrollable content"
+        aria-label={i18n.t("ui.scrollView.ariaLabel")}
         onKeyDown={(e) => {
           onKeyDown(e)
           if (typeof events.onKeyDown === "function") events.onKeyDown(e as any)

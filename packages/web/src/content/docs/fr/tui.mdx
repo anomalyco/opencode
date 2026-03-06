@@ -355,24 +355,34 @@ Certains éditeurs ont besoin d'arguments de ligne de commande pour s'exécuter 
 
 ## Configurer
 
-Vous pouvez personnaliser le comportement de TUI via votre fichier de configuration OpenCode.
+Vous pouvez personnaliser le comportement de TUI via `tui.json` (ou `tui.jsonc`).
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "tui": {
-    "scroll_speed": 3,
-    "scroll_acceleration": {
-      "enabled": true
-    }
-  }
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "opencode",
+  "keybinds": {
+    "leader": "ctrl+x"
+  },
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": true
+  },
+  "diff_style": "auto"
 }
 ```
 
+Ceci est séparé de `opencode.json`, qui configure le comportement du serveur/d'exécution.
+
 ### Options
 
-- `scroll_acceleration` - Activez l'accélération de défilement de style macOS pour un défilement fluide et naturel. Lorsqu'elle est activée, la vitesse de défilement augmente avec les gestes de défilement rapides et reste précise pour les mouvements plus lents. **Ce paramètre est prioritaire sur `scroll_speed` et le remplace lorsqu'il est activé.**
-- `scroll_speed` - Contrôle la vitesse de défilement du TUI lors de l'utilisation des commandes de défilement (minimum : `1`). La valeur par défaut est `3`. **Remarque : Ceci est ignoré si `scroll_acceleration.enabled` est défini sur `true`.**
+- `theme` - Définit votre thème d'interface utilisateur. [En savoir plus](/docs/themes).
+- `keybinds` - Personnalise les raccourcis clavier. [En savoir plus](/docs/keybinds).
+- `scroll_acceleration.enabled` - Activez l'accélération de défilement de style macOS pour un défilement fluide et naturel. Lorsqu'elle est activée, la vitesse de défilement augmente avec les gestes de défilement rapides et reste précise pour les mouvements plus lents. **Ce paramètre est prioritaire sur `scroll_speed` et le remplace lorsqu'il est activé.**
+- `scroll_speed` - Contrôle la vitesse de défilement du TUI lors de l'utilisation des commandes de défilement (minimum : `0.001`, prend en charge les valeurs décimales). La valeur par défaut est `3`. **Remarque : Ceci est ignoré si `scroll_acceleration.enabled` est défini sur `true`.**
+- `diff_style` - Contrôle le rendu différentiel. `"auto"` s'adapte à la largeur du terminal, `"stacked"` affiche toujours une seule colonne.
+
+Utilisez `OPENCODE_TUI_CONFIG` pour charger un chemin de configuration TUI personnalisé.
 
 ---
 

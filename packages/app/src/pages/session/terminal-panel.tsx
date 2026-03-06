@@ -56,9 +56,9 @@ export function TerminalPanel() {
     on(
       () => terminal.all().length,
       (count, prevCount) => {
-        if (prevCount !== undefined && prevCount > 0 && count === 0) {
-          if (opened()) view().terminal.toggle()
-        }
+        if (prevCount === undefined || prevCount <= 0 || count !== 0) return
+        if (!opened()) return
+        close()
       },
     ),
   )
@@ -102,7 +102,7 @@ export function TerminalPanel() {
 
   const all = createMemo(() => terminal.all())
   const ids = createMemo(() => all().map((pty) => pty.id))
-  const byId = createMemo(() => new Map(all().map((pty) => [pty.id, pty])))
+  const byId = createMemo(() => new Map(all().map((pty) => [pty.id, { ...pty }])))
 
   const handleTerminalDragStart = (event: unknown) => {
     const id = getDraggableId(event)
@@ -189,7 +189,13 @@ export function TerminalPanel() {
               >
                 <Tabs.List class="h-10">
                   <SortableProvider ids={ids()}>
-                    <For each={all()}>{(pty) => <SortableTerminalTab terminal={pty} onClose={close} />}</For>
+                    <For each={ids()}>
+                      {(id) => (
+                        <Show when={byId().get(id)} keyed>
+                          {(pty) => <SortableTerminalTab terminal={pty} onClose={close} />}
+                        </Show>
+                      )}
+                    </For>
                   </SortableProvider>
                   <div class="h-full flex items-center justify-center">
                     <TooltipKeybind
@@ -211,10 +217,10 @@ export function TerminalPanel() {
               <div class="flex-1 min-h-0 relative">
                 <Show when={terminal.active()} keyed>
                   {(id) => (
-                    <Show when={byId().get(id)}>
+                    <Show when={byId().get(id)} keyed>
                       {(pty) => (
                         <div id={`terminal-wrapper-${id}`} class="absolute inset-0">
-                          <Terminal pty={pty()} onCleanup={terminal.update} onConnectError={() => terminal.clone(id)} />
+                          <Terminal pty={pty} onCleanup={terminal.update} onConnectError={() => terminal.clone(id)} />
                         </div>
                       )}
                     </Show>
@@ -223,14 +229,14 @@ export function TerminalPanel() {
               </div>
             </div>
             <DragOverlay>
-              <Show when={store.activeDraggable}>
+              <Show when={store.activeDraggable} keyed>
                 {(draggedId) => (
-                  <Show when={byId().get(draggedId())}>
+                  <Show when={byId().get(draggedId)} keyed>
                     {(t) => (
                       <div class="relative p-1 h-10 flex items-center bg-background-stronger text-14-regular">
                         {terminalTabLabel({
-                          title: t().title,
-                          titleNumber: t().titleNumber,
+                          title: t.title,
+                          titleNumber: t.titleNumber,
                           t: language.t as (key: string, vars?: Record<string, string | number | boolean>) => string,
                         })}
                       </div>
