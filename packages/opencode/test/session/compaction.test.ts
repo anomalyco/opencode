@@ -281,7 +281,7 @@ describe("session.compaction.process", () => {
             return input.assistantMessage
           },
           partFromToolCall(_callID: string) {
-            return undefined
+            throw new Error("unused")
           },
           async process() {
             const time = (await Session.get(input.sessionID)).time.compacting
@@ -335,7 +335,7 @@ describe("session.compaction.process", () => {
             return input.assistantMessage
           },
           partFromToolCall(_callID: string) {
-            return undefined
+            throw new Error("unused")
           },
           async process() {
             const time = (await Session.get(input.sessionID)).time.compacting
