@@ -14,6 +14,9 @@
       "info": "#007197",
       "diffAdd": "#4f8f7b",
       "diffDelete": "#d05f7c"
+    },
+    "overrides": {
+      "syntax-keyword": "#9854f1"
     }
   },
   "dark": {
@@ -28,6 +31,9 @@
       "info": "#7dcfff",
       "diffAdd": "#41a6b5",
       "diffDelete": "#c34043"
+    },
+    "overrides": {
+      "syntax-keyword": "#bb9af7"
     }
   }
 }
