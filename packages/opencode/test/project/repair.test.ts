@@ -3,6 +3,7 @@ import { $ } from "bun"
 import path from "path"
 import fs from "fs/promises"
 import { loadProject } from "./setup"
+import { repairAll } from "../../src/project/repair"
 import { tmpdir } from "../fixture/fixture"
 import { Database, eq } from "../../src/storage/db"
 import { ProjectTable } from "../../src/project/project.sql"
@@ -86,7 +87,7 @@ describe("Project.repairAll", () => {
           .run()
       })
 
-      await p.repairAll()
+      await repairAll()
 
       const repaired = await p.fromDirectory(worktreePath).then((x) => x.project)
       expect(repaired.id).toBe(first.id)
@@ -113,7 +114,6 @@ describe("Project.repairAll", () => {
   })
 
   test("does not repair non-git duplicate projects", async () => {
-    const p = await loadProject()
     await using tmp = await tmpdir({ git: true })
     const stamp = `${Date.now()}-${Math.random()}`
 
@@ -141,7 +141,7 @@ describe("Project.repairAll", () => {
     })
     const dir = process.env["XDG_DATA_HOME"] + "/opencode"
     const before = await fs.readdir(dir)
-    await p.repairAll()
+    await repairAll()
 
     const projects = Database.use((db) =>
       db.select().from(ProjectTable).where(eq(ProjectTable.worktree, tmp.path)).all(),
@@ -154,7 +154,6 @@ describe("Project.repairAll", () => {
   })
 
   test("does not repair when only one git project exists for a worktree", async () => {
-    const p = await loadProject()
     await using tmp = await tmpdir({ git: true })
 
     const stamp = `${Date.now()}-${Math.random()}`
@@ -185,7 +184,7 @@ describe("Project.repairAll", () => {
     const dir = process.env["XDG_DATA_HOME"] + "/opencode"
     const before = await fs.readdir(dir)
 
-    await p.repairAll()
+    await repairAll()
 
     const projects = Database.use((db) =>
       db.select().from(ProjectTable).where(eq(ProjectTable.worktree, tmp.path)).all(),
@@ -198,7 +197,6 @@ describe("Project.repairAll", () => {
   })
 
   test("does not repair legacy git project without sessions", async () => {
-    const p = await loadProject()
     await using tmp = await tmpdir({ git: true })
 
     const stamp = `${Date.now()}-${Math.random()}`
@@ -221,7 +219,7 @@ describe("Project.repairAll", () => {
     const dir = process.env["XDG_DATA_HOME"] + "/opencode"
     const before = await fs.readdir(dir)
 
-    await p.repairAll()
+    await repairAll()
 
     const after = await fs.readdir(dir)
     const added = after.filter((f) => !before.includes(f))
@@ -229,7 +227,6 @@ describe("Project.repairAll", () => {
   })
 
   test("does not consider legacy git projects needing repair when session directory is missing", async () => {
-    const p = await loadProject()
     await using tmp = await tmpdir({ git: true })
 
     const root = await $`git rev-list --max-parents=0 HEAD`
@@ -279,13 +276,13 @@ describe("Project.repairAll", () => {
     const dir = process.env["XDG_DATA_HOME"] + "/opencode"
     const before = await fs.readdir(dir)
 
-    await p.repairAll()
+    await repairAll()
 
     const mid = await fs.readdir(dir)
     const added1 = mid.filter((f) => !before.includes(f))
     expect(added1.some((f) => f.startsWith("opencode.db.before-project-repair."))).toBe(false)
 
-    await p.repairAll()
+    await repairAll()
 
     const after = await fs.readdir(dir)
     const added2 = after.filter((f) => !mid.includes(f))
@@ -293,7 +290,6 @@ describe("Project.repairAll", () => {
   })
 
   test("does not consider legacy git projects needing repair when worktree is missing", async () => {
-    const p = await loadProject()
     const stamp = `${Date.now()}-${Math.random()}`
     const root = `00112233445566778899aabbccddeeff00112233`
     const worktree = path.join(process.env["XDG_DATA_HOME"]!, `missing-worktree-${stamp}`)
@@ -337,7 +333,7 @@ describe("Project.repairAll", () => {
     const dir = process.env["XDG_DATA_HOME"] + "/opencode"
     const before = await fs.readdir(dir)
 
-    await p.repairAll()
+    await repairAll()
 
     const after = await fs.readdir(dir)
     const added = after.filter((f) => !before.includes(f))
@@ -345,7 +341,6 @@ describe("Project.repairAll", () => {
   })
 
   test("migrates legacy git project without sessions when permission exists", async () => {
-    const p = await loadProject()
     await using tmp = await tmpdir({ git: true })
 
     const root = await $`git rev-list --max-parents=0 HEAD`
@@ -379,7 +374,7 @@ describe("Project.repairAll", () => {
     const dir = process.env["XDG_DATA_HOME"] + "/opencode"
     const before = await fs.readdir(dir)
 
-    await p.repairAll()
+    await repairAll()
 
     const mid = await fs.readdir(dir)
     const added1 = mid.filter((f) => !before.includes(f))
@@ -393,7 +388,7 @@ describe("Project.repairAll", () => {
     const perm = Database.use((db) => db.select().from(PermissionTable).where(eq(PermissionTable.project_id, id)).get())
     expect(perm).toBeDefined()
 
-    await p.repairAll()
+    await repairAll()
 
     const after = await fs.readdir(dir)
     const added2 = after.filter((f) => !mid.includes(f))
@@ -401,7 +396,6 @@ describe("Project.repairAll", () => {
   })
 
   test("migrates legacy git project without sessions when workspace exists", async () => {
-    const p = await loadProject()
     await using tmp = await tmpdir({ git: true })
 
     const root = await $`git rev-list --max-parents=0 HEAD`
@@ -438,7 +432,7 @@ describe("Project.repairAll", () => {
     const dir = process.env["XDG_DATA_HOME"] + "/opencode"
     const before = await fs.readdir(dir)
 
-    await p.repairAll()
+    await repairAll()
 
     const mid = await fs.readdir(dir)
     const added1 = mid.filter((f) => !before.includes(f))
@@ -452,7 +446,7 @@ describe("Project.repairAll", () => {
     const ws = Database.use((db) => db.select().from(WorkspaceTable).where(eq(WorkspaceTable.project_id, id)).get())
     expect(ws).toBeDefined()
 
-    await p.repairAll()
+    await repairAll()
 
     const after = await fs.readdir(dir)
     const added2 = after.filter((f) => !mid.includes(f))
@@ -516,7 +510,7 @@ describe("Project.repairAll", () => {
         .run()
     })
 
-    await p.repairAll()
+    await repairAll()
 
     const { project } = await p.fromDirectory(tmp.path)
     expect(project.id).not.toBe("global")
@@ -646,7 +640,7 @@ describe("Project.repairAll", () => {
           .run()
       })
 
-      await p.repairAll()
+      await repairAll()
 
       const a = await p.fromDirectory(tmp.path).then((x) => x.project)
       const b = await p.fromDirectory(clonePath).then((x) => x.project)
@@ -751,7 +745,7 @@ describe("Project.repairAll", () => {
           .run()
       })
 
-      await p.repairAll()
+      await repairAll()
 
       const b = await p.fromDirectory(clonePath).then((x) => x.project)
       expect(b.id).toBe("existing-project")
@@ -893,7 +887,7 @@ describe("Project.repairAll", () => {
           .run()
       })
 
-      await p.repairAll()
+      await repairAll()
 
       const aRoot = await p.fromDirectory(tmp.path).then((x) => x.project)
       const aWt = await p.fromDirectory(wtA).then((x) => x.project)
@@ -934,7 +928,6 @@ describe("Project.repairAll", () => {
   })
 
   test("does not delete legacy project when some session directories are missing", async () => {
-    const p = await loadProject()
     await using tmp = await tmpdir({ git: true })
 
     const root = await $`git rev-list --max-parents=0 HEAD`
@@ -979,7 +972,7 @@ describe("Project.repairAll", () => {
         .run()
     })
 
-    await p.repairAll()
+    await repairAll()
 
     const session = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, "ses_missing")).get())
     expect(session?.project_id).toBe(root)
