@@ -1,10 +1,4 @@
-import { A, useNavigate, useParams } from "@solidjs/router"
-import { useGlobalSync } from "@/context/global-sync"
-import { useLanguage } from "@/context/language"
-import { useLayout, type LocalProject, getAvatarColors } from "@/context/layout"
-import { useNotification } from "@/context/notification"
-import { usePermission } from "@/context/permission"
-import { base64Encode } from "@opencode-ai/util/encode"
+import type { Message, Session, TextPart, UserMessage } from "@opencode-ai/sdk/v2/client"
 import { Avatar } from "@opencode-ai/ui/avatar"
 import { HoverCard } from "@opencode-ai/ui/hover-card"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -12,12 +6,18 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { MessageNav } from "@opencode-ai/ui/message-nav"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { base64Encode } from "@opencode-ai/util/encode"
 import { getFilename } from "@opencode-ai/util/path"
-import { type Message, type Session, type TextPart, type UserMessage } from "@opencode-ai/sdk/v2/client"
-import { For, Match, Show, Switch, createMemo, onCleanup, type Accessor, type JSX } from "solid-js"
+import { A, useNavigate, useParams } from "@solidjs/router"
+import { type Accessor, createMemo, For, type JSX, Match, onCleanup, Show, Switch } from "solid-js"
+import { useGlobalSync } from "@/context/global-sync"
+import { useLanguage } from "@/context/language"
+import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
+import { useNotification } from "@/context/notification"
+import { usePermission } from "@/context/permission"
 import { agentColor } from "@/utils/agent"
-import { hasProjectPermissions } from "./helpers"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
+import { hasProjectPermissions } from "./helpers"
 
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
@@ -231,7 +231,9 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const hoverEnabled = createMemo(() => (props.popover ?? true) && hoverAllowed())
   const isActive = createMemo(() => props.session.id === params.id)
 
-  const hoverPrefetch = { current: undefined as ReturnType<typeof setTimeout> | undefined }
+  const hoverPrefetch = {
+    current: undefined as ReturnType<typeof setTimeout> | undefined,
+  }
   const cancelHoverPrefetch = () => {
     if (hoverPrefetch.current === undefined) return
     clearTimeout(hoverPrefetch.current)
@@ -300,17 +302,15 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
           setHoverSession={props.setHoverSession}
           messageLabel={messageLabel}
           onMessageSelect={(message) => {
-            if (!isActive()) {
+            if (!isActive())
               layout.pendingMessage.set(`${base64Encode(props.session.directory)}/${props.session.id}`, message.id)
-              navigate(`${props.slug}/session/${props.session.id}`)
-              return
-            }
-            window.history.replaceState(null, "", `#message-${message.id}`)
-            window.dispatchEvent(new HashChangeEvent("hashchange"))
+
+            navigate(`${props.slug}/session/${props.session.id}#message-${message.id}`)
           }}
           trigger={item}
         />
       </Show>
+
       <div
         class={`absolute ${props.dense ? "top-0.5 right-0.5" : "top-1 right-1"} flex items-center gap-0.5 transition-opacity`}
         classList={{

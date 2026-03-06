@@ -33,24 +33,60 @@ export namespace InstanceEvent {
   )
 }
 
+function emit(directory: string) {
+  GlobalBus.emit("event", {
+    directory,
+    payload: {
+      type: "server.instance.disposed",
+      properties: {
+        directory,
+      },
+    },
+  })
+}
+
+function boot(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
+  return iife(async () => {
+    const ctx =
+      input.project && input.worktree
+        ? {
+            directory: input.directory,
+            worktree: input.worktree,
+            project: input.project,
+          }
+        : await Project.fromDirectory(input.directory).then(({ project, sandbox }) => ({
+            directory: input.directory,
+            worktree: sandbox,
+            project,
+          }))
+    await context.provide(ctx, async () => {
+      await input.init?.()
+    })
+    return ctx
+  })
+}
+
+function track(directory: string, next: Promise<Context>) {
+  const task = next.catch((error) => {
+    if (cache.get(directory) === task) cache.delete(directory)
+    throw error
+  })
+  cache.set(directory, task)
+  return task
+}
+
 export const Instance = {
   async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
     let existing = cache.get(input.directory)
     if (!existing) {
       Log.Default.info("creating instance", { directory: input.directory })
-      existing = iife(async () => {
-        const { project, sandbox } = await Project.fromDirectory(input.directory)
-        const ctx = {
+      existing = track(
+        input.directory,
+        boot({
           directory: input.directory,
-          worktree: sandbox,
-          project,
-        }
-        await context.provide(ctx, async () => {
-          await input.init?.()
-        })
-        return ctx
-      })
-      cache.set(input.directory, existing)
+          init: input.init,
+        }),
+      )
     }
     const ctx = await existing
     return context.provide(ctx, async () => {
@@ -87,7 +123,7 @@ export const Instance = {
     ctx.worktree = sandbox
     ctx.project = project
     cache.delete(prev)
-    cache.set(dir, Promise.resolve(ctx))
+    track(dir, Promise.resolve(ctx))
 
     const result = {
       directory: dir,
@@ -118,19 +154,19 @@ export const Instance = {
   state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): () => S {
     return State.create(() => Instance.directory, init, dispose)
   },
+  async reload(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
+    Log.Default.info("reloading instance", { directory: input.directory })
+    await State.dispose(input.directory)
+    cache.delete(input.directory)
+    const next = track(input.directory, boot(input))
+    emit(input.directory)
+    return await next
+  },
   async dispose() {
     Log.Default.info("disposing instance", { directory: Instance.directory })
     await State.dispose(Instance.directory)
     cache.delete(Instance.directory)
-    GlobalBus.emit("event", {
-      directory: Instance.directory,
-      payload: {
-        type: "server.instance.disposed",
-        properties: {
-          directory: Instance.directory,
-        },
-      },
-    })
+    emit(Instance.directory)
   },
   async disposeAll() {
     if (disposal.all) return disposal.all
