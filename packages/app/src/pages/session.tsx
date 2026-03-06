@@ -20,6 +20,7 @@ import { createStore } from "solid-js/store"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Select } from "@opencode-ai/ui/select"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
+import { Button } from "@opencode-ai/ui/button"
 import { base64Encode, checksum } from "@opencode-ai/util/encode"
 import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
@@ -813,6 +814,21 @@ export default function Page() {
             empty={
               store.changes === "turn" ? (
                 emptyTurn()
+              ) : reviewEmptyKey() === "session.review.noVcs" ? (
+                <div class={input.emptyClass}>
+                  <div class="flex flex-col gap-3">
+                    <div class="text-14-medium text-text-strong">Create a Git repository</div>
+                    <div
+                      class="text-14-regular text-text-base max-w-md"
+                      style={{ "line-height": "var(--line-height-normal)" }}
+                    >
+                      Track, review, and undo changes in this project
+                    </div>
+                  </div>
+                  <Button size="large" onClick={() => undefined}>
+                    Create Git repository
+                  </Button>
+                </div>
               ) : (
                 <div class={input.emptyClass}>
                   <div class="text-14-regular text-text-weak max-w-56">{language.t(reviewEmptyKey())}</div>
