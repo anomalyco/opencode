@@ -1,5 +1,5 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode, checksum } from "@opencode-ai/util/encode"
 
 export const serverHost = process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"
 export const serverPort = process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"
@@ -32,4 +32,10 @@ export function dirPath(directory: string) {
 
 export function sessionPath(directory: string, sessionID?: string) {
   return `${dirPath(directory)}/session${sessionID ? `/${sessionID}` : ""}`
+}
+
+export function workspacePersistKey(directory: string, key: string) {
+  const head = directory.slice(0, 12) || "workspace"
+  const sum = checksum(directory) ?? "0"
+  return `opencode.workspace.${head}.${sum}.dat:workspace:${key}`
 }
