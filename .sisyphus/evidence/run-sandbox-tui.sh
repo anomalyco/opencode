@@ -7,6 +7,8 @@ evidence_dir="${OPENCODE_SANDBOX_EVIDENCE_DIR:-$repo_root/.sisyphus/evidence}"
 opencode_dir="${OPENCODE_SANDBOX_OPENCODE_DIR:-$repo_root/packages/opencode}"
 check_script="$repo_root/.sisyphus/evidence/check-sandbox-evidence.sh"
 model="${OPENCODE_SANDBOX_MODEL:-openai/gpt-5.2-codex}"
+pane_width="${OPENCODE_SANDBOX_WIDTH:-80}"
+pane_height="${OPENCODE_SANDBOX_HEIGHT:-24}"
 if [[ -z "$state" ]]; then
   echo "Usage: $0 <error|final|stream|tool|warning|idle>"
   echo "Tip: view ANSI output with: less -R $evidence_dir/task-2-<state>.txt"
@@ -44,6 +46,7 @@ export OPENCODE_DISABLE_PROJECT_CONFIG=1
 mkdir -p "$XDG_CONFIG_HOME/opencode" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$OPENCODE_TEST_HOME"
 
 config_path="$XDG_CONFIG_HOME/opencode/opencode.json"
+tui_path="$XDG_CONFIG_HOME/opencode/tui.json"
 auth_target_dir="$XDG_DATA_HOME/opencode"
 auth_target="$auth_target_dir/auth.json"
 
@@ -57,6 +60,41 @@ if [[ "$state" != "error" ]]; then
       cp "$HOME/.local/share/opencode/auth.json" "$auth_target"
     fi
   fi
+fi
+
+if [[ -n "${OPENCODE_SANDBOX_THEME:-}" || -n "${OPENCODE_SANDBOX_PROMPT_PLUGIN:-}" || -n "${OPENCODE_SANDBOX_PROMPT_ENABLED:-}" ]]; then
+  enabled_json=""
+  if [[ -n "${OPENCODE_SANDBOX_PROMPT_ENABLED:-}" ]]; then
+    case "${OPENCODE_SANDBOX_PROMPT_ENABLED}" in
+      1|true|TRUE|yes|YES|on|ON) enabled_json="true" ;;
+      *) enabled_json="false" ;;
+    esac
+  fi
+
+  {
+    printf '{\n  "\\$schema": "https://opencode.ai/tui.json"'
+    if [[ -n "${OPENCODE_SANDBOX_THEME:-}" ]]; then
+      printf ',\n  "theme": "%s"' "${OPENCODE_SANDBOX_THEME}"
+    fi
+    if [[ -n "${OPENCODE_SANDBOX_PROMPT_PLUGIN:-}" || -n "$enabled_json" ]]; then
+      printf ',\n  "prompt_bar_animation": {'
+      wrote_field=0
+      if [[ -n "$enabled_json" ]]; then
+        printf '\n    "enabled": %s' "$enabled_json"
+        wrote_field=1
+      fi
+      if [[ -n "${OPENCODE_SANDBOX_PROMPT_PLUGIN:-}" ]]; then
+        if [[ "$wrote_field" -eq 1 ]]; then
+          printf ',\n'
+        else
+          printf '\n'
+        fi
+        printf '    "plugin": "%s"' "${OPENCODE_SANDBOX_PROMPT_PLUGIN}"
+      fi
+      printf '\n  }'
+    fi
+    printf '\n}\n'
+  } > "$tui_path"
 fi
 
 if [[ "$state" != "error" && -z "${OPENCODE_SANDBOX_OPENAI_API_KEY:-}" && ! -f "$auth_target" ]]; then
@@ -117,7 +155,7 @@ if tmux has-session -t "$session_name" 2>/dev/null; then
   tmux kill-session -t "$session_name"
 fi
 
-tmux new-session -d -s "$session_name" "bash"
+tmux new-session -d -x "$pane_width" -y "$pane_height" -s "$session_name" "bash"
 tmux send-keys -t "$session_name" "export PATH=\"$HOME/.bun/bin:$PATH\"" Enter
 tmux send-keys -t "$session_name" "export XDG_DATA_HOME=$XDG_DATA_HOME XDG_CONFIG_HOME=$XDG_CONFIG_HOME XDG_STATE_HOME=$XDG_STATE_HOME XDG_CACHE_HOME=$XDG_CACHE_HOME OPENCODE_TEST_HOME=$OPENCODE_TEST_HOME OPENCODE_DISABLE_PROJECT_CONFIG=1 OPENCODE_PERMISSION='$OPENCODE_PERMISSION' OPENCODE_DISABLE_DEFAULT_PLUGINS=1 OPENCODE_DISABLE_LSP_DOWNLOAD=1 OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER=1 OPENCODE_DISABLE_MODELS_FETCH=1" Enter
 tmux send-keys -t "$session_name" "cd $opencode_dir" Enter

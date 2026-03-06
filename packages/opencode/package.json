@@ -8,6 +8,7 @@
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "test": "bun test --timeout 30000",
+    "test:prompt-bar-regressions": "bun test test/cli/tui/prompt-layout-harness.test.ts test/cli/tui/prompt-bar-animation-registry.test.ts test/cli/tui/prompt-bar-visual.test.ts test/config/tui.test.ts",
     "build": "bun run script/build.ts",
     "dev": "bun run --conditions=browser ./src/index.ts",
     "random": "echo 'Random script updated at $(date)' && echo 'Change queued successfully' && echo 'Another change made' && echo 'Yet another change' && echo 'One more change' && echo 'Final change' && echo 'Another final change' && echo 'Yet another final change'",

@@ -43,6 +43,16 @@ import {
   loadPromptBarAnimationPlugins,
   resolvePromptBarAnimationPlugin,
 } from "@tui/util/prompt-bar-animation-registry"
+import {
+  promptBarAnimationEnabled,
+  promptBarBackground,
+  promptBarBottomLeft,
+  promptBarLayoutSpec,
+  promptBarPluginEnabled,
+  promptBarResetEnabled,
+  promptBarSurface,
+  promptBarUseLegacyLayoutForTheme,
+} from "@tui/util/prompt-bar-layout-policy"
 import { useTuiConfig } from "@tui/context/tui-config"
 
 export type PromptProps = {
@@ -89,6 +99,7 @@ export function Prompt(props: PromptProps) {
   const tuiConfig = useTuiConfig()
   const [pluginLoad, setPluginLoad] = createSignal(0)
   const kv = useKV()
+  const layout = promptBarLayoutSpec()
   const [store, setStore] = createStore<{
     prompt: PromptInfo
     mode: "normal" | "shell"
@@ -114,7 +125,10 @@ export function Prompt(props: PromptProps) {
     })
   })
   const hasPromptContent = createMemo(() => store.prompt.input.trim().length > 0 || store.prompt.parts.length > 0)
-  const promptBarAnimationEnabled = createMemo(() => tuiConfig.prompt_bar_animation?.enabled ?? false)
+  const promptBarAnimationOverride = createMemo(() => kv.get("prompt_bar_animation_enabled_override", false))
+  const isPromptBarAnimationEnabled = createMemo(() =>
+    promptBarAnimationEnabled(tuiConfig.prompt_bar_animation?.enabled, promptBarAnimationOverride()),
+  )
   const promptBarAnimationConfigured = createMemo(
     () => tuiConfig.prompt_bar_animation?.plugin ?? DEFAULT_PROMPT_BAR_ANIMATION_PLUGIN,
   )
@@ -125,20 +139,37 @@ export function Prompt(props: PromptProps) {
     pluginLoad()
     return resolvePromptBarAnimationPlugin(promptBarAnimationCurrent())
   })
+  const usePromptBarLegacyLayout = createMemo(() =>
+    promptBarUseLegacyLayoutForTheme(
+      isPromptBarAnimationEnabled(),
+      promptBarAnimationPlugin().id,
+      theme.backgroundElement,
+    ),
+  )
   const promptBarColor = usePromptBarColorEffect({
     visible: () => props.visible !== false,
     state: promptBarState,
     hasContent: hasPromptContent,
     animationsEnabled: () => kv.get("animations_enabled", true),
-    pluginEnabled: promptBarAnimationEnabled,
+    pluginEnabled: () => promptBarPluginEnabled(usePromptBarLegacyLayout()),
     plugin: promptBarAnimationPlugin,
     theme,
     requestRender: () => renderer.requestRender(),
   })
-  const promptBarBackground = createMemo(() => {
-    if (!promptBarAnimationEnabled()) return theme.backgroundElement
-    return promptBarColor.background()
-  })
+  const resolvedPromptBarBackground = createMemo(() =>
+    promptBarBackground({
+      useLegacyLayout: usePromptBarLegacyLayout(),
+      overlay: promptBarColor.background(),
+      background: theme.backgroundElement,
+    }),
+  )
+  const promptBarSurfaceStyle = createMemo(() =>
+    promptBarSurface({
+      useLegacyLayout: usePromptBarLegacyLayout(),
+      background: resolvedPromptBarBackground(),
+      chromeVisible: theme.backgroundElement.a !== 0,
+    }),
+  )
 
   onMount(() => {
     loadPromptBarAnimationPlugins().then(() => {
@@ -246,6 +277,7 @@ export function Prompt(props: PromptProps) {
               current={promptBarAnimationCurrent()}
               onSelect={(opt) => {
                 kv.set("prompt_bar_animation_plugin", opt.value)
+                kv.set("prompt_bar_animation_enabled_override", true)
                 toast.show({
                   variant: "info",
                   message: `Prompt animation switched to ${opt.title} (${opt.value})`,
@@ -273,6 +305,7 @@ export function Prompt(props: PromptProps) {
           const next = plugins[(idx + 1) % plugins.length] ?? plugins[0]
           if (!next) return
           kv.set("prompt_bar_animation_plugin", next.id)
+          kv.set("prompt_bar_animation_enabled_override", true)
           toast.show({
             variant: "info",
             message: `Prompt animation switched to ${next.label} (${next.id})`,
@@ -290,9 +323,14 @@ export function Prompt(props: PromptProps) {
           name: "prompt-animation-reset",
           aliases: ["animation-reset", "reset-prompt-animation"],
         },
-        enabled: promptBarAnimationCurrent() !== promptBarAnimationConfigured(),
+        enabled: promptBarResetEnabled(
+          promptBarAnimationCurrent(),
+          promptBarAnimationConfigured(),
+          promptBarAnimationOverride(),
+        ),
         onSelect: (dialog) => {
           kv.set("prompt_bar_animation_plugin", promptBarAnimationConfigured())
+          kv.set("prompt_bar_animation_enabled_override", false)
           renderer.requestRender()
           dialog.clear()
         },
@@ -934,24 +972,24 @@ export function Prompt(props: PromptProps) {
           customBorderChars={{
             ...EmptyBorder,
             vertical: "┃",
-            bottomLeft: "╹",
+            bottomLeft: promptBarBottomLeft(usePromptBarLegacyLayout()),
           }}
-          backgroundColor={promptBarAnimationEnabled() ? promptBarBackground() : undefined}
+          backgroundColor={promptBarSurfaceStyle().shellBackground}
         >
           <box
-            paddingLeft={2}
-            paddingRight={2}
-            paddingTop={1}
+            paddingLeft={layout.content_padding_left}
+            paddingRight={layout.content_padding_right}
+            paddingTop={layout.content_padding_top}
             flexShrink={0}
-            backgroundColor={promptBarBackground()}
+            backgroundColor={promptBarSurfaceStyle().contentBackground}
             flexGrow={1}
           >
             <textarea
               placeholder={placeholderText()}
               textColor={keybind.leader ? theme.textMuted : theme.text}
               focusedTextColor={keybind.leader ? theme.textMuted : theme.text}
-              minHeight={1}
-              maxHeight={6}
+              minHeight={layout.textarea_min_height}
+              maxHeight={layout.textarea_max_height}
               onContentChange={() => {
                 const value = input.plainText
                 setStore("prompt", "input", value)
@@ -1120,11 +1158,17 @@ export function Prompt(props: PromptProps) {
                 }, 0)
               }}
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
-              focusedBackgroundColor={promptBarBackground()}
+              focusedBackgroundColor={promptBarSurfaceStyle().contentBackground}
               cursorColor={theme.text}
               syntaxStyle={syntax()}
             />
-            <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
+            <box
+              flexDirection="row"
+              flexShrink={0}
+              minHeight={layout.footer_row_height}
+              paddingTop={layout.footer_padding_top}
+              gap={1}
+            >
               <text fg={highlight()}>
                 {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
               </text>
@@ -1145,35 +1189,28 @@ export function Prompt(props: PromptProps) {
             </box>
           </box>
         </box>
-        <Show when={!promptBarAnimationEnabled()}>
+        <box
+          height={layout.separator_height}
+          border={["left"]}
+          borderColor={highlight()}
+          backgroundColor={promptBarSurfaceStyle().separatorBackground}
+          customBorderChars={{
+            ...EmptyBorder,
+            vertical: promptBarSurfaceStyle().separatorVertical,
+          }}
+        >
           <box
-            height={1}
-            border={["left"]}
-            borderColor={highlight()}
+            height={layout.separator_height}
+            border={["bottom"]}
+            borderColor={promptBarSurfaceStyle().separatorBorderColor}
+            backgroundColor={promptBarSurfaceStyle().separatorBackground}
             customBorderChars={{
               ...EmptyBorder,
-              vertical: theme.backgroundElement.a !== 0 ? "╹" : " ",
+              horizontal: promptBarSurfaceStyle().separatorHorizontal,
             }}
-          >
-            <box
-              height={1}
-              border={["bottom"]}
-              borderColor={theme.backgroundElement}
-              customBorderChars={
-                theme.backgroundElement.a !== 0
-                  ? {
-                      ...EmptyBorder,
-                      horizontal: "▀",
-                    }
-                  : {
-                      ...EmptyBorder,
-                      horizontal: " ",
-                    }
-              }
-            />
-          </box>
-        </Show>
-        <box flexDirection="row" justifyContent="space-between">
+          />
+        </box>
+        <box flexDirection="row" justifyContent="space-between" minHeight={layout.status_row_height}>
           <Show when={status().type !== "idle"} fallback={<text />}>
             <box
               flexDirection="row"

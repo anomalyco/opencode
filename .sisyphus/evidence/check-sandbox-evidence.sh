@@ -49,11 +49,11 @@ extract_prompt_line_raw() {
     local provider="${model%%/*}"
     local model_id="${model#*/}"
     rg -m1 -i -F "$model_id" "$file" || rg -m1 -i -F "$provider" "$file" \
-      || rg -m1 "GPT-5\\.2|OpenAI" "$file" || rg -m1 "Build" "$file" || rg -m1 "Ask anything" "$file" || true
+      || rg -m1 "Ask anything" "$file" || rg -m1 "Build" "$file" || true
     return
   fi
 
-  rg -m1 "GPT-5\\.2|OpenAI" "$file" || rg -m1 "Build" "$file" || rg -m1 "Ask anything" "$file" || true
+  rg -m1 "Ask anything" "$file" || rg -m1 "Build" "$file" || true
 }
 
 extract_background_code() {
@@ -67,6 +67,7 @@ extract_prompt_line() {
 
 case "$state" in
   idle)
+    expect_cycle="${OPENCODE_SANDBOX_EXPECT_IDLE_CYCLE:-1}"
     local_file_a="$evidence_dir/task-2-idle-a.txt"
     local_file_b="$evidence_dir/task-2-idle-b.txt"
     local_file_c="$evidence_dir/task-2-idle-c.txt"
@@ -84,34 +85,36 @@ case "$state" in
       exit 1
     fi
 
-    bg_a="$(extract_background_code "$line_a")"
-    bg_b="$(extract_background_code "$line_b")"
+    if [[ "$expect_cycle" == "1" ]]; then
+      bg_a="$(extract_background_code "$line_a")"
+      bg_b="$(extract_background_code "$line_b")"
 
-    if [[ -n "$bg_a" && -n "$bg_b" ]]; then
-      if [[ "$bg_a" == "$bg_b" ]]; then
-        if [[ -f "$local_file_c" ]]; then
-          line_c="$(extract_prompt_line_raw "$local_file_c")"
-          bg_c="$(extract_background_code "$line_c")"
-          if [[ -z "$bg_c" || "$bg_b" == "$bg_c" ]]; then
+      if [[ -n "$bg_a" && -n "$bg_b" ]]; then
+        if [[ "$bg_a" == "$bg_b" ]]; then
+          if [[ -f "$local_file_c" ]]; then
+            line_c="$(extract_prompt_line_raw "$local_file_c")"
+            bg_c="$(extract_background_code "$line_c")"
+            if [[ -z "$bg_c" || "$bg_b" == "$bg_c" ]]; then
+              echo "Idle prompt bar background did not change between captures"
+              exit 1
+            fi
+          else
             echo "Idle prompt bar background did not change between captures"
             exit 1
           fi
-        else
-          echo "Idle prompt bar background did not change between captures"
-          exit 1
         fi
-      fi
-    else
-      if [[ "$line_a" == "$line_b" ]]; then
-        if [[ -f "$local_file_c" ]]; then
-          line_c="$(extract_prompt_line_raw "$local_file_c")"
-          if [[ "$line_b" == "$line_c" ]]; then
+      else
+        if [[ "$line_a" == "$line_b" ]]; then
+          if [[ -f "$local_file_c" ]]; then
+            line_c="$(extract_prompt_line_raw "$local_file_c")"
+            if [[ "$line_b" == "$line_c" ]]; then
+              echo "Idle prompt bar line did not change between captures"
+              exit 1
+            fi
+          else
             echo "Idle prompt bar line did not change between captures"
             exit 1
           fi
-        else
-          echo "Idle prompt bar line did not change between captures"
-          exit 1
         fi
       fi
     fi

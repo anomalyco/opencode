@@ -10,6 +10,8 @@ if [[ -z "$state" ]]; then
   exit 1
 fi
 
+strict_compare="${OPENCODE_COMPARE_STRICT:-1}"
+
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 upstream_dir="${OPENCODE_UPSTREAM_DIR:-/tmp/opencode-upstream}"
 evidence_root="${OPENCODE_BENCH_EVIDENCE_DIR:-/tmp/opencode-sandbox-evidence}"
@@ -25,7 +27,7 @@ mkdir -p "$fork_evidence" "$upstream_evidence"
 origin_head="$(git -C "$repo_root" symbolic-ref --quiet --short refs/remotes/origin/HEAD || true)"
 origin_branch="${origin_head#origin/}"
 if [[ -z "$origin_branch" ]]; then
-  origin_branch="main"
+  origin_branch="dev"
 fi
 
 if [[ ! -e "$upstream_dir/.git" ]]; then
@@ -68,4 +70,45 @@ if [[ "$state" == "idle" ]]; then
   diff -u "$fork_evidence/task-2-idle-b.txt" "$upstream_evidence/task-2-idle-b.txt" || true
 else
   diff -u "$fork_evidence/task-2-${state}.txt" "$upstream_evidence/task-2-${state}.txt" || true
+fi
+
+normalize_file() {
+  local src="$1"
+  local dst="$2"
+  perl -ne 'print unless /Model .* is not valid/' "$src" \
+    | perl -pe 's#Ask anything\.\.\. "[^"]*"#Ask anything... "<placeholder>"#g' \
+    | perl -pe 's#^.*packages/opencode:[^\x1b ]+.*$#<repo-line>#g' \
+    | perl -pe 's#^.*Ask anything\.\.\..*$#<ask-line>#g' \
+    | perl -pe 's#^.*Build .*#<build-line>#g' \
+    | perl -ne 'print if /<ask-line>|<build-line>|╹|▀/' \
+    > "$dst"
+}
+
+compare_normalized() {
+  local left="$1"
+  local right="$2"
+  local label="$3"
+  local left_norm="$evidence_root/.normalized-${label}-fork.txt"
+  local right_norm="$evidence_root/.normalized-${label}-upstream.txt"
+  normalize_file "$left" "$left_norm"
+  normalize_file "$right" "$right_norm"
+  if ! diff -u "$left_norm" "$right_norm"; then
+    echo "Normalized drift detected for $label"
+    return 1
+  fi
+  echo "Normalized parity OK for $label"
+  return 0
+}
+
+if [[ "$strict_compare" == "1" ]]; then
+  strict_status=0
+  if [[ "$state" == "idle" ]]; then
+    compare_normalized "$fork_evidence/task-2-idle-a.txt" "$upstream_evidence/task-2-idle-a.txt" "idle-a" || strict_status=1
+    compare_normalized "$fork_evidence/task-2-idle-b.txt" "$upstream_evidence/task-2-idle-b.txt" "idle-b" || strict_status=1
+  else
+    compare_normalized "$fork_evidence/task-2-${state}.txt" "$upstream_evidence/task-2-${state}.txt" "$state" || strict_status=1
+  fi
+  if [[ "$strict_status" -ne 0 ]]; then
+    exit 1
+  fi
 fi
