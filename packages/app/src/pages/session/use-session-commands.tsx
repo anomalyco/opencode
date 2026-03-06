@@ -269,7 +269,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
           ? language.t("command.permissions.autoaccept.disable")
           : language.t("command.permissions.autoaccept.enable"),
       keybind: "mod+shift+a",
-      disabled: !params.id || !permission.permissionsEnabled(),
+      disabled: !params.id,
       onSelect: () => {
         const sessionID = params.id
         if (!sessionID) return
