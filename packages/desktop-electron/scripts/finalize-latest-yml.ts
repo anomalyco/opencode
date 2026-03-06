@@ -78,9 +78,17 @@ async function read(subdir: string, filename: string): Promise<LatestYml | undef
 
 const output: Record<string, string> = {}
 
-// Windows: single arch, pass through
-const win = await read("latest-yml-x86_64-pc-windows-msvc", "latest.yml")
-if (win) output["latest.yml"] = serialize(win)
+// Windows: merge arm64 + x64 into single file
+const winX64 = await read("latest-yml-x86_64-pc-windows-msvc", "latest.yml")
+const winArm64 = await read("latest-yml-aarch64-pc-windows-msvc", "latest.yml")
+if (winX64 || winArm64) {
+  const base = winArm64 ?? winX64!
+  output["latest.yml"] = serialize({
+    version: base.version,
+    files: [...(winArm64?.files ?? []), ...(winX64?.files ?? [])],
+    releaseDate: base.releaseDate,
+  })
+}
 
 // Linux x64: pass through
 const linuxX64 = await read("latest-yml-x86_64-unknown-linux-gnu", "latest-linux.yml")
