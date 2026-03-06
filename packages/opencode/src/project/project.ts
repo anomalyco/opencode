@@ -110,8 +110,14 @@ export namespace Project {
     )
   }
 
-  function legacyWorktrees() {
-    const rows = Database.use((db) =>
+  function isgit(dir: string) {
+    if (!existsSync(dir)) return false
+    if (!existsSync(path.join(dir, ".git"))) return false
+    return true
+  }
+
+  function legacyRows() {
+    return Database.use((db) =>
       db
         .select({ id: ProjectTable.id, worktree: ProjectTable.worktree })
         .from(ProjectTable)
@@ -119,11 +125,10 @@ export namespace Project {
         .all(),
     )
       .filter((p) => !!legacy(p.id))
-      .filter((p) => existsSync(p.worktree) && existsSync(path.join(p.worktree, ".git")))
+      .filter((p) => isgit(p.worktree))
+  }
 
-    const ids = rows.map((p) => p.id)
-    if (ids.length === 0) return []
-
+  function legacyRefs(ids: string[]) {
     const sessions = Database.use((db) =>
       db
         .select({ id: SessionTable.project_id, directory: SessionTable.directory })
@@ -147,30 +152,40 @@ export namespace Project {
         .all(),
     )
 
+    return { sessions, perms, workspaces }
+  }
+
+  function actionable(
+    id: string,
+    input: { total: Map<string, number>; exist: Map<string, number>; pset: Set<string>; wmap: Map<string, number> },
+  ) {
+    const all = input.total.get(id) ?? 0
+    const ok = input.exist.get(id) ?? 0
+    if (ok > 0) return true
+    if (all > 0) return false
+    return input.pset.has(id) || (input.wmap.get(id) ?? 0) > 0
+  }
+
+  function legacyWorktrees() {
+    const rows = legacyRows()
+
+    const ids = rows.map((p) => p.id)
+    if (ids.length === 0) return []
+
+    const refs = legacyRefs(ids)
+
     const total = new Map<string, number>()
     const exist = new Map<string, number>()
-    for (const s of sessions) {
+    for (const s of refs.sessions) {
       total.set(s.id, (total.get(s.id) ?? 0) + 1)
       if (existsSync(s.directory)) {
         exist.set(s.id, (exist.get(s.id) ?? 0) + 1)
       }
     }
-    const pset = new Set(perms.map((x) => x.id))
-    const wmap = new Map(workspaces.map((x) => [x.id, x.count]))
+    const pset = new Set(refs.perms.map((x) => x.id))
+    const wmap = new Map(refs.workspaces.map((x) => [x.id, x.count]))
 
-    return [
-      ...new Set(
-        rows
-          .filter((p) => {
-            const all = total.get(p.id) ?? 0
-            const ok = exist.get(p.id) ?? 0
-            if (ok > 0) return true
-            if (all > 0) return false
-            return pset.has(p.id) || (wmap.get(p.id) ?? 0) > 0
-          })
-          .map((p) => p.worktree),
-      ),
-    ]
+    return [...new Set(rows.filter((p) => actionable(p.id, { total, exist, pset, wmap })).map((p) => p.worktree))]
   }
 
   function cachePath(commonDir: string) {
@@ -251,6 +266,132 @@ export namespace Project {
     db.delete(ProjectTable).where(inArray(ProjectTable.id, ids)).run()
   }
 
+  type Group = { tops: Set<string>; sessions: Set<string>; workspaces: Set<string> }
+
+  function within(root: string, dir: string) {
+    const rel = path.relative(root, dir)
+    if (!rel) return true
+    if (rel.startsWith("..")) return false
+    if (path.isAbsolute(rel)) return false
+    return true
+  }
+
+  function addref(
+    groups: Map<string, Group>,
+    root: string,
+    input?: { top?: string; session?: string; workspace?: string },
+  ) {
+    const group = groups.get(root)
+    if (group) {
+      if (input?.top) group.tops.add(input.top)
+      if (input?.session) group.sessions.add(input.session)
+      if (input?.workspace) group.workspaces.add(input.workspace)
+      return
+    }
+    groups.set(root, {
+      tops: new Set(input?.top ? [input.top] : []),
+      sessions: new Set(input?.session ? [input.session] : []),
+      workspaces: new Set(input?.workspace ? [input.workspace] : []),
+    })
+  }
+
+  async function legacyGroups(input: {
+    baseRoot: string
+    sessions: { id: string; directory: string }[]
+    workspaces: { id: string; directory: string | null }[]
+    perm: boolean
+  }) {
+    const groups = new Map<string, Group>()
+    for (const s of input.sessions) {
+      if (!existsSync(s.directory)) continue
+      const top = await git(["rev-parse", "--show-toplevel"], { cwd: s.directory })
+        .then((result) => gitpath(s.directory, result.text()))
+        .catch(() => s.directory)
+
+      const common = await commonDir(top)
+      if (!common) continue
+
+      addref(groups, path.dirname(common), { top, session: s.id })
+    }
+
+    if (input.sessions.length > 0 && groups.size === 0) return
+
+    const roots = [...groups.keys()].sort((a, b) => a.localeCompare(b))
+    const pick = (dir: string | null) => {
+      if (!dir) return input.baseRoot
+      let best = input.baseRoot
+      for (const root of roots) {
+        if (within(root, dir) && root.length > best.length) best = root
+      }
+      return best
+    }
+
+    for (const w of input.workspaces) {
+      addref(groups, pick(w.directory), { workspace: w.id })
+    }
+
+    if (groups.size === 0 && (input.perm || input.workspaces.length > 0)) {
+      addref(groups, input.baseRoot, { top: input.baseRoot })
+    }
+
+    return groups
+  }
+
+  async function resolveId(root: string) {
+    const common = await commonDir(root)
+    if (!common) return
+
+    const cached = await Bun.file(cachePath(common))
+      .text()
+      .then((x) => x.trim())
+      .catch(() => undefined)
+
+    const canon = canonical(root)
+    const fixed = canon?.vcs === "git" && !legacy(canon.id) ? canon.id : undefined
+
+    let id = fixed ?? (cached && !legacy(cached) ? cached : crypto.randomUUID())
+    for (let i = 0; i < 3; i++) {
+      const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
+      if (!row || row.worktree === root) break
+      id = crypto.randomUUID()
+    }
+    if (id !== cached) writeCache(common, id)
+    return { common, id }
+  }
+
+  function ensureProject(
+    db: Database.TxOrDb,
+    input: {
+      id: string
+      root: string
+      src: typeof ProjectTable.$inferSelect | undefined
+      tops: Set<string>
+      now: number
+    },
+  ) {
+    const row = db.select().from(ProjectTable).where(eq(ProjectTable.id, input.id)).get()
+    if (row) return
+    db.insert(ProjectTable)
+      .values({
+        id: input.id,
+        worktree: input.root,
+        vcs: "git",
+        name: input.src?.name,
+        icon_url: input.src?.icon_url,
+        icon_color: input.src?.icon_color,
+        sandboxes: [...new Set([input.root, ...input.tops])],
+        commands: input.src?.commands,
+        time_created: input.src?.time_created ?? input.now,
+        time_updated: input.now,
+        time_initialized: input.src?.time_initialized,
+      })
+      .run()
+  }
+
+  function moveWorkspaces(db: Database.TxOrDb, ids: string[], project: string) {
+    db.update(WorkspaceTable).set({ project_id: project }).where(inArray(WorkspaceTable.id, ids)).run()
+  }
+
   // One-time migration for legacy git project IDs.
   //
   // Historical behavior: git projects used a root commit hash as the project id. That is stable
@@ -264,8 +405,7 @@ export namespace Project {
   // IMPORTANT: All DB repairs/migrations are centralized in repairAll(); fromDirectory() must be
   // side-effect free with respect to the database.
   async function repairLegacy(worktree: string) {
-    if (!existsSync(worktree)) return
-    if (!existsSync(path.join(worktree, ".git"))) return
+    if (!isgit(worktree)) return
 
     const projects = Database.use((db) =>
       db.select().from(ProjectTable).where(eq(ProjectTable.worktree, worktree)).all(),
@@ -288,13 +428,6 @@ export namespace Project {
         .all(),
     )
 
-    if (sessions.length === 0 && workspaces.length === 0) {
-      const perm = Database.use((db) =>
-        db.select().from(PermissionTable).where(eq(PermissionTable.project_id, olds[0]!)).get(),
-      )
-      if (!perm) return
-    }
-
     const base = await commonDir(worktree)
     if (!base) return
     const baseRoot = path.dirname(base)
@@ -304,118 +437,25 @@ export namespace Project {
       db.select().from(PermissionTable).where(eq(PermissionTable.project_id, olds[0]!)).get(),
     )
 
-    const within = (root: string, dir: string) => {
-      const rel = path.relative(root, dir)
-      if (!rel) return true
-      if (rel.startsWith("..")) return false
-      if (path.isAbsolute(rel)) return false
-      return true
-    }
+    if (sessions.length === 0 && workspaces.length === 0 && !perm) return
 
-    const groups = new Map<string, { tops: Set<string>; sessions: Set<string>; workspaces: Set<string> }>()
-
-    const add = (root: string, input?: { top?: string; session?: string; workspace?: string }) => {
-      const group = groups.get(root)
-      if (group) {
-        if (input?.top) group.tops.add(input.top)
-        if (input?.session) group.sessions.add(input.session)
-        if (input?.workspace) group.workspaces.add(input.workspace)
-        return
-      }
-      groups.set(root, {
-        tops: new Set(input?.top ? [input.top] : []),
-        sessions: new Set(input?.session ? [input.session] : []),
-        workspaces: new Set(input?.workspace ? [input.workspace] : []),
-      })
-    }
-
-    for (const s of sessions) {
-      if (!existsSync(s.directory)) continue
-
-      const top = await git(["rev-parse", "--show-toplevel"], { cwd: s.directory })
-        .then((result) => gitpath(s.directory, result.text()))
-        .catch(() => s.directory)
-
-      const common = await commonDir(top)
-      if (!common) continue
-
-      add(path.dirname(common), { top, session: s.id })
-    }
-
-    if (sessions.length > 0 && groups.size === 0) return
-
-    const roots = [...groups.keys()].sort((a, b) => a.localeCompare(b))
-    const pick = (dir: string | null) => {
-      if (!dir) return baseRoot
-      let best = baseRoot
-      for (const root of roots) {
-        if (within(root, dir) && root.length > best.length) best = root
-      }
-      return best
-    }
-
-    for (const w of workspaces) {
-      add(pick(w.directory), { workspace: w.id })
-    }
-
-    if (groups.size === 0 && (perm || workspaces.length > 0)) {
-      add(baseRoot, { top: baseRoot })
-    }
+    const groups = await legacyGroups({ baseRoot, sessions, workspaces, perm: !!perm })
+    if (!groups) return
 
     for (const [root, group] of groups) {
-      const common = await commonDir(root)
-      if (!common) continue
-
-      const cached = await Bun.file(cachePath(common))
-        .text()
-        .then((x) => x.trim())
-        .catch(() => undefined)
-
-      const canon = canonical(root)
-      const fixed = canon?.vcs === "git" && !legacy(canon.id) ? canon.id : undefined
-
-      let id = fixed ?? (cached && !legacy(cached) ? cached : crypto.randomUUID())
-      for (let i = 0; i < 3; i++) {
-        const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
-        if (!row || row.worktree === root) break
-        id = crypto.randomUUID()
-      }
-      if (id !== cached) writeCache(common, id)
+      const resolved = await resolveId(root)
+      if (!resolved) continue
 
       const ids = [...group.sessions]
+      const ws = [...group.workspaces]
 
       Database.transaction((db) => {
         const now = Date.now()
 
-        const target = db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get()
-        if (!target) {
-          db.insert(ProjectTable)
-            .values({
-              id,
-              worktree: root,
-              vcs: "git",
-              name: src?.name,
-              icon_url: src?.icon_url,
-              icon_color: src?.icon_color,
-              sandboxes: [...new Set([root, ...group.tops])],
-              commands: src?.commands,
-              time_created: src?.time_created ?? now,
-              time_updated: now,
-              time_initialized: src?.time_initialized,
-            })
-            .run()
-        }
-
-        if (ids.length > 0) moveSessionsById(db, ids, id)
-
-        if (group.workspaces.size > 0) {
-          db.update(WorkspaceTable)
-            .set({ project_id: id })
-            .where(inArray(WorkspaceTable.id, [...group.workspaces]))
-            .run()
-        }
-
-        if (perm) ensurePermission(db, { target: id, now, data: perm.data })
+        ensureProject(db, { id: resolved.id, root, src, tops: group.tops, now })
+        if (ids.length > 0) moveSessionsById(db, ids, resolved.id)
+        if (ws.length > 0) moveWorkspaces(db, ws, resolved.id)
+        if (perm) ensurePermission(db, { target: resolved.id, now, data: perm.data })
       })
     }
 
