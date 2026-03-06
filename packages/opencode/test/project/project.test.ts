@@ -9,6 +9,7 @@ import { GlobalBus } from "../../src/bus/global"
 import { Database, eq } from "../../src/storage/db"
 import { ProjectTable } from "../../src/project/project.sql"
 import { PermissionTable, SessionTable } from "../../src/session/session.sql"
+import { WorkspaceTable } from "../../src/control-plane/workspace.sql"
 import fs from "fs/promises"
 
 Log.init({ print: false })
@@ -22,12 +23,7 @@ let mode: Mode = "none"
 mock.module("../../src/util/git", () => ({
   git: (args: string[], opts: { cwd: string; env?: Record<string, string> }) => {
     const cmd = ["git", ...args].join(" ")
-    if (
-      mode === "head-fail" &&
-      cmd.includes("git rev-parse") &&
-      cmd.includes("--verify") &&
-      cmd.includes("HEAD")
-    ) {
+    if (mode === "head-fail" && cmd.includes("git rev-parse") && cmd.includes("--verify") && cmd.includes("HEAD")) {
       return Promise.resolve({
         exitCode: 128,
         text: () => "",
@@ -349,7 +345,9 @@ describe("Project.fromDirectory with worktrees", () => {
       expect(repaired.id).toBe(first.id)
       expect(repaired.icon?.url).toBe("data:image/png;base64,AA==")
 
-      const projects = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.worktree, tmp.path)).all())
+      const projects = Database.use((db) =>
+        db.select().from(ProjectTable).where(eq(ProjectTable.worktree, tmp.path)).all(),
+      )
       expect(projects.length).toBe(1)
 
       const session = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, "ses_dupe")).get())
@@ -398,7 +396,9 @@ describe("Project.fromDirectory with worktrees", () => {
     const before = await fs.readdir(dir)
     await p.repairAll()
 
-    const projects = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.worktree, tmp.path)).all())
+    const projects = Database.use((db) =>
+      db.select().from(ProjectTable).where(eq(ProjectTable.worktree, tmp.path)).all(),
+    )
     expect(projects.length).toBe(2)
 
     const after = await fs.readdir(dir)
@@ -440,12 +440,276 @@ describe("Project.fromDirectory with worktrees", () => {
 
     await p.repairAll()
 
-    const projects = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.worktree, tmp.path)).all())
+    const projects = Database.use((db) =>
+      db.select().from(ProjectTable).where(eq(ProjectTable.worktree, tmp.path)).all(),
+    )
     expect(projects.length).toBe(2)
 
     const after = await fs.readdir(dir)
     const added = after.filter((f) => !before.includes(f))
     expect(added.some((f) => f.startsWith("opencode.db.before-project-repair."))).toBe(false)
+  })
+
+  test("does not repair legacy git project without sessions", async () => {
+    const p = await loadProject()
+    await using tmp = await tmpdir({ git: true })
+
+    const stamp = `${Date.now()}-${Math.random()}`
+    const legacy = `aabbccddeeff00112233445566778899aabbccdd`
+
+    Database.transaction((db) => {
+      db.insert(ProjectTable)
+        .values({
+          id: legacy,
+          worktree: tmp.path,
+          vcs: "git",
+          sandboxes: [],
+          time_created: Date.now(),
+          time_updated: Date.now(),
+          name: `legacy-${stamp}`,
+        })
+        .run()
+    })
+
+    const dir = process.env["XDG_DATA_HOME"] + "/opencode"
+    const before = await fs.readdir(dir)
+
+    await p.repairAll()
+
+    const after = await fs.readdir(dir)
+    const added = after.filter((f) => !before.includes(f))
+    expect(added.some((f) => f.startsWith("opencode.db.before-project-repair."))).toBe(false)
+  })
+
+  test("does not consider legacy git projects needing repair when session directory is missing", async () => {
+    const p = await loadProject()
+    await using tmp = await tmpdir({ git: true })
+
+    const root = await $`git rev-list --max-parents=0 HEAD`
+      .cwd(tmp.path)
+      .quiet()
+      .then((r) => r.text())
+      .then((s) => s.trim())
+
+    const missing = path.join(tmp.path, "missing")
+
+    Database.transaction((db) => {
+      db.insert(ProjectTable)
+        .values({
+          id: root,
+          worktree: tmp.path,
+          vcs: "git",
+          sandboxes: [tmp.path],
+          time_created: Date.now(),
+          time_updated: Date.now(),
+        })
+        .run()
+
+      db.insert(SessionTable)
+        .values({
+          id: "ses_missing_dir",
+          project_id: root,
+          parent_id: null,
+          slug: "slug",
+          directory: missing,
+          title: "legacy session",
+          version: "test",
+          share_url: null,
+          summary_additions: null,
+          summary_deletions: null,
+          summary_files: null,
+          summary_diffs: null,
+          revert: null,
+          permission: null,
+          time_created: Date.now() + 1,
+          time_updated: Date.now() + 1,
+          time_compacting: null,
+          time_archived: null,
+        })
+        .run()
+    })
+
+    const dir = process.env["XDG_DATA_HOME"] + "/opencode"
+    const before = await fs.readdir(dir)
+
+    await p.repairAll()
+
+    const mid = await fs.readdir(dir)
+    const added1 = mid.filter((f) => !before.includes(f))
+    expect(added1.some((f) => f.startsWith("opencode.db.before-project-repair."))).toBe(false)
+
+    await p.repairAll()
+
+    const after = await fs.readdir(dir)
+    const added2 = after.filter((f) => !mid.includes(f))
+    expect(added2.some((f) => f.startsWith("opencode.db.before-project-repair."))).toBe(false)
+  })
+
+  test("does not consider legacy git projects needing repair when worktree is missing", async () => {
+    const p = await loadProject()
+    const stamp = `${Date.now()}-${Math.random()}`
+    const root = `00112233445566778899aabbccddeeff00112233`
+    const worktree = path.join(process.env["XDG_DATA_HOME"]!, `missing-worktree-${stamp}`)
+
+    Database.transaction((db) => {
+      db.insert(ProjectTable)
+        .values({
+          id: root,
+          worktree,
+          vcs: "git",
+          sandboxes: [],
+          time_created: Date.now(),
+          time_updated: Date.now(),
+        })
+        .run()
+
+      db.insert(SessionTable)
+        .values({
+          id: `ses_missing_wt_${stamp}`,
+          project_id: root,
+          parent_id: null,
+          slug: "slug",
+          directory: path.join(worktree, "sub"),
+          title: "legacy session",
+          version: "test",
+          share_url: null,
+          summary_additions: null,
+          summary_deletions: null,
+          summary_files: null,
+          summary_diffs: null,
+          revert: null,
+          permission: null,
+          time_created: Date.now() + 1,
+          time_updated: Date.now() + 1,
+          time_compacting: null,
+          time_archived: null,
+        })
+        .run()
+    })
+
+    const dir = process.env["XDG_DATA_HOME"] + "/opencode"
+    const before = await fs.readdir(dir)
+
+    await p.repairAll()
+
+    const after = await fs.readdir(dir)
+    const added = after.filter((f) => !before.includes(f))
+    expect(added.some((f) => f.startsWith("opencode.db.before-project-repair."))).toBe(false)
+  })
+
+  test("migrates legacy git project without sessions when permission exists", async () => {
+    const p = await loadProject()
+    await using tmp = await tmpdir({ git: true })
+
+    const root = await $`git rev-list --max-parents=0 HEAD`
+      .cwd(tmp.path)
+      .quiet()
+      .then((r) => r.text())
+      .then((s) => s.trim())
+
+    Database.transaction((db) => {
+      db.insert(ProjectTable)
+        .values({
+          id: root,
+          worktree: tmp.path,
+          vcs: "git",
+          sandboxes: [tmp.path],
+          time_created: Date.now(),
+          time_updated: Date.now(),
+        })
+        .run()
+
+      db.insert(PermissionTable)
+        .values({
+          project_id: root,
+          data: [],
+          time_created: Date.now() + 1,
+          time_updated: Date.now() + 1,
+        })
+        .run()
+    })
+
+    const dir = process.env["XDG_DATA_HOME"] + "/opencode"
+    const before = await fs.readdir(dir)
+
+    await p.repairAll()
+
+    const mid = await fs.readdir(dir)
+    const added1 = mid.filter((f) => !before.includes(f))
+    expect(added1.some((f) => f.startsWith("opencode.db.before-project-repair."))).toBe(true)
+
+    const id = await Bun.file(path.join(tmp.path, ".git", "opencode"))
+      .text()
+      .then((s) => s.trim())
+    expect(id).not.toBe(root)
+
+    const perm = Database.use((db) => db.select().from(PermissionTable).where(eq(PermissionTable.project_id, id)).get())
+    expect(perm).toBeDefined()
+
+    await p.repairAll()
+
+    const after = await fs.readdir(dir)
+    const added2 = after.filter((f) => !mid.includes(f))
+    expect(added2.some((f) => f.startsWith("opencode.db.before-project-repair."))).toBe(false)
+  })
+
+  test("migrates legacy git project without sessions when workspace exists", async () => {
+    const p = await loadProject()
+    await using tmp = await tmpdir({ git: true })
+
+    const root = await $`git rev-list --max-parents=0 HEAD`
+      .cwd(tmp.path)
+      .quiet()
+      .then((r) => r.text())
+      .then((s) => s.trim())
+
+    Database.transaction((db) => {
+      db.insert(ProjectTable)
+        .values({
+          id: root,
+          worktree: tmp.path,
+          vcs: "git",
+          sandboxes: [tmp.path],
+          time_created: Date.now(),
+          time_updated: Date.now(),
+        })
+        .run()
+
+      db.insert(WorkspaceTable)
+        .values({
+          id: `ws_${Date.now()}`,
+          type: "worktree",
+          branch: null,
+          name: "ws",
+          directory: tmp.path,
+          extra: null,
+          project_id: root,
+        })
+        .run()
+    })
+
+    const dir = process.env["XDG_DATA_HOME"] + "/opencode"
+    const before = await fs.readdir(dir)
+
+    await p.repairAll()
+
+    const mid = await fs.readdir(dir)
+    const added1 = mid.filter((f) => !before.includes(f))
+    expect(added1.some((f) => f.startsWith("opencode.db.before-project-repair."))).toBe(true)
+
+    const id = await Bun.file(path.join(tmp.path, ".git", "opencode"))
+      .text()
+      .then((s) => s.trim())
+    expect(id).not.toBe(root)
+
+    const ws = Database.use((db) => db.select().from(WorkspaceTable).where(eq(WorkspaceTable.project_id, id)).get())
+    expect(ws).toBeDefined()
+
+    await p.repairAll()
+
+    const after = await fs.readdir(dir)
+    const added2 = after.filter((f) => !mid.includes(f))
+    expect(added2.some((f) => f.startsWith("opencode.db.before-project-repair."))).toBe(false)
   })
 
   test("separate clones of the same repo do not share project identity", async () => {
@@ -715,8 +979,12 @@ describe("Project.fromDirectory with worktrees", () => {
       const pr = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, root)).get())
       expect(pr).toBeUndefined()
 
-      const pa = Database.use((db) => db.select().from(PermissionTable).where(eq(PermissionTable.project_id, a.id)).get())
-      const pb = Database.use((db) => db.select().from(PermissionTable).where(eq(PermissionTable.project_id, b.id)).get())
+      const pa = Database.use((db) =>
+        db.select().from(PermissionTable).where(eq(PermissionTable.project_id, a.id)).get(),
+      )
+      const pb = Database.use((db) =>
+        db.select().from(PermissionTable).where(eq(PermissionTable.project_id, b.id)).get(),
+      )
       expect(pa).toBeDefined()
       expect(pb).toBeDefined()
     } finally {
@@ -795,7 +1063,9 @@ describe("Project.fromDirectory with worktrees", () => {
 
       expect(await Bun.file(path.join(clonePath, ".git", "opencode")).text()).toBe("existing-project")
 
-      const session = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, "ses_existing")).get())
+      const session = Database.use((db) =>
+        db.select().from(SessionTable).where(eq(SessionTable.id, "ses_existing")).get(),
+      )
       expect(session?.project_id).toBe("existing-project")
     } finally {
       await fs.rm(clonePath, { recursive: true, force: true })
