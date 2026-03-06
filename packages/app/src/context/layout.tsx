@@ -159,7 +159,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       const fileTree = value.fileTree
       const migratedFileTree = (() => {
         if (!isRecord(fileTree)) return fileTree
-        if (fileTree.tab === "changes" || fileTree.tab === "all") return fileTree
+        if (fileTree.tab === "changes" || fileTree.tab === "all" || fileTree.tab === "git") return fileTree
 
         const width = typeof fileTree.width === "number" ? fileTree.width : DEFAULT_PANEL_WIDTH
         return {
@@ -245,7 +245,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         fileTree: {
           opened: true,
           width: DEFAULT_PANEL_WIDTH,
-          tab: "changes" as "changes" | "all",
+          tab: "changes" as "changes" | "all" | "git",
         },
         session: {
           width: DEFAULT_SESSION_WIDTH,
@@ -630,7 +630,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         opened: createMemo(() => store.fileTree?.opened ?? true),
         width: createMemo(() => store.fileTree?.width ?? DEFAULT_PANEL_WIDTH),
         tab: createMemo(() => store.fileTree?.tab ?? "changes"),
-        setTab(tab: "changes" | "all") {
+        setTab(tab: "changes" | "all" | "git") {
           if (!store.fileTree) {
             setStore("fileTree", { opened: true, width: DEFAULT_PANEL_WIDTH, tab })
             return

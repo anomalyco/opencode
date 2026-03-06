@@ -13,6 +13,7 @@ import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 
 import FileTree from "@/components/file-tree"
+import { GitChangesPanel } from "@/components/git-changes"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { SessionContextTab, SortableTab, FileVisual } from "@/components/session"
@@ -134,7 +135,7 @@ export function SessionSidePanel(props: {
   const fileTreeTab = () => layout.fileTree.tab()
 
   const setFileTreeTabValue = (value: string) => {
-    if (value !== "changes" && value !== "all") return
+    if (value !== "changes" && value !== "all" && value !== "git") return
     layout.fileTree.setTab(value)
   }
 
@@ -364,6 +365,9 @@ export function SessionSidePanel(props: {
                   <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
                     {language.t("session.files.all")}
                   </Tabs.Trigger>
+                  <Tabs.Trigger value="git" class="flex-1" classes={{ button: "w-full" }}>
+                    Git
+                  </Tabs.Trigger>
                 </Tabs.List>
                 <Tabs.Content
                   value="changes"
@@ -411,6 +415,9 @@ export function SessionSidePanel(props: {
                     kinds={kinds()}
                     onFileClick={(node) => openTab(file.tab(node.path))}
                   />
+                </Tabs.Content>
+                <Tabs.Content value="git" class="bg-background-stronger h-full">
+                  <GitChangesPanel />
                 </Tabs.Content>
               </Tabs>
             </div>
