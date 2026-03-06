@@ -445,6 +445,57 @@ export async function seedSessionPermission(
   return { id: result.id }
 }
 
+export async function seedSessionTask(
+  sdk: ReturnType<typeof createSdk>,
+  input: {
+    sessionID: string
+    description: string
+    prompt: string
+    subagentType?: string
+  },
+) {
+  const text = [
+    "Your only valid response is one task tool call.",
+    `Use this JSON input: ${JSON.stringify({
+      description: input.description,
+      prompt: input.prompt,
+      subagent_type: input.subagentType ?? "general",
+    })}`,
+    "Do not output plain text.",
+    "Wait for the task to start and return the child session id.",
+  ].join("\n")
+
+  const result = await seed({
+    sdk,
+    sessionID: input.sessionID,
+    prompt: text,
+    timeout: 90_000,
+    probe: async () => {
+      const messages = await sdk.session.messages({ sessionID: input.sessionID, limit: 50 }).then((x) => x.data ?? [])
+      const part = messages
+        .flatMap((message) => message.parts)
+        .find((part) => {
+          if (part.type !== "tool" || part.tool !== "task") return false
+          if (part.state.input?.description !== input.description) return false
+          return typeof part.state.metadata?.sessionId === "string" && part.state.metadata.sessionId.length > 0
+        })
+
+      if (!part) return
+      const id = part.state.metadata?.sessionId
+      if (typeof id !== "string" || !id) return
+      const child = await sdk.session
+        .get({ sessionID: id })
+        .then((x) => x.data)
+        .catch(() => undefined)
+      if (!child?.id) return
+      return { sessionID: id }
+    },
+  })
+
+  if (!result) throw new Error("Timed out seeding task tool")
+  return result
+}
+
 export async function seedSessionTodos(
   sdk: ReturnType<typeof createSdk>,
   input: {
