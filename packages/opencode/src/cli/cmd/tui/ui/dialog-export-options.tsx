@@ -4,6 +4,7 @@ import { useDialog, type DialogContext } from "./dialog"
 import { createStore } from "solid-js/store"
 import { onMount, Show, type JSX } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
+import { guard } from "../util/input-filter"
 
 export type DialogExportOptionsProps = {
   defaultFilename: string
@@ -97,6 +98,9 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
               assistantMetadata: store.assistantMetadata,
               openWithoutSaving: store.openWithoutSaving,
             })
+          }}
+          onKeyDown={(evt) => {
+            guard(evt)
           }}
           height={3}
           keyBindings={[{ name: "return", action: "submit" }]}

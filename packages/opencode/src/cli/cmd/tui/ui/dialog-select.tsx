@@ -8,6 +8,7 @@ import * as fuzzysort from "fuzzysort"
 import { isDeepEqual } from "remeda"
 import { useDialog, type DialogContext } from "@tui/ui/dialog"
 import { useKeybind } from "@tui/context/keybind"
+import { guard } from "@tui/util/input-filter"
 import { Keybind } from "@/util/keybind"
 import { Locale } from "@/util/locale"
 
@@ -242,6 +243,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         </box>
         <box paddingTop={1}>
           <input
+            onKeyDown={(evt) => {
+              guard(evt)
+            }}
             onInput={(e) => {
               batch(() => {
                 setStore("filter", e)

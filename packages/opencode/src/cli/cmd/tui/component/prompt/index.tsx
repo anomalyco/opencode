@@ -34,6 +34,7 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { guard } from "../../util/input-filter"
 
 export type PromptProps = {
   sessionID?: string
@@ -836,6 +837,7 @@ export function Prompt(props: PromptProps) {
                   e.preventDefault()
                   return
                 }
+                if (guard(e)) return
                 // Handle clipboard paste (Ctrl+V) - check for images first on Windows
                 // This is needed because Windows terminal doesn't properly send image data
                 // through bracketed paste, so we need to intercept the keypress and

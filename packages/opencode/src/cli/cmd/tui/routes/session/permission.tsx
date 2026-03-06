@@ -16,6 +16,7 @@ import { Locale } from "@/util/locale"
 import { Global } from "@/global"
 import { useDialog } from "../../ui/dialog"
 import { useTuiConfig } from "../../context/tui-config"
+import { guard } from "../../util/input-filter"
 
 type PermissionStage = "permission" | "always" | "reject"
 
@@ -523,6 +524,9 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
           focusedTextColor={theme.text}
           cursorColor={theme.primary}
           keyBindings={textareaKeybindings()}
+          onKeyDown={(evt) => {
+            guard(evt)
+          }}
         />
         <box flexDirection="row" gap={2} flexShrink={0}>
           <text fg={theme.text}>

@@ -9,6 +9,7 @@ import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
 import { useTextareaKeybindings } from "../../component/textarea-keybindings"
 import { useDialog } from "../../ui/dialog"
+import { guard } from "../../util/input-filter"
 
 export function QuestionPrompt(props: { request: QuestionRequest }) {
   const sdk = useSDK()
@@ -384,6 +385,9 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                             val.focus()
                             val.gotoLineEnd()
                           })
+                        }}
+                        onKeyDown={(evt) => {
+                          guard(evt)
                         }}
                         initialValue={input()}
                         placeholder="Type your own answer"

@@ -3,6 +3,7 @@ import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 import { onMount, type JSX } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
+import { guard } from "../util/input-filter"
 
 export type DialogPromptProps = {
   title: string
@@ -48,6 +49,9 @@ export function DialogPrompt(props: DialogPromptProps) {
         <textarea
           onSubmit={() => {
             props.onConfirm?.(textarea.plainText)
+          }}
+          onKeyDown={(evt) => {
+            guard(evt)
           }}
           height={3}
           keyBindings={[{ name: "return", action: "submit" }]}
