@@ -51,21 +51,22 @@ export const SettingsCommands: Component = () => {
   const platform = usePlatform()
   const globalSync = useGlobalSync()
   const [store, setStore] = createStore({ loading: false })
+  const canImport = createMemo(() => Boolean(platform.openFilePickerDialog && platform.readTextFile))
 
   const list = createMemo(() => {
     return Object.keys(globalSync.data.config.command ?? {}).sort((a, b) => a.localeCompare(b))
   })
 
   const add = async () => {
-    if (!platform.openFilePickerDialog || !platform.readTextFile) return
+    if (!canImport()) return
 
-    const pick = await platform.openFilePickerDialog({ multiple: true, title: "Choose markdown command files" })
+    const pick = await platform.openFilePickerDialog!({ multiple: true, title: "Choose command markdown files" })
     if (!pick) return
     const paths = Array.isArray(pick) ? pick : [pick]
 
     const files = paths.filter((item) => item.toLowerCase().endsWith(".md"))
     if (files.length === 0) {
-      showToast({ title: language.t("common.requestFailed"), description: "Select one or more .md files." })
+      showToast({ title: language.t("common.requestFailed"), description: "Pick one or more .md files." })
       return
     }
 
@@ -79,7 +80,7 @@ export const SettingsCommands: Component = () => {
       for (const file of files) {
         const key = name(file)
         if (!key) continue
-        const parsed = parse(await platform.readTextFile(file))
+        const parsed = parse(await platform.readTextFile!(file))
         if (!parsed.template) continue
         next[key] = parsed
       }
@@ -89,12 +90,13 @@ export const SettingsCommands: Component = () => {
         return
       }
 
-      await globalSync.updateConfig({ command: next })
+      const curr = globalSync.data.config.command ?? {}
+      await globalSync.updateConfig({ command: { ...curr, ...next } })
       showToast({
         variant: "success",
         icon: "circle-check",
         title: "Commands imported",
-        description: `${Object.keys(next).length} command${Object.keys(next).length > 1 ? "s" : ""} added globally.`,
+        description: `${Object.keys(next).length} command${Object.keys(next).length > 1 ? "s" : ""} saved in global config.`,
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
@@ -119,9 +121,14 @@ export const SettingsCommands: Component = () => {
           <div class="bg-surface-raised-base px-4 rounded-lg">
             <div class="flex items-center justify-between gap-4 min-h-16 py-3 border-b border-border-weak-base">
               <div class="text-14-regular text-text-weak">
-                Import markdown files to use as slash commands in every project.
+                Import `.md` files and use them as slash commands in every project.
               </div>
-              <Button size="large" variant="secondary" onClick={() => void add()} disabled={store.loading}>
+              <Button
+                size="large"
+                variant="secondary"
+                onClick={() => void add()}
+                disabled={store.loading || !canImport()}
+              >
                 {store.loading
                   ? `${language.t("common.loading")}${language.t("common.loading.ellipsis")}`
                   : "Import .md"}
@@ -144,13 +151,13 @@ export const SettingsCommands: Component = () => {
         </div>
 
         <div class="text-12-regular text-text-weak max-w-[640px]">
-          Imported commands are stored in your global OpenCode config, so they are available in all projects.
+          Imported commands are stored in your global OpenCode config and shared across all projects.
         </div>
       </div>
 
-      <Show when={!platform.openFilePickerDialog || !platform.readTextFile}>
+      <Show when={!canImport()}>
         <div class="max-w-[720px] text-12-regular text-text-weak mt-6">
-          Command file import is only available in the desktop app.
+          Command import is available in the desktop app.
         </div>
       </Show>
     </div>
