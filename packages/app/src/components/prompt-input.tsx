@@ -57,6 +57,7 @@ import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { createPromptPair } from "./prompt-input/autocomplete-pair"
 import { createModelAutocomplete, createAutocompleteSettings } from "./prompt-input/autocomplete-model"
 import { GhostText } from "./prompt-input/ghost-text"
+import { shouldRender } from "./prompt-input/sync"
 
 interface PromptInputProps {
   class?: string
@@ -694,17 +695,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       () => prompt.current(),
       (currentParts) => {
         const inputParts = currentParts.filter((part) => part.type !== "image")
+        const mirrorMode = mirror.input
+        if (mirrorMode) mirror.input = false
+        const normalized = isNormalizedEditor()
 
-        if (mirror.input) {
-          mirror.input = false
-          if (isNormalizedEditor()) return
-
+        if (mirrorMode) {
+          if (!shouldRender({ composing: composing(), mirror: true, normalized, equal: false })) return
           renderEditorWithCursor(inputParts)
           return
         }
 
+        if (composing()) return
+
         const domParts = parseFromDOM()
-        if (isNormalizedEditor() && isPromptEqual(inputParts, domParts)) return
+        const equal = isPromptEqual(inputParts, domParts)
+        if (!shouldRender({ composing: false, mirror: false, normalized, equal })) return
 
         renderEditorWithCursor(inputParts)
       },
@@ -909,7 +914,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             const placeholder = next && emptyText ? next : document.createTextNode("\u200B")
             if (!next) last.parentNode?.insertBefore(placeholder, null)
             placeholder.textContent = "\u200B"
-            range.setStart(placeholder, 0)
+            range.setStart(placeholder, 1)
           } else {
             range.setStartAfter(last)
           }
