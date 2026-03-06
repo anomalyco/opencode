@@ -17,6 +17,7 @@ import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
+import { DialogSelect } from "@tui/ui/dialog-select"
 import { useRenderer } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
@@ -36,6 +37,13 @@ import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
 import { usePromptBarColorEffect } from "./color-effect"
+import {
+  DEFAULT_PROMPT_BAR_ANIMATION_PLUGIN,
+  listPromptBarAnimationPlugins,
+  loadPromptBarAnimationPlugins,
+  resolvePromptBarAnimationPlugin,
+} from "@tui/util/prompt-bar-animation-registry"
+import { useTuiConfig } from "@tui/context/tui-config"
 
 export type PromptProps = {
   sessionID?: string
@@ -78,6 +86,8 @@ export function Prompt(props: PromptProps) {
   const command = useCommandDialog()
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
+  const tuiConfig = useTuiConfig()
+  const [pluginLoad, setPluginLoad] = createSignal(0)
   const kv = useKV()
   const [store, setStore] = createStore<{
     prompt: PromptInfo
@@ -104,13 +114,37 @@ export function Prompt(props: PromptProps) {
     })
   })
   const hasPromptContent = createMemo(() => store.prompt.input.trim().length > 0 || store.prompt.parts.length > 0)
+  const promptBarAnimationEnabled = createMemo(() => tuiConfig.prompt_bar_animation?.enabled ?? false)
+  const promptBarAnimationConfigured = createMemo(
+    () => tuiConfig.prompt_bar_animation?.plugin ?? DEFAULT_PROMPT_BAR_ANIMATION_PLUGIN,
+  )
+  const promptBarAnimationCurrent = createMemo(() =>
+    kv.get("prompt_bar_animation_plugin", promptBarAnimationConfigured()),
+  )
+  const promptBarAnimationPlugin = createMemo(() => {
+    pluginLoad()
+    return resolvePromptBarAnimationPlugin(promptBarAnimationCurrent())
+  })
   const promptBarColor = usePromptBarColorEffect({
     visible: () => props.visible !== false,
     state: promptBarState,
     hasContent: hasPromptContent,
     animationsEnabled: () => kv.get("animations_enabled", true),
+    pluginEnabled: promptBarAnimationEnabled,
+    plugin: promptBarAnimationPlugin,
     theme,
     requestRender: () => renderer.requestRender(),
+  })
+  const promptBarBackground = createMemo(() => {
+    if (!promptBarAnimationEnabled()) return theme.backgroundElement
+    return promptBarColor.background()
+  })
+
+  onMount(() => {
+    loadPromptBarAnimationPlugins().then(() => {
+      setPluginLoad((x) => x + 1)
+      renderer.requestRender()
+    })
   })
 
   function promptModelWarning() {
@@ -188,6 +222,81 @@ export function Prompt(props: PromptProps) {
 
   command.register(() => {
     return [
+      {
+        title: "Choose prompt animation",
+        value: "prompt.animation.choose",
+        category: "Prompt",
+        slash: {
+          name: "prompt-animation",
+          aliases: ["animation", "choose-prompt-animation"],
+        },
+        onSelect: (dialog) => {
+          const options = listPromptBarAnimationPlugins()
+            .toSorted((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }))
+            .map((plugin) => ({
+              title: plugin.label,
+              value: plugin.id,
+              description: plugin.id,
+              footer: plugin.interval_ms > 0 ? `${plugin.interval_ms}ms` : "static",
+            }))
+          dialog.replace(() => (
+            <DialogSelect
+              title="Prompt Animation"
+              options={options}
+              current={promptBarAnimationCurrent()}
+              onSelect={(opt) => {
+                kv.set("prompt_bar_animation_plugin", opt.value)
+                toast.show({
+                  variant: "info",
+                  message: `Prompt animation switched to ${opt.title} (${opt.value})`,
+                  duration: 2500,
+                })
+                renderer.requestRender()
+                dialog.clear()
+              }}
+            />
+          ))
+        },
+      },
+      {
+        title: `Cycle prompt animation (${promptBarAnimationPlugin().id})`,
+        value: "prompt.animation.cycle",
+        category: "Prompt",
+        slash: {
+          name: "prompt-animation-cycle",
+          aliases: ["animation-cycle", "cycle-prompt-animation"],
+        },
+        onSelect: (dialog) => {
+          const plugins = listPromptBarAnimationPlugins()
+          if (plugins.length === 0) return
+          const idx = plugins.findIndex((x) => x.id === promptBarAnimationCurrent())
+          const next = plugins[(idx + 1) % plugins.length] ?? plugins[0]
+          if (!next) return
+          kv.set("prompt_bar_animation_plugin", next.id)
+          toast.show({
+            variant: "info",
+            message: `Prompt animation switched to ${next.label} (${next.id})`,
+            duration: 2500,
+          })
+          renderer.requestRender()
+          dialog.clear()
+        },
+      },
+      {
+        title: "Reset prompt animation to config",
+        value: "prompt.animation.reset",
+        category: "Prompt",
+        slash: {
+          name: "prompt-animation-reset",
+          aliases: ["animation-reset", "reset-prompt-animation"],
+        },
+        enabled: promptBarAnimationCurrent() !== promptBarAnimationConfigured(),
+        onSelect: (dialog) => {
+          kv.set("prompt_bar_animation_plugin", promptBarAnimationConfigured())
+          renderer.requestRender()
+          dialog.clear()
+        },
+      },
       {
         title: "Clear prompt",
         value: "prompt.clear",
@@ -827,14 +936,14 @@ export function Prompt(props: PromptProps) {
             vertical: "┃",
             bottomLeft: "╹",
           }}
-          backgroundColor={promptBarColor.background()}
+          backgroundColor={promptBarAnimationEnabled() ? promptBarBackground() : undefined}
         >
           <box
             paddingLeft={2}
             paddingRight={2}
             paddingTop={1}
             flexShrink={0}
-            backgroundColor={promptBarColor.background()}
+            backgroundColor={promptBarBackground()}
             flexGrow={1}
           >
             <textarea
@@ -1011,7 +1120,7 @@ export function Prompt(props: PromptProps) {
                 }, 0)
               }}
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
-              focusedBackgroundColor={promptBarColor.background()}
+              focusedBackgroundColor={promptBarBackground()}
               cursorColor={theme.text}
               syntaxStyle={syntax()}
             />
@@ -1036,6 +1145,34 @@ export function Prompt(props: PromptProps) {
             </box>
           </box>
         </box>
+        <Show when={!promptBarAnimationEnabled()}>
+          <box
+            height={1}
+            border={["left"]}
+            borderColor={highlight()}
+            customBorderChars={{
+              ...EmptyBorder,
+              vertical: theme.backgroundElement.a !== 0 ? "╹" : " ",
+            }}
+          >
+            <box
+              height={1}
+              border={["bottom"]}
+              borderColor={theme.backgroundElement}
+              customBorderChars={
+                theme.backgroundElement.a !== 0
+                  ? {
+                      ...EmptyBorder,
+                      horizontal: "▀",
+                    }
+                  : {
+                      ...EmptyBorder,
+                      horizontal: " ",
+                    }
+              }
+            />
+          </box>
+        </Show>
         <box flexDirection="row" justifyContent="space-between">
           <Show when={status().type !== "idle"} fallback={<text />}>
             <box

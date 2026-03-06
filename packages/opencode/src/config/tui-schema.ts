@@ -22,6 +22,13 @@ export const TuiOptions = z.object({
     .enum(["auto", "stacked"])
     .optional()
     .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+  prompt_bar_animation: z
+    .object({
+      enabled: z.boolean().optional().describe("Enable prompt bar animation plugin styling"),
+      plugin: z.string().optional().describe("Prompt bar animation plugin id"),
+    })
+    .optional()
+    .describe("Prompt bar animation settings"),
 })
 
 export const TuiInfo = z

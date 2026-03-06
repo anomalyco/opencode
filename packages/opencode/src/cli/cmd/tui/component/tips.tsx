@@ -120,6 +120,8 @@ const TIPS = [
   "Comment {highlight}/oc{/highlight} on PR code lines for targeted code reviews",
   'Use {highlight}"theme": "system"{/highlight} to match your terminal\'s colors',
   "Create JSON theme files in {highlight}.opencode/themes/{/highlight} directory",
+  "Create JS/TS animation plugins in {highlight}.opencode/prompt-bar-animations/{/highlight}",
+  "Use command palette to run {highlight}Cycle prompt animation{/highlight} and hot-swap styles",
   "Themes support dark/light variants for both modes",
   "Reference ANSI colors 0-255 in custom themes",
   "Use {highlight}{env:VAR_NAME}{/highlight} syntax to reference environment variables in config",
