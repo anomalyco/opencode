@@ -1206,6 +1206,10 @@ export type KeybindsConfig = {
    */
   agent_cycle_reverse?: string
   /**
+   * Toggle auto-accept mode for permissions
+   */
+  permission_auto_accept_toggle?: string
+  /**
    * Cycle model variants
    */
   variant_cycle?: string

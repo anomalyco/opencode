@@ -63,6 +63,7 @@ export namespace Agent {
       question: "deny",
       plan_enter: "deny",
       plan_exit: "deny",
+      edit: "ask",
       // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
       read: {
         "*": "allow",
