@@ -20,7 +20,7 @@ export const docsLocale = [
 
 export type DocsLocale = (typeof docsLocale)[number]
 
-export const locale = ["root", ...docsLocale] as const
+export const locale = ["en", ...docsLocale] as const
 
 export type Locale = (typeof locale)[number]
 
@@ -30,7 +30,7 @@ export const localeAlias = {
   bs: "bs",
   da: "da",
   de: "de",
-  en: "root",
+  en: "en",
   es: "es",
   fr: "fr",
   it: "it",
@@ -42,7 +42,7 @@ export const localeAlias = {
   pl: "pl",
   pt: "pt-br",
   "pt-br": "pt-br",
-  root: "root",
+  root: "en",
   ru: "ru",
   th: "th",
   tr: "tr",
@@ -66,7 +66,7 @@ const starts = [
   ["ar", "ar"],
   ["th", "th"],
   ["tr", "tr"],
-  ["en", "root"],
+  ["en", "en"],
 ] as const
 
 function parse(input: string) {

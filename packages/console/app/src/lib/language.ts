@@ -69,7 +69,7 @@ const TAG = {
 } satisfies Record<Locale, string>
 
 const DOCS = {
-  en: "root",
+  en: "en",
   zh: "zh-cn",
   zht: "zh-tw",
   ko: "ko",
@@ -87,26 +87,6 @@ const DOCS = {
   th: "th",
   tr: "tr",
 } satisfies Record<Locale, string>
-
-const DOCS_SEGMENT = new Set([
-  "ar",
-  "bs",
-  "da",
-  "de",
-  "es",
-  "fr",
-  "it",
-  "ja",
-  "ko",
-  "nb",
-  "pl",
-  "pt-br",
-  "ru",
-  "th",
-  "tr",
-  "zh-cn",
-  "zh-tw",
-])
 
 const DOCS_LOCALE = {
   ar: "ar",
@@ -144,29 +124,28 @@ function suffix(pathname: string) {
 }
 
 export function docs(locale: Locale, pathname: string) {
-  const value = DOCS[locale]
   const next = suffix(pathname)
   if (next.path !== "/docs" && next.path !== "/docs/" && !next.path.startsWith("/docs/")) {
     return `${next.path}${next.suffix}`
   }
 
-  if (value === "root") {
-    if (next.path === "/docs/en") return `/docs${next.suffix}`
-    if (next.path === "/docs/en/") return `/docs/${next.suffix}`
-    if (next.path.startsWith("/docs/en/")) return `/docs/${next.path.slice("/docs/en/".length)}${next.suffix}`
-    return `${next.path}${next.suffix}`
-  }
+  const rest = next.path.slice("/docs".length)
+  if (!rest || rest === "/") return `/docs/${DOCS[locale]}/${next.suffix}`
 
-  if (next.path === "/docs") return `/docs/${value}${next.suffix}`
-  if (next.path === "/docs/") return `/docs/${value}/${next.suffix}`
-
-  const head = next.path.slice("/docs/".length).split("/")[0] ?? ""
-  if (!head) return `/docs/${value}/${next.suffix}`
-  if (DOCS_SEGMENT.has(head)) return `${next.path}${next.suffix}`
+  const value = rest.slice(1)
+  const index = value.indexOf("/")
+  const head = (index === -1 ? value : value.slice(0, index)).toLowerCase()
+  const tail = index === -1 ? "" : value.slice(index + 1)
+  if (!head) return `/docs/${DOCS[locale]}/${next.suffix}`
   if (head.startsWith("_")) return `${next.path}${next.suffix}`
   if (head.includes(".")) return `${next.path}${next.suffix}`
 
-  return `/docs/${value}${next.path.slice("/docs".length)}${next.suffix}`
+  if (head in DOCS_LOCALE) {
+    if (head === "root") return `/docs/en/${tail}${next.suffix}`
+    return `${next.path}${next.suffix}`
+  }
+
+  return `/docs/${DOCS[locale]}/${value}${next.suffix}`
 }
 
 export function parseLocale(value: unknown): Locale | null {
@@ -292,11 +271,13 @@ export function localeFromCookieHeader(header: string | null) {
   const raw = header
     .split(";")
     .map((x) => x.trim())
-    .find((x) => x.startsWith(`${LOCALE_COOKIE}=`))
+    .filter((x) => x.startsWith(`${LOCALE_COOKIE}=`))
+    .at(-1)
     ?.slice(`${LOCALE_COOKIE}=`.length)
 
   if (!raw) return null
-  return parseLocale(decodeURIComponent(raw))
+  if (raw.startsWith('"') && raw.endsWith('"')) return parseLocale(raw.slice(1, -1))
+  return parseLocale(raw)
 }
 
 export function localeFromRequest(request: Request) {

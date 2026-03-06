@@ -21,7 +21,7 @@ const imageAttrs = {
 
 const github = (config.social || []).filter(s => s.icon === 'github')[0];
 const discord = (config.social || []).filter(s => s.icon === 'discord')[0];
-const locale = Astro.currentLocale || 'root';
+const locale = Astro.currentLocale || 'en';
 const t = Astro.locals.t as (key: string) => string;
 const docsHref = getRelativeLocaleUrl(locale, "")
 const docsCliHref = getRelativeLocaleUrl(locale, "cli")

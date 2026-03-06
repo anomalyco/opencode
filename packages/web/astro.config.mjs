@@ -32,9 +32,9 @@ export default defineConfig({
     solidJs(),
     starlight({
       title: "OpenCode",
-      defaultLocale: "root",
+      defaultLocale: "en",
       locales: {
-        root: {
+        en: {
           label: "English",
           lang: "en",
           dir: "ltr",

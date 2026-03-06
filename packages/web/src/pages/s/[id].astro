@@ -10,8 +10,8 @@ const ta = Astro.locals.t as ((key: string) => string) & {
   all?: () => Record<string, string>
 }
 const all = typeof ta.all === "function" ? ta.all() : {}
-const locale = Astro.currentLocale || Astro.locals.starlightRoute.locale || "root"
-const formatLocale = locale === "root" ? "en" : locale
+const locale = Astro.currentLocale || Astro.locals.starlightRoute.locale || "en"
+const formatLocale = locale
 const t = ta
 
 function tx(key: string) {

@@ -7,7 +7,7 @@ import Default from "toolbeam-docs-theme/overrides/Header.astro"
 import SiteTitle from "@astrojs/starlight/components/SiteTitle.astro"
 
 const path = Astro.url.pathname
-const locale = Astro.currentLocale || "root"
+const locale = Astro.currentLocale || "en"
 const route = Astro.locals.starlightRoute
 const t = Astro.locals.t as (key: string) => string
 const links = astroConfig.social || []

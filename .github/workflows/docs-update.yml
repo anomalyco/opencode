@@ -59,9 +59,9 @@ jobs:
             Steps:
             1. For each commit that looks like a new feature or significant change:
                - Read the changed files to understand what was added
-               - Check if the feature is already documented in packages/web/src/content/docs/*
+               - Check if the feature is already documented in packages/web/src/content/docs/en/*.mdx
             2. If you find undocumented features:
-               - Update the relevant documentation files in packages/web/src/content/docs/*
+               - Update the relevant documentation files in packages/web/src/content/docs/en/*.mdx
                - Follow the existing documentation style and structure
                - Make sure to document the feature clearly with examples where appropriate
             3. If all new features are already documented, report that no updates are needed
