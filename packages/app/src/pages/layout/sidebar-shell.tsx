@@ -48,8 +48,9 @@ export const SidebarContent = (props: {
   })
 
   return (
-    <div class="flex h-full w-full overflow-hidden">
+    <div class="flex h-full w-full min-w-0 overflow-hidden">
       <div
+        data-component="sidebar-rail"
         class="w-16 shrink-0 bg-background-base flex flex-col items-center overflow-hidden"
         onMouseMove={props.aimMove}
       >
@@ -115,7 +116,7 @@ export const SidebarContent = (props: {
         ref={(el) => {
           panel = el
         }}
-        classList={{ "flex h-full min-h-0": true, "pointer-events-none": !expanded() }}
+        classList={{ "flex h-full min-h-0 min-w-0 overflow-hidden": true, "pointer-events-none": !expanded() }}
         aria-hidden={!expanded()}
       >
         {props.renderPanel()}
