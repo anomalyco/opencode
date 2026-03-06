@@ -80,6 +80,17 @@ export namespace LSP {
     async () => {
       const clients: LSPClient.Info[] = []
       const servers: Record<string, LSPServer.Info> = {}
+
+      if (Flag.OPENCODE_DISABLE_LSP) {
+        log.info("all LSPs are disabled via OPENCODE_DISABLE_LSP")
+        return {
+          broken: new Set<string>(),
+          servers,
+          clients,
+          spawning: new Map<string, Promise<LSPClient.Info | undefined>>(),
+        }
+      }
+
       const cfg = await Config.get()
 
       if (cfg.lsp === false) {
