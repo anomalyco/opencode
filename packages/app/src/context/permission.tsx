@@ -7,7 +7,12 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "./global-sync"
 import { useParams } from "@solidjs/router"
 import { decode64 } from "@/utils/base64"
-import { acceptKey, directoryAcceptKey, isDirectoryAutoAccepting, autoRespondsPermission } from "./permission-auto-respond"
+import {
+  acceptKey,
+  directoryAcceptKey,
+  isDirectoryAutoAccepting,
+  autoRespondsPermission,
+} from "./permission-auto-respond"
 
 type PermissionRespondFn = (input: {
   sessionID: string
