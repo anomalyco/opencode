@@ -369,25 +369,31 @@ export namespace Auth {
   }
 
   export async function set(key: string, info: Info) {
+    const normalized = key.replace(/\/+$/, "")
     return updateStore(async (store) => {
+      // Clean up pre-existing trailing-slash variant
+      if (normalized !== key) delete store.providers[key]
+      const stale = `${normalized}/`
+      if (store.providers[stale]) delete store.providers[stale]
+
       if (info.type === "api") {
-        store.providers[key] = { type: "api", key: info.key }
+        store.providers[normalized] = { type: "api", key: info.key }
         return { value: undefined, changed: true }
       }
 
       if (info.type === "wellknown") {
-        store.providers[key] = { type: "wellknown", key: info.key, token: info.token }
+        store.providers[normalized] = { type: "wellknown", key: info.key, token: info.token }
         return { value: undefined, changed: true }
       }
 
       const namespace = "default"
-      const provider = ensureOAuthProvider(store, key)
+      const provider = ensureOAuthProvider(store, normalized)
 
       // First check if we have a context-specific recordID (e.g. from browser refresh)
-      const contextRecordID = getOAuthRecordID(key)
+      const contextRecordID = getOAuthRecordID(normalized)
       // Then check if this refresh token already exists (update existing account)
       const existingRecordID = await findOAuthRecordIDByRefreshToken({
-        providerID: key,
+        providerID: normalized,
         namespace,
         refresh: info.refresh,
         provider,
@@ -437,12 +443,19 @@ export namespace Auth {
   }
 
   export async function remove(key: string) {
+    const normalized = key.replace(/\/+$/, "")
     return updateStore((store) => {
-      const existing = store.providers[key]
-      if (!existing) return { value: undefined, changed: false }
-
-      delete store.providers[key]
-      return { value: undefined, changed: true }
+      let changed = false
+      if (store.providers[normalized]) {
+        delete store.providers[normalized]
+        changed = true
+      }
+      const stale = `${normalized}/`
+      if (store.providers[stale]) {
+        delete store.providers[stale]
+        changed = true
+      }
+      return { value: undefined, changed }
     })
   }
 
