@@ -1628,11 +1628,14 @@ function InlineTool(props: {
   spinner?: boolean
   children: JSX.Element
   part: ToolPart
+  onClick?: () => void
 }) {
   const [margin, setMargin] = createSignal(0)
   const { theme } = useTheme()
   const ctx = use()
   const sync = useSync()
+  const renderer = useRenderer()
+  const [hover, setHover] = createSignal(false)
 
   const permission = createMemo(() => {
     const callID = sync.data.permission[ctx.sessionID]?.at(0)?.tool?.callID
@@ -1642,6 +1645,7 @@ function InlineTool(props: {
 
   const fg = createMemo(() => {
     if (permission()) return theme.warning
+    if (hover() && props.onClick) return theme.text
     if (props.complete) return theme.textMuted
     return theme.text
   })
@@ -1661,6 +1665,12 @@ function InlineTool(props: {
       paddingLeft={3}
       border={props.border}
       borderColor={props.borderColor}
+      onMouseOver={() => props.onClick && setHover(true)}
+      onMouseOut={() => setHover(false)}
+      onMouseUp={() => {
+        if (renderer.getSelection()?.getSelectedText()) return
+        props.onClick?.()
+      }}
       renderBefore={function () {
         const el = this as BoxRenderable
         const parent = el.parent
@@ -2012,6 +2022,11 @@ function Task(props: ToolProps<typeof TaskTool>) {
       part={props.part}
       border={["left"]}
       borderColor={color()}
+      onClick={() => {
+        if (props.metadata.sessionId) {
+          navigate({ type: "session", sessionID: props.metadata.sessionId })
+        }
+      }}
     >
       {content()}
     </InlineTool>
