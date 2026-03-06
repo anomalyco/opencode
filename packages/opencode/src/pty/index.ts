@@ -121,7 +121,7 @@ export namespace Pty {
     const id = Identifier.create("pty", false)
     const command = input.command || Shell.preferred()
     const args = input.args || []
-    if (command.endsWith("sh")) {
+    if (Shell.login(command)) {
       args.push("-l")
     }
 

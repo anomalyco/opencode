@@ -9,6 +9,9 @@ import { setTimeout as sleep } from "node:timers/promises"
 const SIGKILL_TIMEOUT_MS = 200
 
 export namespace Shell {
+  const BLACKLIST = new Set(["fish", "nu"])
+  const LOGIN = new Set(["bash", "dash", "fish", "ksh", "sh", "zsh"])
+
   export async function killTree(proc: ChildProcess, opts?: { exited?: () => boolean }): Promise<void> {
     const pid = proc.pid
     if (!pid || opts?.exited?.()) return
@@ -36,7 +39,29 @@ export namespace Shell {
       }
     }
   }
-  const BLACKLIST = new Set(["fish", "nu"])
+
+  function full(file: string) {
+    if (process.platform !== "win32") return file
+    const shell = Filesystem.windowsPath(file)
+    if (path.win32.dirname(shell) !== ".") return shell
+    return Bun.which(shell) || shell
+  }
+
+  function pick() {
+    const pwsh = Bun.which("pwsh")
+    if (pwsh) return pwsh
+    const powershell = Bun.which("powershell")
+    if (powershell) return powershell
+  }
+
+  function select(file: string | undefined, opts?: { acceptable?: boolean }) {
+    if (file && (!opts?.acceptable || !BLACKLIST.has(name(file)))) return full(file)
+    if (process.platform === "win32") {
+      const shell = pick()
+      if (shell) return shell
+    }
+    return fallback()
+  }
 
   function fallback() {
     if (process.platform === "win32") {
@@ -56,15 +81,16 @@ export namespace Shell {
     return "/bin/sh"
   }
 
-  export const preferred = lazy(() => {
-    const s = process.env.SHELL
-    if (s) return s
-    return fallback()
-  })
+  export function name(file: string) {
+    if (process.platform === "win32") return path.win32.parse(Filesystem.windowsPath(file)).name.toLowerCase()
+    return path.basename(file).toLowerCase()
+  }
 
-  export const acceptable = lazy(() => {
-    const s = process.env.SHELL
-    if (s && !BLACKLIST.has(process.platform === "win32" ? path.win32.basename(s) : path.basename(s))) return s
-    return fallback()
-  })
+  export function login(file: string) {
+    return LOGIN.has(name(file))
+  }
+
+  export const preferred = lazy(() => select(process.env.SHELL))
+
+  export const acceptable = lazy(() => select(process.env.SHELL, { acceptable: true }))
 }
