@@ -72,12 +72,13 @@
     "@biomejs/biome": "2.4.4",
     "@tsconfig/bun": "catalog:",
     "@types/mime-types": "3.0.1",
+    "@typescript/native-preview": "catalog:",
     "glob": "13.0.5",
     "husky": "9.1.7",
     "prettier": "3.6.2",
     "semver": "^7.6.0",
     "sst": "3.18.10",
-    "turbo": "2.5.6"
+    "turbo": "2.8.13"
   },
   "dependencies": {
     "@ast-grep/napi": "0.40.5",
@@ -101,7 +102,8 @@
     "protobufjs",
     "tree-sitter",
     "tree-sitter-bash",
-    "web-tree-sitter"
+    "web-tree-sitter",
+    "electron"
   ],
   "overrides": {
     "@types/bun": "catalog:",
