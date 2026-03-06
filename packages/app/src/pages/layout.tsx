@@ -576,22 +576,16 @@ export default function Layout(props: ParentProps) {
   const currentSessions = createMemo(() => {
     const now = Date.now()
     const dynamic = server.dynamicSort.enabled()
-    if (workspaceSetting()) {
-      const dirs = workspaceIds(project)
-      const activeDir = currentDir()
-      const result: Session[] = []
-      for (const dir of dirs) {
-        const expanded = store.workspaceExpanded[dir] ?? dir === project.worktree
-        const active = dir === activeDir
-        if (!expanded && !active) continue
-        const [dirStore] = globalSync.child(dir, { bootstrap: true })
-        const dirSessions = sortedRootSessions(dirStore, now, dynamic)
-        result.push(...dirSessions)
-      }
-      return result
+    const dirs = visibleSessionDirs()
+    if (dirs.length === 0) return [] as Session[]
+
+    const result: Session[] = []
+    for (const dir of dirs) {
+      const [dirStore] = globalSync.child(dir, { bootstrap: true })
+      const dirSessions = sortedRootSessions(dirStore, now, dynamic)
+      result.push(...dirSessions)
     }
-    const [projectStore] = globalSync.child(project.worktree)
-    return sortedRootSessions(projectStore, now, dynamic)
+    return result
   })
 
   type PrefetchQueue = {
@@ -1904,15 +1898,15 @@ export default function Layout(props: ParentProps) {
                         </DropdownMenu.Item>
                         <DropdownMenu.Item
                           data-action="project-pin-toggle"
-                          data-project={base64Encode(p().worktree)}
+                          data-project={base64Encode(p.worktree)}
                           onSelect={() => {
-                            server.projects.isPinned(p().worktree)
-                              ? server.projects.unpin(p().worktree)
-                              : server.projects.pin(p().worktree)
+                            server.projects.isPinned(p.worktree)
+                              ? server.projects.unpin(p.worktree)
+                              : server.projects.pin(p.worktree)
                           }}
                         >
                           <DropdownMenu.ItemLabel>
-                            {server.projects.isPinned(p().worktree)
+                            {server.projects.isPinned(p.worktree)
                               ? language.t("sidebar.project.unpin")
                               : language.t("sidebar.project.pin")}
                           </DropdownMenu.ItemLabel>
