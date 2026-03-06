@@ -78,6 +78,9 @@ export type Platform = {
   /** Parse markdown to HTML using native parser (desktop only, returns unprocessed code blocks) */
   parseMarkdown?(markdown: string): Promise<string>
 
+  /** Read UTF-8 text file content (desktop only) */
+  readTextFile?(path: string): Promise<string>
+
   /** Webview zoom level (desktop only) */
   webviewZoom?: Accessor<number>
 

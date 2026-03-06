@@ -15,6 +15,7 @@ export const commands = {
 	getDisplayBackend: () => __TAURI_INVOKE<"wayland" | "auto" | null>("get_display_backend"),
 	setDisplayBackend: (backend: LinuxDisplayBackend) => __TAURI_INVOKE<null>("set_display_backend", { backend }),
 	parseMarkdownCommand: (markdown: string) => __TAURI_INVOKE<string>("parse_markdown_command", { markdown }),
+	readTextFile: (path: string) => __TAURI_INVOKE<string>("read_text_file", { path }),
 	checkAppExists: (appName: string) => __TAURI_INVOKE<boolean>("check_app_exists", { appName }),
 	wslPath: (path: string, mode: "windows" | "linux" | null) => __TAURI_INVOKE<string>("wsl_path", { path, mode }),
 	resolveAppPath: (appName: string) => __TAURI_INVOKE<string | null>("resolve_app_path", { appName }),
@@ -65,4 +66,3 @@ function makeEvent<T>(name: string) {
 
     return Object.assign(fn, base);
 }
-

@@ -208,6 +208,14 @@ fn open_path(_app: AppHandle, path: String, app_name: Option<String>) -> Result<
         .map_err(|e| format!("Failed to open path: {e}"))
 }
 
+#[tauri::command]
+#[specta::specta]
+async fn read_text_file(path: String) -> Result<String, String> {
+    tokio::fs::read_to_string(path)
+        .await
+        .map_err(|e| format!("Failed to read file: {e}"))
+}
+
 #[cfg(target_os = "macos")]
 fn check_macos_app(app_name: &str) -> bool {
     // Check common installation locations
@@ -400,6 +408,7 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             get_display_backend,
             set_display_backend,
             markdown::parse_markdown_command,
+            read_text_file,
             check_app_exists,
             wsl_path,
             resolve_app_path,
