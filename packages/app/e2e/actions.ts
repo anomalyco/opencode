@@ -5,10 +5,10 @@ import path from "node:path"
 import { execSync } from "node:child_process"
 import { modKey, serverUrl } from "./utils"
 import {
-  sessionItemSelector,
   dropdownMenuTriggerSelector,
   dropdownMenuContentSelector,
   projectMenuTriggerSelector,
+  projectCloseMenuSelector,
   projectWorkspacesToggleSelector,
   titlebarRightSelector,
   popoverBodySelector,
@@ -206,7 +206,7 @@ export function sessionIDFromUrl(url: string) {
 }
 
 export async function hoverSessionItem(page: Page, sessionID: string) {
-  const sessionEl = page.locator(sessionItemSelector(sessionID)).first()
+  const sessionEl = page.locator(`[data-session-id="${sessionID}"]`).last()
   await expect(sessionEl).toBeVisible()
   await sessionEl.hover()
   return sessionEl
@@ -556,32 +556,42 @@ export async function openProjectMenu(page: Page, projectSlug: string) {
   const trigger = page.locator(projectMenuTriggerSelector(projectSlug)).first()
   await expect(trigger).toHaveCount(1)
 
+  const menu = page
+    .locator(dropdownMenuContentSelector)
+    .filter({ has: page.locator(projectCloseMenuSelector(projectSlug)) })
+    .first()
+  const close = menu.locator(projectCloseMenuSelector(projectSlug)).first()
+
+  const clicked = await trigger
+    .click({ timeout: 1500 })
+    .then(() => true)
+    .catch(() => false)
+
+  if (clicked) {
+    const opened = await menu
+      .waitFor({ state: "visible", timeout: 1500 })
+      .then(() => true)
+      .catch(() => false)
+    if (opened) {
+      await expect(close).toBeVisible()
+      return menu
+    }
+  }
+
   await trigger.focus()
   await page.keyboard.press("Enter")
 
-  const menu = page.locator(dropdownMenuContentSelector).first()
   const opened = await menu
     .waitFor({ state: "visible", timeout: 1500 })
     .then(() => true)
     .catch(() => false)
 
   if (opened) {
-    const viewport = page.viewportSize()
-    const x = viewport ? Math.max(viewport.width - 5, 0) : 1200
-    const y = viewport ? Math.max(viewport.height - 5, 0) : 800
-    await page.mouse.move(x, y)
+    await expect(close).toBeVisible()
     return menu
   }
 
-  await trigger.click({ force: true })
-
-  await expect(menu).toBeVisible()
-
-  const viewport = page.viewportSize()
-  const x = viewport ? Math.max(viewport.width - 5, 0) : 1200
-  const y = viewport ? Math.max(viewport.height - 5, 0) : 800
-  await page.mouse.move(x, y)
-  return menu
+  throw new Error(`Failed to open project menu: ${projectSlug}`)
 }
 
 export async function setWorkspacesEnabled(page: Page, projectSlug: string, enabled: boolean) {
@@ -594,11 +604,18 @@ export async function setWorkspacesEnabled(page: Page, projectSlug: string, enab
 
   if (current === enabled) return
 
-  const menu = await openProjectMenu(page, projectSlug)
+  const flip = async (timeout?: number) => {
+    const menu = await openProjectMenu(page, projectSlug)
+    const toggle = menu.locator(projectWorkspacesToggleSelector(projectSlug)).first()
+    await expect(toggle).toBeVisible()
+    return toggle.click({ force: true, timeout })
+  }
 
-  const toggle = menu.locator(projectWorkspacesToggleSelector(projectSlug)).first()
-  await expect(toggle).toBeVisible()
-  await toggle.click({ force: true })
+  const flipped = await flip(1500)
+    .then(() => true)
+    .catch(() => false)
+
+  if (!flipped) await flip()
 
   const expected = enabled ? "New workspace" : "New session"
   await expect(page.getByRole("button", { name: expected }).first()).toBeVisible()

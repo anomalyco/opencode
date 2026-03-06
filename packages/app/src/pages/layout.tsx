@@ -1180,6 +1180,12 @@ export default function Layout(props: ParentProps) {
     }
     const openSession = async (target: { directory: string; id: string }) => {
       if (!canOpen(target.directory)) return false
+      const [data] = globalSync.child(target.directory, { bootstrap: false })
+      if (data.session.some((item) => item.id === target.id)) {
+        setStore("lastProjectSession", root, { directory: target.directory, id: target.id, at: Date.now() })
+        navigateWithSidebarReset(`/${base64Encode(target.directory)}/session/${target.id}`)
+        return true
+      }
       const resolved = await globalSDK.client.session
         .get({ sessionID: target.id })
         .then((x) => x.data)
@@ -2257,10 +2263,12 @@ export default function Layout(props: ParentProps) {
             "duration-180 ease-out": peeked() && !layout.sidebar.opened(),
             "duration-120 ease-in": !peeked() || layout.sidebar.opened(),
           }}
+          onMouseMove={disarm}
           onMouseEnter={() => {
             disarm()
             aim.reset()
           }}
+          onPointerDown={disarm}
           onMouseLeave={() => {
             arm()
           }}

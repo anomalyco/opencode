@@ -336,9 +336,6 @@ test("can reorder workspaces by drag and drop", async ({ page, withProject }) =>
       const src = page.locator(workspaceItemSelector(from)).first()
       const dst = page.locator(workspaceItemSelector(to)).first()
 
-      await src.scrollIntoViewIfNeeded()
-      await dst.scrollIntoViewIfNeeded()
-
       const a = await src.boundingBox()
       const b = await dst.boundingBox()
       if (!a || !b) throw new Error("Failed to resolve workspace drag bounds")
