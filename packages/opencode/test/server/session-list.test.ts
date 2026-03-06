@@ -93,7 +93,9 @@ describe("Session.list", () => {
 
   test("manual summarize bumps updated time and reorders list", async () => {
     await using tmp = await tmpdir({ git: true })
-    const loop = spyOn(SessionPrompt, "loop").mockImplementation(async () => undefined as never)
+    const loop = spyOn(SessionPrompt, "loop").mockImplementation(
+      (async () => undefined as never) as unknown as typeof SessionPrompt.loop,
+    )
 
     try {
       const one = await Instance.provide({
