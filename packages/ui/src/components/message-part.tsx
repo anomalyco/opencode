@@ -494,7 +494,8 @@ export function AssistantParts(props: {
               {(() => {
                 const parts = createMemo(
                   () => {
-                    const entry = entryAccessor() as { type: "context"; refs: PartRef[] }
+                    const entry = entryAccessor()
+                    if (entry.type !== "context") return emptyTools
                     return entry.refs
                       .map((ref) => partByID(list(data.store.part?.[ref.messageID], emptyParts), ref.partID))
                       .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
@@ -514,11 +515,13 @@ export function AssistantParts(props: {
             <Match when={entryType() === "part"}>
               {(() => {
                 const message = createMemo(() => {
-                  const entry = entryAccessor() as { type: "part"; ref: PartRef }
+                  const entry = entryAccessor()
+                  if (entry.type !== "part") return
                   return props.messages.find((item) => item.id === entry.ref.messageID)
                 })
                 const part = createMemo(() => {
-                  const entry = entryAccessor() as { type: "part"; ref: PartRef }
+                  const entry = entryAccessor()
+                  if (entry.type !== "part") return
                   return partByID(list(data.store.part?.[entry.ref.messageID], emptyParts), entry.ref.partID)
                 })
 
@@ -711,7 +714,8 @@ export function AssistantMessageDisplay(props: {
               {(() => {
                 const parts = createMemo(
                   () => {
-                    const entry = entryAccessor() as { type: "context"; refs: PartRef[] }
+                    const entry = entryAccessor()
+                    if (entry.type !== "context") return emptyTools
                     return entry.refs
                       .map((ref) => partByID(props.parts, ref.partID))
                       .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
@@ -730,7 +734,8 @@ export function AssistantMessageDisplay(props: {
             <Match when={entryType() === "part"}>
               {(() => {
                 const part = createMemo(() => {
-                  const entry = entryAccessor() as { type: "part"; ref: PartRef }
+                  const entry = entryAccessor()
+                  if (entry.type !== "part") return
                   return partByID(props.parts, entry.ref.partID)
                 })
 

@@ -197,6 +197,7 @@ export async function createTestProject() {
   await fs.writeFile(path.join(root, "README.md"), "# e2e\n")
 
   execSync("git init", { cwd: root, stdio: "ignore" })
+  execSync("git config core.fsmonitor false", { cwd: root, stdio: "ignore" })
   execSync("git add -A", { cwd: root, stdio: "ignore" })
   execSync('git -c user.name="e2e" -c user.email="e2e@example.com" commit -m "init" --allow-empty', {
     cwd: root,
@@ -207,7 +208,10 @@ export async function createTestProject() {
 }
 
 export async function cleanupTestProject(directory: string) {
-  await fs.rm(directory, { recursive: true, force: true }).catch(() => undefined)
+  try {
+    execSync("git fsmonitor--daemon stop", { cwd: directory, stdio: "ignore" })
+  } catch {}
+  await fs.rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }).catch(() => undefined)
 }
 
 export function sessionIDFromUrl(url: string) {
