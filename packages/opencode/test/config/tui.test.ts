@@ -508,3 +508,28 @@ test("gracefully falls back when tui.json has invalid JSON", async () => {
     },
   })
 })
+
+test("loads prompt bar animation plugin config from tui.json", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "tui.json"),
+        JSON.stringify({
+          prompt_bar_animation: {
+            enabled: false,
+            plugin: "state-static",
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await TuiConfig.get()
+      expect(config.prompt_bar_animation?.enabled).toBe(false)
+      expect(config.prompt_bar_animation?.plugin).toBe("state-static")
+    },
+  })
+})
