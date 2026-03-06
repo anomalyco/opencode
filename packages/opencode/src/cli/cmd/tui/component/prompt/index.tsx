@@ -1,4 +1,4 @@
-import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, decodePasteBytes } from "@opentui/core"
+import { BoxRenderable, TextareaRenderable, MouseEvent, MouseButton, PasteEvent, decodePasteBytes } from "@opentui/core"
 import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
@@ -1106,7 +1106,15 @@ export function Prompt(props: PromptProps) {
                   input.cursorColor = theme.text
                 }, 0)
               }}
-              onMouseDown={(r: MouseEvent) => r.target?.focus()}
+              onMouseDown={async (r: MouseEvent) => {
+                r.target?.focus()
+                if (r.button !== MouseButton.MIDDLE) return
+                if (props.disabled) return
+                r.preventDefault()
+                const text = await Clipboard.readPrimary()
+                if (!text || !input || input.isDestroyed) return
+                input.insertText(text)
+              }}
               focusedBackgroundColor={theme.backgroundElement}
               cursorColor={theme.text}
               syntaxStyle={syntax()}

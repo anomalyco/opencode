@@ -110,6 +110,23 @@ export async function read(): Promise<Content | undefined> {
   }
 }
 
+export async function readPrimary(): Promise<string | undefined> {
+  if (platform() !== "linux") return
+  const which = await getWhich()
+  if (process.env["WAYLAND_DISPLAY"] && which("wl-paste")) {
+    const result = await Process.text(["wl-paste", "--primary", "--no-newline"], { nothrow: true })
+    if (result.text) return result.text
+  }
+  if (which("xclip")) {
+    const result = await Process.text(["xclip", "-selection", "primary", "-o"], { nothrow: true })
+    if (result.text) return result.text
+  }
+  if (which("xsel")) {
+    const result = await Process.text(["xsel", "--primary", "--output"], { nothrow: true })
+    if (result.text) return result.text
+  }
+}
+
 const getCopyMethod = lazy(async () => {
   const os = platform()
   const which = await getWhich()
