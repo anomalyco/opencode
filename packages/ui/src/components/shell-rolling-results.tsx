@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, on, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
 import stripAnsi from "strip-ansi"
 import type { ToolPart } from "@opencode-ai/sdk/v2"
 import { prefersReducedMotion } from "../hooks/use-reduced-motion"
@@ -8,9 +8,15 @@ import { Icon } from "./icon"
 import { IconButton } from "./icon-button"
 import { TextShimmer } from "./text-shimmer"
 import { Tooltip } from "./tooltip"
-import { animate, clearFadeStyles, clearMaskStyles, FAST_SPRING, GROW_SPRING, WIPE_MASK } from "./motion"
+import {
+  animate,
+  clearFadeStyles,
+  clearMaskStyles,
+  GROW_SPRING,
+  WIPE_MASK,
+} from "./motion"
 import { useSpring } from "./motion-spring"
-import { busy, createThrottledValue, useToolFade } from "./tool-utils"
+import { busy, createThrottledValue, hold, updateScrollMask, useCollapsible, useToolFade } from "./tool-utils"
 
 function ShellRollingSubtitle(props: { text: string; animate?: boolean }) {
   let ref: HTMLSpanElement | undefined
@@ -57,6 +63,118 @@ function ShellRollingCommand(props: { text: string; animate?: boolean }) {
   )
 }
 
+function ShellExpanded(props: { cmd: string; out: string; open: boolean }) {
+  const i18n = useI18n()
+  const fade = 12
+  const rows = 10
+  const rowHeight = 22
+  const max = rows * rowHeight
+
+  let contentRef: HTMLDivElement | undefined
+  let bodyRef: HTMLDivElement | undefined
+  let scrollRef: HTMLDivElement | undefined
+  let topRef: HTMLDivElement | undefined
+  const [copied, setCopied] = createSignal(false)
+  const [cap, setCap] = createSignal(max)
+
+  const updateMask = () => {
+    if (scrollRef) updateScrollMask(scrollRef, fade)
+  }
+
+  const resize = () => {
+    const top = Math.ceil(topRef?.getBoundingClientRect().height ?? 0)
+    setCap(Math.max(rowHeight * 2, max - top - (props.out ? 1 : 0)))
+  }
+
+  const measure = () => {
+    resize()
+    return Math.ceil(bodyRef?.getBoundingClientRect().height ?? 0)
+  }
+
+  onMount(() => {
+    resize()
+    if (!topRef) return
+    const obs = new ResizeObserver(resize)
+    obs.observe(topRef)
+    onCleanup(() => obs.disconnect())
+  })
+
+  createEffect(() => {
+    props.cmd
+    props.out
+    queueMicrotask(() => {
+      resize()
+      updateMask()
+    })
+  })
+
+  useCollapsible({
+    content: () => contentRef,
+    body: () => bodyRef,
+    open: () => props.open,
+    measure,
+    onOpen: updateMask,
+  })
+
+  const handleCopy = async (e: MouseEvent) => {
+    e.stopPropagation()
+    const cmd = props.cmd ? `$ ${props.cmd}` : ""
+    const text = `${cmd}${props.out ? `${cmd ? "\n\n" : ""}${props.out}` : ""}`
+    if (!text) return
+    await navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div ref={contentRef} style={{ overflow: "clip", height: "0px", display: "none" }}>
+      <div ref={bodyRef} data-component="shell-expanded-shell">
+        <div data-slot="shell-expanded-body">
+          <div ref={topRef} data-slot="shell-expanded-top">
+            <div data-slot="shell-expanded-command">
+              <span data-slot="shell-expanded-prompt">$</span>
+              <span data-slot="shell-expanded-input">{props.cmd}</span>
+            </div>
+            <div data-slot="shell-expanded-actions">
+              <Tooltip
+                value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+                placement="top"
+                gutter={4}
+              >
+                <IconButton
+                  icon={copied() ? "check" : "copy"}
+                  size="small"
+                  variant="ghost"
+                  class="shell-expanded-copy"
+                  onMouseDown={(e: MouseEvent) => e.preventDefault()}
+                  onClick={handleCopy}
+                  aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+                />
+              </Tooltip>
+            </div>
+          </div>
+          <Show when={props.out}>
+            <>
+              <div data-slot="shell-expanded-divider" />
+              <div
+                ref={scrollRef}
+                data-component="shell-expanded-output"
+                data-scrollable
+                onScroll={updateMask}
+                style={{ "max-height": `${cap()}px` }}
+              >
+                <pre data-slot="shell-expanded-pre">
+                  <code>{props.out}</code>
+                </pre>
+              </div>
+            </>
+          </Show>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function ShellRollingResults(props: { part: ToolPart; animate?: boolean }) {
   const i18n = useI18n()
   const wiped = new Set<string>()
@@ -66,35 +184,23 @@ export function ShellRollingResults(props: { part: ToolPart; animate?: boolean }
   onMount(() => setMounted(true))
   const state = createMemo(() => props.part.state as Record<string, any>)
   const pending = createMemo(() => busy(props.part.state.status))
-  // autoOpen starts true if pending, false if already complete (e.g. scrolling back in history).
-  // When pending transitions false, autoOpen is still true — no intermediate state — then
-  // a 2s timer sets it false to trigger the collapse. This avoids the flash caused by
-  // holdOpen being set in a late-running effect.
-  const [autoOpen, setAutoOpen] = createSignal(pending())
-  createEffect(
-    on(pending, (isPending, wasPending) => {
-      if (isPending) {
-        setAutoOpen(true)
-      } else if (wasPending && !userToggled()) {
-        const timer = setTimeout(() => setAutoOpen(false), 2000)
-        onCleanup(() => clearTimeout(timer))
-      }
-    }),
-  )
+  const autoOpen = hold(pending, 2000)
   const effectiveOpen = createMemo(() => {
     if (pending()) return true
     if (userToggled()) return userOpen()
     return autoOpen()
   })
-  const subtitle = createMemo(() => {
-    const value = state().input?.description ?? state().metadata?.description
-    if (typeof value === "string") return value
-    return ""
-  })
+  const expanded = createMemo(() => !pending() && !autoOpen() && userToggled() && userOpen())
+  const previewOpen = createMemo(() => effectiveOpen() && !expanded())
   const command = createMemo(() => {
     const value = state().input?.command ?? state().metadata?.command
     if (typeof value === "string") return value
     return ""
+  })
+  const subtitle = createMemo(() => {
+    const value = state().input?.description ?? state().metadata?.description
+    if (typeof value === "string" && value.trim().length > 0) return value
+    return firstLine(command()) ?? ""
   })
   const output = createMemo(() => {
     const value = state().output ?? state().metadata?.output
@@ -105,9 +211,10 @@ export function ShellRollingResults(props: { part: ToolPart; animate?: boolean }
   const skip = () => reduce() || props.animate === false
   const opacity = useSpring(() => (mounted() ? 1 : 0), GROW_SPRING)
   const blur = useSpring(() => (mounted() ? 0 : 2), GROW_SPRING)
+  const previewOpacity = useSpring(() => (previewOpen() ? 1 : 0), GROW_SPRING)
+  const previewBlur = useSpring(() => (previewOpen() ? 0 : 2), GROW_SPRING)
   const headerHeight = useSpring(() => (mounted() ? 37 : 0), GROW_SPRING)
   let headerClipRef: HTMLDivElement | undefined
-  const [copied, setCopied] = createSignal(false)
   const handleHeaderClick = () => {
     if (pending()) return
     const el = headerClipRef
@@ -122,16 +229,6 @@ export function ShellRollingResults(props: { part: ToolPart; animate?: boolean }
         if (delta !== 0) viewport.scrollTop += delta
       })
     }
-  }
-  const handleCopy = async (e: MouseEvent) => {
-    e.stopPropagation()
-    const cmd = command()
-    const out = stripAnsi(output())
-    const content = `$ ${cmd}${out ? "\n" + out : ""}`
-    if (!content) return
-    await navigator.clipboard.writeText(content)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
   }
   const line = createMemo(() => firstLine(command()))
   const fixed = createMemo(() => {
@@ -162,21 +259,6 @@ export function ShellRollingResults(props: { part: ToolPart; animate?: boolean }
           <Show when={subtitle()}>{(text) => <ShellRollingSubtitle text={text()} animate={props.animate} />}</Show>
           <Show when={!pending()}>
             <span data-slot="shell-rolling-actions">
-              <Tooltip
-                value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
-                placement="top"
-                gutter={4}
-              >
-                <IconButton
-                  icon={copied() ? "check" : "copy"}
-                  size="small"
-                  variant="ghost"
-                  class="shell-rolling-copy"
-                  onMouseDown={(e: MouseEvent) => e.preventDefault()}
-                  onClick={handleCopy}
-                  aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
-                />
-              </Tooltip>
               <span data-slot="shell-rolling-arrow" data-open={effectiveOpen() ? "true" : "false"}>
                 <Icon name="chevron-down" size="small" />
               </span>
@@ -184,59 +266,74 @@ export function ShellRollingResults(props: { part: ToolPart; animate?: boolean }
           </Show>
         </div>
       </div>
-      <RollingResults
-        class="shell-rolling-output"
-        items={rows()}
-        fixed={fixed()}
-        fixedHeight={22}
-        rows={userToggled() && userOpen() ? 10 : 5}
-        rowHeight={22}
-        rowGap={0}
-        open={effectiveOpen()}
-        scrollable={!pending() && !autoOpen() && userToggled() && userOpen()}
-        spring={userToggled() ? FAST_SPRING : undefined}
-        animate={props.animate !== false}
-        getKey={(row) => row.id}
-        render={(row) => {
-          const [textRef, setTextRef] = createSignal<HTMLSpanElement>()
-          createEffect(() => {
-            const el = textRef()
-            if (!el || !row.text) return
-            if (wiped.has(row.id)) return
-            wiped.add(row.id)
-            if (reduce()) return
-            el.style.maskImage = WIPE_MASK
-            el.style.webkitMaskImage = WIPE_MASK
-            el.style.maskSize = "240% 100%"
-            el.style.webkitMaskSize = "240% 100%"
-            el.style.maskRepeat = "no-repeat"
-            el.style.webkitMaskRepeat = "no-repeat"
-            el.style.maskPosition = "100% 0%"
-            el.style.webkitMaskPosition = "100% 0%"
-            animate(
-              el,
-              {
-                opacity: [0, 1],
-                filter: ["blur(2px)", "blur(0px)"],
-                transform: ["translateX(-0.06em)", "translateX(0)"],
-                maskPosition: "0% 0%",
-              },
-              GROW_SPRING,
-            ).finished.then(() => {
-              if (!el) return
-              clearFadeStyles(el)
-              clearMaskStyles(el)
-            })
-          })
-          return (
-            <div data-component="shell-rolling-row">
-              <span ref={setTextRef} data-slot="shell-rolling-text">
-                {row.text}
-              </span>
-            </div>
-          )
+      <div
+        data-slot="shell-rolling-preview"
+        style={{
+          opacity: skip() ? (previewOpen() ? 1 : 0) : previewOpacity(),
+          filter: `blur(${skip() ? 0 : previewBlur()}px)`,
         }}
-      />
+      >
+        <RollingResults
+          class="shell-rolling-output"
+          items={rows()}
+          fixed={fixed()}
+          fixedHeight={22}
+          rows={5}
+          rowHeight={22}
+          rowGap={0}
+          open={previewOpen()}
+          animate={props.animate !== false}
+          getKey={(row) => row.id}
+          render={(row) => {
+            const [textRef, setTextRef] = createSignal<HTMLSpanElement>()
+            createEffect(() => {
+              const el = textRef()
+              if (!el || !row.text) return
+              if (wiped.has(row.id)) return
+              wiped.add(row.id)
+              if (reduce()) return
+              el.style.maskImage = WIPE_MASK
+              el.style.webkitMaskImage = WIPE_MASK
+              el.style.maskSize = "240% 100%"
+              el.style.webkitMaskSize = "240% 100%"
+              el.style.maskRepeat = "no-repeat"
+              el.style.webkitMaskRepeat = "no-repeat"
+              el.style.maskPosition = "100% 0%"
+              el.style.webkitMaskPosition = "100% 0%"
+              let done = false
+              const clear = () => {
+                if (done) return
+                done = true
+                clearFadeStyles(el)
+                clearMaskStyles(el)
+              }
+              const anim = animate(
+                el,
+                {
+                  opacity: [0, 1],
+                  filter: ["blur(2px)", "blur(0px)"],
+                  transform: ["translateX(-0.06em)", "translateX(0)"],
+                  maskPosition: "0% 0%",
+                },
+                GROW_SPRING,
+              )
+              anim.finished.catch(() => {}).finally(clear)
+              onCleanup(() => {
+                anim.stop()
+                clear()
+              })
+            })
+            return (
+              <div data-component="shell-rolling-row">
+                <span ref={setTextRef} data-slot="shell-rolling-text">
+                  {row.text}
+                </span>
+              </div>
+            )
+          }}
+        />
+      </div>
+      <ShellExpanded cmd={command()} out={text()} open={expanded()} />
     </div>
   )
 }

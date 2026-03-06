@@ -1,9 +1,10 @@
-import { createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js"
 import {
   animate,
   type AnimationPlaybackControls,
   clearFadeStyles,
   clearMaskStyles,
+  COLLAPSIBLE_SPRING,
   GROW_SPRING,
   WIPE_MASK,
 } from "./motion"
@@ -74,6 +75,90 @@ export function hold(state: () => boolean, wait = 2000) {
   })
 
   return live
+}
+
+export function updateScrollMask(el: HTMLElement, fade = 12) {
+  const { scrollTop, scrollHeight, clientHeight } = el
+  const overflow = scrollHeight - clientHeight
+  if (overflow <= 1) {
+    el.style.maskImage = ""
+    el.style.webkitMaskImage = ""
+    return
+  }
+  const top = scrollTop > 1
+  const bottom = scrollTop < overflow - 1
+  const mask =
+    top && bottom
+      ? `linear-gradient(to bottom, transparent 0, black ${fade}px, black calc(100% - ${fade}px), transparent 100%)`
+      : top
+        ? `linear-gradient(to bottom, transparent 0, black ${fade}px)`
+        : bottom
+          ? `linear-gradient(to bottom, black calc(100% - ${fade}px), transparent 100%)`
+          : ""
+  el.style.maskImage = mask
+  el.style.webkitMaskImage = mask
+}
+
+export function useCollapsible(options: {
+  content: () => HTMLElement | undefined
+  body: () => HTMLElement | undefined
+  open: () => boolean
+  measure?: () => number
+  onOpen?: () => void
+}) {
+  let heightAnim: AnimationPlaybackControls | undefined
+  let fadeAnim: AnimationPlaybackControls | undefined
+
+  createEffect(
+    on(options.open, (isOpen) => {
+      const content = options.content()
+      const body = options.body()
+      if (!content || !body) return
+      heightAnim?.stop()
+      fadeAnim?.stop()
+      if (isOpen) {
+        content.style.display = ""
+        content.style.height = "0px"
+        body.style.opacity = "0"
+        body.style.filter = "blur(2px)"
+        fadeAnim = animate(body, { opacity: [0, 1], filter: ["blur(2px)", "blur(0px)"] }, COLLAPSIBLE_SPRING)
+        queueMicrotask(() => {
+          if (!options.open()) return
+          const c = options.content()
+          if (!c) return
+          const h = options.measure?.() ?? Math.ceil(body.getBoundingClientRect().height)
+          heightAnim = animate(c, { height: ["0px", `${h}px`] }, COLLAPSIBLE_SPRING)
+          heightAnim.finished
+            .catch(() => {})
+            .then(() => {
+              if (!options.open()) return
+              const el = options.content()
+              if (!el) return
+              el.style.height = "auto"
+              options.onOpen?.()
+            })
+        })
+        return
+      }
+
+      const h = content.getBoundingClientRect().height
+      heightAnim = animate(content, { height: [`${h}px`, "0px"] }, COLLAPSIBLE_SPRING)
+      fadeAnim = animate(body, { opacity: [1, 0], filter: ["blur(0px)", "blur(2px)"] }, COLLAPSIBLE_SPRING)
+      heightAnim.finished
+        .catch(() => {})
+        .then(() => {
+          if (options.open()) return
+          const el = options.content()
+          if (!el) return
+          el.style.display = "none"
+        })
+    }, { defer: true }),
+  )
+
+  onCleanup(() => {
+    heightAnim?.stop()
+    fadeAnim?.stop()
+  })
 }
 
 export function useContextToolPending(parts: () => ToolPart[], working?: () => boolean) {

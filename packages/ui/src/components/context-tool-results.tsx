@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onMount } from "solid-js"
 import type { ToolPart } from "@opencode-ai/sdk/v2"
 import { getFilename } from "@opencode-ai/util/path"
 import { useI18n } from "../context/i18n"
@@ -9,15 +9,13 @@ import { AnimatedCountList } from "./tool-count-summary"
 import { RollingResults } from "./rolling-results"
 import {
   animate,
-  type AnimationPlaybackControls,
   clearFadeStyles,
   clearMaskStyles,
-  COLLAPSIBLE_SPRING,
   GROW_SPRING,
   WIPE_MASK,
 } from "./motion"
 import { useSpring } from "./motion-spring"
-import { busy } from "./tool-utils"
+import { busy, updateScrollMask, useCollapsible } from "./tool-utils"
 
 function contextToolLabel(part: ToolPart): { action: string; detail: string } {
   const state = part.state
@@ -124,74 +122,15 @@ export function ContextToolExpandedList(props: { parts: ToolPart[]; expanded: bo
   let contentRef: HTMLDivElement | undefined
   let bodyRef: HTMLDivElement | undefined
   let scrollRef: HTMLDivElement | undefined
-  let heightAnim: AnimationPlaybackControls | undefined
-  let fadeAnim: AnimationPlaybackControls | undefined
-
-  const FADE = 12
-
   const updateMask = () => {
-    if (!scrollRef) return
-    const { scrollTop, scrollHeight, clientHeight } = scrollRef
-    const overflow = scrollHeight - clientHeight
-    if (overflow <= 1) {
-      scrollRef.style.maskImage = ""
-      scrollRef.style.webkitMaskImage = ""
-      return
-    }
-    const top = scrollTop > 1
-    const bottom = scrollTop < overflow - 1
-    const mask =
-      top && bottom
-        ? `linear-gradient(to bottom, transparent 0, black ${FADE}px, black calc(100% - ${FADE}px), transparent 100%)`
-        : top
-          ? `linear-gradient(to bottom, transparent 0, black ${FADE}px)`
-          : bottom
-            ? `linear-gradient(to bottom, black calc(100% - ${FADE}px), transparent 100%)`
-            : ""
-    scrollRef.style.maskImage = mask
-    scrollRef.style.webkitMaskImage = mask
+    if (scrollRef) updateScrollMask(scrollRef)
   }
 
-  createEffect(
-    on(
-      () => props.expanded,
-      (isOpen) => {
-        if (!contentRef || !bodyRef) return
-        heightAnim?.stop()
-        fadeAnim?.stop()
-        if (isOpen) {
-          contentRef.style.display = ""
-          bodyRef.style.opacity = "0"
-          bodyRef.style.filter = "blur(2px)"
-          const h = bodyRef.getBoundingClientRect().height
-          heightAnim = animate(contentRef, { height: ["0px", `${h}px`] }, COLLAPSIBLE_SPRING)
-          fadeAnim = animate(bodyRef, { opacity: [0, 1], filter: ["blur(2px)", "blur(0px)"] }, COLLAPSIBLE_SPRING)
-          heightAnim.finished
-            .catch(() => {})
-            .then(() => {
-              if (!contentRef || !props.expanded) return
-              contentRef.style.height = "auto"
-              updateMask()
-            })
-        } else {
-          const h = contentRef.getBoundingClientRect().height
-          heightAnim = animate(contentRef, { height: [`${h}px`, "0px"] }, COLLAPSIBLE_SPRING)
-          fadeAnim = animate(bodyRef, { opacity: [1, 0], filter: ["blur(0px)", "blur(2px)"] }, COLLAPSIBLE_SPRING)
-          heightAnim.finished
-            .catch(() => {})
-            .then(() => {
-              if (!contentRef || props.expanded) return
-              contentRef.style.display = "none"
-            })
-        }
-      },
-      { defer: true },
-    ),
-  )
-
-  onCleanup(() => {
-    heightAnim?.stop()
-    fadeAnim?.stop()
+  useCollapsible({
+    content: () => contentRef,
+    body: () => bodyRef,
+    open: () => props.expanded,
+    onOpen: updateMask,
   })
 
   return (
