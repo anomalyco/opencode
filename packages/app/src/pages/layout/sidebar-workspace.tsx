@@ -182,7 +182,7 @@ const WorkspaceActions = (props: {
           aria-label={props.language.t("common.moreOptions")}
         />
       </Tooltip>
-      <DropdownMenu.Portal mount={!props.mobile ? props.nav() : undefined}>
+      <DropdownMenu.Portal>
         <DropdownMenu.Content
           onCloseAutoFocus={(event) => {
             if (!props.pendingRename()) return

@@ -1960,7 +1960,7 @@ export default function Layout(props: ParentProps) {
                       }}
                       aria-label={language.t("common.moreOptions")}
                     />
-                    <DropdownMenu.Portal mount={!panelProps.mobile ? state.nav : undefined}>
+                    <DropdownMenu.Portal>
                       <DropdownMenu.Content class="mt-1">
                         <DropdownMenu.Item onSelect={() => showEditProjectDialog(p())}>
                           <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
