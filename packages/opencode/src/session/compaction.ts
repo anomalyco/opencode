@@ -10,105 +10,96 @@ import { SessionProcessor } from "./processor"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
-import { NotFoundError } from "@/storage/storage"
-import { ModelID, ProviderID } from "@/provider/schema"
-import { Effect, Layer, Context, Schema } from "effect"
-import * as DateTime from "effect/DateTime"
-import { InstanceState } from "@/effect/instance-state"
-import { isOverflow as overflow, usable } from "./overflow"
-import { serviceUse } from "@/effect/service-use"
-import { RuntimeFlags } from "@/effect/runtime-flags"
-import { EventV2Bridge } from "@/event-v2-bridge"
-import { SessionEvent } from "@opencode-ai/core/session-event"
+import { ProviderTransform } from "@/provider/transform"
+import { ulid } from "ulid"
 
 const log = Log.create({ service: "session.compaction" })
 
-export const Event = {
-  Compacted: BusEvent.define(
-    "session.compacted",
-    Schema.Struct({
-      sessionID: SessionID,
-    }),
-  ),
-}
+  async function hookPart(input: {
+    sessionID: string
+    messageID: string
+    plugin: string
+    hook: string
+    stage: "before" | "after" | "error"
+    error?: string
+  }) {
+    const now = Date.now()
+    await Session.updatePart({
+      id: Identifier.ascending("part"),
+      messageID: input.messageID,
+      sessionID: input.sessionID,
+      type: "tool",
+      callID: ulid(),
+      tool: "hook",
+      state: {
+        status: "completed",
+        input: {
+          hook: input.plugin,
+          hook_type: `${input.stage} ${input.hook}`,
+          event: input.hook,
+        },
+        output: input.error ?? "",
+        title: input.plugin,
+        metadata: {
+          hook: input.plugin,
+          hook_type: `${input.stage} ${input.hook}`,
+          event: input.hook,
+          output: input.error ?? "",
+        },
+        time: {
+          start: now,
+          end: now,
+        },
+      },
+      metadata: {
+        hook: input.plugin,
+        hook_type: `${input.stage} ${input.hook}`,
+        event: input.hook,
+        error: input.error,
+      },
+    })
+  }
 
-export const PRUNE_MINIMUM = 20_000
-export const PRUNE_PROTECT = 40_000
-const TOOL_OUTPUT_MAX_CHARS = 2_000
-const PRUNE_PROTECTED_TOOLS = ["skill"]
-const DEFAULT_TAIL_TURNS = 2
-const MIN_PRESERVE_RECENT_TOKENS = 2_000
-const MAX_PRESERVE_RECENT_TOKENS = 8_000
-const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <template> and keep the section order unchanged. Do not include the <template> tags in your response.
-<template>
-## Goal
-- [single-sentence task summary]
+  function hookOpts(sessionID: string, messageID: string) {
+    return {
+      onInvoke: async (event: {
+        plugin: string
+        custom: boolean
+        hook: string
+        stage: "before" | "after" | "error"
+        error?: string
+      }) => {
+        if (!event.custom) return
+        try {
+          await hookPart({
+            sessionID,
+            messageID,
+            plugin: event.plugin,
+            hook: event.hook,
+            stage: event.stage,
+            error: event.error,
+          })
+        } catch (err) {
+          log.debug("skip hook timeline part", {
+            sessionID,
+            messageID,
+            plugin: event.plugin,
+            hook: event.hook,
+            stage: event.stage,
+            error: err instanceof Error ? err.message : String(err),
+          })
+        }
+      },
+    }
+  }
 
-## Constraints & Preferences
-- [user constraints, preferences, specs, or "(none)"]
-
-## Progress
-### Done
-- [completed work or "(none)"]
-
-### In Progress
-- [current work or "(none)"]
-
-### Blocked
-- [blockers or "(none)"]
-
-## Key Decisions
-- [decision and why, or "(none)"]
-
-## Next Steps
-- [ordered next actions or "(none)"]
-
-## Critical Context
-- [important technical facts, errors, open questions, or "(none)"]
-
-## Relevant Files
-- [file or directory path: why it matters, or "(none)"]
-</template>
-
-Rules:
-- Keep every section, even when empty.
-- Use terse bullets, not prose paragraphs.
-- Preserve exact file paths, commands, error strings, and identifiers when known.
-- Do not mention the summary process or that context was compacted.`
-type Turn = {
-  start: number
-  end: number
-  id: MessageID
-}
-
-type Tail = {
-  start: number
-  id: MessageID
-}
-
-type CompletedCompaction = {
-  userIndex: number
-  assistantIndex: number
-  summary: string | undefined
-}
-
-function summaryText(message: MessageV2.WithParts) {
-  const text = message.parts
-    .filter((part): part is MessageV2.TextPart => part.type === "text")
-    .map((part) => part.text.trim())
-    .filter(Boolean)
-    .join("\n\n")
-    .trim()
-  return text || undefined
-}
-
-function completedCompactions(messages: MessageV2.WithParts[]) {
-  const users = new Map<MessageID, number>()
-  for (let i = 0; i < messages.length; i++) {
-    const msg = messages[i]
-    if (msg.info.role !== "user") continue
-    if (!msg.parts.some((part) => part.type === "compaction")) continue
-    users.set(msg.info.id, i)
+  export const Event = {
+    Compacted: BusEvent.define(
+      "session.compacted",
+      z.object({
+        sessionID: z.string(),
+      }),
+    ),
   }
 
   return messages.flatMap((msg, assistantIndex): CompletedCompaction[] => {
@@ -340,6 +331,16 @@ export const layer = Layer.effect(
         log.info("pruned", { count: toPrune.length })
       }
     })
+    // Allow plugins to inject context or replace compaction prompt
+    const compacting = await Plugin.trigger(
+      "experimental.session.compacting",
+      { sessionID: input.sessionID },
+      { context: [], prompt: undefined },
+      hookOpts(input.sessionID, msg.id),
+    )
+    const defaultPrompt = `Provide a detailed prompt for continuing our conversation above.
+Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next.
+The summary that you construct will be used so that another agent can read it and continue the work.
 
     const processCompaction = Effect.fn("SessionCompaction.process")(function* (input: {
       parentID: MessageID
