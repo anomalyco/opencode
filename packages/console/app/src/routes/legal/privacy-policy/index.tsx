@@ -1,16 +1,18 @@
 import "../../brand/index.css"
 import "./index.css"
-import { Title, Meta, Link } from "@solidjs/meta"
+import { Title, Meta } from "@solidjs/meta"
 import { Header } from "~/component/header"
-import { config } from "~/config"
 import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
+import { LocaleLinks } from "~/component/locale-links"
+import { useLanguage } from "~/context/language"
 
 export default function PrivacyPolicy() {
+  const language = useLanguage()
   return (
     <main data-page="legal">
       <Title>OpenCode | Privacy Policy</Title>
-      <Link rel="canonical" href={`${config.baseUrl}/legal/privacy-policy`} />
+      <LocaleLinks path="/legal/privacy-policy" />
       <Meta name="description" content="OpenCode privacy policy" />
       <div data-component="container">
         <Header />
@@ -19,7 +21,7 @@ export default function PrivacyPolicy() {
           <section data-component="brand-content">
             <article data-component="privacy-policy">
               <h1>Privacy Policy</h1>
-              <p class="effective-date">Effective date: Dec 16, 2025</p>
+              <p class="effective-date">Effective date: Mar 6, 2026</p>
 
               <p>
                 At OpenCode, we take your privacy seriously. Please read this Privacy Policy to learn how we treat your
@@ -28,14 +30,17 @@ export default function PrivacyPolicy() {
                   By using or accessing our Services in any manner, you acknowledge that you accept the practices and
                   policies outlined below, and you hereby consent that we will collect, use and disclose your
                   information as described in this Privacy Policy.
-                </strong>
+                </strong>{" "}
+                For clarity, our open source software that is not provided to you on a hosted basis is subject to the
+                open source license and terms set forth on the applicable repository where you access such open source
+                software, and such license and terms will exclusively govern your use of such open source software.
               </p>
 
               <p>
                 Remember that your use of OpenCode is at all times subject to our Terms of Use,{" "}
-                <a href="/legal/terms-of-service">https://opencode.ai/legal/terms-of-service</a>, which incorporates
-                this Privacy Policy. Any terms we use in this Policy without defining them have the definitions given to
-                them in the Terms of Use.
+                <a href={language.route("/legal/terms-of-service")}>https://opencode.ai/legal/terms-of-service</a>,
+                which incorporates this Privacy Policy. Any terms we use in this Policy without defining them have the
+                definitions given to them in the Terms of Use.
               </p>
 
               <p>You may print a copy of this Privacy Policy by clicking the print button in your browser.</p>
@@ -380,9 +385,7 @@ export default function PrivacyPolicy() {
               </ul>
 
               <h3>Parties You Authorize, Access or Authenticate</h3>
-              <ul>
-                <li>Home buyers</li>
-              </ul>
+              <p>Parties You Authorize, Access or Authenticate.</p>
 
               <h3>Legal Obligations</h3>
               <p>
@@ -1500,6 +1503,7 @@ export default function PrivacyPolicy() {
                   Email: <a href="mailto:contact@anoma.ly">contact@anoma.ly</a>
                 </li>
                 <li>Phone: +1 415 794-0209</li>
+                <li>Address: 2443 Fillmore St #380-6343, San Francisco, CA 94115, United States</li>
               </ul>
             </article>
           </section>

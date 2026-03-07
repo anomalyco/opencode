@@ -1,48 +1,25 @@
-import { describe, expect, test } from "bun:test"
+import { describe, test, expect } from "bun:test"
 import path from "path"
+import fs from "fs/promises"
 import { EditTool } from "../../src/tool/edit"
 import { Instance } from "../../src/project/instance"
-import { FileTime } from "../../src/file/time"
 import { tmpdir } from "../fixture/fixture"
+import { FileTime } from "../../src/file/time"
 
-const baseCtx = {
-  sessionID: "test",
+const ctx = {
+  sessionID: "test-edit-session",
   messageID: "",
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
+  messages: [],
   metadata: () => {},
+  ask: async () => {},
 }
 
-type AskInput = {
-  permission: string
-  patterns: string[]
-  always: string[]
-  metadata: {
-    filepath: string
-    diff: string
-  }
-}
-
-type ToolCtx = typeof baseCtx & {
-  ask: (input: AskInput) => Promise<void>
-}
-
-const baseOld = "alpha\nbeta\ngamma"
-const baseNew = "alpha\nbeta-updated\ngamma"
-const baseAlt = "alpha\nbeta\nomega"
-
-const makeCtx = () => {
-  const calls: AskInput[] = []
-  const ctx: ToolCtx = {
-    ...baseCtx,
-    ask: async (input) => {
-      calls.push(input)
-    },
-  }
-
-  return { ctx, calls }
-}
+const old = "alpha\nbeta\ngamma"
+const next = "alpha\nbeta-updated\ngamma"
+const alt = "alpha\nbeta\nomega"
 
 const normalize = (text: string, ending: "\n" | "\r\n") => {
   const normalized = text.replaceAll("\r\n", "\n")
@@ -50,11 +27,9 @@ const normalize = (text: string, ending: "\n" | "\r\n") => {
   return normalized.replaceAll("\n", "\r\n")
 }
 
-const countLineEndings = (content: string) => {
-  const crlfMatches = content.match(/\r\n/g)
-  const lfMatches = content.match(/\n/g)
-  const crlf = crlfMatches ? crlfMatches.length : 0
-  const lf = lfMatches ? lfMatches.length : 0
+const count = (content: string) => {
+  const crlf = content.match(/\r\n/g)?.length ?? 0
+  const lf = content.match(/\n/g)?.length ?? 0
   return {
     crlf,
     lf: lf - crlf,
@@ -62,33 +37,32 @@ const countLineEndings = (content: string) => {
 }
 
 const expectLf = (content: string) => {
-  const counts = countLineEndings(content)
+  const counts = count(content)
   expect(counts.crlf).toBe(0)
   expect(counts.lf).toBeGreaterThan(0)
 }
 
 const expectCrlf = (content: string) => {
-  const counts = countLineEndings(content)
+  const counts = count(content)
   expect(counts.lf).toBe(0)
   expect(counts.crlf).toBeGreaterThan(0)
 }
 
-type EditInput = {
+type Input = {
   content: string
   oldString: string
   newString: string
   replaceAll?: boolean
 }
 
-const runEdit = async (input: EditInput) => {
+const apply = async (input: Input) => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(path.join(dir, "test.txt"), input.content)
     },
   })
-  const ctxData = makeCtx()
-  const ctx = ctxData.ctx
-  return Instance.provide({
+
+  return await Instance.provide({
     directory: tmp.path,
     fn: async () => {
       const edit = await EditTool.init()
@@ -103,125 +77,596 @@ const runEdit = async (input: EditInput) => {
         },
         ctx,
       )
-      return Bun.file(filePath).text()
+      return await Bun.file(filePath).text()
     },
   })
 }
 
-describe("tool.edit line endings", () => {
-  test("preserves LF with LF multi-line strings", async () => {
-    const content = normalize(baseOld + "\n", "\n")
-    const output = await runEdit({
-      content,
-      oldString: normalize(baseOld, "\n"),
-      newString: normalize(baseNew, "\n"),
+describe("tool.edit", () => {
+  describe("creating new files", () => {
+    test("creates new file when oldString is empty", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "newfile.txt")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const edit = await EditTool.init()
+          const result = await edit.execute(
+            {
+              filePath: filepath,
+              oldString: "",
+              newString: "new content",
+            },
+            ctx,
+          )
+
+          expect(result.metadata.diff).toContain("new content")
+
+          const content = await fs.readFile(filepath, "utf-8")
+          expect(content).toBe("new content")
+        },
+      })
     })
-    expect(output).toBe(normalize(baseNew + "\n", "\n"))
-    expectLf(output)
+
+    test("creates new file with nested directories", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "nested", "dir", "file.txt")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const edit = await EditTool.init()
+          await edit.execute(
+            {
+              filePath: filepath,
+              oldString: "",
+              newString: "nested file",
+            },
+            ctx,
+          )
+
+          const content = await fs.readFile(filepath, "utf-8")
+          expect(content).toBe("nested file")
+        },
+      })
+    })
+
+    test("emits add event for new files", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "new.txt")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const { Bus } = await import("../../src/bus")
+          const { File } = await import("../../src/file")
+          const { FileWatcher } = await import("../../src/file/watcher")
+
+          const events: string[] = []
+          const unsubEdited = Bus.subscribe(File.Event.Edited, () => events.push("edited"))
+          const unsubUpdated = Bus.subscribe(FileWatcher.Event.Updated, () => events.push("updated"))
+
+          const edit = await EditTool.init()
+          await edit.execute(
+            {
+              filePath: filepath,
+              oldString: "",
+              newString: "content",
+            },
+            ctx,
+          )
+
+          expect(events).toContain("edited")
+          expect(events).toContain("updated")
+          unsubEdited()
+          unsubUpdated()
+        },
+      })
+    })
   })
 
-  test("preserves CRLF with CRLF multi-line strings", async () => {
-    const content = normalize(baseOld + "\n", "\r\n")
-    const output = await runEdit({
-      content,
-      oldString: normalize(baseOld, "\r\n"),
-      newString: normalize(baseNew, "\r\n"),
+  describe("editing existing files", () => {
+    test("replaces text in existing file", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "existing.txt")
+      await fs.writeFile(filepath, "old content here", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          FileTime.read(ctx.sessionID, filepath)
+
+          const edit = await EditTool.init()
+          const result = await edit.execute(
+            {
+              filePath: filepath,
+              oldString: "old content",
+              newString: "new content",
+            },
+            ctx,
+          )
+
+          expect(result.output).toContain("Edit applied successfully")
+
+          const content = await fs.readFile(filepath, "utf-8")
+          expect(content).toBe("new content here")
+        },
+      })
     })
-    expect(output).toBe(normalize(baseNew + "\n", "\r\n"))
-    expectCrlf(output)
+
+    test("throws error when file does not exist", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "nonexistent.txt")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          FileTime.read(ctx.sessionID, filepath)
+
+          const edit = await EditTool.init()
+          await expect(
+            edit.execute(
+              {
+                filePath: filepath,
+                oldString: "old",
+                newString: "new",
+              },
+              ctx,
+            ),
+          ).rejects.toThrow("not found")
+        },
+      })
+    })
+
+    test("throws error when oldString equals newString", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "file.txt")
+      await fs.writeFile(filepath, "content", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const edit = await EditTool.init()
+          await expect(
+            edit.execute(
+              {
+                filePath: filepath,
+                oldString: "same",
+                newString: "same",
+              },
+              ctx,
+            ),
+          ).rejects.toThrow("identical")
+        },
+      })
+    })
+
+    test("throws error when oldString not found in file", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "file.txt")
+      await fs.writeFile(filepath, "actual content", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          FileTime.read(ctx.sessionID, filepath)
+
+          const edit = await EditTool.init()
+          await expect(
+            edit.execute(
+              {
+                filePath: filepath,
+                oldString: "not in file",
+                newString: "replacement",
+              },
+              ctx,
+            ),
+          ).rejects.toThrow()
+        },
+      })
+    })
+
+    test("throws error when file was not read first (FileTime)", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "file.txt")
+      await fs.writeFile(filepath, "content", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const edit = await EditTool.init()
+          await expect(
+            edit.execute(
+              {
+                filePath: filepath,
+                oldString: "content",
+                newString: "modified",
+              },
+              ctx,
+            ),
+          ).rejects.toThrow("You must read file")
+        },
+      })
+    })
+
+    test("throws error when file has been modified since read", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "file.txt")
+      await fs.writeFile(filepath, "original content", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          FileTime.read(ctx.sessionID, filepath)
+
+          await new Promise((resolve) => setTimeout(resolve, 100))
+
+          await fs.writeFile(filepath, "modified externally", "utf-8")
+
+          const edit = await EditTool.init()
+          await expect(
+            edit.execute(
+              {
+                filePath: filepath,
+                oldString: "modified externally",
+                newString: "edited",
+              },
+              ctx,
+            ),
+          ).rejects.toThrow("modified since it was last read")
+        },
+      })
+    })
+
+    test("replaces all occurrences with replaceAll option", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "file.txt")
+      await fs.writeFile(filepath, "foo bar foo baz foo", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          FileTime.read(ctx.sessionID, filepath)
+
+          const edit = await EditTool.init()
+          await edit.execute(
+            {
+              filePath: filepath,
+              oldString: "foo",
+              newString: "qux",
+              replaceAll: true,
+            },
+            ctx,
+          )
+
+          const content = await fs.readFile(filepath, "utf-8")
+          expect(content).toBe("qux bar qux baz qux")
+        },
+      })
+    })
+
+    test("emits change event for existing files", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "file.txt")
+      await fs.writeFile(filepath, "original", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          FileTime.read(ctx.sessionID, filepath)
+
+          const { Bus } = await import("../../src/bus")
+          const { File } = await import("../../src/file")
+          const { FileWatcher } = await import("../../src/file/watcher")
+
+          const events: string[] = []
+          const unsubEdited = Bus.subscribe(File.Event.Edited, () => events.push("edited"))
+          const unsubUpdated = Bus.subscribe(FileWatcher.Event.Updated, () => events.push("updated"))
+
+          const edit = await EditTool.init()
+          await edit.execute(
+            {
+              filePath: filepath,
+              oldString: "original",
+              newString: "modified",
+            },
+            ctx,
+          )
+
+          expect(events).toContain("edited")
+          expect(events).toContain("updated")
+          unsubEdited()
+          unsubUpdated()
+        },
+      })
+    })
   })
 
-  test("preserves LF when old/new use CRLF", async () => {
-    const content = normalize(baseOld + "\n", "\n")
-    const output = await runEdit({
-      content,
-      oldString: normalize(baseOld, "\r\n"),
-      newString: normalize(baseNew, "\r\n"),
+  describe("edge cases", () => {
+    test("handles multiline replacements", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "file.txt")
+      await fs.writeFile(filepath, "line1\nline2\nline3", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          FileTime.read(ctx.sessionID, filepath)
+
+          const edit = await EditTool.init()
+          await edit.execute(
+            {
+              filePath: filepath,
+              oldString: "line2",
+              newString: "new line 2\nextra line",
+            },
+            ctx,
+          )
+
+          const content = await fs.readFile(filepath, "utf-8")
+          expect(content).toBe("line1\nnew line 2\nextra line\nline3")
+        },
+      })
     })
-    expect(output).toBe(normalize(baseNew + "\n", "\n"))
-    expectLf(output)
+
+    test("handles CRLF line endings", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "file.txt")
+      await fs.writeFile(filepath, "line1\r\nold\r\nline3", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          FileTime.read(ctx.sessionID, filepath)
+
+          const edit = await EditTool.init()
+          await edit.execute(
+            {
+              filePath: filepath,
+              oldString: "old",
+              newString: "new",
+            },
+            ctx,
+          )
+
+          const content = await fs.readFile(filepath, "utf-8")
+          expect(content).toBe("line1\r\nnew\r\nline3")
+        },
+      })
+    })
+
+    test("throws error when oldString equals newString", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "file.txt")
+      await fs.writeFile(filepath, "content", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const edit = await EditTool.init()
+          await expect(
+            edit.execute(
+              {
+                filePath: filepath,
+                oldString: "",
+                newString: "",
+              },
+              ctx,
+            ),
+          ).rejects.toThrow("identical")
+        },
+      })
+    })
+
+    test("throws error when path is directory", async () => {
+      await using tmp = await tmpdir()
+      const dirpath = path.join(tmp.path, "adir")
+      await fs.mkdir(dirpath)
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          FileTime.read(ctx.sessionID, dirpath)
+
+          const edit = await EditTool.init()
+          await expect(
+            edit.execute(
+              {
+                filePath: dirpath,
+                oldString: "old",
+                newString: "new",
+              },
+              ctx,
+            ),
+          ).rejects.toThrow("directory")
+        },
+      })
+    })
+
+    test("tracks file diff statistics", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "file.txt")
+      await fs.writeFile(filepath, "line1\nline2\nline3", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          FileTime.read(ctx.sessionID, filepath)
+
+          const edit = await EditTool.init()
+          const result = await edit.execute(
+            {
+              filePath: filepath,
+              oldString: "line2",
+              newString: "new line a\nnew line b",
+            },
+            ctx,
+          )
+
+          expect(result.metadata.filediff).toBeDefined()
+          expect(result.metadata.filediff.file).toBe(filepath)
+          expect(result.metadata.filediff.additions).toBeGreaterThan(0)
+        },
+      })
+    })
   })
 
-  test("preserves CRLF when old/new use LF", async () => {
-    const content = normalize(baseOld + "\n", "\r\n")
-    const output = await runEdit({
-      content,
-      oldString: normalize(baseOld, "\n"),
-      newString: normalize(baseNew, "\n"),
+  describe("line endings", () => {
+    test("preserves LF with LF multi-line strings", async () => {
+      const content = normalize(old + "\n", "\n")
+      const output = await apply({
+        content,
+        oldString: normalize(old, "\n"),
+        newString: normalize(next, "\n"),
+      })
+      expect(output).toBe(normalize(next + "\n", "\n"))
+      expectLf(output)
     })
-    expect(output).toBe(normalize(baseNew + "\n", "\r\n"))
-    expectCrlf(output)
+
+    test("preserves CRLF with CRLF multi-line strings", async () => {
+      const content = normalize(old + "\n", "\r\n")
+      const output = await apply({
+        content,
+        oldString: normalize(old, "\r\n"),
+        newString: normalize(next, "\r\n"),
+      })
+      expect(output).toBe(normalize(next + "\n", "\r\n"))
+      expectCrlf(output)
+    })
+
+    test("preserves LF when old/new use CRLF", async () => {
+      const content = normalize(old + "\n", "\n")
+      const output = await apply({
+        content,
+        oldString: normalize(old, "\r\n"),
+        newString: normalize(next, "\r\n"),
+      })
+      expect(output).toBe(normalize(next + "\n", "\n"))
+      expectLf(output)
+    })
+
+    test("preserves CRLF when old/new use LF", async () => {
+      const content = normalize(old + "\n", "\r\n")
+      const output = await apply({
+        content,
+        oldString: normalize(old, "\n"),
+        newString: normalize(next, "\n"),
+      })
+      expect(output).toBe(normalize(next + "\n", "\r\n"))
+      expectCrlf(output)
+    })
+
+    test("preserves LF when newString uses CRLF", async () => {
+      const content = normalize(old + "\n", "\n")
+      const output = await apply({
+        content,
+        oldString: normalize(old, "\n"),
+        newString: normalize(next, "\r\n"),
+      })
+      expect(output).toBe(normalize(next + "\n", "\n"))
+      expectLf(output)
+    })
+
+    test("preserves CRLF when newString uses LF", async () => {
+      const content = normalize(old + "\n", "\r\n")
+      const output = await apply({
+        content,
+        oldString: normalize(old, "\r\n"),
+        newString: normalize(next, "\n"),
+      })
+      expect(output).toBe(normalize(next + "\n", "\r\n"))
+      expectCrlf(output)
+    })
+
+    test("preserves LF with mixed old/new line endings", async () => {
+      const content = normalize(old + "\n", "\n")
+      const output = await apply({
+        content,
+        oldString: "alpha\nbeta\r\ngamma",
+        newString: "alpha\r\nbeta\nomega",
+      })
+      expect(output).toBe(normalize(alt + "\n", "\n"))
+      expectLf(output)
+    })
+
+    test("preserves CRLF with mixed old/new line endings", async () => {
+      const content = normalize(old + "\n", "\r\n")
+      const output = await apply({
+        content,
+        oldString: "alpha\r\nbeta\ngamma",
+        newString: "alpha\nbeta\r\nomega",
+      })
+      expect(output).toBe(normalize(alt + "\n", "\r\n"))
+      expectCrlf(output)
+    })
+
+    test("replaceAll preserves LF for multi-line blocks", async () => {
+      const blockOld = "alpha\nbeta"
+      const blockNew = "alpha\nbeta-updated"
+      const content = normalize(blockOld + "\n" + blockOld + "\n", "\n")
+      const output = await apply({
+        content,
+        oldString: normalize(blockOld, "\n"),
+        newString: normalize(blockNew, "\n"),
+        replaceAll: true,
+      })
+      expect(output).toBe(normalize(blockNew + "\n" + blockNew + "\n", "\n"))
+      expectLf(output)
+    })
+
+    test("replaceAll preserves CRLF for multi-line blocks", async () => {
+      const blockOld = "alpha\nbeta"
+      const blockNew = "alpha\nbeta-updated"
+      const content = normalize(blockOld + "\n" + blockOld + "\n", "\r\n")
+      const output = await apply({
+        content,
+        oldString: normalize(blockOld, "\r\n"),
+        newString: normalize(blockNew, "\r\n"),
+        replaceAll: true,
+      })
+      expect(output).toBe(normalize(blockNew + "\n" + blockNew + "\n", "\r\n"))
+      expectCrlf(output)
+    })
   })
 
-  test("preserves LF when newString uses CRLF", async () => {
-    const content = normalize(baseOld + "\n", "\n")
-    const output = await runEdit({
-      content,
-      oldString: normalize(baseOld, "\n"),
-      newString: normalize(baseNew, "\r\n"),
-    })
-    expect(output).toBe(normalize(baseNew + "\n", "\n"))
-    expectLf(output)
-  })
+  describe("concurrent editing", () => {
+    test("serializes concurrent edits to same file", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "file.txt")
+      await fs.writeFile(filepath, "0", "utf-8")
 
-  test("preserves CRLF when newString uses LF", async () => {
-    const content = normalize(baseOld + "\n", "\r\n")
-    const output = await runEdit({
-      content,
-      oldString: normalize(baseOld, "\r\n"),
-      newString: normalize(baseNew, "\n"),
-    })
-    expect(output).toBe(normalize(baseNew + "\n", "\r\n"))
-    expectCrlf(output)
-  })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          FileTime.read(ctx.sessionID, filepath)
 
-  test("preserves LF with mixed old/new line endings", async () => {
-    const content = normalize(baseOld + "\n", "\n")
-    const output = await runEdit({
-      content,
-      oldString: "alpha\nbeta\r\ngamma",
-      newString: "alpha\r\nbeta\nomega",
-    })
-    expect(output).toBe(normalize(baseAlt + "\n", "\n"))
-    expectLf(output)
-  })
+          const edit = await EditTool.init()
 
-  test("preserves CRLF with mixed old/new line endings", async () => {
-    const content = normalize(baseOld + "\n", "\r\n")
-    const output = await runEdit({
-      content,
-      oldString: "alpha\r\nbeta\ngamma",
-      newString: "alpha\nbeta\r\nomega",
-    })
-    expect(output).toBe(normalize(baseAlt + "\n", "\r\n"))
-    expectCrlf(output)
-  })
+          const promise1 = edit.execute(
+            {
+              filePath: filepath,
+              oldString: "0",
+              newString: "1",
+            },
+            ctx,
+          )
 
-  test("replaceAll preserves LF for multi-line blocks", async () => {
-    const blockOld = "alpha\nbeta"
-    const blockNew = "alpha\nbeta-updated"
-    const content = normalize(blockOld + "\n" + blockOld + "\n", "\n")
-    const output = await runEdit({
-      content,
-      oldString: normalize(blockOld, "\n"),
-      newString: normalize(blockNew, "\n"),
-      replaceAll: true,
-    })
-    expect(output).toBe(normalize(blockNew + "\n" + blockNew + "\n", "\n"))
-    expectLf(output)
-  })
+          FileTime.read(ctx.sessionID, filepath)
 
-  test("replaceAll preserves CRLF for multi-line blocks", async () => {
-    const blockOld = "alpha\nbeta"
-    const blockNew = "alpha\nbeta-updated"
-    const content = normalize(blockOld + "\n" + blockOld + "\n", "\r\n")
-    const output = await runEdit({
-      content,
-      oldString: normalize(blockOld, "\r\n"),
-      newString: normalize(blockNew, "\r\n"),
-      replaceAll: true,
+          const promise2 = edit.execute(
+            {
+              filePath: filepath,
+              oldString: "0",
+              newString: "2",
+            },
+            ctx,
+          )
+
+          const results = await Promise.allSettled([promise1, promise2])
+          expect(results.some((r) => r.status === "fulfilled")).toBe(true)
+        },
+      })
     })
-    expect(output).toBe(normalize(blockNew + "\n" + blockNew + "\n", "\r\n"))
-    expectCrlf(output)
   })
 })

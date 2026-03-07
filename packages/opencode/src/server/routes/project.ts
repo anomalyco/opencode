@@ -6,6 +6,7 @@ import { Project } from "../../project/project"
 import z from "zod"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { InstanceBootstrap } from "../../project/bootstrap"
 
 export const ProjectRoutes = lazy(() =>
   new Hono()
@@ -52,11 +53,45 @@ export const ProjectRoutes = lazy(() =>
         return c.json(Instance.project)
       },
     )
+    .post(
+      "/git/init",
+      describeRoute({
+        summary: "Initialize git repository",
+        description: "Create a git repository for the current project and return the refreshed project info.",
+        operationId: "project.initGit",
+        responses: {
+          200: {
+            description: "Project information after git initialization",
+            content: {
+              "application/json": {
+                schema: resolver(Project.Info),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const dir = Instance.directory
+        const prev = Instance.project
+        const next = await Project.initGit({
+          directory: dir,
+          project: prev,
+        })
+        if (next.id === prev.id && next.vcs === prev.vcs && next.worktree === prev.worktree) return c.json(next)
+        await Instance.reload({
+          directory: dir,
+          worktree: dir,
+          project: next,
+          init: InstanceBootstrap,
+        })
+        return c.json(next)
+      },
+    )
     .patch(
       "/:projectID",
       describeRoute({
         summary: "Update project",
-        description: "Update project properties such as name, icon and color.",
+        description: "Update project properties such as name, icon, and commands.",
         operationId: "project.update",
         responses: {
           200: {

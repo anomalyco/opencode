@@ -1,4 +1,4 @@
-import { and, Database, eq, gte, inArray, isNull, lte, or, sql, sum } from "@opencode-ai/console-core/drizzle/index.js"
+import { and, Database, eq, gte, inArray, isNull, lt, or, sql, sum } from "@opencode-ai/console-core/drizzle/index.js"
 import { UsageTable } from "@opencode-ai/console-core/schema/billing.sql.js"
 import { KeyTable } from "@opencode-ai/console-core/schema/key.sql.js"
 import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
@@ -20,6 +20,7 @@ import {
   Legend,
   type ChartConfiguration,
 } from "chart.js"
+import { useI18n } from "~/context/i18n"
 
 Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend)
 
@@ -27,9 +28,7 @@ async function getCosts(workspaceID: string, year: number, month: number) {
   "use server"
   return withActor(async () => {
     const startDate = new Date(year, month, 1)
-    const endDate = new Date(year, month + 1, 0)
-
-    // First query: get usage data without joining keys
+    const endDate = new Date(year, month + 1, 1)
     const usageData = await Database.use((tx) =>
       tx
         .select({
@@ -37,21 +36,27 @@ async function getCosts(workspaceID: string, year: number, month: number) {
           model: UsageTable.model,
           totalCost: sum(UsageTable.cost),
           keyId: UsageTable.keyID,
+          plan: sql<string | null>`JSON_EXTRACT(${UsageTable.enrichment}, '$.plan')`,
         })
         .from(UsageTable)
         .where(
           and(
             eq(UsageTable.workspaceID, workspaceID),
             gte(UsageTable.timeCreated, startDate),
-            lte(UsageTable.timeCreated, endDate),
-            or(isNull(UsageTable.enrichment), sql`JSON_EXTRACT(${UsageTable.enrichment}, '$.plan') != 'sub'`),
+            lt(UsageTable.timeCreated, endDate),
           ),
         )
-        .groupBy(sql`DATE(${UsageTable.timeCreated})`, UsageTable.model, UsageTable.keyID)
+        .groupBy(
+          sql`DATE(${UsageTable.timeCreated})`,
+          UsageTable.model,
+          UsageTable.keyID,
+          sql`JSON_EXTRACT(${UsageTable.enrichment}, '$.plan')`,
+        )
         .then((x) =>
           x.map((r) => ({
             ...r,
             totalCost: r.totalCost ? parseInt(r.totalCost) : 0,
+            plan: r.plan as "sub" | "lite" | "byok" | null,
           })),
         ),
     )
@@ -86,10 +91,8 @@ async function getCosts(workspaceID: string, year: number, month: number) {
       usage: usageData,
       keys: keysData.map((key) => ({
         id: key.keyId,
-        displayName:
-          key.timeDeleted !== null
-            ? `${key.userEmail} - ${key.keyName} (deleted)`
-            : `${key.userEmail} - ${key.keyName}`,
+        displayName: `${key.userEmail} - ${key.keyName}`,
+        deleted: key.timeDeleted !== null,
       })),
     }
   }, workspaceID)
@@ -128,7 +131,7 @@ function formatDateLabel(dateStr: string): string {
   date.setMonth(m - 1)
   date.setDate(d)
   date.setHours(0, 0, 0, 0)
-  const month = date.toLocaleDateString("en-US", { month: "short" })
+  const month = date.toLocaleDateString(undefined, { month: "short" })
   const day = date.getUTCDate().toString().padStart(2, "0")
   return `${month} ${day}`
 }
@@ -148,6 +151,7 @@ export function GraphSection() {
   let canvasRef: HTMLCanvasElement | undefined
   let chartInstance: Chart | undefined
   const params = useParams()
+  const i18n = useI18n()
   const now = new Date()
   const [store, setStore] = createStore({
     data: null as Awaited<ReturnType<typeof getCosts>> | null,
@@ -189,13 +193,14 @@ export function GraphSection() {
   })
 
   const getKeyName = (keyID: string | null): string => {
-    if (!keyID || !store.data?.keys) return "All Keys"
+    if (!keyID || !store.data?.keys) return i18n.t("workspace.cost.allKeys")
     const found = store.data.keys.find((k) => k.id === keyID)
-    return found?.displayName ?? "All Keys"
+    if (!found) return i18n.t("workspace.cost.allKeys")
+    return found.deleted ? `${found.displayName} ${i18n.t("workspace.cost.deletedSuffix")}` : found.displayName
   }
 
   const formatMonthYear = () =>
-    new Date(store.year, store.month, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" })
+    new Date(store.year, store.month, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" })
 
   const isCurrentMonth = () => store.year === now.getFullYear() && store.month === now.getMonth()
 
@@ -212,30 +217,74 @@ export function GraphSection() {
     const colorText = styles.getPropertyValue("--color-text").trim()
     const colorTextSecondary = styles.getPropertyValue("--color-text-secondary").trim()
     const colorBorder = styles.getPropertyValue("--color-border").trim()
+    const subSuffix = ` (${i18n.t("workspace.cost.subscriptionShort")})`
+    const liteSuffix = ` (${i18n.t("workspace.cost.liteShort")})`
 
-    const dailyData = new Map<string, Map<string, number>>()
-    for (const dateKey of dates) dailyData.set(dateKey, new Map())
+    const dailyDataRegular = new Map<string, Map<string, number>>()
+    const dailyDataSub = new Map<string, Map<string, number>>()
+    const dailyDataLite = new Map<string, Map<string, number>>()
+    for (const dateKey of dates) {
+      dailyDataRegular.set(dateKey, new Map())
+      dailyDataSub.set(dateKey, new Map())
+      dailyDataLite.set(dateKey, new Map())
+    }
 
     data.usage
       .filter((row) => (store.key ? row.keyId === store.key : true))
       .forEach((row) => {
-        const dayMap = dailyData.get(row.date)
+        const targetMap = row.plan === "sub" ? dailyDataSub : row.plan === "lite" ? dailyDataLite : dailyDataRegular
+        const dayMap = targetMap.get(row.date)
         if (!dayMap) return
         dayMap.set(row.model, (dayMap.get(row.model) ?? 0) + row.totalCost)
       })
 
     const filteredModels = store.model === null ? getModels() : [store.model]
 
-    const datasets = filteredModels.map((model) => {
-      const color = getModelColor(model)
-      return {
-        label: model,
-        data: dates.map((date) => (dailyData.get(date)?.get(model) || 0) / 100_000_000),
-        backgroundColor: color,
-        hoverBackgroundColor: color,
-        borderWidth: 0,
-      }
-    })
+    // Create datasets: regular first, then subscription, then lite (with visual distinction via opacity)
+    const datasets = [
+      ...filteredModels
+        .filter((model) => dates.some((date) => (dailyDataRegular.get(date)?.get(model) || 0) > 0))
+        .map((model) => {
+          const color = getModelColor(model)
+          return {
+            label: model,
+            data: dates.map((date) => (dailyDataRegular.get(date)?.get(model) || 0) / 100_000_000),
+            backgroundColor: color,
+            hoverBackgroundColor: color,
+            borderWidth: 0,
+            stack: "usage",
+          }
+        }),
+      ...filteredModels
+        .filter((model) => dates.some((date) => (dailyDataSub.get(date)?.get(model) || 0) > 0))
+        .map((model) => {
+          const color = getModelColor(model)
+          return {
+            label: `${model}${subSuffix}`,
+            data: dates.map((date) => (dailyDataSub.get(date)?.get(model) || 0) / 100_000_000),
+            backgroundColor: addOpacityToColor(color, 0.5),
+            hoverBackgroundColor: addOpacityToColor(color, 0.7),
+            borderWidth: 1,
+            borderColor: color,
+            stack: "subscription",
+          }
+        }),
+      ...filteredModels
+        .filter((model) => dates.some((date) => (dailyDataLite.get(date)?.get(model) || 0) > 0))
+        .map((model) => {
+          const color = getModelColor(model)
+          return {
+            label: `${model}${liteSuffix}`,
+            data: dates.map((date) => (dailyDataLite.get(date)?.get(model) || 0) / 100_000_000),
+            backgroundColor: addOpacityToColor(color, 0.35),
+            hoverBackgroundColor: addOpacityToColor(color, 0.55),
+            borderWidth: 1,
+            borderColor: addOpacityToColor(color, 0.7),
+            borderDash: [4, 2],
+            stack: "lite",
+          }
+        }),
+    ]
 
     return {
       type: "bar",
@@ -292,12 +341,9 @@ export function GraphSection() {
             borderWidth: 1,
             padding: 12,
             displayColors: true,
+            filter: (item) => (item.parsed.y ?? 0) > 0,
             callbacks: {
-              label: (context) => {
-                const value = context.parsed.y
-                if (!value || value === 0) return
-                return `${context.dataset.label}: $${value.toFixed(2)}`
-              },
+              label: (context) => `${context.dataset.label}: $${(context.parsed.y ?? 0).toFixed(2)}`,
             },
           },
           legend: {
@@ -317,8 +363,21 @@ export function GraphSection() {
               const chart = legend.chart
               chart.data.datasets?.forEach((dataset, i) => {
                 const meta = chart.getDatasetMeta(i)
-                const baseColor = getModelColor(dataset.label || "")
-                const color = i === legendItem.datasetIndex ? baseColor : addOpacityToColor(baseColor, 0.3)
+                const label = dataset.label || ""
+                const isSub = label.endsWith(subSuffix)
+                const isLite = label.endsWith(liteSuffix)
+                const model = isSub
+                  ? label.slice(0, -subSuffix.length)
+                  : isLite
+                    ? label.slice(0, -liteSuffix.length)
+                    : label
+                const baseColor = getModelColor(model)
+                const originalColor = isSub
+                  ? addOpacityToColor(baseColor, 0.5)
+                  : isLite
+                    ? addOpacityToColor(baseColor, 0.35)
+                    : baseColor
+                const color = i === legendItem.datasetIndex ? originalColor : addOpacityToColor(baseColor, 0.15)
                 meta.data.forEach((bar: any) => {
                   bar.options.backgroundColor = color
                 })
@@ -329,9 +388,22 @@ export function GraphSection() {
               const chart = legend.chart
               chart.data.datasets?.forEach((dataset, i) => {
                 const meta = chart.getDatasetMeta(i)
-                const baseColor = getModelColor(dataset.label || "")
+                const label = dataset.label || ""
+                const isSub = label.endsWith(subSuffix)
+                const isLite = label.endsWith(liteSuffix)
+                const model = isSub
+                  ? label.slice(0, -subSuffix.length)
+                  : isLite
+                    ? label.slice(0, -liteSuffix.length)
+                    : label
+                const baseColor = getModelColor(model)
+                const color = isSub
+                  ? addOpacityToColor(baseColor, 0.5)
+                  : isLite
+                    ? addOpacityToColor(baseColor, 0.35)
+                    : baseColor
                 meta.data.forEach((bar: any) => {
-                  bar.options.backgroundColor = baseColor
+                  bar.options.backgroundColor = color
                 })
               })
               chart.update("none")
@@ -372,8 +444,8 @@ export function GraphSection() {
   return (
     <section class={styles.root}>
       <div data-slot="section-title">
-        <h2>Cost</h2>
-        <p>Usage costs broken down by model.</p>
+        <h2>{i18n.t("workspace.cost.title")}</h2>
+        <p>{i18n.t("workspace.cost.subtitle")}</p>
       </div>
 
       <div data-slot="filter-container">
@@ -387,13 +459,13 @@ export function GraphSection() {
           </button>
         </div>
         <Dropdown
-          trigger={store.model === null ? "All Models" : store.model}
+          trigger={store.model === null ? i18n.t("workspace.cost.allModels") : store.model}
           open={store.modelDropdownOpen}
           onOpenChange={(open) => setStore({ modelDropdownOpen: open })}
         >
           <>
             <button data-slot="model-item" onClick={() => onSelectModel(null)}>
-              <span>All Models</span>
+              <span>{i18n.t("workspace.cost.allModels")}</span>
             </button>
             <For each={getModels()}>
               {(model) => (
@@ -411,12 +483,14 @@ export function GraphSection() {
         >
           <>
             <button data-slot="model-item" onClick={() => onSelectKey(null)}>
-              <span>All Keys</span>
+              <span>{i18n.t("workspace.cost.allKeys")}</span>
             </button>
             <For each={store.data?.keys || []}>
               {(key) => (
                 <button data-slot="model-item" onClick={() => onSelectKey(key.id)}>
-                  <span>{key.displayName}</span>
+                  <span>
+                    {key.deleted ? `${key.displayName} ${i18n.t("workspace.cost.deletedSuffix")}` : key.displayName}
+                  </span>
                 </button>
               )}
             </For>
@@ -428,7 +502,7 @@ export function GraphSection() {
         when={chartConfig()}
         fallback={
           <div data-component="empty-state">
-            <p>No usage data available for the selected period.</p>
+            <p>{i18n.t("workspace.cost.empty")}</p>
           </div>
         }
       >
