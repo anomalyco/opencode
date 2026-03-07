@@ -19,6 +19,7 @@ export namespace Plugin {
   type Item = {
     name: string
     hooks: Hooks
+    custom: boolean
   }
 
   const BUILTIN = ["opencode-anthropic-auth@0.0.13"]
@@ -49,7 +50,7 @@ export namespace Plugin {
       const init = await plugin(input).catch((err) => {
         log.error("failed to load internal plugin", { name: plugin.name, error: err })
       })
-      if (init) hooks.push({ name: plugin.name || "internal", hooks: init })
+      if (init) hooks.push({ name: plugin.name || "internal", hooks: init, custom: false })
     }
 
     let plugins = config.plugin ?? []
@@ -59,6 +60,7 @@ export namespace Plugin {
     }
 
     for (let plugin of plugins) {
+      const spec = plugin
       // ignore old codex plugin since it is supported first party now
       if (plugin.includes("opencode-openai-codex-auth") || plugin.includes("opencode-copilot-auth")) continue
       log.info("loading plugin", { path: plugin })
@@ -91,7 +93,7 @@ export namespace Plugin {
             const init = await fn(input)
             const base = Config.getPluginName(plugin)
             const name = _name === "default" ? base : `${base}:${_name}`
-            hooks.push({ name, hooks: init })
+            hooks.push({ name, hooks: init, custom: !spec.startsWith("opencode-") })
           }
         })
         .catch((err) => {
@@ -122,6 +124,7 @@ export namespace Plugin {
     opts?: {
       onInvoke?: (input: {
         plugin: string
+        custom: boolean
         hook: string
         stage: "before" | "after" | "error"
         error?: string
@@ -134,6 +137,7 @@ export namespace Plugin {
       if (!fn) continue
       await opts?.onInvoke?.({
         plugin: item.name,
+        custom: item.custom,
         hook: String(name),
         stage: "before",
       })
@@ -144,12 +148,14 @@ export namespace Plugin {
         await fn(input, output)
         await opts?.onInvoke?.({
           plugin: item.name,
+          custom: item.custom,
           hook: String(name),
           stage: "after",
         })
       } catch (err) {
         await opts?.onInvoke?.({
           plugin: item.name,
+          custom: item.custom,
           hook: String(name),
           stage: "error",
           error: err instanceof Error ? err.message : String(err),

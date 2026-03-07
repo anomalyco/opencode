@@ -15,10 +15,89 @@ import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
+import { ulid } from "ulid"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
   const log = Log.create({ service: "session.processor" })
+
+  async function hookPart(input: {
+    sessionID: string
+    messageID: string
+    plugin: string
+    hook: string
+    stage: "before" | "after" | "error"
+    error?: string
+  }) {
+    const now = Date.now()
+    await Session.updatePart({
+      id: Identifier.ascending("part"),
+      messageID: input.messageID,
+      sessionID: input.sessionID,
+      type: "tool",
+      callID: ulid(),
+      tool: "hook",
+      state: {
+        status: "completed",
+        input: {
+          hook: input.plugin,
+          hook_type: `${input.stage} ${input.hook}`,
+          event: input.hook,
+        },
+        output: input.error ?? "",
+        title: input.plugin,
+        metadata: {
+          hook: input.plugin,
+          hook_type: `${input.stage} ${input.hook}`,
+          event: input.hook,
+          output: input.error ?? "",
+        },
+        time: {
+          start: now,
+          end: now,
+        },
+      },
+      metadata: {
+        hook: input.plugin,
+        hook_type: `${input.stage} ${input.hook}`,
+        event: input.hook,
+        error: input.error,
+      },
+    })
+  }
+
+  function hookOpts(sessionID: string, messageID: string) {
+    return {
+      onInvoke: async (event: {
+        plugin: string
+        custom: boolean
+        hook: string
+        stage: "before" | "after" | "error"
+        error?: string
+      }) => {
+        if (!event.custom) return
+        try {
+          await hookPart({
+            sessionID,
+            messageID,
+            plugin: event.plugin,
+            hook: event.hook,
+            stage: event.stage,
+            error: event.error,
+          })
+        } catch (err) {
+          log.debug("skip hook timeline part", {
+            sessionID,
+            messageID,
+            plugin: event.plugin,
+            hook: event.hook,
+            stage: event.stage,
+            error: err instanceof Error ? err.message : String(err),
+          })
+        }
+      },
+    }
+  }
 
   export type Info = Awaited<ReturnType<typeof create>>
   export type Result = Awaited<ReturnType<Info["process"]>>
@@ -327,6 +406,7 @@ export namespace SessionProcessor {
                         partID: currentText.id,
                       },
                       { text: currentText.text },
+                      hookOpts(input.sessionID, input.assistantMessage.id),
                     )
                     currentText.text = textOutput.text
                     currentText.time = {

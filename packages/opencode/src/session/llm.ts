@@ -22,10 +22,91 @@ import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { PermissionNext } from "@/permission/next"
 import { Auth } from "@/auth"
+import { Session } from "."
+import { Identifier } from "@/id/id"
+import { ulid } from "ulid"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
   export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
+
+  async function hookPart(input: {
+    sessionID: string
+    messageID: string
+    plugin: string
+    hook: string
+    stage: "before" | "after" | "error"
+    error?: string
+  }) {
+    const now = Date.now()
+    await Session.updatePart({
+      id: Identifier.ascending("part"),
+      messageID: input.messageID,
+      sessionID: input.sessionID,
+      type: "tool",
+      callID: ulid(),
+      tool: "hook",
+      state: {
+        status: "completed",
+        input: {
+          hook: input.plugin,
+          hook_type: `${input.stage} ${input.hook}`,
+          event: input.hook,
+        },
+        output: input.error ?? "",
+        title: input.plugin,
+        metadata: {
+          hook: input.plugin,
+          hook_type: `${input.stage} ${input.hook}`,
+          event: input.hook,
+          output: input.error ?? "",
+        },
+        time: {
+          start: now,
+          end: now,
+        },
+      },
+      metadata: {
+        hook: input.plugin,
+        hook_type: `${input.stage} ${input.hook}`,
+        event: input.hook,
+        error: input.error,
+      },
+    })
+  }
+
+  function hookOpts(sessionID: string, messageID: string) {
+    return {
+      onInvoke: async (event: {
+        plugin: string
+        custom: boolean
+        hook: string
+        stage: "before" | "after" | "error"
+        error?: string
+      }) => {
+        if (!event.custom) return
+        try {
+          await hookPart({
+            sessionID,
+            messageID,
+            plugin: event.plugin,
+            hook: event.hook,
+            stage: event.stage,
+            error: event.error,
+          })
+        } catch (err) {
+          log.debug("skip hook timeline part", {
+            sessionID,
+            messageID,
+            plugin: event.plugin,
+            hook: event.hook,
+            stage: event.stage,
+            error: err instanceof Error ? err.message : String(err),
+          })
+        }
+      },
+    }
+  }
 
   export type StreamInput = {
     user: MessageV2.User
@@ -37,6 +118,7 @@ export namespace LLM {
     messages: ModelMessage[]
     small?: boolean
     tools: Record<string, Tool>
+    hooks?: boolean
     retries?: number
     toolChoice?: "auto" | "required" | "none"
   }
@@ -84,6 +166,7 @@ export namespace LLM {
       "experimental.chat.system.transform",
       { sessionID: input.sessionID, model: input.model },
       { system },
+      input.hooks === false ? undefined : hookOpts(input.sessionID, input.user.id),
     )
     // rejoin to maintain 2-part structure for caching if header unchanged
     if (system.length > 2 && system[0] === header) {
@@ -128,6 +211,7 @@ export namespace LLM {
         topK: ProviderTransform.topK(input.model),
         options,
       },
+      input.hooks === false ? undefined : hookOpts(input.sessionID, input.user.id),
     )
 
     const { headers } = await Plugin.trigger(
@@ -142,6 +226,7 @@ export namespace LLM {
       {
         headers: {},
       },
+      input.hooks === false ? undefined : hookOpts(input.sessionID, input.user.id),
     )
 
     const maxOutputTokens =

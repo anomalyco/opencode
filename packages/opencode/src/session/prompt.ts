@@ -111,10 +111,12 @@ export namespace SessionPrompt {
     return {
       onInvoke: async (event: {
         plugin: string
+        custom: boolean
         hook: string
         stage: "before" | "after" | "error"
         error?: string
       }) => {
+        if (!event.custom) return
         try {
           await hookPart({
             sessionID,
@@ -2112,6 +2114,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         system: [],
         small: false,
         tools: {},
+        hooks: false,
         model,
         abort: new AbortController().signal,
         sessionID: input.session.id,
@@ -2234,6 +2237,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           system: [],
           small: false,
           tools: {},
+          hooks: false,
           model,
           abort: new AbortController().signal,
           sessionID: input.sessionID,

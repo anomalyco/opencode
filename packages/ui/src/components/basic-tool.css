@@ -149,6 +149,11 @@
         color: var(--text-interactive-base);
       }
     }
+
+    &.hook-type {
+      opacity: 0.7;
+      font-weight: var(--font-weight-regular);
+    }
   }
 
   [data-slot="basic-tool-tool-arg"] {

@@ -259,8 +259,8 @@ export function getToolInfo(tool: string, input: any = {}, metadata: any = {}): 
       const type = hookType(input, metadata)
       return {
         icon: "console",
-        title: hook ? (type ? `${hook} | ${type}` : hook) : i18n.t("ui.tool.shell"),
-        subtitle: input.description ?? metadata.description,
+        title: hook ?? i18n.t("ui.tool.shell"),
+        subtitle: hook ? type : (input.description ?? metadata.description),
       }
     case "edit":
       return {
@@ -1612,9 +1612,10 @@ ToolRegistry.register({
         {...props}
         icon="console"
         trigger={{
-          title: hook() ? (type() ? `${hook()} | ${type()}` : hook()!) : i18n.t("ui.tool.shell"),
+          title: hook() ?? i18n.t("ui.tool.shell"),
           titleClass: hook() ? "hook-name" : "tool-exec",
-          subtitle: props.input.description ?? props.metadata.description,
+          subtitle: hook() ? type() : (props.input.description ?? props.metadata.description),
+          subtitleClass: hook() ? "hook-type" : undefined,
         }}
       >
         <div data-component="bash-output">
@@ -1656,9 +1657,10 @@ ToolRegistry.register({
         {...props}
         icon="console"
         trigger={{
-          title: hook() ? (type() ? `${hook()} | ${type()}` : hook()!) : i18n.t("ui.tool.shell"),
+          title: hook() ?? i18n.t("ui.tool.shell"),
           titleClass: hook() ? "hook-name" : "tool-exec",
-          subtitle: props.input.description ?? props.metadata.description,
+          subtitle: hook() ? type() : (props.input.description ?? props.metadata.description),
+          subtitleClass: hook() ? "hook-type" : undefined,
         }}
       >
         <Show when={props.output}>
