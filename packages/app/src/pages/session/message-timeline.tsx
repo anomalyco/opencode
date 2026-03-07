@@ -670,7 +670,6 @@ export function MessageTimeline(props: {
                     }}
                     classList={{
                       "min-w-0 w-full max-w-full": true,
-                      "md:max-w-200 2xl:max-w-[1000px]": props.centered,
                     }}
                     style={{ "content-visibility": "auto", "contain-intrinsic-size": "auto 500px" }}
                   >
