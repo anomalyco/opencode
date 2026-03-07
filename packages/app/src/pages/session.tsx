@@ -36,7 +36,7 @@ import { createSessionComposerState, SessionComposerRegion } from "@/pages/sessi
 import { createOpenReviewFile, createSizing } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
-import { syncSessionModel } from "@/pages/session/session-model-helpers"
+import { resetSessionModel, syncSessionModel } from "@/pages/session/session-model-helpers"
 import { createScrollSpy } from "@/pages/session/scroll-spy"
 import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
@@ -421,6 +421,17 @@ export default function Page() {
         if (!msg) return
         syncSessionModel(local, msg)
       },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => params.id,
+      (id, prev) => {
+        if (id || !prev) return
+        resetSessionModel(local)
+      },
+      { defer: true },
     ),
   )
 

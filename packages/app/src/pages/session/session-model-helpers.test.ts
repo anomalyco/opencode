@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { UserMessage } from "@opencode-ai/sdk/v2"
-import { syncSessionModel } from "./session-model-helpers"
+import { resetSessionModel, syncSessionModel } from "./session-model-helpers"
 
 const message = (input?: Partial<Pick<UserMessage, "agent" | "model" | "variant">>) =>
   ({
@@ -20,6 +20,9 @@ describe("syncSessionModel", () => {
     syncSessionModel(
       {
         agent: {
+          current() {
+            return undefined
+          },
           set(value) {
             calls.push(["agent", value])
           },
@@ -54,6 +57,9 @@ describe("syncSessionModel", () => {
     syncSessionModel(
       {
         agent: {
+          current() {
+            return undefined
+          },
           set(value) {
             calls.push(["agent", value])
           },
@@ -78,6 +84,75 @@ describe("syncSessionModel", () => {
     expect(calls).toEqual([
       ["agent", "build"],
       ["model", { providerID: "anthropic", modelID: "claude-sonnet-4" }],
+    ])
+  })
+})
+
+describe("resetSessionModel", () => {
+  test("restores the current agent defaults", () => {
+    const calls: unknown[] = []
+
+    resetSessionModel({
+      agent: {
+        current() {
+          return {
+            model: { providerID: "anthropic", modelID: "claude-sonnet-4" },
+            variant: "high",
+          }
+        },
+        set() {},
+      },
+      model: {
+        set(value) {
+          calls.push(["model", value])
+        },
+        current() {
+          return undefined
+        },
+        variant: {
+          set(value) {
+            calls.push(["variant", value])
+          },
+        },
+      },
+    })
+
+    expect(calls).toEqual([
+      ["model", { providerID: "anthropic", modelID: "claude-sonnet-4" }],
+      ["variant", "high"],
+    ])
+  })
+
+  test("clears the variant when the agent has none", () => {
+    const calls: unknown[] = []
+
+    resetSessionModel({
+      agent: {
+        current() {
+          return {
+            model: { providerID: "anthropic", modelID: "claude-sonnet-4" },
+          }
+        },
+        set() {},
+      },
+      model: {
+        set(value) {
+          calls.push(["model", value])
+        },
+        current() {
+          return undefined
+        },
+        variant: {
+          set(value) {
+            calls.push(["variant", value])
+          },
+        },
+      },
+    })
+
+    expect(calls).toEqual([
+      ["model", { providerID: "anthropic", modelID: "claude-sonnet-4" }],
+      ["variant", undefined],
     ])
   })
 })

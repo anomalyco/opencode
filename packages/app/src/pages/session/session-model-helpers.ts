@@ -3,6 +3,12 @@ import { batch } from "solid-js"
 
 type Local = {
   agent: {
+    current():
+      | {
+          model?: UserMessage["model"]
+          variant?: string
+        }
+      | undefined
     set(name: string | undefined): void
   }
   model: {
@@ -17,6 +23,15 @@ type Local = {
       set(value: string | undefined): void
     }
   }
+}
+
+export const resetSessionModel = (local: Local) => {
+  const agent = local.agent.current()
+  if (!agent) return
+  batch(() => {
+    local.model.set(agent.model)
+    local.model.variant.set(agent.variant)
+  })
 }
 
 export const syncSessionModel = (local: Local, msg: UserMessage) => {
