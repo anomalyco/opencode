@@ -196,7 +196,20 @@ export const SettingsModels: Component = () => {
                             <div class="min-w-0">
                               <span class="text-14-regular text-text-strong truncate block">{item.name}</span>
                             </div>
-                            <div class="flex-shrink-0">
+                            <div class="flex items-center gap-2 flex-shrink-0">
+                              <IconButton
+                                icon="circle-check"
+                                variant="ghost"
+                                size="small"
+                                aria-label={language.t(
+                                  models.favorite.has(key) ? "dialog.model.unfavorite" : "dialog.model.favorite",
+                                )}
+                                classList={{
+                                  "opacity-100": models.favorite.has(key),
+                                  "opacity-30": !models.favorite.has(key),
+                                }}
+                                onClick={() => models.favorite.toggle(key)}
+                              />
                               <Switch
                                 checked={models.visible(key)}
                                 onChange={(checked) => {
