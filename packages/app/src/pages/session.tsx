@@ -1047,8 +1047,10 @@ export default function Page() {
 
         if (opened) {
           const active = tabs().active()
-          const tab = active === "review" || (!active && hasReview()) ? "changes" : "all"
-          layout.fileTree.setTab(tab)
+          if (layout.fileTree.tab() !== "changes") return
+          if (!active) return
+          if (!file.pathFromTab(active)) return
+          layout.fileTree.setTab("all")
         }
       },
       { defer: true },
