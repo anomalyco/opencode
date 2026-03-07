@@ -790,7 +790,7 @@ export default function Page() {
   }
 
   const emptyTurn = () => (
-    <div class="h-full pb-30 flex flex-col items-center justify-center text-center gap-6">
+    <div class="h-full pb-64 flex flex-col items-center justify-center text-center gap-6">
       <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.noChanges")}</div>
     </div>
   )
@@ -905,7 +905,7 @@ export default function Page() {
           diffStyle: layout.review.diffStyle(),
           onDiffStyleChange: layout.review.setDiffStyle,
           loadingClass: "px-6 py-4 text-text-weak",
-          emptyClass: "h-full pb-30 flex flex-col items-center justify-center text-center gap-6",
+          emptyClass: "h-full pb-64 flex flex-col items-center justify-center text-center gap-6",
         })}
       </div>
     </div>
@@ -1274,7 +1274,7 @@ export default function Page() {
                         container: "px-4",
                       },
                       loadingClass: "px-4 py-4 text-text-weak",
-                      emptyClass: "h-full pb-30 flex flex-col items-center justify-center text-center gap-6",
+                      emptyClass: "h-full pb-64 flex flex-col items-center justify-center text-center gap-6",
                     })}
                     scroll={ui.scroll}
                     onResumeScroll={resumeScroll}

@@ -96,7 +96,7 @@ export function SessionSidePanel(props: {
   const empty = (msg: string) => (
     <div class="h-full flex flex-col">
       <div class="h-12 shrink-0" aria-hidden />
-      <div class="flex-1 pb-30 flex items-center justify-center text-center">
+      <div class="flex-1 pb-64 flex items-center justify-center text-center">
         <div class="text-12-regular text-text-weak">{msg}</div>
       </div>
     </div>
