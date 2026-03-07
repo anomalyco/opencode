@@ -60,7 +60,7 @@ export namespace ACP {
     directory: string,
   ): Promise<number | null> {
     const providers = await sdk.config
-      .providers({ directory })
+      .providers({ directory }, { throwOnError: true })
       .then((x) => x.data?.providers ?? [])
       .catch((error) => {
         log.error("failed to get providers for context limit", { error })
