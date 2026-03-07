@@ -417,7 +417,7 @@ export function MessageTimeline(props: {
               style={{ "padding-top": "var(--session-title-height)" }}
               classList={{
                 "w-full": true,
-                "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
+                "md:max-w-[500px] md:mx-auto 2xl:max-w-[700px]": props.centered,
                 "mt-0.5": props.centered,
                 "mt-0": !props.centered,
               }}
@@ -472,7 +472,7 @@ export function MessageTimeline(props: {
                       }}
                       classList={{
                         "min-w-0 w-full max-w-full": true,
-                        "md:max-w-200 2xl:max-w-[1000px]": props.centered,
+                        "md:max-w-[500px] 2xl:max-w-[700px]": props.centered,
                       }}
                     >
                       <Show when={commentCount() > 0}>
