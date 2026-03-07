@@ -66,6 +66,9 @@ export namespace Config {
     if (target.plugin && source.plugin) {
       merged.plugin = Array.from(new Set([...target.plugin, ...source.plugin]))
     }
+    if (target.disabled_plugins && source.disabled_plugins) {
+      merged.disabled_plugins = Array.from(new Set([...target.disabled_plugins, ...source.disabled_plugins]))
+    }
     if (target.instructions && source.instructions) {
       merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
     }
@@ -232,6 +235,11 @@ export namespace Config {
     }
 
     result.plugin = deduplicatePlugins(result.plugin ?? [])
+
+    const disabled = result.disabled_plugins ?? []
+    if (disabled.length) {
+      result.plugin = result.plugin.filter((p) => !disabled.includes(getPluginName(p)))
+    }
 
     return {
       config: result,
@@ -1016,6 +1024,10 @@ export namespace Config {
           "Automatically update to the latest version. Set to true to auto-update, false to disable, or 'notify' to show update notifications",
         ),
       disabled_providers: z.array(z.string()).optional().describe("Disable providers that are loaded automatically"),
+      disabled_plugins: z
+        .array(z.string())
+        .optional()
+        .describe("Disable plugins by name. Matches against the canonical plugin name (e.g. 'oh-my-opencode')"),
       enabled_providers: z
         .array(z.string())
         .optional()

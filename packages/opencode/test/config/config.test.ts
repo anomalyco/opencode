@@ -1994,3 +1994,107 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
     }
   })
 })
+
+describe("disabled_plugins", () => {
+  test("filters out disabled plugins by name", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await writeConfig(dir, {
+          $schema: "https://opencode.ai/config.json",
+          plugin: ["my-plugin@1.0.0", "other-plugin@2.0.0"],
+          disabled_plugins: ["my-plugin"],
+        })
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        const plugins = config.plugin ?? []
+        expect(plugins.some((p) => p.includes("my-plugin"))).toBe(false)
+        expect(plugins.some((p) => p.includes("other-plugin"))).toBe(true)
+      },
+    })
+  })
+
+  test("project disabled_plugins overrides global plugin", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const projectDir = path.join(dir, "project")
+        const opencodeDir = path.join(projectDir, ".opencode")
+        await fs.mkdir(opencodeDir, { recursive: true })
+
+        await writeConfig(dir, {
+          $schema: "https://opencode.ai/config.json",
+          plugin: ["global-plugin@1.0.0", "keep-plugin@1.0.0"],
+        })
+
+        await writeConfig(opencodeDir, {
+          $schema: "https://opencode.ai/config.json",
+          disabled_plugins: ["global-plugin"],
+        })
+      },
+    })
+    await Instance.provide({
+      directory: path.join(tmp.path, "project"),
+      fn: async () => {
+        const config = await Config.get()
+        const plugins = config.plugin ?? []
+        expect(plugins.some((p) => p.includes("global-plugin"))).toBe(false)
+        expect(plugins.some((p) => p.includes("keep-plugin"))).toBe(true)
+      },
+    })
+  })
+
+  test("disabled_plugins matches scoped packages", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await writeConfig(dir, {
+          $schema: "https://opencode.ai/config.json",
+          plugin: ["@scope/my-plugin@1.0.0", "plain-plugin@1.0.0"],
+          disabled_plugins: ["@scope/my-plugin"],
+        })
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        const plugins = config.plugin ?? []
+        expect(plugins.some((p) => p.includes("@scope/my-plugin"))).toBe(false)
+        expect(plugins.some((p) => p.includes("plain-plugin"))).toBe(true)
+      },
+    })
+  })
+
+  test("disabled_plugins merges across config levels", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const projectDir = path.join(dir, "project")
+        const opencodeDir = path.join(projectDir, ".opencode")
+        await fs.mkdir(opencodeDir, { recursive: true })
+
+        await writeConfig(dir, {
+          $schema: "https://opencode.ai/config.json",
+          plugin: ["plugin-a@1.0.0", "plugin-b@1.0.0", "plugin-c@1.0.0"],
+          disabled_plugins: ["plugin-a"],
+        })
+
+        await writeConfig(opencodeDir, {
+          $schema: "https://opencode.ai/config.json",
+          disabled_plugins: ["plugin-b"],
+        })
+      },
+    })
+    await Instance.provide({
+      directory: path.join(tmp.path, "project"),
+      fn: async () => {
+        const config = await Config.get()
+        const plugins = config.plugin ?? []
+        expect(plugins.some((p) => p.includes("plugin-a"))).toBe(false)
+        expect(plugins.some((p) => p.includes("plugin-b"))).toBe(false)
+        expect(plugins.some((p) => p.includes("plugin-c"))).toBe(true)
+      },
+    })
+  })
+})
