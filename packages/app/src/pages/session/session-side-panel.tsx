@@ -60,6 +60,12 @@ export function SessionSidePanel(props: {
     return sync.data.session_diff[id] !== undefined
   })
 
+  const reviewEmptyKey = createMemo(() => {
+    if (sync.project && !sync.project.vcs) return "session.review.noVcs"
+    if (sync.data.config.snapshot === false) return "session.review.noSnapshot"
+    return "session.review.noChanges"
+  })
+
   const diffFiles = createMemo(() => diffs().map((d) => d.file))
   const kinds = createMemo(() => {
     const merge = (a: "add" | "del" | "mix" | undefined, b: "add" | "del" | "mix") => {
@@ -387,7 +393,7 @@ export function SessionSidePanel(props: {
                         />
                       </Show>
                     </Match>
-                    <Match when={true}>{empty(language.t("session.review.noChanges"))}</Match>
+                    <Match when={true}>{empty(language.t(reviewEmptyKey()))}</Match>
                   </Switch>
                 </Tabs.Content>
                 <Tabs.Content value="all" class="bg-background-stronger px-3 py-0">
