@@ -195,7 +195,7 @@ export namespace Pty {
       session.bufferCursor += excess
     })
     ptyProcess.onExit(({ exitCode }) => {
-      if (session.info.status === 'exited') return
+      if (session.info.status === "exited") return
       log.info("session exited", { id, exitCode })
       session.info.status = "exited"
       Bus.publish(Event.Exited, { id, exitCode })
