@@ -17,6 +17,36 @@ export function DialogMessage(props: {
   const message = createMemo(() => sync.data.message[props.sessionID]?.find((x) => x.id === props.messageID))
   const route = useRoute()
 
+  function revert(mode: "conversation" | "conversation_and_code") {
+    return (dialog: { clear: () => void }) => {
+      const msg = message()
+      if (!msg) return
+
+      sdk.client.session.revert({
+        sessionID: props.sessionID,
+        messageID: msg.id,
+        mode,
+      })
+
+      if (props.setPrompt) {
+        const parts = sync.data.part[msg.id]
+        const promptInfo = parts.reduce(
+          (agg, part) => {
+            if (part.type === "text") {
+              if (!part.synthetic) agg.input += part.text
+            }
+            if (part.type === "file") agg.parts.push(part)
+            return agg
+          },
+          { input: "", parts: [] as PromptInfo["parts"] },
+        )
+        props.setPrompt(promptInfo)
+      }
+
+      dialog.clear()
+    }
+  }
+
   return (
     <DialogSelect
       title="Message Actions"
@@ -25,65 +55,13 @@ export function DialogMessage(props: {
           title: "Revert conversation",
           value: "session.revert.conversation",
           description: "undo messages only",
-          onSelect: (dialog) => {
-            const msg = message()
-            if (!msg) return
-
-            sdk.client.session.revert({
-              sessionID: props.sessionID,
-              messageID: msg.id,
-              mode: "conversation",
-            })
-
-            if (props.setPrompt) {
-              const parts = sync.data.part[msg.id]
-              const promptInfo = parts.reduce(
-                (agg, part) => {
-                  if (part.type === "text") {
-                    if (!part.synthetic) agg.input += part.text
-                  }
-                  if (part.type === "file") agg.parts.push(part)
-                  return agg
-                },
-                { input: "", parts: [] as PromptInfo["parts"] },
-              )
-              props.setPrompt(promptInfo)
-            }
-
-            dialog.clear()
-          },
+          onSelect: revert("conversation"),
         },
         {
           title: "Revert conversation and code",
           value: "session.revert.conversation_and_code",
           description: "undo messages and file changes",
-          onSelect: (dialog) => {
-            const msg = message()
-            if (!msg) return
-
-            void sdk.client.session.revert({
-              sessionID: props.sessionID,
-              messageID: msg.id,
-              mode: "conversation_and_code",
-            })
-
-            if (props.setPrompt) {
-              const parts = sync.data.part[msg.id]
-              const promptInfo = parts.reduce(
-                (agg, part) => {
-                  if (part.type === "text") {
-                    if (!part.synthetic) agg.input += part.text
-                  }
-                  if (part.type === "file") agg.parts.push(strip(part))
-                  return agg
-                },
-                { input: "", parts: [] as PromptInfo["parts"] },
-              )
-              props.setPrompt(promptInfo)
-            }
-
-            dialog.clear()
-          },
+          onSelect: revert("conversation_and_code"),
         },
         {
           title: "Copy",
@@ -121,7 +99,7 @@ export function DialogMessage(props: {
                     if (part.type === "text") {
                       if (!part.synthetic) agg.input += part.text
                     }
-                    if (part.type === "file") agg.parts.push(part)
+            if (part.type === "file") agg.parts.push(strip(part))
                     return agg
                   },
                   { input: "", parts: [] as PromptInfo["parts"] },
