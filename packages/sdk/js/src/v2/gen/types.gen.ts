@@ -835,6 +835,7 @@ export type Session = {
     partID?: string
     snapshot?: string
     diff?: string
+    mode?: "conversation" | "conversation_and_code"
   }
 }
 
@@ -1699,6 +1700,7 @@ export type GlobalSession = {
     partID?: string
     snapshot?: string
     diff?: string
+    mode?: "conversation" | "conversation_and_code"
   }
   project: ProjectSummary | null
 }
@@ -3660,6 +3662,7 @@ export type SessionRevertData = {
   body?: {
     messageID: string
     partID?: string
+    mode?: "conversation" | "conversation_and_code"
   }
   path: {
     sessionID: string

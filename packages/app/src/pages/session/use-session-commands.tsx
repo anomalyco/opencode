@@ -342,7 +342,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
           setActiveMessage(lastMsg)
           return
         }
-        await sdk.client.session.revert({ sessionID, messageID: nextMessage.id })
+        const mode = info()?.revert?.mode
+        await sdk.client.session.revert({ sessionID, messageID: nextMessage.id, mode })
         const priorMsg = findLast(userMessages(), (x) => x.id < nextMessage.id)
         setActiveMessage(priorMsg)
       },

@@ -152,6 +152,7 @@ export namespace Session {
           partID: z.string().optional(),
           snapshot: z.string().optional(),
           diff: z.string().optional(),
+          mode: z.enum(["conversation", "conversation_and_code"]).optional(),
         })
         .optional(),
     })

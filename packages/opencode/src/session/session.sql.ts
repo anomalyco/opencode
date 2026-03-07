@@ -26,7 +26,13 @@ export const SessionTable = sqliteTable(
     summary_deletions: integer(),
     summary_files: integer(),
     summary_diffs: text({ mode: "json" }).$type<Snapshot.FileDiff[]>(),
-    revert: text({ mode: "json" }).$type<{ messageID: string; partID?: string; snapshot?: string; diff?: string }>(),
+    revert: text({ mode: "json" }).$type<{
+      messageID: string
+      partID?: string
+      snapshot?: string
+      diff?: string
+      mode?: "conversation" | "conversation_and_code"
+    }>(),
     permission: text({ mode: "json" }).$type<PermissionNext.Ruleset>(),
     ...Timestamps,
     time_compacting: integer(),

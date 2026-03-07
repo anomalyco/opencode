@@ -18,6 +18,7 @@ export namespace SessionRevert {
     sessionID: Identifier.schema("session"),
     messageID: Identifier.schema("message"),
     partID: Identifier.schema("part").optional(),
+    mode: z.enum(["conversation", "conversation_and_code"]).optional(),
   })
   export type RevertInput = z.infer<typeof RevertInput>
 
@@ -27,6 +28,7 @@ export namespace SessionRevert {
     let lastUser: MessageV2.User | undefined
     const session = await Session.get(input.sessionID)
 
+    const mode = input.mode ?? session.revert?.mode ?? "conversation_and_code"
     let revert: Session.Info["revert"]
     const patches: Snapshot.Patch[] = []
     for (const msg of all) {
@@ -56,6 +58,19 @@ export namespace SessionRevert {
 
     if (revert) {
       const session = await Session.get(input.sessionID)
+      if (mode === "conversation") {
+        const rangeMessages = all.filter((msg) => msg.info.id >= revert!.messageID)
+        const diffs = await SessionSummary.computeDiff({ messages: rangeMessages })
+        return Session.setRevert({
+          sessionID: input.sessionID,
+          revert: { ...revert, mode },
+          summary: {
+            additions: diffs.reduce((sum, x) => sum + x.additions, 0),
+            deletions: diffs.reduce((sum, x) => sum + x.deletions, 0),
+            files: diffs.length,
+          },
+        })
+      }
       revert.snapshot = session.revert?.snapshot ?? (await Snapshot.track())
       await Snapshot.revert(patches)
       if (revert.snapshot) revert.diff = await Snapshot.diff(revert.snapshot)
@@ -68,7 +83,7 @@ export namespace SessionRevert {
       })
       return Session.setRevert({
         sessionID: input.sessionID,
-        revert,
+        revert: { ...revert, mode },
         summary: {
           additions: diffs.reduce((sum, x) => sum + x.additions, 0),
           deletions: diffs.reduce((sum, x) => sum + x.deletions, 0),
