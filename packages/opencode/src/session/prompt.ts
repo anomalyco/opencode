@@ -77,20 +77,20 @@ export namespace SessionPrompt {
       sessionID: input.sessionID,
       type: "tool",
       callID: ulid(),
-      tool: "bash",
+      tool: "hook",
       state: {
         status: "completed",
         input: {
-          command: `# hook ${input.plugin}`,
-          description: input.plugin,
+          hook: input.plugin,
+          hook_type: `${input.stage} ${input.hook}`,
+          event: input.hook,
         },
         output: input.error ?? "",
-        title: "",
+        title: input.plugin,
         metadata: {
           hook: input.plugin,
           hook_type: `${input.stage} ${input.hook}`,
           event: input.hook,
-          description: input.plugin,
           output: input.error ?? "",
         },
         time: {

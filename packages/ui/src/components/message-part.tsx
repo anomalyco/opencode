@@ -254,6 +254,7 @@ export function getToolInfo(tool: string, input: any = {}, metadata: any = {}): 
         subtitle: input.description,
       }
     case "bash":
+    case "hook":
       const hook = hookName(input, metadata)
       const type = hookType(input, metadata)
       return {
@@ -1639,6 +1640,34 @@ ToolRegistry.register({
             </pre>
           </div>
         </div>
+      </BasicTool>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "hook",
+  render(props) {
+    const i18n = useI18n()
+    const hook = createMemo(() => hookName(props.input ?? {}, props.metadata ?? {}))
+    const type = createMemo(() => hookType(props.input ?? {}, props.metadata ?? {}))
+    return (
+      <BasicTool
+        {...props}
+        icon="console"
+        trigger={{
+          title: hook() ? (type() ? `${hook()} | ${type()}` : hook()!) : i18n.t("ui.tool.shell"),
+          titleClass: hook() ? "hook-name" : "tool-exec",
+          subtitle: props.input.description ?? props.metadata.description,
+        }}
+      >
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={String(output())} />
+            </div>
+          )}
+        </Show>
       </BasicTool>
     )
   },
