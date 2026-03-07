@@ -20,7 +20,8 @@ export function ToolStatusTitle(props: {
 }) {
   const split = createMemo(() => commonPrefix(props.activeText, props.doneText))
   const suffix = createMemo(
-    () => (props.split ?? true) && split().prefix.length >= 2 && split().aSuffix.length > 0 && split().bSuffix.length > 0,
+    () =>
+      (props.split ?? true) && split().prefix.length >= 2 && split().aSuffix.length > 0 && split().bSuffix.length > 0,
   )
   const prefixLen = createMemo(() => Array.from(split().prefix).length)
   const activeTail = createMemo(() => (suffix() ? split().aSuffix : props.activeText))

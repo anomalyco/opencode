@@ -1,5 +1,12 @@
 import { createEffect, createSignal, on, onCleanup, onMount } from "solid-js"
-import { animate, type AnimationPlaybackControls, clearFadeStyles, clearMaskStyles, GROW_SPRING, WIPE_MASK } from "./motion"
+import {
+  animate,
+  type AnimationPlaybackControls,
+  clearFadeStyles,
+  clearMaskStyles,
+  GROW_SPRING,
+  WIPE_MASK,
+} from "./motion"
 import { prefersReducedMotion } from "../hooks/use-reduced-motion"
 
 const px = (value: number | string | undefined, fallback: number) => {

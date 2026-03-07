@@ -79,8 +79,7 @@
     transform: translateX(-0.08em);
     transition-property: opacity, filter, transform;
     transition-duration:
-      var(--tool-motion-fade-ms, 400ms), var(--tool-motion-fade-ms, 400ms),
-      var(--tool-motion-fade-ms, 400ms);
+      var(--tool-motion-fade-ms, 400ms), var(--tool-motion-fade-ms, 400ms), var(--tool-motion-fade-ms, 400ms);
     transition-timing-function: ease-out, ease-out, ease-out;
   }
 
