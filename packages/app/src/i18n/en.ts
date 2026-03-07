@@ -777,11 +777,8 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Expand edit tool parts",
   "settings.general.row.editToolPartsExpanded.description":
     "Show edit, write, and patch tool parts expanded by default in the timeline",
-  "settings.general.row.showSessionProgressBar.title": "Show session progress bar",
-  "settings.general.row.showSessionProgressBar.description":
-    "Display the animated progress bar at the top of the session when the agent is working",
-  "settings.general.row.pinchZoom.title": "Pinch to zoom",
-  "settings.general.row.pinchZoom.description": "Allow trackpad pinch and Ctrl-scroll gestures to zoom",
+  "settings.general.row.customHookParts.title": "Show custom hooks",
+  "settings.general.row.customHookParts.description": "Display custom hook entries in the timeline",
 
   "settings.general.row.fontSize.title": "Message Font Size",
   "settings.general.row.fontSize.description": "Adjust the font size for user and assistant messages",

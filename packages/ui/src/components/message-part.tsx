@@ -162,6 +162,7 @@ export interface MessageProps {
   actions?: UserActions
   showAssistantCopyPartID?: string | null
   showReasoningSummaries?: boolean
+  showCustomHookParts?: boolean
 }
 
 export type SessionAction = (input: { sessionID: string; messageID: string }) => Promise<void> | void
@@ -299,63 +300,50 @@ export type ToolInfo = {
   subtitle?: string
 }
 
-function agentTitle(i18n: UiI18n, type?: string) {
-  if (!type) return i18n.t("ui.tool.agent.default")
-  return i18n.t("ui.tool.agent", { type })
+function text(value: unknown) {
+  if (typeof value !== "string") return
+  const next = value.trim()
+  if (!next) return
+  return next
 }
 
-const agentTones: Record<string, string> = {
-  ask: "var(--icon-agent-ask-base)",
-  build: "var(--icon-agent-build-base)",
-  docs: "var(--icon-agent-docs-base)",
-  plan: "var(--icon-agent-plan-base)",
-}
-
-const agentPalette = [
-  "var(--icon-agent-ask-base)",
-  "var(--icon-agent-build-base)",
-  "var(--icon-agent-docs-base)",
-  "var(--icon-agent-plan-base)",
-  "var(--syntax-info)",
-  "var(--syntax-success)",
-  "var(--syntax-warning)",
-  "var(--syntax-property)",
-  "var(--syntax-constant)",
-  "var(--text-diff-add-base)",
-  "var(--text-diff-delete-base)",
-  "var(--icon-warning-base)",
-]
-
-function tone(name: string) {
-  let hash = 0
-  for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
-  return agentPalette[hash % agentPalette.length]
-}
-
-function taskAgent(
-  raw: unknown,
-  list?: readonly { name: string; color?: string }[],
-): { name?: string; color?: string } {
-  if (typeof raw !== "string" || !raw) return {}
-  const key = raw.toLowerCase()
-  const item = list?.find((entry) => entry.name === raw || entry.name.toLowerCase() === key)
-  return {
-    name: item?.name ?? `${raw[0]!.toUpperCase()}${raw.slice(1)}`,
-    color: item?.color ?? agentTones[key] ?? tone(key),
+function hookName(input: Record<string, any>, metadata: Record<string, any>) {
+  const keys = ["hook", "hook_name", "hookName", "event", "name"]
+  for (const src of [metadata, input]) {
+    for (const key of keys) {
+      const value = text(src?.[key])
+      if (!value) continue
+      if (value.includes("-")) return value
+      if (value === "session-start") return value
+    }
   }
+
+  const desc = text(input.description) ?? text(metadata.description)
+  if (!desc) return
+  const match = desc.match(/([a-z0-9]+(?:-[a-z0-9]+){1,})/i)
+  if (!match?.[1]) return
+  return match[1]
 }
 
-function webSearchProviderLabel(provider: unknown) {
-  if (provider === "parallel") return "Parallel Web Search"
-  if (provider === "exa") return "Exa Web Search"
-  return "Web Search"
+function hookType(input: Record<string, any>, metadata: Record<string, any>) {
+  const keys = ["hook_type", "hookType", "stage", "phase", "event_type", "eventType"]
+  for (const src of [metadata, input]) {
+    for (const key of keys) {
+      const value = text(src?.[key])
+      if (value) return value
+    }
+  }
+
+  const desc = text(input.description) ?? text(metadata.description)
+  if (!desc) return
+  const phase = /\bbefore\b/i.test(desc) ? "before" : /\bafter\b/i.test(desc) ? "after" : ""
+  const event = desc.match(/([a-z]+(?:\.[a-z_]+)+(?:\.(?:before|after))?)/i)?.[1]
+  if (phase && event) return `${phase} ${event}`
+  if (phase) return phase
+  if (event) return event
 }
 
-export function getToolInfo(
-  tool: string,
-  input: any = {},
-  metadata: Record<string, unknown> | undefined = {},
-): ToolInfo {
+export function getToolInfo(tool: string, input: any = {}, metadata: any = {}): ToolInfo {
   const i18n = useI18n()
   switch (tool) {
     case "read":
@@ -406,10 +394,12 @@ export function getToolInfo(
       }
     }
     case "bash":
+      const hook = hookName(input, metadata)
+      const type = hookType(input, metadata)
       return {
         icon: "console",
-        title: i18n.t("ui.tool.shell"),
-        subtitle: input.description,
+        title: hook ? (type ? `${hook} | ${type}` : hook) : i18n.t("ui.tool.shell"),
+        subtitle: input.description ?? metadata.description,
       }
     case "edit":
       return {
@@ -499,10 +489,44 @@ function taskSession(
 }
 
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
-const HIDDEN_TOOLS = new Set(["todowrite"])
+const HIDDEN_TOOLS = new Set(["todowrite", "todoread"])
+const BUILTIN_TOOLS = new Set([
+  "apply_patch",
+  "bash",
+  "batch",
+  "codesearch",
+  "edit",
+  "glob",
+  "grep",
+  "invalid",
+  "list",
+  "lsp",
+  "plan_exit",
+  "question",
+  "read",
+  "skill",
+  "task",
+  "todoread",
+  "todowrite",
+  "webfetch",
+  "websearch",
+  "write",
+])
 
 function toolName(part: { tool: string }) {
   return part.tool.toLowerCase()
+}
+
+function customTool(tool: string) {
+  return !BUILTIN_TOOLS.has(tool.toLowerCase())
+}
+
+function customPart(part: ToolPart) {
+  const tool = toolName(part)
+  if (customTool(tool)) return true
+  if (tool !== "bash") return false
+  const metadata = part.state.status === "pending" ? {} : (part.state.metadata ?? {})
+  return !!hookName(part.state.input ?? {}, metadata)
 }
 
 function list<T>(value: T[] | undefined | null, fallback: T[]) {
@@ -510,106 +534,12 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
   return fallback
 }
 
-function same<T>(a: readonly T[] | undefined, b: readonly T[] | undefined) {
-  if (a === b) return true
-  if (!a || !b) return false
-  if (a.length !== b.length) return false
-  return a.every((x, i) => x === b[i])
-}
-
-export type PartRef = {
-  messageID: string
-  partID: string
-}
-
-export type PartGroup =
-  | {
-      key: string
-      type: "part"
-      ref: PartRef
-    }
-  | {
-      key: string
-      type: "context"
-      refs: PartRef[]
-    }
-
-function sameRef(a: PartRef, b: PartRef) {
-  return a.messageID === b.messageID && a.partID === b.partID
-}
-
-function sameGroup(a: PartGroup, b: PartGroup) {
-  if (a === b) return true
-  if (a.key !== b.key) return false
-  if (a.type !== b.type) return false
-  if (a.type === "part") {
-    if (b.type !== "part") return false
-    return sameRef(a.ref, b.ref)
-  }
-  if (b.type !== "context") return false
-  if (a.refs.length !== b.refs.length) return false
-  return a.refs.every((ref, i) => sameRef(ref, b.refs[i]!))
-}
-
-export function sameGroups(a: readonly PartGroup[] | undefined, b: readonly PartGroup[] | undefined) {
-  if (a === b) return true
-  if (!a || !b) return false
-  if (a.length !== b.length) return false
-  return a.every((item, i) => sameGroup(item, b[i]!))
-}
-
-export function groupParts(parts: { messageID: string; part: PartType }[]) {
-  const result: PartGroup[] = []
-  let start = -1
-
-  const flush = (end: number) => {
-    if (start < 0) return
-    const first = parts[start]
-    const last = parts[end]
-    if (!first || !last) {
-      start = -1
-      return
-    }
-    result.push({
-      key: `context:${first.part.id}`,
-      type: "context",
-      refs: parts.slice(start, end + 1).map((item) => ({
-        messageID: item.messageID,
-        partID: item.part.id,
-      })),
-    })
-    start = -1
-  }
-
-  parts.forEach((item, index) => {
-    if (isContextGroupTool(item.part)) {
-      if (start < 0) start = index
-      return
-    }
-
-    flush(index - 1)
-    result.push({
-      key: `part:${item.messageID}:${item.part.id}`,
-      type: "part",
-      ref: {
-        messageID: item.messageID,
-        partID: item.part.id,
-      },
-    })
-  })
-
-  flush(parts.length - 1)
-  return result
-}
-
-function index<T extends { id: string }>(items: readonly T[]) {
-  return new Map(items.map((item) => [item.id, item] as const))
-}
-
-export function renderable(part: PartType, showReasoningSummaries = true) {
+function renderable(part: PartType, showReasoningSummaries = true, showCustomHookParts = true) {
   if (part.type === "tool") {
-    if (HIDDEN_TOOLS.has(toolName(part))) return false
-    if (toolName(part) === "question") return part.state.status !== "pending" && part.state.status !== "running"
+    const tool = toolName(part)
+    if (HIDDEN_TOOLS.has(tool)) return false
+    if (!showCustomHookParts && customPart(part)) return false
+    if (tool === "question") return part.state.status !== "pending"
     return true
   }
   if (part.type === "text") return !!part.text?.trim()
@@ -633,6 +563,7 @@ export function AssistantParts(props: {
   turnDurationMs?: number
   working?: boolean
   showReasoningSummaries?: boolean
+  showCustomHookParts?: boolean
   shellToolDefaultOpen?: boolean
   editToolDefaultOpen?: boolean
 }) {
@@ -663,13 +594,66 @@ export function AssistantParts(props: {
     { equals: sameGroups },
   )
 
-  const last = createMemo(() => grouped().at(-1)?.key)
+    const parts = props.messages.flatMap((message) =>
+      list(data.store.part?.[message.id], emptyParts)
+        .filter((part) => renderable(part, props.showReasoningSummaries ?? true, props.showCustomHookParts ?? true))
+        .map((part) => ({ message, part })),
+    )
+
+    let start = -1
+
+    const flush = (end: number) => {
+      if (start < 0) return
+      const first = parts[start]
+      const last = parts[end]
+      if (!first || !last) {
+        start = -1
+        return
+      }
+      push(`context:${first.part.id}`, {
+        type: "context",
+        parts: parts
+          .slice(start, end + 1)
+          .map((x) => x.part)
+          .filter((part): part is ToolPart => isContextGroupTool(part)),
+      })
+      start = -1
+    }
+
+    parts.forEach((item, index) => {
+      if (isContextGroupTool(item.part)) {
+        if (start < 0) start = index
+        return
+      }
+
+      flush(index - 1)
+      push(`part:${item.message.id}:${item.part.id}`, { type: "part", part: item.part, message: item.message })
+    })
+
+    flush(parts.length - 1)
+
+    return { keys, items }
+  })
+
+  const last = createMemo(() => grouped()?.keys.at(-1))
 
   return (
-    <Index each={grouped()}>
-      {(entryAccessor) => {
-        const entryType = createMemo(() => entryAccessor().type)
-
+    <For each={grouped()?.keys ?? []}>
+      {(key) => {
+        const item = createMemo(() => grouped().items[key])
+        const ctx = createMemo(() => {
+          const value = item()
+          if (!value) return
+          if (value.type !== "context") return
+          return value
+        })
+        const part = createMemo(() => {
+          const value = item()
+          if (!value) return
+          if (value.type !== "part") return
+          return value
+        })
+        const tail = createMemo(() => last() === key)
         return (
           <Switch>
             <Match when={entryType() === "context"}>
@@ -734,7 +718,8 @@ function isContextGroupTool(part: PartType): part is ToolPart {
 }
 
 function contextToolDetail(part: ToolPart): string | undefined {
-  const info = getToolInfo(toolName(part), part.state.input ?? {})
+  const metadata = part.state.status === "pending" ? {} : (part.state.metadata ?? {})
+  const info = getToolInfo(toolName(part), part.state.input ?? {}, metadata)
   if (info.subtitle) return info.subtitle
   if (part.state.status === "error") return part.state.error
   if ((part.state.status === "running" || part.state.status === "completed") && part.state.title)
@@ -816,7 +801,12 @@ export function Message(props: MessageProps) {
     <Switch>
       <Match when={props.message.role === "user" && props.message}>
         {(userMessage) => (
-          <UserMessageDisplay message={userMessage() as UserMessage} parts={props.parts} actions={props.actions} />
+          <UserMessageDisplay
+            message={userMessage() as UserMessage}
+            parts={props.parts}
+            interrupted={props.interrupted}
+            showCustomHookParts={props.showCustomHookParts}
+          />
         )}
       </Match>
       <Match when={props.message.role === "assistant" && props.message}>
@@ -826,6 +816,7 @@ export function Message(props: MessageProps) {
             parts={props.parts}
             showAssistantCopyPartID={props.showAssistantCopyPartID}
             showReasoningSummaries={props.showReasoningSummaries}
+            showCustomHookParts={props.showCustomHookParts}
           />
         )}
       </Match>
@@ -838,28 +829,67 @@ export function AssistantMessageDisplay(props: {
   parts: PartType[]
   showAssistantCopyPartID?: string | null
   showReasoningSummaries?: boolean
+  showCustomHookParts?: boolean
 }) {
-  const emptyTools: ToolPart[] = []
-  const part = createMemo(() => index(props.parts))
-  const grouped = createMemo(
-    () =>
-      groupParts(
-        props.parts
-          .filter((part) => renderable(part, props.showReasoningSummaries ?? true))
-          .map((part) => ({
-            messageID: props.message.id,
-            part,
-          })),
-      ),
-    [] as PartGroup[],
-    { equals: sameGroups },
-  )
+  const grouped = createMemo(() => {
+    const keys: string[] = []
+    const items: Record<string, { type: "part"; part: PartType } | { type: "context"; parts: ToolPart[] }> = {}
+    const push = (key: string, item: { type: "part"; part: PartType } | { type: "context"; parts: ToolPart[] }) => {
+      keys.push(key)
+      items[key] = item
+    }
+
+    const parts = props.parts
+    let start = -1
+
+    const flush = (end: number) => {
+      if (start < 0) return
+      const first = parts[start]
+      const last = parts[end]
+      if (!first || !last) {
+        start = -1
+        return
+      }
+      push(`context:${first.id}`, {
+        type: "context",
+        parts: parts.slice(start, end + 1).filter((part): part is ToolPart => isContextGroupTool(part)),
+      })
+      start = -1
+    }
+
+    parts.forEach((part, index) => {
+      if (!renderable(part, props.showReasoningSummaries ?? true, props.showCustomHookParts ?? true)) return
+
+      if (isContextGroupTool(part)) {
+        if (start < 0) start = index
+        return
+      }
+
+      flush(index - 1)
+      push(`part:${part.id}`, { type: "part", part })
+    })
+
+    flush(parts.length - 1)
+
+    return { keys, items }
+  })
 
   return (
-    <Index each={grouped()}>
-      {(entryAccessor) => {
-        const entryType = createMemo(() => entryAccessor().type)
-
+    <For each={grouped()?.keys ?? []}>
+      {(key) => {
+        const item = createMemo(() => grouped()?.items[key])
+        const ctx = createMemo(() => {
+          const value = item()
+          if (!value) return
+          if (value.type !== "context") return
+          return value
+        })
+        const part = createMemo(() => {
+          const value = item()
+          if (!value) return
+          if (value.type !== "part") return
+          return value
+        })
         return (
           <Switch>
             <Match when={entryType() === "context"}>
@@ -1021,7 +1051,12 @@ export function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
   )
 }
 
-export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[]; actions?: UserActions }) {
+export function UserMessageDisplay(props: {
+  message: UserMessage
+  parts: PartType[]
+  interrupted?: boolean
+  showCustomHookParts?: boolean
+}) {
   const data = useData()
   const dialog = useDialog()
   const i18n = useI18n()
@@ -1052,6 +1087,11 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   )
 
   const agents = createMemo(() => (props.parts?.filter((p) => p.type === "agent") as AgentPart[]) ?? [])
+  const hooks = createMemo(() =>
+    props.parts.filter(
+      (part): part is ToolPart => part.type === "tool" && renderable(part, true, props.showCustomHookParts ?? true),
+    ),
+  )
 
   const model = createMemo(() => {
     const providerID = props.message.model?.providerID
@@ -1226,6 +1266,11 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
           </div>
         </BasicTool>
       </Show>
+      <Show when={hooks().length > 0}>
+        <div data-slot="user-message-hooks">
+          <For each={hooks()}>{(part) => <Part part={part} message={props.message} />}</For>
+        </div>
+      </Show>
     </div>
   )
 }
@@ -1329,9 +1374,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const tool = toolName(part)
   if (tool === "todowrite" || tool === "todoread") return null
 
-  const hideQuestion = createMemo(
-    () => tool === "question" && (part.state.status === "pending" || part.state.status === "running"),
-  )
+  const hideQuestion = createMemo(() => tool === "question" && part.state.status === "pending")
 
   const emptyInput: Record<string, any> = {}
   const emptyMetadata: Record<string, any> = {}
@@ -1862,8 +1905,8 @@ ToolRegistry.register({
   name: "bash",
   render(props) {
     const i18n = useI18n()
-    const pending = () => props.status === "pending" || props.status === "running"
-    const sawPending = pending()
+    const hook = createMemo(() => hookName(props.input ?? {}, props.metadata ?? {}))
+    const type = createMemo(() => hookType(props.input ?? {}, props.metadata ?? {}))
     const text = createMemo(() => {
       const cmd = props.input.command ?? props.metadata.command ?? ""
       const out = stripAnsi(props.output || props.metadata.output || "").replace(/\r\n?/g, "\n")
@@ -1885,9 +1928,9 @@ ToolRegistry.register({
         {...props}
         icon="console"
         trigger={{
-          title: i18n.t("ui.tool.shell"),
-          titleClass: "tool-exec",
-          subtitle: props.input.description,
+          title: hook() ? (type() ? `${hook()} | ${type()}` : hook()!) : i18n.t("ui.tool.shell"),
+          titleClass: hook() ? "hook-name" : "tool-exec",
+          subtitle: props.input.description ?? props.metadata.description,
         }}
       >
         <div data-component="bash-output">

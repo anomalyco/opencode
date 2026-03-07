@@ -1192,26 +1192,33 @@ export function MessageTimeline(props: {
     }
   }
 
-  function TimelineRowView(props: { rowKey: string }) {
-    return (
-      <Show when={timelineRowByKey().get(props.rowKey)} keyed>
-        {(item) => renderTimelineRow(item)}
-      </Show>
-    )
-  }
-
-  return (
-    <div class="relative w-full h-full min-w-0">
-      <div
-        class="absolute left-1/2 -translate-x-1/2 bottom-6 z-[60] pointer-events-none transition-all duration-200 ease-out"
-        classList={{
-          "opacity-100 translate-y-0 scale-100": props.scroll.overflow && props.scroll.jump,
-          "opacity-0 translate-y-2 scale-95 pointer-events-none": !props.scroll.overflow || !props.scroll.jump,
-        }}
-      >
-        <button
-          class="pointer-events-auto flex items-center justify-center w-10 h-8 bg-transparent border-none cursor-pointer p-0 group"
-          onClick={props.onResumeScroll}
+            const root = e.currentTarget
+            markBoundaryGesture({ root, target: e.target, delta, onMarkScrollGesture: props.onMarkScrollGesture })
+          }}
+          onTouchEnd={() => {
+            touchGesture = undefined
+          }}
+          onTouchCancel={() => {
+            touchGesture = undefined
+          }}
+          onPointerDown={(e) => {
+            if (e.target !== e.currentTarget) return
+            props.onMarkScrollGesture(e.currentTarget)
+          }}
+          onScroll={(e) => {
+            props.onScheduleScrollState(e.currentTarget)
+            if (!props.hasScrollGesture()) return
+            props.onAutoScrollHandleScroll()
+            props.onTurnBackfillScroll()
+            props.onMarkScrollGesture(e.currentTarget)
+            if (props.isDesktop) props.onScrollSpyScroll()
+          }}
+          onClick={props.onAutoScrollInteraction}
+          class="relative min-w-0 w-full h-full"
+          style={{
+            "--session-title-height": showHeader() ? "40px" : "0px",
+            "--sticky-accordion-top": showHeader() ? "48px" : "0px",
+          }}
         >
           <Show when={showHeader()}>
             <div
@@ -1480,6 +1487,7 @@ export function MessageTimeline(props: {
                       sessionID={sessionID() ?? ""}
                       messageID={message.id}
                       showReasoningSummaries={settings.general.showReasoningSummaries()}
+                      showCustomHookParts={settings.general.showCustomHookParts()}
                       shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
                       editToolDefaultOpen={settings.general.editToolPartsExpanded()}
                       classes={{

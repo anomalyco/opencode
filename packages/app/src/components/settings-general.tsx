@@ -661,7 +661,55 @@ export const SettingsGeneral: Component = () => {
             </Button>
           </div>
         </SettingsRow>
-      </SettingsList>
+
+        <SettingsRow
+          title={language.t("settings.general.row.reasoningSummaries.title")}
+          description={language.t("settings.general.row.reasoningSummaries.description")}
+        >
+          <div data-action="settings-feed-reasoning-summaries">
+            <Switch
+              checked={settings.general.showReasoningSummaries()}
+              onChange={(checked) => settings.general.setShowReasoningSummaries(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.customHookParts.title")}
+          description={language.t("settings.general.row.customHookParts.description")}
+        >
+          <div data-action="settings-feed-custom-hook-parts">
+            <Switch
+              checked={settings.general.showCustomHookParts()}
+              onChange={(checked) => settings.general.setShowCustomHookParts(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.shellToolPartsExpanded.title")}
+          description={language.t("settings.general.row.shellToolPartsExpanded.description")}
+        >
+          <div data-action="settings-feed-shell-tool-parts-expanded">
+            <Switch
+              checked={settings.general.shellToolPartsExpanded()}
+              onChange={(checked) => settings.general.setShellToolPartsExpanded(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.editToolPartsExpanded.title")}
+          description={language.t("settings.general.row.editToolPartsExpanded.description")}
+        >
+          <div data-action="settings-feed-edit-tool-parts-expanded">
+            <Switch
+              checked={settings.general.editToolPartsExpanded()}
+              onChange={(checked) => settings.general.setEditToolPartsExpanded(checked)}
+            />
+          </div>
+        </SettingsRow>
+      </div>
     </div>
   )
 

@@ -29,6 +29,7 @@ export interface Settings {
     showStatus: boolean
     showTerminal: boolean
     showReasoningSummaries: boolean
+    showCustomHookParts: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
     showSessionProgressBar: boolean
@@ -114,7 +115,8 @@ const defaultSettings: Settings = {
     showStatus: false,
     showTerminal: false,
     showReasoningSummaries: false,
-    shellToolPartsExpanded: false,
+    showCustomHookParts: true,
+    shellToolPartsExpanded: true,
     editToolPartsExpanded: false,
     showSessionProgressBar: true,
   },
@@ -229,6 +231,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setShowReasoningSummaries(value: boolean) {
           setStore("general", "showReasoningSummaries", value)
+        },
+        showCustomHookParts: withFallback(
+          () => store.general?.showCustomHookParts,
+          defaultSettings.general.showCustomHookParts,
+        ),
+        setShowCustomHookParts(value: boolean) {
+          setStore("general", "showCustomHookParts", value)
         },
         shellToolPartsExpanded: withFallback(
           () => store.general?.shellToolPartsExpanded,
