@@ -124,6 +124,96 @@ test("conversation mode reverts messages but keeps files", async () => {
   })
 })
 
+test("default revert reverts code when messages share timestamp", async () => {
+  await using tmp = await tmpdir({ git: true, config: { snapshot: true } })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await Session.create({})
+      const sessionID = session.id
+      const now = Date.now()
+
+      const userMsg = await Session.updateMessage({
+        id: Identifier.ascending("message"),
+        role: "user",
+        sessionID,
+        agent: "default",
+        model: {
+          providerID: "openai",
+          modelID: "gpt-4",
+        },
+        time: {
+          created: now,
+        },
+      })
+
+      await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: userMsg.id,
+        sessionID,
+        type: "text",
+        text: "Modify test.txt",
+      })
+
+      const assistantMsg: MessageV2.Assistant = {
+        id: Identifier.ascending("message"),
+        role: "assistant",
+        sessionID,
+        mode: "default",
+        agent: "default",
+        path: {
+          cwd: tmp.path,
+          root: tmp.path,
+        },
+        cost: 0,
+        tokens: {
+          output: 0,
+          input: 0,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        },
+        modelID: "gpt-4",
+        providerID: "openai",
+        parentID: userMsg.id,
+        time: {
+          created: now,
+        },
+        finish: "end_turn",
+      }
+      await Session.updateMessage(assistantMsg)
+
+      const filePath = path.join(tmp.path, "test.txt")
+      await Bun.write(filePath, "ORIGINAL")
+
+      const hash = await Snapshot.track()
+      expect(hash).toBeTruthy()
+
+      await Bun.write(filePath, "MODIFIED")
+
+      const patch = await Snapshot.patch(hash!)
+      expect(patch.files.length).toBeGreaterThan(0)
+      await Session.updatePart({
+        id: Identifier.ascending("part"),
+        sessionID,
+        messageID: assistantMsg.id,
+        type: "patch",
+        hash: patch.hash,
+        files: patch.files.map((x) => path.relative(tmp.path, x).replaceAll("\\", "/")),
+      })
+
+      const messages = await Session.messages({ sessionID })
+      expect(messages.map((x) => x.info.id)).toEqual([userMsg.id, assistantMsg.id])
+
+      await SessionRevert.revert({
+        sessionID,
+        messageID: userMsg.id,
+      })
+
+      expect(await Bun.file(filePath).text()).toBe("ORIGINAL")
+    },
+  })
+})
+
 test("default revert still reverts conversation and code", async () => {
   await using tmp = await tmpdir({ git: true, config: { snapshot: true } })
   await Instance.provide({

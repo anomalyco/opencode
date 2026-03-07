@@ -970,6 +970,85 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         tools,
       },
     ),
+  }
+
+  export const stream = fn(Identifier.schema("session"), async function* (sessionID) {
+    const size = 50
+    let offset = 0
+    while (true) {
+      const rows = Database.use((db) =>
+        db
+          .select()
+          .from(MessageTable)
+          .where(eq(MessageTable.session_id, sessionID))
+          .orderBy(desc(MessageTable.time_created), desc(MessageTable.id))
+          .limit(size)
+          .offset(offset)
+          .all(),
+      )
+      if (rows.length === 0) break
+
+      const ids = rows.map((row) => row.id)
+      const partsByMessage = new Map<string, MessageV2.Part[]>()
+      if (ids.length > 0) {
+        const partRows = Database.use((db) =>
+          db
+            .select()
+            .from(PartTable)
+            .where(inArray(PartTable.message_id, ids))
+            .orderBy(PartTable.message_id, PartTable.id)
+            .all(),
+        )
+        for (const row of partRows) {
+          const part = {
+            ...row.data,
+            id: row.id,
+            sessionID: row.session_id,
+            messageID: row.message_id,
+          } as MessageV2.Part
+          const list = partsByMessage.get(row.message_id)
+          if (list) list.push(part)
+          else partsByMessage.set(row.message_id, [part])
+        }
+      }
+
+      for (const row of rows) {
+        const info = { ...row.data, id: row.id, sessionID: row.session_id } as MessageV2.Info
+        yield {
+          info,
+          parts: partsByMessage.get(row.id) ?? [],
+        }
+      }
+
+      offset += rows.length
+      if (rows.length < size) break
+    }
+  })
+
+  export const parts = fn(Identifier.schema("message"), async (message_id) => {
+    const rows = Database.use((db) =>
+      db.select().from(PartTable).where(eq(PartTable.message_id, message_id)).orderBy(PartTable.id).all(),
+    )
+    return rows.map(
+      (row) => ({ ...row.data, id: row.id, sessionID: row.session_id, messageID: row.message_id }) as MessageV2.Part,
+    )
+  })
+
+  export const get = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      messageID: Identifier.schema("message"),
+    }),
+    async (input): Promise<WithParts> => {
+      const row = Database.use((db) => db.select().from(MessageTable).where(eq(MessageTable.id, input.messageID)).get())
+      if (!row) throw new Error(`Message not found: ${input.messageID}`)
+      const info = { ...row.data, id: row.id, sessionID: row.session_id } as MessageV2.Info
+      return {
+        info,
+        parts: await parts(input.messageID),
+      }
+    },
+>>>>>>> 01d5f3f (fix(session): deterministic message ordering to fix revert flakiness)
   )
 })
 
