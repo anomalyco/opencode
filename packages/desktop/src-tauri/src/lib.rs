@@ -181,14 +181,31 @@ fn resolve_app_path(app_name: &str) -> Option<String> {
 
 #[tauri::command]
 #[specta::specta]
-fn open_in_powershell(path: String) -> Result<(), String> {
+fn open_path(_app: AppHandle, path: String, app_name: Option<String>) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        return os::windows::open_in_powershell(path);
+        let app_name = app_name.map(|v| os::windows::resolve_windows_app_path(&v).unwrap_or(v));
+        let is_powershell = app_name.as_ref().is_some_and(|v| {
+            std::path::Path::new(v)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| {
+                    name.eq_ignore_ascii_case("powershell")
+                        || name.eq_ignore_ascii_case("powershell.exe")
+                })
+        });
+
+        if is_powershell {
+            return os::windows::open_in_powershell(path);
+        }
+
+        return tauri_plugin_opener::open_path(path, app_name.as_deref())
+            .map_err(|e| format!("Failed to open path: {e}"));
     }
 
     #[cfg(not(target_os = "windows"))]
-    Err("PowerShell is only supported on Windows".to_string())
+    tauri_plugin_opener::open_path(path, app_name.as_deref())
+        .map_err(|e| format!("Failed to open path: {e}"))
 }
 
 #[cfg(target_os = "macos")]
@@ -386,7 +403,7 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             check_app_exists,
             wsl_path,
             resolve_app_path,
-            open_in_powershell
+            open_path
         ])
         .events(tauri_specta::collect_events![
             LoadingWindowComplete,

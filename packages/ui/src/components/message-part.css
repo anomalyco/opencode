@@ -46,10 +46,16 @@
     overflow: hidden;
     background: var(--surface-weak);
     border: 1px solid var(--border-weak-base);
-    transition: border-color 0.15s ease;
+    transition:
+      border-color 0.15s ease,
+      opacity 0.3s ease;
 
     &:hover {
       border-color: var(--border-strong-base);
+    }
+
+    &[data-queued] {
+      opacity: 0.6;
     }
 
     &[data-type="image"] {
@@ -101,6 +107,11 @@
     border: 1px solid var(--border-weak-base);
     padding: 8px 12px;
     border-radius: 6px;
+    transition: opacity 0.3s ease;
+
+    &[data-queued] {
+      opacity: 0.6;
+    }
 
     [data-highlight="file"] {
       color: var(--syntax-property);
@@ -111,6 +122,14 @@
     }
 
     max-width: 100%;
+  }
+
+  [data-slot="user-message-queued-indicator"] {
+    margin-top: 6px;
+    margin-right: 2px;
+    font-size: var(--font-size-small);
+    color: var(--text-weak);
+    user-select: none;
   }
 
   [data-slot="user-message-copy-wrapper"] {
@@ -149,6 +168,7 @@
     align-items: center;
     justify-content: flex-end;
     overflow: hidden;
+    gap: 6px;
   }
 
   [data-slot="user-message-meta-tail"] {
@@ -222,6 +242,33 @@
   [data-component="markdown"] {
     margin-top: 0;
     font-size: var(--font-size-base);
+  }
+}
+
+[data-component="compaction-part"] {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+
+  [data-slot="compaction-part-divider"] {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    width: 100%;
+  }
+
+  [data-slot="compaction-part-line"] {
+    flex: 1 1 auto;
+    height: 1px;
+    background: var(--border-weak-base);
+  }
+
+  [data-slot="compaction-part-label"] {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    text-align: center;
   }
 }
 
@@ -530,6 +577,46 @@
   justify-content: center;
 }
 
+[data-component="exa-tool-output"] {
+  width: 100%;
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+[data-slot="basic-tool-tool-subtitle"].exa-tool-query {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-slot="exa-tool-links"] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+[data-slot="exa-tool-link"] {
+  display: block;
+  max-width: 100%;
+  color: var(--text-interactive-base);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &:hover {
+    color: var(--text-interactive-base);
+  }
+
+  &:visited {
+    color: var(--text-interactive-base);
+  }
+}
+
 [data-component="todos"] {
   padding: 10px 0 24px 0;
   display: flex;
@@ -561,29 +648,8 @@
   cursor: pointer;
 
   [data-slot="context-tool-group-title"] {
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-family: var(--font-family-sans);
-    font-size: 14px;
-    font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
-    color: var(--text-strong);
-  }
-
-  [data-slot="context-tool-group-label"] {
-    flex-shrink: 0;
-  }
-
-  [data-slot="context-tool-group-summary"] {
     flex-shrink: 1;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-weight: var(--font-weight-regular);
-    color: var(--text-base);
   }
 
   [data-slot="collapsible-arrow"] {
@@ -649,6 +715,7 @@
 [data-component="reasoning-part"],
 [data-component="tool-error"],
 [data-component="tool-output"],
+[data-component="bash-output"],
 [data-component="edit-content"],
 [data-component="write-content"],
 [data-component="todos"],
