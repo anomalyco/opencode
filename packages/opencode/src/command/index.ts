@@ -322,12 +322,13 @@ export namespace Command {
     const builtIn = createBuiltInCommands()
     if (builtIn[name]) return builtIn[name]
 
-    if (cfg.command?.[name]) {
-      return { ...cfg.command[name], name, hints: Command.hints(cfg.command[name].template) }
-    }
-
     const cached = commandCache.get(name)
     const fileInfo = await findCommandFile(name)
+
+    // Only use cfg.command as fallback if no markdown file exists on disk
+    if (!fileInfo && cfg.command?.[name]) {
+      return { ...cfg.command[name], name, hints: Command.hints(cfg.command[name].template) }
+    }
 
     if (!fileInfo) {
       const fresh = await loadFreshCommandsWithMtime()
