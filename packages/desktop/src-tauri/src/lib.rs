@@ -17,9 +17,10 @@ use futures::{
     future::{self, Shared},
 };
 use std::{
+    collections::HashSet,
     env,
     net::TcpListener,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::Command,
     sync::{Arc, Mutex},
     time::Duration,
@@ -44,6 +45,12 @@ struct ServerReadyData {
     username: Option<String>,
     password: Option<String>,
     is_sidecar: bool,
+}
+
+#[derive(Clone, serde::Serialize, specta::Type, Debug)]
+struct MarkdownFile {
+    path: String,
+    text: String,
 }
 
 #[derive(Clone, Copy, serde::Serialize, specta::Type, Debug)]
@@ -214,6 +221,61 @@ async fn read_text_file(path: String) -> Result<String, String> {
     tokio::fs::read_to_string(path)
         .await
         .map_err(|e| format!("Failed to read file: {e}"))
+}
+
+fn add_markdown(path: &Path, seen: &mut HashSet<PathBuf>, out: &mut Vec<PathBuf>) -> Result<(), String> {
+    let full = path
+        .canonicalize()
+        .map_err(|e| format!("Failed to resolve path {}: {e}", path.display()))?;
+    if !seen.insert(full.clone()) {
+        return Ok(());
+    }
+
+    if full.is_file() {
+        if full
+            .extension()
+            .and_then(|v| v.to_str())
+            .is_some_and(|v| v.eq_ignore_ascii_case("md"))
+        {
+            out.push(full);
+        }
+        return Ok(());
+    }
+
+    if !full.is_dir() {
+        return Ok(());
+    }
+
+    for item in std::fs::read_dir(&full).map_err(|e| format!("Failed to read dir {}: {e}", full.display()))? {
+        let item = item.map_err(|e| format!("Failed to read dir entry in {}: {e}", full.display()))?;
+        add_markdown(&item.path(), seen, out)?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn read_markdown_files(paths: Vec<String>) -> Result<Vec<MarkdownFile>, String> {
+    let mut seen = HashSet::new();
+    let mut files = Vec::new();
+
+    for path in paths {
+        add_markdown(Path::new(&path), &mut seen, &mut files)?;
+    }
+
+    let mut out = Vec::new();
+    for path in files {
+        let text = tokio::fs::read_to_string(&path)
+            .await
+            .map_err(|e| format!("Failed to read file {}: {e}", path.display()))?;
+        out.push(MarkdownFile {
+            path: path.to_string_lossy().to_string(),
+            text,
+        });
+    }
+
+    Ok(out)
 }
 
 #[cfg(target_os = "macos")]
@@ -409,6 +471,7 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             set_display_backend,
             markdown::parse_markdown_command,
             read_text_file,
+            read_markdown_files,
             check_app_exists,
             wsl_path,
             resolve_app_path,

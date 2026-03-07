@@ -370,6 +370,8 @@ const createPlatform = (): Platform => {
 
     readTextFile: (path: string) => commands.readTextFile(path),
 
+    readMarkdownFiles: (paths: string[]) => commands.readMarkdownFiles(paths),
+
     webviewZoom,
 
     checkAppExists: async (appName: string) => {

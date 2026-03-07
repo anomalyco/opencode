@@ -16,6 +16,7 @@ export const commands = {
 	setDisplayBackend: (backend: LinuxDisplayBackend) => __TAURI_INVOKE<null>("set_display_backend", { backend }),
 	parseMarkdownCommand: (markdown: string) => __TAURI_INVOKE<string>("parse_markdown_command", { markdown }),
 	readTextFile: (path: string) => __TAURI_INVOKE<string>("read_text_file", { path }),
+	readMarkdownFiles: (paths: string[]) => __TAURI_INVOKE<MarkdownFile[]>("read_markdown_files", { paths }),
 	checkAppExists: (appName: string) => __TAURI_INVOKE<boolean>("check_app_exists", { appName }),
 	wslPath: (path: string, mode: "windows" | "linux" | null) => __TAURI_INVOKE<string>("wsl_path", { path, mode }),
 	resolveAppPath: (appName: string) => __TAURI_INVOKE<string | null>("resolve_app_path", { appName }),
@@ -34,6 +35,11 @@ export type InitStep = { phase: "server_waiting" } | { phase: "sqlite_waiting" }
 export type LinuxDisplayBackend = "wayland" | "auto";
 
 export type LoadingWindowComplete = null;
+
+export type MarkdownFile = {
+		path: string,
+		text: string,
+	};
 
 export type ServerReadyData = {
 		url: string,
@@ -66,3 +72,4 @@ function makeEvent<T>(name: string) {
 
     return Object.assign(fn, base);
 }
+

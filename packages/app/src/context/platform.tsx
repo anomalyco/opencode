@@ -81,6 +81,9 @@ export type Platform = {
   /** Read UTF-8 text file content (desktop only) */
   readTextFile?(path: string): Promise<string>
 
+  /** Read markdown files from files/folders (desktop only) */
+  readMarkdownFiles?(paths: string[]): Promise<Array<{ path: string; text: string }>>
+
   /** Webview zoom level (desktop only) */
   webviewZoom?: Accessor<number>
 

@@ -51,56 +51,73 @@ export const SettingsCommands: Component = () => {
   const platform = usePlatform()
   const globalSync = useGlobalSync()
   const [store, setStore] = createStore({ loading: false })
-  const canImport = createMemo(() => Boolean(platform.openFilePickerDialog && platform.readTextFile))
+  const files = createMemo(() => Boolean(platform.openFilePickerDialog && platform.readTextFile))
+  const dirs = createMemo(() => Boolean(platform.openDirectoryPickerDialog && platform.readMarkdownFiles))
 
   const list = createMemo(() => {
     return Object.keys(globalSync.data.config.command ?? {}).sort((a, b) => a.localeCompare(b))
   })
 
-  const add = async () => {
-    if (!canImport()) return
-
-    const pick = await platform.openFilePickerDialog!({ multiple: true, title: "Choose command markdown files" })
-    if (!pick) return
-    const paths = Array.isArray(pick) ? pick : [pick]
-
-    const files = paths.filter((item) => item.toLowerCase().endsWith(".md"))
-    if (files.length === 0) {
-      showToast({ title: language.t("common.requestFailed"), description: "Pick one or more .md files." })
-      return
-    }
-
+  const apply = async (input: Array<{ path: string; text: string }>) => {
     const next: Record<
       string,
       { template: string; description?: string; agent?: string; model?: string; subtask?: boolean }
     > = {}
+    for (const item of input) {
+      const key = name(item.path)
+      if (!key) continue
+      const parsed = parse(item.text)
+      if (!parsed.template) continue
+      next[key] = parsed
+    }
+    if (Object.keys(next).length === 0) {
+      showToast({ title: language.t("common.requestFailed"), description: "No valid commands were imported." })
+      return
+    }
+    const curr = globalSync.data.config.command ?? {}
+    await globalSync.updateConfig({ command: { ...curr, ...next } })
+    showToast({
+      variant: "success",
+      icon: "circle-check",
+      title: "Commands imported",
+      description: `${Object.keys(next).length} command${Object.keys(next).length > 1 ? "s" : ""} saved in global config.`,
+    })
+  }
+
+  const file = async () => {
+    if (!files()) return
+    const pick = await platform.openFilePickerDialog!({ multiple: true, title: "Choose command markdown files" })
+    if (!pick) return
+    const paths = (Array.isArray(pick) ? pick : [pick]).filter((item) => item.toLowerCase().endsWith(".md"))
+    if (paths.length === 0) {
+      showToast({ title: language.t("common.requestFailed"), description: "Pick one or more .md files." })
+      return
+    }
     setStore("loading", true)
-
     try {
-      for (const file of files) {
-        const key = name(file)
-        if (!key) continue
-        const parsed = parse(await platform.readTextFile!(file))
-        if (!parsed.template) continue
-        next[key] = parsed
-      }
-
-      if (Object.keys(next).length === 0) {
-        showToast({ title: language.t("common.requestFailed"), description: "No valid commands were imported." })
-        return
-      }
-
-      const curr = globalSync.data.config.command ?? {}
-      await globalSync.updateConfig({ command: { ...curr, ...next } })
-      showToast({
-        variant: "success",
-        icon: "circle-check",
-        title: "Commands imported",
-        description: `${Object.keys(next).length} command${Object.keys(next).length > 1 ? "s" : ""} saved in global config.`,
-      })
+      await apply(await Promise.all(paths.map(async (path) => ({ path, text: await platform.readTextFile!(path) }))))
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      showToast({ title: language.t("common.requestFailed"), description: message })
+      const msg = err instanceof Error ? err.message : String(err)
+      showToast({ title: language.t("common.requestFailed"), description: msg })
+    } finally {
+      setStore("loading", false)
+    }
+  }
+
+  const dir = async () => {
+    if (!dirs()) return
+    const pick = await platform.openDirectoryPickerDialog!({
+      multiple: true,
+      title: "Choose folders with command files",
+    })
+    if (!pick) return
+    const paths = Array.isArray(pick) ? pick : [pick]
+    setStore("loading", true)
+    try {
+      await apply(await platform.readMarkdownFiles!(paths))
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      showToast({ title: language.t("common.requestFailed"), description: msg })
     } finally {
       setStore("loading", false)
     }
@@ -121,18 +138,32 @@ export const SettingsCommands: Component = () => {
           <div class="bg-surface-raised-base px-4 rounded-lg">
             <div class="flex items-center justify-between gap-4 min-h-16 py-3 border-b border-border-weak-base">
               <div class="text-14-regular text-text-weak">
-                Import `.md` files and use them as slash commands in every project.
+                Import `.md` files or folders and use them as slash commands in every project.
               </div>
-              <Button
-                size="large"
-                variant="secondary"
-                onClick={() => void add()}
-                disabled={store.loading || !canImport()}
-              >
-                {store.loading
-                  ? `${language.t("common.loading")}${language.t("common.loading.ellipsis")}`
-                  : "Import .md"}
-              </Button>
+              <div class="flex items-center gap-2 shrink-0">
+                <div onClick={() => (store.loading || !files() ? undefined : void file())}>
+                  <Button
+                    size="large"
+                    variant="secondary"
+                    class={store.loading || !files() ? "opacity-50 pointer-events-none" : undefined}
+                  >
+                    {store.loading
+                      ? `${language.t("common.loading")}${language.t("common.loading.ellipsis")}`
+                      : "Import files"}
+                  </Button>
+                </div>
+                <div onClick={() => (store.loading || !dirs() ? undefined : void dir())}>
+                  <Button
+                    size="large"
+                    variant="secondary"
+                    class={store.loading || !dirs() ? "opacity-50 pointer-events-none" : undefined}
+                  >
+                    {store.loading
+                      ? `${language.t("common.loading")}${language.t("common.loading.ellipsis")}`
+                      : "Import folders"}
+                  </Button>
+                </div>
+              </div>
             </div>
 
             <Show
@@ -155,7 +186,7 @@ export const SettingsCommands: Component = () => {
         </div>
       </div>
 
-      <Show when={!canImport()}>
+      <Show when={!files() && !dirs()}>
         <div class="max-w-[720px] text-12-regular text-text-weak mt-6">
           Command import is available in the desktop app.
         </div>
