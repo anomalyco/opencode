@@ -596,9 +596,11 @@ export function Session() {
           prompt?.set({ input: "", parts: [] })
           return
         }
+        const mode = session()?.revert?.mode
         void sdk.client.session.revert({
           sessionID: route.sessionID,
           messageID: message.id,
+          mode,
         })
       },
     },

@@ -18,6 +18,7 @@ export const RevertInput = Schema.Struct({
   sessionID: SessionID,
   messageID: MessageID,
   partID: Schema.optional(PartID),
+  mode: Schema.optional(Schema.Literal("conversation", "conversation_and_code")),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type RevertInput = Schema.Schema.Type<typeof RevertInput>
 
@@ -45,6 +46,8 @@ export const layer = Layer.effect(
       let lastUser: MessageV2.User | undefined
       const session = yield* sessions.get(input.sessionID)
 
+      const mode = input.mode ?? session.revert?.mode ?? "conversation_and_code"
+
       let rev: Session.Info["revert"]
       const patches: Snapshot.Patch[] = []
       for (const msg of all) {
@@ -71,17 +74,30 @@ export const layer = Layer.effect(
 
       if (!rev) return session
 
+      const range = all.filter((msg) => msg.info.id >= rev!.messageID)
+      const diffs = yield* summary.computeDiff({ messages: range })
+
+      if (mode === "conversation") {
+        return yield* sessions.setRevert({
+          sessionID: input.sessionID,
+          revert: { ...rev, mode },
+          summary: {
+            additions: diffs.reduce((sum, x) => sum + x.additions, 0),
+            deletions: diffs.reduce((sum, x) => sum + x.deletions, 0),
+            files: diffs.length,
+          },
+        })
+      }
+
       rev.snapshot = session.revert?.snapshot ?? (yield* snap.track())
       if (session.revert?.snapshot) yield* snap.restore(session.revert.snapshot)
       yield* snap.revert(patches)
       if (rev.snapshot) rev.diff = yield* snap.diff(rev.snapshot as string)
-      const range = all.filter((msg) => msg.info.id >= rev!.messageID)
-      const diffs = yield* summary.computeDiff({ messages: range })
       yield* storage.write(["session_diff", input.sessionID], diffs).pipe(Effect.ignore)
       yield* bus.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: diffs })
       yield* sessions.setRevert({
         sessionID: input.sessionID,
-        revert: rev,
+        revert: { ...rev, mode },
         summary: {
           additions: diffs.reduce((sum, x) => sum + x.additions, 0),
           deletions: diffs.reduce((sum, x) => sum + x.deletions, 0),

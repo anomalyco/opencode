@@ -154,6 +154,7 @@ const Revert = Schema.Struct({
   partID: optionalOmitUndefined(PartID),
   snapshot: optionalOmitUndefined(Schema.String),
   diff: optionalOmitUndefined(Schema.String),
+  mode: optionalOmitUndefined(Schema.Literal("conversation", "conversation_and_code")),
 })
 
 export const Info = Schema.Struct({
