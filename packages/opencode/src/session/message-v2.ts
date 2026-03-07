@@ -840,10 +840,34 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
               ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
               ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
             })
-          }
-          if (part.state.status === "error") {
-            const output = part.state.metadata?.interrupted === true ? part.state.metadata.output : undefined
-            if (typeof output === "string") {
+          if (part.type === "step-start")
+            assistantMessage.parts.push({
+              type: "step-start",
+            })
+          if (part.type === "tool") {
+            if (part.tool === "hook") continue
+            toolNames.add(part.tool)
+            if (part.state.status === "completed") {
+              const outputText = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
+              const attachments = part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
+
+              // For providers that don't support media in tool results, extract media files
+              // (images, PDFs) to be sent as a separate user message
+              const mediaAttachments = attachments.filter((a) => isMedia(a.mime))
+              const nonMediaAttachments = attachments.filter((a) => !isMedia(a.mime))
+              if (!supportsMediaInToolResults && mediaAttachments.length > 0) {
+                media.push(...mediaAttachments)
+              }
+              const finalAttachments = supportsMediaInToolResults ? attachments : nonMediaAttachments
+
+              const output =
+                finalAttachments.length > 0
+                  ? {
+                      text: outputText,
+                      attachments: finalAttachments,
+                    }
+                  : outputText
+
               assistantMessage.parts.push({
                 type: ("tool-" + part.tool) as `tool-${string}`,
                 state: "output-available",
