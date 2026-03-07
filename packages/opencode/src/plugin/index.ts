@@ -16,6 +16,11 @@ import { gitlabAuthPlugin as GitlabAuthPlugin } from "@gitlab/opencode-gitlab-au
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
+  type Item = {
+    name: string
+    hooks: Hooks
+  }
+
   const BUILTIN = ["opencode-anthropic-auth@0.0.13"]
 
   // Built-in plugins that are directly imported (not installed from npm)
@@ -29,7 +34,7 @@ export namespace Plugin {
       fetch: async (...args) => Server.App().fetch(...args),
     })
     const config = await Config.get()
-    const hooks: Hooks[] = []
+    const hooks: Item[] = []
     const input: PluginInput = {
       client,
       project: Instance.project,
@@ -44,7 +49,7 @@ export namespace Plugin {
       const init = await plugin(input).catch((err) => {
         log.error("failed to load internal plugin", { name: plugin.name, error: err })
       })
-      if (init) hooks.push(init)
+      if (init) hooks.push({ name: plugin.name || "internal", hooks: init })
     }
 
     let plugins = config.plugin ?? []
@@ -83,7 +88,10 @@ export namespace Plugin {
           for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
             if (seen.has(fn)) continue
             seen.add(fn)
-            hooks.push(await fn(input))
+            const init = await fn(input)
+            const base = Config.getPluginName(plugin)
+            const name = _name === "default" ? base : `${base}:${_name}`
+            hooks.push({ name, hooks: init })
           }
         })
         .catch((err) => {
@@ -107,34 +115,66 @@ export namespace Plugin {
     Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool">,
     Input = Parameters<Required<Hooks>[Name]>[0],
     Output = Parameters<Required<Hooks>[Name]>[1],
-  >(name: Name, input: Input, output: Output): Promise<Output> {
+  >(
+    name: Name,
+    input: Input,
+    output: Output,
+    opts?: {
+      onInvoke?: (input: {
+        plugin: string
+        hook: string
+        stage: "before" | "after" | "error"
+        error?: string
+      }) => Promise<void> | void
+    },
+  ): Promise<Output> {
     if (!name) return output
-    for (const hook of await state().then((x) => x.hooks)) {
-      const fn = hook[name]
+    for (const item of await state().then((x) => x.hooks)) {
+      const fn = item.hooks[name]
       if (!fn) continue
-      // @ts-expect-error if you feel adventurous, please fix the typing, make sure to bump the try-counter if you
-      // give up.
-      // try-counter: 2
-      await fn(input, output)
+      await opts?.onInvoke?.({
+        plugin: item.name,
+        hook: String(name),
+        stage: "before",
+      })
+      try {
+        // @ts-expect-error if you feel adventurous, please fix the typing, make sure to bump the try-counter if you
+        // give up.
+        // try-counter: 2
+        await fn(input, output)
+        await opts?.onInvoke?.({
+          plugin: item.name,
+          hook: String(name),
+          stage: "after",
+        })
+      } catch (err) {
+        await opts?.onInvoke?.({
+          plugin: item.name,
+          hook: String(name),
+          stage: "error",
+          error: err instanceof Error ? err.message : String(err),
+        })
+        throw err
+      }
     }
     return output
   }
 
   export async function list() {
-    return state().then((x) => x.hooks)
+    return state().then((x) => x.hooks.map((item) => item.hooks))
   }
 
   export async function init() {
     const hooks = await state().then((x) => x.hooks)
     const config = await Config.get()
-    for (const hook of hooks) {
+    for (const item of hooks) {
       // @ts-expect-error this is because we haven't moved plugin to sdk v2
-      await hook.config?.(config)
+      await item.hooks.config?.(config)
     }
     Bus.subscribeAll(async (input) => {
       const hooks = await state().then((x) => x.hooks)
-      for (const hook of hooks) {
-        hook["event"]?.({
+      for (const item of hooks) {
+        item.hooks["event"]?.({
           event: input,
         })
       }

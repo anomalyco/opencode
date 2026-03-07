@@ -93,6 +93,7 @@ export interface MessageProps {
   showAssistantCopyPartID?: string | null
   interrupted?: boolean
   showReasoningSummaries?: boolean
+  showCustomHookParts?: boolean
 }
 
 export interface MessagePartProps {
@@ -170,7 +171,50 @@ export type ToolInfo = {
   subtitle?: string
 }
 
-export function getToolInfo(tool: string, input: any = {}): ToolInfo {
+function text(value: unknown) {
+  if (typeof value !== "string") return
+  const next = value.trim()
+  if (!next) return
+  return next
+}
+
+function hookName(input: Record<string, any>, metadata: Record<string, any>) {
+  const keys = ["hook", "hook_name", "hookName", "event", "name"]
+  for (const src of [metadata, input]) {
+    for (const key of keys) {
+      const value = text(src?.[key])
+      if (!value) continue
+      if (value.includes("-")) return value
+      if (value === "session-start") return value
+    }
+  }
+
+  const desc = text(input.description) ?? text(metadata.description)
+  if (!desc) return
+  const match = desc.match(/([a-z0-9]+(?:-[a-z0-9]+){1,})/i)
+  if (!match?.[1]) return
+  return match[1]
+}
+
+function hookType(input: Record<string, any>, metadata: Record<string, any>) {
+  const keys = ["hook_type", "hookType", "stage", "phase", "event_type", "eventType"]
+  for (const src of [metadata, input]) {
+    for (const key of keys) {
+      const value = text(src?.[key])
+      if (value) return value
+    }
+  }
+
+  const desc = text(input.description) ?? text(metadata.description)
+  if (!desc) return
+  const phase = /\bbefore\b/i.test(desc) ? "before" : /\bafter\b/i.test(desc) ? "after" : ""
+  const event = desc.match(/([a-z]+(?:\.[a-z_]+)+(?:\.(?:before|after))?)/i)?.[1]
+  if (phase && event) return `${phase} ${event}`
+  if (phase) return phase
+  if (event) return event
+}
+
+export function getToolInfo(tool: string, input: any = {}, metadata: any = {}): ToolInfo {
   const i18n = useI18n()
   switch (tool) {
     case "read":
@@ -210,10 +254,12 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
         subtitle: input.description,
       }
     case "bash":
+      const hook = hookName(input, metadata)
+      const type = hookType(input, metadata)
       return {
         icon: "console",
-        title: i18n.t("ui.tool.shell"),
-        subtitle: input.description,
+        title: hook ? (type ? `${hook} | ${type}` : hook) : i18n.t("ui.tool.shell"),
+        subtitle: input.description ?? metadata.description,
       }
     case "edit":
       return {
@@ -265,9 +311,43 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
 
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
 const HIDDEN_TOOLS = new Set(["todowrite", "todoread"])
+const BUILTIN_TOOLS = new Set([
+  "apply_patch",
+  "bash",
+  "batch",
+  "codesearch",
+  "edit",
+  "glob",
+  "grep",
+  "invalid",
+  "list",
+  "lsp",
+  "plan_exit",
+  "question",
+  "read",
+  "skill",
+  "task",
+  "todoread",
+  "todowrite",
+  "webfetch",
+  "websearch",
+  "write",
+])
 
 function toolName(part: { tool: string }) {
   return part.tool.toLowerCase()
+}
+
+function customTool(tool: string) {
+  return !BUILTIN_TOOLS.has(tool.toLowerCase())
+}
+
+function customPart(part: ToolPart) {
+  const tool = toolName(part)
+  if (customTool(tool)) return true
+  if (tool !== "bash") return false
+  const metadata = part.state.status === "pending" ? {} : (part.state.metadata ?? {})
+  return !!hookName(part.state.input ?? {}, metadata)
 }
 
 function list<T>(value: T[] | undefined | null, fallback: T[]) {
@@ -275,10 +355,12 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
   return fallback
 }
 
-function renderable(part: PartType, showReasoningSummaries = true) {
+function renderable(part: PartType, showReasoningSummaries = true, showCustomHookParts = true) {
   if (part.type === "tool") {
-    if (HIDDEN_TOOLS.has(toolName(part))) return false
-    if (toolName(part) === "question") return part.state.status !== "pending" && part.state.status !== "running"
+    const tool = toolName(part)
+    if (HIDDEN_TOOLS.has(tool)) return false
+    if (!showCustomHookParts && customPart(part)) return false
+    if (tool === "question") return part.state.status !== "pending"
     return true
   }
   if (part.type === "text") return !!part.text?.trim()
@@ -302,6 +384,7 @@ export function AssistantParts(props: {
   turnDurationMs?: number
   working?: boolean
   showReasoningSummaries?: boolean
+  showCustomHookParts?: boolean
   shellToolDefaultOpen?: boolean
   editToolDefaultOpen?: boolean
 }) {
@@ -324,7 +407,7 @@ export function AssistantParts(props: {
 
     const parts = props.messages.flatMap((message) =>
       list(data.store.part?.[message.id], emptyParts)
-        .filter((part) => renderable(part, props.showReasoningSummaries ?? true))
+        .filter((part) => renderable(part, props.showReasoningSummaries ?? true, props.showCustomHookParts ?? true))
         .map((part) => ({ message, part })),
     )
 
@@ -363,10 +446,10 @@ export function AssistantParts(props: {
     return { keys, items }
   })
 
-  const last = createMemo(() => grouped().keys.at(-1))
+  const last = createMemo(() => grouped()?.keys.at(-1))
 
   return (
-    <For each={grouped().keys}>
+    <For each={grouped()?.keys ?? []}>
       {(key) => {
         const item = createMemo(() => grouped().items[key])
         const ctx = createMemo(() => {
@@ -410,7 +493,8 @@ function isContextGroupTool(part: PartType): part is ToolPart {
 }
 
 function contextToolDetail(part: ToolPart): string | undefined {
-  const info = getToolInfo(toolName(part), part.state.input ?? {})
+  const metadata = part.state.status === "pending" ? {} : (part.state.metadata ?? {})
+  const info = getToolInfo(toolName(part), part.state.input ?? {}, metadata)
   if (info.subtitle) return info.subtitle
   if (part.state.status === "error") return part.state.error
   if ((part.state.status === "running" || part.state.status === "completed") && part.state.title)
@@ -504,6 +588,7 @@ export function Message(props: MessageProps) {
             message={userMessage() as UserMessage}
             parts={props.parts}
             interrupted={props.interrupted}
+            showCustomHookParts={props.showCustomHookParts}
           />
         )}
       </Match>
@@ -514,6 +599,7 @@ export function Message(props: MessageProps) {
             parts={props.parts}
             showAssistantCopyPartID={props.showAssistantCopyPartID}
             showReasoningSummaries={props.showReasoningSummaries}
+            showCustomHookParts={props.showCustomHookParts}
           />
         )}
       </Match>
@@ -526,6 +612,7 @@ export function AssistantMessageDisplay(props: {
   parts: PartType[]
   showAssistantCopyPartID?: string | null
   showReasoningSummaries?: boolean
+  showCustomHookParts?: boolean
 }) {
   const grouped = createMemo(() => {
     const keys: string[] = []
@@ -554,7 +641,7 @@ export function AssistantMessageDisplay(props: {
     }
 
     parts.forEach((part, index) => {
-      if (!renderable(part, props.showReasoningSummaries ?? true)) return
+      if (!renderable(part, props.showReasoningSummaries ?? true, props.showCustomHookParts ?? true)) return
 
       if (isContextGroupTool(part)) {
         if (start < 0) start = index
@@ -571,9 +658,9 @@ export function AssistantMessageDisplay(props: {
   })
 
   return (
-    <For each={grouped().keys}>
+    <For each={grouped()?.keys ?? []}>
       {(key) => {
-        const item = createMemo(() => grouped().items[key])
+        const item = createMemo(() => grouped()?.items[key])
         const ctx = createMemo(() => {
           const value = item()
           if (!value) return
@@ -688,7 +775,12 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
   )
 }
 
-export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[]; interrupted?: boolean }) {
+export function UserMessageDisplay(props: {
+  message: UserMessage
+  parts: PartType[]
+  interrupted?: boolean
+  showCustomHookParts?: boolean
+}) {
   const data = useData()
   const dialog = useDialog()
   const i18n = useI18n()
@@ -724,6 +816,11 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   )
 
   const agents = createMemo(() => (props.parts?.filter((p) => p.type === "agent") as AgentPart[]) ?? [])
+  const hooks = createMemo(() =>
+    props.parts.filter(
+      (part): part is ToolPart => part.type === "tool" && renderable(part, true, props.showCustomHookParts ?? true),
+    ),
+  )
 
   const model = createMemo(() => {
     const providerID = props.message.model?.providerID
@@ -881,6 +978,11 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
           </div>
         </BasicTool>
       </Show>
+      <Show when={hooks().length > 0}>
+        <div data-slot="user-message-hooks">
+          <For each={hooks()}>{(part) => <Part part={part} message={props.message} />}</For>
+        </div>
+      </Show>
     </div>
   )
 }
@@ -980,9 +1082,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const tool = toolName(part)
   if (tool === "todowrite" || tool === "todoread") return null
 
-  const hideQuestion = createMemo(
-    () => tool === "question" && (part.state.status === "pending" || part.state.status === "running"),
-  )
+  const hideQuestion = createMemo(() => tool === "question" && part.state.status === "pending")
 
   const emptyInput: Record<string, any> = {}
   const emptyMetadata: Record<string, any> = {}
@@ -1489,6 +1589,8 @@ ToolRegistry.register({
   name: "bash",
   render(props) {
     const i18n = useI18n()
+    const hook = createMemo(() => hookName(props.input ?? {}, props.metadata ?? {}))
+    const type = createMemo(() => hookType(props.input ?? {}, props.metadata ?? {}))
     const text = createMemo(() => {
       const cmd = props.input.command ?? props.metadata.command ?? ""
       const out = stripAnsi(props.output || props.metadata.output || "")
@@ -1509,9 +1611,9 @@ ToolRegistry.register({
         {...props}
         icon="console"
         trigger={{
-          title: i18n.t("ui.tool.shell"),
-          titleClass: "tool-exec",
-          subtitle: props.input.description,
+          title: hook() ? (type() ? `${hook()} | ${type()}` : hook()!) : i18n.t("ui.tool.shell"),
+          titleClass: hook() ? "hook-name" : "tool-exec",
+          subtitle: props.input.description ?? props.metadata.description,
         }}
       >
         <div data-component="bash-output">

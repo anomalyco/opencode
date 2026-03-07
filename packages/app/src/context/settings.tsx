@@ -23,6 +23,7 @@ export interface Settings {
     autoSave: boolean
     releaseNotes: boolean
     showReasoningSummaries: boolean
+    showCustomHookParts: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
   }
@@ -48,6 +49,7 @@ const defaultSettings: Settings = {
     autoSave: true,
     releaseNotes: true,
     showReasoningSummaries: false,
+    showCustomHookParts: true,
     shellToolPartsExpanded: true,
     editToolPartsExpanded: false,
   },
@@ -151,6 +153,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setShowReasoningSummaries(value: boolean) {
           setStore("general", "showReasoningSummaries", value)
+        },
+        showCustomHookParts: withFallback(
+          () => store.general?.showCustomHookParts,
+          defaultSettings.general.showCustomHookParts,
+        ),
+        setShowCustomHookParts(value: boolean) {
+          setStore("general", "showCustomHookParts", value)
         },
         shellToolPartsExpanded: withFallback(
           () => store.general?.shellToolPartsExpanded,

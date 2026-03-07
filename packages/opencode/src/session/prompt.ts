@@ -62,6 +62,82 @@ const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested struc
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
 
+  async function hookPart(input: {
+    sessionID: string
+    messageID: string
+    plugin: string
+    hook: string
+    stage: "before" | "after" | "error"
+    error?: string
+  }) {
+    const now = Date.now()
+    await Session.updatePart({
+      id: Identifier.ascending("part"),
+      messageID: input.messageID,
+      sessionID: input.sessionID,
+      type: "tool",
+      callID: ulid(),
+      tool: "bash",
+      state: {
+        status: "completed",
+        input: {
+          command: `# hook ${input.plugin}`,
+          description: input.plugin,
+        },
+        output: input.error ?? "",
+        title: "",
+        metadata: {
+          hook: input.plugin,
+          hook_type: `${input.stage} ${input.hook}`,
+          event: input.hook,
+          description: input.plugin,
+          output: input.error ?? "",
+        },
+        time: {
+          start: now,
+          end: now,
+        },
+      },
+      metadata: {
+        hook: input.plugin,
+        hook_type: `${input.stage} ${input.hook}`,
+        event: input.hook,
+        error: input.error,
+      },
+    })
+  }
+
+  function hookOpts(sessionID: string, messageID: string) {
+    return {
+      onInvoke: async (event: {
+        plugin: string
+        hook: string
+        stage: "before" | "after" | "error"
+        error?: string
+      }) => {
+        try {
+          await hookPart({
+            sessionID,
+            messageID,
+            plugin: event.plugin,
+            hook: event.hook,
+            stage: event.stage,
+            error: event.error,
+          })
+        } catch (err) {
+          log.debug("skip hook timeline part", {
+            sessionID,
+            messageID,
+            plugin: event.plugin,
+            hook: event.hook,
+            stage: event.stage,
+            error: err instanceof Error ? err.message : String(err),
+          })
+        }
+      },
+    }
+  }
+
   const state = Instance.state(
     () => {
       const data: Record<
@@ -417,6 +493,7 @@ export namespace SessionPrompt {
             callID: part.id,
           },
           { args: taskArgs },
+          hookOpts(sessionID, assistantMessage.id),
         )
         let executionError: Error | undefined
         const taskAgent = await Agent.get(task.agent)
@@ -466,6 +543,7 @@ export namespace SessionPrompt {
             args: taskArgs,
           },
           result,
+          hookOpts(sessionID, assistantMessage.id),
         )
         assistantMessage.finish = "tool-calls"
         assistantMessage.time.completed = Date.now()
@@ -661,6 +739,23 @@ export namespace SessionPrompt {
         system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
       }
 
+      await Plugin.trigger(
+        "assistant.response.before",
+        {
+          sessionID,
+          messageID: processor.message.id,
+          parentID: lastUser.id,
+          step,
+          agent: agent.name,
+          model: {
+            providerID: model.providerID,
+            modelID: model.id,
+          },
+        },
+        {},
+        hookOpts(sessionID, processor.message.id),
+      )
+
       const result = await processor.process({
         user: lastUser,
         agent,
@@ -682,6 +777,26 @@ export namespace SessionPrompt {
         model,
         toolChoice: format.type === "json_schema" ? "required" : undefined,
       })
+
+      await Plugin.trigger(
+        "assistant.response.after",
+        {
+          sessionID,
+          messageID: processor.message.id,
+          parentID: lastUser.id,
+          step,
+          agent: agent.name,
+          model: {
+            providerID: model.providerID,
+            modelID: model.id,
+          },
+        },
+        {
+          finish: processor.message.finish,
+          error: processor.message.error,
+        },
+        hookOpts(sessionID, processor.message.id),
+      )
 
       // If structured output was captured, save it and exit immediately
       // This takes priority because the StructuredOutput tool was called successfully
@@ -807,6 +922,7 @@ export namespace SessionPrompt {
             {
               args,
             },
+            hookOpts(ctx.sessionID, input.processor.message.id),
           )
           const result = await item.execute(args, ctx)
           const output = {
@@ -827,6 +943,7 @@ export namespace SessionPrompt {
               args,
             },
             output,
+            hookOpts(ctx.sessionID, input.processor.message.id),
           )
           return output
         },
@@ -853,6 +970,7 @@ export namespace SessionPrompt {
           {
             args,
           },
+          hookOpts(ctx.sessionID, input.processor.message.id),
         )
 
         await ctx.ask({
@@ -873,6 +991,7 @@ export namespace SessionPrompt {
             args,
           },
           result,
+          hookOpts(ctx.sessionID, input.processor.message.id),
         )
 
         const textParts: string[] = []
@@ -1314,6 +1433,7 @@ export namespace SessionPrompt {
         message: info,
         parts,
       },
+      hookOpts(input.sessionID, info.id),
     )
 
     await Session.updateMessage(info)
@@ -1631,6 +1751,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       "shell.env",
       { cwd, sessionID: input.sessionID, callID: part.callID },
       { env: {} },
+      hookOpts(input.sessionID, msg.id),
     )
     const proc = spawn(shell, args, {
       cwd,
@@ -1907,6 +2028,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         arguments: input.arguments,
       },
       { parts },
+      input.messageID ? hookOpts(input.sessionID, input.messageID) : undefined,
     )
 
     const result = (await prompt({

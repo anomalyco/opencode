@@ -375,6 +375,18 @@ export const SettingsGeneral: Component = () => {
         </SettingsRow>
 
         <SettingsRow
+          title={language.t("settings.general.row.customHookParts.title")}
+          description={language.t("settings.general.row.customHookParts.description")}
+        >
+          <div data-action="settings-feed-custom-hook-parts">
+            <Switch
+              checked={settings.general.showCustomHookParts()}
+              onChange={(checked) => settings.general.setShowCustomHookParts(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
           title={language.t("settings.general.row.shellToolPartsExpanded.title")}
           description={language.t("settings.general.row.shellToolPartsExpanded.description")}
         >

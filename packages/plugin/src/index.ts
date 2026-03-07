@@ -197,6 +197,31 @@ export interface Hooks {
       metadata: any
     },
   ) => Promise<void>
+  "assistant.response.before"?: (
+    input: {
+      sessionID: string
+      messageID: string
+      parentID: string
+      step: number
+      agent: string
+      model: { providerID: string; modelID: string }
+    },
+    output: {},
+  ) => Promise<void>
+  "assistant.response.after"?: (
+    input: {
+      sessionID: string
+      messageID: string
+      parentID: string
+      step: number
+      agent: string
+      model: { providerID: string; modelID: string }
+    },
+    output: {
+      finish?: string
+      error?: unknown
+    },
+  ) => Promise<void>
   "experimental.chat.messages.transform"?: (
     input: {},
     output: {

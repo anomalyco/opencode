@@ -498,9 +498,9 @@ export function MessageTimeline(props: {
           }}
           onScroll={(e) => {
             props.onScheduleScrollState(e.currentTarget)
-            props.onTurnBackfillScroll()
             if (!props.hasScrollGesture()) return
             props.onAutoScrollHandleScroll()
+            props.onTurnBackfillScroll()
             props.onMarkScrollGesture(e.currentTarget)
             if (props.isDesktop) props.onScrollSpyScroll()
           }}
@@ -707,6 +707,7 @@ export function MessageTimeline(props: {
                       sessionID={sessionID() ?? ""}
                       messageID={message.id}
                       showReasoningSummaries={settings.general.showReasoningSummaries()}
+                      showCustomHookParts={settings.general.showCustomHookParts()}
                       shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
                       editToolDefaultOpen={settings.general.editToolPartsExpanded()}
                       classes={{
