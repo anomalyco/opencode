@@ -143,7 +143,7 @@ export const SessionReview = (props: SessionReviewProps) => {
   const i18n = useI18n()
   const fileComponent = useFileComponent()
   const anchors = new Map<string, HTMLElement>()
-  const heads = new Map<string, HTMLDivElement>()
+  const heads = new Map<string, HTMLElement>()
   const searchHandles = new Map<string, FileSearchHandle>()
   const readyFiles = new Set<string>()
   const [store, setStore] = createStore<{ open: string[]; force: Record<string, boolean> }>({

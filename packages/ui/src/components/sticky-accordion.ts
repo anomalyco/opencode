@@ -33,11 +33,13 @@ export function pinSticky(head: HTMLElement | undefined, fn: () => void) {
 
   let frame: number | undefined
   let still = 0
+  let obs: ResizeObserver | undefined
+  let timer: ReturnType<typeof setTimeout> | undefined
   const stop = () => {
     if (frame !== undefined) cancelAnimationFrame(frame)
     frame = undefined
     obs?.disconnect()
-    clearTimeout(timer)
+    if (timer !== undefined) clearTimeout(timer)
   }
 
   const step = () => {
@@ -65,7 +67,7 @@ export function pinSticky(head: HTMLElement | undefined, fn: () => void) {
     })
   }
 
-  const obs =
+  obs =
     typeof ResizeObserver === "undefined"
       ? undefined
       : new ResizeObserver(() => {
@@ -76,7 +78,7 @@ export function pinSticky(head: HTMLElement | undefined, fn: () => void) {
   obs?.observe(pane)
   obs?.observe(head)
 
-  const timer = setTimeout(stop, 400)
+  timer = setTimeout(stop, 400)
   step()
 }
 

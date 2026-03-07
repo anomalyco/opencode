@@ -6,7 +6,7 @@ import {
   For,
   Match,
   on,
-  onMount,
+  onCleanup,
   Show,
   Switch,
   type JSX,
@@ -47,49 +47,13 @@ import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
 import { TextShimmer } from "./text-shimmer"
-import { AnimatedCountList } from "./tool-count-summary"
-import { ToolStatusTitle } from "./tool-status-title"
 import { pinStickyAccordionChange } from "./sticky-accordion"
-import { animate } from "motion"
 import { list } from "./text-utils"
 import { GrowBox } from "./grow-box"
 import { COLLAPSIBLE_SPRING } from "./motion"
 import { busy, hold, createThrottledValue, useToolFade, useContextToolPending } from "./tool-utils"
 import { ContextToolGroupHeader, ContextToolExpandedList, ContextToolRollingResults } from "./context-tool-results"
 import { ShellRollingResults } from "./shell-rolling-results"
-
-function ShellSubmessage(props: { text: string; animate?: boolean }) {
-  let widthRef: HTMLSpanElement | undefined
-  let valueRef: HTMLSpanElement | undefined
-
-  onMount(() => {
-    if (!props.animate) return
-    requestAnimationFrame(() => {
-      if (widthRef) {
-        animate(widthRef, { width: "auto" }, { type: "spring", visualDuration: 0.25, bounce: 0 })
-      }
-      if (valueRef) {
-        animate(valueRef, { opacity: 1, filter: "blur(0px)" }, { duration: 0.32, ease: [0.16, 1, 0.3, 1] })
-      }
-    })
-  })
-
-  return (
-    <span data-component="shell-submessage">
-      <span ref={widthRef} data-slot="shell-submessage-width" style={{ width: props.animate ? "0px" : undefined }}>
-        <span data-slot="basic-tool-tool-subtitle">
-          <span
-            ref={valueRef}
-            data-slot="shell-submessage-value"
-            style={props.animate ? { opacity: 0, filter: "blur(2px)" } : undefined}
-          >
-            {props.text}
-          </span>
-        </span>
-      </span>
-    </span>
-  )
-}
 
 interface Diagnostic {
   range: {
@@ -971,7 +935,7 @@ export const ToolRegistry = {
 function ToolFileAccordion(props: { path: string; actions?: JSX.Element; children: JSX.Element }) {
   const value = createMemo(() => props.path || "tool-file")
   const [open, setOpen] = createSignal<string[]>([value()])
-  let head: HTMLDivElement | undefined
+  let head: HTMLElement | undefined
 
   const change = (value: string | string[] | undefined) => pinStickyAccordionChange(open(), value, () => head, setOpen)
 
@@ -1853,7 +1817,7 @@ ToolRegistry.register({
       return list[0]
     })
     const [expanded, setExpanded] = createSignal<string[]>([])
-    const heads = new Map<string, HTMLDivElement>()
+    const heads = new Map<string, HTMLElement>()
     let seeded = false
     createEffect(() => {
       const list = files()
@@ -1916,6 +1880,7 @@ ToolRegistry.register({
                     {(file) => {
                       const active = createMemo(() => expanded().includes(file.filePath))
                       const [visible, setVisible] = createSignal(false)
+                      onCleanup(() => heads.delete(file.filePath))
                       createEffect(() => {
                         if (!active()) {
                           setVisible(false)

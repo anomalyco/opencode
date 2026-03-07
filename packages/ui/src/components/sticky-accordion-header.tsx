@@ -1,13 +1,7 @@
-import { Accordion } from "./accordion"
+import { Accordion, type AccordionHeaderProps } from "./accordion"
 import { splitProps, type ParentProps } from "solid-js"
 
-export function StickyAccordionHeader(
-  props: ParentProps<{
-    ref?: (el: HTMLDivElement) => void
-    class?: string
-    classList?: Record<string, boolean | undefined>
-  }>,
-) {
+export function StickyAccordionHeader(props: ParentProps<AccordionHeaderProps & { ref?: (el: HTMLElement) => void }>) {
   const [local, rest] = splitProps(props, ["ref", "class", "classList", "children"])
 
   return (
