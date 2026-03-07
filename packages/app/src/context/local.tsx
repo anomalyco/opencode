@@ -144,7 +144,19 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         return models.find(key)
       })
 
-      const recent = createMemo(() => models.recent.list().map(models.find).filter(Boolean))
+      const favorite = createMemo(() =>
+        models.favorite
+          .list()
+          .map(models.find)
+          .filter((item): item is NonNullable<typeof item> => !!item),
+      )
+
+      const recent = createMemo(() =>
+        models.recent
+          .list()
+          .map(models.find)
+          .filter((item): item is NonNullable<typeof item> => !!item),
+      )
 
       const cycle = (direction: 1 | -1) => {
         const recentList = recent()
@@ -181,13 +193,45 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       setModel = set
 
+      const cycleFavorite = (direction: 1 | -1) => {
+        const list = favorite()
+        if (list.length === 0) return
+        const curr = current()
+        let index = -1
+
+        if (curr) {
+          index = list.findIndex((item) => item.provider.id === curr.provider.id && item.id === curr.id)
+        }
+
+        if (index === -1) index = direction === 1 ? 0 : list.length - 1
+        else index = (index + direction + list.length) % list.length
+
+        const item = list[index]
+        if (!item) return
+        set(
+          {
+            providerID: item.provider.id,
+            modelID: item.id,
+          },
+          { recent: true },
+        )
+      }
+
       return {
         ready: models.ready,
         current,
+        favorite,
         recent,
         list: models.list,
         cycle,
+        cycleFavorite,
         set,
+        isFavorite(model: ModelKey) {
+          return models.favorite.has(model)
+        },
+        toggleFavorite(model: ModelKey) {
+          models.favorite.toggle(model)
+        },
         visible(model: ModelKey) {
           return models.visible(model)
         },

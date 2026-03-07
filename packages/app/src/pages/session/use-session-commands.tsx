@@ -227,6 +227,38 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       slash: "model",
       onSelect: () => dialog.show(() => <DialogSelectModel />),
     }),
+    modelCommand({
+      id: "model.favorite.cycle",
+      title: language.t("command.model.favorite.cycle"),
+      description: language.t("command.model.favorite.cycle.description"),
+      keybind: "mod+shift+arrowdown",
+      onSelect: () => {
+        if (local.model.favorite().length === 0) {
+          showToast({
+            title: language.t("toast.model.favorite.none.title"),
+            description: language.t("toast.model.favorite.none.description"),
+          })
+          return
+        }
+        local.model.cycleFavorite(1)
+      },
+    }),
+    modelCommand({
+      id: "model.favorite.cycle.reverse",
+      title: language.t("command.model.favorite.cycle.reverse"),
+      description: language.t("command.model.favorite.cycle.reverse.description"),
+      keybind: "mod+shift+arrowup",
+      onSelect: () => {
+        if (local.model.favorite().length === 0) {
+          showToast({
+            title: language.t("toast.model.favorite.none.title"),
+            description: language.t("toast.model.favorite.none.description"),
+          })
+          return
+        }
+        local.model.cycleFavorite(-1)
+      },
+    }),
     mcpCommand({
       id: "mcp.toggle",
       title: language.t("command.mcp.toggle"),

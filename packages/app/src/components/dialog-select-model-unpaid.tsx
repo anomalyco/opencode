@@ -1,6 +1,7 @@
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
+import { IconButton } from "@opencode-ai/ui/icon-button"
 import { List, type ListRef } from "@opencode-ai/ui/list"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tag } from "@opencode-ai/ui/tag"
@@ -18,6 +19,13 @@ export const DialogSelectModelUnpaid: Component = () => {
   const dialog = useDialog()
   const providers = useProviders()
   const language = useLanguage()
+  const favorite = (providerID: string, modelID: string) => local.model.isFavorite({ providerID, modelID })
+
+  const toggleFavorite = (event: MouseEvent, providerID: string, modelID: string) => {
+    event.preventDefault()
+    event.stopPropagation()
+    local.model.toggleFavorite({ providerID, modelID })
+  }
 
   let listRef: ListRef | undefined
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -38,6 +46,12 @@ export const DialogSelectModelUnpaid: Component = () => {
           items={local.model.list}
           current={local.model.current()}
           key={(x) => `${x.provider.id}:${x.id}`}
+          sortBy={(a, b) => {
+            const af = favorite(a.provider.id, a.id)
+            const bf = favorite(b.provider.id, b.id)
+            if (af !== bf) return af ? -1 : 1
+            return a.name.localeCompare(b.name)
+          }}
           itemWrapper={(item, node) => (
             <Tooltip
               class="w-full"
@@ -63,11 +77,32 @@ export const DialogSelectModelUnpaid: Component = () => {
         >
           {(i) => (
             <div class="w-full flex items-center gap-x-2.5">
-              <span>{i.name}</span>
-              <Tag>{language.t("model.tag.free")}</Tag>
-              <Show when={i.latest}>
-                <Tag>{language.t("model.tag.latest")}</Tag>
-              </Show>
+              <div class="min-w-0 flex-1 flex items-center gap-x-2.5">
+                <span class="truncate">{i.name}</span>
+                <Tag>{language.t("model.tag.free")}</Tag>
+                <Show when={i.latest}>
+                  <Tag>{language.t("model.tag.latest")}</Tag>
+                </Show>
+              </div>
+              <Tooltip
+                value={language.t(favorite(i.provider.id, i.id) ? "dialog.model.unfavorite" : "dialog.model.favorite")}
+              >
+                <IconButton
+                  icon="circle-check"
+                  variant="ghost"
+                  size="small"
+                  class="shrink-0"
+                  classList={{
+                    "opacity-100": favorite(i.provider.id, i.id),
+                    "opacity-30": !favorite(i.provider.id, i.id),
+                  }}
+                  onMouseDown={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                  }}
+                  onClick={(event) => toggleFavorite(event, i.provider.id, i.id)}
+                />
+              </Tooltip>
             </div>
           )}
         </List>
