@@ -452,6 +452,15 @@ echo -e ""
 echo -e ""
 echo -e "${MUTED}OpenCode includes free models, to start:${NC}"
 echo -e ""
+if [[ -n "${config_file:-}" && ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+case $current_shell in
+    sh) echo -e ". \"$config_file\"  ${MUTED}# Or open a new terminal${NC}" ;;
+    *)  echo -e "source \"$config_file\"  ${MUTED}# Or open a new terminal${NC}" ;;
+esac
+echo -e ""
+echo -e "${MUTED}then:${NC}"
+echo -e ""
+fi
 echo -e "cd <project>  ${MUTED}# Open directory${NC}"
 echo -e "opencode      ${MUTED}# Run command${NC}"
 echo -e ""
