@@ -26,7 +26,7 @@
     },
     "packages/app": {
       "name": "@opencode-ai/app",
-      "version": "1.2.20",
+      "version": "1.2.21",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@opencode-ai/sdk": "workspace:*",
@@ -293,7 +293,7 @@
     },
     "packages/opencode": {
       "name": "opencode",
-      "version": "1.2.20",
+      "version": "1.2.21",
       "bin": {
         "opencode": "./bin/opencode",
       },
