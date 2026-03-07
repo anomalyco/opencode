@@ -14,8 +14,7 @@
     "prepare": "husky",
     "random": "echo 'Random script'",
     "hello": "echo 'Hello World!'",
-    "test": "echo 'do not run tests from root' && exit 1",
-    "pr:create": "bun ./script/pr-create.ts"
+    "test": "echo 'do not run tests from root' && exit 1"
   },
   "workspaces": {
     "packages": [
