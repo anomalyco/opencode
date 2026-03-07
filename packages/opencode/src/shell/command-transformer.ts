@@ -132,6 +132,14 @@ export class CommandTransformer {
       replace: (match: string, p1: string, p2: string) => `${p1}Write-Output ${p2}`,
       description: "Output text",
     },
+    {
+      pattern: /(^|\s|;|\|\||&&)seq\s+(\d+)\s+(\d+)/,
+      replace: (match: string, p1: string, p2: string, p3: string) => `${p1}${p2}..${p3}`,
+    },
+    {
+      pattern: /(^|\s|;|\|\||&&)seq\s+(\d+)/,
+      replace: (match: string, p1: string, p2: string) => `${p1}1..${p2}`,
+    },
   ]
 
   private static readonly unixToCmd: CommandMapping[] = [
@@ -250,6 +258,14 @@ export class CommandTransformer {
       pattern: /(^|\s|;|\|\||&&)echo\s+(.+)/,
       replace: (match: string, p1: string, p2: string) => `${p1}echo ${p2}`,
       description: "Output text",
+    },
+    {
+      pattern: /(^|\s|;|\|\||&&)seq\s+(\d+)\s+(\d+)/,
+      replace: (match: string, p1: string, p2: string, p3: string) => `${p1}for /L %i in (${p2},1,${p3}) do @echo %i`,
+    },
+    {
+      pattern: /(^|\s|;|\|\||&&)seq\s+(\d+)/,
+      replace: (match: string, p1: string, p2: string) => `${p1}for /L %i in (1,1,${p2}) do @echo %i`,
     },
   ]
 

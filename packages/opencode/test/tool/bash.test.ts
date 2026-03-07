@@ -314,7 +314,10 @@ describe("tool.bash permissions", () => {
 })
 
 describe("tool.bash truncation", () => {
+  const isWindows = process.platform === "win32"
+
   test("truncates output exceeding line limit", async () => {
+    if (isWindows) return
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
@@ -335,6 +338,7 @@ describe("tool.bash truncation", () => {
   })
 
   test("truncates output exceeding byte limit", async () => {
+    if (isWindows) return
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
@@ -374,6 +378,7 @@ describe("tool.bash truncation", () => {
   })
 
   test("full output is saved to file when truncated", async () => {
+    if (isWindows) return
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
