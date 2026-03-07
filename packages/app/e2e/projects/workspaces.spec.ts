@@ -22,6 +22,26 @@ function slugFromUrl(url: string) {
   return /\/([^/]+)\/session(?:\/|$)/.exec(url)?.[1] ?? ""
 }
 
+async function waitSlug(page: Page, skip: string[] = []) {
+  let prev = ""
+  await expect
+    .poll(
+      () => {
+        const slug = slugFromUrl(page.url())
+        if (!slug) return ""
+        if (skip.includes(slug)) return ""
+        if (slug !== prev) {
+          prev = slug
+          return ""
+        }
+        return slug
+      },
+      { timeout: 45_000 },
+    )
+    .not.toBe("")
+  return slugFromUrl(page.url())
+}
+
 async function setupWorkspaceTest(page: Page, project: { slug: string }) {
   const rootSlug = project.slug
   await openSidebar(page)
@@ -29,17 +49,7 @@ async function setupWorkspaceTest(page: Page, project: { slug: string }) {
   await setWorkspacesEnabled(page, rootSlug, true)
 
   await page.getByRole("button", { name: "New workspace" }).first().click()
-  await expect
-    .poll(
-      () => {
-        const slug = slugFromUrl(page.url())
-        return slug.length > 0 && slug !== rootSlug
-      },
-      { timeout: 45_000 },
-    )
-    .toBe(true)
-
-  const slug = slugFromUrl(page.url())
+  const slug = await waitSlug(page, [rootSlug])
   const dir = base64Decode(slug)
 
   await openSidebar(page)
@@ -91,18 +101,7 @@ test("can create a workspace", async ({ page, withProject }) => {
     await expect(page.getByRole("button", { name: "New workspace" }).first()).toBeVisible()
 
     await page.getByRole("button", { name: "New workspace" }).first().click()
-
-    await expect
-      .poll(
-        () => {
-          const currentSlug = slugFromUrl(page.url())
-          return currentSlug.length > 0 && currentSlug !== slug
-        },
-        { timeout: 45_000 },
-      )
-      .toBe(true)
-
-    const workspaceSlug = slugFromUrl(page.url())
+    const workspaceSlug = await waitSlug(page, [slug])
     const workspaceDir = base64Decode(workspaceSlug)
 
     await openSidebar(page)
@@ -279,7 +278,7 @@ test("can delete a workspace", async ({ page, withProject }) => {
     await clickMenuItem(menu, /^Delete$/i, { force: true })
     await confirmDialog(page, /^Delete workspace$/i)
 
-    await expect(page).toHaveURL(new RegExp(`/${rootSlug}/session`))
+    await expect.poll(() => base64Decode(slugFromUrl(page.url()))).toBe(project.directory)
 
     await expect
       .poll(

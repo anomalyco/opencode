@@ -3,7 +3,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { execSync } from "node:child_process"
-import { modKey, serverUrl } from "./utils"
+import { createSdk, modKey, resolveDirectory, serverUrl } from "./utils"
 import {
   dropdownMenuTriggerSelector,
   dropdownMenuContentSelector,
@@ -18,7 +18,6 @@ import {
   workspaceItemSelector,
   workspaceMenuTriggerSelector,
 } from "./selectors"
-import type { createSdk } from "./utils"
 
 export async function defocus(page: Page) {
   await page
@@ -190,7 +189,7 @@ export async function createTestProject() {
     stdio: "ignore",
   })
 
-  return root
+  return resolveDirectory(root)
 }
 
 export async function cleanupTestProject(directory: string) {

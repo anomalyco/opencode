@@ -14,6 +14,12 @@ export function createSdk(directory?: string) {
   return createOpencodeClient({ baseUrl: serverUrl, directory, throwOnError: true })
 }
 
+export async function resolveDirectory(directory: string) {
+  return createSdk(directory)
+    .path.get()
+    .then((x) => x.data?.directory ?? directory)
+}
+
 export async function getWorktree() {
   const sdk = createSdk()
   const result = await sdk.path.get()

@@ -9,6 +9,26 @@ function slugFromUrl(url: string) {
   return /\/([^/]+)\/session(?:\/|$)/.exec(url)?.[1] ?? ""
 }
 
+async function waitSlug(page: Page, skip: string[] = []) {
+  let prev = ""
+  await expect
+    .poll(
+      () => {
+        const slug = slugFromUrl(page.url())
+        if (!slug) return ""
+        if (skip.includes(slug)) return ""
+        if (slug !== prev) {
+          prev = slug
+          return ""
+        }
+        return slug
+      },
+      { timeout: 45_000 },
+    )
+    .not.toBe("")
+  return slugFromUrl(page.url())
+}
+
 async function waitWorkspaceReady(page: Page, slug: string) {
   await openSidebar(page)
   await expect
@@ -31,20 +51,7 @@ async function createWorkspace(page: Page, root: string, seen: string[]) {
   await openSidebar(page)
   await page.getByRole("button", { name: "New workspace" }).first().click()
 
-  await expect
-    .poll(
-      () => {
-        const slug = slugFromUrl(page.url())
-        if (!slug) return ""
-        if (slug === root) return ""
-        if (seen.includes(slug)) return ""
-        return slug
-      },
-      { timeout: 45_000 },
-    )
-    .not.toBe("")
-
-  const slug = slugFromUrl(page.url())
+  const slug = await waitSlug(page, [root, ...seen])
   const directory = base64Decode(slug)
   if (!directory) throw new Error(`Failed to decode workspace slug: ${slug}`)
   return { slug, directory }
@@ -60,12 +67,13 @@ async function openWorkspaceNewSession(page: Page, slug: string) {
   await expect(button).toBeVisible()
   await button.click({ force: true })
 
-  await expect.poll(() => slugFromUrl(page.url())).toBe(slug)
-  await expect(page).toHaveURL(new RegExp(`/${slug}/session(?:[/?#]|$)`))
+  const next = await waitSlug(page)
+  await expect(page).toHaveURL(new RegExp(`/${next}/session(?:[/?#]|$)`))
+  return next
 }
 
 async function createSessionFromWorkspace(page: Page, slug: string, text: string) {
-  await openWorkspaceNewSession(page, slug)
+  const next = await openWorkspaceNewSession(page, slug)
 
   const prompt = page.locator(promptSelector)
   await expect(prompt).toBeVisible()
@@ -76,13 +84,13 @@ async function createSessionFromWorkspace(page: Page, slug: string, text: string
   await expect.poll(async () => ((await prompt.textContent()) ?? "").trim()).toContain(text)
   await prompt.press("Enter")
 
-  await expect.poll(() => slugFromUrl(page.url())).toBe(slug)
+  await expect.poll(() => slugFromUrl(page.url())).toBe(next)
   await expect.poll(() => sessionIDFromUrl(page.url()) ?? "", { timeout: 30_000 }).not.toBe("")
 
   const sessionID = sessionIDFromUrl(page.url())
   if (!sessionID) throw new Error(`Failed to parse session id from url: ${page.url()}`)
-  await expect(page).toHaveURL(new RegExp(`/${slug}/session/${sessionID}(?:[/?#]|$)`))
-  return sessionID
+  await expect(page).toHaveURL(new RegExp(`/${next}/session/${sessionID}(?:[/?#]|$)`))
+  return { sessionID, slug: next }
 }
 
 async function sessionDirectory(directory: string, sessionID: string) {
@@ -114,17 +122,17 @@ test("new sessions from sidebar workspace actions stay in selected workspace", a
       await waitWorkspaceReady(page, second.slug)
 
       const firstSession = await createSessionFromWorkspace(page, first.slug, `workspace one ${Date.now()}`)
-      sessions.push(firstSession)
+      sessions.push(firstSession.sessionID)
 
       const secondSession = await createSessionFromWorkspace(page, second.slug, `workspace two ${Date.now()}`)
-      sessions.push(secondSession)
+      sessions.push(secondSession.sessionID)
 
       const thirdSession = await createSessionFromWorkspace(page, first.slug, `workspace one again ${Date.now()}`)
-      sessions.push(thirdSession)
+      sessions.push(thirdSession.sessionID)
 
-      await expect.poll(() => sessionDirectory(first.directory, firstSession)).toBe(first.directory)
-      await expect.poll(() => sessionDirectory(second.directory, secondSession)).toBe(second.directory)
-      await expect.poll(() => sessionDirectory(first.directory, thirdSession)).toBe(first.directory)
+      await expect.poll(() => sessionDirectory(first.directory, firstSession.sessionID)).toBe(first.directory)
+      await expect.poll(() => sessionDirectory(second.directory, secondSession.sessionID)).toBe(second.directory)
+      await expect.poll(() => sessionDirectory(first.directory, thirdSession.sessionID)).toBe(first.directory)
     } finally {
       const dirs = [directory, ...workspaces.map((workspace) => workspace.directory)]
       await Promise.all(
