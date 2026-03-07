@@ -13,6 +13,7 @@ export const popularProviders = [
   "openrouter",
   "vercel",
 ]
+
 const popularProviderSet = new Set(popularProviders)
 
 export function useProviders() {
