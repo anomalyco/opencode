@@ -466,3 +466,163 @@ test("sequential revert keeps prior conversation mode", async () => {
     },
   })
 })
+
+test("redo to prior conversation-only point restores code state", async () => {
+  await using tmp = await tmpdir({ git: true, config: { snapshot: true } })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await Session.create({})
+      const sessionID = session.id
+      const file = path.join(tmp.path, "test.txt")
+      await Bun.write(file, "ORIGINAL")
+
+      const user1 = await Session.updateMessage({
+        id: Identifier.ascending("message"),
+        role: "user",
+        sessionID,
+        agent: "default",
+        model: {
+          providerID: "openai",
+          modelID: "gpt-4",
+        },
+        time: {
+          created: Date.now(),
+        },
+      })
+
+      await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: user1.id,
+        sessionID,
+        type: "text",
+        text: "first",
+      })
+
+      const ass1: MessageV2.Assistant = {
+        id: Identifier.ascending("message"),
+        role: "assistant",
+        sessionID,
+        mode: "default",
+        agent: "default",
+        path: {
+          cwd: tmp.path,
+          root: tmp.path,
+        },
+        cost: 0,
+        tokens: {
+          output: 0,
+          input: 0,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        },
+        modelID: "gpt-4",
+        providerID: "openai",
+        parentID: user1.id,
+        time: {
+          created: Date.now(),
+        },
+        finish: "end_turn",
+      }
+      await Session.updateMessage(ass1)
+
+      const hash1 = await Snapshot.track()
+      expect(hash1).toBeTruthy()
+      await Bun.write(file, "STEP1")
+      const patch1 = await Snapshot.patch(hash1!)
+      await Session.updatePart({
+        id: Identifier.ascending("part"),
+        sessionID,
+        messageID: ass1.id,
+        type: "patch",
+        hash: patch1.hash,
+        files: patch1.files.map((x) => path.relative(tmp.path, x).replaceAll("\\", "/")),
+      })
+
+      const user2 = await Session.updateMessage({
+        id: Identifier.ascending("message"),
+        role: "user",
+        sessionID,
+        agent: "default",
+        model: {
+          providerID: "openai",
+          modelID: "gpt-4",
+        },
+        time: {
+          created: Date.now(),
+        },
+      })
+
+      await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: user2.id,
+        sessionID,
+        type: "text",
+        text: "second",
+      })
+
+      const ass2: MessageV2.Assistant = {
+        id: Identifier.ascending("message"),
+        role: "assistant",
+        sessionID,
+        mode: "default",
+        agent: "default",
+        path: {
+          cwd: tmp.path,
+          root: tmp.path,
+        },
+        cost: 0,
+        tokens: {
+          output: 0,
+          input: 0,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        },
+        modelID: "gpt-4",
+        providerID: "openai",
+        parentID: user2.id,
+        time: {
+          created: Date.now(),
+        },
+        finish: "end_turn",
+      }
+      await Session.updateMessage(ass2)
+
+      const hash2 = await Snapshot.track()
+      expect(hash2).toBeTruthy()
+      await Bun.write(file, "STEP2")
+      const patch2 = await Snapshot.patch(hash2!)
+      await Session.updatePart({
+        id: Identifier.ascending("part"),
+        sessionID,
+        messageID: ass2.id,
+        type: "patch",
+        hash: patch2.hash,
+        files: patch2.files.map((x) => path.relative(tmp.path, x).replaceAll("\\", "/")),
+      })
+
+      await SessionRevert.revert({
+        sessionID,
+        messageID: user2.id,
+        mode: "conversation",
+      })
+      expect(await Bun.file(file).text()).toBe("STEP2")
+
+      await SessionRevert.revert({
+        sessionID,
+        messageID: user1.id,
+        mode: "conversation_and_code",
+      })
+      expect(await Bun.file(file).text()).toBe("ORIGINAL")
+
+      await SessionRevert.revert({
+        sessionID,
+        messageID: user2.id,
+        mode: "conversation_and_code",
+      })
+
+      expect(await Bun.file(file).text()).toBe("STEP2")
+      expect((await Session.get(sessionID)).revert?.mode).toBe("conversation")
+    },
+  })
+})
