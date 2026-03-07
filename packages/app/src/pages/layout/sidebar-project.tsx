@@ -137,7 +137,7 @@ const ProjectTile = (props: {
       >
         <ProjectIcon project={props.project} notify />
       </ContextMenu.Trigger>
-      <ContextMenu.Portal mount={!props.mobile ? props.nav() : undefined}>
+      <ContextMenu.Portal>
         <ContextMenu.Content>
           <ContextMenu.Item onSelect={() => props.showEditProjectDialog(props.project)}>
             <ContextMenu.ItemLabel>{props.language.t("common.edit")}</ContextMenu.ItemLabel>
