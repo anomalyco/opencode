@@ -340,6 +340,47 @@
         ]
       }
     },
+    "/project/git/init": {
+      "post": {
+        "operationId": "project.initGit",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Initialize git repository",
+        "description": "Create a git repository for the current project and return the refreshed project info.",
+        "responses": {
+          "200": {
+            "description": "Project information after git initialization",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.project.initGit({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/project/{projectID}": {
       "patch": {
         "operationId": "project.update",

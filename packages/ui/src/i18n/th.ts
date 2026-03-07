@@ -95,6 +95,8 @@ export const dict = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "ดึงจากเว็บ",
+  "ui.tool.websearch": "ค้นหาเว็บ",
+  "ui.tool.codesearch": "ค้นหาโค้ด",
   "ui.tool.shell": "เชลล์",
   "ui.tool.patch": "แพตช์",
   "ui.tool.todos": "รายการงาน",

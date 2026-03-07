@@ -23,7 +23,8 @@
   <a href="README.tr.md">Türkçe</a> |
   <a href="README.uk.md">Українська</a> |
   <a href="README.bn.md">বাংলা</a> |
-  <a href="README.gr.md">Ελληνικά</a>
+  <a href="README.gr.md">Ελληνικά</a> |
+  <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
 这是一个针对 OpenCode Desktop 应用进行深度 UI 优化和功能增强的个人定制版本。在保持 OpenCode 核心功能的基础上，大幅改进了用户界面交互体验和使用效率。
