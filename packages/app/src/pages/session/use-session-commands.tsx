@@ -12,6 +12,7 @@ import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { DialogSelectFile } from "@/components/dialog-select-file"
+import { DialogSettings } from "@/components/dialog-settings"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
 import { DialogFork } from "@/components/dialog-fork"
@@ -228,36 +229,42 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       onSelect: () => dialog.show(() => <DialogSelectModel />),
     }),
     modelCommand({
-      id: "model.favorite.cycle",
-      title: language.t("command.model.favorite.cycle"),
-      description: language.t("command.model.favorite.cycle.description"),
+      id: "model.quick.switch",
+      title: language.t("command.model.quick.switch"),
+      description: language.t("command.model.quick.switch.description"),
       keybind: "mod+shift+arrowdown",
       onSelect: () => {
-        if (local.model.favorite().length === 0) {
+        if (local.model.quick.list().length < 2) {
           showToast({
-            title: language.t("toast.model.favorite.none.title"),
-            description: language.t("toast.model.favorite.none.description"),
+            title: language.t("toast.model.quick.none.title"),
+            description: language.t("toast.model.quick.none.description"),
           })
           return
         }
-        local.model.cycleFavorite(1)
+        local.model.quick.cycle(1)
       },
     }),
     modelCommand({
-      id: "model.favorite.cycle.reverse",
-      title: language.t("command.model.favorite.cycle.reverse"),
-      description: language.t("command.model.favorite.cycle.reverse.description"),
+      id: "model.quick.switch.reverse",
+      title: language.t("command.model.quick.switch.reverse"),
+      description: language.t("command.model.quick.switch.reverse.description"),
       keybind: "mod+shift+arrowup",
       onSelect: () => {
-        if (local.model.favorite().length === 0) {
+        if (local.model.quick.list().length < 2) {
           showToast({
-            title: language.t("toast.model.favorite.none.title"),
-            description: language.t("toast.model.favorite.none.description"),
+            title: language.t("toast.model.quick.none.title"),
+            description: language.t("toast.model.quick.none.description"),
           })
           return
         }
-        local.model.cycleFavorite(-1)
+        local.model.quick.cycle(-1)
       },
+    }),
+    modelCommand({
+      id: "model.quick.settings",
+      title: language.t("command.model.quick.settings"),
+      description: language.t("command.model.quick.settings.description"),
+      onSelect: () => dialog.show(() => <DialogSettings tab="models" />),
     }),
     mcpCommand({
       id: "mcp.toggle",

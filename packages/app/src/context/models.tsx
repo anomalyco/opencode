@@ -13,6 +13,10 @@ type User = ModelKey & { visibility: Visibility; favorite?: boolean }
 type Store = {
   user: User[]
   recent: ModelKey[]
+  quick: {
+    a?: ModelKey
+    b?: ModelKey
+  }
   variant?: Record<string, string | undefined>
 }
 
@@ -32,6 +36,7 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       createStore<Store>({
         user: [],
         recent: [],
+        quick: {},
         variant: {},
       }),
     )
@@ -122,6 +127,18 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       setStore("user", store.user.length, { ...model, visibility: "show", favorite: true })
     }
 
+    function same(a: ModelKey | undefined, b: ModelKey | undefined) {
+      if (!a || !b) return false
+      return a.providerID === b.providerID && a.modelID === b.modelID
+    }
+
+    function setQuick(slot: "a" | "b", model: ModelKey | undefined) {
+      const other = slot === "a" ? "b" : "a"
+      setStore("quick", slot, model)
+      if (same(model, store.quick[other])) setStore("quick", other, undefined)
+      if (model) update(model, "show")
+    }
+
     const visible = (model: ModelKey) => {
       const key = modelKey(model)
       const state = visibility().get(key)
@@ -178,6 +195,13 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       recent: {
         list: createMemo(() => store.recent),
         push,
+      },
+      quick: {
+        list: createMemo(() => [store.quick.a, store.quick.b].filter((item): item is ModelKey => !!item)),
+        get(slot: "a" | "b") {
+          return store.quick[slot]
+        },
+        set: setQuick,
       },
       variant: {
         get: getVariant,

@@ -3,13 +3,19 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Select } from "@opencode-ai/ui/select"
 import { TextField } from "@opencode-ai/ui/text-field"
-import { type Component, For, Show } from "solid-js"
+import { type Component, For, Show, createMemo } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useModels } from "@/context/models"
 import { popularProviders } from "@/hooks/use-providers"
 
 type ModelItem = ReturnType<ReturnType<typeof useModels>["list"]>[number]
+type Option = {
+  id: string
+  label: string
+  key: { providerID: string; modelID: string }
+}
 
 const ListLoadingState: Component<{ label: string }> = (props) => {
   return (
@@ -33,6 +39,33 @@ const ListEmptyState: Component<{ message: string; filter: string }> = (props) =
 export const SettingsModels: Component = () => {
   const language = useLanguage()
   const models = useModels()
+
+  const id = (key: { providerID: string; modelID: string }) => `${key.providerID}:${key.modelID}`
+
+  const all = createMemo<Option[]>(() =>
+    models
+      .list()
+      .map((item) => ({
+        id: id({ providerID: item.provider.id, modelID: item.id }),
+        label: `${item.provider.name} / ${item.name}`,
+        key: { providerID: item.provider.id, modelID: item.id },
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+  )
+
+  const enabled = createMemo(() => all().filter((item) => models.visible(item.key)))
+
+  const current = (slot: "a" | "b") => {
+    const key = models.quick.get(slot)
+    if (!key) return
+    return all().find((item) => item.id === id(key))
+  }
+
+  const options = (slot: "a" | "b") => {
+    const other = models.quick.get(slot === "a" ? "b" : "a")
+    if (!other) return enabled()
+    return enabled().filter((item) => item.id !== id(other))
+  }
 
   const list = useFilteredList<ModelItem>({
     items: (_filter) => models.list(),
@@ -61,6 +94,7 @@ export const SettingsModels: Component = () => {
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-4 pt-6 pb-6 max-w-[720px]">
           <h2 class="text-16-medium text-text-strong">{language.t("settings.models.title")}</h2>
+          <p class="text-13-regular text-text-weak">{language.t("settings.models.description")}</p>
           <div class="flex items-center gap-2 px-3 h-9 rounded-lg bg-surface-base">
             <Icon name="magnifying-glass" class="text-icon-weak-base flex-shrink-0" />
             <TextField
@@ -83,6 +117,59 @@ export const SettingsModels: Component = () => {
       </div>
 
       <div class="flex flex-col gap-8 max-w-[720px]">
+        <div class="flex flex-col gap-1">
+          <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.models.quick.title")}</h3>
+          <div class="bg-surface-raised-base px-4 rounded-lg">
+            <div class="flex flex-wrap items-center justify-between gap-4 py-3 border-b border-border-weak-base">
+              <div class="flex flex-col gap-0.5 min-w-0">
+                <span class="text-14-medium text-text-strong">{language.t("settings.models.quick.first.title")}</span>
+                <span class="text-12-regular text-text-weak">
+                  {language.t("settings.models.quick.first.description")}
+                </span>
+              </div>
+              <div class="flex items-center gap-2 flex-shrink-0">
+                <Select
+                  options={options("a")}
+                  current={current("a")}
+                  value={(item) => item.id}
+                  label={(item) => item.label}
+                  onSelect={(item) => models.quick.set("a", item?.key)}
+                  variant="secondary"
+                  size="small"
+                  triggerVariant="settings"
+                  triggerStyle={{ "min-width": "260px" }}
+                />
+                <Show when={models.quick.get("a")}>
+                  <IconButton icon="circle-x" variant="ghost" onClick={() => models.quick.set("a", undefined)} />
+                </Show>
+              </div>
+            </div>
+            <div class="flex flex-wrap items-center justify-between gap-4 py-3">
+              <div class="flex flex-col gap-0.5 min-w-0">
+                <span class="text-14-medium text-text-strong">{language.t("settings.models.quick.second.title")}</span>
+                <span class="text-12-regular text-text-weak">
+                  {language.t("settings.models.quick.second.description")}
+                </span>
+              </div>
+              <div class="flex items-center gap-2 flex-shrink-0">
+                <Select
+                  options={options("b")}
+                  current={current("b")}
+                  value={(item) => item.id}
+                  label={(item) => item.label}
+                  onSelect={(item) => models.quick.set("b", item?.key)}
+                  variant="secondary"
+                  size="small"
+                  triggerVariant="settings"
+                  triggerStyle={{ "min-width": "260px" }}
+                />
+                <Show when={models.quick.get("b")}>
+                  <IconButton icon="circle-x" variant="ghost" onClick={() => models.quick.set("b", undefined)} />
+                </Show>
+              </div>
+            </div>
+          </div>
+        </div>
         <Show
           when={!list.grouped.loading}
           fallback={

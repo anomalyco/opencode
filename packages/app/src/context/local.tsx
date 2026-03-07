@@ -158,6 +158,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           .filter((item): item is NonNullable<typeof item> => !!item),
       )
 
+      const quick = createMemo(() =>
+        models.quick
+          .list()
+          .map(models.find)
+          .filter((item): item is NonNullable<typeof item> => !!item)
+          .filter((item) => models.visible({ providerID: item.provider.id, modelID: item.id })),
+      )
+
       const cycle = (direction: 1 | -1) => {
         const recentList = recent()
         const currentModel = current()
@@ -217,6 +225,24 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         )
       }
 
+      const cycleQuick = (direction: 1 | -1) => {
+        const list = quick()
+        if (list.length < 2) return
+        const curr = current()
+        const index = curr ? list.findIndex((item) => item.provider.id === curr.provider.id && item.id === curr.id) : -1
+        const next =
+          index === -1 ? (direction === 1 ? 0 : list.length - 1) : (index + direction + list.length) % list.length
+        const item = list[next]
+        if (!item) return
+        set(
+          {
+            providerID: item.provider.id,
+            modelID: item.id,
+          },
+          { recent: true },
+        )
+      }
+
       return {
         ready: models.ready,
         current,
@@ -225,6 +251,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         list: models.list,
         cycle,
         cycleFavorite,
+        quick: {
+          list: quick,
+          get: models.quick.get,
+          set: models.quick.set,
+          cycle: cycleQuick,
+        },
         set,
         isFavorite(model: ModelKey) {
           return models.favorite.has(model)

@@ -48,7 +48,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { DialogSelectProvider } from "@/components/dialog-select-provider"
 import { DialogSelectServer } from "@/components/dialog-select-server"
-import { DialogSettings } from "@/components/dialog-settings"
+import { DialogSettings, type SettingsTab } from "@/components/dialog-settings"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
@@ -1098,8 +1098,8 @@ export default function Layout(props: ParentProps) {
     dialog.show(() => <DialogSelectServer />)
   }
 
-  function openSettings() {
-    dialog.show(() => <DialogSettings />)
+  function openSettings(tab?: SettingsTab) {
+    dialog.show(() => <DialogSettings tab={tab} />)
   }
 
   function projectRoot(directory: string) {
