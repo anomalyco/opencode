@@ -396,6 +396,18 @@ export namespace Project {
     },
   )
 
+  export const remove = fn(
+    z.object({
+      projectID: z.string(),
+    }),
+    async ({ projectID }) => {
+      const existing = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, projectID)).get())
+      if (!existing) throw new Error(`Project not found: ${projectID}`)
+      Database.use((db) => db.delete(ProjectTable).where(eq(ProjectTable.id, projectID)).run())
+      return true
+    },
+  )
+
   export async function sandboxes(id: string) {
     const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
     if (!row) return []

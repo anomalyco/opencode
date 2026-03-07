@@ -18,6 +18,7 @@ import { Storage } from "@/storage/storage"
 import { Log } from "../util/log"
 import { MessageV2 } from "./message-v2"
 import { Instance } from "../project/instance"
+import { Project } from "../project/project"
 import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
 import { Command } from "../command"
@@ -217,14 +218,18 @@ export namespace Session {
     z
       .object({
         parentID: Identifier.schema("session").optional(),
+        directory: z.string().optional(),
         title: z.string().optional(),
         permission: Info.shape.permission,
       })
       .optional(),
     async (input) => {
+      const directory = input?.directory ?? Instance.directory
+      const project = directory === Instance.directory ? Instance.project : (await Project.fromDirectory(directory)).project
       return createNext({
         parentID: input?.parentID,
-        directory: Instance.directory,
+        directory,
+        projectID: project.id,
         title: input?.title,
         permission: input?.permission,
       })
@@ -293,13 +298,14 @@ export namespace Session {
     title?: string
     parentID?: string
     directory: string
+    projectID?: string
     permission?: PermissionNext.Ruleset
   }) {
     const result: Info = {
       id: Identifier.descending("session", input.id),
       slug: Slug.create(),
       version: Installation.VERSION,
-      projectID: Instance.project.id,
+      projectID: input.projectID ?? Instance.project.id,
       directory: input.directory,
       workspaceID: WorkspaceContext.workspaceID,
       parentID: input.parentID,

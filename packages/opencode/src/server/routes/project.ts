@@ -32,6 +32,31 @@ export const ProjectRoutes = lazy(() =>
         return c.json(projects)
       },
     )
+    .post(
+      "/",
+      describeRoute({
+        summary: "Add a project",
+        description: "Register a new project by providing a directory path. The directory will be analyzed and registered as a project.",
+        operationId: "project.add",
+        responses: {
+          200: {
+            description: "Project successfully added",
+            content: {
+              "application/json": {
+                schema: resolver(Project.Info),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("json", z.object({ directory: z.string() })),
+      async (c) => {
+        const { directory } = c.req.valid("json")
+        const { project } = await Project.fromDirectory(directory)
+        return c.json(project)
+      },
+    )
     .get(
       "/current",
       describeRoute({
@@ -112,6 +137,31 @@ export const ProjectRoutes = lazy(() =>
         const body = c.req.valid("json")
         const project = await Project.update({ ...body, projectID })
         return c.json(project)
+      },
+    )
+    .delete(
+      "/:projectID",
+      describeRoute({
+        summary: "Delete project",
+        description: "Delete a project by ID.",
+        operationId: "project.delete",
+        responses: {
+          200: {
+            description: "Project deleted",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ projectID: z.string() })),
+      async (c) => {
+        const projectID = c.req.valid("param").projectID
+        await Project.remove({ projectID })
+        return c.json(true)
       },
     ),
 )
