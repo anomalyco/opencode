@@ -61,6 +61,10 @@ export const dict = {
   "command.message.next.description": "Go to the next user message",
   "command.model.choose": "Choose model",
   "command.model.choose.description": "Select a different model",
+  "command.model.favorite.cycle": "Cycle favorite models",
+  "command.model.favorite.cycle.description": "Switch to the next favorite model",
+  "command.model.favorite.cycle.reverse": "Cycle favorite models backwards",
+  "command.model.favorite.cycle.reverse.description": "Switch to the previous favorite model",
   "command.mcp.toggle": "Toggle MCPs",
   "command.mcp.toggle.description": "Toggle MCPs",
   "command.agent.cycle": "Cycle agent",
@@ -111,6 +115,8 @@ export const dict = {
   "dialog.model.select.title": "Select model",
   "dialog.model.search.placeholder": "Search models",
   "dialog.model.empty": "No model results",
+  "dialog.model.favorite": "Favorite",
+  "dialog.model.unfavorite": "Unfavorite",
   "dialog.model.manage": "Manage models",
   "dialog.model.manage.description": "Customize which models appear in the model selector.",
   "dialog.model.manage.provider.toggle": "Toggle all {{provider}} models",
@@ -423,6 +429,8 @@ export const dict = {
 
   "toast.model.none.title": "No model selected",
   "toast.model.none.description": "Connect a provider to summarize this session",
+  "toast.model.favorite.none.title": "No favorite models",
+  "toast.model.favorite.none.description": "Favorite a couple of models to cycle between them quickly.",
 
   "toast.file.loadFailed.title": "Failed to load file",
   "toast.file.listFailed.title": "Failed to list files",

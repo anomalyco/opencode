@@ -34,6 +34,14 @@ const ModelList: Component<{
       .filter((m) => (props.provider ? m.provider.id === props.provider : true)),
   )
 
+  const favorite = (providerID: string, modelID: string) => local.model.isFavorite({ providerID, modelID })
+
+  const toggleFavorite = (event: MouseEvent, providerID: string, modelID: string) => {
+    event.preventDefault()
+    event.stopPropagation()
+    local.model.toggleFavorite({ providerID, modelID })
+  }
+
   return (
     <List
       class={`flex-1 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0 ${props.class ?? ""}`}
@@ -43,7 +51,12 @@ const ModelList: Component<{
       items={models}
       current={local.model.current()}
       filterKeys={["provider.name", "name", "id"]}
-      sortBy={(a, b) => a.name.localeCompare(b.name)}
+      sortBy={(a, b) => {
+        const af = favorite(a.provider.id, a.id)
+        const bf = favorite(b.provider.id, b.id)
+        if (af !== bf) return af ? -1 : 1
+        return a.name.localeCompare(b.name)
+      }}
       groupBy={(x) => x.provider.name}
       sortGroupsBy={(a, b) => {
         const aProvider = a.items[0].provider.id
@@ -71,13 +84,34 @@ const ModelList: Component<{
     >
       {(i) => (
         <div class="w-full flex items-center gap-x-2 text-13-regular">
-          <span class="truncate">{i.name}</span>
-          <Show when={isFree(i.provider.id, i.cost)}>
-            <Tag>{language.t("model.tag.free")}</Tag>
-          </Show>
-          <Show when={i.latest}>
-            <Tag>{language.t("model.tag.latest")}</Tag>
-          </Show>
+          <div class="min-w-0 flex-1 flex items-center gap-x-2">
+            <span class="truncate">{i.name}</span>
+            <Show when={isFree(i.provider.id, i.cost)}>
+              <Tag>{language.t("model.tag.free")}</Tag>
+            </Show>
+            <Show when={i.latest}>
+              <Tag>{language.t("model.tag.latest")}</Tag>
+            </Show>
+          </div>
+          <Tooltip
+            value={language.t(favorite(i.provider.id, i.id) ? "dialog.model.unfavorite" : "dialog.model.favorite")}
+          >
+            <IconButton
+              icon="circle-check"
+              variant="ghost"
+              size="small"
+              class="shrink-0"
+              classList={{
+                "opacity-100": favorite(i.provider.id, i.id),
+                "opacity-30": !favorite(i.provider.id, i.id),
+              }}
+              onMouseDown={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+              }}
+              onClick={(event) => toggleFavorite(event, i.provider.id, i.id)}
+            />
+          </Tooltip>
         </div>
       )}
     </List>
