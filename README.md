@@ -61,6 +61,13 @@ mise use -g opencode               # Any OS
 nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev branch
 ```
 
+Fork distribution (mysterycode):
+
+```bash
+npm i -g mysterycode
+mysterycode
+```
+
 > [!TIP]
 > Remove versions older than 0.1.x before installing.
 

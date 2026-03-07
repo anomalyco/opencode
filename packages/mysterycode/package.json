@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "mysterycode",
+  "version": "0.0.0-dev",
+  "private": true,
+  "license": "MIT",
+  "bin": {
+    "mysterycode": "./bin/mysterycode.cjs"
+  },
+  "scripts": {
+    "postinstall": "node ./postinstall.mjs"
+  }
+}
