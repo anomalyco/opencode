@@ -41,8 +41,8 @@
       "@tailwindcss/vite": "4.1.11",
       "diff": "8.0.2",
       "dompurify": "3.3.1",
-      "drizzle-kit": "1.0.0-beta.12-a5629fb",
-      "drizzle-orm": "1.0.0-beta.12-a5629fb",
+      "drizzle-kit": "1.0.0-beta.16-ea816b6",
+      "drizzle-orm": "1.0.0-beta.16-ea816b6",
       "ai": "5.0.124",
       "hono": "4.10.7",
       "hono-openapi": "1.1.2",
@@ -71,12 +71,13 @@
     "@actions/artifact": "5.0.1",
     "@tsconfig/bun": "catalog:",
     "@types/mime-types": "3.0.1",
+    "@typescript/native-preview": "catalog:",
     "glob": "13.0.5",
     "husky": "9.1.7",
     "prettier": "3.6.2",
     "semver": "^7.6.0",
     "sst": "3.18.10",
-    "turbo": "2.5.6"
+    "turbo": "2.8.13"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.933.0",
@@ -99,7 +100,8 @@
     "protobufjs",
     "tree-sitter",
     "tree-sitter-bash",
-    "web-tree-sitter"
+    "web-tree-sitter",
+    "electron"
   ],
   "overrides": {
     "@types/bun": "catalog:",

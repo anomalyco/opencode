@@ -456,6 +456,7 @@ export const dict = {
   "session.todo.title": "المهام",
   "session.todo.collapse": "طي",
   "session.todo.expand": "توسيع",
+  "session.new.title": "ابنِ أي شيء",
   "session.new.worktree.main": "الفرع الرئيسي",
   "session.new.worktree.mainWithBranch": "الفرع الرئيسي ({{branch}})",
   "session.new.worktree.create": "إنشاء شجرة عمل جديدة",

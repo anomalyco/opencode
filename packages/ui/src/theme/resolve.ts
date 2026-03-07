@@ -152,11 +152,6 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["border-weak-disabled"] = neutralAlpha[5]
   tokens["border-weak-focus"] = neutralAlpha[isDark ? 7 : 6]
   tokens["border-weaker-base"] = neutralAlpha[2]
-  tokens["border-weaker-hover"] = neutralAlpha[3]
-  tokens["border-weaker-active"] = neutralAlpha[5]
-  tokens["border-weaker-selected"] = withAlpha(interactive[3], isDark ? 0.3 : 0.4) as ColorValue
-  tokens["border-weaker-disabled"] = neutralAlpha[1]
-  tokens["border-weaker-focus"] = neutralAlpha[5]
 
   tokens["border-interactive-base"] = interactive[6]
   tokens["border-interactive-hover"] = interactive[7]

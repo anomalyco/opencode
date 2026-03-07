@@ -234,7 +234,6 @@ export function FileTabContent(props: { tab: string }) {
     if (typeof window === "undefined") return
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return
       if (tabs().active() !== props.tab) return
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return
       if (event.key.toLowerCase() !== "f") return
@@ -447,9 +446,9 @@ export function FileTabContent(props: { tab: string }) {
   )
 
   return (
-    <Tabs.Content value={props.tab} class="mt-3 relative h-full">
+    <Tabs.Content value={props.tab} class="mt-3 relative flex h-full min-h-0 flex-col overflow-hidden contain-strict">
       <ScrollView
-        class="h-full"
+        class="h-full min-h-0 flex-1"
         viewportRef={(el: HTMLDivElement) => {
           scroll = el
           restoreScroll()

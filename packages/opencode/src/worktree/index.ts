@@ -331,7 +331,7 @@ export namespace Worktree {
     }, 0)
   }
 
-  export const create = fn(CreateInput.optional(), async (input) => {
+  export async function makeWorktreeInfo(name?: string): Promise<Info> {
     if (Instance.project.vcs !== "git") {
       throw new NotGitError({ message: "Worktrees are only supported for git projects" })
     }
@@ -339,9 +339,11 @@ export namespace Worktree {
     const root = path.join(Global.Path.data, "worktree", Instance.project.id)
     await fs.mkdir(root, { recursive: true })
 
-    const base = input?.name ? slug(input.name) : ""
-    const info = await candidate(root, base || undefined)
+    const base = name ? slug(name) : ""
+    return candidate(root, base || undefined)
+  }
 
+  export async function createFromInfo(info: Info, startCommand?: string) {
     const created = await $`git worktree add --no-checkout -b ${info.branch} ${info.directory}`
       .quiet()
       .nothrow()
@@ -353,8 +355,9 @@ export namespace Worktree {
     await Project.addSandbox(Instance.project.id, info.directory).catch(() => undefined)
 
     const projectID = Instance.project.id
-    const extra = input?.startCommand?.trim()
-    setTimeout(() => {
+    const extra = startCommand?.trim()
+
+    return () => {
       const start = async () => {
         const populated = await $`git reset --hard`.quiet().nothrow().cwd(info.directory)
         if (populated.exitCode !== 0) {
@@ -411,8 +414,17 @@ export namespace Worktree {
       void start().catch((error) => {
         log.error("worktree start task failed", { directory: info.directory, error })
       })
-    }, 0)
+    }
+  }
 
+  export const create = fn(CreateInput.optional(), async (input) => {
+    const info = await makeWorktreeInfo(input?.name)
+    const bootstrap = await createFromInfo(info, input?.startCommand)
+    // This is needed due to how worktrees currently work in the
+    // desktop app
+    setTimeout(() => {
+      bootstrap()
+    }, 0)
     return info
   })
 
@@ -462,6 +474,11 @@ export namespace Worktree {
           throw new RemoveFailedError({ message: message || "Failed to remove git worktree directory" })
         })
 
+    const stop = async (target: string) => {
+      if (!(await exists(target))) return
+      await $`git fsmonitor--daemon stop`.quiet().nothrow().cwd(target)
+    }
+
     const list = await $`git worktree list --porcelain`.quiet().nothrow().cwd(Instance.worktree)
     if (list.exitCode !== 0) {
       throw new RemoveFailedError({ message: errorText(list) || "Failed to read git worktrees" })
@@ -472,11 +489,13 @@ export namespace Worktree {
     if (!entry?.path) {
       const directoryExists = await exists(directory)
       if (directoryExists) {
+        await stop(directory)
         await clean(directory)
       }
       return true
     }
 
+    await stop(entry.path)
     const removed = await $`git worktree remove --force ${entry.path}`.quiet().nothrow().cwd(Instance.worktree)
     if (removed.exitCode !== 0) {
       const next = await $`git worktree list --porcelain`.quiet().nothrow().cwd(Instance.worktree)
@@ -625,7 +644,7 @@ export namespace Worktree {
       throw new ResetFailedError({ message: errorText(subClean) || "Failed to clean submodules" })
     }
 
-    const status = await $`git status --porcelain=v1`.quiet().nothrow().cwd(worktreePath)
+    const status = await $`git -c core.fsmonitor=false status --porcelain=v1`.quiet().nothrow().cwd(worktreePath)
     if (status.exitCode !== 0) {
       throw new ResetFailedError({ message: errorText(status) || "Failed to read git status" })
     }
