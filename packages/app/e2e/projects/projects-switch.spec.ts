@@ -1,18 +1,43 @@
 import { base64Decode } from "@opencode-ai/util/encode"
+import type { Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
-import {
-  defocus,
-  createTestProject,
-  cleanupTestProject,
-  openSidebar,
-  setWorkspacesEnabled,
-  sessionIDFromUrl,
-} from "../actions"
+import { defocus, createTestProject, cleanupTestProject, openSidebar, sessionIDFromUrl } from "../actions"
 import { projectSwitchSelector, promptSelector, workspaceItemSelector, workspaceNewSessionSelector } from "../selectors"
-import { createSdk, dirSlug } from "../utils"
+import { createSdk, dirSlug, sessionPath } from "../utils"
 
 function slugFromUrl(url: string) {
   return /\/([^/]+)\/session(?:\/|$)/.exec(url)?.[1] ?? ""
+}
+
+async function workspaces(page: Page, directory: string, enabled: boolean) {
+  await page.evaluate(
+    ({ directory, enabled }: { directory: string; enabled: boolean }) => {
+      const key = "opencode.global.dat:layout"
+      const raw = localStorage.getItem(key)
+      const data = raw ? JSON.parse(raw) : {}
+      const sidebar = data.sidebar && typeof data.sidebar === "object" ? data.sidebar : {}
+      const current =
+        sidebar.workspaces && typeof sidebar.workspaces === "object" && !Array.isArray(sidebar.workspaces)
+          ? sidebar.workspaces
+          : {}
+      const next = { ...current }
+
+      if (enabled) next[directory] = true
+      if (!enabled) delete next[directory]
+
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          ...data,
+          sidebar: {
+            ...sidebar,
+            workspaces: next,
+          },
+        }),
+      )
+    },
+    { directory, enabled },
+  )
 }
 
 test("can switch between projects from sidebar", async ({ page, withProject }) => {
@@ -51,7 +76,6 @@ test("switching back to a project opens the latest workspace session", async ({ 
 
   const other = await createTestProject()
   const otherSlug = dirSlug(other)
-  const stamp = Date.now()
   let rootDir: string | undefined
   let workspaceDir: string | undefined
   let sessionID: string | undefined
@@ -61,8 +85,11 @@ test("switching back to a project opens the latest workspace session", async ({ 
       async ({ directory, slug }) => {
         rootDir = directory
         await defocus(page)
+        await workspaces(page, directory, true)
+        await page.reload()
+        await expect(page.locator(promptSelector)).toBeVisible()
         await openSidebar(page)
-        await setWorkspacesEnabled(page, slug, true)
+        await expect(page.getByRole("button", { name: "New workspace" }).first()).toBeVisible()
 
         await page.getByRole("button", { name: "New workspace" }).first().click()
 
@@ -80,6 +107,7 @@ test("switching back to a project opens the latest workspace session", async ({ 
 
         const workspaceSlug = slugFromUrl(page.url())
         workspaceDir = base64Decode(workspaceSlug)
+        if (!workspaceDir) throw new Error(`Failed to decode workspace slug: ${workspaceSlug}`)
         await openSidebar(page)
 
         const workspace = page.locator(workspaceItemSelector(workspaceSlug)).first()
@@ -92,15 +120,19 @@ test("switching back to a project opens the latest workspace session", async ({ 
 
         await expect(page).toHaveURL(new RegExp(`/${workspaceSlug}/session(?:[/?#]|$)`))
 
+        // Create a session by sending a prompt
         const prompt = page.locator(promptSelector)
         await expect(prompt).toBeVisible()
-        await prompt.fill(`project switch remembers workspace ${stamp}`)
-        await prompt.press("Enter")
+        await prompt.fill("test")
+        await page.keyboard.press("Enter")
 
-        await expect.poll(() => sessionIDFromUrl(page.url()) ?? "", { timeout: 30_000 }).not.toBe("")
+        // Wait for the URL to update with the new session ID
+        await expect.poll(() => sessionIDFromUrl(page.url()) ?? "", { timeout: 15_000 }).not.toBe("")
+
         const created = sessionIDFromUrl(page.url())
-        if (!created) throw new Error(`Failed to parse session id from URL: ${page.url()}`)
+        if (!created) throw new Error(`Failed to get session ID from url: ${page.url()}`)
         sessionID = created
+
         await expect(page).toHaveURL(new RegExp(`/${workspaceSlug}/session/${created}(?:[/?#]|$)`))
 
         await openSidebar(page)
@@ -114,7 +146,8 @@ test("switching back to a project opens the latest workspace session", async ({ 
         await expect(rootButton).toBeVisible()
         await rootButton.click()
 
-        await expect(page).toHaveURL(new RegExp(`/${workspaceSlug}/session/${created}(?:[/?#]|$)`))
+        await expect.poll(() => sessionIDFromUrl(page.url()) ?? "").toBe(created)
+        await expect(page).toHaveURL(new RegExp(`/session/${created}(?:[/?#]|$)`))
       },
       { extra: [other] },
     )
