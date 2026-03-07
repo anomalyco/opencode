@@ -1495,38 +1495,120 @@ describe("ProviderTransform.message - providerOptions key remapping", () => {
   })
 })
 
-describe("ProviderTransform.message - claude w/bedrock custom inference profile", () => {
-  test("adds cachePoint", () => {
-    const model = {
-      id: "amazon-bedrock/custom-claude-sonnet-4.5",
-      providerID: "amazon-bedrock",
+describe("ProviderTransform.message - bedrock prompt caching", () => {
+  const createBedrockModel = (apiId: string, providerID = "amazon-bedrock") =>
+    ({
+      id: `${providerID}/${apiId}`,
+      providerID,
       api: {
-        id: "arn:aws:bedrock:xxx:yyy:application-inference-profile/zzz",
-        url: "https://api.test.com",
+        id: apiId,
+        url: "https://bedrock.amazonaws.com",
         npm: "@ai-sdk/amazon-bedrock",
       },
-      name: "Custom inference profile",
+      name: apiId,
       capabilities: {},
       options: {},
       headers: {},
-    } as any
+    }) as any
 
-    const msgs = [
-      {
-        role: "user",
-        content: "Hello",
-      },
-    ] as any[]
-
+  test("Claude models on Bedrock get prompt caching", () => {
+    const model = createBedrockModel("anthropic.claude-3-5-sonnet-20241022-v2:0")
+    const msgs = [{ role: "user", content: "Hello" }] as any[]
     const result = ProviderTransform.message(msgs, model, {})
+    expect(result[0].providerOptions?.bedrock?.cachePoint).toEqual({ type: "default" })
+  })
 
-    expect(result[0].providerOptions?.bedrock).toEqual(
-      expect.objectContaining({
-        cachePoint: {
-          type: "default",
-        },
-      }),
-    )
+  test("Amazon Nova models get prompt caching", () => {
+    const model = createBedrockModel("amazon.nova-pro-v1:0")
+    const msgs = [{ role: "user", content: "Hello" }] as any[]
+    const result = ProviderTransform.message(msgs, model, {})
+    expect(result[0].providerOptions?.bedrock?.cachePoint).toEqual({ type: "default" })
+  })
+
+  test("Nova models with nova- prefix get prompt caching", () => {
+    const model = createBedrockModel("nova-lite-v1:0")
+    const msgs = [{ role: "user", content: "Hello" }] as any[]
+    const result = ProviderTransform.message(msgs, model, {})
+    expect(result[0].providerOptions?.bedrock?.cachePoint).toEqual({ type: "default" })
+  })
+
+  test("Llama models on Bedrock do NOT get prompt caching", () => {
+    const model = createBedrockModel("meta.llama3-70b-instruct-v1:0")
+    const msgs = [{ role: "user", content: "Hello" }] as any[]
+    const result = ProviderTransform.message(msgs, model, {})
+    expect(result[0].providerOptions?.bedrock?.cachePoint).toBeUndefined()
+  })
+
+  test("Mistral models on Bedrock do NOT get prompt caching", () => {
+    const model = createBedrockModel("mistral.mistral-large-2402-v1:0")
+    const msgs = [{ role: "user", content: "Hello" }] as any[]
+    const result = ProviderTransform.message(msgs, model, {})
+    expect(result[0].providerOptions?.bedrock?.cachePoint).toBeUndefined()
+  })
+
+  test("Cohere models on Bedrock do NOT get prompt caching", () => {
+    const model = createBedrockModel("cohere.command-r-plus-v1:0")
+    const msgs = [{ role: "user", content: "Hello" }] as any[]
+    const result = ProviderTransform.message(msgs, model, {})
+    expect(result[0].providerOptions?.bedrock?.cachePoint).toBeUndefined()
+  })
+
+  test("Custom ARN with Claude in name gets prompt caching", () => {
+    const model = createBedrockModel("arn:aws:bedrock:us-east-1:123456789:custom-model/my-claude-finetune")
+    const msgs = [{ role: "user", content: "Hello" }] as any[]
+    const result = ProviderTransform.message(msgs, model, {})
+    expect(result[0].providerOptions?.bedrock?.cachePoint).toEqual({ type: "default" })
+  })
+
+  test("Custom ARN without Claude in name does NOT get prompt caching", () => {
+    const model = createBedrockModel("arn:aws:bedrock:us-east-1:123456789:custom-model/my-llama-model")
+    const msgs = [{ role: "user", content: "Hello" }] as any[]
+    const result = ProviderTransform.message(msgs, model, {})
+    expect(result[0].providerOptions?.bedrock?.cachePoint).toBeUndefined()
+  })
+
+  test("Cross-region inference profiles with Claude get prompt caching", () => {
+    const model = createBedrockModel("us.anthropic.claude-3-5-sonnet-20241022-v2:0")
+    const msgs = [{ role: "user", content: "Hello" }] as any[]
+    const result = ProviderTransform.message(msgs, model, {})
+    expect(result[0].providerOptions?.bedrock?.cachePoint).toEqual({ type: "default" })
+  })
+
+  test("Application inference profile gets prompt caching when Claude-based", () => {
+    const model = createBedrockModel("arn:aws:bedrock:us-east-1:123456789:application-inference-profile/my-claude-profile")
+    const msgs = [{ role: "user", content: "Hello" }] as any[]
+    const result = ProviderTransform.message(msgs, model, {})
+    expect(result[0].providerOptions?.bedrock?.cachePoint).toEqual({ type: "default" })
+  })
+
+  test("Application inference profile with options.caching=true gets prompt caching", () => {
+    const model = {
+      ...createBedrockModel("arn:aws:bedrock:eu-west-1:995555607786:application-inference-profile/bzg00wo23901"),
+      options: { caching: true },
+    }
+    const msgs = [{ role: "user", content: "Hello" }] as any[]
+    const result = ProviderTransform.message(msgs, model, {})
+    expect(result[0].providerOptions?.bedrock?.cachePoint).toEqual({ type: "default" })
+  })
+
+  test("Custom ARN with options.caching=true gets prompt caching", () => {
+    const model = {
+      ...createBedrockModel("arn:aws:bedrock:us-east-1:123456789:custom-model/my-custom-model"),
+      options: { caching: true },
+    }
+    const msgs = [{ role: "user", content: "Hello" }] as any[]
+    const result = ProviderTransform.message(msgs, model, {})
+    expect(result[0].providerOptions?.bedrock?.cachePoint).toEqual({ type: "default" })
+  })
+
+  test("Claude model with options.caching=false does NOT get prompt caching", () => {
+    const model = {
+      ...createBedrockModel("anthropic.claude-3-5-sonnet-20241022-v2:0"),
+      options: { caching: false },
+    }
+    const msgs = [{ role: "user", content: "Hello" }] as any[]
+    const result = ProviderTransform.message(msgs, model, {})
+    expect(result[0].providerOptions?.bedrock?.cachePoint).toBeUndefined()
   })
 })
 

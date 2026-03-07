@@ -252,15 +252,45 @@ export namespace ProviderTransform {
   export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
     msgs = unsupportedParts(msgs, model)
     msgs = normalizeMessages(msgs, model, options)
-    if (
+    // Apply caching for Anthropic models and Bedrock models that support prompt caching
+    // Bedrock prompt caching is supported by:
+    // - Anthropic Claude models (claude-3-5-sonnet, claude-3-5-haiku, claude-3-opus, etc.)
+    // - Amazon Nova models (nova-pro, nova-lite, nova-micro)
+    // NOT supported by: Llama, Mistral, Cohere, and other third-party models
+    const isBedrockProvider =
+      model.providerID === "amazon-bedrock" || model.api.npm === "@ai-sdk/amazon-bedrock"
+
+    const isAnthropicModel =
+      !isBedrockProvider &&
       (model.providerID === "anthropic" ||
         model.api.id.includes("anthropic") ||
         model.api.id.includes("claude") ||
         model.id.includes("anthropic") ||
         model.id.includes("claude") ||
-        model.api.npm === "@ai-sdk/anthropic") &&
-      model.api.npm !== "@ai-sdk/gateway"
-    ) {
+        model.api.npm === "@ai-sdk/anthropic")
+
+    const isBedrockModelWithCaching = iife(() => {
+      if (!isBedrockProvider) {
+        return false
+      }
+      // Check for explicit caching option in model config
+      // This allows users to enable/disable caching for custom ARNs and inference profiles
+      // Example: { "options": { "caching": true } }
+      if (typeof model.options?.caching === "boolean") {
+        return model.options.caching
+      }
+      const modelId = model.api.id.toLowerCase()
+      // Claude models on Bedrock support caching
+      if (modelId.includes("anthropic") || modelId.includes("claude")) return true
+      // Amazon Nova models support caching
+      if (modelId.includes("amazon.nova") || modelId.includes("nova-")) return true
+      // Custom ARN models might support caching if they're Claude-based
+      // (ARNs like arn:aws:bedrock:...:custom-model/xxx can be Claude fine-tunes)
+      if (modelId.startsWith("arn:") && (modelId.includes("claude") || modelId.includes("anthropic"))) return true
+      return false
+    })
+
+    if ((isAnthropicModel || isBedrockModelWithCaching) && model.api.npm !== "@ai-sdk/gateway") {
       msgs = applyCaching(msgs, model)
     }
 
