@@ -404,7 +404,7 @@ export function SessionTimelineHeader(props: {
             "w-full": true,
             "pb-10": true,
             "px-4 md:px-5": true,
-            "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
+            "md:max-w-[500px] md:mx-auto 2xl:max-w-[700px]": props.centered,
           }}
         >
           <div class="pointer-events-auto h-12 w-full flex items-center justify-between gap-2">
