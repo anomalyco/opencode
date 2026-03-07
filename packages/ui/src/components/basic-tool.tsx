@@ -13,6 +13,7 @@ import {
 } from "solid-js"
 import { animate, type AnimationPlaybackControls, tunableSpringValue, COLLAPSIBLE_SPRING } from "./motion"
 import { Collapsible } from "./collapsible"
+import { pinSticky } from "./sticky-accordion"
 import { TextShimmer } from "./text-shimmer"
 import { hold } from "./tool-utils"
 
@@ -165,6 +166,7 @@ function ToolCallPanel(props: ToolCallPanelBaseProps) {
   // Animated content height — single springValue drives all height changes
   let contentRef: HTMLDivElement | undefined
   let bodyRef: HTMLDivElement | undefined
+  let triggerRef: HTMLElement | undefined
   let fadeAnim: AnimationPlaybackControls | undefined
   let observer: ResizeObserver | undefined
   let resizeFrame: number | undefined
@@ -271,12 +273,17 @@ function ToolCallPanel(props: ToolCallPanelBaseProps) {
   const handleOpenChange = (value: boolean) => {
     if (pending()) return
     if (props.locked && !value) return
+    if (value === open()) return
+    if (triggerRef) {
+      pinSticky(triggerRef, () => setOpen(value))
+      return
+    }
     setOpen(value)
   }
 
   return (
     <Collapsible open={open()} onOpenChange={handleOpenChange} class="tool-collapsible">
-      <Collapsible.Trigger>
+      <Collapsible.Trigger ref={triggerRef}>
         <ToolCallTriggerBody
           trigger={props.trigger}
           pending={pending()}
