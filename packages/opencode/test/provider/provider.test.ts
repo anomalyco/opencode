@@ -2279,3 +2279,40 @@ test("cloudflare-ai-gateway forwards config metadata options", async () => {
     },
   })
 })
+
+test("model id override inherits cost and limits from models.dev", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "amazon-bedrock": {
+              models: {
+                "deepseek.v3-v1:0": {
+                  id: "deepseek.v3-correct-id",
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("AWS_ACCESS_KEY_ID", "test-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const model = providers["amazon-bedrock"]?.models["deepseek.v3-v1:0"]
+      expect(model).toBeDefined()
+      expect(model!.api.id).toBe("deepseek.v3-correct-id")
+      // cost and limits must be inherited from models.dev, not zeroed out
+      expect(model!.cost.input).toBe(0.58)
+      expect(model!.limit.context).toBe(163840)
+    },
+  })
+})
