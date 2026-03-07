@@ -202,29 +202,26 @@ export function StatusPopover() {
       triggerAs={Button}
       triggerProps={{
         variant: "ghost",
-        class:
-          "rounded-md h-[24px] pr-3 pl-0.5 gap-2 border border-border-weak-base bg-surface-panel shadow-none data-[expanded]:bg-surface-base-active",
+        class: "titlebar-icon w-6 h-6 p-0 box-border",
+        "aria-label": language.t("status.popover.trigger"),
         style: { scale: 1 },
       }}
       trigger={
-        <div class="flex items-center gap-0.5">
-          <div class="size-4 flex items-center justify-center">
-            <div
-              classList={{
-                "size-1.5 rounded-full": true,
-                "bg-icon-success-base": overallHealthy(),
-                "bg-icon-critical-base": !overallHealthy() && server.healthy() !== undefined,
-                "bg-border-weak-base": server.healthy() === undefined,
-              }}
-            />
-          </div>
-          <span class="text-12-regular text-text-strong">{language.t("status.popover.trigger")}</span>
+        <div class="flex size-4 items-center justify-center">
+          <div
+            classList={{
+              "size-1.5 rounded-full": true,
+              "bg-icon-success-base": overallHealthy(),
+              "bg-icon-critical-base": !overallHealthy() && server.healthy() !== undefined,
+              "bg-border-weak-base": server.healthy() === undefined,
+            }}
+          />
         </div>
       }
       class="[&_[data-slot=popover-body]]:p-0 w-[360px] max-w-[calc(100vw-40px)] bg-transparent border-0 shadow-none rounded-xl"
       gutter={4}
       placement="bottom-end"
-      shift={-136}
+      shift={-168}
     >
       <div class="flex items-center gap-1 w-[360px] rounded-xl shadow-[var(--shadow-lg-border-base)]">
         <Tabs

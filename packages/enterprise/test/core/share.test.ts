@@ -30,8 +30,8 @@ describe.concurrent("core.share", () => {
       data,
     })
 
-    const events = await Storage.list({ prefix: ["share_event", share.id] })
-    expect(events.length).toBe(1)
+    const snapshot = await Storage.read<{ data: Share.Data[] }>(["share_snapshot", share.id])
+    expect(snapshot?.data).toHaveLength(1)
 
     await Share.remove({ id: share.id, secret: share.secret })
   })
@@ -64,8 +64,8 @@ describe.concurrent("core.share", () => {
       data: data2,
     })
 
-    const events = await Storage.list({ prefix: ["share_event", share.id] })
-    expect(events.length).toBe(2)
+    const snapshot = await Storage.read<{ data: Share.Data[] }>(["share_snapshot", share.id])
+    expect(snapshot?.data).toHaveLength(2)
 
     await Share.remove({ id: share.id, secret: share.secret })
   })
@@ -190,6 +190,28 @@ describe.concurrent("core.share", () => {
     const result = await Share.data(share.id)
 
     expect(result).toEqual([])
+
+    await Share.remove({ id: share.id, secret: share.secret })
+  })
+
+  test("should migrate legacy event data into the snapshot", async () => {
+    const sessionID = Identifier.descending()
+    const share = await Share.create({ sessionID })
+    const data: Share.Data[] = [
+      {
+        type: "part",
+        data: { id: "part1", sessionID, messageID: "msg1", type: "text", text: "Hello" },
+      },
+    ]
+
+    await Storage.remove(["share_snapshot", share.id])
+    await Storage.write(["share_event", share.id, Identifier.descending()], data)
+
+    const result = await Share.data(share.id)
+    const snapshot = await Storage.read<{ data: Share.Data[] }>(["share_snapshot", share.id])
+
+    expect(result).toHaveLength(1)
+    expect(snapshot?.data).toHaveLength(1)
 
     await Share.remove({ id: share.id, secret: share.secret })
   })

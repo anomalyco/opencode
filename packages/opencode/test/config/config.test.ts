@@ -25,6 +25,34 @@ async function writeConfig(dir: string, config: object, name = "opencode.json") 
   await Filesystem.write(path.join(dir, name), JSON.stringify(config))
 }
 
+async function check(map: (dir: string) => string) {
+  if (process.platform !== "win32") return
+  await using globalTmp = await tmpdir()
+  await using tmp = await tmpdir({ git: true, config: { snapshot: true } })
+  const prev = Global.Path.config
+  ;(Global.Path as { config: string }).config = globalTmp.path
+  Config.global.reset()
+  try {
+    await writeConfig(globalTmp.path, {
+      $schema: "https://opencode.ai/config.json",
+      snapshot: false,
+    })
+    await Instance.provide({
+      directory: map(tmp.path),
+      fn: async () => {
+        const cfg = await Config.get()
+        expect(cfg.snapshot).toBe(true)
+        expect(Instance.directory).toBe(Filesystem.resolve(tmp.path))
+        expect(Instance.project.id).not.toBe("global")
+      },
+    })
+  } finally {
+    await Instance.disposeAll()
+    ;(Global.Path as { config: string }).config = prev
+    Config.global.reset()
+  }
+}
+
 test("loads config with defaults when no files exist", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
@@ -53,6 +81,23 @@ test("loads JSON config file", async () => {
       expect(config.model).toBe("test/model")
       expect(config.username).toBe("testuser")
     },
+  })
+})
+
+test("loads project config from Git Bash and MSYS2 paths on Windows", async () => {
+  // Git Bash and MSYS2 both use /<drive>/... paths on Windows.
+  await check((dir) => {
+    const drive = dir[0].toLowerCase()
+    const rest = dir.slice(2).replaceAll("\\", "/")
+    return `/${drive}${rest}`
+  })
+})
+
+test("loads project config from Cygwin paths on Windows", async () => {
+  await check((dir) => {
+    const drive = dir[0].toLowerCase()
+    const rest = dir.slice(2).replaceAll("\\", "/")
+    return `/cygdrive/${drive}${rest}`
   })
 })
 
@@ -1527,6 +1572,71 @@ test("project config overrides remote well-known config", async () => {
         expect(fetchedUrl).toBe("https://example.com/.well-known/opencode")
         // Project config (enabled: true) should override remote (enabled: false)
         expect(config.mcp?.jira?.enabled).toBe(true)
+      },
+    })
+  } finally {
+    globalThis.fetch = originalFetch
+    Auth.all = originalAuthAll
+  }
+})
+
+test("wellknown URL with trailing slash is normalized", async () => {
+  const originalFetch = globalThis.fetch
+  let fetchedUrl: string | undefined
+  const mockFetch = mock((url: string | URL | Request) => {
+    const urlStr = url.toString()
+    if (urlStr.includes(".well-known/opencode")) {
+      fetchedUrl = urlStr
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            config: {
+              mcp: {
+                slack: {
+                  type: "remote",
+                  url: "https://slack.example.com/mcp",
+                  enabled: true,
+                },
+              },
+            },
+          }),
+          { status: 200 },
+        ),
+      )
+    }
+    return originalFetch(url)
+  })
+  globalThis.fetch = mockFetch as unknown as typeof fetch
+
+  const originalAuthAll = Auth.all
+  Auth.all = mock(() =>
+    Promise.resolve({
+      "https://example.com/": {
+        type: "wellknown" as const,
+        key: "TEST_TOKEN",
+        token: "test-token",
+      },
+    }),
+  )
+
+  try {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        await Filesystem.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await Config.get()
+        // Trailing slash should be stripped — no double slash in the fetch URL
+        expect(fetchedUrl).toBe("https://example.com/.well-known/opencode")
       },
     })
   } finally {

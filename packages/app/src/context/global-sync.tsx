@@ -228,10 +228,7 @@ function createGlobalSync() {
         showToast({
           variant: "error",
           title: language.t("toast.session.listFailed.title", { project }),
-          description: formatServerError(err, {
-            unknown: language.t("error.chain.unknown"),
-            invalidConfiguration: language.t("error.server.invalidConfiguration"),
-          }),
+          description: formatServerError(err, language.t),
         })
       })
 
@@ -261,8 +258,7 @@ function createGlobalSync() {
         setStore: child[1],
         vcsCache: cache,
         loadSessions,
-        unknownError: language.t("error.chain.unknown"),
-        invalidConfigurationError: language.t("error.server.invalidConfiguration"),
+        translate: language.t,
       })
     })()
 
@@ -331,8 +327,7 @@ function createGlobalSync() {
         url: globalSDK.url,
       }),
       requestFailedTitle: language.t("common.requestFailed"),
-      unknownError: language.t("error.chain.unknown"),
-      invalidConfigurationError: language.t("error.server.invalidConfiguration"),
+      translate: language.t,
       formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
       setGlobalStore: setBootStore,
     })
