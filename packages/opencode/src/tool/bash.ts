@@ -169,7 +169,8 @@ export const BashTool = Tool.define("bash", async () => {
         { cwd, sessionID: ctx.sessionID, callID: ctx.callID },
         { env: {} },
       )
-      const proc = spawn(params.command, {
+      const command = Shell.transformCommand(params.command, shell)
+      const proc = spawn(command, {
         shell,
         cwd,
         env: {

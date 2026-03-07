@@ -17,6 +17,7 @@ Before executing the command, please follow these steps:
      - mkdir /Users/name/My Documents (incorrect - will fail)
      - python "/path/with spaces/script.py" (correct)
      - python /path/with spaces/script.py (incorrect - will fail)
+   - On Windows, Unix commands (ls, rm, export, mkdir, cat, which, pwd, touch) are automatically converted to native PowerShell or CMD equivalents when Git Bash is not available.
    - After ensuring proper quoting, execute the command.
    - Capture the output of the command.
 
