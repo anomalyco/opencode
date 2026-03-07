@@ -19,7 +19,7 @@ import {
 import { useData } from "../context"
 import { useFileComponent } from "../context/file"
 import { useDialog } from "../context/dialog"
-import { useI18n } from "../context/i18n"
+import { type UiI18n, useI18n } from "../context/i18n"
 import { GenericTool, ToolCall } from "./basic-tool"
 import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
@@ -123,6 +123,11 @@ export type ToolInfo = {
   subtitle?: string
 }
 
+function agentTitle(i18n: UiI18n, type?: string) {
+  if (!type) return i18n.t("ui.tool.agent.default")
+  return i18n.t("ui.tool.agent", { type })
+}
+
 export function getToolInfo(tool: string, input: any = {}): ToolInfo {
   const i18n = useI18n()
   switch (tool) {
@@ -168,12 +173,17 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
         title: i18n.t("ui.tool.codesearch"),
         subtitle: input.query,
       }
-    case "task":
+    case "task": {
+      const type =
+        typeof input.subagent_type === "string" && input.subagent_type
+          ? input.subagent_type[0]!.toUpperCase() + input.subagent_type.slice(1)
+          : undefined
       return {
         icon: "task",
-        title: i18n.t("ui.tool.agent"),
+        title: agentTitle(i18n, type),
         subtitle: input.description,
       }
+    }
     case "bash":
       return {
         icon: "console",
@@ -1475,11 +1485,12 @@ ToolRegistry.register({
     const data = useData()
     const i18n = useI18n()
     const childSessionId = () => props.metadata.sessionId as string | undefined
-    const agentType = createMemo(() => {
+    const type = createMemo(() => {
       const raw = props.input.subagent_type
       if (typeof raw !== "string" || !raw) return undefined
       return raw[0]!.toUpperCase() + raw.slice(1)
     })
+    const title = createMemo(() => agentTitle(i18n, type()))
     const description = createMemo(() => {
       const value = props.input.description
       if (typeof value === "string") return value
@@ -1527,9 +1538,8 @@ ToolRegistry.register({
       <div data-slot="basic-tool-tool-info-structured">
         <div data-slot="basic-tool-tool-info-main">
           <span data-slot="basic-tool-tool-title">
-            <TextShimmer text={i18n.t("ui.tool.agent")} active={running()} />
+            <TextShimmer text={title()} active={running()} />
           </span>
-          <Show when={agentType()}>{(type) => <ToolText text={type()} animate={reveal()} />}</Show>
           <Show when={description()}>
             <Switch>
               <Match when={href()}>
