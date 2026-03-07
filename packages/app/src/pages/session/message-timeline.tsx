@@ -347,6 +347,7 @@ export function MessageTimeline(props: {
           placeholderTitle={placeholderTitle}
         />
         <ScrollView
+          reverse
           viewportRef={props.setScrollRef}
           onWheel={(e) => {
             const root = e.currentTarget

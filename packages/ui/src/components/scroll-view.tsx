@@ -5,13 +5,14 @@ import { FAST_SPRING } from "./motion"
 
 export interface ScrollViewProps extends ComponentProps<"div"> {
   viewportRef?: (el: HTMLDivElement) => void
+  reverse?: boolean
 }
 
 export function ScrollView(props: ScrollViewProps) {
   const i18n = useI18n()
   const [local, events, rest] = splitProps(
     props,
-    ["class", "children", "viewportRef", "style"],
+    ["class", "children", "viewportRef", "style", "reverse"],
     [
       "onScroll",
       "onWheel",
@@ -36,6 +37,8 @@ export function ScrollView(props: ScrollViewProps) {
   const [thumbTop, setThumbTop] = createSignal(0)
   const [showThumb, setShowThumb] = createSignal(false)
 
+  const reverse = () => local.reverse === true
+
   const updateThumb = () => {
     if (!viewportRef) return
     const { scrollTop, scrollHeight, clientHeight } = viewportRef
@@ -57,10 +60,11 @@ export function ScrollView(props: ScrollViewProps) {
     const maxScrollTop = scrollHeight - clientHeight
     const maxThumbTop = trackHeight - height
 
-    // With column-reverse: scrollTop=0 is at bottom, negative = scrolled up
-    // Normalize so 0 = at top, maxScrollTop = at bottom
-    const normalizedScrollTop = maxScrollTop + scrollTop
-    const top = maxScrollTop > 0 ? (normalizedScrollTop / maxScrollTop) * maxThumbTop : 0
+    const top = (() => {
+      if (maxScrollTop <= 0) return 0
+      if (!reverse()) return (scrollTop / maxScrollTop) * maxThumbTop
+      return ((maxScrollTop + scrollTop) / maxScrollTop) * maxThumbTop
+    })()
 
     // Ensure thumb stays within bounds
     const boundedTop = trackPadding + Math.max(0, Math.min(top, maxThumbTop))
@@ -135,7 +139,8 @@ export function ScrollView(props: ScrollViewProps) {
 
   const limit = (top: number) => {
     const max = viewportRef.scrollHeight - viewportRef.clientHeight
-    return Math.max(-max, Math.min(0, top))
+    if (reverse()) return Math.max(-max, Math.min(0, top))
+    return Math.max(0, Math.min(max, top))
   }
 
   const glide = (top: number) => {
@@ -175,13 +180,11 @@ export function ScrollView(props: ScrollViewProps) {
         break
       case "Home":
         e.preventDefault()
-        // With column-reverse, top of content = -(scrollHeight - clientHeight)
-        glide(-(viewportRef.scrollHeight - viewportRef.clientHeight))
+        glide(reverse() ? -(viewportRef.scrollHeight - viewportRef.clientHeight) : 0)
         break
       case "End":
         e.preventDefault()
-        // With column-reverse, bottom of content = 0
-        glide(0)
+        glide(reverse() ? 0 : viewportRef.scrollHeight - viewportRef.clientHeight)
         break
       case "ArrowUp":
         e.preventDefault()
@@ -206,6 +209,7 @@ export function ScrollView(props: ScrollViewProps) {
       <div
         ref={viewportRef}
         class="scroll-view__viewport"
+        data-reverse={reverse() ? "true" : undefined}
         onScroll={(e) => {
           updateThumb()
           if (typeof events.onScroll === "function") events.onScroll(e as any)

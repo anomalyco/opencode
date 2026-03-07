@@ -9,9 +9,13 @@
   overflow-y: auto;
   scrollbar-width: none;
   outline: none;
+  display: block;
+  overflow-anchor: none;
+}
+
+.scroll-view__viewport[data-reverse="true"] {
   display: flex;
   flex-direction: column-reverse;
-  overflow-anchor: none;
 }
 
 .scroll-view__viewport::-webkit-scrollbar {
