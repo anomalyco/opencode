@@ -1,7 +1,7 @@
 import { base64Decode } from "@opencode-ai/util/encode"
 import type { Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
-import { cleanupTestProject, openSidebar, sessionIDFromUrl, setWorkspacesEnabled } from "../actions"
+import { openSidebar, sessionIDFromUrl, setWorkspacesEnabled } from "../actions"
 import { promptSelector, workspaceItemSelector, workspaceNewSessionSelector } from "../selectors"
 import { createSdk } from "../utils"
 
@@ -105,48 +105,29 @@ async function sessionDirectory(directory: string, sessionID: string) {
 test("new sessions from sidebar workspace actions stay in selected workspace", async ({ page, withProject }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
-  await withProject(async ({ directory, slug: root }) => {
-    const workspaces = [] as { slug: string; directory: string }[]
-    const sessions = [] as string[]
+  await withProject(async ({ directory, slug: root, trackSession, trackDirectory }) => {
+    await openSidebar(page)
+    await setWorkspacesEnabled(page, root, true)
 
-    try {
-      await openSidebar(page)
-      await setWorkspacesEnabled(page, root, true)
+    const first = await createWorkspace(page, root, [])
+    trackDirectory(first.directory)
+    await waitWorkspaceReady(page, first.slug)
 
-      const first = await createWorkspace(page, root, [])
-      workspaces.push(first)
-      await waitWorkspaceReady(page, first.slug)
+    const second = await createWorkspace(page, root, [first.slug])
+    trackDirectory(second.directory)
+    await waitWorkspaceReady(page, second.slug)
 
-      const second = await createWorkspace(page, root, [first.slug])
-      workspaces.push(second)
-      await waitWorkspaceReady(page, second.slug)
+    const firstSession = await createSessionFromWorkspace(page, first.slug, `workspace one ${Date.now()}`)
+    trackSession(firstSession.sessionID, first.directory)
 
-      const firstSession = await createSessionFromWorkspace(page, first.slug, `workspace one ${Date.now()}`)
-      sessions.push(firstSession.sessionID)
+    const secondSession = await createSessionFromWorkspace(page, second.slug, `workspace two ${Date.now()}`)
+    trackSession(secondSession.sessionID, second.directory)
 
-      const secondSession = await createSessionFromWorkspace(page, second.slug, `workspace two ${Date.now()}`)
-      sessions.push(secondSession.sessionID)
+    const thirdSession = await createSessionFromWorkspace(page, first.slug, `workspace one again ${Date.now()}`)
+    trackSession(thirdSession.sessionID, first.directory)
 
-      const thirdSession = await createSessionFromWorkspace(page, first.slug, `workspace one again ${Date.now()}`)
-      sessions.push(thirdSession.sessionID)
-
-      await expect.poll(() => sessionDirectory(first.directory, firstSession.sessionID)).toBe(first.directory)
-      await expect.poll(() => sessionDirectory(second.directory, secondSession.sessionID)).toBe(second.directory)
-      await expect.poll(() => sessionDirectory(first.directory, thirdSession.sessionID)).toBe(first.directory)
-    } finally {
-      const dirs = [directory, ...workspaces.map((workspace) => workspace.directory)]
-      await Promise.all(
-        sessions.map((sessionID) =>
-          Promise.all(
-            dirs.map((dir) =>
-              createSdk(dir)
-                .session.delete({ sessionID })
-                .catch(() => undefined),
-            ),
-          ),
-        ),
-      )
-      await Promise.all(workspaces.map((workspace) => cleanupTestProject(workspace.directory)))
-    }
+    await expect.poll(() => sessionDirectory(first.directory, firstSession.sessionID)).toBe(first.directory)
+    await expect.poll(() => sessionDirectory(second.directory, secondSession.sessionID)).toBe(second.directory)
+    await expect.poll(() => sessionDirectory(first.directory, thirdSession.sessionID)).toBe(first.directory)
   })
 })

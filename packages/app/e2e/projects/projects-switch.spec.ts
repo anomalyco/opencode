@@ -3,7 +3,7 @@ import type { Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
 import { defocus, createTestProject, cleanupTestProject, openSidebar, sessionIDFromUrl } from "../actions"
 import { projectSwitchSelector, promptSelector, workspaceItemSelector, workspaceNewSessionSelector } from "../selectors"
-import { createSdk, dirSlug, sessionPath } from "../utils"
+import { dirSlug } from "../utils"
 
 function slugFromUrl(url: string) {
   return /\/([^/]+)\/session(?:\/|$)/.exec(url)?.[1] ?? ""
@@ -76,14 +76,10 @@ test("switching back to a project opens the latest workspace session", async ({ 
 
   const other = await createTestProject()
   const otherSlug = dirSlug(other)
-  let rootDir: string | undefined
   let workspaceDir: string | undefined
-  let sessionID: string | undefined
-
   try {
     await withProject(
-      async ({ directory, slug }) => {
-        rootDir = directory
+      async ({ directory, slug, trackSession, trackDirectory }) => {
         await defocus(page)
         await workspaces(page, directory, true)
         await page.reload()
@@ -108,6 +104,7 @@ test("switching back to a project opens the latest workspace session", async ({ 
         const workspaceSlug = slugFromUrl(page.url())
         workspaceDir = base64Decode(workspaceSlug)
         if (!workspaceDir) throw new Error(`Failed to decode workspace slug: ${workspaceSlug}`)
+        trackDirectory(workspaceDir)
         await openSidebar(page)
 
         const workspace = page.locator(workspaceItemSelector(workspaceSlug)).first()
@@ -131,7 +128,7 @@ test("switching back to a project opens the latest workspace session", async ({ 
 
         const created = sessionIDFromUrl(page.url())
         if (!created) throw new Error(`Failed to get session ID from url: ${page.url()}`)
-        sessionID = created
+        trackSession(created, workspaceDir)
 
         await expect(page).toHaveURL(new RegExp(`/${workspaceSlug}/session/${created}(?:[/?#]|$)`))
 
@@ -152,20 +149,6 @@ test("switching back to a project opens the latest workspace session", async ({ 
       { extra: [other] },
     )
   } finally {
-    if (sessionID) {
-      const id = sessionID
-      const dirs = [rootDir, workspaceDir].filter((x): x is string => !!x)
-      await Promise.all(
-        dirs.map((directory) =>
-          createSdk(directory)
-            .session.delete({ sessionID: id })
-            .catch(() => undefined),
-        ),
-      )
-    }
-    if (workspaceDir) {
-      await cleanupTestProject(workspaceDir)
-    }
     await cleanupTestProject(other)
   }
 })

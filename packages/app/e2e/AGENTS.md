@@ -71,6 +71,9 @@ test("test description", async ({ page, sdk, gotoSession }) => {
 - `closeDialog(page, dialog)` - Close any dialog
 - `openSidebar(page)` / `closeSidebar(page)` - Toggle sidebar
 - `withSession(sdk, title, callback)` - Create temp session
+- `withProject(...)` - Create temp project/workspace
+- `trackSession(sessionID, directory?)` - Register session for fixture cleanup
+- `trackDirectory(directory)` - Register directory for fixture cleanup
 - `clickListItem(container, filter)` - Click list item by key/text
 
 **Selectors** (`selectors.ts`):
@@ -109,7 +112,7 @@ import { test, expect } from "@playwright/test"
 
 ### Error Handling
 
-Tests should clean up after themselves:
+Tests should clean up after themselves. Prefer fixture-managed cleanup:
 
 ```typescript
 test("test with cleanup", async ({ page, sdk, gotoSession }) => {
@@ -119,6 +122,11 @@ test("test with cleanup", async ({ page, sdk, gotoSession }) => {
   }) // Auto-deletes session
 })
 ```
+
+- Prefer `withSession(...)` for temp sessions
+- In `withProject(...)` tests that create sessions or extra workspaces, call `trackSession(sessionID, directory?)` and `trackDirectory(directory)`
+- This lets fixture teardown abort, wait for idle, and clean up safely under CI concurrency
+- Avoid calling `sdk.session.delete(...)` directly
 
 ### Timeouts
 
