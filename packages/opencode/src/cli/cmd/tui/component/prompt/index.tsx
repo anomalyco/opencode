@@ -57,6 +57,19 @@ export type PromptRef = {
 
 const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
 const SHELL_PLACEHOLDERS = ["ls -la", "git status", "pwd"]
+const MYSTERY_ALLOWED_COMMANDS = new Set([
+  "import",
+  "chapters",
+  "select",
+  "selected",
+  "analyze",
+  "export",
+  "check",
+  "graphs",
+  "status",
+  "help",
+  "quit",
+])
 
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
@@ -532,6 +545,26 @@ export function Prompt(props: PromptProps) {
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
       exit()
+      return
+    }
+    const firstLine = trimmed.split("\n")[0].trim()
+    const firstToken = firstLine.split(/\s+/, 1)[0]
+    const commandName = firstToken.startsWith("/") ? firstToken.slice(1) : ""
+    if (!commandName || !MYSTERY_ALLOWED_COMMANDS.has(commandName)) {
+      toast.show({
+        variant: "warning",
+        message: "This build is command-only. Type /help.",
+        duration: 3000,
+      })
+      return
+    }
+    const installed = sync.data.command.some((x) => x.name === commandName)
+    if (!installed) {
+      toast.show({
+        variant: "warning",
+        message: `Command not installed: /${commandName}`,
+        duration: 3000,
+      })
       return
     }
     const selectedModel = local.model.current()
