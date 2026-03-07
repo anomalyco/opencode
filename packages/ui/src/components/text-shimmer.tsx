@@ -37,14 +37,14 @@ export const TextShimmer = <T extends ValidComponent = "span">(props: {
   })
 
   const shimmerSize = createMemo(() => {
-    const len = Math.max(props.text.length, 1)
+    const len = Math.max(props.text?.length ?? 0, 1)
     return Math.max(300, Math.round(200 + 1400 / len))
   })
 
   // duration = len × (size - 1) / velocity → uniform perceived sweep speed
   const VELOCITY = 0.01375 // ch per ms, ~10% faster than original 0.0125 baseline
   const shimmerDuration = createMemo(() => {
-    const len = Math.max(props.text.length, 1)
+    const len = Math.max(props.text?.length ?? 0, 1)
     const s = shimmerSize() / 100
     return Math.max(1000, Math.min(2500, Math.round((len * (s - 1)) / VELOCITY)))
   })
