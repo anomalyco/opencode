@@ -5,6 +5,7 @@ import { which } from "@/util/which"
 import path from "path"
 import { spawn, type ChildProcess } from "child_process"
 import { setTimeout as sleep } from "node:timers/promises"
+import { CommandTransformer } from "./command-transformer"
 
 const SIGKILL_TIMEOUT_MS = 200
 
@@ -48,6 +49,8 @@ export namespace Shell {
         const bash = path.join(git, "..", "..", "bin", "bash.exe")
         if (Filesystem.stat(bash)?.size) return bash
       }
+      const pwsh = which("powershell")
+      if (pwsh) return pwsh
       return process.env.COMSPEC || "cmd.exe"
     }
     if (process.platform === "darwin") return "/bin/zsh"
@@ -67,4 +70,8 @@ export namespace Shell {
     if (s && !BLACKLIST.has(process.platform === "win32" ? path.win32.basename(s) : path.basename(s))) return s
     return fallback()
   })
+
+  export function transformCommand(command: string, shell: string): string {
+    return CommandTransformer.transformCommand(command, shell)
+  }
 }
