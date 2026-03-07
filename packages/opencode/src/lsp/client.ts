@@ -15,6 +15,35 @@ import { Filesystem } from "../util/filesystem"
 
 const DIAGNOSTICS_DEBOUNCE_MS = 150
 
+function diffContentChanges(oldText: string, newText: string) {
+  const oldLines = oldText.split("\n")
+  const newLines = newText.split("\n")
+
+  let first = 0
+  while (first < oldLines.length && first < newLines.length && oldLines[first] === newLines[first]) first++
+
+  if (first === oldLines.length && first === newLines.length) return []
+
+  let oldEnd = oldLines.length - 1
+  let newEnd = newLines.length - 1
+  while (oldEnd > first && newEnd > first && oldLines[oldEnd] === newLines[newEnd]) {
+    oldEnd--
+    newEnd--
+  }
+
+  const replacement = newLines.slice(first, newEnd + 1).join("\n") + (newEnd + 1 < newLines.length ? "\n" : "")
+
+  return [
+    {
+      range: {
+        start: { line: first, character: 0 },
+        end: { line: oldEnd + 1, character: 0 },
+      },
+      text: replacement,
+    },
+  ]
+}
+
 export namespace LSPClient {
   const log = Log.create({ service: "lsp.client" })
 
@@ -133,7 +162,7 @@ export namespace LSPClient {
     }
 
     const files: {
-      [path: string]: number
+      [path: string]: { version: number; content: string }
     } = {}
 
     const result = {
@@ -151,55 +180,37 @@ export namespace LSPClient {
           const extension = path.extname(input.path)
           const languageId = LANGUAGE_EXTENSIONS[extension] ?? "plaintext"
 
-          const version = files[input.path]
-          if (version !== undefined) {
-            log.info("workspace/didChangeWatchedFiles", input)
-            await connection.sendNotification("workspace/didChangeWatchedFiles", {
-              changes: [
-                {
-                  uri: pathToFileURL(input.path).href,
-                  type: 2, // Changed
-                },
-              ],
+          const file = files[input.path]
+
+          const notify = (method: string, params: unknown) =>
+            connection.sendNotification(method, params).catch((err) => log.error(method, { err }))
+
+          if (file !== undefined) {
+            notify("workspace/didChangeWatchedFiles", {
+              changes: [{ uri: pathToFileURL(input.path).href, type: 2 }],
             })
 
-            const next = version + 1
-            files[input.path] = next
-            log.info("textDocument/didChange", {
-              path: input.path,
-              version: next,
-            })
-            await connection.sendNotification("textDocument/didChange", {
-              textDocument: {
-                uri: pathToFileURL(input.path).href,
-                version: next,
-              },
-              contentChanges: [{ text }],
+            const next = file.version + 1
+            const contentChanges = diffContentChanges(file.content, text)
+            files[input.path] = { version: next, content: text }
+            log.info("textDocument/didChange", { path: input.path, version: next })
+            notify("textDocument/didChange", {
+              textDocument: { uri: pathToFileURL(input.path).href, version: next },
+              contentChanges,
             })
             return
           }
 
-          log.info("workspace/didChangeWatchedFiles", input)
-          await connection.sendNotification("workspace/didChangeWatchedFiles", {
-            changes: [
-              {
-                uri: pathToFileURL(input.path).href,
-                type: 1, // Created
-              },
-            ],
+          notify("workspace/didChangeWatchedFiles", {
+            changes: [{ uri: pathToFileURL(input.path).href, type: 1 }],
           })
 
           log.info("textDocument/didOpen", input)
           diagnostics.delete(input.path)
-          await connection.sendNotification("textDocument/didOpen", {
-            textDocument: {
-              uri: pathToFileURL(input.path).href,
-              languageId,
-              version: 0,
-              text,
-            },
+          notify("textDocument/didOpen", {
+            textDocument: { uri: pathToFileURL(input.path).href, languageId, version: 0, text },
           })
-          files[input.path] = 0
+          files[input.path] = { version: 0, content: text }
           return
         },
       },
