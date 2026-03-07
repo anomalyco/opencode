@@ -60,6 +60,12 @@ export function SessionSidePanel(props: {
     return sync.data.session_diff[id] !== undefined
   })
 
+  const reviewEmptyKey = createMemo(() => {
+    if (sync.project && !sync.project.vcs) return "session.review.noVcs"
+    if (sync.data.config.snapshot === false) return "session.review.noSnapshot"
+    return "session.review.noChanges"
+  })
+
   const diffFiles = createMemo(() => diffs().map((d) => d.file))
   const kinds = createMemo(() => {
     const merge = (a: "add" | "del" | "mix" | undefined, b: "add" | "del" | "mix") => {
@@ -85,6 +91,21 @@ export function SessionSidePanel(props: {
       }
     }
     return out
+  })
+
+  const empty = (msg: string) => (
+    <div class="h-full flex flex-col">
+      <div class="h-12 shrink-0" aria-hidden />
+      <div class="flex-1 pb-30 flex items-center justify-center text-center">
+        <div class="text-12-regular text-text-weak">{msg}</div>
+      </div>
+    </div>
+  )
+
+  const nofiles = createMemo(() => {
+    const state = file.tree.state("")
+    if (!state?.loaded) return false
+    return file.tree.children("").length === 0
   })
 
   const normalizeTab = (tab: string) => {
@@ -145,16 +166,7 @@ export function SessionSidePanel(props: {
 
   const [store, setStore] = createStore({
     activeDraggable: undefined as string | undefined,
-    fileTreeScrolled: false,
   })
-
-  let changesEl: HTMLDivElement | undefined
-  let allEl: HTMLDivElement | undefined
-
-  const syncFileTreeScrolled = (el?: HTMLDivElement) => {
-    const next = (el?.scrollTop ?? 0) > 0
-    setStore("fileTreeScrolled", (current) => (current === next ? current : next))
-  }
 
   const handleDragStart = (event: unknown) => {
     const id = getDraggableId(event)
@@ -175,11 +187,6 @@ export function SessionSidePanel(props: {
   const handleDragEnd = () => {
     setStore("activeDraggable", undefined)
   }
-
-  createEffect(() => {
-    if (!layout.fileTree.opened()) return
-    syncFileTreeScrolled(fileTreeTab() === "changes" ? changesEl : allEl)
-  })
 
   createEffect(() => {
     if (!file.ready()) return
@@ -207,7 +214,7 @@ export function SessionSidePanel(props: {
       <aside
         id="review-panel"
         aria-label={language.t("session.panel.reviewAndFiles")}
-        class="relative min-w-0 h-full border-l border-border-weak-base flex"
+        class="relative min-w-0 h-full border-l border-border-weaker-base flex"
         classList={{
           "flex-1": reviewOpen(),
           "shrink-0": !reviewOpen(),
@@ -331,9 +338,7 @@ export function SessionSidePanel(props: {
                     const path = createMemo(() => file.pathFromTab(tab))
                     return (
                       <div data-component="tabs-drag-preview">
-                        <Show when={path()} keyed>
-                          {(p) => <FileVisual active path={p} />}
-                        </Show>
+                        <Show when={path()}>{(p) => <FileVisual active path={p()} />}</Show>
                       </div>
                     )
                   }}
@@ -347,7 +352,7 @@ export function SessionSidePanel(props: {
           <div id="file-tree-panel" class="relative shrink-0 h-full" style={{ width: `${layout.fileTree.width()}px` }}>
             <div
               class="h-full flex flex-col overflow-hidden group/filetree"
-              classList={{ "border-l border-border-weak-base": reviewOpen() }}
+              classList={{ "border-l border-border-weaker-base": reviewOpen() }}
             >
               <Tabs
                 variant="pill"
@@ -356,7 +361,7 @@ export function SessionSidePanel(props: {
                 class="h-full"
                 data-scope="filetree"
               >
-                <Tabs.List data-scrolled={store.fileTreeScrolled ? "" : undefined}>
+                <Tabs.List>
                   <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
                     {reviewCount()}{" "}
                     {language.t(reviewCount() === 1 ? "session.review.change.one" : "session.review.change.other")}
@@ -365,12 +370,7 @@ export function SessionSidePanel(props: {
                     {language.t("session.files.all")}
                   </Tabs.Trigger>
                 </Tabs.List>
-                <Tabs.Content
-                  value="changes"
-                  ref={(el: HTMLDivElement) => (changesEl = el)}
-                  onScroll={(e: UIEvent & { currentTarget: HTMLDivElement }) => syncFileTreeScrolled(e.currentTarget)}
-                  class="bg-background-stronger px-3 py-0"
-                >
+                <Tabs.Content value="changes" class="bg-background-stronger px-3 py-0">
                   <Switch>
                     <Match when={hasReview()}>
                       <Show
@@ -384,6 +384,7 @@ export function SessionSidePanel(props: {
                       >
                         <FileTree
                           path=""
+                          class="pt-3"
                           allowed={diffFiles()}
                           kinds={kinds()}
                           draggable={false}
@@ -392,25 +393,22 @@ export function SessionSidePanel(props: {
                         />
                       </Show>
                     </Match>
-                    <Match when={true}>
-                      <div class="mt-8 text-center text-12-regular text-text-weak">
-                        {language.t("session.review.noChanges")}
-                      </div>
-                    </Match>
+                    <Match when={true}>{empty(language.t(reviewEmptyKey()))}</Match>
                   </Switch>
                 </Tabs.Content>
-                <Tabs.Content
-                  value="all"
-                  ref={(el: HTMLDivElement) => (allEl = el)}
-                  onScroll={(e: UIEvent & { currentTarget: HTMLDivElement }) => syncFileTreeScrolled(e.currentTarget)}
-                  class="bg-background-stronger px-3 py-0"
-                >
-                  <FileTree
-                    path=""
-                    modified={diffFiles()}
-                    kinds={kinds()}
-                    onFileClick={(node) => openTab(file.tab(node.path))}
-                  />
+                <Tabs.Content value="all" class="bg-background-stronger px-3 py-0">
+                  <Switch>
+                    <Match when={nofiles()}>{empty(language.t("session.files.empty"))}</Match>
+                    <Match when={true}>
+                      <FileTree
+                        path=""
+                        class="pt-3"
+                        modified={diffFiles()}
+                        kinds={kinds()}
+                        onFileClick={(node) => openTab(file.tab(node.path))}
+                      />
+                    </Match>
+                  </Switch>
                 </Tabs.Content>
               </Tabs>
             </div>
