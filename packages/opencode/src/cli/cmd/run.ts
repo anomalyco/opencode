@@ -168,12 +168,17 @@ function websearch(info: ToolProps<typeof WebSearchTool>) {
 }
 
 function task(info: ToolProps<typeof TaskTool>) {
-  const agent = Locale.titlecase(info.input.subagent_type)
-  const desc = info.input.description
-  const started = info.part.state.status === "running"
+  const input = info.part.state.input
+  const status = info.part.state.status
+  const subagent =
+    typeof input.subagent_type === "string" && input.subagent_type.trim().length > 0 ? input.subagent_type : "unknown"
+  const agent = Locale.titlecase(subagent)
+  const desc =
+    typeof input.description === "string" && input.description.trim().length > 0 ? input.description : undefined
+  const icon = status === "error" ? "✗" : status === "running" ? "•" : "✓"
   const name = desc ?? `${agent} Task`
   inline({
-    icon: started ? "•" : "✓",
+    icon,
     title: name,
     description: desc ? `${agent} Agent` : undefined,
   })
@@ -451,9 +456,17 @@ export const RunCommand = cmd({
             const part = event.properties.part
             if (part.sessionID !== sessionID) continue
 
-            if (part.type === "tool" && part.state.status === "completed") {
+            if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
               if (emit("tool_use", { part })) continue
-              tool(part)
+              if (part.state.status === "completed") {
+                tool(part)
+                continue
+              }
+              inline({
+                icon: "✗",
+                title: `${part.tool} failed`,
+              })
+              UI.error(part.state.error)
             }
 
             if (
@@ -542,6 +555,45 @@ export const RunCommand = cmd({
       // Validate agent if specified
       const agent = await (async () => {
         if (!args.agent) return undefined
+
+        // When attaching, validate against the running server instead of local Instance state.
+        if (args.attach) {
+          const modes = await sdk.app
+            .agents(undefined, { throwOnError: true })
+            .then((x) => x.data ?? [])
+            .catch(() => undefined)
+
+          if (!modes) {
+            UI.println(
+              UI.Style.TEXT_WARNING_BOLD + "!",
+              UI.Style.TEXT_NORMAL,
+              `failed to list agents from ${args.attach}. Falling back to default agent`,
+            )
+            return undefined
+          }
+
+          const agent = modes.find((a) => a.name === args.agent)
+          if (!agent) {
+            UI.println(
+              UI.Style.TEXT_WARNING_BOLD + "!",
+              UI.Style.TEXT_NORMAL,
+              `agent "${args.agent}" not found. Falling back to default agent`,
+            )
+            return undefined
+          }
+
+          if (agent.mode === "subagent") {
+            UI.println(
+              UI.Style.TEXT_WARNING_BOLD + "!",
+              UI.Style.TEXT_NORMAL,
+              `agent "${args.agent}" is a subagent, not a primary agent. Falling back to default agent`,
+            )
+            return undefined
+          }
+
+          return args.agent
+        }
+
         const entry = await Agent.get(args.agent)
         if (!entry) {
           UI.println(

@@ -3,11 +3,14 @@ use process_wrap::tokio::CommandWrap;
 #[cfg(unix)]
 use process_wrap::tokio::ProcessGroup;
 #[cfg(windows)]
-use process_wrap::tokio::{JobObject, KillOnDrop};
+use process_wrap::tokio::{CommandWrapper, JobObject, KillOnDrop};
+use std::collections::HashMap;
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
+use std::path::Path;
+use std::process::Stdio;
 use std::sync::Arc;
-use std::{process::Stdio, time::Duration};
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager, path::BaseDirectory};
 use tauri_specta::Event;
 use tokio::{
@@ -18,12 +21,28 @@ use tokio::{
 };
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::Instrument;
+#[cfg(windows)]
+use windows_sys::Win32::System::Threading::{CREATE_NO_WINDOW, CREATE_SUSPENDED};
 
 use crate::server::get_wsl_config;
 
+#[cfg(windows)]
+#[derive(Clone, Copy, Debug)]
+// Keep this as a custom wrapper instead of process_wrap::CreationFlags.
+// JobObject pre_spawn rewrites creation flags, so this must run after it.
+struct WinCreationFlags;
+
+#[cfg(windows)]
+impl CommandWrapper for WinCreationFlags {
+    fn pre_spawn(&mut self, command: &mut Command, _core: &CommandWrap) -> std::io::Result<()> {
+        command.creation_flags(CREATE_NO_WINDOW | CREATE_SUSPENDED);
+        Ok(())
+    }
+}
 
 const CLI_INSTALL_DIR: &str = ".opencode/bin";
 const CLI_BINARY_NAME: &str = "opencode";
+const SHELL_ENV_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(serde::Deserialize, Debug)]
 pub struct ServerConfig {
@@ -203,7 +222,7 @@ fn get_user_shell() -> String {
 }
 
 fn is_wsl_enabled(_app: &tauri::AppHandle) -> bool {
-  get_wsl_config(_app.clone()).is_ok_and(|v| v.enabled)
+    get_wsl_config(_app.clone()).is_ok_and(|v| v.enabled)
 }
 
 fn shell_escape(input: &str) -> String {
@@ -215,6 +234,133 @@ fn shell_escape(input: &str) -> String {
     escaped.push_str(&input.replace("'", "'\"'\"'"));
     escaped.push('\'');
     escaped
+}
+
+fn parse_shell_env(stdout: &[u8]) -> HashMap<String, String> {
+    String::from_utf8_lossy(stdout)
+        .split('\0')
+        .filter_map(|line| {
+            if line.is_empty() {
+                return None;
+            }
+
+            let (key, value) = line.split_once('=')?;
+            if key.is_empty() {
+                return None;
+            }
+
+            Some((key.to_string(), value.to_string()))
+        })
+        .collect()
+}
+
+fn command_output_with_timeout(
+    mut cmd: std::process::Command,
+    timeout: Duration,
+) -> std::io::Result<Option<std::process::Output>> {
+    let mut child = cmd.spawn()?;
+    let start = Instant::now();
+
+    loop {
+        if child.try_wait()?.is_some() {
+            return child.wait_with_output().map(Some);
+        }
+
+        if start.elapsed() >= timeout {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Ok(None);
+        }
+
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+enum ShellEnvProbe {
+    Loaded(HashMap<String, String>),
+    Timeout,
+    Unavailable,
+}
+
+fn probe_shell_env(shell: &str, mode: &str) -> ShellEnvProbe {
+    let mut cmd = std::process::Command::new(shell);
+    cmd.args([mode, "-c", "env -0"]);
+    cmd.stdin(Stdio::null());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::null());
+    let output = match command_output_with_timeout(cmd, SHELL_ENV_TIMEOUT) {
+        Ok(Some(output)) => output,
+        Ok(None) => return ShellEnvProbe::Timeout,
+        Err(error) => {
+            tracing::debug!(shell, mode, ?error, "Shell env probe failed");
+            return ShellEnvProbe::Unavailable;
+        }
+    };
+    if !output.status.success() {
+        tracing::debug!(shell, mode, "Shell env probe exited with non-zero status");
+        return ShellEnvProbe::Unavailable;
+    }
+    let env = parse_shell_env(&output.stdout);
+    if env.is_empty() {
+        tracing::debug!(shell, mode, "Shell env probe returned empty env");
+        return ShellEnvProbe::Unavailable;
+    }
+
+    ShellEnvProbe::Loaded(env)
+}
+
+fn is_nushell(shell: &str) -> bool {
+    let shell_name = Path::new(shell)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(shell)
+        .to_ascii_lowercase();
+    shell_name == "nu" || shell_name == "nu.exe" || shell.to_ascii_lowercase().ends_with("\\nu.exe")
+}
+fn load_shell_env(shell: &str) -> Option<HashMap<String, String>> {
+    if is_nushell(shell) {
+        tracing::debug!(shell, "Skipping shell env probe for nushell");
+        return None;
+    }
+
+    match probe_shell_env(shell, "-il") {
+        ShellEnvProbe::Loaded(env) => {
+            tracing::info!(
+                shell,
+                env_count = env.len(),
+                "Loaded shell environment with -il"
+            );
+            return Some(env);
+        }
+        ShellEnvProbe::Timeout => {
+            tracing::warn!(shell, "Interactive shell env probe timed out");
+            return None;
+        }
+        ShellEnvProbe::Unavailable => {}
+    }
+
+    if let ShellEnvProbe::Loaded(env) = probe_shell_env(shell, "-l") {
+        tracing::info!(
+            shell,
+            env_count = env.len(),
+            "Loaded shell environment with -l"
+        );
+        return Some(env);
+    }
+    tracing::warn!(shell, "Falling back to app environment");
+    None
+}
+
+fn merge_shell_env(
+    shell_env: Option<HashMap<String, String>>,
+    envs: Vec<(String, String)>,
+) -> Vec<(String, String)> {
+    let mut merged = shell_env.unwrap_or_default();
+    for (key, value) in envs {
+        merged.insert(key, value);
+    }
+
+    merged.into_iter().collect()
 }
 
 pub fn spawn_command(
@@ -297,6 +443,7 @@ pub fn spawn_command(
     } else {
         let sidecar = get_sidecar_path(app);
         let shell = get_user_shell();
+        let envs = merge_shell_env(load_shell_env(&shell), envs);
 
         let line = if shell.ends_with("/nu") {
             format!("^\"{}\" {}", sidecar.display(), args)
@@ -318,9 +465,6 @@ pub fn spawn_command(
     cmd.stderr(Stdio::piped());
     cmd.stdin(Stdio::null());
 
-    #[cfg(windows)]
-    cmd.creation_flags(0x0800_0000);
-
     let mut wrap = CommandWrap::from(cmd);
 
     #[cfg(unix)]
@@ -330,7 +474,7 @@ pub fn spawn_command(
 
     #[cfg(windows)]
     {
-        wrap.wrap(JobObject).wrap(KillOnDrop);
+        wrap.wrap(JobObject).wrap(WinCreationFlags).wrap(KillOnDrop);
     }
 
     let mut child = wrap.spawn()?;
@@ -542,5 +686,56 @@ async fn read_line<F: Fn(String) -> CommandEvent + Send + Copy + 'static>(
                 break;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn parse_shell_env_supports_null_delimited_pairs() {
+        let env = parse_shell_env(b"PATH=/usr/bin:/bin\0FOO=bar=baz\0\0");
+
+        assert_eq!(env.get("PATH"), Some(&"/usr/bin:/bin".to_string()));
+        assert_eq!(env.get("FOO"), Some(&"bar=baz".to_string()));
+    }
+
+    #[test]
+    fn parse_shell_env_ignores_invalid_entries() {
+        let env = parse_shell_env(b"INVALID\0=empty\0OK=1\0");
+
+        assert_eq!(env.len(), 1);
+        assert_eq!(env.get("OK"), Some(&"1".to_string()));
+    }
+
+    #[test]
+    fn merge_shell_env_keeps_explicit_overrides() {
+        let mut shell_env = HashMap::new();
+        shell_env.insert("PATH".to_string(), "/shell/path".to_string());
+        shell_env.insert("HOME".to_string(), "/tmp/home".to_string());
+
+        let merged = merge_shell_env(
+            Some(shell_env),
+            vec![
+                ("PATH".to_string(), "/desktop/path".to_string()),
+                ("OPENCODE_CLIENT".to_string(), "desktop".to_string()),
+            ],
+        )
+        .into_iter()
+        .collect::<HashMap<_, _>>();
+
+        assert_eq!(merged.get("PATH"), Some(&"/desktop/path".to_string()));
+        assert_eq!(merged.get("HOME"), Some(&"/tmp/home".to_string()));
+        assert_eq!(merged.get("OPENCODE_CLIENT"), Some(&"desktop".to_string()));
+    }
+
+    #[test]
+    fn is_nushell_handles_path_and_binary_name() {
+        assert!(is_nushell("nu"));
+        assert!(is_nushell("/opt/homebrew/bin/nu"));
+        assert!(is_nushell("C:\\Program Files\\nu.exe"));
+        assert!(!is_nushell("/bin/zsh"));
     }
 }

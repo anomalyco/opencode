@@ -8,6 +8,7 @@ import { SessionTable, MessageTable, PartTable } from "../../session/session.sql
 import { Instance } from "../../project/instance"
 import { ShareNext } from "../../share/share-next"
 import { EOL } from "os"
+import { Filesystem } from "../../util/filesystem"
 
 /** Discriminated union returned by the ShareNext API (GET /api/share/:id/data) */
 export type ShareData =
@@ -116,8 +117,7 @@ export const ImportCommand = cmd({
 
         exportData = transformed
       } else {
-        const file = Bun.file(args.file)
-        exportData = await file.json().catch(() => {})
+        exportData = await Filesystem.readJson<NonNullable<typeof exportData>>(args.file).catch(() => undefined)
         if (!exportData) {
           process.stdout.write(`File not found: ${args.file}`)
           process.stdout.write(EOL)
@@ -131,7 +131,14 @@ export const ImportCommand = cmd({
         return
       }
 
-      Database.use((db) => db.insert(SessionTable).values(Session.toRow(exportData.info)).onConflictDoNothing().run())
+      const row = { ...Session.toRow(exportData.info), project_id: Instance.project.id }
+      Database.use((db) =>
+        db
+          .insert(SessionTable)
+          .values(row)
+          .onConflictDoUpdate({ target: SessionTable.id, set: { project_id: row.project_id } })
+          .run(),
+      )
 
       for (const msg of exportData.messages) {
         Database.use((db) =>

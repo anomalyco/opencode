@@ -10,10 +10,12 @@ import { Log } from "../util/log"
 import { NamedError } from "@opencode-ai/util/error"
 import z from "zod"
 import path from "path"
-import { readFileSync, readdirSync } from "fs"
+import { readFileSync, readdirSync, existsSync } from "fs"
 import * as schema from "./schema"
+import { Installation } from "../installation"
+import { Flag } from "../flag/flag"
 
-declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number }[] | undefined
+declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number; name: string }[] | undefined
 
 export const NotFoundError = NamedError.create(
   "NotFoundError",
@@ -25,13 +27,26 @@ export const NotFoundError = NamedError.create(
 const log = Log.create({ service: "db" })
 
 export namespace Database {
-  export const Path = path.join(Global.Path.data, "opencode.db")
+  export function file(channel: string) {
+    if (channel === "latest" || Flag.OPENCODE_DISABLE_CHANNEL_DB) return "opencode.db"
+    const safe = channel.replace(/[^a-zA-Z0-9._-]/g, "-")
+    return `opencode-${safe}.db`
+  }
+
+  export const Path = (() => {
+    return path.join(Global.Path.data, file(Installation.CHANNEL))
+  })()
+
   type Schema = typeof schema
   export type Transaction = SQLiteTransaction<"sync", void, Schema>
 
   type Client = SQLiteBunDatabase<Schema>
 
-  type Journal = { sql: string; timestamp: number }[]
+  type Journal = { sql: string; timestamp: number; name: string }[]
+
+  const state = {
+    sqlite: undefined as BunDatabase | undefined,
+  }
 
   function time(tag: string) {
     const match = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/.exec(tag)
@@ -54,10 +69,11 @@ export namespace Database {
     const sql = dirs
       .map((name) => {
         const file = path.join(dir, name, "migration.sql")
-        if (!Bun.file(file).size) return
+        if (!existsSync(file)) return
         return {
           sql: readFileSync(file, "utf-8"),
           timestamp: time(name),
+          name,
         }
       })
       .filter(Boolean) as Journal
@@ -66,9 +82,10 @@ export namespace Database {
   }
 
   export const Client = lazy(() => {
-    log.info("opening database", { path: path.join(Global.Path.data, "opencode.db") })
+    log.info("opening database", { path: Path })
 
-    const sqlite = new BunDatabase(path.join(Global.Path.data, "opencode.db"), { create: true })
+    const sqlite = new BunDatabase(Path, { create: true })
+    state.sqlite = sqlite
 
     sqlite.run("PRAGMA journal_mode = WAL")
     sqlite.run("PRAGMA synchronous = NORMAL")
@@ -94,6 +111,14 @@ export namespace Database {
 
     return db
   })
+
+  export function close() {
+    const sqlite = state.sqlite
+    if (!sqlite) return
+    sqlite.close()
+    state.sqlite = undefined
+    Client.reset()
+  }
 
   export type TxOrDb = Transaction | Client
 
@@ -130,7 +155,7 @@ export namespace Database {
     } catch (err) {
       if (err instanceof Context.NotFound) {
         const effects: (() => void | Promise<void>)[] = []
-        const result = Client().transaction((tx) => {
+        const result = (Client().transaction as any)((tx: TxOrDb) => {
           return ctx.provide({ tx, effects }, () => callback(tx))
         })
         for (const effect of effects) effect()
