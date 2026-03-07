@@ -292,6 +292,7 @@ export namespace LSP {
     const results: Record<string, LSPClient.Diagnostic[]> = {}
     for (const result of await runAll(async (client) => client.diagnostics)) {
       for (const [path, diagnostics] of result.entries()) {
+        if (!Instance.containsPath(path)) continue
         const arr = results[path] || []
         arr.push(...diagnostics)
         results[path] = arr
