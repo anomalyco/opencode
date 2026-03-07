@@ -199,6 +199,33 @@ export async function cleanupTestProject(directory: string) {
   await fs.rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }).catch(() => undefined)
 }
 
+export function slugFromUrl(url: string) {
+  return /\/([^/]+)\/session(?:[/?#]|$)/.exec(url)?.[1] ?? ""
+}
+
+export async function waitSlug(page: Page, skip: string[] = []) {
+  let prev = ""
+  let next = ""
+  await expect
+    .poll(
+      () => {
+        const slug = slugFromUrl(page.url())
+        if (!slug) return ""
+        if (skip.includes(slug)) return ""
+        if (slug !== prev) {
+          prev = slug
+          next = ""
+          return ""
+        }
+        next = slug
+        return slug
+      },
+      { timeout: 45_000 },
+    )
+    .not.toBe("")
+  return next
+}
+
 export function sessionIDFromUrl(url: string) {
   const match = /\/session\/([^/?#]+)/.exec(url)
   return match?.[1]

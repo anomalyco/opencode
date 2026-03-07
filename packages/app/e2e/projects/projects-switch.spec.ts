@@ -1,13 +1,9 @@
 import { base64Decode } from "@opencode-ai/util/encode"
 import type { Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
-import { defocus, createTestProject, cleanupTestProject, openSidebar, sessionIDFromUrl } from "../actions"
+import { defocus, createTestProject, cleanupTestProject, openSidebar, sessionIDFromUrl, waitSlug } from "../actions"
 import { projectSwitchSelector, promptSelector, workspaceItemSelector, workspaceNewSessionSelector } from "../selectors"
-import { dirSlug } from "../utils"
-
-function slugFromUrl(url: string) {
-  return /\/([^/]+)\/session(?:\/|$)/.exec(url)?.[1] ?? ""
-}
+import { dirSlug, resolveDirectory } from "../utils"
 
 async function workspaces(page: Page, directory: string, enabled: boolean) {
   await page.evaluate(
@@ -76,7 +72,6 @@ test("switching back to a project opens the latest workspace session", async ({ 
 
   const other = await createTestProject()
   const otherSlug = dirSlug(other)
-  let workspaceDir: string | undefined
   try {
     await withProject(
       async ({ directory, slug, trackSession, trackDirectory }) => {
@@ -89,33 +84,27 @@ test("switching back to a project opens the latest workspace session", async ({ 
 
         await page.getByRole("button", { name: "New workspace" }).first().click()
 
-        await expect
-          .poll(
-            () => {
-              const next = slugFromUrl(page.url())
-              if (!next) return ""
-              if (next === slug) return ""
-              return next
-            },
-            { timeout: 45_000 },
-          )
-          .not.toBe("")
-
-        const workspaceSlug = slugFromUrl(page.url())
-        workspaceDir = base64Decode(workspaceSlug)
-        if (!workspaceDir) throw new Error(`Failed to decode workspace slug: ${workspaceSlug}`)
-        trackDirectory(workspaceDir)
+        const raw = await waitSlug(page, [slug])
+        const dir = base64Decode(raw)
+        if (!dir) throw new Error(`Failed to decode workspace slug: ${raw}`)
+        const space = await resolveDirectory(dir)
+        const next = dirSlug(space)
+        trackDirectory(space)
         await openSidebar(page)
 
-        const workspace = page.locator(workspaceItemSelector(workspaceSlug)).first()
-        await expect(workspace).toBeVisible()
-        await workspace.hover()
+        const item = page.locator(`${workspaceItemSelector(next)}, ${workspaceItemSelector(raw)}`).first()
+        await expect(item).toBeVisible()
+        await item.hover()
 
-        const newSession = page.locator(workspaceNewSessionSelector(workspaceSlug)).first()
-        await expect(newSession).toBeVisible()
-        await newSession.click({ force: true })
+        const btn = page.locator(`${workspaceNewSessionSelector(next)}, ${workspaceNewSessionSelector(raw)}`).first()
+        await expect(btn).toBeVisible()
+        await btn.click({ force: true })
 
-        await expect(page).toHaveURL(new RegExp(`/${workspaceSlug}/session(?:[/?#]|$)`))
+        // A new workspace can be discovered via a transient slug before the route and sidebar
+        // settle to the canonical workspace path on Windows, so interact with either and assert
+        // against the resolved workspace slug.
+        await waitSlug(page)
+        await expect(page).toHaveURL(new RegExp(`/${next}/session(?:[/?#]|$)`))
 
         // Create a session by sending a prompt
         const prompt = page.locator(promptSelector)
@@ -128,9 +117,9 @@ test("switching back to a project opens the latest workspace session", async ({ 
 
         const created = sessionIDFromUrl(page.url())
         if (!created) throw new Error(`Failed to get session ID from url: ${page.url()}`)
-        trackSession(created, workspaceDir)
+        trackSession(created, space)
 
-        await expect(page).toHaveURL(new RegExp(`/${workspaceSlug}/session/${created}(?:[/?#]|$)`))
+        await expect(page).toHaveURL(new RegExp(`/${next}/session/${created}(?:[/?#]|$)`))
 
         await openSidebar(page)
 

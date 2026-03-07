@@ -14,33 +14,11 @@ import {
   openSidebar,
   openWorkspaceMenu,
   setWorkspacesEnabled,
+  slugFromUrl,
+  waitSlug,
 } from "../actions"
 import { dropdownMenuContentSelector, inlineInputSelector, workspaceItemSelector } from "../selectors"
 import { createSdk, dirSlug } from "../utils"
-
-function slugFromUrl(url: string) {
-  return /\/([^/]+)\/session(?:\/|$)/.exec(url)?.[1] ?? ""
-}
-
-async function waitSlug(page: Page, skip: string[] = []) {
-  let prev = ""
-  await expect
-    .poll(
-      () => {
-        const slug = slugFromUrl(page.url())
-        if (!slug) return ""
-        if (skip.includes(slug)) return ""
-        if (slug !== prev) {
-          prev = slug
-          return ""
-        }
-        return slug
-      },
-      { timeout: 45_000 },
-    )
-    .not.toBe("")
-  return slugFromUrl(page.url())
-}
 
 async function setupWorkspaceTest(page: Page, project: { slug: string }) {
   const rootSlug = project.slug
@@ -353,17 +331,7 @@ test("can reorder workspaces by drag and drop", async ({ page, withProject }) =>
       for (const _ of [0, 1]) {
         const prev = slugFromUrl(page.url())
         await page.getByRole("button", { name: "New workspace" }).first().click()
-        await expect
-          .poll(
-            () => {
-              const slug = slugFromUrl(page.url())
-              return slug.length > 0 && slug !== rootSlug && slug !== prev
-            },
-            { timeout: 45_000 },
-          )
-          .toBe(true)
-
-        const slug = slugFromUrl(page.url())
+        const slug = await waitSlug(page, [rootSlug, prev])
         const dir = base64Decode(slug)
         workspaces.push({ slug, directory: dir })
 
