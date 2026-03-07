@@ -83,6 +83,7 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".json.erb": "erb",
   ".rs": "rust",
   ".scss": "scss",
+  ".sol": "solidity",
   ".sass": "sass",
   ".scala": "scala",
   ".shader": "shaderlab",
