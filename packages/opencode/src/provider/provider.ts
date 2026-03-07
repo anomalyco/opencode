@@ -698,6 +698,144 @@ export namespace Provider {
     })
   export type Info = z.infer<typeof Info>
 
+  const LiveModel = z
+    .object({
+      id: z.string(),
+      name: z.string().optional(),
+      created: z.number().optional(),
+      context_length: z.number().optional(),
+      max_output_length: z.number().optional(),
+      input_modalities: z.array(z.string()).optional(),
+      output_modalities: z.array(z.string()).optional(),
+      supported_sampling_parameters: z.array(z.string()).optional(),
+      supported_features: z.array(z.string()).optional(),
+      pricing: z
+        .object({
+          prompt: z.string().optional(),
+          completion: z.string().optional(),
+          input_cache_reads: z.string().optional(),
+          input_cache_writes: z.string().optional(),
+        })
+        .optional(),
+    })
+    .passthrough()
+
+  const LiveList = z
+    .object({
+      data: z.array(LiveModel),
+    })
+    .passthrough()
+
+  function rate(input: string | undefined, fallback: number) {
+    if (!input) return fallback
+    const value = Number(input)
+    if (!Number.isFinite(value)) return fallback
+    return value * 1_000_000
+  }
+
+  function day(input: number | undefined, fallback: string) {
+    if (!input) return fallback
+    const value = new Date(input * 1000)
+    const year = value.getUTCFullYear()
+    const month = String(value.getUTCMonth() + 1).padStart(2, "0")
+    const date = String(value.getUTCDate()).padStart(2, "0")
+    return `${year}-${month}-${date}`
+  }
+
+  function slim(input: string | undefined) {
+    if (!input) return input
+    return input.replace(/^Inception:\s+/, "")
+  }
+
+  async function hydrate(provider: Info) {
+    if (provider.id !== "inception") return
+    const model = Object.values(provider.models)[0]
+    if (!model) return
+    if (!model.api.npm.includes("@ai-sdk/openai-compatible")) return
+
+    const key =
+      typeof provider.options["apiKey"] === "string"
+        ? provider.options["apiKey"]
+        : typeof provider.key === "string"
+          ? provider.key
+          : undefined
+    if (!key) return
+
+    const baseURL = loadBaseURL(model, provider.options)
+    if (typeof baseURL !== "string") return
+
+    const res = await fetch(`${baseURL.replace(/\/+$/, "")}/models`, {
+      headers: {
+        Authorization: `Bearer ${key}`,
+      },
+      signal: AbortSignal.timeout(5000),
+    }).catch(() => undefined)
+    if (!res?.ok) return
+
+    const body = await res.json().catch(() => undefined)
+    const parsed = LiveList.safeParse(body)
+    if (!parsed.success) return
+
+    for (const item of parsed.data.data) {
+      const prev = provider.models[item.id]
+      const input = item.input_modalities ?? []
+      const output = item.output_modalities ?? []
+      const features = new Set(item.supported_features ?? [])
+      const params = new Set(item.supported_sampling_parameters ?? [])
+      provider.models[item.id] = {
+        id: item.id,
+        providerID: provider.id,
+        name: slim(item.name) ?? prev?.name ?? item.id,
+        family: prev?.family ?? model.family,
+        api: {
+          id: item.id,
+          url: model.api.url,
+          npm: model.api.npm,
+        },
+        capabilities: {
+          temperature: params.has("temperature") || prev?.capabilities.temperature || false,
+          reasoning: prev?.capabilities.reasoning ?? false,
+          attachment: input.some((x) => x !== "text") || prev?.capabilities.attachment || false,
+          toolcall: features.has("tools") || prev?.capabilities.toolcall || false,
+          input: {
+            text: input.includes("text") || prev?.capabilities.input.text || false,
+            audio: input.includes("audio") || prev?.capabilities.input.audio || false,
+            image: input.includes("image") || prev?.capabilities.input.image || false,
+            video: input.includes("video") || prev?.capabilities.input.video || false,
+            pdf: input.includes("pdf") || prev?.capabilities.input.pdf || false,
+          },
+          output: {
+            text: output.includes("text") || prev?.capabilities.output.text || false,
+            audio: output.includes("audio") || prev?.capabilities.output.audio || false,
+            image: output.includes("image") || prev?.capabilities.output.image || false,
+            video: output.includes("video") || prev?.capabilities.output.video || false,
+            pdf: output.includes("pdf") || prev?.capabilities.output.pdf || false,
+          },
+          interleaved: prev?.capabilities.interleaved ?? false,
+        },
+        cost: {
+          input: rate(item.pricing?.prompt, prev?.cost.input ?? 0),
+          output: rate(item.pricing?.completion, prev?.cost.output ?? 0),
+          cache: {
+            read: rate(item.pricing?.input_cache_reads, prev?.cost.cache.read ?? 0),
+            write: rate(item.pricing?.input_cache_writes, prev?.cost.cache.write ?? 0),
+          },
+          experimentalOver200K: prev?.cost.experimentalOver200K,
+        },
+        limit: {
+          context: item.context_length ?? prev?.limit.context ?? 0,
+          input: prev?.limit.input,
+          output: item.max_output_length ?? prev?.limit.output ?? 0,
+        },
+        status: prev?.status ?? "active",
+        options: prev?.options ?? {},
+        headers: prev?.headers ?? {},
+        release_date: day(item.created, prev?.release_date ?? ""),
+        variants: prev?.variants ?? {},
+      }
+    }
+  }
+
   function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
     const m: Model = {
       id: model.id,
@@ -1005,6 +1143,10 @@ export namespace Provider {
       if (provider.name) partial.name = provider.name
       if (provider.options) partial.options = provider.options
       mergeProvider(providerID, partial)
+    }
+
+    for (const provider of Object.values(providers)) {
+      await hydrate(provider)
     }
 
     for (const [providerID, provider] of Object.entries(providers)) {
