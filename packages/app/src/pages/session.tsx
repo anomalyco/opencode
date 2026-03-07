@@ -36,6 +36,7 @@ import { createSessionComposerState, SessionComposerRegion } from "@/pages/sessi
 import { createOpenReviewFile, createSizing } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
+import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { createScrollSpy } from "@/pages/session/scroll-spy"
 import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
@@ -418,11 +419,7 @@ export default function Page() {
       () => {
         const msg = lastUserMessage()
         if (!msg) return
-        if (msg.agent) {
-          local.agent.set(msg.agent)
-          if (local.agent.current()?.model) return
-        }
-        if (msg.model) local.model.set(msg.model)
+        syncSessionModel(local, msg)
       },
     ),
   )
