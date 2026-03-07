@@ -209,3 +209,37 @@ describe("session.prompt agent variant", () => {
     }
   })
 })
+
+describe("session.prompt fast mode", () => {
+  test("normalizes fast mode into user message controls", async () => {
+    const prev = process.env.OPENAI_API_KEY
+    process.env.OPENAI_API_KEY = "test-openai-key"
+
+    try {
+      await using tmp = await tmpdir({ git: true })
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const session = await Session.create({})
+
+          const message = await SessionPrompt.prompt({
+            sessionID: session.id,
+            model: { providerID: "openai", modelID: "gpt-5.2" },
+            noReply: true,
+            fast: true,
+            parts: [{ type: "text", text: "hello" }],
+          })
+          if (message.info.role !== "user") throw new Error("expected user message")
+          expect(message.info.controls).toEqual(["fast"])
+          expect(message.info.fast).toBe(true)
+
+          await Session.remove(session.id)
+        },
+      })
+    } finally {
+      if (prev === undefined) delete process.env.OPENAI_API_KEY
+      else process.env.OPENAI_API_KEY = prev
+    }
+  })
+})

@@ -368,6 +368,8 @@ export namespace MessageV2 {
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
     variant: z.string().optional(),
+    controls: z.array(z.string()).optional(),
+    fast: z.boolean().optional(),
   }).meta({
     ref: "UserMessage",
   })
@@ -436,6 +438,8 @@ export namespace MessageV2 {
     }),
     structured: z.any().optional(),
     variant: z.string().optional(),
+    controls: z.array(z.string()).optional(),
+    fast: z.boolean().optional(),
     finish: z.string().optional(),
   }).meta({
     ref: "AssistantMessage",
@@ -446,6 +450,16 @@ export namespace MessageV2 {
     ref: "Message",
   })
   export type Info = z.infer<typeof Info>
+
+  export function controlIDs(message: { controls?: string[]; fast?: boolean } | undefined) {
+    const result = new Set(message?.controls ?? [])
+    if (message?.fast) result.add("fast")
+    return [...result]
+  }
+
+  export function hasControl(message: { controls?: string[]; fast?: boolean } | undefined, controlID: string) {
+    return controlIDs(message).includes(controlID)
+  }
 
   export const Event = {
     Updated: BusEvent.define(

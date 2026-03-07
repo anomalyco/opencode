@@ -108,6 +108,8 @@ export namespace SessionPrompt {
     format: MessageV2.Format.optional(),
     system: z.string().optional(),
     variant: z.string().optional(),
+    controls: z.array(z.string()).optional(),
+    fast: z.boolean().optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -360,6 +362,8 @@ export namespace SessionPrompt {
           mode: task.agent,
           agent: task.agent,
           variant: lastUser.variant,
+          controls: MessageV2.controlIDs(lastUser),
+          fast: MessageV2.hasControl(lastUser, "fast") ? true : undefined,
           path: {
             cwd: Instance.directory,
             root: Instance.worktree,
@@ -572,6 +576,8 @@ export namespace SessionPrompt {
           mode: agent.name,
           agent: agent.name,
           variant: lastUser.variant,
+          controls: MessageV2.controlIDs(lastUser),
+          fast: MessageV2.hasControl(lastUser, "fast") ? true : undefined,
           path: {
             cwd: Instance.directory,
             root: Instance.worktree,
@@ -962,6 +968,7 @@ export namespace SessionPrompt {
         ? await Provider.getModel(model.providerID, model.modelID).catch(() => undefined)
         : undefined
     const variant = input.variant ?? (agent.variant && full?.variants?.[agent.variant] ? agent.variant : undefined)
+    const controls = MessageV2.controlIDs(input)
 
     const info: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
@@ -976,6 +983,8 @@ export namespace SessionPrompt {
       system: input.system,
       format: input.format,
       variant,
+      controls: controls.length > 0 ? controls : undefined,
+      fast: controls.includes("fast") ? true : undefined,
     }
     using _ = defer(() => InstructionPrompt.clear(info.id))
 
@@ -1302,6 +1311,8 @@ export namespace SessionPrompt {
         model: input.model,
         messageID: input.messageID,
         variant: input.variant,
+        controls: controls.length > 0 ? controls : undefined,
+        fast: controls.includes("fast") ? true : input.fast,
       },
       {
         message: info,
@@ -1718,6 +1729,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     arguments: z.string(),
     command: z.string(),
     variant: z.string().optional(),
+    controls: z.array(z.string()).optional(),
+    fast: z.boolean().optional(),
     parts: z
       .array(
         z.discriminatedUnion("type", [
@@ -1875,6 +1888,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       agent: userAgent,
       parts,
       variant: input.variant,
+      controls: input.controls,
+      fast: input.fast,
     })) as MessageV2.WithParts
 
     Bus.publish(Command.Event.Executed, {

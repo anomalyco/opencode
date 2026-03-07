@@ -138,6 +138,8 @@ export type UserMessage = {
     [key: string]: boolean
   }
   variant?: string
+  controls?: Array<string>
+  fast?: boolean
 }
 
 export type ProviderAuthError = {
@@ -240,6 +242,8 @@ export type AssistantMessage = {
   }
   structured?: unknown
   variant?: string
+  controls?: Array<string>
+  fast?: boolean
   finish?: string
 }
 
@@ -1206,6 +1210,29 @@ export type ProviderConfig = {
           [key: string]: unknown | boolean | undefined
         }
       }
+      /**
+       * Control-specific configuration
+       */
+      controls?: {
+        [key: string]: {
+          label?: string
+          options?: {
+            [key: string]: unknown
+          }
+          /**
+           * Disable this control for the model
+           */
+          disabled?: boolean
+          [key: string]:
+            | unknown
+            | string
+            | {
+                [key: string]: unknown
+              }
+            | boolean
+            | undefined
+        }
+      }
     }
   }
   whitelist?: Array<string>
@@ -1536,6 +1563,20 @@ export type NotFoundError = {
   }
 }
 
+export type ModelControl = {
+  label?: string
+  options?: {
+    [key: string]: unknown
+  }
+  [key: string]:
+    | unknown
+    | string
+    | {
+        [key: string]: unknown
+      }
+    | undefined
+}
+
 export type Model = {
   id: string
   providerID: string
@@ -1604,6 +1645,9 @@ export type Model = {
     [key: string]: {
       [key: string]: unknown
     }
+  }
+  controls?: {
+    [key: string]: ModelControl
   }
 }
 
@@ -3287,6 +3331,8 @@ export type SessionPromptData = {
     format?: OutputFormat
     system?: string
     variant?: string
+    controls?: Array<string>
+    fast?: boolean
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -3520,6 +3566,8 @@ export type SessionPromptAsyncData = {
     format?: OutputFormat
     system?: string
     variant?: string
+    controls?: Array<string>
+    fast?: boolean
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -3565,6 +3613,8 @@ export type SessionCommandData = {
     arguments: string
     command: string
     variant?: string
+    controls?: Array<string>
+    fast?: boolean
     parts?: Array<{
       id?: string
       type: "file"
@@ -3984,6 +4034,21 @@ export type ProviderListResponses = {
           variants?: {
             [key: string]: {
               [key: string]: unknown
+            }
+          }
+          controls?: {
+            [key: string]: {
+              label?: string
+              options?: {
+                [key: string]: unknown
+              }
+              [key: string]:
+                | unknown
+                | string
+                | {
+                    [key: string]: unknown
+                  }
+                | undefined
             }
           }
         }

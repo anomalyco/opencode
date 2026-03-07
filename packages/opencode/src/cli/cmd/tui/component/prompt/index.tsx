@@ -1,5 +1,17 @@
 import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg } from "@opentui/core"
-import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  type JSX,
+  onMount,
+  createSignal,
+  onCleanup,
+  on,
+  Show,
+  Switch,
+  Match,
+  For,
+} from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
 import { Filesystem } from "@/util/filesystem"
@@ -164,6 +176,10 @@ export function Prompt(props: PromptProps) {
         local.agent.set(msg.agent)
         if (msg.model) local.model.set(msg.model)
         if (msg.variant) local.model.variant.set(msg.variant)
+        const activeControls = new Set([...(msg.controls ?? []), ...(msg.fast ? ["fast"] : [])])
+        for (const control of local.model.control.list()) {
+          local.model.control.set(control.id, activeControls.has(control.id))
+        }
       }
     }
   })
@@ -239,6 +255,24 @@ export function Prompt(props: PromptProps) {
             })
             setStore("interrupt", 0)
           }
+          dialog.clear()
+        },
+      },
+      {
+        title: local.model.control.enabled("fast") ? "Disable fast mode" : "Enable fast mode",
+        value: "prompt.fast.toggle",
+        category: "Agent",
+        enabled: local.model.control.supported("fast"),
+        slash: {
+          name: "fast",
+        },
+        onSelect: (dialog) => {
+          if (!local.model.control.toggle("fast")) return
+          toast.show({
+            variant: "info",
+            message: local.model.control.enabled("fast") ? "Fast mode enabled" : "Fast mode disabled",
+            duration: 2000,
+          })
           dialog.clear()
         },
       },
@@ -539,6 +573,17 @@ export function Prompt(props: PromptProps) {
       promptModelWarning()
       return
     }
+    if (store.mode === "normal" && trimmed.split(/\s+/, 1)[0] === "/fast") {
+      if (local.model.control.toggle("fast")) {
+        toast.show({
+          variant: "info",
+          message: local.model.control.enabled("fast") ? "Fast mode enabled" : "Fast mode disabled",
+          duration: 2000,
+        })
+      }
+      clearPrompt()
+      return
+    }
     const sessionID = props.sessionID
       ? props.sessionID
       : await (async () => {
@@ -570,6 +615,8 @@ export function Prompt(props: PromptProps) {
     // Capture mode before it gets reset
     const currentMode = store.mode
     const variant = local.model.variant.current()
+    const controls = local.model.control.current()
+    const fast = controls.includes("fast")
 
     if (store.mode === "shell") {
       sdk.client.session.shell({
@@ -605,6 +652,8 @@ export function Prompt(props: PromptProps) {
         model: `${selectedModel.providerID}/${selectedModel.modelID}`,
         messageID,
         variant,
+        controls,
+        fast,
         parts: nonTextParts
           .filter((x) => x.type === "file")
           .map((x) => ({
@@ -621,6 +670,8 @@ export function Prompt(props: PromptProps) {
           agent: local.agent.current().name,
           model: selectedModel,
           variant,
+          controls,
+          fast,
           parts: [
             {
               id: Identifier.ascending("part"),
@@ -639,12 +690,7 @@ export function Prompt(props: PromptProps) {
       ...store.prompt,
       mode: currentMode,
     })
-    input.extmarks.clear()
-    setStore("prompt", {
-      input: "",
-      parts: [],
-    })
-    setStore("extmarkToPartIndex", new Map())
+    clearPrompt()
     props.onSubmit?.()
 
     // temporary hack to make sure the message is sent
@@ -655,6 +701,14 @@ export function Prompt(props: PromptProps) {
           sessionID,
         })
       }, 50)
+  }
+  function clearPrompt() {
+    input.extmarks.clear()
+    setStore("prompt", {
+      input: "",
+      parts: [],
+    })
+    setStore("extmarkToPartIndex", new Map())
     input.clear()
   }
   const exit = useExit()
@@ -748,6 +802,7 @@ export function Prompt(props: PromptProps) {
     const current = local.model.variant.current()
     return !!current
   })
+  const activeControls = createMemo(() => local.model.control.active())
 
   const placeholderText = createMemo(() => {
     if (props.sessionID) return undefined
@@ -1012,6 +1067,16 @@ export function Prompt(props: PromptProps) {
                       <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
                     </text>
                   </Show>
+                  <For each={activeControls()}>
+                    {(control) => (
+                      <>
+                        <text fg={theme.textMuted}>·</text>
+                        <text>
+                          <span style={{ fg: theme.warning, bold: true }}>{control.label}</span>
+                        </text>
+                      </>
+                    )}
+                  </For>
                 </box>
               </Show>
             </box>

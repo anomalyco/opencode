@@ -443,6 +443,121 @@ describe("session.llm.stream", () => {
     })
   })
 
+  test("sends priority service tier when fast mode is enabled", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const source = await loadFixture("openai", "gpt-5.2")
+    const model = source.model
+
+    const responseChunks = [
+      {
+        type: "response.created",
+        response: {
+          id: "resp-fast",
+          created_at: Math.floor(Date.now() / 1000),
+          model: model.id,
+          service_tier: "priority",
+        },
+      },
+      {
+        type: "response.output_text.delta",
+        item_id: "item-fast",
+        delta: "Hello",
+        logprobs: null,
+      },
+      {
+        type: "response.completed",
+        response: {
+          incomplete_details: null,
+          usage: {
+            input_tokens: 1,
+            input_tokens_details: null,
+            output_tokens: 1,
+            output_tokens_details: null,
+          },
+          service_tier: "priority",
+        },
+      },
+    ]
+    const request = waitRequest("/responses", createEventResponse(responseChunks, true))
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: ["openai"],
+            provider: {
+              openai: {
+                name: "OpenAI",
+                env: ["OPENAI_API_KEY"],
+                npm: "@ai-sdk/openai",
+                api: "https://api.openai.com/v1",
+                models: {
+                  [model.id]: model,
+                },
+                options: {
+                  apiKey: "test-openai-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await Provider.getModel("openai", model.id)
+        const sessionID = "session-fast"
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          temperature: 0.2,
+        } satisfies Agent.Info
+
+        const user = {
+          id: "user-fast",
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: "openai", modelID: resolved.id },
+          variant: "high",
+          controls: ["fast"],
+        } satisfies MessageV2.User
+
+        const stream = await LLM.stream({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          abort: new AbortController().signal,
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        for await (const _ of stream.fullStream) {
+        }
+
+        const capture = await request
+        const body = capture.body
+
+        expect(body.service_tier).toBe("priority")
+        expect((body.reasoning as { effort?: string } | undefined)?.effort).toBe("high")
+      },
+    })
+  })
+
   test("sends messages API payload for Anthropic models", async () => {
     const server = state.server
     if (!server) {

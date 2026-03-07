@@ -612,6 +612,11 @@ export namespace Provider {
     },
   }
 
+  export const Control = ModelsDev.Control.meta({
+    ref: "ModelControl",
+  })
+  export type Control = z.infer<typeof Control>
+
   export const Model = z
     .object({
       id: z.string(),
@@ -677,6 +682,7 @@ export namespace Provider {
       headers: z.record(z.string(), z.string()),
       release_date: z.string(),
       variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
+      controls: z.record(z.string(), Control).optional(),
     })
     .meta({
       ref: "Model",
@@ -758,9 +764,11 @@ export namespace Provider {
       },
       release_date: model.release_date,
       variants: {},
+      controls: {},
     }
 
     m.variants = mapValues(ProviderTransform.variants(m), (v) => v)
+    m.controls = mapValues(mergeDeep(ProviderTransform.controls(m), model.controls ?? {}), (v) => v)
 
     return m
   }
@@ -901,10 +909,16 @@ export namespace Provider {
           family: model.family ?? existingModel?.family ?? "",
           release_date: model.release_date ?? existingModel?.release_date ?? "",
           variants: {},
+          controls: {},
         }
         const merged = mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {})
         parsedModel.variants = mapValues(
           pickBy(merged, (v) => !v.disabled),
+          (v) => omit(v, ["disabled"]),
+        )
+        const mergedControls = mergeDeep(ProviderTransform.controls(parsedModel), model.controls ?? {})
+        parsedModel.controls = mapValues(
+          pickBy(mergedControls, (v) => !v.disabled),
           (v) => omit(v, ["disabled"]),
         )
         parsed.models[modelID] = parsedModel
@@ -1028,12 +1042,22 @@ export namespace Provider {
           delete provider.models[modelID]
 
         model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
+        model.controls = mapValues(ProviderTransform.controls(model), (v) => v)
 
         // Filter out disabled variants from config
         const configVariants = configProvider?.models?.[modelID]?.variants
         if (configVariants && model.variants) {
           const merged = mergeDeep(model.variants, configVariants)
           model.variants = mapValues(
+            pickBy(merged, (v) => !v.disabled),
+            (v) => omit(v, ["disabled"]),
+          )
+        }
+
+        const configControls = configProvider?.models?.[modelID]?.controls
+        if (configControls && model.controls) {
+          const merged = mergeDeep(model.controls, configControls)
+          model.controls = mapValues(
             pickBy(merged, (v) => !v.disabled),
             (v) => omit(v, ["disabled"]),
           )

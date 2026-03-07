@@ -162,6 +162,8 @@ export interface Hooks {
       model?: { providerID: string; modelID: string }
       messageID?: string
       variant?: string
+      controls?: string[]
+      fast?: boolean
     },
     output: { message: UserMessage; parts: Part[] },
   ) => Promise<void>

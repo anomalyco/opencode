@@ -15,6 +15,13 @@ export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
   const filepath = path.join(Global.Path.cache, "models.json")
 
+  export const Control = z
+    .object({
+      label: z.string().optional(),
+      options: z.record(z.string(), z.any()).optional(),
+    })
+    .catchall(z.any())
+
   export const Model = z.object({
     id: z.string(),
     name: z.string(),
@@ -67,6 +74,7 @@ export namespace ModelsDev {
     headers: z.record(z.string(), z.string()).optional(),
     provider: z.object({ npm: z.string().optional(), api: z.string().optional() }).optional(),
     variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
+    controls: z.record(z.string(), Control).optional(),
   })
   export type Model = z.infer<typeof Model>
 

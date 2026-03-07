@@ -140,6 +140,8 @@ export namespace SessionCompaction {
       mode: "compaction",
       agent: "compaction",
       variant: userMessage.variant,
+      controls: MessageV2.controlIDs(userMessage),
+      fast: MessageV2.hasControl(userMessage, "fast") ? true : undefined,
       summary: true,
       path: {
         cwd: Instance.directory,
@@ -246,6 +248,8 @@ When constructing the summary, try to stick to this template:
           tools: original.tools,
           system: original.system,
           variant: original.variant,
+          controls: MessageV2.controlIDs(original),
+          fast: MessageV2.hasControl(original, "fast") ? true : undefined,
         })
         for (const part of replay.parts) {
           if (part.type === "compaction") continue
@@ -268,6 +272,8 @@ When constructing the summary, try to stick to this template:
           time: { created: Date.now() },
           agent: userMessage.agent,
           model: userMessage.model,
+          controls: MessageV2.controlIDs(userMessage),
+          fast: MessageV2.hasControl(userMessage, "fast") ? true : undefined,
         })
         const text =
           (input.overflow

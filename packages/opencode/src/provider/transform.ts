@@ -329,6 +329,45 @@ export namespace ProviderTransform {
   const WIDELY_SUPPORTED_EFFORTS = ["low", "medium", "high"]
   const OPENAI_EFFORTS = ["none", "minimal", ...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
 
+  export function supportsOpenAIFlexProcessing(modelID: string) {
+    const id = modelID.toLowerCase()
+    return id.startsWith("o3") || id.startsWith("o4-mini") || (id.startsWith("gpt-5") && !id.startsWith("gpt-5-chat"))
+  }
+
+  export function supportsOpenAIPriorityProcessing(modelID: string) {
+    const id = modelID.toLowerCase()
+    return (
+      id.startsWith("gpt-4") ||
+      id.startsWith("gpt-5-mini") ||
+      (id.startsWith("gpt-5") && !id.startsWith("gpt-5-nano") && !id.startsWith("gpt-5-chat")) ||
+      id.startsWith("o3") ||
+      id.startsWith("o4-mini")
+    )
+  }
+
+  export function controls(model: Provider.Model): Record<string, Provider.Control> {
+    const id = (model.api.id ?? model.id).toLowerCase()
+    if (model.providerID === "openai" && supportsOpenAIPriorityProcessing(id)) {
+      return {
+        fast: {
+          label: "fast",
+          options: {
+            serviceTier: "priority",
+          },
+        },
+      }
+    }
+    return {}
+  }
+
+  export function controlOptions(model: Provider.Model, controls: string[]) {
+    return controls.reduce<Record<string, any>>((acc, controlID) => {
+      const control = model.controls?.[controlID]
+      if (!control?.options) return acc
+      return mergeDeep(acc, control.options)
+    }, {})
+  }
+
   export function variants(model: Provider.Model): Record<string, Record<string, any>> {
     if (!model.capabilities.reasoning) return {}
 

@@ -11,12 +11,12 @@ import {
   tool,
   jsonSchema,
 } from "ai"
-import { mergeDeep, pipe } from "remeda"
+import { mergeDeep } from "remeda"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
 import { Instance } from "@/project/instance"
 import type { Agent } from "@/agent/agent"
-import type { MessageV2 } from "./message-v2"
+import { MessageV2 } from "./message-v2"
 import { Plugin } from "@/plugin"
 import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
@@ -101,11 +101,12 @@ export namespace LLM {
           sessionID: input.sessionID,
           providerOptions: provider.options,
         })
-    const options: Record<string, any> = pipe(
-      base,
-      mergeDeep(input.model.options),
-      mergeDeep(input.agent.options),
-      mergeDeep(variant),
+    const options: Record<string, any> = mergeDeep(base, input.model.options) as Record<string, any>
+    Object.assign(options, mergeDeep(options, input.agent.options))
+    Object.assign(options, mergeDeep(options, variant))
+    Object.assign(
+      options,
+      mergeDeep(options, ProviderTransform.controlOptions(input.model, MessageV2.controlIDs(input.user))),
     )
     if (isCodex) {
       options.instructions = SystemPrompt.instructions()

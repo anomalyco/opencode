@@ -948,6 +948,15 @@ export namespace Config {
               )
               .optional()
               .describe("Variant-specific configuration"),
+            controls: z
+              .record(
+                z.string(),
+                ModelsDev.Control.extend({
+                  disabled: z.boolean().optional().describe("Disable this control for the model"),
+                }),
+              )
+              .optional()
+              .describe("Control-specific configuration"),
           }),
         )
         .optional(),

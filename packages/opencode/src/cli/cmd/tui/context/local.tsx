@@ -112,12 +112,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           modelID: string
         }[]
         variant: Record<string, string | undefined>
+        controls: Record<string, string[] | undefined>
       }>({
         ready: false,
         model: {},
         recent: [],
         favorite: [],
         variant: {},
+        controls: {},
       })
 
       const filePath = path.join(Global.Path.state, "model.json")
@@ -135,6 +137,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           recent: modelStore.recent,
           favorite: modelStore.favorite,
           variant: modelStore.variant,
+          controls: modelStore.controls,
         })
       }
 
@@ -143,6 +146,21 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (Array.isArray(x.recent)) setModelStore("recent", x.recent)
           if (Array.isArray(x.favorite)) setModelStore("favorite", x.favorite)
           if (typeof x.variant === "object" && x.variant !== null) setModelStore("variant", x.variant)
+          const controls: Record<string, string[]> = {}
+          if (typeof x.controls === "object" && x.controls !== null) {
+            for (const [key, value] of Object.entries(x.controls)) {
+              if (!Array.isArray(value)) continue
+              const ids = [...new Set(value.filter((item): item is string => typeof item === "string"))]
+              if (ids.length > 0) controls[key] = ids
+            }
+          }
+          if (typeof x.fast === "object" && x.fast !== null) {
+            for (const [key, value] of Object.entries(x.fast)) {
+              if (!value) continue
+              controls[key] = [...new Set([...(controls[key] ?? []), "fast"])]
+            }
+          }
+          if (Object.keys(controls).length > 0) setModelStore("controls", controls)
         })
         .catch(() => {})
         .finally(() => {
@@ -200,6 +218,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           ) ?? undefined
         )
       })
+
+      function modelKey(model: { providerID: string; modelID: string }) {
+        return `${model.providerID}/${model.modelID}`
+      }
+
+      function currentModelInfo() {
+        const value = currentModel()
+        if (!value) return
+        const provider = sync.data.provider.find((x) => x.id === value.providerID)
+        return provider?.models[value.modelID]
+      }
 
       return {
         current: currentModel,
@@ -324,22 +353,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           current() {
             const m = currentModel()
             if (!m) return undefined
-            const key = `${m.providerID}/${m.modelID}`
-            return modelStore.variant[key]
+            return modelStore.variant[modelKey(m)]
           },
           list() {
-            const m = currentModel()
-            if (!m) return []
-            const provider = sync.data.provider.find((x) => x.id === m.providerID)
-            const info = provider?.models[m.modelID]
+            const info = currentModelInfo()
             if (!info?.variants) return []
             return Object.keys(info.variants)
           },
           set(value: string | undefined) {
             const m = currentModel()
             if (!m) return
-            const key = `${m.providerID}/${m.modelID}`
-            setModelStore("variant", key, value)
+            setModelStore("variant", modelKey(m), value)
             save()
           },
           cycle() {
@@ -356,6 +380,58 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               return
             }
             this.set(variants[index + 1])
+          },
+        },
+        control: {
+          current() {
+            const m = currentModel()
+            if (!m) return []
+            return modelStore.controls[modelKey(m)] ?? []
+          },
+          list() {
+            const info = currentModelInfo()
+            if (!info?.controls) return []
+            return Object.entries(info.controls).map(([id, control]) => ({
+              id,
+              label: control.label ?? id,
+            }))
+          },
+          active() {
+            const ids = this.current()
+            const info = currentModelInfo()
+            return ids.flatMap((id) => {
+              const control = info?.controls?.[id]
+              if (!control) return []
+              return [{ id, label: control.label ?? id }]
+            })
+          },
+          enabled(id: string) {
+            return this.current().includes(id)
+          },
+          supported(id: string) {
+            return this.list().some((control) => control.id === id)
+          },
+          set(id: string, value: boolean | undefined) {
+            const m = currentModel()
+            if (!m) return false
+            const info = currentModelInfo()
+            if (value && !info?.controls?.[id]) {
+              toast.show({
+                message: `${id} is not supported for ${m.providerID}/${m.modelID}`,
+                variant: "warning",
+                duration: 3000,
+              })
+              return false
+            }
+            const next = new Set(this.current())
+            if (value) next.add(id)
+            else next.delete(id)
+            setModelStore("controls", modelKey(m), next.size > 0 ? [...next] : undefined)
+            save()
+            return true
+          },
+          toggle(id: string) {
+            return this.set(id, !this.enabled(id))
           },
         },
       }
