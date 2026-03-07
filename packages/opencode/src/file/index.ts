@@ -395,10 +395,11 @@ export namespace File {
       cache = result
       fetching = false
     }
-    fn(cache)
+    const initialScan = fn(cache)
 
     return {
       async files() {
+        await initialScan
         if (!fetching) {
           fn({
             files: [],
