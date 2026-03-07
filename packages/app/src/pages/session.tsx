@@ -495,8 +495,9 @@ export default function Page() {
   })
   const reviewEmptyKey = createMemo(() => {
     const project = sync.project
-    if (!project || project.vcs) return "session.review.empty"
-    return "session.review.noVcs"
+    if (project && !project.vcs) return "session.review.noVcs"
+    if (sync.data.config.snapshot === false) return "session.review.noSnapshot"
+    return "session.review.empty"
   })
 
   function upsert(next: Project) {

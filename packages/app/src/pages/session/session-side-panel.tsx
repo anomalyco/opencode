@@ -60,6 +60,12 @@ export function SessionSidePanel(props: {
     return sync.data.session_diff[id] !== undefined
   })
 
+  const reviewEmptyKey = createMemo(() => {
+    if (sync.project && !sync.project.vcs) return "session.review.noVcs"
+    if (sync.data.config.snapshot === false) return "session.review.noSnapshot"
+    return "session.review.noChanges"
+  })
+
   const diffFiles = createMemo(() => diffs().map((d) => d.file))
   const kinds = createMemo(() => {
     const merge = (a: "add" | "del" | "mix" | undefined, b: "add" | "del" | "mix") => {
@@ -208,7 +214,7 @@ export function SessionSidePanel(props: {
       <aside
         id="review-panel"
         aria-label={language.t("session.panel.reviewAndFiles")}
-        class="relative min-w-0 h-full border-l border-border-weak-base flex"
+        class="relative min-w-0 h-full border-l border-border-weaker-base flex"
         classList={{
           "flex-1": reviewOpen(),
           "shrink-0": !reviewOpen(),
@@ -346,7 +352,7 @@ export function SessionSidePanel(props: {
           <div id="file-tree-panel" class="relative shrink-0 h-full" style={{ width: `${layout.fileTree.width()}px` }}>
             <div
               class="h-full flex flex-col overflow-hidden group/filetree"
-              classList={{ "border-l border-border-weak-base": reviewOpen() }}
+              classList={{ "border-l border-border-weaker-base": reviewOpen() }}
             >
               <Tabs
                 variant="pill"
@@ -387,7 +393,7 @@ export function SessionSidePanel(props: {
                         />
                       </Show>
                     </Match>
-                    <Match when={true}>{empty(language.t("session.review.noChanges"))}</Match>
+                    <Match when={true}>{empty(language.t(reviewEmptyKey()))}</Match>
                   </Switch>
                 </Tabs.Content>
                 <Tabs.Content value="all" class="bg-background-stronger px-3 py-0">
