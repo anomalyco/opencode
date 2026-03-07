@@ -510,6 +510,7 @@ export const dict = {
   "session.todo.title": "待办事项",
   "session.todo.collapse": "折叠",
   "session.todo.expand": "展开",
+  "session.new.title": "构建任何东西",
   "session.new.worktree.main": "主分支",
   "session.new.worktree.mainWithBranch": "主分支（{{branch}}）",
   "session.new.worktree.create": "创建新的 worktree",

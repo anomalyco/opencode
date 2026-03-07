@@ -7,6 +7,7 @@ import {
   For,
   Match,
   on,
+  onMount,
   Show,
   Switch,
   useContext,
@@ -153,7 +154,7 @@ export function Session() {
   const [timestamps, setTimestamps] = kv.signal<"hide" | "show">("timestamps", "hide")
   const [showDetails, setShowDetails] = kv.signal("tool_details_visibility", true)
   const [showAssistantMetadata, setShowAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
-  const [showScrollbar, setShowScrollbar] = kv.signal("scrollbar_visible", false)
+  const [showScrollbar, setShowScrollbar] = kv.signal("scrollbar_visible", true)
   const [showHeader, setShowHeader] = kv.signal("header_visible", true)
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
@@ -240,7 +241,6 @@ export function Session() {
     const logo = UI.logo("  ").split(/\r?\n/)
     return exit.message.set(
       [
-        ``,
         `${logo[0] ?? ""}`,
         `${logo[1] ?? ""}`,
         `${logo[2] ?? ""}`,
@@ -924,6 +924,7 @@ export function Session() {
       keybind: "session_parent",
       category: "Session",
       hidden: true,
+      enabled: !!session()?.parentID,
       onSelect: childSessionHandler((dialog) => {
         const parentID = session()?.parentID
         if (parentID) {
@@ -941,6 +942,7 @@ export function Session() {
       keybind: "session_child_cycle",
       category: "Session",
       hidden: true,
+      enabled: !!session()?.parentID,
       onSelect: childSessionHandler((dialog) => {
         moveChild(1)
         dialog.clear()
@@ -952,6 +954,7 @@ export function Session() {
       keybind: "session_child_cycle_reverse",
       category: "Session",
       hidden: true,
+      enabled: !!session()?.parentID,
       onSelect: childSessionHandler((dialog) => {
         moveChild(-1)
         dialog.clear()
@@ -1323,6 +1326,8 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     return props.message.time.completed - user.time.created
   })
 
+  const keybind = useKeybind()
+
   return (
     <>
       <For each={props.parts}>
@@ -1340,6 +1345,14 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           )
         }}
       </For>
+      <Show when={props.parts.some((x) => x.type === "tool" && x.tool === "task")}>
+        <box paddingTop={1} paddingLeft={3}>
+          <text fg={theme.text}>
+            {keybind.print("session_child_first")}
+            <span style={{ fg: theme.textMuted }}> view subagents</span>
+          </text>
+        </box>
+      </Show>
       <Show when={props.message.error && props.message.error.name !== "MessageAbortedError"}>
         <box
           border={["left"]}
@@ -1609,13 +1622,17 @@ function InlineTool(props: {
   iconColor?: RGBA
   complete: any
   pending: string
+  spinner?: boolean
   children: JSX.Element
   part: ToolPart
+  onClick?: () => void
 }) {
   const [margin, setMargin] = createSignal(0)
   const { theme } = useTheme()
   const ctx = use()
   const sync = useSync()
+  const renderer = useRenderer()
+  const [hover, setHover] = createSignal(false)
 
   const permission = createMemo(() => {
     const callID = sync.data.permission[ctx.sessionID]?.at(0)?.tool?.callID
@@ -1625,6 +1642,7 @@ function InlineTool(props: {
 
   const fg = createMemo(() => {
     if (permission()) return theme.warning
+    if (hover() && props.onClick) return theme.text
     if (props.complete) return theme.textMuted
     return theme.text
   })
@@ -1642,6 +1660,12 @@ function InlineTool(props: {
     <box
       marginTop={margin()}
       paddingLeft={3}
+      onMouseOver={() => props.onClick && setHover(true)}
+      onMouseOut={() => setHover(false)}
+      onMouseUp={() => {
+        if (renderer.getSelection()?.getSelectedText()) return
+        props.onClick?.()
+      }}
       renderBefore={function () {
         const el = this as BoxRenderable
         const parent = el.parent
@@ -1665,11 +1689,18 @@ function InlineTool(props: {
         }
       }}
     >
-      <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
-        <Show fallback={<>~ {props.pending}</>} when={props.complete}>
-          <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
-        </Show>
-      </text>
+      <Switch>
+        <Match when={props.spinner}>
+          <Spinner color={fg()} children={props.children} />
+        </Match>
+        <Match when={true}>
+          <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
+            <Show fallback={<>~ {props.pending}</>} when={props.complete}>
+              <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
+            </Show>
+          </text>
+        </Match>
+      </Switch>
       <Show when={error() && !denied()}>
         <text fg={theme.error}>{error()}</text>
       </Show>
@@ -1836,6 +1867,7 @@ function Glob(props: ToolProps<typeof GlobTool>) {
 
 function Read(props: ToolProps<typeof ReadTool>) {
   const { theme } = useTheme()
+  const isRunning = createMemo(() => props.part.state.status === "running")
   const loaded = createMemo(() => {
     if (props.part.state.status !== "completed") return []
     if (props.part.state.time.compacted) return []
@@ -1845,7 +1877,13 @@ function Read(props: ToolProps<typeof ReadTool>) {
   })
   return (
     <>
-      <InlineTool icon="→" pending="Reading file..." complete={props.input.filePath} part={props.part}>
+      <InlineTool
+        icon="→"
+        pending="Reading file..."
+        complete={props.input.filePath}
+        spinner={isRunning()}
+        part={props.part}
+      >
         Read {normalizePath(props.input.filePath!)} {input(props.input, ["filePath"])}
       </InlineTool>
       <For each={loaded()}>
@@ -1921,62 +1959,64 @@ function Task(props: ToolProps<typeof TaskTool>) {
   const local = useLocal()
   const sync = useSync()
 
+  onMount(() => {
+    if (props.metadata.sessionId && !sync.data.message[props.metadata.sessionId]?.length)
+      sync.session.sync(props.metadata.sessionId)
+  })
+
+  const messages = createMemo(() => sync.data.message[props.metadata.sessionId ?? ""] ?? [])
+
   const tools = createMemo(() => {
-    const sessionID = props.metadata.sessionId
-    const msgs = sync.data.message[sessionID ?? ""] ?? []
-    return msgs.flatMap((msg) =>
+    return messages().flatMap((msg) =>
       (sync.data.part[msg.id] ?? [])
         .filter((part): part is ToolPart => part.type === "tool")
         .map((part) => ({ tool: part.tool, state: part.state })),
     )
   })
 
-  const current = createMemo(() => tools().findLast((x) => x.state.status !== "pending"))
+  const current = createMemo(() => tools().findLast((x) => (x.state as any).title))
 
   const isRunning = createMemo(() => props.part.state.status === "running")
 
+  const duration = createMemo(() => {
+    const first = messages().find((x) => x.role === "user")?.time.created
+    const assistant = messages().findLast((x) => x.role === "assistant")?.time.completed
+    if (!first || !assistant) return 0
+    return assistant - first
+  })
+
+  const content = createMemo(() => {
+    if (!props.input.description) return ""
+    let content = [`Task ${props.input.description}`]
+
+    if (isRunning() && tools().length > 0) {
+      // content[0] += ` · ${tools().length} toolcalls`
+      if (current()) content.push(`↳ ${Locale.titlecase(current()!.tool)} ${(current()!.state as any).title}`)
+      else content.push(`↳ ${tools().length} toolcalls`)
+    }
+
+    if (props.part.state.status === "completed") {
+      content.push(`└ ${tools().length} toolcalls · ${Locale.duration(duration())}`)
+    }
+
+    return content.join("\n")
+  })
+
   return (
-    <Switch>
-      <Match when={props.input.description || props.input.subagent_type}>
-        <BlockTool
-          title={"# " + Locale.titlecase(props.input.subagent_type ?? "unknown") + " Task"}
-          onClick={
-            props.metadata.sessionId
-              ? () => navigate({ type: "session", sessionID: props.metadata.sessionId! })
-              : undefined
-          }
-          part={props.part}
-          spinner={isRunning()}
-        >
-          <box>
-            <text style={{ fg: theme.textMuted }}>
-              {props.input.description} ({tools().length} toolcalls)
-            </text>
-            <Show when={current()}>
-              {(item) => {
-                const title = item().state.status === "completed" ? (item().state as any).title : ""
-                return (
-                  <text style={{ fg: item().state.status === "error" ? theme.error : theme.textMuted }}>
-                    └ {Locale.titlecase(item().tool)} {title}
-                  </text>
-                )
-              }}
-            </Show>
-          </box>
-          <Show when={props.metadata.sessionId}>
-            <text fg={theme.text}>
-              {keybind.print("session_child_first")}
-              <span style={{ fg: theme.textMuted }}> view subagents</span>
-            </text>
-          </Show>
-        </BlockTool>
-      </Match>
-      <Match when={true}>
-        <InlineTool icon="#" pending="Delegating..." complete={props.input.subagent_type} part={props.part}>
-          {props.input.subagent_type} Task {props.input.description}
-        </InlineTool>
-      </Match>
-    </Switch>
+    <InlineTool
+      icon="│"
+      spinner={isRunning()}
+      complete={props.input.description}
+      pending="Delegating..."
+      part={props.part}
+      onClick={() => {
+        if (props.metadata.sessionId) {
+          navigate({ type: "session", sessionID: props.metadata.sessionId })
+        }
+      }}
+    >
+      {content()}
+    </InlineTool>
   )
 }
 
@@ -2195,10 +2235,16 @@ function Diagnostics(props: { diagnostics?: Record<string, Record<string, any>[]
 
 function normalizePath(input?: string) {
   if (!input) return ""
-  if (path.isAbsolute(input)) {
-    return path.relative(process.cwd(), input) || "."
-  }
-  return input
+
+  const cwd = process.cwd()
+  const absolute = path.isAbsolute(input) ? input : path.resolve(cwd, input)
+  const relative = path.relative(cwd, absolute)
+
+  if (!relative) return "."
+  if (!relative.startsWith("..")) return relative
+
+  // outside cwd - use absolute
+  return absolute
 }
 
 function input(input: Record<string, any>, omit?: string[]): string {

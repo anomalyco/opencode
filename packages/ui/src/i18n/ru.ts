@@ -39,6 +39,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "повтор",
   "ui.sessionTurn.retry.inSeconds": "через {{seconds}}с",
+  "ui.sessionTurn.retry.attempt": "попытка №{{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - попытка №{{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini сейчас перегружен",
   "ui.sessionTurn.error.freeUsageExceeded": "Лимит бесплатного использования превышен",
   "ui.sessionTurn.error.addCredits": "Добавить кредиты",
 
@@ -56,6 +59,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Рассмотрение следующих шагов",
 
   "ui.messagePart.questions.dismissed": "Вопросы отклонены",
+  "ui.messagePart.compaction": "История сжата",
   "ui.messagePart.context.read.one": "{{count}} чтение",
   "ui.messagePart.context.read.other": "{{count}} чтений",
   "ui.messagePart.context.search.one": "{{count}} поиск",
@@ -89,12 +93,15 @@ export const dict = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webfetch",
+  "ui.tool.websearch": "Веб-поиск",
+  "ui.tool.codesearch": "Поиск кода",
   "ui.tool.shell": "Оболочка",
   "ui.tool.patch": "Патч",
   "ui.tool.todos": "Задачи",
   "ui.tool.todos.read": "Читать задачи",
   "ui.tool.questions": "Вопросы",
   "ui.tool.agent": "Агент {{type}}",
+  "ui.tool.agent.default": "Агент",
 
   "ui.common.file.one": "файл",
   "ui.common.file.other": "файлов",
@@ -121,6 +128,7 @@ export const dict = {
   "ui.message.copyResponse": "Копировать ответ",
   "ui.message.copied": "Скопировано!",
   "ui.message.interrupted": "Прервано",
+  "ui.message.queued": "В очереди",
   "ui.message.attachment.alt": "вложение",
 
   "ui.patch.action.deleted": "Удалено",

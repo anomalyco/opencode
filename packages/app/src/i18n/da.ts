@@ -510,6 +510,7 @@ export const dict = {
   "session.todo.collapse": "Skjul",
   "session.todo.expand": "Udvid",
 
+  "session.new.title": "Byg hvad som helst",
   "session.new.worktree.main": "Hovedgren",
   "session.new.worktree.mainWithBranch": "Hovedgren ({{branch}})",
   "session.new.worktree.create": "Opret nyt worktree",
