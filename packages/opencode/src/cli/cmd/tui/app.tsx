@@ -220,6 +220,25 @@ function App() {
     if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
     if (!renderer.getSelection()) return
 
+    if (Selection.focused(renderer)) {
+      if (evt.ctrl && evt.name === "c") {
+        if (!Selection.copy(renderer, toast)) return
+
+        evt.preventDefault()
+        evt.stopPropagation()
+        return
+      }
+
+      if (evt.name === "escape") {
+        renderer.clearSelection()
+        evt.preventDefault()
+        evt.stopPropagation()
+        return
+      }
+
+      return
+    }
+
     // Windows Terminal-like behavior:
     // - Ctrl+C copies and dismisses selection
     // - Esc dismisses selection

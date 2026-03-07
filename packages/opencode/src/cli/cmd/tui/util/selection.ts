@@ -8,9 +8,14 @@ type Toast = {
 type Renderer = {
   getSelection: () => { getSelectedText: () => string } | null
   clearSelection: () => void
+  currentFocusedRenderable?: { hasSelection?: () => boolean } | null
 }
 
 export namespace Selection {
+  export function focused(renderer: Renderer) {
+    return !!renderer.currentFocusedRenderable?.hasSelection?.()
+  }
+
   export function copy(renderer: Renderer, toast: Toast): boolean {
     const text = renderer.getSelection()?.getSelectedText()
     if (!text) return false
