@@ -964,6 +964,67 @@ test("getSmallModel respects config small_model override", async () => {
   })
 })
 
+test("getSmallModel respects provider-specific small_model override", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            anthropic: {
+              small_model: "claude-sonnet-4-20250514",
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("ANTHROPIC_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const model = await Provider.getSmallModel("anthropic")
+      expect(model).toBeDefined()
+      expect(model?.providerID).toBe("anthropic")
+      expect(model?.id).toBe("claude-sonnet-4-20250514")
+    },
+  })
+})
+
+test("provider-specific small_model takes precedence over global small_model", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          small_model: "anthropic/claude-sonnet-4-20250514",
+          provider: {
+            anthropic: {
+              small_model: "claude-sonnet-4-20250514",
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("ANTHROPIC_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const model = await Provider.getSmallModel("anthropic")
+      expect(model).toBeDefined()
+      expect(model?.providerID).toBe("anthropic")
+      expect(model?.id).toBe("claude-sonnet-4-20250514")
+    },
+  })
+})
+
 test("provider.sort prioritizes preferred models", () => {
   const models = [
     { id: "random-model", name: "Random" },

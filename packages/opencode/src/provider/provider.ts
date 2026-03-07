@@ -1233,6 +1233,12 @@ export namespace Provider {
   export async function getSmallModel(providerID: string) {
     const cfg = await Config.get()
 
+    const ref = cfg.provider?.[providerID]?.small_model
+    if (ref) {
+      const parsed = parseModelRef(providerID, ref)
+      return getModel(parsed.providerID, parsed.modelID)
+    }
+
     if (cfg.small_model) {
       const parsed = parseModel(cfg.small_model)
       return getModel(parsed.providerID, parsed.modelID)
@@ -1338,6 +1344,14 @@ export namespace Provider {
     return {
       providerID: providerID,
       modelID: rest.join("/"),
+    }
+  }
+
+  function parseModelRef(providerID: string, model: string) {
+    if (model.includes("/")) return parseModel(model)
+    return {
+      providerID,
+      modelID: model,
     }
   }
 

@@ -244,6 +244,20 @@ You can configure the providers and models you want to use in your OpenCode conf
 
 The `small_model` option configures a separate model for lightweight tasks like title generation. By default, OpenCode tries to use a cheaper model if one is available from your provider, otherwise it falls back to your main model.
 
+You can also set `provider.<id>.small_model` to override the small model for a specific provider. This is used by subagents like `explore` when the agent model is not explicitly configured.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "opencode/claude-opus-4-6",
+  "provider": {
+    "opencode": {
+      "small_model": "gpt-5-mini"
+    }
+  }
+}
+```
+
 Provider options can include `timeout` and `setCacheKey`:
 
 ```json title="opencode.json"

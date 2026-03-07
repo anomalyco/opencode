@@ -933,6 +933,12 @@ export namespace Config {
     .extend({
       whitelist: z.array(z.string()).optional(),
       blacklist: z.array(z.string()).optional(),
+      small_model: z
+        .string()
+        .optional()
+        .describe(
+          "Small model override for this provider. Supports either a model ID (provider-local) or provider/model format.",
+        ),
       models: z
         .record(
           z.string(),
