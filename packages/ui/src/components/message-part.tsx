@@ -2374,7 +2374,7 @@ ToolRegistry.register({
     )
 
     return (
-      <BasicTool icon="code" status={props.status} trigger={trigger()} defaultOpen>
+      <ToolCall variant="panel" icon="code" status={props.status} trigger={trigger()} defaultOpen>
         <Show when={html()}>
           <div style={{ height: `${height()}px`, overflow: "hidden" }}>
             <iframe
@@ -2390,7 +2390,7 @@ ToolRegistry.register({
             />
           </div>
         </Show>
-      </BasicTool>
+      </ToolCall>
     )
   },
 })
