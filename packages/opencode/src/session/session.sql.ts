@@ -32,6 +32,13 @@ export const SessionTable = sqliteTable(
       snapshot?: string
       diff?: string
       mode?: "conversation" | "conversation_and_code"
+      points?: {
+        messageID: string
+        partID?: string
+        mode: "conversation" | "conversation_and_code"
+        snapshot?: string
+      }[]
+      index?: number
     }>(),
     permission: text({ mode: "json" }).$type<PermissionNext.Ruleset>(),
     ...Timestamps,

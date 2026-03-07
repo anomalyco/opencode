@@ -153,6 +153,16 @@ export namespace Session {
           snapshot: z.string().optional(),
           diff: z.string().optional(),
           mode: z.enum(["conversation", "conversation_and_code"]).optional(),
+          points: z
+            .object({
+              messageID: z.string(),
+              partID: z.string().optional(),
+              mode: z.enum(["conversation", "conversation_and_code"]),
+              snapshot: z.string().optional(),
+            })
+            .array()
+            .optional(),
+          index: z.number().optional(),
         })
         .optional(),
     })

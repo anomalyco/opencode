@@ -29,24 +29,24 @@ export namespace SessionRevert {
     const session = await Session.get(input.sessionID)
 
     const mode = input.mode ?? session.revert?.mode ?? "conversation_and_code"
-    let revert: Session.Info["revert"]
+    let next: Session.Info["revert"]
     const patches: Snapshot.Patch[] = []
     for (const msg of all) {
       if (msg.info.role === "user") lastUser = msg.info
       const remaining = []
       for (const part of msg.parts) {
-        if (revert) {
+        if (next) {
           if (part.type === "patch") {
             patches.push(part)
           }
           continue
         }
 
-        if (!revert) {
+        if (!next) {
           if ((msg.info.id === input.messageID && !input.partID) || part.id === input.partID) {
             // if no useful parts left in message, same as reverting whole message
             const partID = remaining.some((item) => ["text", "tool"].includes(item.type)) ? input.partID : undefined
-            revert = {
+            next = {
               messageID: !partID && lastUser ? lastUser.id : msg.info.id,
               partID,
             }
@@ -56,42 +56,91 @@ export namespace SessionRevert {
       }
     }
 
-    if (revert) {
-      const session = await Session.get(input.sessionID)
-      if (mode === "conversation") {
-        const rangeMessages = all.filter((msg) => msg.info.id >= revert!.messageID)
-        const diffs = await SessionSummary.computeDiff({ messages: rangeMessages })
-        return Session.setRevert({
+    if (!next) return session
+
+    const range = all.filter((msg) => msg.info.id >= next.messageID)
+    const diffs = await SessionSummary.computeDiff({ messages: range })
+    const summary = {
+      additions: diffs.reduce((sum, x) => sum + x.additions, 0),
+      deletions: diffs.reduce((sum, x) => sum + x.deletions, 0),
+      files: diffs.length,
+    }
+
+    const pts = session.revert?.points ?? []
+    const idx = session.revert?.index ?? pts.length - 1
+    const hit = pts.findIndex((item) => item.messageID === next!.messageID && item.partID === next!.partID)
+
+    if (hit >= 0) {
+      const point = pts[hit]
+      if (point?.snapshot) await Snapshot.restore(point.snapshot)
+      if (point?.mode === "conversation_and_code") {
+        await Storage.write(["session_diff", input.sessionID], diffs)
+        Bus.publish(Session.Event.Diff, {
           sessionID: input.sessionID,
-          revert: { ...revert, mode },
-          summary: {
-            additions: diffs.reduce((sum, x) => sum + x.additions, 0),
-            deletions: diffs.reduce((sum, x) => sum + x.deletions, 0),
-            files: diffs.length,
-          },
+          diff: diffs,
         })
       }
-      revert.snapshot = session.revert?.snapshot ?? (await Snapshot.track())
-      await Snapshot.revert(patches)
-      if (revert.snapshot) revert.diff = await Snapshot.diff(revert.snapshot)
-      const rangeMessages = all.filter((msg) => msg.info.id >= revert!.messageID)
-      const diffs = await SessionSummary.computeDiff({ messages: rangeMessages })
-      await Storage.write(["session_diff", input.sessionID], diffs)
-      Bus.publish(Session.Event.Diff, {
-        sessionID: input.sessionID,
-        diff: diffs,
-      })
       return Session.setRevert({
         sessionID: input.sessionID,
-        revert: { ...revert, mode },
-        summary: {
-          additions: diffs.reduce((sum, x) => sum + x.additions, 0),
-          deletions: diffs.reduce((sum, x) => sum + x.deletions, 0),
-          files: diffs.length,
+        revert: {
+          ...next,
+          snapshot: session.revert?.snapshot,
+          mode: point?.mode ?? mode,
+          points: pts,
+          index: hit,
         },
+        summary,
       })
     }
-    return session
+
+    const root = session.revert?.snapshot ?? (await Snapshot.track())
+    const keep = idx >= 0 ? pts.slice(0, idx + 1) : []
+
+    if (mode === "conversation") {
+      const point = {
+        ...next,
+        mode,
+        snapshot: await Snapshot.track(),
+      }
+      const points = [...keep, point]
+      return Session.setRevert({
+        sessionID: input.sessionID,
+        revert: {
+          ...next,
+          snapshot: root,
+          mode,
+          points,
+          index: points.length - 1,
+        },
+        summary,
+      })
+    }
+
+    await Snapshot.revert(patches)
+    const point = {
+      ...next,
+      mode,
+      snapshot: await Snapshot.track(),
+    }
+    const points = [...keep, point]
+    const revert = {
+      ...next,
+      snapshot: root,
+      mode,
+      points,
+      index: points.length - 1,
+      diff: root ? await Snapshot.diff(root) : undefined,
+    }
+    await Storage.write(["session_diff", input.sessionID], diffs)
+    Bus.publish(Session.Event.Diff, {
+      sessionID: input.sessionID,
+      diff: diffs,
+    })
+    return Session.setRevert({
+      sessionID: input.sessionID,
+      revert,
+      summary,
+    })
   }
 
   export async function unrevert(input: { sessionID: string }) {
