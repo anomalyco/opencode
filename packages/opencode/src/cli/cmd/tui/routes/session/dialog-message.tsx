@@ -23,7 +23,7 @@ export function DialogMessage(props: {
       options={[
         {
           title: "Revert conversation",
-          value: "session.revert",
+          value: "session.revert.conversation",
           description: "undo messages only",
           onSelect: (dialog) => {
             const msg = message()
@@ -55,7 +55,7 @@ export function DialogMessage(props: {
         },
         {
           title: "Revert conversation and code",
-          value: "session.revert",
+          value: "session.revert.conversation_and_code",
           description: "undo messages and file changes",
           onSelect: (dialog) => {
             const msg = message()
