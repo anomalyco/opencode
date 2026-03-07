@@ -2033,11 +2033,15 @@ export default function Layout(props: ParentProps) {
         if (!dir) return
         const directory = decode64(dir)
         if (!directory) return
-        notification.project.markViewed(directory)
+        const root = projectRoot(directory)
+        const project = layout.projects.list().find((item) => item.worktree === root)
+        Array.from(new Set([root, directory, ...(store.workspaceOrder[root] ?? []), ...(project?.sandboxes ?? [])]))
+          .filter((item) => notification.project.unseenCount(item) > 0)
+          .forEach((item) => notification.project.markViewed(item))
         const at = Date.now()
         const id = value.id
         if (!id) return
-        setStore("lastProjectSession", projectRoot(directory), { directory, id, at })
+        setStore("lastProjectSession", root, { directory, id, at })
         notification.session.markViewed(id)
         const expanded = untrack(() => store.workspaceExpanded[directory])
         if (expanded === false) {
