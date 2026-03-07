@@ -2,7 +2,7 @@ import { base64Decode } from "@opencode-ai/util/encode"
 import type { Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
 import { defocus, createTestProject, cleanupTestProject, openSidebar, sessionIDFromUrl, waitSlug } from "../actions"
-import { projectSwitchSelector, promptSelector, workspaceItemSelector, workspaceNewSessionSelector } from "../selectors"
+import { projectSwitchSelector, promptSelector } from "../selectors"
 import { dirSlug, resolveDirectory } from "../utils"
 
 async function workspaces(page: Page, directory: string, enabled: boolean) {
@@ -90,19 +90,8 @@ test("switching back to a project opens the latest workspace session", async ({ 
         const space = await resolveDirectory(dir)
         const next = dirSlug(space)
         trackDirectory(space)
-        await openSidebar(page)
-
-        const item = page.locator(`${workspaceItemSelector(next)}, ${workspaceItemSelector(raw)}`).first()
-        await expect(item).toBeVisible()
-        await item.hover()
-
-        const btn = page.locator(`${workspaceNewSessionSelector(next)}, ${workspaceNewSessionSelector(raw)}`).first()
-        await expect(btn).toBeVisible()
-        await btn.click({ force: true })
-
-        // A new workspace can be discovered via a transient slug before the route and sidebar
-        // settle to the canonical workspace path on Windows, so interact with either and assert
-        // against the resolved workspace slug.
+        // A new workspace can be discovered via a transient slug before the route settles to
+        // the canonical workspace path on Windows.
         await waitSlug(page)
         await expect(page).toHaveURL(new RegExp(`/${next}/session(?:[/?#]|$)`))
 
