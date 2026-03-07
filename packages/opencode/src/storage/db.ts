@@ -106,6 +106,11 @@ export namespace Database {
         count: entries.length,
         mode: typeof OPENCODE_MIGRATIONS !== "undefined" ? "bundled" : "dev",
       })
+      if (Flag.OPENCODE_SKIP_MIGRATIONS) {
+        for (const item of entries) {
+          item.sql = "select 1;"
+        }
+      }
       migrate(db, entries)
     }
 
