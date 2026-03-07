@@ -459,6 +459,7 @@ export const dict = {
   "session.todo.title": "할 일",
   "session.todo.collapse": "접기",
   "session.todo.expand": "펼치기",
+  "session.new.title": "무엇이든 만들기",
   "session.new.worktree.main": "메인 브랜치",
   "session.new.worktree.mainWithBranch": "메인 브랜치 ({{branch}})",
   "session.new.worktree.create": "새 작업 트리 생성",
