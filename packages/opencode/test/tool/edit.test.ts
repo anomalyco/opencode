@@ -17,71 +17,6 @@ const ctx = {
   ask: async () => {},
 }
 
-const old = "alpha\nbeta\ngamma"
-const next = "alpha\nbeta-updated\ngamma"
-const alt = "alpha\nbeta\nomega"
-
-const normalize = (text: string, ending: "\n" | "\r\n") => {
-  const normalized = text.replaceAll("\r\n", "\n")
-  if (ending === "\n") return normalized
-  return normalized.replaceAll("\n", "\r\n")
-}
-
-const count = (content: string) => {
-  const crlf = content.match(/\r\n/g)?.length ?? 0
-  const lf = content.match(/\n/g)?.length ?? 0
-  return {
-    crlf,
-    lf: lf - crlf,
-  }
-}
-
-const expectLf = (content: string) => {
-  const counts = count(content)
-  expect(counts.crlf).toBe(0)
-  expect(counts.lf).toBeGreaterThan(0)
-}
-
-const expectCrlf = (content: string) => {
-  const counts = count(content)
-  expect(counts.lf).toBe(0)
-  expect(counts.crlf).toBeGreaterThan(0)
-}
-
-type Input = {
-  content: string
-  oldString: string
-  newString: string
-  replaceAll?: boolean
-}
-
-const apply = async (input: Input) => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(path.join(dir, "test.txt"), input.content)
-    },
-  })
-
-  return await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const edit = await EditTool.init()
-      const filePath = path.join(tmp.path, "test.txt")
-      FileTime.read(ctx.sessionID, filePath)
-      await edit.execute(
-        {
-          filePath,
-          oldString: input.oldString,
-          newString: input.newString,
-          replaceAll: input.replaceAll,
-        },
-        ctx,
-      )
-      return await Bun.file(filePath).text()
-    },
-  })
-}
-
 describe("tool.edit", () => {
   describe("creating new files", () => {
     test("creates new file when oldString is empty", async () => {
@@ -298,12 +233,16 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
+          // Read first
           FileTime.read(ctx.sessionID, filepath)
 
+          // Wait a bit to ensure different timestamps
           await new Promise((resolve) => setTimeout(resolve, 100))
 
+          // Simulate external modification
           await fs.writeFile(filepath, "modified externally", "utf-8")
 
+          // Try to edit with the new content
           const edit = await EditTool.init()
           await expect(
             edit.execute(
@@ -513,6 +452,71 @@ describe("tool.edit", () => {
   })
 
   describe("line endings", () => {
+    const old = "alpha\nbeta\ngamma"
+    const next = "alpha\nbeta-updated\ngamma"
+    const alt = "alpha\nbeta\nomega"
+
+    const normalize = (text: string, ending: "\n" | "\r\n") => {
+      const normalized = text.replaceAll("\r\n", "\n")
+      if (ending === "\n") return normalized
+      return normalized.replaceAll("\n", "\r\n")
+    }
+
+    const count = (content: string) => {
+      const crlf = content.match(/\r\n/g)?.length ?? 0
+      const lf = content.match(/\n/g)?.length ?? 0
+      return {
+        crlf,
+        lf: lf - crlf,
+      }
+    }
+
+    const expectLf = (content: string) => {
+      const counts = count(content)
+      expect(counts.crlf).toBe(0)
+      expect(counts.lf).toBeGreaterThan(0)
+    }
+
+    const expectCrlf = (content: string) => {
+      const counts = count(content)
+      expect(counts.lf).toBe(0)
+      expect(counts.crlf).toBeGreaterThan(0)
+    }
+
+    type Input = {
+      content: string
+      oldString: string
+      newString: string
+      replaceAll?: boolean
+    }
+
+    const apply = async (input: Input) => {
+      await using tmp = await tmpdir({
+        init: async (dir) => {
+          await Bun.write(path.join(dir, "test.txt"), input.content)
+        },
+      })
+
+      return await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const edit = await EditTool.init()
+          const filePath = path.join(tmp.path, "test.txt")
+          FileTime.read(ctx.sessionID, filePath)
+          await edit.execute(
+            {
+              filePath,
+              oldString: input.oldString,
+              newString: input.newString,
+              replaceAll: input.replaceAll,
+            },
+            ctx,
+          )
+          return await Bun.file(filePath).text()
+        },
+      })
+    }
+
     test("preserves LF with LF multi-line strings", async () => {
       const content = normalize(old + "\n", "\n")
       const output = await apply({
@@ -643,6 +647,7 @@ describe("tool.edit", () => {
 
           const edit = await EditTool.init()
 
+          // Two concurrent edits
           const promise1 = edit.execute(
             {
               filePath: filepath,
@@ -652,6 +657,7 @@ describe("tool.edit", () => {
             ctx,
           )
 
+          // Need to read again since FileTime tracks per-session
           FileTime.read(ctx.sessionID, filepath)
 
           const promise2 = edit.execute(
@@ -663,6 +669,7 @@ describe("tool.edit", () => {
             ctx,
           )
 
+          // Both should complete without error (though one might fail due to content mismatch)
           const results = await Promise.allSettled([promise1, promise2])
           expect(results.some((r) => r.status === "fulfilled")).toBe(true)
         },
