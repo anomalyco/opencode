@@ -1038,25 +1038,6 @@ export default function Page() {
     tabs().setActive(next)
   })
 
-  createEffect(
-    on(
-      () => layout.fileTree.opened(),
-      (opened, prev) => {
-        if (prev === undefined) return
-        if (!isDesktop()) return
-
-        if (opened) {
-          const active = tabs().active()
-          if (layout.fileTree.tab() !== "changes") return
-          if (!active) return
-          if (!file.pathFromTab(active)) return
-          layout.fileTree.setTab("all")
-        }
-      },
-      { defer: true },
-    ),
-  )
-
   createEffect(() => {
     const id = params.id
     if (!id) return
