@@ -34,7 +34,7 @@ export namespace LSP {
     })
   export type Range = z.infer<typeof Range>
 
-  export const Symbol = z
+  export const SymbolInfo = z
     .object({
       name: z.string(),
       kind: z.number(),
@@ -46,7 +46,7 @@ export namespace LSP {
     .meta({
       ref: "Symbol",
     })
-  export type Symbol = z.infer<typeof Symbol>
+  export type SymbolInfo = z.infer<typeof SymbolInfo>
 
   export const DocumentSymbol = z
     .object({
@@ -176,7 +176,8 @@ export namespace LSP {
 
   async function getClients(file: string) {
     const s = await state()
-    const extension = path.parse(file).ext || file
+    const parsed = path.parse(file)
+    const extension = parsed.ext || parsed.base
     const result: LSPClient.Info[] = []
 
     async function schedule(server: LSPServer.Info, root: string, key: string) {
@@ -263,7 +264,8 @@ export namespace LSP {
 
   export async function hasClients(file: string) {
     const s = await state()
-    const extension = path.parse(file).ext || file
+    const parsed = path.parse(file)
+    const extension = parsed.ext || parsed.base
     for (const server of Object.values(s.servers)) {
       if (server.extensions.length && !server.extensions.includes(extension)) continue
       const root = await server.root(file)
@@ -362,10 +364,10 @@ export namespace LSP {
         .sendRequest("workspace/symbol", {
           query,
         })
-        .then((result: any) => result.filter((x: LSP.Symbol) => kinds.includes(x.kind)))
+        .then((result: any) => result.filter((x: LSP.SymbolInfo) => kinds.includes(x.kind)))
         .then((result: any) => result.slice(0, 10))
         .catch(() => []),
-    ).then((result) => result.flat() as LSP.Symbol[])
+    ).then((result) => result.flat() as LSP.SymbolInfo[])
   }
 
   export async function documentSymbol(uri: string) {
@@ -379,7 +381,7 @@ export namespace LSP {
         })
         .catch(() => []),
     )
-      .then((result) => result.flat() as (LSP.DocumentSymbol | LSP.Symbol)[])
+      .then((result) => result.flat() as (LSP.DocumentSymbol | LSP.SymbolInfo)[])
       .then((result) => result.filter(Boolean))
   }
 

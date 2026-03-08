@@ -1606,7 +1606,7 @@ export namespace LSPServer {
   }
   export const BashLS: Info = {
     id: "bash",
-    extensions: [".sh", ".bash", ".zsh", ".ksh"],
+    extensions: [".sh", ".bash", ".zsh", ".ksh", ".mk", "Makefile", "makefile"],
     root: async () => Instance.directory,
     async spawn(root) {
       let binary = Bun.which("bash-language-server")

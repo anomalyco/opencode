@@ -93,7 +93,7 @@ export const FileRoutes = lazy(() =>
             description: "Symbols",
             content: {
               "application/json": {
-                schema: resolver(LSP.Symbol.array()),
+                schema: resolver(LSP.SymbolInfo.array()),
               },
             },
           },
