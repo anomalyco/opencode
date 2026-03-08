@@ -1,5 +1,56 @@
 import { describe, test, expect } from "bun:test"
+import type { ParsedKey } from "@opentui/core"
 import { Keybind } from "../src/util/keybind"
+
+function key(name: string): ParsedKey {
+  return {
+    name,
+    ctrl: true,
+    meta: false,
+    shift: false,
+    option: false,
+    sequence: name,
+    number: false,
+    raw: name,
+    eventType: "press",
+    source: "raw",
+  }
+}
+
+describe("Keybind.fromParsedKey", () => {
+  test("normalizes ctrl+underscore to ctrl+-", () => {
+    expect(Keybind.fromParsedKey(key("_"), false)).toEqual({
+      ctrl: true,
+      meta: false,
+      shift: false,
+      super: false,
+      leader: false,
+      name: "-",
+    })
+  })
+
+  test("normalizes ctrl control code to ctrl+-", () => {
+    expect(Keybind.fromParsedKey(key("\x1F"), false)).toEqual({
+      ctrl: true,
+      meta: false,
+      shift: false,
+      super: false,
+      leader: false,
+      name: "-",
+    })
+  })
+
+  test("normalizes ctrl+> to ctrl+.", () => {
+    expect(Keybind.fromParsedKey(key(">"), false)).toEqual({
+      ctrl: true,
+      meta: false,
+      shift: false,
+      super: false,
+      leader: false,
+      name: ".",
+    })
+  })
+})
 
 describe("Keybind.toString", () => {
   test("should convert simple key to string", () => {
@@ -415,6 +466,32 @@ describe("Keybind.parse", () => {
         super: true,
         leader: false,
         name: "z",
+      },
+    ])
+  })
+
+  test("normalizes ctrl+underscore to ctrl+-", () => {
+    const result = Keybind.parse("ctrl+_")
+    expect(result).toEqual([
+      {
+        ctrl: true,
+        meta: false,
+        shift: false,
+        leader: false,
+        name: "-",
+      },
+    ])
+  })
+
+  test("normalizes ctrl+> to ctrl+.", () => {
+    const result = Keybind.parse("ctrl+>")
+    expect(result).toEqual([
+      {
+        ctrl: true,
+        meta: false,
+        shift: false,
+        leader: false,
+        name: ".",
       },
     ])
   })

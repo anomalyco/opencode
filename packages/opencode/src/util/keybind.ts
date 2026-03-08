@@ -2,6 +2,14 @@ import { isDeepEqual } from "remeda"
 import type { ParsedKey } from "@opentui/core"
 
 export namespace Keybind {
+  function normalize(name: string, ctrl?: boolean) {
+    if (name === " ") return "space"
+    if (!ctrl) return name
+    if (name === "\x1F" || name === "_") return "-"
+    if (name === ">") return "."
+    return name
+  }
+
   /**
    * Keybind info derived from OpenTUI's ParsedKey with our custom `leader` field.
    * This ensures type compatibility and catches missing fields at compile time.
@@ -23,7 +31,7 @@ export namespace Keybind {
    */
   export function fromParsedKey(key: ParsedKey, leader = false): Info {
     return {
-      name: key.name === " " ? "space" : key.name,
+      name: normalize(key.name, key.ctrl),
       ctrl: key.ctrl,
       meta: key.meta,
       shift: key.shift,
@@ -96,6 +104,8 @@ export namespace Keybind {
             break
         }
       }
+
+      info.name = normalize(info.name, info.ctrl)
 
       return info
     })
