@@ -5,6 +5,7 @@ import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
 import { existsSync } from "fs"
+import { Dir } from "./directory"
 
 export const AttachCommand = cmd({
   command: "attach <url>",
@@ -53,8 +54,7 @@ export const AttachCommand = cmd({
       const directory = (() => {
         if (!args.dir) return undefined
         try {
-          process.chdir(args.dir)
-          return process.cwd()
+          return Dir.enter(args.dir)
         } catch {
           // If the directory doesn't exist locally (remote attach), pass it through.
           return args.dir

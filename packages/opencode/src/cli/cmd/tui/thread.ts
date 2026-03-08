@@ -2,7 +2,6 @@ import { cmd } from "@/cli/cmd/cmd"
 import { tui } from "./app"
 import { Rpc } from "@/util/rpc"
 import { type rpc } from "./worker"
-import path from "path"
 import { fileURLToPath } from "url"
 import { UI } from "@/cli/ui"
 import { Log } from "@/util/log"
@@ -14,6 +13,7 @@ import type { EventSource } from "./context/sdk"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
+import { Dir } from "./directory"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -110,18 +110,16 @@ export const TuiThreadCommand = cmd({
         return
       }
 
-      // Resolve relative paths against PWD to preserve behavior when using --cwd flag
-      const root = Filesystem.resolve(process.env.PWD ?? process.cwd())
-      const cwd = args.project
-        ? Filesystem.resolve(path.isAbsolute(args.project) ? args.project : path.join(root, args.project))
-        : root
+      const cwd = (() => {
+        try {
+          return Dir.project(args.project)
+        } catch {
+          UI.error("Failed to change directory to " + (args.project ?? Dir.root()))
+          return
+        }
+      })()
+      if (!cwd) return
       const file = await target()
-      try {
-        process.chdir(cwd)
-      } catch {
-        UI.error("Failed to change directory to " + cwd)
-        return
-      }
 
       const worker = new Worker(file, {
         env: Object.fromEntries(
