@@ -1170,6 +1170,7 @@ export default function Layout(props: ParentProps) {
       if (!value) return false
       return dirs.some((item) => workspaceKey(item) === workspaceKey(value))
     }
+    const pref = canOpen(directory) ? directory : root
     const refreshDirs = async (target?: string) => {
       if (!target || target === root || canOpen(target)) return canOpen(target)
       const listed = await globalSDK.client.worktree
@@ -1199,11 +1200,34 @@ export default function Layout(props: ParentProps) {
     }
 
     const projectSession = store.lastProjectSession[root]
-    if (projectSession?.id) {
+    const same = (a: string, b: string) => workspaceKey(a) === workspaceKey(b)
+    if (projectSession?.id && (pref === root || same(projectSession.directory, pref))) {
       await refreshDirs(projectSession.directory)
       const opened = await openSession(projectSession)
       if (opened) return
       clearLastProjectSession(root)
+    }
+
+    if (pref !== root) {
+      const local = latestRootSession([globalSync.child(pref, { bootstrap: false })[0]], Date.now())
+      if (local && (await openSession(local))) return
+
+      const fetched = latestRootSession(
+        [
+          {
+            path: { directory: pref },
+            session: await globalSDK.client.session
+              .list({ directory: pref })
+              .then((x) => x.data ?? [])
+              .catch(() => []),
+          },
+        ],
+        Date.now(),
+      )
+      if (fetched && (await openSession(fetched))) return
+
+      navigateWithSidebarReset(`/${base64Encode(pref)}/session`)
+      return
     }
 
     const latest = latestRootSession(
