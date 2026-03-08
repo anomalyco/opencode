@@ -1291,8 +1291,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
           <div class="pointer-events-none absolute bottom-2 left-2">
             <div
-              aria-hidden={store.mode !== "normal"}
-              class="pointer-events-auto"
+              class="pointer-events-auto flex items-center gap-1.5"
               style={{
                 "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
               }}
@@ -1320,6 +1319,99 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 >
                   <Icon name="plus" class="size-4.5" />
                 </Button>
+              </TooltipKeybind>
+
+              <Show
+                when={providers.paid().length > 0}
+                fallback={
+                  <TooltipKeybind
+                    placement="top"
+                    gutter={8}
+                    title={language.t("command.model.choose")}
+                    keybind={command.keybind("model.choose")}
+                  >
+                    <Button
+                      as="div"
+                      variant="ghost"
+                      size="small"
+                      class="min-w-0 max-w-[240px] text-13-regular group"
+                      style={{
+                        opacity: buttonsSpring(),
+                        transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
+                        filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
+                      }}
+                      onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}
+                    >
+                      <Show when={local.model.current()?.provider?.id}>
+                        <ProviderIcon
+                          id={local.model.current()!.provider.id}
+                          class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
+                          style={{ "will-change": "opacity", transform: "translateZ(0)" }}
+                        />
+                      </Show>
+                      <span class="truncate">
+                        {local.model.current()?.name ?? language.t("dialog.model.select.title")}
+                      </span>
+                      <Icon name="chevron-down" size="small" class="shrink-0" />
+                    </Button>
+                  </TooltipKeybind>
+                }
+              >
+                <TooltipKeybind
+                  placement="top"
+                  gutter={8}
+                  title={language.t("command.model.choose")}
+                  keybind={command.keybind("model.choose")}
+                >
+                  <ModelSelectorPopover
+                    triggerAs={Button}
+                    triggerProps={{
+                      variant: "ghost",
+                      size: "small",
+                      style: {
+                        opacity: buttonsSpring(),
+                        transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
+                        filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
+                      },
+                      class: "min-w-0 max-w-[240px] text-13-regular group",
+                    }}
+                  >
+                    <Show when={local.model.current()?.provider?.id}>
+                      <ProviderIcon
+                        id={local.model.current()!.provider.id}
+                        class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
+                        style={{ "will-change": "opacity", transform: "translateZ(0)" }}
+                      />
+                    </Show>
+                    <span class="truncate">
+                      {local.model.current()?.name ?? language.t("dialog.model.select.title")}
+                    </span>
+                    <Icon name="chevron-down" size="small" class="shrink-0" />
+                  </ModelSelectorPopover>
+                </TooltipKeybind>
+              </Show>
+
+              <TooltipKeybind
+                placement="top"
+                gutter={8}
+                title={language.t("command.model.variant.cycle")}
+                keybind={command.keybind("model.variant.cycle")}
+              >
+                <Select
+                  size="small"
+                  options={variants()}
+                  current={local.model.variant.current() ?? "default"}
+                  label={(x) => (x === "default" ? language.t("common.default") : x)}
+                  onSelect={(x) => local.model.variant.set(x === "default" ? undefined : x)}
+                  class="capitalize max-w-[160px]"
+                  valueClass="truncate text-13-regular"
+                  triggerStyle={{
+                    opacity: buttonsSpring(),
+                    transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
+                    filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
+                  }}
+                  variant="ghost"
+                />
               </TooltipKeybind>
             </div>
           </div>
@@ -1354,103 +1446,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     options={agentNames()}
                     current={local.agent.current()?.name ?? ""}
                     onSelect={local.agent.set}
-                    class="capitalize max-w-[160px]"
-                    valueClass="truncate text-13-regular"
-                    triggerStyle={{
-                      height: "28px",
-                      opacity: buttonsSpring(),
-                      transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
-                      filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
-                      "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
-                    }}
-                    variant="ghost"
-                  />
-                </TooltipKeybind>
-                <Show
-                  when={providers.paid().length > 0}
-                  fallback={
-                    <TooltipKeybind
-                      placement="top"
-                      gutter={4}
-                      title={language.t("command.model.choose")}
-                      keybind={command.keybind("model.choose")}
-                    >
-                      <Button
-                        as="div"
-                        variant="ghost"
-                        size="normal"
-                        class="min-w-0 max-w-[320px] text-13-regular group"
-                        style={{
-                          height: "28px",
-                          opacity: buttonsSpring(),
-                          transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
-                          filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
-                          "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
-                        }}
-                        onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}
-                      >
-                        <Show when={local.model.current()?.provider?.id}>
-                          <ProviderIcon
-                            id={local.model.current()!.provider.id}
-                            class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
-                            style={{ "will-change": "opacity", transform: "translateZ(0)" }}
-                          />
-                        </Show>
-                        <span class="truncate">
-                          {local.model.current()?.name ?? language.t("dialog.model.select.title")}
-                        </span>
-                        <Icon name="chevron-down" size="small" class="shrink-0" />
-                      </Button>
-                    </TooltipKeybind>
-                  }
-                >
-                  <TooltipKeybind
-                    placement="top"
-                    gutter={4}
-                    title={language.t("command.model.choose")}
-                    keybind={command.keybind("model.choose")}
-                  >
-                    <ModelSelectorPopover
-                      triggerAs={Button}
-                      triggerProps={{
-                        variant: "ghost",
-                        size: "normal",
-                        style: {
-                          height: "28px",
-                          opacity: buttonsSpring(),
-                          transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
-                          filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
-                          "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
-                        },
-                        class: "min-w-0 max-w-[320px] text-13-regular group",
-                      }}
-                    >
-                      <Show when={local.model.current()?.provider?.id}>
-                        <ProviderIcon
-                          id={local.model.current()!.provider.id}
-                          class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
-                          style={{ "will-change": "opacity", transform: "translateZ(0)" }}
-                        />
-                      </Show>
-                      <span class="truncate">
-                        {local.model.current()?.name ?? language.t("dialog.model.select.title")}
-                      </span>
-                      <Icon name="chevron-down" size="small" class="shrink-0" />
-                    </ModelSelectorPopover>
-                  </TooltipKeybind>
-                </Show>
-                <TooltipKeybind
-                  placement="top"
-                  gutter={4}
-                  title={language.t("command.model.variant.cycle")}
-                  keybind={command.keybind("model.variant.cycle")}
-                >
-                  <Select
-                    size="normal"
-                    options={variants()}
-                    current={local.model.variant.current() ?? "default"}
-                    label={(x) => (x === "default" ? language.t("common.default") : x)}
-                    onSelect={(x) => local.model.variant.set(x === "default" ? undefined : x)}
                     class="capitalize max-w-[160px]"
                     valueClass="truncate text-13-regular"
                     triggerStyle={{
