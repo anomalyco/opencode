@@ -1994,3 +1994,20 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
     }
   })
 })
+
+describe("provider options timeout default", () => {
+  test("defaults to 300000 when options provided but timeout omitted", () => {
+    const parsed = Config.Provider.parse({ options: {} })
+    expect(parsed.options?.timeout).toBe(300000)
+  })
+
+  test("respects explicit timeout value", () => {
+    const parsed = Config.Provider.parse({ options: { timeout: 60000 } })
+    expect(parsed.options?.timeout).toBe(60000)
+  })
+
+  test("accepts false to disable timeout", () => {
+    const parsed = Config.Provider.parse({ options: { timeout: false } })
+    expect(parsed.options?.timeout).toBe(false)
+  })
+})

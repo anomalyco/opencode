@@ -1067,7 +1067,7 @@ export namespace Provider {
       })
       const s = await state()
       const provider = s.providers[model.providerID]
-      const options = { ...provider.options }
+      const options = { timeout: 300000, ...provider.options }
 
       if (model.providerID === "google-vertex" && !model.api.npm.includes("@ai-sdk/openai-compatible")) {
         delete options.fetch

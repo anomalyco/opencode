@@ -969,6 +969,7 @@ export namespace Config {
               z.literal(false).describe("Disable timeout for this provider entirely."),
             ])
             .optional()
+            .default(300000)
             .describe(
               "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
             ),
