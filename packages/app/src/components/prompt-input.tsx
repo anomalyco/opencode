@@ -1342,7 +1342,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       as="div"
                       variant="ghost"
                       size="small"
-                      class="min-w-0 max-w-[240px] text-13-regular group"
+                      class="min-w-0 max-w-[240px] text-13-regular text-text-base group"
                       style={{
                         opacity: buttonsSpring(),
                         transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
@@ -1381,7 +1381,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
                         filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
                       },
-                      class: "min-w-0 max-w-[240px] text-13-regular group",
+                      class: "min-w-0 max-w-[240px] text-13-regular text-text-base group",
                     }}
                   >
                     <Show when={local.model.current()?.provider?.id}>
@@ -1412,7 +1412,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   label={(x) => (x === "default" ? language.t("common.default") : x)}
                   onSelect={(x) => local.model.variant.set(x === "default" ? undefined : x)}
                   class="capitalize max-w-[160px]"
-                  valueClass="truncate text-13-regular"
+                  valueClass="truncate text-13-regular text-text-base"
                   triggerStyle={{
                     opacity: buttonsSpring(),
                     transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
@@ -1455,7 +1455,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     current={local.agent.current()?.name ?? ""}
                     onSelect={local.agent.set}
                     class="capitalize max-w-[160px]"
-                    valueClass="truncate text-13-regular"
+                    valueClass="truncate text-13-regular text-text-base"
                     triggerStyle={{
                       height: "28px",
                       opacity: buttonsSpring(),
@@ -1491,7 +1491,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       flip()
                     }}
                     class="max-w-[220px]"
-                    valueClass="truncate text-13-regular"
+                    valueClass="truncate text-13-regular text-text-base"
                     triggerStyle={{
                       height: "28px",
                       opacity: buttonsSpring(),
