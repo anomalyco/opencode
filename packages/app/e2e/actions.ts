@@ -7,6 +7,7 @@ import { createSdk, modKey, resolveDirectory, serverUrl } from "./utils"
 import {
   dropdownMenuTriggerSelector,
   dropdownMenuContentSelector,
+  sessionTimelineHeaderSelector,
   projectMenuTriggerSelector,
   projectCloseMenuSelector,
   projectWorkspacesToggleSelector,
@@ -243,7 +244,9 @@ export async function openSessionMoreMenu(page: Page, sessionID: string) {
 
   const scroller = page.locator(".scroll-view__viewport").first()
   await expect(scroller).toBeVisible()
-  await expect(scroller.getByRole("heading", { level: 1 }).first()).toBeVisible({ timeout: 30_000 })
+  const header = page.locator(sessionTimelineHeaderSelector).first()
+  await expect(header).toBeVisible({ timeout: 30_000 })
+  await expect(header.getByRole("heading", { level: 1 }).first()).toBeVisible({ timeout: 30_000 })
 
   const menu = page
     .locator(dropdownMenuContentSelector)
@@ -259,7 +262,7 @@ export async function openSessionMoreMenu(page: Page, sessionID: string) {
 
   if (opened) return menu
 
-  const menuTrigger = scroller.getByRole("button", { name: /more options/i }).first()
+  const menuTrigger = header.getByRole("button", { name: /more options/i }).first()
   await expect(menuTrigger).toBeVisible()
   await menuTrigger.click()
 
