@@ -426,10 +426,12 @@ export default function Page() {
 
   createEffect(
     on(
-      () => params.id,
-      (id, prev) => {
-        if (id || !prev) return
-        resetSessionModel(local)
+      () => ({ dir: params.dir, id: params.id }),
+      (next, prev) => {
+        if (!prev) return
+        if (next.dir === prev.dir && next.id === prev.id) return
+        if (prev.id) sync.session.evict(prev.id, prev.dir)
+        if (!next.id) resetSessionModel(local)
       },
       { defer: true },
     ),
