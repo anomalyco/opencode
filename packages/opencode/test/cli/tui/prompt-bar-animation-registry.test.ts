@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { RGBA } from "@opentui/core"
+import { type OptimizedBuffer, RGBA } from "@opentui/core"
 import fs from "node:fs/promises"
 import path from "node:path"
 import type { PromptBarAnimationPlugin } from "../../../src/cli/cmd/tui/util/prompt-bar-animation-plugin"
@@ -12,6 +12,7 @@ import {
 } from "../../../src/cli/cmd/tui/util/prompt-bar-animation-registry"
 import type { PromptBarVisualTheme } from "../../../src/cli/cmd/tui/util/prompt-bar-visual"
 import { tmpdir } from "../../fixture/fixture"
+import { resolvePromptBarRippleConfig } from "../../../src/cli/cmd/tui/util/prompt-bar-ripple"
 
 const theme: PromptBarVisualTheme = {
   primary: RGBA.fromInts(1, 1, 1, 255),
@@ -118,5 +119,114 @@ export const community = {
     await loadPromptBarAnimationPlugins({ directories: [tmp.path] })
     expect(resolvePromptBarAnimationPlugin("community-glow").id).toBe("community-glow")
     expect(listPromptBarAnimationPlugins().some((x) => x.id === "community-glow")).toBe(true)
+  })
+
+  test("diagonal-ripple plugin is registered", () => {
+    const plugin = resolvePromptBarAnimationPlugin("diagonal-ripple")
+    expect(plugin.id).toBe("diagonal-ripple")
+    expect(plugin.render).toBeFunction()
+  })
+
+  test("diagonal-ripple resolve returns legacy colors for non-idle states", () => {
+    const plugin = resolvePromptBarAnimationPlugin("diagonal-ripple")
+    expect(
+      plugin.resolve({
+        state: "streaming",
+        hasContent: false,
+        idleCycleIndex: 0,
+        idleCycleEnabled: true,
+        theme,
+      }),
+    ).toEqual(theme.primary)
+    expect(
+      plugin.resolve({
+        state: "error",
+        hasContent: false,
+        idleCycleIndex: 0,
+        idleCycleEnabled: true,
+        theme,
+      }),
+    ).toEqual(theme.error)
+  })
+
+  test("diagonal-ripple resolve returns undefined for idle cycling", () => {
+    const plugin = resolvePromptBarAnimationPlugin("diagonal-ripple")
+    expect(
+      plugin.resolve({
+        state: "idle",
+        hasContent: false,
+        idleCycleIndex: 3,
+        idleCycleEnabled: true,
+        theme,
+      }),
+    ).toBeUndefined()
+  })
+
+  test("diagonal-ripple resolve returns secondary when idle with content", () => {
+    const plugin = resolvePromptBarAnimationPlugin("diagonal-ripple")
+    expect(
+      plugin.resolve({
+        state: "idle",
+        hasContent: true,
+        idleCycleIndex: 0,
+        idleCycleEnabled: false,
+        theme,
+      }),
+    ).toEqual(theme.secondary)
+  })
+
+  test("diagonal-ripple render draws per-cell background colors", () => {
+    const plugin = resolvePromptBarAnimationPlugin("diagonal-ripple")
+    const cells: Array<{ x: number; y: number; color: RGBA }> = []
+    const buffer = {
+      width: 4,
+      height: 2,
+      fillRect(x: number, y: number, _w: number, _h: number, color: RGBA) {
+        cells.push({ x, y, color })
+      },
+    }
+    expect(plugin.render).toBeDefined()
+    plugin.render?.({
+      buffer: buffer as unknown as OptimizedBuffer,
+      data: {
+        state: "idle",
+        hasContent: false,
+        idleCycleIndex: 5,
+        idleCycleEnabled: true,
+        theme,
+      },
+      ripple: resolvePromptBarRippleConfig(),
+    })
+    expect(cells.length).toBe(8)
+    const topLeft = cells.find((c) => c.x === 0 && c.y === 0)
+    const bottomRight = cells.find((c) => c.x === 3 && c.y === 1)
+    expect(topLeft).toBeDefined()
+    expect(bottomRight).toBeDefined()
+    expect(topLeft?.color).not.toEqual(bottomRight?.color)
+  })
+
+  test("diagonal-ripple render skips when idle cycle disabled", () => {
+    const plugin = resolvePromptBarAnimationPlugin("diagonal-ripple")
+    const cells: Array<{ x: number; y: number }> = []
+    const buffer = {
+      width: 4,
+      height: 2,
+      fillRect(x: number, y: number) {
+        cells.push({ x, y })
+      },
+    }
+    expect(plugin.render).toBeDefined()
+    plugin.render?.({
+      buffer: buffer as unknown as OptimizedBuffer,
+      data: {
+        state: "idle",
+        hasContent: false,
+        idleCycleIndex: 0,
+        idleCycleEnabled: false,
+        theme,
+      },
+      ripple: resolvePromptBarRippleConfig(),
+    })
+    expect(cells.length).toBe(0)
   })
 })

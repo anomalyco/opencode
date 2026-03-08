@@ -8,9 +8,10 @@ import {
   promptBarLayoutSpec,
   promptBarPluginEnabled,
   promptBarResetEnabled,
+  promptBarSpatialRippleActive,
   promptBarSurface,
-  promptBarUseLegacyLayoutForTheme,
   promptBarUseLegacyLayout,
+  promptBarUseLegacyLayoutForTheme,
 } from "../../../src/cli/cmd/tui/util/prompt-bar-layout-policy"
 
 describe("prompt bar layout policy", () => {
@@ -51,6 +52,7 @@ describe("prompt bar layout policy", () => {
       useLegacyLayout,
       background,
       chromeVisible: false,
+      spatialRippleActive: false,
     })
 
     expect(surface.shellBackground).toBeUndefined()
@@ -64,6 +66,63 @@ describe("prompt bar layout policy", () => {
   test("enables plugin effects only for non-legacy layout", () => {
     expect(promptBarPluginEnabled(true)).toBe(false)
     expect(promptBarPluginEnabled(false)).toBe(true)
+  })
+
+  test("enables spatial ripple only while diagonal-ripple idle cycle is active", () => {
+    expect(
+      promptBarSpatialRippleActive({
+        pluginEnabled: false,
+        plugin: "diagonal-ripple",
+        state: "idle",
+        hasContent: false,
+        idleCycleEnabled: true,
+      }),
+    ).toBe(false)
+    expect(
+      promptBarSpatialRippleActive({
+        pluginEnabled: true,
+        plugin: "legacy-cycle",
+        state: "idle",
+        hasContent: false,
+        idleCycleEnabled: true,
+      }),
+    ).toBe(false)
+    expect(
+      promptBarSpatialRippleActive({
+        pluginEnabled: true,
+        plugin: "diagonal-ripple",
+        state: "streaming",
+        hasContent: false,
+        idleCycleEnabled: true,
+      }),
+    ).toBe(false)
+    expect(
+      promptBarSpatialRippleActive({
+        pluginEnabled: true,
+        plugin: "diagonal-ripple",
+        state: "idle",
+        hasContent: true,
+        idleCycleEnabled: true,
+      }),
+    ).toBe(false)
+    expect(
+      promptBarSpatialRippleActive({
+        pluginEnabled: true,
+        plugin: "diagonal-ripple",
+        state: "idle",
+        hasContent: false,
+        idleCycleEnabled: false,
+      }),
+    ).toBe(false)
+    expect(
+      promptBarSpatialRippleActive({
+        pluginEnabled: true,
+        plugin: "diagonal-ripple",
+        state: "idle",
+        hasContent: false,
+        idleCycleEnabled: true,
+      }),
+    ).toBe(true)
   })
 
   test("falls back to base background when overlay is unavailable", () => {
@@ -113,6 +172,7 @@ describe("prompt bar layout policy", () => {
       useLegacyLayout: false,
       background,
       chromeVisible: true,
+      spatialRippleActive: false,
     })
 
     expect(surface.shellBackground).toEqual(overlay)
@@ -127,6 +187,7 @@ describe("prompt bar layout policy", () => {
       useLegacyLayout: true,
       background: base,
       chromeVisible: true,
+      spatialRippleActive: false,
     })
 
     expect(legacy.shellBackground).toBeUndefined()
@@ -143,16 +204,19 @@ describe("prompt bar layout policy", () => {
       useLegacyLayout: false,
       background: base,
       chromeVisible: true,
+      spatialRippleActive: false,
     })
     const hidden = promptBarSurface({
       useLegacyLayout: false,
       background: base,
       chromeVisible: false,
+      spatialRippleActive: false,
     })
     const legacyHidden = promptBarSurface({
       useLegacyLayout: true,
       background: base,
       chromeVisible: false,
+      spatialRippleActive: false,
     })
 
     expect(visible.separatorVertical).toBe("╹")
@@ -166,6 +230,53 @@ describe("prompt bar layout policy", () => {
   test("keeps bottom-left corner glyph in all modes", () => {
     expect(promptBarBottomLeft(true)).toBe("╹")
     expect(promptBarBottomLeft(false)).toBe("╹")
+  })
+
+  test("keeps layout dimensions while spatial ripple clears explicit fills", () => {
+    const base = RGBA.fromInts(10, 20, 30, 255)
+    const ripple = promptBarSurface({
+      useLegacyLayout: false,
+      background: base,
+      chromeVisible: true,
+      spatialRippleActive: true,
+    })
+
+    expect(ripple.shellBackground).toBeUndefined()
+    expect(ripple.contentBackground).toBeUndefined()
+    expect(ripple.separatorBackground).toBeUndefined()
+    expect(ripple.separatorBorderColor).toBeUndefined()
+    expect(ripple.shouldFill).toBe(false)
+    expect(promptBarLayoutHeight(promptBarLayoutSpec())).toEqual({ min: 6, max: 11 })
+  })
+
+  test("keeps overlay-filled surface when diagonal-ripple is inactive", () => {
+    const base = RGBA.fromInts(10, 20, 30, 255)
+    const overlay = RGBA.fromInts(40, 50, 60, 255)
+    const background = promptBarBackground({
+      useLegacyLayout: false,
+      overlay,
+      background: base,
+    })
+    const active = promptBarSpatialRippleActive({
+      pluginEnabled: true,
+      plugin: "diagonal-ripple",
+      state: "streaming",
+      hasContent: false,
+      idleCycleEnabled: true,
+    })
+    expect(active).toBe(false)
+
+    const surface = promptBarSurface({
+      useLegacyLayout: false,
+      background,
+      chromeVisible: true,
+      spatialRippleActive: active,
+    })
+    expect(surface.shellBackground).toEqual(overlay)
+    expect(surface.contentBackground).toEqual(overlay)
+    expect(surface.separatorBackground).toEqual(overlay)
+    expect(surface.separatorBorderColor).toEqual(overlay)
+    expect(surface.shouldFill).toBe(true)
   })
 
   test("encodes v1.2.18 prompt geometry constants", () => {
@@ -188,6 +299,23 @@ describe("prompt bar layout policy", () => {
     ).text()
     expect(source.includes("promptBarLayoutSpec")).toBe(true)
     expect(source.includes("promptBarUseLegacyLayoutForTheme")).toBe(true)
+    expect(source.includes('if (promptBarAnimationPlugin().id === "diagonal-ripple") return true')).toBe(true)
+    expect(source.includes("<box ref={(r) => (anchor = r)} visible={props.visible !== false}>")).toBe(true)
+    expect(source.includes("visible={props.visible !== false}\n        renderBefore={function (buffer) {")).toBe(false)
+    expect(source.includes("renderBefore={function (buffer) {")).toBe(true)
+    expect(source.includes("const el = this as BoxRenderable")).toBe(true)
+    expect(source.includes("width: el.width")).toBe(true)
+    expect(source.includes("height: el.height")).toBe(true)
+    expect(source.includes("buffer.fillRect(el.x + x, el.y + y, w, h, color)")).toBe(true)
+    expect(
+      source.includes(
+        "backgroundColor={promptBarSurfaceStyle().shellBackground}\n          shouldFill={promptBarSurfaceStyle().shouldFill}\n          renderBefore={function (buffer) {",
+      ),
+    ).toBe(true)
+    expect(source.includes("if (!promptBarSpatialRipple()) return")).toBe(true)
+    expect(source.includes("diagonal_ripple")).toBe(true)
+    expect(source.includes("spatialRippleActive: promptBarSpatialRipple()")).toBe(true)
+    expect(source.includes("shouldFill={promptBarSurfaceStyle().shouldFill}")).toBe(true)
     expect(source.includes("chromeVisible: theme.backgroundElement.a !== 0")).toBe(true)
   })
 })

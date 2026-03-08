@@ -533,3 +533,38 @@ test("loads prompt bar animation plugin config from tui.json", async () => {
     },
   })
 })
+
+test("loads prompt bar diagonal ripple options from tui.json", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "tui.json"),
+        JSON.stringify({
+          prompt_bar_animation: {
+            enabled: true,
+            plugin: "diagonal-ripple",
+            options: {
+              diagonal_ripple: {
+                speed: 1.5,
+                intensity: 0.8,
+                direction: "down-right",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await TuiConfig.get()
+      expect(config.prompt_bar_animation?.enabled).toBe(true)
+      expect(config.prompt_bar_animation?.plugin).toBe("diagonal-ripple")
+      expect(config.prompt_bar_animation?.options?.diagonal_ripple?.speed).toBe(1.5)
+      expect(config.prompt_bar_animation?.options?.diagonal_ripple?.intensity).toBe(0.8)
+      expect(config.prompt_bar_animation?.options?.diagonal_ripple?.direction).toBe("down-right")
+    },
+  })
+})
