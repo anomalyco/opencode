@@ -1,10 +1,3 @@
-/**
- * Tests for the session.stopping hook.
- *
- * Verifies the hook is defined in the Hooks interface, that Plugin.trigger
- * correctly propagates output mutations, and that the hook message text is
- * correctly written as a user message part in the session when stop=false.
- */
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
@@ -16,10 +9,8 @@ import { SessionPrompt } from "../../src/session/prompt"
 import type { Hooks } from "@opencode-ai/plugin"
 
 describe("session.stopping hook", () => {
-  test("hook key exists in Hooks interface", () => {
-    // Type-level check: a Hooks object with session.stopping should be valid
+  test("hook key is valid in Hooks interface", () => {
     const hooks: Hooks = {
-      // @ts-ignore — session.stopping is in the local source type
       "session.stopping": async (_input, output) => {
         output.stop = false
         output.message = "continue"
@@ -51,7 +42,6 @@ describe("session.stopping hook", () => {
       directory: tmp.path,
       fn: async () => {
         await Plugin.init()
-        // @ts-ignore — session.stopping is not yet in the published type
         const out = await Plugin.trigger("session.stopping", { sessionID: "test-session" }, { stop: true, message: undefined as string | undefined })
         expect(out.stop).toBe(false)
         expect(out.message).toBe("workflow gate")
@@ -59,24 +49,20 @@ describe("session.stopping hook", () => {
     })
   }, 30000)
 
-  test("session continues when stop=true (default, no plugin installed)", async () => {
+  test("no plugin installed — stop stays true", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
         await Plugin.init()
-        // @ts-ignore — session.stopping is not yet in the published type
         const out = await Plugin.trigger("session.stopping", { sessionID: "test-session" }, { stop: true, message: undefined as string | undefined })
-        // With no plugin overriding, output is unchanged
         expect(out.stop).toBe(true)
         expect(out.message).toBeUndefined()
       },
     })
   }, 30000)
 
-  test("plugin returning stop=false but no message does not trigger re-entry", async () => {
-    // The loop guard is: !hook.stop && hook.message
-    // A plugin that sets stop=false but leaves message undefined must not re-enter.
+  test("stop=false without message does not satisfy re-entry condition", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
         const plug = path.join(dir, ".opencode", "plugin")
@@ -91,17 +77,15 @@ describe("session.stopping hook", () => {
       directory: tmp.path,
       fn: async () => {
         await Plugin.init()
-        // @ts-ignore — session.stopping is not yet in the published type
         const out = await Plugin.trigger("session.stopping", { sessionID: "test-session" }, { stop: true, message: undefined as string | undefined })
         expect(out.stop).toBe(false)
         expect(out.message).toBeUndefined()
-        // Guard: re-entry requires both stop=false AND a message
         expect(!out.stop && !!out.message).toBe(false)
       },
     })
   }, 30000)
 
-  test("hook message is written as a user message part in the session", async () => {
+  test("hook message is persisted as a user message in the session", async () => {
     await using tmp = await tmpdir({
       git: true,
       init: async (dir) => {
@@ -127,15 +111,10 @@ describe("session.stopping hook", () => {
         await Plugin.init()
         const session = await Session.create({})
 
-        // Simulate what the loop does when stop=false: fire the hook, then
-        // write the hook message as a new user message via SessionPrompt.prompt
-        // with noReply=true (which is exactly what createUserMessage does).
-        // @ts-ignore — session.stopping is not yet in the published type
         const out = await Plugin.trigger("session.stopping", { sessionID: session.id }, { stop: true, message: undefined as string | undefined })
         expect(out.stop).toBe(false)
         expect(out.message).toBe("resume from gate")
 
-        // Write the hook message as a user message (mirrors the loop's createUserMessage call)
         const msg = await SessionPrompt.prompt({
           sessionID: session.id,
           noReply: true,

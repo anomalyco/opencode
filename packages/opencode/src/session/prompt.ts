@@ -320,10 +320,6 @@ export namespace SessionPrompt {
         !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
         lastUser.id < lastAssistant.id
       ) {
-        // Fire session.stopping hook — allows plugins to prevent premature stops.
-        // A plugin sets output.stop = false and provides output.message to inject
-        // a follow-up user message and continue the agent loop.
-        // @ts-ignore — session.stopping is not yet in the published Hooks type
         const hook = await Plugin.trigger("session.stopping", { sessionID }, { stop: true, message: undefined as string | undefined })
         if (!hook.stop && hook.message) {
           log.info("session.stopping re-entered loop", { sessionID })
