@@ -6,8 +6,12 @@ const path = require("path")
 const os = require("os")
 
 function run(target) {
+  const temp =
+    process.platform === "win32" && process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "Temp") : undefined
+
   const result = childProcess.spawnSync(target, process.argv.slice(2), {
     stdio: "inherit",
+    env: temp ? { ...process.env, TMP: temp, TEMP: temp } : process.env,
   })
   if (result.error) {
     console.error(result.error.message)
