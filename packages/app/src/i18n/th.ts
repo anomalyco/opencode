@@ -511,6 +511,7 @@ export const dict = {
   "session.todo.collapse": "ย่อ",
   "session.todo.expand": "ขยาย",
 
+  "session.new.title": "สร้างอะไรก็ได้",
   "session.new.worktree.main": "สาขาหลัก",
   "session.new.worktree.mainWithBranch": "สาขาหลัก ({{branch}})",
   "session.new.worktree.create": "สร้าง worktree ใหม่",
