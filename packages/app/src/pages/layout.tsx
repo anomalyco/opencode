@@ -1668,6 +1668,13 @@ export default function Layout(props: ParentProps) {
   )
 
   createEffect(() => {
+    const id = params.id
+    if (!id) return
+    if (notification.session.unseenCount(id) === 0) return
+    notification.session.markViewed(id)
+  })
+
+  createEffect(() => {
     const sidebarWidth = layout.sidebar.opened() ? layout.sidebar.width() : 48
     document.documentElement.style.setProperty("--dialog-left-margin", `${sidebarWidth}px`)
   })
