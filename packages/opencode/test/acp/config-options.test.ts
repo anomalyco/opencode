@@ -123,6 +123,12 @@ function values(opts: unknown): string[] {
     .map((item) => item.value)
 }
 
+function id(opts: Array<{ id: string; category?: string | null }> | undefined, category: string) {
+  const item = opts?.find((entry) => entry.category === category)
+  if (item) return item.id
+  throw new Error(`missing config option category: ${category}`)
+}
+
 describe("acp.agent config options", () => {
   test("returns thinking levels as config options and keeps model list base-only", async () => {
     await using tmp = await tmpdir()
@@ -137,8 +143,8 @@ describe("acp.agent config options", () => {
             "opencode/small-pickle",
           ])
 
-          const model = out.configOptions?.find((item: { id: string }) => item.id === "opencode.model")
-          const cfg = out.configOptions?.find((item: { id: string }) => item.id === "opencode.thought")
+          const model = out.configOptions?.find((item) => item.category === "model")
+          const cfg = out.configOptions?.find((item) => item.category === "thought_level")
           expect(model?.category).toBe("model")
           expect(values(model?.options)).toEqual(["opencode/big-pickle", "opencode/small-pickle"])
           expect(cfg?.category).toBe("thought_level")
@@ -158,11 +164,14 @@ describe("acp.agent config options", () => {
       fn: async () => {
         const { agent, prompts, stop } = create()
         try {
-          const sessionId = await agent.newSession({ cwd: tmp.path, mcpServers: [] } as any).then((x) => x.sessionId)
+          const out = await agent.newSession({ cwd: tmp.path, mcpServers: [] } as any)
+          const sessionId = out.sessionId
+          const thoughtID = id(out.configOptions, "thought_level")
+          const modelID = id(out.configOptions, "model")
 
           await agent.setSessionConfigOption({
             sessionId,
-            configId: "opencode.thought",
+            configId: thoughtID,
             value: "high",
           })
           await agent.prompt({
@@ -172,7 +181,7 @@ describe("acp.agent config options", () => {
 
           await agent.setSessionConfigOption({
             sessionId,
-            configId: "opencode.model",
+            configId: modelID,
             value: "opencode/small-pickle",
           })
           await agent.prompt({
@@ -182,7 +191,7 @@ describe("acp.agent config options", () => {
 
           await agent.setSessionConfigOption({
             sessionId,
-            configId: "opencode.thought",
+            configId: thoughtID,
             value: "default",
           })
           await agent.prompt({
