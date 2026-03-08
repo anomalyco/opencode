@@ -101,6 +101,22 @@ describe("session.compaction.isOverflow", () => {
     })
   })
 
+  test("uses corrected GPT-5.4-style input caps near the full context window", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = createModel({ context: 1_050_000, input: 922_000, output: 128_000 })
+
+        const belowThreshold = { input: 880_000, output: 20_000, reasoning: 0, cache: { read: 1_999, write: 0 } }
+        expect(await SessionCompaction.isOverflow({ tokens: belowThreshold, model })).toBe(false)
+
+        const atThreshold = { input: 880_000, output: 20_000, reasoning: 0, cache: { read: 2_000, write: 0 } }
+        expect(await SessionCompaction.isOverflow({ tokens: atThreshold, model })).toBe(true)
+      },
+    })
+  })
+
   test("returns false when output within limit with input caps", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({

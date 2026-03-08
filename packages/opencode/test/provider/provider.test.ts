@@ -4,7 +4,51 @@ import path from "path"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
+import type { ModelsDev } from "../../src/provider/models"
 import { Env } from "../../src/env"
+
+function createModelsDevProvider(providerID: string, modelID: string, input = 272_000): ModelsDev.Provider {
+  return {
+    id: providerID,
+    name: providerID,
+    env: [],
+    api: "https://api.example.com/v1",
+    npm: providerID === "openrouter" ? "@openrouter/ai-sdk-provider" : "@ai-sdk/openai",
+    models: {
+      [modelID]: {
+        id: modelID,
+        name: modelID,
+        release_date: "2026-03-05",
+        attachment: true,
+        reasoning: true,
+        temperature: true,
+        tool_call: true,
+        options: {},
+        limit: {
+          context: 1_050_000,
+          input,
+          output: 128_000,
+        },
+      },
+    },
+  }
+}
+
+for (const [providerID, modelID] of [
+  ["openai", "gpt-5.4"],
+  ["openai", "gpt-5.4-pro"],
+  ["openrouter", "openai/gpt-5.4-pro"],
+] as const) {
+  test(`normalizes ${providerID}/${modelID} input limit to leave room for output`, () => {
+    const provider = Provider.fromModelsDevProvider(createModelsDevProvider(providerID, modelID))
+    expect(provider.models[modelID].limit.input).toBe(922_000)
+  })
+}
+
+test("does not normalize non-target GPT-5.4 metadata", () => {
+  const provider = Provider.fromModelsDevProvider(createModelsDevProvider("opencode", "gpt-5.4-pro"))
+  expect(provider.models["gpt-5.4-pro"].limit.input).toBe(272_000)
+})
 
 test("provider loaded from env variable", async () => {
   await using tmp = await tmpdir({

@@ -60,6 +60,27 @@ export namespace Provider {
     return isGpt5OrLater(modelID) && !modelID.startsWith("gpt-5-mini")
   }
 
+  const NORMALIZED_INPUT_LIMITS = new Set([
+    "openai/gpt-5.4",
+    "openai/gpt-5.4-pro",
+    "openrouter/openai/gpt-5.4-pro",
+  ])
+
+  function normalizeKnownModelLimits(model: Model): Model {
+    const key = `${model.providerID}/${model.id}`
+    if (!NORMALIZED_INPUT_LIMITS.has(key)) return model
+    if (model.limit.context !== 1_050_000 || model.limit.input !== 272_000 || model.limit.output !== 128_000)
+      return model
+
+    return {
+      ...model,
+      limit: {
+        ...model.limit,
+        input: model.limit.context - model.limit.output,
+      },
+    }
+  }
+
   function googleVertexVars(options: Record<string, any>) {
     const project =
       options["project"] ?? Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
@@ -677,7 +698,7 @@ export namespace Provider {
   export type Info = z.infer<typeof Info>
 
   function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
-    const m: Model = {
+    const m = normalizeKnownModelLimits({
       id: model.id,
       providerID: provider.id,
       name: model.name,
@@ -736,7 +757,7 @@ export namespace Provider {
       },
       release_date: model.release_date,
       variants: {},
-    }
+    })
 
     m.variants = mapValues(ProviderTransform.variants(m), (v) => v)
 
