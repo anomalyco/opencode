@@ -183,17 +183,7 @@ export const BashTool = Tool.define("bash", async () => {
 
       let output = ""
 
-      // Initialize metadata with empty output
-      ctx.metadata({
-        metadata: {
-          output: "",
-          description: params.description,
-        },
-      })
-
-      const decoder = new StringDecoder("utf8")
-      const append = (chunk: Buffer) => {
-        output += decoder.write(chunk)
+      const sync = () =>
         ctx.metadata({
           metadata: {
             // truncate the metadata to avoid GIANT blobs of data (has nothing to do w/ what agent can access)
@@ -201,10 +191,20 @@ export const BashTool = Tool.define("bash", async () => {
             description: params.description,
           },
         })
+
+      // Initialize metadata with empty output
+      sync()
+
+      const stdoutDecoder = new StringDecoder("utf8")
+      const stderrDecoder = new StringDecoder("utf8")
+      const append = (text: string) => {
+        if (!text) return
+        output += text
+        sync()
       }
 
-      proc.stdout?.on("data", append)
-      proc.stderr?.on("data", append)
+      proc.stdout?.on("data", (chunk: Buffer) => append(stdoutDecoder.write(chunk)))
+      proc.stderr?.on("data", (chunk: Buffer) => append(stderrDecoder.write(chunk)))
 
       let timedOut = false
       let aborted = false
@@ -247,6 +247,9 @@ export const BashTool = Tool.define("bash", async () => {
           reject(error)
         })
       })
+
+      append(stdoutDecoder.end())
+      append(stderrDecoder.end())
 
       const resultMetadata: string[] = []
 

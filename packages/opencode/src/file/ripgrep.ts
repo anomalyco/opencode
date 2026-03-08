@@ -9,6 +9,7 @@ import { $ } from "bun"
 import { Filesystem } from "../util/filesystem"
 import { Process } from "../util/process"
 import { text } from "node:stream/consumers"
+import { StringDecoder } from "string_decoder"
 
 import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"
 import { Log } from "@/util/log"
@@ -211,6 +212,21 @@ export namespace Ripgrep {
     return filepath
   }
 
+  export async function* lines(stream: AsyncIterable<Buffer | string>) {
+    const decoder = new StringDecoder("utf8")
+    let buffer = ""
+    for await (const chunk of stream) {
+      buffer += typeof chunk === "string" ? decoder.end() + chunk : decoder.write(chunk)
+      const parts = buffer.split(/\r?\n/)
+      buffer = parts.pop() || ""
+      for (const line of parts) {
+        if (line) yield line
+      }
+    }
+    buffer += decoder.end()
+    if (buffer) yield buffer
+  }
+
   export async function* files(input: {
     cwd: string
     glob?: string[]
@@ -251,22 +267,10 @@ export namespace Ripgrep {
       throw new Error("Process output not available")
     }
 
-    let buffer = ""
-    const stream = proc.stdout as AsyncIterable<Buffer | string>
-    for await (const chunk of stream) {
+    for await (const line of lines(proc.stdout as AsyncIterable<Buffer | string>)) {
       input.signal?.throwIfAborted()
-
-      buffer += typeof chunk === "string" ? chunk : chunk.toString()
-      // Handle both Unix (\n) and Windows (\r\n) line endings
-      const lines = buffer.split(/\r?\n/)
-      buffer = lines.pop() || ""
-
-      for (const line of lines) {
-        if (line) yield line
-      }
+      if (line) yield line
     }
-
-    if (buffer) yield buffer
     await proc.exited
 
     input.signal?.throwIfAborted()

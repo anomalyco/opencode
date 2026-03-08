@@ -77,3 +77,16 @@ test("StringDecoder fix prevents emdash corruption", async () => {
   expect(output).toContain("—")
   expect(output).not.toContain("\uFFFD")
 })
+
+test("stdout and stderr need separate decoders", () => {
+  const shared = new StringDecoder("utf8")
+  const mixed = shared.write(Buffer.from([0xe2, 0x86])) + shared.write(Buffer.from([0x91])) + shared.end()
+
+  const stdout = new StringDecoder("utf8")
+  const stderr = new StringDecoder("utf8")
+  const separate =
+    stdout.write(Buffer.from([0xe2, 0x86])) + stderr.write(Buffer.from([0x91])) + stdout.end() + stderr.end()
+
+  expect(mixed).toBe("↑")
+  expect(separate).toBe("��")
+})

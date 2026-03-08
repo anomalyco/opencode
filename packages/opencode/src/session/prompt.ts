@@ -1638,28 +1638,22 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     let output = ""
     const stdoutDecoder = new StringDecoder("utf8")
     const stderrDecoder = new StringDecoder("utf8")
-
-    proc.stdout?.on("data", (chunk: Buffer) => {
-      output += stdoutDecoder.write(chunk)
-      if (part.state.status === "running") {
-        part.state.metadata = {
-          output: output,
-          description: "",
-        }
-        Session.updatePart(part)
+    const sync = () => {
+      if (part.state.status !== "running") return
+      part.state.metadata = {
+        output,
+        description: "",
       }
-    })
+      Session.updatePart(part)
+    }
+    const append = (text: string) => {
+      if (!text) return
+      output += text
+      sync()
+    }
 
-    proc.stderr?.on("data", (chunk: Buffer) => {
-      output += stderrDecoder.write(chunk)
-      if (part.state.status === "running") {
-        part.state.metadata = {
-          output: output,
-          description: "",
-        }
-        Session.updatePart(part)
-      }
-    })
+    proc.stdout?.on("data", (chunk: Buffer) => append(stdoutDecoder.write(chunk)))
+    proc.stderr?.on("data", (chunk: Buffer) => append(stderrDecoder.write(chunk)))
 
     let aborted = false
     let exited = false
@@ -1685,6 +1679,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         resolve()
       })
     })
+
+    append(stdoutDecoder.end())
+    append(stderrDecoder.end())
 
     if (aborted) {
       output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
