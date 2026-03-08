@@ -1247,7 +1247,9 @@ export namespace Config {
         for (let i = 0; i < data.plugin.length; i++) {
           const plugin = data.plugin[i]
           try {
-            data.plugin[i] = import.meta.resolve!(plugin, options.path)
+            const resolved = import.meta.resolve!(plugin, options.path)
+            // Ensure resolved path is a file:// URL for consistent handling
+            data.plugin[i] = resolved.startsWith("file://") ? resolved : pathToFileURL(resolved).href
           } catch (e) {
             try {
               // import.meta.resolve sometimes fails with newly created node_modules
