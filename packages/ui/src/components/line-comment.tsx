@@ -240,6 +240,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
           }}
           on:keydown={(e) => {
             const event = e as KeyboardEvent
+            if (event.isComposing || event.keyCode === 229) return
             event.stopPropagation()
             if (e.key === "Escape") {
               event.preventDefault()
