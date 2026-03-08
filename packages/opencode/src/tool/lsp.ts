@@ -11,6 +11,7 @@ import { Filesystem } from "../util/filesystem"
 const operations = [
   "goToDefinition",
   "findReferences",
+  "diagnostics",
   "hover",
   "documentSymbol",
   "workspaceSymbol",
@@ -20,14 +21,61 @@ const operations = [
   "outgoingCalls",
 ] as const
 
+const positionOperations = [
+  "goToDefinition",
+  "findReferences",
+  "hover",
+  "goToImplementation",
+  "prepareCallHierarchy",
+  "incomingCalls",
+  "outgoingCalls",
+] as const
+
+const fileOperations = ["diagnostics", "documentSymbol", "workspaceSymbol"] as const
+
 export const LspTool = Tool.define("lsp", {
   description: DESCRIPTION,
-  parameters: z.object({
-    operation: z.enum(operations).describe("The LSP operation to perform"),
-    filePath: z.string().describe("The absolute or relative path to the file"),
-    line: z.number().int().min(1).describe("The line number (1-based, as shown in editors)"),
-    character: z.number().int().min(1).describe("The character offset (1-based, as shown in editors)"),
-  }),
+  parameters: z
+    .object({
+      operation: z.enum(operations).describe("The LSP operation to perform"),
+      filePath: z.string().describe("The absolute or relative path to the file"),
+      line: z.number().int().min(1).optional().describe("The line number (1-based, as shown in editors)"),
+      character: z.number().int().min(1).optional().describe("The character offset (1-based, as shown in editors)"),
+    })
+    .superRefine((args, ctx) => {
+      if ((positionOperations as readonly string[]).includes(args.operation)) {
+        if (args.line === undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["line"],
+            message: `line is required for ${args.operation}`,
+          })
+        }
+        if (args.character === undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["character"],
+            message: `character is required for ${args.operation}`,
+          })
+        }
+      }
+      if ((fileOperations as readonly string[]).includes(args.operation)) {
+        if (args.line !== undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["line"],
+            message: `line is not used for ${args.operation}`,
+          })
+        }
+        if (args.character !== undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["character"],
+            message: `character is not used for ${args.operation}`,
+          })
+        }
+      }
+    }),
   execute: async (args, ctx) => {
     const file = path.isAbsolute(args.filePath) ? args.filePath : path.join(Instance.directory, args.filePath)
     await assertExternalDirectory(ctx, file)
@@ -39,14 +87,18 @@ export const LspTool = Tool.define("lsp", {
       metadata: {},
     })
     const uri = pathToFileURL(file).href
-    const position = {
-      file,
-      line: args.line - 1,
-      character: args.character - 1,
-    }
+    const position = args.line !== undefined && args.character !== undefined
+      ? {
+          file,
+          line: args.line - 1,
+          character: args.character - 1,
+        }
+      : undefined
 
     const relPath = path.relative(Instance.worktree, file)
-    const title = `${args.operation} ${relPath}:${args.line}:${args.character}`
+    const title = position
+      ? `${args.operation} ${relPath}:${position.line + 1}:${position.character + 1}`
+      : `${args.operation} ${relPath}`
 
     const exists = await Filesystem.exists(file)
     if (!exists) {
@@ -58,28 +110,34 @@ export const LspTool = Tool.define("lsp", {
       throw new Error("No LSP server available for this file type.")
     }
 
-    await LSP.touchFile(file, true)
+    if (args.operation !== "workspaceSymbol") {
+      await LSP.touchFile(file, true)
+    }
 
     const result: unknown[] = await (async () => {
       switch (args.operation) {
         case "goToDefinition":
-          return LSP.definition(position)
+          return LSP.definition(position!)
         case "findReferences":
-          return LSP.references(position)
+          return LSP.references(position!)
+        case "diagnostics": {
+          const diagnostics = await LSP.diagnostics()
+          return diagnostics[Filesystem.normalizePath(file)] ?? []
+        }
         case "hover":
-          return LSP.hover(position)
+          return LSP.hover(position!)
         case "documentSymbol":
           return LSP.documentSymbol(uri)
         case "workspaceSymbol":
           return LSP.workspaceSymbol("")
         case "goToImplementation":
-          return LSP.implementation(position)
+          return LSP.implementation(position!)
         case "prepareCallHierarchy":
-          return LSP.prepareCallHierarchy(position)
+          return LSP.prepareCallHierarchy(position!)
         case "incomingCalls":
-          return LSP.incomingCalls(position)
+          return LSP.incomingCalls(position!)
         case "outgoingCalls":
-          return LSP.outgoingCalls(position)
+          return LSP.outgoingCalls(position!)
       }
     })()
 

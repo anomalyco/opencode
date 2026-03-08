@@ -17,6 +17,7 @@ const MAX_LINE_LENGTH = 2000
 const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
 const MAX_BYTES = 50 * 1024
 const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
+const MAX_DIAGNOSTICS_PER_FILE = 20
 
 export const ReadTool = Tool.define("read", {
   description: DESCRIPTION,
@@ -108,6 +109,7 @@ export const ReadTool = Tool.define("read", {
         title,
         output,
         metadata: {
+          diagnostics: [],
           preview: sliced.slice(0, 20).join("\n"),
           truncated,
           loaded: [] as string[],
@@ -127,6 +129,7 @@ export const ReadTool = Tool.define("read", {
         title,
         output: msg,
         metadata: {
+          diagnostics: [],
           preview: msg,
           truncated: false,
           loaded: instructions.map((i) => i.filepath),
@@ -212,18 +215,22 @@ export const ReadTool = Tool.define("read", {
     }
     output += "\n</content>"
 
-    // just warms the lsp client
-    LSP.touchFile(filepath, false)
+    const diagnostics = await getFileDiagnostics(filepath)
     FileTime.read(ctx.sessionID, filepath)
 
     if (instructions.length > 0) {
       output += `\n\n<system-reminder>\n${instructions.map((i) => i.content).join("\n\n")}\n</system-reminder>`
     }
 
+    if (diagnostics.length > 0) {
+      output += `\n\n<diagnostics file="${filepath}">\n${diagnostics.map(LSP.Diagnostic.pretty).join("\n")}\n</diagnostics>`
+    }
+
     return {
       title,
       output,
       metadata: {
+        diagnostics,
         preview,
         truncated,
         loaded: instructions.map((i) => i.filepath),
@@ -231,6 +238,16 @@ export const ReadTool = Tool.define("read", {
     }
   },
 })
+
+async function getFileDiagnostics(filepath: string) {
+  const hasClients = await LSP.hasClients(filepath).catch(() => false)
+  if (!hasClients) return []
+
+  await LSP.touchFile(filepath, true).catch(() => {})
+  const diagnostics = (await LSP.diagnostics().catch(() => ({}))) as Awaited<ReturnType<typeof LSP.diagnostics>>
+  const issues = diagnostics[Filesystem.normalizePath(filepath)] ?? []
+  return issues.filter((item) => item.severity === 1 || item.severity === 2).slice(0, MAX_DIAGNOSTICS_PER_FILE)
+}
 
 async function isBinaryFile(filepath: string, fileSize: number): Promise<boolean> {
   const ext = path.extname(filepath).toLowerCase()

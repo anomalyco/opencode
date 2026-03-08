@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, spyOn, test } from "bun:test"
 import path from "path"
 import { ReadTool } from "../../src/tool/read"
 import { Instance } from "../../src/project/instance"
@@ -6,6 +6,7 @@ import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 import { PermissionNext } from "../../src/permission/next"
 import { Agent } from "../../src/agent/agent"
+import { LSP } from "../../src/lsp"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
@@ -19,6 +20,12 @@ const ctx = {
   metadata: () => {},
   ask: async () => {},
 }
+
+const spies: Array<{ mockRestore(): void }> = []
+
+afterEach(() => {
+  while (spies.length > 0) spies.pop()?.mockRestore()
+})
 
 describe("tool.read external_directory permission", () => {
   test("allows reading absolute path inside project directory", async () => {
@@ -461,6 +468,69 @@ describe("tool.read loaded instructions", () => {
         expect(result.output).toContain("Test Instructions")
         expect(result.metadata.loaded).toBeDefined()
         expect(result.metadata.loaded).toContain(path.join(tmp.path, "subdir", "AGENTS.md"))
+      },
+    })
+  })
+})
+
+describe("tool.read diagnostics", () => {
+  test("surfaces diagnostics when an LSP client exists", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "diagnostics.ts"), "const x = 1\n")
+      },
+    })
+
+    const filepath = path.join(tmp.path, "diagnostics.ts")
+    const normalized = Filesystem.normalizePath(filepath)
+    spies.push(spyOn(LSP, "hasClients").mockResolvedValue(true))
+    spies.push(spyOn(LSP, "touchFile").mockResolvedValue())
+    spies.push(
+      spyOn(LSP, "diagnostics").mockResolvedValue({
+        [normalized]: [
+          {
+            severity: 2,
+            message: '"x" is declared but its value is never read',
+            range: {
+              start: { line: 0, character: 6 },
+              end: { line: 0, character: 7 },
+            },
+            source: "language-server",
+          },
+        ],
+      }),
+    )
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: filepath }, ctx)
+        expect(result.output).toContain("<diagnostics file=")
+        expect(result.output).toContain('WARN [1:7] "x" is declared but its value is never read')
+        expect(result.metadata.diagnostics).toHaveLength(1)
+      },
+    })
+  })
+
+  test("does not fail when diagnostics lookup fails", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "safe.ts"), "const x = 1\n")
+      },
+    })
+
+    const filepath = path.join(tmp.path, "safe.ts")
+    spies.push(spyOn(LSP, "hasClients").mockResolvedValue(true))
+    spies.push(spyOn(LSP, "touchFile").mockRejectedValue(new Error("slow lsp")))
+    spies.push(spyOn(LSP, "diagnostics").mockRejectedValue(new Error("no diagnostics")))
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: filepath }, ctx)
+        expect(result.output).toContain("const x = 1")
+        expect(result.output).not.toContain("<diagnostics file=")
+        expect(result.metadata.diagnostics).toEqual([])
       },
     })
   })
