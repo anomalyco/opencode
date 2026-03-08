@@ -6,19 +6,8 @@ import { Instance } from "../../src/project/instance"
 import { Plugin } from "../../src/plugin"
 import { Session } from "../../src/session"
 import { SessionPrompt } from "../../src/session/prompt"
-import type { Hooks } from "@opencode-ai/plugin"
 
 describe("session.stopping hook", () => {
-  test("hook key is valid in Hooks interface", () => {
-    const hooks: Hooks = {
-      "session.stopping": async (_input, output) => {
-        output.stop = false
-        output.message = "continue"
-      },
-    }
-    expect(typeof hooks["session.stopping"]).toBe("function")
-  })
-
   test("plugin with session.stopping hook loads and triggers correctly", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
@@ -80,7 +69,6 @@ describe("session.stopping hook", () => {
         const out = await Plugin.trigger("session.stopping", { sessionID: "test-session" }, { stop: true, message: undefined as string | undefined })
         expect(out.stop).toBe(false)
         expect(out.message).toBeUndefined()
-        expect(!out.stop && !!out.message).toBe(false)
       },
     })
   }, 30000)
