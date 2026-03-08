@@ -1,5 +1,10 @@
-import { test, expect } from "bun:test"
+import { test, expect, afterEach } from "bun:test"
 import { Auth } from "../../src/auth"
+
+afterEach(async () => {
+  await Auth.remove("https://example.com")
+  await Auth.remove("anthropic")
+})
 
 test("set normalizes trailing slashes in keys", async () => {
   await Auth.set("https://example.com/", {

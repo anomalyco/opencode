@@ -68,6 +68,71 @@ export type EventGlobalDisposed = {
   }
 }
 
+export type EventTuiPromptAppend = {
+  type: "tui.prompt.append"
+  properties: {
+    text: string
+  }
+}
+
+export type EventTuiCommandExecute = {
+  type: "tui.command.execute"
+  properties: {
+    command:
+      | "session.list"
+      | "session.new"
+      | "session.share"
+      | "session.interrupt"
+      | "session.compact"
+      | "session.page.up"
+      | "session.page.down"
+      | "session.line.up"
+      | "session.line.down"
+      | "session.half.page.up"
+      | "session.half.page.down"
+      | "session.first"
+      | "session.last"
+      | "prompt.clear"
+      | "prompt.submit"
+      | "agent.cycle"
+      | string
+  }
+}
+
+export type EventTuiToastShow = {
+  type: "tui.toast.show"
+  properties: {
+    title?: string
+    message: string
+    variant: "info" | "success" | "warning" | "error"
+    /**
+     * Duration in milliseconds
+     */
+    duration?: number
+  }
+}
+
+export type EventTuiSessionSelect = {
+  type: "tui.session.select"
+  properties: {
+    /**
+     * Session ID to navigate to
+     */
+    sessionID: string
+  }
+}
+
+export type EventCredentialFailover = {
+  type: "credential.failover"
+  properties: {
+    providerID: string
+    fromRecordID: string
+    toRecordID?: string
+    statusCode: number
+    message: string
+  }
+}
+
 export type EventLspClientDiagnostics = {
   type: "lsp.client.diagnostics"
   properties: {
@@ -716,60 +781,6 @@ export type EventTodoUpdated = {
   }
 }
 
-export type EventTuiPromptAppend = {
-  type: "tui.prompt.append"
-  properties: {
-    text: string
-  }
-}
-
-export type EventTuiCommandExecute = {
-  type: "tui.command.execute"
-  properties: {
-    command:
-      | "session.list"
-      | "session.new"
-      | "session.share"
-      | "session.interrupt"
-      | "session.compact"
-      | "session.page.up"
-      | "session.page.down"
-      | "session.line.up"
-      | "session.line.down"
-      | "session.half.page.up"
-      | "session.half.page.down"
-      | "session.first"
-      | "session.last"
-      | "prompt.clear"
-      | "prompt.submit"
-      | "agent.cycle"
-      | string
-  }
-}
-
-export type EventTuiToastShow = {
-  type: "tui.toast.show"
-  properties: {
-    title?: string
-    message: string
-    variant: "info" | "success" | "warning" | "error"
-    /**
-     * Duration in milliseconds
-     */
-    duration?: number
-  }
-}
-
-export type EventTuiSessionSelect = {
-  type: "tui.session.select"
-  properties: {
-    /**
-     * Session ID to navigate to
-     */
-    sessionID: string
-  }
-}
-
 export type EventMcpToolsChanged = {
   type: "mcp.tools.changed"
   properties: {
@@ -964,6 +975,11 @@ export type Event =
   | EventServerInstanceDisposed
   | EventServerConnected
   | EventGlobalDisposed
+  | EventTuiPromptAppend
+  | EventTuiCommandExecute
+  | EventTuiToastShow
+  | EventTuiSessionSelect
+  | EventCredentialFailover
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventFileEdited
@@ -982,10 +998,6 @@ export type Event =
   | EventSessionCompacted
   | EventFileWatcherUpdated
   | EventTodoUpdated
-  | EventTuiPromptAppend
-  | EventTuiCommandExecute
-  | EventTuiToastShow
-  | EventTuiSessionSelect
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
   | EventCommandExecuted
@@ -1210,6 +1222,31 @@ export type ProviderConfig = {
   }
   whitelist?: Array<string>
   blacklist?: Array<string>
+  /**
+   * OAuth rotation settings
+   */
+  oauth?: {
+    /**
+     * Rate limit cooldown in milliseconds
+     */
+    rateLimitCooldownMs?: number
+    /**
+     * Auth failure cooldown in milliseconds
+     */
+    authFailureCooldownMs?: number
+    /**
+     * Network retry attempts per OAuth credential before failing
+     */
+    networkRetryAttempts?: number
+    /**
+     * Maximum OAuth credential attempts per request
+     */
+    maxAttempts?: number
+    /**
+     * Failover toast duration in milliseconds
+     */
+    toastDurationMs?: number
+  }
   options?: {
     apiKey?: string
     baseURL?: string
@@ -1770,6 +1807,8 @@ export type ProviderAuthAuthorization = {
   instructions: string
 }
 
+export type AuthUsage = unknown
+
 export type Symbol = {
   name: string
   kind: number
@@ -1994,6 +2033,38 @@ export type GlobalDisposeResponses = {
 }
 
 export type GlobalDisposeResponse = GlobalDisposeResponses[keyof GlobalDisposeResponses]
+
+export type AuthRemoveAccountData = {
+  body?: {
+    providerID: string
+    recordID: string
+    namespace?: string
+  }
+  path?: never
+  query?: never
+  url: "/auth/account"
+}
+
+export type AuthRemoveAccountErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthRemoveAccountError = AuthRemoveAccountErrors[keyof AuthRemoveAccountErrors]
+
+export type AuthRemoveAccountResponses = {
+  /**
+   * Account removed
+   */
+  200: {
+    removed: boolean
+    remaining: number
+  }
+}
+
+export type AuthRemoveAccountResponse = AuthRemoveAccountResponses[keyof AuthRemoveAccountResponses]
 
 export type AuthRemoveData = {
   body?: never
@@ -4099,6 +4170,309 @@ export type ProviderOauthCallbackResponses = {
 
 export type ProviderOauthCallbackResponse = ProviderOauthCallbackResponses[keyof ProviderOauthCallbackResponses]
 
+export type AuthUsageData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/provider/auth/usage"
+}
+
+export type AuthUsageErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthUsageError = AuthUsageErrors[keyof AuthUsageErrors]
+
+export type AuthUsageResponses = {
+  /**
+   * Usage information per provider and account
+   */
+  200: AuthUsage
+}
+
+export type AuthUsageResponse = AuthUsageResponses[keyof AuthUsageResponses]
+
+export type AuthSetActiveData = {
+  body?: {
+    providerID: string
+    recordID: string
+    namespace?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/provider/auth/active"
+}
+
+export type AuthSetActiveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthSetActiveError = AuthSetActiveErrors[keyof AuthSetActiveErrors]
+
+export type AuthSetActiveResponses = {
+  /**
+   * Active account switched with updated usage
+   */
+  200: {
+    success: boolean
+    anthropicUsage?: unknown
+  }
+}
+
+export type AuthSetActiveResponse = AuthSetActiveResponses[keyof AuthSetActiveResponses]
+
+export type AuthDeleteAccountData = {
+  body?: {
+    providerID: string
+    recordID: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/provider/auth/account"
+}
+
+export type AuthDeleteAccountErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthDeleteAccountError = AuthDeleteAccountErrors[keyof AuthDeleteAccountErrors]
+
+export type AuthDeleteAccountResponses = {
+  /**
+   * Account deleted
+   */
+  200: {
+    success: boolean
+    remaining: number
+  }
+}
+
+export type AuthDeleteAccountResponse = AuthDeleteAccountResponses[keyof AuthDeleteAccountResponses]
+
+export type AuthUpdateAccountData = {
+  body?: {
+    providerID: string
+    recordID: string
+    namespace?: string
+    label?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/provider/auth/account"
+}
+
+export type AuthUpdateAccountErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthUpdateAccountError = AuthUpdateAccountErrors[keyof AuthUpdateAccountErrors]
+
+export type AuthUpdateAccountResponses = {
+  /**
+   * Account updated
+   */
+  200: {
+    success: boolean
+  }
+}
+
+export type AuthUpdateAccountResponse = AuthUpdateAccountResponses[keyof AuthUpdateAccountResponses]
+
+export type ProviderBrowserSessionsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/provider/auth/browser-session"
+}
+
+export type ProviderBrowserSessionsResponses = {
+  /**
+   * List of browser sessions
+   */
+  200: Array<{
+    recordId: string
+    enabled: boolean
+    profilePath: string
+    lastRefresh?: number
+    lastError?: string
+    isConfigured: boolean
+    label?: string
+  }>
+}
+
+export type ProviderBrowserSessionsResponse = ProviderBrowserSessionsResponses[keyof ProviderBrowserSessionsResponses]
+
+export type ProviderBrowserSessionRemoveData = {
+  body?: never
+  path: {
+    /**
+     * OAuth record ID
+     */
+    recordId: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/provider/auth/browser-session/{recordId}"
+}
+
+export type ProviderBrowserSessionRemoveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderBrowserSessionRemoveError =
+  ProviderBrowserSessionRemoveErrors[keyof ProviderBrowserSessionRemoveErrors]
+
+export type ProviderBrowserSessionRemoveResponses = {
+  /**
+   * Browser session removed
+   */
+  200: boolean
+}
+
+export type ProviderBrowserSessionRemoveResponse =
+  ProviderBrowserSessionRemoveResponses[keyof ProviderBrowserSessionRemoveResponses]
+
+export type ProviderBrowserSessionStatusData = {
+  body?: never
+  path: {
+    /**
+     * OAuth record ID
+     */
+    recordId: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/provider/auth/browser-session/{recordId}"
+}
+
+export type ProviderBrowserSessionStatusErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ProviderBrowserSessionStatusError =
+  ProviderBrowserSessionStatusErrors[keyof ProviderBrowserSessionStatusErrors]
+
+export type ProviderBrowserSessionStatusResponses = {
+  /**
+   * Browser session status
+   */
+  200: {
+    recordId: string
+    enabled: boolean
+    profilePath: string
+    lastRefresh?: number
+    lastError?: string
+    isConfigured: boolean
+  }
+}
+
+export type ProviderBrowserSessionStatusResponse =
+  ProviderBrowserSessionStatusResponses[keyof ProviderBrowserSessionStatusResponses]
+
+export type ProviderBrowserSessionSetupData = {
+  body?: never
+  path: {
+    /**
+     * OAuth record ID
+     */
+    recordId: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/provider/auth/browser-session/{recordId}/setup"
+}
+
+export type ProviderBrowserSessionSetupErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderBrowserSessionSetupError =
+  ProviderBrowserSessionSetupErrors[keyof ProviderBrowserSessionSetupErrors]
+
+export type ProviderBrowserSessionSetupResponses = {
+  /**
+   * Browser session setup successful
+   */
+  200: {
+    success: boolean
+    message: string
+  }
+}
+
+export type ProviderBrowserSessionSetupResponse =
+  ProviderBrowserSessionSetupResponses[keyof ProviderBrowserSessionSetupResponses]
+
+export type ProviderBrowserSessionRefreshData = {
+  body?: never
+  path: {
+    /**
+     * OAuth record ID
+     */
+    recordId: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/provider/auth/browser-session/{recordId}/refresh"
+}
+
+export type ProviderBrowserSessionRefreshErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderBrowserSessionRefreshError =
+  ProviderBrowserSessionRefreshErrors[keyof ProviderBrowserSessionRefreshErrors]
+
+export type ProviderBrowserSessionRefreshResponses = {
+  /**
+   * Token refresh result
+   */
+  200: {
+    success: boolean
+    message: string
+  }
+}
+
+export type ProviderBrowserSessionRefreshResponse =
+  ProviderBrowserSessionRefreshResponses[keyof ProviderBrowserSessionRefreshResponses]
+
 export type FindTextData = {
   body?: never
   path?: never
@@ -4783,6 +5157,67 @@ export type TuiControlResponseResponses = {
 }
 
 export type TuiControlResponseResponse = TuiControlResponseResponses[keyof TuiControlResponseResponses]
+
+export type AuthUsage2Data = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/auth/usage"
+}
+
+export type AuthUsage2Errors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthUsage2Error = AuthUsage2Errors[keyof AuthUsage2Errors]
+
+export type AuthUsage2Responses = {
+  /**
+   * Usage information per provider and account
+   */
+  200: AuthUsage
+}
+
+export type AuthUsage2Response = AuthUsage2Responses[keyof AuthUsage2Responses]
+
+export type AuthSetActive2Data = {
+  body?: {
+    providerID: string
+    recordID: string
+    namespace?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/auth/active"
+}
+
+export type AuthSetActive2Errors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthSetActive2Error = AuthSetActive2Errors[keyof AuthSetActive2Errors]
+
+export type AuthSetActive2Responses = {
+  /**
+   * Active account updated
+   */
+  200: {
+    success: boolean
+    anthropicUsage?: unknown
+  }
+}
+
+export type AuthSetActive2Response = AuthSetActive2Responses[keyof AuthSetActive2Responses]
 
 export type InstanceDisposeData = {
   body?: never
