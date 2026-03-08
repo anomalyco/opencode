@@ -1147,6 +1147,44 @@ export namespace Config {
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
         })
         .optional(),
+      cleanup: z
+        .object({
+          enabled: z.boolean().optional().describe("Enable cleanup on startup (default: true)"),
+          log: z
+            .object({
+              max_count: z
+                .number()
+                .int()
+                .min(1)
+                .optional()
+                .describe("Maximum log files to retain (default: 10)"),
+            })
+            .optional(),
+          session: z
+            .object({
+              max_age_days: z
+                .number()
+                .int()
+                .min(1)
+                .optional()
+                .describe("Delete sessions older than N days (disabled by default)"),
+              target: z
+                .enum(["archived", "all"])
+                .optional()
+                .describe("Which sessions to consider for cleanup (default: archived)"),
+            })
+            .optional(),
+          storage: z
+            .array(z.enum(["session", "session_diff", "message", "part", "todo", "project", "snapshot"]))
+            .optional()
+            .describe("Storage categories to sweep for orphaned files (default: all)"),
+          vacuum: z
+            .object({
+              enabled: z.boolean().optional().describe("Run VACUUM on startup (default: true)"),
+            })
+            .optional(),
+        })
+        .optional(),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),

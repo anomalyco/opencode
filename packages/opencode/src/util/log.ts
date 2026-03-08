@@ -46,6 +46,7 @@ export namespace Log {
     print: boolean
     dev?: boolean
     level?: Level
+    maxLogFiles?: number
   }
 
   let logpath = ""
@@ -59,7 +60,7 @@ export namespace Log {
 
   export async function init(options: Options) {
     if (options.level) level = options.level
-    cleanup(Global.Path.log)
+    cleanup(Global.Path.log, options.maxLogFiles)
     if (options.print) return
     logpath = path.join(
       Global.Path.log,
@@ -77,15 +78,15 @@ export namespace Log {
     }
   }
 
-  async function cleanup(dir: string) {
+  async function cleanup(dir: string, maxCount = 10) {
     const files = await Glob.scan("????-??-??T??????.log", {
       cwd: dir,
       absolute: true,
       include: "file",
     })
-    if (files.length <= 5) return
-
-    const filesToDelete = files.slice(0, -10)
+    if (files.length <= maxCount) return
+    files.sort()
+    const filesToDelete = files.slice(0, -maxCount)
     await Promise.all(filesToDelete.map((file) => fs.unlink(file).catch(() => {})))
   }
 

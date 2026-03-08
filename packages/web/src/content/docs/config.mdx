@@ -505,6 +505,41 @@ You can control context compaction behavior through the `compaction` option.
 
 ---
 
+### Cleanup
+
+You can control startup cleanup behavior through the `cleanup` option. OpenCode runs cleanup on every startup to manage old sessions, orphaned storage files, and database maintenance.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "cleanup": {
+    "enabled": true,
+    "log": {
+      "max_count": 10
+    },
+    "session": {
+      "max_age_days": 90,
+      "target": "archived"
+    },
+    "storage": ["session", "session_diff", "message", "part", "todo", "project", "snapshot"],
+    "vacuum": {
+      "enabled": true
+    }
+  }
+}
+```
+
+- `enabled` - Enable cleanup on startup (default: `true`).
+- `log.max_count` - Maximum log files to retain (default: `10`).
+- `session.max_age_days` - Delete sessions older than N days based on last modification time (disabled by default).
+- `session.target` - Which sessions to consider: `"archived"` (only archived sessions) or `"all"` (default: `"archived"`).
+- `storage` - Storage categories to sweep for orphaned files (default: all categories). Categories: `session`, `session_diff`, `message`, `part`, `todo`, `project`, `snapshot`.
+- `vacuum.enabled` - Run SQLite VACUUM on startup (default: `true`).
+
+Session cleanup is opt-in — it only runs when `max_age_days` is explicitly set. The orphan sweep and vacuum run by default and clean up storage files that no longer have corresponding database records.
+
+---
+
 ### Watcher
 
 You can configure file watcher ignore patterns through the `watcher` option.

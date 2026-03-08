@@ -33,6 +33,8 @@ import path from "path"
 import { Global } from "./global"
 import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
+import { Config } from "./config/config"
+import { Cleanup } from "./cleanup"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -69,9 +71,12 @@ let cli = yargs(hideBin(process.argv))
     choices: ["DEBUG", "INFO", "WARN", "ERROR"],
   })
   .middleware(async (opts) => {
+    const globalConfig = await Config.global()
+
     await Log.init({
       print: process.argv.includes("--print-logs"),
       dev: Installation.isLocal(),
+      maxLogFiles: globalConfig?.cleanup?.log?.max_count,
       level: (() => {
         if (opts.logLevel) return opts.logLevel as Log.Level
         if (Installation.isLocal()) return "DEBUG"
@@ -124,6 +129,8 @@ let cli = yargs(hideBin(process.argv))
       }
       process.stderr.write("Database migration complete." + EOL)
     }
+
+    Cleanup.run(globalConfig?.cleanup)
   })
   .usage("\n" + UI.logo())
   .completion("completion", "generate shell completion script")

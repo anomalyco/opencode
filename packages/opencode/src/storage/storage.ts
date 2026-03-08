@@ -210,7 +210,7 @@ export namespace Storage {
       const result = await Glob.scan("**/*", {
         cwd: path.join(dir, ...prefix),
         include: "file",
-      }).then((results) => results.map((x) => [...prefix, ...x.slice(0, -5).split(path.sep)]))
+      }).then((results) => results.map((x) => [...prefix, ...x.slice(0, -5).split("/")]))
       result.sort()
       return result
     } catch {
