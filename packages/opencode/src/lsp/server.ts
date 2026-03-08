@@ -2055,22 +2055,4 @@ export namespace LSPServer {
       }
     },
   }
-
-  export const SolidityLS: Info = {
-    id: "solidity",
-    extensions: [".sol"],
-    root: NearestRoot(["foundry.toml", "hardhat.config.ts", "hardhat.config.js", "truffle-config.js", "remappings.txt"]),
-    async spawn(root) {
-      const bin = which("solidity-language-server")
-      if (!bin) {
-        log.info("solidity-language-server not found, install via: cargo install solidity-language-server")
-        return
-      }
-      return {
-        process: spawn(bin, ["--stdio"], {
-          cwd: root,
-        }),
-      }
-    },
-  }
 }
