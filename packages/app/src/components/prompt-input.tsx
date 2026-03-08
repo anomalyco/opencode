@@ -1214,7 +1214,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               onKeyDown={handleKeyDown}
               classList={{
                 "select-text": true,
-                "w-full pl-3 pr-2 pt-2 pb-[52px] text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
+                "w-full pl-3 pr-2 pt-2 pb-11 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
                 "[&_[data-type=file]]:text-syntax-property": true,
                 "[&_[data-type=agent]]:text-syntax-type": true,
                 "font-mono!": store.mode === "shell",
@@ -1222,7 +1222,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             />
             <Show when={!prompt.dirty()}>
               <div
-                class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 pb-[52px] text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
+                class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 pb-11 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
                 classList={{ "font-mono!": store.mode === "shell" }}
               >
                 {placeholder()}
@@ -1250,6 +1250,30 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
               }}
             >
+              <TooltipKeybind
+                placement="top"
+                title={language.t("prompt.action.attachFile")}
+                keybind={command.keybind("file.attach")}
+              >
+                <Button
+                  data-action="prompt-attach"
+                  type="button"
+                  variant="ghost"
+                  class="size-8 p-0"
+                  style={{
+                    opacity: buttonsSpring(),
+                    transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
+                    filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
+                  }}
+                  onClick={pick}
+                  disabled={store.mode !== "normal"}
+                  tabIndex={store.mode === "normal" ? undefined : -1}
+                  aria-label={language.t("prompt.action.attachFile")}
+                >
+                  <Icon name="plus" class="size-4.5" />
+                </Button>
+              </TooltipKeybind>
+
               <Tooltip
                 placement="top"
                 inactive={!prompt.dirty() && !working()}
@@ -1290,35 +1314,42 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           </div>
 
           <div class="pointer-events-none absolute bottom-2 left-2">
-            <div
-              aria-hidden={store.mode !== "normal"}
-              class="pointer-events-auto"
-              style={{
-                "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
-              }}
-            >
+            <div class="pointer-events-auto">
               <TooltipKeybind
                 placement="top"
                 gutter={8}
-                title={language.t("prompt.action.attachFile")}
-                keybind={command.keybind("file.attach")}
+                title={language.t(
+                  accepting() ? "command.permissions.autoaccept.disable" : "command.permissions.autoaccept.enable",
+                )}
+                keybind={command.keybind("permissions.autoaccept")}
               >
                 <Button
-                  data-action="prompt-attach"
-                  type="button"
+                  data-action="prompt-permissions"
                   variant="ghost"
-                  class="size-8 p-0"
-                  style={{
-                    opacity: buttonsSpring(),
-                    transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
-                    filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
+                  onClick={() => {
+                    if (!params.id) {
+                      permission.toggleAutoAcceptDirectory(sdk.directory)
+                      return
+                    }
+                    permission.toggleAutoAccept(params.id, sdk.directory)
                   }}
-                  onClick={pick}
-                  disabled={store.mode !== "normal"}
-                  tabIndex={store.mode === "normal" ? undefined : -1}
-                  aria-label={language.t("prompt.action.attachFile")}
+                  classList={{
+                    "size-6 flex items-center justify-center": true,
+                    "text-text-base": !accepting(),
+                    "hover:bg-surface-success-base": accepting(),
+                  }}
+                  aria-label={
+                    accepting()
+                      ? language.t("command.permissions.autoaccept.disable")
+                      : language.t("command.permissions.autoaccept.enable")
+                  }
+                  aria-pressed={accepting()}
                 >
-                  <Icon name="plus" class="size-4.5" />
+                  <Icon
+                    name="chevron-double-right"
+                    size="small"
+                    classList={{ "text-icon-success-base": accepting() }}
+                  />
                 </Button>
               </TooltipKeybind>
             </div>
@@ -1462,51 +1493,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     }}
                     variant="ghost"
                   />
-                </TooltipKeybind>
-
-                <TooltipKeybind
-                  placement="top"
-                  gutter={4}
-                  title={language.t(
-                    accepting() ? "command.permissions.autoaccept.disable" : "command.permissions.autoaccept.enable",
-                  )}
-                  keybind={command.keybind("permissions.autoaccept")}
-                >
-                  <Button
-                    data-action="prompt-permissions"
-                    type="button"
-                    variant="ghost"
-                    class="size-7 p-0 flex items-center justify-center"
-                    style={{
-                      opacity: buttonsSpring(),
-                      transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
-                      filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
-                      "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
-                    }}
-                    onClick={() => {
-                      if (!params.id) {
-                        permission.toggleAutoAcceptDirectory(sdk.directory)
-                        return
-                      }
-                      permission.toggleAutoAccept(params.id, sdk.directory)
-                    }}
-                    classList={{
-                      "text-text-base": !accepting(),
-                      "hover:bg-surface-success-base": accepting(),
-                    }}
-                    aria-label={
-                      accepting()
-                        ? language.t("command.permissions.autoaccept.disable")
-                        : language.t("command.permissions.autoaccept.enable")
-                    }
-                    aria-pressed={accepting()}
-                  >
-                    <Icon
-                      name="chevron-double-right"
-                      size="small"
-                      classList={{ "text-icon-success-base": accepting() }}
-                    />
-                  </Button>
                 </TooltipKeybind>
               </div>
             </div>
