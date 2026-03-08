@@ -3,10 +3,87 @@ set -euo pipefail
 
 export PATH="$HOME/.bun/bin:$PATH"
 
-state="${1:-}"
-if [[ -z "$state" ]]; then
-  echo "Usage: $0 <error|final|stream|tool|warning|idle>"
+usage() {
+  echo "Usage: $0 [options] <error|final|stream|tool|warning|idle>"
+  echo ""
+  echo "Options:"
+  echo "  --model NAME"
+  echo "  --width COLS"
+  echo "  --height ROWS"
+  echo "  --use-real-auth"
+  echo "  -h, --help"
+  echo ""
   echo "Env: OPENCODE_UPSTREAM_DIR=/path OPENCODE_BENCH_EVIDENCE_DIR=/path"
+  echo "Deprecated env: OPENCODE_SANDBOX_MODEL OPENCODE_SANDBOX_USE_REAL_AUTH OPENCODE_SANDBOX_WIDTH OPENCODE_SANDBOX_HEIGHT"
+}
+
+warn_env() {
+  echo "Deprecated: $1 is set. Use $2 instead." >&2
+}
+
+state=""
+model=""
+pane_width=""
+pane_height=""
+use_real_auth=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --model)
+      model="$2"
+      shift 2
+      ;;
+    --model=*)
+      model="${1#*=}"
+      shift
+      ;;
+    --width)
+      pane_width="$2"
+      shift 2
+      ;;
+    --width=*)
+      pane_width="${1#*=}"
+      shift
+      ;;
+    --height)
+      pane_height="$2"
+      shift 2
+      ;;
+    --height=*)
+      pane_height="${1#*=}"
+      shift
+      ;;
+    --use-real-auth)
+      use_real_auth="1"
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -* )
+      echo "Unknown option: $1" >&2
+      usage
+      exit 1
+      ;;
+    *)
+      if [[ -n "$state" ]]; then
+        echo "Unexpected argument: $1" >&2
+        usage
+        exit 1
+      fi
+      state="$1"
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "$state" ]]; then
+  usage
   exit 1
 fi
 
@@ -18,8 +95,24 @@ evidence_root="${OPENCODE_BENCH_EVIDENCE_DIR:-/tmp/opencode-sandbox-evidence}"
 fork_evidence="$evidence_root/fork"
 upstream_evidence="$evidence_root/upstream"
 
-if [[ -z "${OPENCODE_SANDBOX_USE_REAL_AUTH:-}" && -f "$HOME/.local/share/opencode/auth.json" ]]; then
-  export OPENCODE_SANDBOX_USE_REAL_AUTH=1
+if [[ -z "$use_real_auth" && -n "${OPENCODE_SANDBOX_USE_REAL_AUTH:-}" ]]; then
+  warn_env "OPENCODE_SANDBOX_USE_REAL_AUTH" "--use-real-auth"
+  use_real_auth="1"
+fi
+if [[ -z "$use_real_auth" && -f "$HOME/.local/share/opencode/auth.json" ]]; then
+  use_real_auth="1"
+fi
+if [[ -z "$model" && -n "${OPENCODE_SANDBOX_MODEL:-}" ]]; then
+  warn_env "OPENCODE_SANDBOX_MODEL" "--model"
+  model="$OPENCODE_SANDBOX_MODEL"
+fi
+if [[ -z "$pane_width" && -n "${OPENCODE_SANDBOX_WIDTH:-}" ]]; then
+  warn_env "OPENCODE_SANDBOX_WIDTH" "--width"
+  pane_width="$OPENCODE_SANDBOX_WIDTH"
+fi
+if [[ -z "$pane_height" && -n "${OPENCODE_SANDBOX_HEIGHT:-}" ]]; then
+  warn_env "OPENCODE_SANDBOX_HEIGHT" "--height"
+  pane_height="$OPENCODE_SANDBOX_HEIGHT"
 fi
 
 mkdir -p "$fork_evidence" "$upstream_evidence"
@@ -42,19 +135,47 @@ fi
 fork_status=0
 upstream_status=0
 
+fork_args=(
+  --repo-root "$repo_root"
+  --evidence-dir "$fork_evidence"
+  --opencode-dir "$repo_root/packages/opencode"
+)
+if [[ -n "$model" ]]; then
+  fork_args+=(--model "$model")
+fi
+if [[ -n "$pane_width" ]]; then
+  fork_args+=(--width "$pane_width")
+fi
+if [[ -n "$pane_height" ]]; then
+  fork_args+=(--height "$pane_height")
+fi
+if [[ "$use_real_auth" == "1" ]]; then
+  fork_args+=(--use-real-auth)
+fi
 echo "Running fork harness (evidence: $fork_evidence)"
-if ! OPENCODE_SANDBOX_REPO_ROOT="$repo_root" OPENCODE_SANDBOX_EVIDENCE_DIR="$fork_evidence" \
-  OPENCODE_SANDBOX_OPENCODE_DIR="$repo_root/packages/opencode" \
-  OPENCODE_SANDBOX_MODEL="${OPENCODE_SANDBOX_MODEL:-}" \
-  bash "$repo_root/.sisyphus/evidence/run-sandbox-tui.sh" "$state"; then
+if ! "$repo_root/scripts/run-sandbox-tui.sh" "${fork_args[@]}" "$state"; then
   fork_status=$?
 fi
 
+upstream_args=(
+  --repo-root "$repo_root"
+  --evidence-dir "$upstream_evidence"
+  --opencode-dir "$upstream_dir/packages/opencode"
+)
+if [[ -n "$model" ]]; then
+  upstream_args+=(--model "$model")
+fi
+if [[ -n "$pane_width" ]]; then
+  upstream_args+=(--width "$pane_width")
+fi
+if [[ -n "$pane_height" ]]; then
+  upstream_args+=(--height "$pane_height")
+fi
+if [[ "$use_real_auth" == "1" ]]; then
+  upstream_args+=(--use-real-auth)
+fi
 echo "Running upstream harness (evidence: $upstream_evidence)"
-if ! OPENCODE_SANDBOX_REPO_ROOT="$repo_root" OPENCODE_SANDBOX_EVIDENCE_DIR="$upstream_evidence" \
-  OPENCODE_SANDBOX_OPENCODE_DIR="$upstream_dir/packages/opencode" \
-  OPENCODE_SANDBOX_MODEL="${OPENCODE_SANDBOX_MODEL:-}" \
-  bash "$repo_root/.sisyphus/evidence/run-sandbox-tui.sh" "$state"; then
+if ! "$repo_root/scripts/run-sandbox-tui.sh" "${upstream_args[@]}" "$state"; then
   upstream_status=$?
 fi
 
