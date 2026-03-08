@@ -3,7 +3,6 @@ import { tui } from "./app"
 import { Rpc } from "@/util/rpc"
 import { type rpc } from "./worker"
 import path from "path"
-import { text as streamText } from "node:stream/consumers"
 import { fileURLToPath } from "url"
 import { UI } from "@/cli/ui"
 import { Log } from "@/util/log"
@@ -54,7 +53,7 @@ async function target() {
 }
 
 async function input(value?: string) {
-  const piped = process.stdin.isTTY ? undefined : await streamText(process.stdin)
+  const piped = process.stdin.isTTY ? undefined : await Bun.stdin.text()
   if (!value) return piped
   if (!piped) return value
   return piped + "\n" + value
@@ -112,8 +111,10 @@ export const TuiThreadCommand = cmd({
       }
 
       // Resolve relative paths against PWD to preserve behavior when using --cwd flag
-      const root = process.env.PWD ?? process.cwd()
-      const cwd = args.project ? path.resolve(root, args.project) : process.cwd()
+      const root = Filesystem.resolve(process.env.PWD ?? process.cwd())
+      const cwd = args.project
+        ? Filesystem.resolve(path.isAbsolute(args.project) ? args.project : path.join(root, args.project))
+        : root
       const file = await target()
       try {
         process.chdir(cwd)
