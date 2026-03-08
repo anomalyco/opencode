@@ -666,4 +666,112 @@ describe("session.llm.stream", () => {
       },
     })
   })
+
+  test("strips reasoning history and options when target model disables reasoning", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const model = (await loadFixture("mistral", "mistral-medium-latest")).model
+    const request = waitRequest(
+      "/chat/completions",
+      new Response(createChatStream("Hello"), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    )
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: ["dax"],
+            provider: {
+              dax: {
+                name: "DAX",
+                npm: "@ai-sdk/openai-compatible",
+                api: `${server.url.origin}/v1`,
+                models: {
+                  [model.id]: model,
+                },
+                options: {
+                  apiKey: "test-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await Provider.getModel("dax", model.id)
+        const sessionID = "session-test-5"
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          temperature: 0.4,
+        } satisfies Agent.Info
+
+        const user = {
+          id: "user-5",
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: "dax", modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        const messages = [
+          {
+            role: "assistant",
+            content: [
+              { type: "reasoning", text: "Private GPT reasoning" },
+              { type: "text", text: "Earlier answer" },
+            ],
+            providerOptions: {
+              openaiCompatible: {
+                reasoning_content: "stale reasoning",
+              },
+            },
+          },
+          {
+            role: "user",
+            content: "Continue",
+          },
+        ] as ModelMessage[]
+
+        const stream = await LLM.stream({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          abort: new AbortController().signal,
+          messages,
+          tools: {},
+        })
+
+        for await (const _ of stream.fullStream) {
+        }
+
+        const capture = await request
+
+        expect(capture.url.pathname.endsWith("/chat/completions")).toBe(true)
+        expect(JSON.stringify(capture.body.messages).includes("reasoning_content")).toBe(false)
+        expect(JSON.stringify(capture.body.messages).includes("Private GPT reasoning")).toBe(false)
+        expect(JSON.stringify(capture.body.messages).includes("Earlier answer")).toBe(true)
+        expect(JSON.stringify(capture.body).includes("reasoningEffort")).toBe(false)
+        expect(JSON.stringify(capture.body).includes("reasoning_effort")).toBe(false)
+      },
+    })
+  })
 })

@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import type { ModelMessage } from "ai"
+import type { Provider } from "../../src/provider/provider"
 import { ProviderTransform } from "../../src/provider/transform"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 
@@ -722,8 +724,142 @@ describe("ProviderTransform.schema - gemini non-object properties removal", () =
 })
 
 describe("ProviderTransform.message - DeepSeek reasoning content", () => {
+  const deepseek = {
+    id: "deepseek/deepseek-chat",
+    providerID: "deepseek",
+    api: {
+      id: "deepseek-chat",
+      url: "https://api.deepseek.com",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "DeepSeek Chat",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: {
+        field: "reasoning_content",
+      },
+    },
+    cost: {
+      input: 0.001,
+      output: 0.002,
+      cache: { read: 0.0001, write: 0.0002 },
+    },
+    limit: {
+      context: 128000,
+      output: 8192,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "2023-04-01",
+  } satisfies Provider.Model
+
+  const openai = {
+    id: "openai/gpt-4",
+    providerID: "openai",
+    api: {
+      id: "gpt-4",
+      url: "https://api.openai.com",
+      npm: "@ai-sdk/openai",
+    },
+    name: "GPT-4",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: {
+      input: 0.03,
+      output: 0.06,
+      cache: { read: 0.001, write: 0.002 },
+    },
+    limit: {
+      context: 128000,
+      output: 4096,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "2023-04-01",
+  } satisfies Provider.Model
+
+  const dax = {
+    id: "dax/mistral-medium-latest",
+    providerID: "dax",
+    api: {
+      id: "mistral-medium-latest",
+      url: "https://dax.example/v1",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "DAX SMART",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: true,
+      toolcall: false,
+      input: { text: true, audio: false, image: true, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: {
+      input: 0.001,
+      output: 0.002,
+      cache: { read: 0.0001, write: 0.0002 },
+    },
+    limit: {
+      context: 128000,
+      output: 4096,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "2023-04-01",
+  } satisfies Provider.Model
+
+  const anthropic = {
+    id: "anthropic/claude-opus-4-5",
+    providerID: "anthropic",
+    api: {
+      id: "claude-opus-4-5",
+      url: "https://api.anthropic.com",
+      npm: "@ai-sdk/anthropic",
+    },
+    name: "Claude Opus",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: true },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: {
+      input: 0.015,
+      output: 0.075,
+      cache: { read: 0.0015, write: 0.00375 },
+    },
+    limit: {
+      context: 200000,
+      output: 4096,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "2024-06-01",
+  } satisfies Provider.Model
+
   test("DeepSeek with tool calls includes reasoning_content in providerOptions", () => {
-    const msgs = [
+    const msgs: ModelMessage[] = [
       {
         role: "assistant",
         content: [
@@ -736,46 +872,9 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
           },
         ],
       },
-    ] as any[]
+    ]
 
-    const result = ProviderTransform.message(
-      msgs,
-      {
-        id: ModelID.make("deepseek/deepseek-chat"),
-        providerID: ProviderID.make("deepseek"),
-        api: {
-          id: "deepseek-chat",
-          url: "https://api.deepseek.com",
-          npm: "@ai-sdk/openai-compatible",
-        },
-        name: "DeepSeek Chat",
-        capabilities: {
-          temperature: true,
-          reasoning: true,
-          attachment: false,
-          toolcall: true,
-          input: { text: true, audio: false, image: false, video: false, pdf: false },
-          output: { text: true, audio: false, image: false, video: false, pdf: false },
-          interleaved: {
-            field: "reasoning_content",
-          },
-        },
-        cost: {
-          input: 0.001,
-          output: 0.002,
-          cache: { read: 0.0001, write: 0.0002 },
-        },
-        limit: {
-          context: 128000,
-          output: 8192,
-        },
-        status: "active",
-        options: {},
-        headers: {},
-        release_date: "2023-04-01",
-      },
-      {},
-    )
+    const result = ProviderTransform.message(msgs, deepseek)
 
     expect(result).toHaveLength(1)
     expect(result[0].content).toEqual([
@@ -789,8 +888,27 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
     expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBe("Let me think about this...")
   })
 
-  test("Non-DeepSeek providers leave reasoning content unchanged", () => {
-    const msgs = [
+  test("field targets keep existing reasoning field metadata", () => {
+    const msgs: ModelMessage[] = [
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "Answer" }],
+        providerOptions: {
+          copilot: {
+            reasoning_content: "Keep me",
+          },
+        },
+      },
+    ]
+
+    const result = ProviderTransform.message(msgs, deepseek)
+
+    expect(result[0].content).toEqual([{ type: "text", text: "Answer" }])
+    expect(result[0].providerOptions?.copilot?.reasoning_content).toBe("Keep me")
+  })
+
+  test("non-interleaved targets strip reasoning parts", () => {
+    const msgs: ModelMessage[] = [
       {
         role: "assistant",
         content: [
@@ -798,50 +916,170 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
           { type: "text", text: "Answer" },
         ],
       },
-    ] as any[]
+    ]
 
-    const result = ProviderTransform.message(
-      msgs,
-      {
-        id: ModelID.make("openai/gpt-4"),
-        providerID: ProviderID.make("openai"),
-        api: {
-          id: "gpt-4",
-          url: "https://api.openai.com",
-          npm: "@ai-sdk/openai",
-        },
-        name: "GPT-4",
-        capabilities: {
-          temperature: true,
-          reasoning: false,
-          attachment: true,
-          toolcall: true,
-          input: { text: true, audio: false, image: true, video: false, pdf: false },
-          output: { text: true, audio: false, image: false, video: false, pdf: false },
-          interleaved: false,
-        },
-        cost: {
-          input: 0.03,
-          output: 0.06,
-          cache: { read: 0.001, write: 0.002 },
-        },
-        limit: {
-          context: 128000,
-          output: 4096,
-        },
-        status: "active",
-        options: {},
-        headers: {},
-        release_date: "2023-04-01",
-      },
-      {},
-    )
+    const result = ProviderTransform.message(msgs, openai)
 
-    expect(result[0].content).toEqual([
-      { type: "reasoning", text: "Should not be processed" },
-      { type: "text", text: "Answer" },
-    ])
+    expect(result[0].content).toEqual([{ type: "text", text: "Answer" }])
     expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBeUndefined()
+  })
+
+  test("replaces tool-only assistant history for targets without tool support", () => {
+    const msgs: ModelMessage[] = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-1",
+            toolName: "bash",
+            input: { command: "echo hello" },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "bash",
+            output: { type: "text", value: "hello" },
+          },
+        ],
+      },
+    ]
+
+    const result = ProviderTransform.message(msgs, dax)
+
+    expect(result).toEqual([
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "[Previous content omitted for model compatibility.]" }],
+      },
+    ])
+  })
+
+  test("Anthropic target keeps reasoning parts in content", () => {
+    const msgs: ModelMessage[] = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "internal thought" },
+          { type: "text", text: "answer" },
+        ],
+      },
+    ]
+
+    const result = ProviderTransform.message(msgs, anthropic)
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "internal thought" },
+          { type: "text", text: "answer" },
+        ],
+      }),
+    ])
+  })
+
+  test("non-reasoning target strips reasoning parts from Anthropic history", () => {
+    const msgs: ModelMessage[] = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "internal thought" },
+          { type: "text", text: "answer" },
+        ],
+      },
+    ]
+
+    const result = ProviderTransform.message(msgs, openai)
+
+    expect(result).toEqual([
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "answer" }],
+      },
+    ])
+  })
+
+  test("reasoning-only assistant message gets placeholder on strip target", () => {
+    const msgs: ModelMessage[] = [
+      {
+        role: "assistant",
+        content: [{ type: "reasoning", text: "only thoughts" }],
+      },
+    ]
+
+    const result = ProviderTransform.message(msgs, openai)
+
+    expect(result).toEqual([
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "[Previous content omitted for model compatibility.]" }],
+      },
+    ])
+  })
+
+  test("reasoning-only assistant message gets placeholder with field target", () => {
+    const msgs: ModelMessage[] = [
+      {
+        role: "assistant",
+        content: [{ type: "reasoning", text: "only thoughts" }],
+      },
+    ]
+
+    const result = ProviderTransform.message(msgs, deepseek)
+
+    expect(result).toEqual([
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "[Previous content omitted for model compatibility.]" }],
+        providerOptions: {
+          openaiCompatible: { reasoning_content: "only thoughts" },
+        },
+      },
+    ])
+  })
+})
+
+describe("ProviderTransform.options - capability filtering", () => {
+  test("removes reasoning defaults for models without reasoning support", () => {
+    const model = {
+      id: "openai/gpt-5-proxy",
+      providerID: "openai",
+      api: {
+        id: "gpt-5.2",
+        url: "https://api.openai.com/v1",
+        npm: "@ai-sdk/openai",
+      },
+      name: "GPT Proxy",
+      capabilities: {
+        temperature: true,
+        reasoning: false,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0.03, output: 0.06, cache: { read: 0.001, write: 0.002 } },
+      limit: { context: 128000, output: 4096 },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "2023-04-01",
+    } satisfies Provider.Model
+
+    const result = ProviderTransform.options({ model, sessionID: "test-session-123", providerOptions: {} })
+
+    expect(result.reasoningEffort).toBeUndefined()
+    expect(result.reasoningSummary).toBeUndefined()
+    expect(result.textVerbosity).toBeUndefined()
+    expect(result.enable_thinking).toBeUndefined()
+    expect(result.include).toBeUndefined()
   })
 })
 
@@ -889,7 +1127,7 @@ describe("ProviderTransform.message - empty image handling", () => {
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, mockModel, {})
+    const result = ProviderTransform.message(msgs, mockModel)
 
     expect(result).toHaveLength(1)
     expect(result[0].content).toHaveLength(2)
@@ -913,7 +1151,7 @@ describe("ProviderTransform.message - empty image handling", () => {
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, mockModel, {})
+    const result = ProviderTransform.message(msgs, mockModel)
 
     expect(result).toHaveLength(1)
     expect(result[0].content).toHaveLength(2)
@@ -935,7 +1173,7 @@ describe("ProviderTransform.message - empty image handling", () => {
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, mockModel, {})
+    const result = ProviderTransform.message(msgs, mockModel)
 
     expect(result).toHaveLength(1)
     expect(result[0].content).toHaveLength(3)
@@ -988,7 +1226,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
       { role: "user", content: "World" },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, anthropicModel, {})
+    const result = ProviderTransform.message(msgs, anthropicModel)
 
     expect(result).toHaveLength(2)
     expect(result[0].content).toBe("Hello")
@@ -1007,7 +1245,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, anthropicModel, {})
+    const result = ProviderTransform.message(msgs, anthropicModel)
 
     expect(result).toHaveLength(1)
     expect(result[0].content).toHaveLength(1)
@@ -1026,7 +1264,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, anthropicModel, {})
+    const result = ProviderTransform.message(msgs, anthropicModel)
 
     expect(result).toHaveLength(1)
     expect(result[0].content).toHaveLength(1)
@@ -1046,7 +1284,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
       { role: "user", content: "World" },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, anthropicModel, {})
+    const result = ProviderTransform.message(msgs, anthropicModel)
 
     expect(result).toHaveLength(2)
     expect(result[0].content).toBe("Hello")
@@ -1064,7 +1302,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, anthropicModel, {})
+    const result = ProviderTransform.message(msgs, anthropicModel)
 
     expect(result).toHaveLength(1)
     expect(result[0].content).toHaveLength(1)
@@ -1088,7 +1326,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, anthropicModel, {})
+    const result = ProviderTransform.message(msgs, anthropicModel)
 
     expect(result).toHaveLength(1)
     expect(result[0].content).toHaveLength(2)
@@ -1147,7 +1385,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, openaiModel, {})
+    const result = ProviderTransform.message(msgs, openaiModel)
 
     expect(result).toHaveLength(2)
     expect(result[0].content).toBe("")
@@ -1209,7 +1447,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, openaiModel, { store: false }) as any[]
+    const result = ProviderTransform.message(msgs, openaiModel) as any[]
 
     expect(result).toHaveLength(1)
     expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("rs_123")
@@ -1248,7 +1486,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, zenModel, { store: false }) as any[]
+    const result = ProviderTransform.message(msgs, zenModel) as any[]
 
     expect(result).toHaveLength(1)
     expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("rs_123")
@@ -1274,7 +1512,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, openaiModel, { store: false }) as any[]
+    const result = ProviderTransform.message(msgs, openaiModel) as any[]
 
     expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("msg_123")
     expect(result[0].content[0].providerOptions?.openai?.otherOption).toBe("value")
@@ -1299,7 +1537,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
     ] as any[]
 
     // openai package preserves itemId regardless of store value
-    const result = ProviderTransform.message(msgs, openaiModel, { store: true }) as any[]
+    const result = ProviderTransform.message(msgs, openaiModel) as any[]
 
     expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("msg_123")
   })
@@ -1332,7 +1570,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
     ] as any[]
 
     // store=false preserves metadata for non-openai packages
-    const result = ProviderTransform.message(msgs, anthropicModel, { store: false }) as any[]
+    const result = ProviderTransform.message(msgs, anthropicModel) as any[]
 
     expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("msg_123")
   })
@@ -1365,7 +1603,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, opencodeModel, { store: false }) as any[]
+    const result = ProviderTransform.message(msgs, opencodeModel) as any[]
 
     expect(result[0].content[0].providerOptions?.opencode?.itemId).toBe("msg_123")
     expect(result[0].content[0].providerOptions?.opencode?.otherOption).toBe("value")
@@ -1403,7 +1641,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, opencodeModel, { store: false }) as any[]
+    const result = ProviderTransform.message(msgs, opencodeModel) as any[]
 
     expect(result[0].providerOptions?.openai?.itemId).toBe("msg_root")
     expect(result[0].providerOptions?.opencode?.itemId).toBe("msg_opencode")
@@ -1440,7 +1678,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+    const result = ProviderTransform.message(msgs, anthropicModel) as any[]
 
     expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("msg_123")
   })
@@ -1485,7 +1723,7 @@ describe("ProviderTransform.message - providerOptions key remapping", () => {
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, model, {})
+    const result = ProviderTransform.message(msgs, model)
 
     expect(result[0].providerOptions?.azure).toEqual({ someOption: "value" })
     expect(result[0].providerOptions?.openai).toBeUndefined()
@@ -1503,7 +1741,7 @@ describe("ProviderTransform.message - providerOptions key remapping", () => {
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, model, {})
+    const result = ProviderTransform.message(msgs, model)
 
     expect(result[0].providerOptions?.copilot).toEqual({ someOption: "value" })
     expect(result[0].providerOptions?.["github-copilot"]).toBeUndefined()
@@ -1521,7 +1759,7 @@ describe("ProviderTransform.message - providerOptions key remapping", () => {
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, model, {})
+    const result = ProviderTransform.message(msgs, model)
 
     expect(result[0].providerOptions?.bedrock).toEqual({ someOption: "value" })
     expect(result[0].providerOptions?.["my-bedrock"]).toBeUndefined()
@@ -1551,7 +1789,7 @@ describe("ProviderTransform.message - claude w/bedrock custom inference profile"
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, model, {})
+    const result = ProviderTransform.message(msgs, model)
 
     expect(result[0].providerOptions?.bedrock).toEqual(
       expect.objectContaining({
@@ -1604,7 +1842,7 @@ describe("ProviderTransform.message - cache control on gateway", () => {
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, model, {}) as any[]
+    const result = ProviderTransform.message(msgs, model) as any[]
 
     expect(result[0].content[0].providerOptions).toBeUndefined()
     expect(result[0].providerOptions).toBeUndefined()
@@ -1630,7 +1868,7 @@ describe("ProviderTransform.message - cache control on gateway", () => {
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, model, {}) as any[]
+    const result = ProviderTransform.message(msgs, model) as any[]
 
     expect(result[0].providerOptions).toEqual({
       anthropic: {

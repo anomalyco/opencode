@@ -20,6 +20,193 @@ function mimeToModality(mime: string): Modality | undefined {
 export namespace ProviderTransform {
   export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
 
+  function rewrite(
+    options: Record<string, unknown> | undefined,
+    fn: (opts: Record<string, unknown>) => Record<string, unknown>,
+  ) {
+    if (!options) return undefined
+    const next = fn(options)
+    return Object.keys(next).length ? next : undefined
+  }
+
+  function clean(options: Record<string, unknown> | undefined, keep?: "reasoning_content" | "reasoning_details") {
+    return rewrite(options, (opts) => {
+      const next = { ...opts }
+      if (keep !== "reasoning_content") delete next.reasoning_content
+      if (keep !== "reasoning_details") delete next.reasoning_details
+      return next
+    })
+  }
+
+  function scrub(options: Record<string, unknown> | undefined, keep?: "reasoning_content" | "reasoning_details") {
+    return rewrite(options, (opts) =>
+      Object.fromEntries(
+        Object.entries(opts).flatMap(([key, value]) => {
+          if (!value || typeof value !== "object" || Array.isArray(value)) return [[key, value]]
+          const cleaned = clean(value as Record<string, unknown> | undefined, keep)
+          if (!cleaned) return []
+          return [[key, cleaned]]
+        }),
+      ),
+    )
+  }
+
+  function patch(options: Record<string, unknown> | undefined, values: Record<string, unknown>) {
+    return {
+      ...(options ?? {}),
+      openaiCompatible: {
+        ...(typeof options?.openaiCompatible === "object" && options.openaiCompatible ? options.openaiCompatible : {}),
+        ...values,
+      },
+    }
+  }
+
+  function bare<T extends { providerOptions?: unknown }>(msg: T) {
+    const rest = { ...msg }
+    delete rest.providerOptions
+    return rest
+  }
+
+  function mode(model: Provider.Model) {
+    if (model.capabilities.reasoning) {
+      if (typeof model.capabilities.interleaved === "object" && model.capabilities.interleaved.field) {
+        return "field"
+      }
+      return "parts"
+    }
+    if (model.providerID === "anthropic" || model.api.npm === "@ai-sdk/anthropic") {
+      return "parts"
+    }
+    return "strip"
+  }
+
+  function sanitize(msgs: ModelMessage[], model: Provider.Model) {
+    const keep =
+      model.capabilities.reasoning && typeof model.capabilities.interleaved === "object"
+        ? model.capabilities.interleaved.field
+        : undefined
+
+    return msgs.flatMap<ModelMessage>((msg) => {
+      if (msg.role === "tool" && !model.capabilities.toolcall) return []
+      if (!Array.isArray(msg.content)) {
+        if (!msg.providerOptions) return [msg]
+        const opts = scrub(msg.providerOptions, keep)
+        return [
+          {
+            ...bare(msg),
+            ...(opts ? { providerOptions: opts } : {}),
+          } as ModelMessage,
+        ]
+      }
+
+      const stripped =
+        !model.capabilities.toolcall &&
+        msg.content.some((part) => part.type === "tool-call" || part.type === "tool-result")
+      const content = model.capabilities.toolcall
+        ? msg.content
+        : msg.content.filter((part) => part.type !== "tool-call" && part.type !== "tool-result")
+      const opts = scrub(msg.providerOptions, keep)
+
+      if (msg.role === "assistant") {
+        const kind = mode(model)
+        const reasoning = content.filter(
+          (part): part is Extract<(typeof content)[number], { type: "reasoning" }> => part.type === "reasoning",
+        )
+        const text = reasoning.map((part) => part.text).join("")
+
+        if (kind === "field" && typeof model.capabilities.interleaved === "object") {
+          const next = content.filter((part) => part.type !== "reasoning")
+          const meta = text
+            ? patch(opts, {
+                [model.capabilities.interleaved.field]: text,
+              })
+            : opts
+          if (next.length > 0) {
+            return [
+              {
+                ...bare(msg),
+                content: next,
+                ...(meta ? { providerOptions: meta } : {}),
+              } as ModelMessage,
+            ]
+          }
+          if (!stripped && !reasoning.length) {
+            return [
+              {
+                ...bare(msg),
+                ...(meta ? { providerOptions: meta } : {}),
+              } as ModelMessage,
+            ]
+          }
+          return [
+            {
+              ...bare(msg),
+              content: [{ type: "text", text: "[Previous content omitted for model compatibility.]" }],
+              ...(meta ? { providerOptions: meta } : {}),
+            } as ModelMessage,
+          ]
+        }
+
+        if (kind === "strip") {
+          const next = content.filter((part) => part.type !== "reasoning")
+          if (next.length > 0) {
+            return [
+              {
+                ...bare(msg),
+                content: next,
+                ...(opts ? { providerOptions: opts } : {}),
+              } as ModelMessage,
+            ]
+          }
+          if (!stripped && reasoning.length === 0) {
+            return [
+              {
+                ...bare(msg),
+                ...(opts ? { providerOptions: opts } : {}),
+              } as ModelMessage,
+            ]
+          }
+          return [
+            {
+              ...bare(msg),
+              content: [{ type: "text", text: "[Previous content omitted for model compatibility.]" }],
+              ...(opts ? { providerOptions: opts } : {}),
+            } as ModelMessage,
+          ]
+        }
+      }
+
+      // "parts" mode (Anthropic): reasoning parts are kept as-is in content;
+      // the Anthropic SDK handles them natively in the message history.
+      if (content.length > 0) {
+        return [
+          {
+            ...bare(msg),
+            content,
+            ...(opts ? { providerOptions: opts } : {}),
+          } as ModelMessage,
+        ]
+      }
+
+      if (!stripped) {
+        return [
+          {
+            ...bare(msg),
+            ...(opts ? { providerOptions: opts } : {}),
+          } as ModelMessage,
+        ]
+      }
+
+      return [
+        {
+          ...bare(msg),
+          content: [{ type: "text", text: "[Previous content omitted for model compatibility.]" }],
+          ...(opts ? { providerOptions: opts } : {}),
+        } as ModelMessage,
+      ]
+    })
+  }
+
   // Maps npm package to the key the AI SDK expects for providerOptions
   function sdkKey(npm: string): string | undefined {
     switch (npm) {
@@ -44,11 +231,7 @@ export namespace ProviderTransform {
     return undefined
   }
 
-  function normalizeMessages(
-    msgs: ModelMessage[],
-    model: Provider.Model,
-    options: Record<string, unknown>,
-  ): ModelMessage[] {
+  function normalizeMessages(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
     // Anthropic rejects messages with empty content - filter out empty string messages
     // and remove empty text/reasoning parts from array content
     if (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/amazon-bedrock") {
@@ -133,41 +316,6 @@ export namespace ProviderTransform {
       return result
     }
 
-    if (typeof model.capabilities.interleaved === "object" && model.capabilities.interleaved.field) {
-      const field = model.capabilities.interleaved.field
-      return msgs.map((msg) => {
-        if (msg.role === "assistant" && Array.isArray(msg.content)) {
-          const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
-          const reasoningText = reasoningParts.map((part: any) => part.text).join("")
-
-          // Filter out reasoning parts from content
-          const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
-
-          // Include reasoning_content | reasoning_details directly on the message for all assistant messages
-          if (reasoningText) {
-            return {
-              ...msg,
-              content: filteredContent,
-              providerOptions: {
-                ...msg.providerOptions,
-                openaiCompatible: {
-                  ...(msg.providerOptions as any)?.openaiCompatible,
-                  [field]: reasoningText,
-                },
-              },
-            }
-          }
-
-          return {
-            ...msg,
-            content: filteredContent,
-          }
-        }
-
-        return msg
-      })
-    }
-
     return msgs
   }
 
@@ -249,9 +397,10 @@ export namespace ProviderTransform {
     })
   }
 
-  export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
+  export function message(msgs: ModelMessage[], model: Provider.Model) {
+    msgs = sanitize(msgs, model)
     msgs = unsupportedParts(msgs, model)
-    msgs = normalizeMessages(msgs, model, options)
+    msgs = normalizeMessages(msgs, model)
     if (
       (model.providerID === "anthropic" ||
         model.api.id.includes("anthropic") ||
@@ -790,26 +939,28 @@ export namespace ProviderTransform {
     }
 
     if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
-      if (!input.model.api.id.includes("gpt-5-pro")) {
-        result["reasoningEffort"] = "medium"
-        result["reasoningSummary"] = "auto"
-      }
+      if (input.model.capabilities.reasoning) {
+        if (!input.model.api.id.includes("gpt-5-pro")) {
+          result["reasoningEffort"] = "medium"
+          result["reasoningSummary"] = "auto"
+        }
 
-      // Only set textVerbosity for non-chat gpt-5.x models
-      // Chat models (e.g. gpt-5.2-chat-latest) only support "medium" verbosity
-      if (
-        input.model.api.id.includes("gpt-5.") &&
-        !input.model.api.id.includes("codex") &&
-        !input.model.api.id.includes("-chat") &&
-        input.model.providerID !== "azure"
-      ) {
-        result["textVerbosity"] = "low"
-      }
+        // Only set textVerbosity for non-chat gpt-5.x models
+        // Chat models (e.g. gpt-5.2-chat-latest) only support "medium" verbosity
+        if (
+          input.model.api.id.includes("gpt-5.") &&
+          !input.model.api.id.includes("codex") &&
+          !input.model.api.id.includes("-chat") &&
+          input.model.providerID !== "azure"
+        ) {
+          result["textVerbosity"] = "low"
+        }
 
-      if (input.model.providerID.startsWith("opencode")) {
-        result["promptCacheKey"] = input.sessionID
-        result["include"] = ["reasoning.encrypted_content"]
-        result["reasoningSummary"] = "auto"
+        if (input.model.providerID.startsWith("opencode")) {
+          result["promptCacheKey"] = input.sessionID
+          result["include"] = ["reasoning.encrypted_content"]
+          result["reasoningSummary"] = "auto"
+        }
       }
     }
 
@@ -826,7 +977,7 @@ export namespace ProviderTransform {
       }
     }
 
-    return result
+    return compat(input.model, result)
   }
 
   export function smallOptions(model: Provider.Model) {
@@ -836,6 +987,7 @@ export namespace ProviderTransform {
       model.api.npm === "@ai-sdk/github-copilot"
     ) {
       if (model.api.id.includes("gpt-5")) {
+        if (!model.capabilities.reasoning) return { store: false }
         if (model.api.id.includes("5.")) {
           return { store: false, reasoningEffort: "low" }
         }
@@ -844,6 +996,7 @@ export namespace ProviderTransform {
       return { store: false }
     }
     if (model.providerID === "google") {
+      if (!model.capabilities.reasoning) return {}
       // gemini-3 uses thinkingLevel, gemini-2.5 uses thinkingBudget
       if (model.api.id.includes("gemini-3")) {
         return { thinkingConfig: { thinkingLevel: "minimal" } }
@@ -854,14 +1007,50 @@ export namespace ProviderTransform {
       if (model.api.id.includes("google")) {
         return { reasoning: { enabled: false } }
       }
+      if (!model.capabilities.reasoning) return {}
       return { reasoningEffort: "minimal" }
     }
 
     if (model.providerID === "venice") {
+      if (!model.capabilities.reasoning) return {}
       return { veniceParameters: { disableThinking: true } }
     }
 
     return {}
+  }
+
+  export function compat(model: Provider.Model, options: Record<string, unknown>) {
+    if (model.capabilities.reasoning) return options
+
+    const result = { ...options }
+    delete result.reasoning
+    delete result.reasoningConfig
+    delete result.reasoningEffort
+    delete result.reasoningSummary
+    delete result.thinking
+    delete result.thinkingConfig
+    delete result.enable_thinking
+    delete result.textVerbosity
+
+    if (Array.isArray(result.include)) {
+      const include = result.include.filter((item) => item !== "reasoning.encrypted_content")
+      result.include = include
+      if (!include.length) delete result.include
+    }
+
+    if (
+      result.chat_template_args &&
+      typeof result.chat_template_args === "object" &&
+      !Array.isArray(result.chat_template_args)
+    ) {
+      const entries = Object.entries(result.chat_template_args as Record<string, unknown>).filter(
+        ([key]) => key !== "enable_thinking",
+      )
+      if (entries.length) result.chat_template_args = Object.fromEntries(entries)
+      if (!entries.length) delete result.chat_template_args
+    }
+
+    return result
   }
 
   // Maps model ID prefix to provider slug used in providerOptions.
