@@ -18,27 +18,12 @@ export namespace Pty {
 
   type Socket = {
     readyState: number
-    data: object
-    send: (data: string | Uint8Array<ArrayBuffer> | ArrayBuffer) => void
+    data?: unknown
+    send: (data: string | Uint8Array | ArrayBuffer) => void
     close: (code?: number, reason?: string) => void
   }
 
-  // Bun's ServerWebSocket has a per-connection `.data` object (set during
-  // `server.upgrade`) that changes when the underlying connection is recycled.
-  // We keep a reference to a stable part of it so output can't leak even when
-  // websocket objects are reused.
-  const token = (ws: Socket) => {
-    const data = ws.data
-    const events = (data as { events?: unknown }).events
-    if (events && typeof events === "object") return events
-
-    const url = (data as { url?: unknown }).url
-    if (url && typeof url === "object") return url
-
-    return data
-  }
-
-  // WebSocket control frame: 0x00 + UTF-8 JSON (currently { cursor }).
+  // WebSocket control frame: 0x00 + UTF-8 JSON.
   const meta = (cursor: number) => {
     const json = JSON.stringify({ cursor })
     const bytes = encoder.encode(json)
@@ -102,7 +87,7 @@ export namespace Pty {
     buffer: string
     bufferCursor: number
     cursor: number
-    subscribers: Map<Socket, object>
+    subscribers: Map<unknown, Socket>
   }
 
   const state = Instance.state(
@@ -112,9 +97,9 @@ export namespace Pty {
         try {
           session.process.kill()
         } catch {}
-        for (const ws of session.subscribers.keys()) {
+        for (const [key, ws] of session.subscribers.entries()) {
           try {
-            ws.close()
+            if (ws.data === key) ws.close()
           } catch {
             // ignore
           }
@@ -185,20 +170,21 @@ export namespace Pty {
     ptyProcess.onData((chunk) => {
       session.cursor += chunk.length
 
-      for (const [ws, data] of session.subscribers) {
+      for (const [key, ws] of session.subscribers.entries()) {
         if (ws.readyState !== 1) {
-          session.subscribers.delete(ws)
+          session.subscribers.delete(key)
           continue
         }
 
-        if (token(ws) !== data) {
-          session.subscribers.delete(ws)
+        if (ws.data !== key) {
+          session.subscribers.delete(key)
           continue
         }
+
         try {
           ws.send(chunk)
         } catch {
-          session.subscribers.delete(ws)
+          session.subscribers.delete(key)
         }
       }
 
@@ -209,18 +195,11 @@ export namespace Pty {
       session.bufferCursor += excess
     })
     ptyProcess.onExit(({ exitCode }) => {
+      if (session.info.status === "exited") return
       log.info("session exited", { id, exitCode })
       session.info.status = "exited"
-      for (const ws of session.subscribers.keys()) {
-        try {
-          ws.close()
-        } catch {
-          // ignore
-        }
-      }
-      session.subscribers.clear()
       Bus.publish(Event.Exited, { id, exitCode })
-      state().delete(id)
+      remove(id)
     })
     Bus.publish(Event.Created, { info })
     return info
@@ -242,19 +221,19 @@ export namespace Pty {
   export async function remove(id: string) {
     const session = state().get(id)
     if (!session) return
+    state().delete(id)
     log.info("removing session", { id })
     try {
       session.process.kill()
     } catch {}
-    for (const ws of session.subscribers.keys()) {
+    for (const [key, ws] of session.subscribers.entries()) {
       try {
-        ws.close()
+        if (ws.data === key) ws.close()
       } catch {
         // ignore
       }
     }
     session.subscribers.clear()
-    state().delete(id)
     Bus.publish(Event.Deleted, { id })
   }
 
@@ -280,6 +259,18 @@ export namespace Pty {
     }
     log.info("client connected to session", { id })
 
+    // Use ws.data as the unique key for this connection lifecycle.
+    // If ws.data is undefined, fallback to ws object.
+    const connectionKey = ws.data && typeof ws.data === "object" ? ws.data : ws
+
+    // Optionally cleanup if the key somehow exists
+    session.subscribers.delete(connectionKey)
+    session.subscribers.set(connectionKey, ws)
+
+    const cleanup = () => {
+      session.subscribers.delete(connectionKey)
+    }
+
     const start = session.bufferCursor
     const end = session.cursor
 
@@ -300,6 +291,7 @@ export namespace Pty {
           ws.send(data.slice(i, i + BUFFER_CHUNK))
         }
       } catch {
+        cleanup()
         ws.close()
         return
       }
@@ -308,23 +300,17 @@ export namespace Pty {
     try {
       ws.send(meta(end))
     } catch {
+      cleanup()
       ws.close()
       return
     }
-
-    if (!ws.data || typeof ws.data !== "object") {
-      ws.close()
-      return
-    }
-
-    session.subscribers.set(ws, token(ws))
     return {
       onMessage: (message: string | ArrayBuffer) => {
         session.process.write(String(message))
       },
       onClose: () => {
         log.info("client disconnected from session", { id })
-        session.subscribers.delete(ws)
+        cleanup()
       },
     }
   }

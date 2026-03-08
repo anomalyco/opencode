@@ -2,6 +2,7 @@ import path from "path"
 import { mkdir } from "fs/promises"
 import { Log } from "../util/log"
 import { Global } from "../global"
+import { Filesystem } from "../util/filesystem"
 
 export namespace Discovery {
   const log = Log.create({ service: "skill-discovery" })
@@ -19,14 +20,14 @@ export namespace Discovery {
   }
 
   async function get(url: string, dest: string): Promise<boolean> {
-    if (await Bun.file(dest).exists()) return true
+    if (await Filesystem.exists(dest)) return true
     return fetch(url)
       .then(async (response) => {
         if (!response.ok) {
           log.error("failed to download", { url, status: response.status })
           return false
         }
-        await Bun.write(dest, await response.text())
+        if (response.body) await Filesystem.writeStream(dest, response.body)
         return true
       })
       .catch((err) => {
@@ -88,7 +89,7 @@ export namespace Discovery {
         )
 
         const md = path.join(root, "SKILL.md")
-        if (await Bun.file(md).exists()) result.push(root)
+        if (await Filesystem.exists(md)) result.push(root)
       }),
     )
 

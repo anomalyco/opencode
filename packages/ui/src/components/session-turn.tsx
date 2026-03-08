@@ -1,21 +1,29 @@
 import { AssistantMessage, type FileDiff, Message as MessageType, Part as PartType } from "@opencode-ai/sdk/v2/client"
+import type { SessionStatus } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
-import { useDiffComponent } from "../context/diff"
+import { useFileComponent } from "../context/file"
 
+import { same } from "@opencode-ai/util/array"
 import { Binary } from "@opencode-ai/util/binary"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { createEffect, createMemo, createSignal, For, on, ParentProps, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, on, onCleanup, ParentProps, Show } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import { AssistantParts, Message } from "./message-part"
+import { GrowBox } from "./grow-box"
+import { AssistantParts, UserMessageDisplay, Part, PART_MAPPING } from "./message-part"
 import { Card } from "./card"
 import { Accordion } from "./accordion"
+import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { Collapsible } from "./collapsible"
 import { DiffChanges } from "./diff-changes"
 import { Icon } from "./icon"
+import { IconButton } from "./icon-button"
 import { TextShimmer } from "./text-shimmer"
+import { TextReveal } from "./text-reveal"
+import { list } from "./text-utils"
+import { SessionRetry } from "./session-retry"
+import { Tooltip } from "./tooltip"
 import { createAutoScroll } from "../hooks"
 import { useI18n } from "../context/i18n"
-
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
 }
@@ -69,35 +77,75 @@ function unwrap(message: string) {
   return message
 }
 
-function same<T>(a: readonly T[], b: readonly T[]) {
-  if (a === b) return true
-  if (a.length !== b.length) return false
-  return a.every((x, i) => x === b[i])
-}
-
-function list<T>(value: T[] | undefined | null, fallback: T[]) {
-  if (Array.isArray(value)) return value
-  return fallback
-}
-
 const hidden = new Set(["todowrite", "todoread"])
+const emptyMessages: MessageType[] = []
+const emptyAssistant: AssistantMessage[] = []
+const emptyDiffs: FileDiff[] = []
+const idle: SessionStatus = { type: "idle" as const }
+const handoffHoldMs = 120
 
-function visible(part: PartType) {
+function partState(part: PartType, showReasoningSummaries: boolean) {
   if (part.type === "tool") {
-    if (hidden.has(part.tool)) return false
-    if (part.tool === "question") return part.state.status !== "pending" && part.state.status !== "running"
-    return true
+    if (hidden.has(part.tool)) return
+    if (part.tool === "question" && (part.state.status === "pending" || part.state.status === "running")) return
+    return "visible" as const
   }
-  if (part.type === "text") return !!part.text?.trim()
-  if (part.type === "reasoning") return !!part.text?.trim()
-  return false
+  if (part.type === "text") return part.text?.trim() ? ("visible" as const) : undefined
+  if (part.type === "reasoning") {
+    if (showReasoningSummaries && part.text?.trim()) return "visible" as const
+    return
+  }
+  if (PART_MAPPING[part.type]) return "visible" as const
+  return
+}
+
+function clean(value: string) {
+  return value
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1")
+    .replace(/[*_~]+/g, "")
+    .trim()
+}
+
+function heading(text: string) {
+  const markdown = text.replace(/\r\n?/g, "\n")
+
+  const html = markdown.match(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/i)
+  if (html?.[1]) {
+    const value = clean(html[1].replace(/<[^>]+>/g, " "))
+    if (value) return value
+  }
+
+  const atx = markdown.match(/^\s{0,3}#{1,6}[ \t]+(.+?)(?:[ \t]+#+[ \t]*)?$/m)
+  if (atx?.[1]) {
+    const value = clean(atx[1])
+    if (value) return value
+  }
+
+  const setext = markdown.match(/^([^\n]+)\n(?:=+|-+)\s*$/m)
+  if (setext?.[1]) {
+    const value = clean(setext[1])
+    if (value) return value
+  }
+
+  const strong = markdown.match(/^\s*(?:\*\*|__)(.+?)(?:\*\*|__)\s*$/m)
+  if (strong?.[1]) {
+    const value = clean(strong[1])
+    if (value) return value
+  }
 }
 
 export function SessionTurn(
   props: ParentProps<{
     sessionID: string
     messageID: string
-    lastUserMessageID?: string
+    animate?: boolean
+    showReasoningSummaries?: boolean
+    shellToolDefaultOpen?: boolean
+    editToolDefaultOpen?: boolean
+    active?: boolean
+    queued?: boolean
+    status?: SessionStatus
     onUserInteracted?: () => void
     classes?: {
       root?: string
@@ -108,13 +156,9 @@ export function SessionTurn(
 ) {
   const data = useData()
   const i18n = useI18n()
-  const diffComponent = useDiffComponent()
+  const fileComponent = useFileComponent()
 
-  const emptyMessages: MessageType[] = []
   const emptyParts: PartType[] = []
-  const emptyAssistant: AssistantMessage[] = []
-  const emptyDiffs: FileDiff[] = []
-  const idle = { type: "idle" as const }
 
   const allMessages = createMemo(() => list(data.store.message?.[props.sessionID], emptyMessages))
 
@@ -142,24 +186,15 @@ export function SessionTurn(
     return msg
   })
 
-  const lastUserMessageID = createMemo(() => {
-    if (props.lastUserMessageID) return props.lastUserMessageID
-
-    const messages = allMessages() ?? emptyMessages
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const msg = messages[i]
-      if (msg?.role === "user") return msg.id
-    }
-    return undefined
-  })
-
-  const isLastUserMessage = createMemo(() => props.messageID === lastUserMessageID())
-
+  const active = createMemo(() => props.active ?? false)
+  const queued = createMemo(() => props.queued ?? false)
   const parts = createMemo(() => {
     const msg = message()
     if (!msg) return emptyParts
     return list(data.store.part?.[msg.id], emptyParts)
   })
+
+  const compaction = createMemo(() => parts().find((part) => part.type === "compaction"))
 
   const diffs = createMemo(() => {
     const files = message()?.summary?.diffs
@@ -215,7 +250,7 @@ export function SessionTurn(
   const error = createMemo(
     () => assistantMessages().find((m) => m.error && m.error.name !== "MessageAbortedError")?.error,
   )
-  const showAssistantCopyPartID = createMemo(() => {
+  const assistantCopyPart = createMemo(() => {
     const messages = assistantMessages()
 
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -225,13 +260,18 @@ export function SessionTurn(
       const parts = list(data.store.part?.[message.id], emptyParts)
       for (let j = parts.length - 1; j >= 0; j--) {
         const part = parts[j]
-        if (!part || part.type !== "text" || !part.text?.trim()) continue
-        return part.id
+        if (!part || part.type !== "text") continue
+        const text = part.text?.trim()
+        if (!text) continue
+        return {
+          id: part.id,
+          text,
+          message,
+        }
       }
     }
-
-    return undefined
   })
+  const assistantCopyPartID = createMemo(() => assistantCopyPart()?.id ?? null)
   const errorText = createMemo(() => {
     const msg = error()?.data?.message
     if (typeof msg === "string") return unwrap(msg)
@@ -240,17 +280,154 @@ export function SessionTurn(
   })
 
   const status = createMemo(() => data.store.session_status[props.sessionID] ?? idle)
-  const working = createMemo(() => status().type !== "idle" && isLastUserMessage())
+  const working = createMemo(() => {
+    if (status().type === "idle") return false
+    if (!message()) return false
+    return active()
+  })
+  const showReasoningSummaries = createMemo(() => props.showReasoningSummaries ?? true)
+  const showDiffSummary = createMemo(() => edited() > 0 && !working())
+  const turnDurationMs = createMemo(() => {
+    const start = message()?.time.created
+    if (typeof start !== "number") return undefined
 
-  const assistantCopyPartID = createMemo(() => {
-    if (working()) return null
-    return showAssistantCopyPartID() ?? null
+    const end = assistantMessages().reduce<number | undefined>((max, item) => {
+      const completed = item.time.completed
+      if (typeof completed !== "number") return max
+      if (max === undefined) return completed
+      return Math.max(max, completed)
+    }, undefined)
+
+    if (typeof end !== "number") return undefined
+    if (end < start) return undefined
+    return end - start
   })
   const assistantVisible = createMemo(() =>
     assistantMessages().reduce((count, message) => {
       const parts = list(data.store.part?.[message.id], emptyParts)
-      return count + parts.filter(visible).length
+      return count + parts.filter((part) => partState(part, showReasoningSummaries()) === "visible").length
     }, 0),
+  )
+  const assistantTailVisible = createMemo(() =>
+    assistantMessages()
+      .flatMap((message) => list(data.store.part?.[message.id], emptyParts))
+      .flatMap((part) => {
+        if (partState(part, showReasoningSummaries()) !== "visible") return []
+        if (part.type === "text") return ["text" as const]
+        return ["other" as const]
+      })
+      .at(-1),
+  )
+  const reasoningHeading = createMemo(() =>
+    assistantMessages()
+      .flatMap((message) => list(data.store.part?.[message.id], emptyParts))
+      .filter((part): part is PartType & { type: "reasoning"; text: string } => part.type === "reasoning")
+      .map((part) => heading(part.text))
+      .filter((text): text is string => !!text)
+      .at(-1),
+  )
+  const thinking = createMemo(() => {
+    if (!working() || !!error()) return false
+    if (queued()) return false
+    if (status().type === "retry") return false
+    if (showReasoningSummaries()) return assistantVisible() === 0
+    return true
+  })
+  const hasAssistant = createMemo(() => assistantMessages().length > 0)
+  const animateEnabled = createMemo(() => props.animate !== false)
+  const [live, setLive] = createSignal(false)
+  const thinkingOpen = createMemo(() => thinking() && (live() || !animateEnabled()))
+  const metaOpen = createMemo(() => !working() && !!assistantCopyPart())
+  const duration = createMemo(() => {
+    const ms = turnDurationMs()
+    if (typeof ms !== "number" || ms < 0) return ""
+
+    const total = Math.round(ms / 1000)
+    if (total < 60) return `${total}s`
+
+    const minutes = Math.floor(total / 60)
+    const seconds = total % 60
+    return `${minutes}m ${seconds}s`
+  })
+  const meta = createMemo(() => {
+    const item = assistantCopyPart()
+    if (!item) return ""
+
+    const agent = item.message.agent ? item.message.agent[0]?.toUpperCase() + item.message.agent.slice(1) : ""
+    const model = item.message.modelID
+      ? (data.store.provider?.all?.find((provider) => provider.id === item.message.providerID)?.models?.[
+          item.message.modelID
+        ]?.name ?? item.message.modelID)
+      : ""
+    return [agent, model, duration()].filter((value) => !!value).join("\u00A0\u00B7\u00A0")
+  })
+  const [copied, setCopied] = createSignal(false)
+  const [handoffHold, setHandoffHold] = createSignal(false)
+  const thinkingVisible = createMemo(() => thinkingOpen() || handoffHold())
+  const handoffOpen = createMemo(() => thinkingVisible() || metaOpen())
+  const lane = createMemo(() => hasAssistant() || handoffOpen())
+
+  let liveFrame: number | undefined
+  let copiedTimer: ReturnType<typeof setTimeout> | undefined
+  let handoffTimer: ReturnType<typeof setTimeout> | undefined
+
+  const copyAssistant = async () => {
+    const text = assistantCopyPart()?.text
+    if (!text) return
+
+    await navigator.clipboard.writeText(text)
+    setCopied(true)
+    if (copiedTimer !== undefined) clearTimeout(copiedTimer)
+    copiedTimer = setTimeout(() => {
+      copiedTimer = undefined
+      setCopied(false)
+    }, 2000)
+  }
+
+  createEffect(
+    on(
+      () => [animateEnabled(), working()] as const,
+      ([enabled, isWorking]) => {
+        if (liveFrame !== undefined) {
+          cancelAnimationFrame(liveFrame)
+          liveFrame = undefined
+        }
+        if (!enabled || !isWorking || live()) return
+        liveFrame = requestAnimationFrame(() => {
+          liveFrame = undefined
+          setLive(true)
+        })
+      },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => [thinkingOpen(), metaOpen()] as const,
+      ([thinkingNow, metaNow]) => {
+        if (handoffTimer !== undefined) {
+          clearTimeout(handoffTimer)
+          handoffTimer = undefined
+        }
+
+        if (thinkingNow) {
+          setHandoffHold(true)
+          return
+        }
+
+        if (metaNow) {
+          setHandoffHold(false)
+          return
+        }
+
+        if (!handoffHold()) return
+        handoffTimer = setTimeout(() => {
+          handoffTimer = undefined
+          setHandoffHold(false)
+        }, handoffHoldMs)
+      },
+      { defer: true },
+    ),
   )
 
   const autoScroll = createAutoScroll({
@@ -258,6 +435,119 @@ export function SessionTurn(
     onUserInteracted: props.onUserInteracted,
     overflowAnchor: "dynamic",
   })
+
+  onCleanup(() => {
+    if (liveFrame !== undefined) cancelAnimationFrame(liveFrame)
+    if (copiedTimer !== undefined) clearTimeout(copiedTimer)
+    if (handoffTimer !== undefined) clearTimeout(handoffTimer)
+  })
+
+  const turnDiffSummary = () => (
+    <div data-slot="session-turn-diffs">
+      <Collapsible open={open()} onOpenChange={setOpen} variant="ghost">
+        <Collapsible.Trigger>
+          <div data-component="session-turn-diffs-trigger">
+            <div data-slot="session-turn-diffs-title">
+              <span data-slot="session-turn-diffs-label">{i18n.t("ui.sessionReview.change.modified")}</span>
+              <span data-slot="session-turn-diffs-count">
+                {edited()} {i18n.t(edited() === 1 ? "ui.common.file.one" : "ui.common.file.other")}
+              </span>
+              <div data-slot="session-turn-diffs-meta">
+                <DiffChanges changes={diffs()} variant="bars" />
+                <Collapsible.Arrow />
+              </div>
+            </div>
+          </div>
+        </Collapsible.Trigger>
+        <Collapsible.Content>
+          <Show when={open()}>
+            <div data-component="session-turn-diffs-content">
+              <Accordion
+                multiple
+                style={{ "--sticky-accordion-offset": "37px" }}
+                value={expanded()}
+                onChange={(value) => setExpanded(Array.isArray(value) ? value : value ? [value] : [])}
+              >
+                <For each={diffs()}>
+                  {(diff) => {
+                    const active = createMemo(() => expanded().includes(diff.file))
+                    const [visible, setVisible] = createSignal(false)
+
+                    createEffect(
+                      on(
+                        active,
+                        (value) => {
+                          if (!value) {
+                            setVisible(false)
+                            return
+                          }
+
+                          requestAnimationFrame(() => {
+                            if (!active()) return
+                            setVisible(true)
+                          })
+                        },
+                        { defer: true },
+                      ),
+                    )
+
+                    return (
+                      <Accordion.Item value={diff.file}>
+                        <StickyAccordionHeader>
+                          <Accordion.Trigger>
+                            <div data-slot="session-turn-diff-trigger">
+                              <span data-slot="session-turn-diff-path">
+                                <Show when={diff.file.includes("/")}>
+                                  <span data-slot="session-turn-diff-directory">{`\u202A${getDirectory(diff.file)}\u202C`}</span>
+                                </Show>
+                                <span data-slot="session-turn-diff-filename">{getFilename(diff.file)}</span>
+                              </span>
+                              <div data-slot="session-turn-diff-meta">
+                                <span data-slot="session-turn-diff-changes">
+                                  <DiffChanges changes={diff} />
+                                </span>
+                                <span data-slot="session-turn-diff-chevron">
+                                  <Icon name="chevron-down" size="small" />
+                                </span>
+                              </div>
+                            </div>
+                          </Accordion.Trigger>
+                        </StickyAccordionHeader>
+                        <Accordion.Content>
+                          <Show when={visible()}>
+                            <div data-slot="session-turn-diff-view" data-scrollable>
+                              <Dynamic
+                                component={fileComponent}
+                                mode="diff"
+                                before={{ name: diff.file, contents: diff.before }}
+                                after={{ name: diff.file, contents: diff.after }}
+                              />
+                            </div>
+                          </Show>
+                        </Accordion.Content>
+                      </Accordion.Item>
+                    )
+                  }}
+                </For>
+              </Accordion>
+            </div>
+          </Show>
+        </Collapsible.Content>
+      </Collapsible>
+    </div>
+  )
+
+  const divider = (label: string) => (
+    <div data-component="compaction-part">
+      <div data-slot="compaction-part-divider">
+        <span data-slot="compaction-part-line" />
+        <span data-slot="compaction-part-label" class="text-12-regular text-text-weak">
+          {label}
+        </span>
+        <span data-slot="compaction-part-line" />
+      </div>
+    </div>
+  )
 
   return (
     <div data-component="session-turn" class={props.classes?.root}>
@@ -277,122 +567,105 @@ export function SessionTurn(
                 class={props.classes?.container}
               >
                 <div data-slot="session-turn-message-content" aria-live="off">
-                  <Message message={msg()} parts={parts()} interrupted={interrupted()} />
+                  <UserMessageDisplay
+                    message={msg()}
+                    parts={parts()}
+                    interrupted={interrupted()}
+                    animate={props.animate}
+                    queued={queued()}
+                  />
                 </div>
-                <Show when={working() && assistantVisible() === 0 && !error()}>
-                  <div data-slot="session-turn-thinking">
-                    <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
-                  </div>
+                <Show when={compaction()}>
+                  {(part) => (
+                    <GrowBox animate={props.animate !== false} fade gap={8} class="w-full min-w-0">
+                      <div data-slot="session-turn-compaction">
+                        <Part part={part()} message={msg()} hideDetails />
+                      </div>
+                    </GrowBox>
+                  )}
                 </Show>
-                <Show when={assistantMessages().length > 0}>
-                  <div data-slot="session-turn-assistant-content" aria-hidden={working()}>
-                    <AssistantParts
-                      messages={assistantMessages()}
-                      showAssistantCopyPartID={assistantCopyPartID()}
-                      working={working()}
-                    />
-                  </div>
-                </Show>
-                <Show when={edited() > 0 && !working()}>
-                  <div data-slot="session-turn-diffs">
-                    <Collapsible open={open()} onOpenChange={setOpen} variant="ghost">
-                      <Collapsible.Trigger>
-                        <div data-component="session-turn-diffs-trigger">
-                          <div data-slot="session-turn-diffs-title">
-                            <span data-slot="session-turn-diffs-label">
-                              {i18n.t("ui.sessionReview.change.modified")}
+                <div data-slot="session-turn-assistant-lane" aria-hidden={!lane()}>
+                  <Show when={hasAssistant()}>
+                    <div
+                      data-slot="session-turn-assistant-content"
+                      aria-hidden={working()}
+                      style={{ contain: "layout paint" }}
+                    >
+                      <AssistantParts
+                        messages={assistantMessages()}
+                        showAssistantCopyPartID={assistantCopyPartID()}
+                        showTurnDiffSummary={showDiffSummary()}
+                        turnDiffSummary={turnDiffSummary}
+                        working={working()}
+                        animate={live()}
+                        showReasoningSummaries={showReasoningSummaries()}
+                        shellToolDefaultOpen={props.shellToolDefaultOpen}
+                        editToolDefaultOpen={props.editToolDefaultOpen}
+                      />
+                    </div>
+                  </Show>
+                  <GrowBox
+                    animate={live()}
+                    animateToggle={live()}
+                    open={handoffOpen()}
+                    fade
+                    slot="session-turn-handoff-wrap"
+                  >
+                    <div data-slot="session-turn-handoff">
+                      <div data-slot="session-turn-thinking" data-visible={thinkingVisible() ? "true" : "false"}>
+                        <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
+                        <TextReveal
+                          text={!showReasoningSummaries() ? (reasoningHeading() ?? "") : ""}
+                          class="session-turn-thinking-heading"
+                          travel={25}
+                          duration={900}
+                        />
+                      </div>
+                      <Show when={metaOpen()}>
+                        <div
+                          data-slot="session-turn-meta"
+                          data-visible={thinkingVisible() ? "false" : "true"}
+                          data-interrupted={interrupted() ? "" : undefined}
+                        >
+                          <Tooltip
+                            value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+                            placement="top"
+                            gutter={4}
+                          >
+                            <IconButton
+                              icon={copied() ? "check" : "copy"}
+                              size="normal"
+                              variant="ghost"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => void copyAssistant()}
+                              aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+                            />
+                          </Tooltip>
+                          <Show when={meta()}>
+                            <span
+                              data-slot="session-turn-meta-label"
+                              class="text-12-regular text-text-weak cursor-default"
+                            >
+                              {meta()}
                             </span>
-                            <span data-slot="session-turn-diffs-count">
-                              {edited()} {i18n.t(edited() === 1 ? "ui.common.file.one" : "ui.common.file.other")}
-                            </span>
-                            <div data-slot="session-turn-diffs-meta">
-                              <DiffChanges changes={diffs()} variant="bars" />
-                              <Collapsible.Arrow />
-                            </div>
-                          </div>
+                          </Show>
                         </div>
-                      </Collapsible.Trigger>
-                      <Collapsible.Content>
-                        <Show when={open()}>
-                          <div data-component="session-turn-diffs-content">
-                            <div data-slot="session-turn-diffs-group">
-                              <Accordion
-                                multiple
-                                value={expanded()}
-                                onChange={(value) => setExpanded(Array.isArray(value) ? value : value ? [value] : [])}
-                              >
-                                <For each={diffs()}>
-                                  {(diff) => {
-                                    const active = createMemo(() => expanded().includes(diff.file))
-                                    const [visible, setVisible] = createSignal(false)
-
-                                    createEffect(
-                                      on(
-                                        active,
-                                        (value) => {
-                                          if (!value) {
-                                            setVisible(false)
-                                            return
-                                          }
-
-                                          requestAnimationFrame(() => {
-                                            if (!active()) return
-                                            setVisible(true)
-                                          })
-                                        },
-                                        { defer: true },
-                                      ),
-                                    )
-
-                                    return (
-                                      <Accordion.Item value={diff.file}>
-                                        <Accordion.Header>
-                                          <Accordion.Trigger>
-                                            <div data-slot="session-turn-diff-trigger">
-                                              <span data-slot="session-turn-diff-path">
-                                                <Show when={diff.file.includes("/")}>
-                                                  <span data-slot="session-turn-diff-directory">
-                                                    {`\u202A${getDirectory(diff.file)}\u202C`}
-                                                  </span>
-                                                </Show>
-                                                <span data-slot="session-turn-diff-filename">
-                                                  {getFilename(diff.file)}
-                                                </span>
-                                              </span>
-                                              <div data-slot="session-turn-diff-meta">
-                                                <span data-slot="session-turn-diff-changes">
-                                                  <DiffChanges changes={diff} />
-                                                </span>
-                                                <span data-slot="session-turn-diff-chevron">
-                                                  <Icon name="chevron-down" size="small" />
-                                                </span>
-                                              </div>
-                                            </div>
-                                          </Accordion.Trigger>
-                                        </Accordion.Header>
-                                        <Accordion.Content>
-                                          <Show when={visible()}>
-                                            <div data-slot="session-turn-diff-view" data-scrollable>
-                                              <Dynamic
-                                                component={diffComponent}
-                                                before={{ name: diff.file, contents: diff.before }}
-                                                after={{ name: diff.file, contents: diff.after }}
-                                              />
-                                            </div>
-                                          </Show>
-                                        </Accordion.Content>
-                                      </Accordion.Item>
-                                    )
-                                  }}
-                                </For>
-                              </Accordion>
-                            </div>
-                          </div>
-                        </Show>
-                      </Collapsible.Content>
-                    </Collapsible>
-                  </div>
-                </Show>
+                      </Show>
+                    </div>
+                  </GrowBox>
+                </div>
+                <GrowBox animate={props.animate !== false} fade gap={0} open={interrupted()} class="w-full min-w-0">
+                  {divider(i18n.t("ui.message.interrupted"))}
+                </GrowBox>
+                <SessionRetry status={status()} show={active()} />
+                <GrowBox
+                  animate={props.animate !== false}
+                  fade
+                  gap={0}
+                  open={showDiffSummary() && !assistantCopyPartID()}
+                >
+                  {turnDiffSummary()}
+                </GrowBox>
                 <Show when={error()}>
                   <Card variant="error" class="error-card">
                     {errorText()}

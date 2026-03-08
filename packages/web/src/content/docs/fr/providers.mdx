@@ -84,6 +84,38 @@ Il fonctionne comme n’importe quel autre fournisseur dans OpenCode et son util
 
 ---
 
+## OpenCode Go
+
+OpenCode Go est un plan d'abonnement à faible coût qui offre un accès fiable aux modèles de codage ouverts populaires fournis par l'équipe OpenCode qui ont été
+testé et vérifié pour fonctionner correctement avec OpenCode.
+
+1. Exécutez la commande `/connect` dans le TUI, sélectionnez `OpenCode Go` et rendez-vous sur [opencode.ai/auth](https://opencode.ai/zen).
+
+   ```txt
+   /connect
+   ```
+
+2. Connectez-vous, ajoutez vos informations de facturation et copiez votre clé API.
+
+3. Collez votre clé API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Exécutez `/models` dans le TUI pour voir la liste des modèles que nous recommandons.
+
+   ```txt
+   /models
+   ```
+
+Il fonctionne comme n’importe quel autre fournisseur dans OpenCode et son utilisation est totalement facultative.
+
+---
+
 ## Annuaire
 
 Examinons certains fournisseurs en détail. Si vous souhaitez ajouter un fournisseur au
@@ -1480,6 +1512,39 @@ Ou ajoutez-le à votre profil bash :
    :::
 
 5. Exécutez la commande `/models` pour sélectionner parmi plus de 40 modèles disponibles.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### STACKIT
+
+STACKIT AI Model Serving fournit un environnement d'hébergement souverain entièrement géré pour les modèles d'IA, se concentrant sur les LLM comme Llama, Mistral et Qwen, avec une souveraineté maximale des données sur l'infrastructure européenne.
+
+1. Rendez-vous sur le [portail STACKIT](https://portal.stackit.cloud), accédez à **AI Model Serving** et créez un jeton d'authentification pour votre projet.
+
+   :::tip
+   Vous avez besoin d'un compte client STACKIT, d'un compte utilisateur et d'un projet avant de créer des jetons d'authentification.
+   :::
+
+2. Exécutez la commande `/connect` et recherchez **STACKIT**.
+
+   ```txt
+   /connect
+   ```
+
+3. Entrez votre jeton d'authentification STACKIT AI Model Serving.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Exécutez la commande `/models` pour sélectionner parmi les modèles disponibles tels que _Qwen3-VL 235B_ ou _Llama 3.3 70B_.
 
    ```txt
    /models
