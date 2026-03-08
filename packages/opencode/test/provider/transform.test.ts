@@ -510,6 +510,106 @@ describe("ProviderTransform.schema - gemini nested array items", () => {
   })
 })
 
+describe("ProviderTransform.schema - gemini combiner nodes", () => {
+  const geminiModel = {
+    providerID: "google",
+    api: {
+      id: "gemini-3-pro",
+    },
+  } as any
+
+  const walk = (node: any, cb: (node: any, path: (string | number)[]) => void, path: (string | number)[] = []) => {
+    if (node === null || typeof node !== "object") {
+      return
+    }
+    if (Array.isArray(node)) {
+      node.forEach((item, i) => walk(item, cb, [...path, i]))
+      return
+    }
+    cb(node, path)
+    Object.entries(node).forEach(([key, value]) => walk(value, cb, [...path, key]))
+  }
+
+  test("keeps edits.items.anyOf without adding type", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        edits: {
+          type: "array",
+          items: {
+            anyOf: [
+              {
+                type: "object",
+                properties: {
+                  old_string: { type: "string" },
+                  new_string: { type: "string" },
+                },
+                required: ["old_string", "new_string"],
+              },
+              {
+                type: "object",
+                properties: {
+                  old_string: { type: "string" },
+                  new_string: { type: "string" },
+                  replace_all: { type: "boolean" },
+                },
+                required: ["old_string", "new_string"],
+              },
+            ],
+          },
+        },
+      },
+      required: ["edits"],
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(Array.isArray(result.properties.edits.items.anyOf)).toBe(true)
+    expect(result.properties.edits.items.type).toBeUndefined()
+  })
+
+  test("does not add sibling keys to combiner nodes during sanitize", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        edits: {
+          type: "array",
+          items: {
+            anyOf: [{ type: "string" }, { type: "number" }],
+          },
+        },
+        value: {
+          oneOf: [{ type: "string" }, { type: "boolean" }],
+        },
+        meta: {
+          allOf: [
+            {
+              type: "object",
+              properties: { a: { type: "string" } },
+            },
+            {
+              type: "object",
+              properties: { b: { type: "string" } },
+            },
+          ],
+        },
+      },
+    } as any
+    const input = JSON.parse(JSON.stringify(schema))
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    walk(result, (node, path) => {
+      const hasCombiner = Array.isArray(node.anyOf) || Array.isArray(node.oneOf) || Array.isArray(node.allOf)
+      if (!hasCombiner) {
+        return
+      }
+      const before = path.reduce((acc: any, key) => acc?.[key], input)
+      const added = Object.keys(node).filter((key) => !(key in before))
+      expect(added).toEqual([])
+    })
+  })
+})
+
 describe("ProviderTransform.schema - gemini non-object properties removal", () => {
   const geminiModel = {
     providerID: "google",
@@ -1705,6 +1805,66 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@ai-sdk/gateway", () => {
+    test("anthropic sonnet 4.6 models return adaptive thinking options", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-sonnet-4-6",
+        providerID: "gateway",
+        api: {
+          id: "anthropic/claude-sonnet-4-6",
+          url: "https://gateway.ai",
+          npm: "@ai-sdk/gateway",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "max"])
+      expect(result.medium).toEqual({
+        thinking: {
+          type: "adaptive",
+        },
+        effort: "medium",
+      })
+    })
+
+    test("anthropic sonnet 4.6 dot-format models return adaptive thinking options", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-sonnet-4-6",
+        providerID: "gateway",
+        api: {
+          id: "anthropic/claude-sonnet-4.6",
+          url: "https://gateway.ai",
+          npm: "@ai-sdk/gateway",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "max"])
+      expect(result.medium).toEqual({
+        thinking: {
+          type: "adaptive",
+        },
+        effort: "medium",
+      })
+    })
+
+    test("anthropic opus 4.6 dot-format models return adaptive thinking options", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-opus-4-6",
+        providerID: "gateway",
+        api: {
+          id: "anthropic/claude-opus-4.6",
+          url: "https://gateway.ai",
+          npm: "@ai-sdk/gateway",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "max"])
+      expect(result.high).toEqual({
+        thinking: {
+          type: "adaptive",
+        },
+        effort: "high",
+      })
+    })
+
     test("anthropic models return anthropic thinking options", () => {
       const model = createMockModel({
         id: "anthropic/claude-sonnet-4",
@@ -2064,6 +2224,26 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@ai-sdk/anthropic", () => {
+    test("sonnet 4.6 returns adaptive thinking options", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-sonnet-4-6",
+        providerID: "anthropic",
+        api: {
+          id: "claude-sonnet-4-6",
+          url: "https://api.anthropic.com",
+          npm: "@ai-sdk/anthropic",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "max"])
+      expect(result.high).toEqual({
+        thinking: {
+          type: "adaptive",
+        },
+        effort: "high",
+      })
+    })
+
     test("returns high and max with thinking config", () => {
       const model = createMockModel({
         id: "anthropic/claude-4",
@@ -2092,6 +2272,26 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@ai-sdk/amazon-bedrock", () => {
+    test("anthropic sonnet 4.6 returns adaptive reasoning options", () => {
+      const model = createMockModel({
+        id: "bedrock/anthropic-claude-sonnet-4-6",
+        providerID: "bedrock",
+        api: {
+          id: "anthropic.claude-sonnet-4-6",
+          url: "https://bedrock.amazonaws.com",
+          npm: "@ai-sdk/amazon-bedrock",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "max"])
+      expect(result.max).toEqual({
+        reasoningConfig: {
+          type: "adaptive",
+          maxReasoningEffort: "max",
+        },
+      })
+    })
+
     test("returns WIDELY_SUPPORTED_EFFORTS with reasoningConfig", () => {
       const model = createMockModel({
         id: "bedrock/llama-4",
@@ -2153,12 +2353,16 @@ describe("ProviderTransform.variants", () => {
       const result = ProviderTransform.variants(model)
       expect(Object.keys(result)).toEqual(["low", "high"])
       expect(result.low).toEqual({
-        includeThoughts: true,
-        thinkingLevel: "low",
+        thinkingConfig: {
+          includeThoughts: true,
+          thinkingLevel: "low",
+        },
       })
       expect(result.high).toEqual({
-        includeThoughts: true,
-        thinkingLevel: "high",
+        thinkingConfig: {
+          includeThoughts: true,
+          thinkingLevel: "high",
+        },
       })
     })
   })
@@ -2223,12 +2427,10 @@ describe("ProviderTransform.variants", () => {
       const result = ProviderTransform.variants(model)
       expect(Object.keys(result)).toEqual(["none", "low", "medium", "high"])
       expect(result.none).toEqual({
-        includeThoughts: true,
-        thinkingLevel: "none",
+        reasoningEffort: "none",
       })
       expect(result.low).toEqual({
-        includeThoughts: true,
-        thinkingLevel: "low",
+        reasoningEffort: "low",
       })
     })
   })

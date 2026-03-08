@@ -152,11 +152,6 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["border-weak-disabled"] = neutralAlpha[5]
   tokens["border-weak-focus"] = neutralAlpha[isDark ? 7 : 6]
   tokens["border-weaker-base"] = neutralAlpha[2]
-  tokens["border-weaker-hover"] = neutralAlpha[3]
-  tokens["border-weaker-active"] = neutralAlpha[5]
-  tokens["border-weaker-selected"] = withAlpha(interactive[3], isDark ? 0.3 : 0.4) as ColorValue
-  tokens["border-weaker-disabled"] = neutralAlpha[1]
-  tokens["border-weaker-focus"] = neutralAlpha[5]
 
   tokens["border-interactive-base"] = interactive[6]
   tokens["border-interactive-hover"] = interactive[7]
@@ -240,7 +235,7 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["icon-diff-add-active"] = diffAdd[isDark ? 10 : 11]
   tokens["icon-diff-delete-base"] = diffDelete[isDark ? 8 : 9]
   tokens["icon-diff-delete-hover"] = diffDelete[isDark ? 9 : 10]
-  tokens["icon-diff-modified-base"] = tokens["icon-warning-base"]
+  tokens["icon-diff-modified-base"] = isDark ? "#ffba92" : "#FF8C00"
 
   tokens["syntax-comment"] = "var(--text-weak)"
   tokens["syntax-regexp"] = "var(--text-base)"

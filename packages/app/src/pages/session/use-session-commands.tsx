@@ -22,10 +22,7 @@ import { UserMessage } from "@opencode-ai/sdk/v2"
 import { canAddSelectionContext } from "@/pages/session/session-command-helpers"
 
 export type SessionCommandContext = {
-  activeMessage: () => UserMessage | undefined
-  showAllFiles: () => void
   navigateMessageByOffset: (offset: number) => void
-  setExpanded: (id: string, fn: (open: boolean | undefined) => boolean) => void
   setActiveMessage: (message: UserMessage | undefined) => void
   focusInput: () => void
 }
@@ -37,7 +34,7 @@ const withCategory = (category: string) => {
   })
 }
 
-export const useSessionCommands = (args: SessionCommandContext) => {
+export const useSessionCommands = (actions: SessionCommandContext) => {
   const command = useCommand()
   const dialog = useDialog()
   const file = useFile()
@@ -56,6 +53,7 @@ export const useSessionCommands = (args: SessionCommandContext) => {
   const tabs = createMemo(() => layout.tabs(sessionKey))
   const view = createMemo(() => layout.view(sessionKey))
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
+
   const idle = { type: "idle" as const }
   const status = createMemo(() => sync.data.session_status[params.id ?? ""] ?? idle)
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
@@ -65,6 +63,11 @@ export const useSessionCommands = (args: SessionCommandContext) => {
     if (!revert) return userMessages()
     return userMessages().filter((m) => m.id < revert)
   })
+
+  const showAllFiles = () => {
+    if (layout.fileTree.tab() !== "changes") return
+    layout.fileTree.setTab("all")
+  }
 
   const selectionPreview = (path: string, selection: FileSelection) => {
     const content = file.get(path)?.content?.content
@@ -80,6 +83,10 @@ export const useSessionCommands = (args: SessionCommandContext) => {
     const preview = selectionPreview(path, selection)
     prompt.context.add({ type: "file", path, selection, preview })
   }
+
+  const navigateMessageByOffset = actions.navigateMessageByOffset
+  const setActiveMessage = actions.setActiveMessage
+  const focusInput = actions.focusInput
 
   const sessionCommand = withCategory(language.t("command.category.session"))
   const fileCommand = withCategory(language.t("command.category.file"))
@@ -108,7 +115,7 @@ export const useSessionCommands = (args: SessionCommandContext) => {
       description: language.t("palette.search.placeholder"),
       keybind: "mod+p",
       slash: "open",
-      onSelect: () => dialog.show(() => <DialogSelectFile onOpenFile={args.showAllFiles} />),
+      onSelect: () => dialog.show(() => <DialogSelectFile onOpenFile={showAllFiles} />),
     }),
     fileCommand({
       id: "tab.close",
@@ -178,7 +185,7 @@ export const useSessionCommands = (args: SessionCommandContext) => {
       id: "input.focus",
       title: language.t("command.input.focus"),
       keybind: "ctrl+l",
-      onSelect: () => args.focusInput(),
+      onSelect: () => focusInput(),
     }),
     terminalCommand({
       id: "terminal.new",
@@ -190,19 +197,6 @@ export const useSessionCommands = (args: SessionCommandContext) => {
         view().terminal.open()
       },
     }),
-    viewCommand({
-      id: "steps.toggle",
-      title: language.t("command.steps.toggle"),
-      description: language.t("command.steps.toggle.description"),
-      keybind: "mod+e",
-      slash: "steps",
-      disabled: !params.id,
-      onSelect: () => {
-        const msg = args.activeMessage()
-        if (!msg) return
-        args.setExpanded(msg.id, (open: boolean | undefined) => !open)
-      },
-    }),
   ])
 
   const messageCommands = createMemo(() => [
@@ -212,7 +206,7 @@ export const useSessionCommands = (args: SessionCommandContext) => {
       description: language.t("command.message.previous.description"),
       keybind: "mod+arrowup",
       disabled: !params.id,
-      onSelect: () => args.navigateMessageByOffset(-1),
+      onSelect: () => navigateMessageByOffset(-1),
     }),
     sessionCommand({
       id: "message.next",
@@ -220,7 +214,7 @@ export const useSessionCommands = (args: SessionCommandContext) => {
       description: language.t("command.message.next.description"),
       keybind: "mod+arrowdown",
       disabled: !params.id,
-      onSelect: () => args.navigateMessageByOffset(1),
+      onSelect: () => navigateMessageByOffset(1),
     }),
   ])
 
@@ -267,24 +261,35 @@ export const useSessionCommands = (args: SessionCommandContext) => {
     }),
   ])
 
+  const isAutoAcceptActive = () => {
+    const sessionID = params.id
+    if (sessionID) return permission.isAutoAccepting(sessionID, sdk.directory)
+    return permission.isAutoAcceptingDirectory(sdk.directory)
+  }
+
   const permissionCommands = createMemo(() => [
     permissionsCommand({
       id: "permissions.autoaccept",
-      title:
-        params.id && permission.isAutoAccepting(params.id, sdk.directory)
-          ? language.t("command.permissions.autoaccept.disable")
-          : language.t("command.permissions.autoaccept.enable"),
+      title: isAutoAcceptActive()
+        ? language.t("command.permissions.autoaccept.disable")
+        : language.t("command.permissions.autoaccept.enable"),
       keybind: "mod+shift+a",
-      disabled: !params.id || !permission.permissionsEnabled(),
+      disabled: false,
       onSelect: () => {
         const sessionID = params.id
-        if (!sessionID) return
-        permission.toggleAutoAccept(sessionID, sdk.directory)
+        if (sessionID) {
+          permission.toggleAutoAccept(sessionID, sdk.directory)
+        } else {
+          permission.toggleAutoAcceptDirectory(sdk.directory)
+        }
+        const active = sessionID
+          ? permission.isAutoAccepting(sessionID, sdk.directory)
+          : permission.isAutoAcceptingDirectory(sdk.directory)
         showToast({
-          title: permission.isAutoAccepting(sessionID, sdk.directory)
+          title: active
             ? language.t("toast.permissions.autoaccept.on.title")
             : language.t("toast.permissions.autoaccept.off.title"),
-          description: permission.isAutoAccepting(sessionID, sdk.directory)
+          description: active
             ? language.t("toast.permissions.autoaccept.on.description")
             : language.t("toast.permissions.autoaccept.off.description"),
         })
@@ -315,7 +320,7 @@ export const useSessionCommands = (args: SessionCommandContext) => {
           prompt.set(restored)
         }
         const priorMessage = findLast(userMessages(), (x) => x.id < message.id)
-        args.setActiveMessage(priorMessage)
+        setActiveMessage(priorMessage)
       },
     }),
     sessionCommand({
@@ -334,12 +339,12 @@ export const useSessionCommands = (args: SessionCommandContext) => {
           await sdk.client.session.unrevert({ sessionID })
           prompt.reset()
           const lastMsg = findLast(userMessages(), (x) => x.id >= revertMessageID)
-          args.setActiveMessage(lastMsg)
+          setActiveMessage(lastMsg)
           return
         }
         await sdk.client.session.revert({ sessionID, messageID: nextMessage.id })
         const priorMsg = findLast(userMessages(), (x) => x.id < nextMessage.id)
-        args.setActiveMessage(priorMsg)
+        setActiveMessage(priorMsg)
       },
     }),
     sessionCommand({
@@ -495,6 +500,6 @@ export const useSessionCommands = (args: SessionCommandContext) => {
       permissionCommands(),
       sessionActionCommands(),
       shareCommands(),
-    ].flatMap((section) => section),
+    ].flatMap((x) => x),
   )
 }

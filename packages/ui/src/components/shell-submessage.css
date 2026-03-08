@@ -1,0 +1,13 @@
+[data-component="shell-submessage"] {
+  min-width: 0;
+  max-width: 100%;
+  display: inline-block;
+  vertical-align: baseline;
+}
+
+[data-component="shell-submessage"] [data-slot="shell-submessage-value"] {
+  display: inline-block;
+  vertical-align: baseline;
+  min-width: 0;
+  white-space: nowrap;
+}

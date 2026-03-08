@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 
-import solidPlugin from "../node_modules/@opentui/solid/scripts/solid-plugin"
-import path from "path"
-import fs from "fs"
 import { $ } from "bun"
+import fs from "fs"
+import path from "path"
 import { fileURLToPath } from "url"
+import solidPlugin from "@opentui/solid/bun-plugin"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -12,8 +12,9 @@ const dir = path.resolve(__dirname, "..")
 
 process.chdir(dir)
 
-import pkg from "../package.json"
 import { Script } from "@opencode-ai/script"
+import pkg from "../package.json"
+
 const modelsUrl = process.env.OPENCODE_MODELS_URL || "https://models.dev"
 // Fetch and generate models.dev snapshot
 const modelsData = process.env.MODELS_DEV_API_JSON
@@ -26,7 +27,11 @@ await Bun.write(
 console.log("Generated models-snapshot.ts")
 
 // Load migrations from migration directories
-const migrationDirs = (await fs.promises.readdir(path.join(dir, "migration"), { withFileTypes: true }))
+const migrationDirs = (
+  await fs.promises.readdir(path.join(dir, "migration"), {
+    withFileTypes: true,
+  })
+)
   .filter((entry) => entry.isDirectory() && /^\d{4}\d{2}\d{2}\d{2}\d{2}\d{2}/.test(entry.name))
   .map((entry) => entry.name)
   .sort()
@@ -46,7 +51,7 @@ const migrations = await Promise.all(
           Number(match[6]),
         )
       : 0
-    return { sql, timestamp }
+    return { sql, timestamp, name }
   }),
 )
 console.log(`Loaded ${migrations.length} migrations`)
@@ -156,7 +161,9 @@ for (const item of targets) {
   console.log(`building ${name}`)
   await $`mkdir -p dist/${name}/bin`
 
-  const parserWorker = fs.realpathSync(path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"))
+  const localPath = path.resolve(dir, "node_modules/@opentui/core/parser.worker.js")
+  const rootPath = path.resolve(dir, "../../node_modules/@opentui/core/parser.worker.js")
+  const parserWorker = fs.realpathSync(fs.existsSync(localPath) ? localPath : rootPath)
   const workerPath = "./src/cli/cmd/tui/worker.ts"
 
   // Use platform-specific bunfs root path based on target OS
@@ -171,7 +178,6 @@ for (const item of targets) {
     compile: {
       autoloadBunfig: false,
       autoloadDotenv: false,
-      //@ts-ignore (bun types aren't up to date)
       autoloadTsconfig: true,
       autoloadPackageJson: true,
       target: name.replace(pkg.name, "bun") as any,
@@ -214,7 +220,7 @@ if (Script.release) {
       await $`zip -r ../../${key}.zip *`.cwd(`dist/${key}/bin`)
     }
   }
-  await $`gh release upload v${Script.version} ./dist/*.zip ./dist/*.tar.gz --clobber`
+  await $`gh release upload v${Script.version} ./dist/*.zip ./dist/*.tar.gz --clobber --repo ${process.env.GH_REPO}`
 }
 
 export { binaries }

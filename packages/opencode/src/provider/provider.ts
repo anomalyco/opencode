@@ -6,9 +6,10 @@ import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
+import { Hash } from "../util/hash"
 import { Plugin } from "../plugin"
-import { ModelsDev } from "./models"
 import { NamedError } from "@opencode-ai/util/error"
+import { ModelsDev } from "./models"
 import { Auth } from "../auth"
 import { Env } from "../env"
 import { Instance } from "../project/instance"
@@ -16,6 +17,7 @@ import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
 import { Global } from "../global"
 import path from "path"
+import { Filesystem } from "../util/filesystem"
 
 // Direct imports for bundled providers
 import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
@@ -39,6 +41,8 @@ import { createTogetherAI } from "@ai-sdk/togetherai"
 import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
 import { createGitLab, VERSION as GITLAB_PROVIDER_VERSION } from "@gitlab/gitlab-ai-provider"
+import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
+import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
 
@@ -251,8 +255,6 @@ export namespace Provider {
       // Only use credential chain if no bearer token exists
       // Bearer token takes precedence over credential chain (profiles, access keys, IAM roles, web identity tokens)
       if (!awsBearerToken) {
-        const { fromNodeProviderChain } = await import(await BunProc.install("@aws-sdk/credential-providers"))
-
         // Build credential provider options (only pass profile if specified)
         const credentialProviderOptions = profile ? { profile } : {}
 
@@ -395,11 +397,9 @@ export namespace Provider {
           project,
           location,
           fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-            const { GoogleAuth } = await import(await BunProc.install("google-auth-library"))
             const auth = new GoogleAuth()
             const client = await auth.getApplicationDefault()
-            const credentials = await client.credential
-            const token = await credentials.getAccessToken()
+            const token = await client.credential.getAccessToken()
 
             const headers = new Headers(init?.headers)
             headers.set("Authorization", `Bearer ${token.token}`)
@@ -556,7 +556,28 @@ export namespace Provider {
       const { createAiGateway } = await import("ai-gateway-provider")
       const { createUnified } = await import("ai-gateway-provider/providers/unified")
 
-      const aigateway = createAiGateway({ accountId, gateway, apiKey: apiToken })
+      const metadata = iife(() => {
+        if (input.options?.metadata) return input.options.metadata
+        try {
+          return JSON.parse(input.options?.headers?.["cf-aig-metadata"])
+        } catch {
+          return undefined
+        }
+      })
+      const opts = {
+        metadata,
+        cacheTtl: input.options?.cacheTtl,
+        cacheKey: input.options?.cacheKey,
+        skipCache: input.options?.skipCache,
+        collectLog: input.options?.collectLog,
+      }
+
+      const aigateway = createAiGateway({
+        accountId,
+        gateway,
+        apiKey: apiToken,
+        ...(Object.values(opts).some((v) => v !== undefined) ? { options: opts } : {}),
+      })
       const unified = createUnified()
 
       return {
@@ -574,6 +595,17 @@ export namespace Provider {
         options: {
           headers: {
             "X-Cerebras-3rd-Party-Integration": "opencode",
+          },
+        },
+      }
+    },
+    kilo: async () => {
+      return {
+        autoload: false,
+        options: {
+          headers: {
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "opencode",
           },
         },
       }
@@ -764,7 +796,7 @@ export namespace Provider {
     const modelLoaders: {
       [providerID: string]: CustomModelLoader
     } = {}
-    const sdk = new Map<number, SDK>()
+    const sdk = new Map<string, SDK>()
 
     log.info("init")
 
@@ -1054,7 +1086,7 @@ export namespace Provider {
           ...model.headers,
         }
 
-      const key = Bun.hash.xxHash32(JSON.stringify({ providerID: model.providerID, npm: model.api.npm, options }))
+      const key = Hash.fast(JSON.stringify({ providerID: model.providerID, npm: model.api.npm, options }))
       const existing = s.sdk.get(key)
       if (existing) return existing
 
@@ -1280,8 +1312,9 @@ export namespace Provider {
     if (cfg.model) return parseModel(cfg.model)
 
     const providers = await list()
-    const recent = (await Bun.file(path.join(Global.Path.state, "model.json"))
-      .json()
+    const recent = (await Filesystem.readJson<{ recent?: { providerID: string; modelID: string }[] }>(
+      path.join(Global.Path.state, "model.json"),
+    )
       .then((x) => (Array.isArray(x.recent) ? x.recent : []))
       .catch(() => [])) as { providerID: string; modelID: string }[]
     for (const entry of recent) {

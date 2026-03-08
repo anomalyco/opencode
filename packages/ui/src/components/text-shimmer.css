@@ -1,0 +1,124 @@
+[data-component="text-shimmer"] {
+  --text-shimmer-step: 45ms;
+  --text-shimmer-duration: 2000ms;
+  --text-shimmer-swap: 220ms;
+  --text-shimmer-index: 0;
+  --text-shimmer-angle: 90deg;
+  --text-shimmer-spread: 5.2ch;
+  --text-shimmer-size: 600%;
+  --text-shimmer-base-color: var(--text-weak);
+  --text-shimmer-peak-color: var(--text-strong);
+  --text-shimmer-sweep: linear-gradient(
+    var(--text-shimmer-angle),
+    transparent calc(50% - var(--text-shimmer-spread)),
+    var(--text-shimmer-peak-color) 50%,
+    transparent calc(50% + var(--text-shimmer-spread))
+  );
+  --text-shimmer-base: linear-gradient(var(--text-shimmer-base-color), var(--text-shimmer-base-color));
+
+  display: inline-block;
+  vertical-align: baseline;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+}
+
+[data-component="text-shimmer"] [data-slot="text-shimmer-char"] {
+  display: inline-block;
+  position: relative;
+  vertical-align: baseline;
+  white-space: pre;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+}
+
+[data-component="text-shimmer"] [data-slot="text-shimmer-char-base"],
+[data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"] {
+  display: inline-block;
+  white-space: pre;
+  transition: opacity var(--text-shimmer-swap) ease-out;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+}
+
+[data-component="text-shimmer"] [data-slot="text-shimmer-char-base"] {
+  position: relative;
+  color: inherit;
+  opacity: 1;
+}
+
+[data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"] {
+  position: absolute;
+  inset: 0;
+  color: var(--text-weaker);
+  opacity: 0;
+}
+
+[data-component="text-shimmer"][data-active="true"] [data-slot="text-shimmer-char-shimmer"] {
+  opacity: 1;
+}
+
+[data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"][data-run="true"] {
+  animation-name: text-shimmer-sweep;
+  animation-duration: var(--text-shimmer-duration);
+  animation-iteration-count: infinite;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  animation-delay: calc(var(--text-shimmer-step) * var(--text-shimmer-index) * -1);
+  will-change: background-position;
+}
+
+@keyframes text-shimmer-sweep {
+  0% {
+    background-position:
+      100% 0,
+      0 0;
+  }
+
+  100% {
+    background-position:
+      0% 0,
+      0 0;
+  }
+}
+
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  [data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"] {
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    background-image: var(--text-shimmer-sweep), var(--text-shimmer-base);
+    background-size:
+      var(--text-shimmer-size) 100%,
+      100% 100%;
+    background-position:
+      100% 0,
+      0 0;
+    background-repeat: no-repeat;
+    -webkit-background-clip: text;
+    background-clip: text;
+  }
+
+  [data-component="text-shimmer"][data-active="true"] [data-slot="text-shimmer-char-base"] {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="text-shimmer"] [data-slot="text-shimmer-char-base"],
+  [data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"] {
+    transition-duration: 0ms;
+  }
+
+  [data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"] {
+    animation: none !important;
+    color: inherit;
+    -webkit-text-fill-color: currentColor;
+    background-image: none;
+  }
+
+  [data-component="text-shimmer"] [data-slot="text-shimmer-char-base"] {
+    opacity: 1 !important;
+  }
+}
