@@ -63,9 +63,9 @@ process.chdir(dir)
 let output = `version=${Script.version}\n`
 
 if (shouldRelease) {
-    // Commit and Tag
-    await $`git commit -am "release: v${Script.version}"`
-    await $`git tag v${Script.version}`
+    // Commit and Tag (tolerate "nothing to commit" if versions were already bumped)
+    await $`git commit -am "release: v${Script.version}"`.nothrow()
+    await $`git tag v${Script.version}`.nothrow()  // tolerates existing tag from partial run
     await $`git fetch origin`
     // Cherry pick dev? Maybe not for Lash if we are divergent.
     // await $`git cherry-pick HEAD..origin/dev`.nothrow()
