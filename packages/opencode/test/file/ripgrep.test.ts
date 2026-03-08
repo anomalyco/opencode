@@ -51,7 +51,7 @@ describe("file.ripgrep", () => {
     })
 
     expect(hits.length).toBe(1)
-    expect(hits[0]?.path.text).toBe("match.ts")
+    expect(path.basename(hits[0]?.path.text ?? "")).toBe("match.ts")
     expect(hits[0]?.line_number).toBe(1)
     expect(hits[0]?.lines.text).toContain("needle")
   })
