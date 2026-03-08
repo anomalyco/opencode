@@ -11,6 +11,7 @@ import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
 import type { BunWebSocketData } from "hono/bun"
 import { Database } from "@/storage/db"
 import { Flag } from "@/flag/flag"
+import { setTimeout as sleep } from "node:timers/promises"
 
 await Log.init({
   print: process.argv.includes("--print-logs"),
@@ -76,7 +77,7 @@ const startEventStream = (directory: string) => {
       ).catch(() => undefined)
 
       if (!events) {
-        await Bun.sleep(250)
+        await sleep(250)
         continue
       }
 
@@ -85,7 +86,7 @@ const startEventStream = (directory: string) => {
       }
 
       if (!signal.aborted) {
-        await Bun.sleep(250)
+        await sleep(250)
       }
     }
   })().catch((error) => {
