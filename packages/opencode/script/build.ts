@@ -224,3 +224,8 @@ if (Script.release) {
 }
 
 export { binaries }
+
+// Explicitly exit — the `@opencode-ai/script` import runs top-level shell
+// commands that leave handles open, preventing the process from exiting
+// naturally after the build completes.
+process.exit(0)
