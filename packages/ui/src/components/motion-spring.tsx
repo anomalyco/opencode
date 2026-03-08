@@ -1,8 +1,9 @@
 import { attachSpring, motionValue } from "motion"
 import type { SpringOptions } from "motion"
 import { createEffect, createSignal, onCleanup } from "solid-js"
+import { prefersReducedMotion } from "../hooks/use-reduced-motion"
 
-type Opt = Partial<Pick<SpringOptions, "visualDuration" | "bounce" | "stiffness" | "damping" | "mass" | "velocity">>
+type Opt = Pick<SpringOptions, "visualDuration" | "bounce" | "stiffness" | "damping" | "mass" | "velocity">
 const eq = (a: Opt | undefined, b: Opt | undefined) =>
   a?.visualDuration === b?.visualDuration &&
   a?.bounce === b?.bounce &&
@@ -13,24 +14,41 @@ const eq = (a: Opt | undefined, b: Opt | undefined) =>
 
 export function useSpring(target: () => number, options?: Opt | (() => Opt)) {
   const read = () => (typeof options === "function" ? options() : options)
+  const reduce = prefersReducedMotion
   const [value, setValue] = createSignal(target())
   const source = motionValue(value())
   const spring = motionValue(value())
   let config = read()
-  let stop = attachSpring(spring, source, config)
-  let off = spring.on("change", (next: number) => setValue(next))
+  let reduced = reduce()
+  let stop = reduced ? () => {} : attachSpring(spring, source, config)
+  let off = spring.on("change", (next) => setValue(next))
 
   createEffect(() => {
-    source.set(target())
+    const next = target()
+    if (reduced) {
+      source.set(next)
+      spring.set(next)
+      setValue(next)
+      return
+    }
+    source.set(next)
   })
 
   createEffect(() => {
-    if (!options) return
     const next = read()
-    if (eq(config, next)) return
+    const skip = reduce()
+    if (eq(config, next) && reduced === skip) return
     config = next
+    reduced = skip
     stop()
-    stop = attachSpring(spring, source, next)
+    stop = skip ? () => {} : attachSpring(spring, source, next)
+    if (skip) {
+      const value = target()
+      source.set(value)
+      spring.set(value)
+      setValue(value)
+      return
+    }
     setValue(spring.get())
   })
 
