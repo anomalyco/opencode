@@ -52,7 +52,7 @@ describe("session.stopping hook", () => {
       fn: async () => {
         await Plugin.init()
         // @ts-ignore — session.stopping is not yet in the published type
-        const out = await Plugin.trigger("session.stopping", { sessionID: "test-session" }, { stop: true, message: undefined })
+        const out = await Plugin.trigger("session.stopping", { sessionID: "test-session" }, { stop: true, message: undefined as string | undefined })
         expect(out.stop).toBe(false)
         expect(out.message).toBe("workflow gate")
       },
@@ -65,8 +65,8 @@ describe("session.stopping hook", () => {
       directory: tmp.path,
       fn: async () => {
         await Plugin.init()
-        // @ts-ignore
-        const out = await Plugin.trigger("session.stopping", { sessionID: "test-session" }, { stop: true, message: undefined })
+        // @ts-ignore — session.stopping is not yet in the published type
+        const out = await Plugin.trigger("session.stopping", { sessionID: "test-session" }, { stop: true, message: undefined as string | undefined })
         // With no plugin overriding, output is unchanged
         expect(out.stop).toBe(true)
         expect(out.message).toBeUndefined()
@@ -111,8 +111,8 @@ describe("session.stopping hook", () => {
         // Simulate what the loop does when stop=false: fire the hook, then
         // write the hook message as a new user message via SessionPrompt.prompt
         // with noReply=true (which is exactly what createUserMessage does).
-        // @ts-ignore
-        const out = await Plugin.trigger("session.stopping", { sessionID: session.id }, { stop: true, message: undefined })
+        // @ts-ignore — session.stopping is not yet in the published type
+        const out = await Plugin.trigger("session.stopping", { sessionID: session.id }, { stop: true, message: undefined as string | undefined })
         expect(out.stop).toBe(false)
         expect(out.message).toBe("resume from gate")
 
