@@ -45,6 +45,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "erneuter Versuch",
   "ui.sessionTurn.retry.inSeconds": "in {{seconds}}s",
+  "ui.sessionTurn.retry.attempt": "Versuch #{{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - Versuch #{{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini ist gerade sehr überlastet",
   "ui.sessionTurn.error.freeUsageExceeded": "Kostenloses Nutzungslimit überschritten",
   "ui.sessionTurn.error.addCredits": "Guthaben aufladen",
 
@@ -62,6 +65,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Nächste Schritte erwägen",
 
   "ui.messagePart.questions.dismissed": "Fragen verworfen",
+  "ui.messagePart.compaction": "Verlauf komprimiert",
   "ui.messagePart.context.read.one": "{{count}} Lesevorgang",
   "ui.messagePart.context.read.other": "{{count}} Lesevorgänge",
   "ui.messagePart.context.search.one": "{{count}} Suche",
@@ -95,12 +99,15 @@ export const dict = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webabruf",
+  "ui.tool.websearch": "Websuche",
+  "ui.tool.codesearch": "Codesuche",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Aufgaben",
   "ui.tool.todos.read": "Aufgaben lesen",
   "ui.tool.questions": "Fragen",
   "ui.tool.agent": "{{type}} Agent",
+  "ui.tool.agent.default": "Agent",
 
   "ui.common.file.one": "Datei",
   "ui.common.file.other": "Dateien",
@@ -127,6 +134,7 @@ export const dict = {
   "ui.message.copyResponse": "Antwort kopieren",
   "ui.message.copied": "Kopiert!",
   "ui.message.interrupted": "Unterbrochen",
+  "ui.message.queued": "In Warteschlange",
   "ui.message.attachment.alt": "Anhang",
 
   "ui.patch.action.deleted": "Gelöscht",

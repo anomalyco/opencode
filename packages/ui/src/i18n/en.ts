@@ -41,6 +41,9 @@ export const dict: Record<string, string> = {
 
   "ui.sessionTurn.retry.retrying": "retrying",
   "ui.sessionTurn.retry.inSeconds": "in {{seconds}}s",
+  "ui.sessionTurn.retry.attempt": "attempt #{{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - attempt #{{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini is way too hot right now",
   "ui.sessionTurn.error.freeUsageExceeded": "Free usage exceeded",
   "ui.sessionTurn.error.addCredits": "Add credits",
 
@@ -63,6 +66,7 @@ export const dict: Record<string, string> = {
   "ui.messagePart.option.typeOwnAnswer": "Type your own answer",
   "ui.messagePart.review.title": "Review your answers",
   "ui.messagePart.questions.dismissed": "Questions dismissed",
+  "ui.messagePart.compaction": "History compacted",
   "ui.messagePart.context.read.one": "{{count}} read",
   "ui.messagePart.context.read.other": "{{count}} reads",
   "ui.messagePart.context.search.one": "{{count}} search",
@@ -91,12 +95,15 @@ export const dict: Record<string, string> = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webfetch",
+  "ui.tool.websearch": "Web Search",
+  "ui.tool.codesearch": "Code Search",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "To-dos",
   "ui.tool.todos.read": "Read to-dos",
   "ui.tool.questions": "Questions",
   "ui.tool.agent": "{{type}} Agent",
+  "ui.tool.agent.default": "Agent",
 
   "ui.common.file.one": "file",
   "ui.common.file.other": "files",
@@ -123,6 +130,7 @@ export const dict: Record<string, string> = {
   "ui.message.copyResponse": "Copy response",
   "ui.message.copied": "Copied",
   "ui.message.interrupted": "Interrupted",
+  "ui.message.queued": "Queued",
   "ui.message.attachment.alt": "attachment",
 
   "ui.patch.action.deleted": "Deleted",
