@@ -471,10 +471,35 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               if (match.found) draft.session[match.index] = session.data!
               if (!match.found) draft.session.splice(match.index, 0, session.data!)
               draft.todo[sessionID] = todo.data ?? []
-              draft.message[sessionID] = messages.data!.map((x) => x.info)
-              for (const message of messages.data!) {
-                draft.part[message.info.id] = message.parts
+
+              // Merge fetched messages with any already delivered by real-time
+              // events to avoid overwriting data that arrived during the fetch.
+              const fetchedMessages = messages.data!.map((x) => x.info)
+              const existing = draft.message[sessionID] ?? []
+              const merged = [...fetchedMessages]
+              for (const msg of existing) {
+                const r = Binary.search(merged, msg.id, (m) => m.id)
+                if (!r.found) merged.splice(r.index, 0, msg)
               }
+              draft.message[sessionID] = merged
+
+              for (const message of messages.data!) {
+                const existingParts = draft.part[message.info.id]
+                if (!existingParts?.length) {
+                  draft.part[message.info.id] = message.parts
+                } else {
+                  // Merge: keep event-delivered parts that aren't in the fetch
+                  const merged = [...message.parts]
+                  for (const part of existingParts) {
+                    const r = Binary.search(merged, part.id, (p) => p.id)
+                    if (!r.found) merged.splice(r.index, 0, part)
+                  }
+                  draft.part[message.info.id] = merged
+                }
+              }
+              // Parts for messages delivered by events but not in the fetch
+              // response are already in draft and left untouched.
+
               draft.session_diff[sessionID] = diff.data ?? []
             }),
           )

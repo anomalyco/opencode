@@ -5,6 +5,7 @@ import { State } from "./state"
 import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
 import { Filesystem } from "@/util/filesystem"
+import fs from "fs"
 
 interface Context {
   directory: string
@@ -62,7 +63,8 @@ function track(directory: string, next: Promise<Context>) {
 
 export const Instance = {
   async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
-    const directory = Filesystem.resolve(input.directory)
+    // Resolve symlinks so the same physical directory always maps to one Instance.
+    const directory = Filesystem.resolve(fs.realpathSync(input.directory))
     let existing = cache.get(directory)
     if (!existing) {
       Log.Default.info("creating instance", { directory })
@@ -104,7 +106,7 @@ export const Instance = {
     return State.create(() => Instance.directory, init, dispose)
   },
   async reload(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
-    const directory = Filesystem.resolve(input.directory)
+    const directory = Filesystem.resolve(fs.realpathSync(input.directory))
     Log.Default.info("reloading instance", { directory })
     await State.dispose(directory)
     cache.delete(directory)

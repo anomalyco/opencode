@@ -647,7 +647,10 @@ export function Prompt(props: PromptProps) {
     setStore("extmarkToPartIndex", new Map())
     props.onSubmit?.()
 
-    // temporary hack to make sure the message is sent
+    // Navigate to the new session after a short delay to allow the
+    // session.prompt request to reach the server. The sync() merge
+    // logic ensures any events that arrive during the fetch window
+    // are preserved rather than overwritten.
     if (!props.sessionID)
       setTimeout(() => {
         route.navigate({
