@@ -34,6 +34,7 @@ import { useProviders } from "@/hooks/use-providers"
 import { showToast, Toast, toaster } from "@opencode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { clearWorkspaceTerminals } from "@/context/terminal"
+import { dropSessionCaches, pickSessionCacheEvictions } from "@/context/global-sync/session-cache"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { Binary } from "@opencode-ai/util/binary"
@@ -657,25 +658,24 @@ export default function Layout(props: ParentProps) {
   const prefetchQueues = new Map<string, PrefetchQueue>()
 
   const PREFETCH_MAX_SESSIONS_PER_DIR = 10
-  const prefetchedByDir = new Map<string, Map<string, true>>()
+  const prefetchedByDir = new Map<string, Set<string>>()
 
   const lruFor = (directory: string) => {
     const existing = prefetchedByDir.get(directory)
     if (existing) return existing
-    const created = new Map<string, true>()
+    const created = new Set<string>()
     prefetchedByDir.set(directory, created)
     return created
   }
 
   const markPrefetched = (directory: string, sessionID: string) => {
     const lru = lruFor(directory)
-    if (lru.has(sessionID)) lru.delete(sessionID)
-    lru.set(sessionID, true)
-    while (lru.size > PREFETCH_MAX_SESSIONS_PER_DIR) {
-      const oldest = lru.keys().next().value as string | undefined
-      if (!oldest) return
-      lru.delete(oldest)
-    }
+    return pickSessionCacheEvictions({
+      seen: lru,
+      keep: sessionID,
+      limit: PREFETCH_MAX_SESSIONS_PER_DIR,
+      preserve: directory === params.dir && params.id ? [params.id] : undefined,
+    })
   }
 
   createEffect(() => {
@@ -724,6 +724,7 @@ export default function Layout(props: ParentProps) {
     return retry(() => globalSDK.client.session.messages({ directory, sessionID, limit: prefetchChunk }))
       .then((messages) => {
         if (prefetchToken.value !== token) return
+        if (!lruFor(directory).has(sessionID)) return
 
         const items = (messages.data ?? []).filter((x) => !!x?.info?.id)
         const next = items.map((x) => x.info).filter((m): m is Message => !!m?.id)
@@ -787,7 +788,18 @@ export default function Layout(props: ParentProps) {
     const lru = lruFor(directory)
     const known = lru.has(session.id)
     if (!known && lru.size >= PREFETCH_MAX_SESSIONS_PER_DIR && priority !== "high") return
-    markPrefetched(directory, session.id)
+    const stale = markPrefetched(directory, session.id)
+    if (stale.length > 0) {
+      const [, setStore] = globalSync.child(directory, { bootstrap: false })
+      for (const id of stale) {
+        globalSync.todo.set(id, undefined)
+      }
+      setStore(
+        produce((draft) => {
+          dropSessionCaches(draft, stale)
+        }),
+      )
+    }
 
     if (priority === "high") q.pending.unshift(session.id)
     if (priority !== "high") q.pending.push(session.id)
