@@ -195,8 +195,13 @@ export const TuiThreadCommand = cmd({
             events: createEventSource(client),
           }
 
+
       setTimeout(() => {
-        client.call("checkUpgrade", { directory: cwd }).catch(() => {})
+        client.call("checkUpgrade", { directory: cwd }).catch((err) => {
+          Log.Default.warn("tui.thread checkUpgrade failed", {
+            error: err instanceof Error ? err.message : String(err),
+          })
+        })
       }, 1000).unref?.()
 
       try {
