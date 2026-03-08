@@ -3,8 +3,12 @@ import { useSync } from "@tui/context/sync"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
+import { useArgs } from "@tui/context/args"
+import { useKV } from "@tui/context/kv"
 import { Clipboard } from "@tui/util/clipboard"
 import type { PromptInfo } from "@tui/component/prompt/history"
+import { useToast } from "@tui/ui/toast"
+import { forkSession } from "./fork"
 
 export function DialogMessage(props: {
   messageID: string
@@ -15,6 +19,9 @@ export function DialogMessage(props: {
   const sdk = useSDK()
   const message = createMemo(() => sync.data.message[props.sessionID]?.find((x) => x.id === props.messageID))
   const route = useRoute()
+  const args = useArgs()
+  const kv = useKV()
+  const toast = useToast()
 
   return (
     <DialogSelect
@@ -76,29 +83,15 @@ export function DialogMessage(props: {
           value: "session.fork",
           description: "create a new session",
           onSelect: async (dialog) => {
-            const result = await sdk.client.session.fork({
+            await forkSession({
               sessionID: props.sessionID,
               messageID: props.messageID,
-            })
-            const initialPrompt = (() => {
-              const msg = message()
-              if (!msg) return undefined
-              const parts = sync.data.part[msg.id]
-              return parts.reduce(
-                (agg, part) => {
-                  if (part.type === "text") {
-                    if (!part.synthetic) agg.input += part.text
-                  }
-                  if (part.type === "file") agg.parts.push(part)
-                  return agg
-                },
-                { input: "", parts: [] as PromptInfo["parts"] },
-              )
-            })()
-            route.navigate({
-              sessionID: result.data!.id,
-              type: "session",
-              initialPrompt,
+              attachURL: args.attachURL,
+              sdk,
+              sync,
+              kv,
+              route,
+              toast,
             })
             dialog.clear()
           },

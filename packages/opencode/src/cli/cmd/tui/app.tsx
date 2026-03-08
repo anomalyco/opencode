@@ -24,7 +24,7 @@ import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
-import { PromptHistoryProvider } from "./component/prompt/history"
+import { PromptHistoryProvider, type PromptInfo } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
@@ -40,6 +40,7 @@ import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { TuiConfigProvider } from "./context/tui-config"
 import { TuiConfig } from "@/config/tui"
+import { forkKey } from "@tui/util/fork-pane"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -299,6 +300,17 @@ function App() {
       }
       // Handle --session without --fork immediately (fork is handled in createEffect below)
       if (args.sessionID && !args.fork) {
+        const key = forkKey(args.sessionID)
+        const initialPrompt = kv.get(key) as PromptInfo | undefined
+        if (initialPrompt && typeof initialPrompt.input === "string" && Array.isArray(initialPrompt.parts)) {
+          kv.set(key, null)
+          route.navigate({
+            type: "session",
+            sessionID: args.sessionID,
+            initialPrompt,
+          })
+          return
+        }
         route.navigate({
           type: "session",
           sessionID: args.sessionID,
