@@ -1245,7 +1245,7 @@ export namespace Config {
       if (!parsed.data.$schema && isFile) {
         parsed.data.$schema = "https://opencode.ai/config.json"
         const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
-        await Bun.write(options.path, updated).catch(() => {})
+        await Filesystem.write(options.path, updated).catch(() => {})
       }
       const data = parsed.data
       if (data.plugin && isFile) {
@@ -1409,3 +1409,5 @@ export namespace Config {
   // Re-export loadCommand for use when cache_command_markdown_files is false
   export const reloadCommands = loadCommand
 }
+Filesystem.write
+Filesystem.write

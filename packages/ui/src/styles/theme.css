@@ -85,6 +85,10 @@
     0 0 0 1px var(--border-weak-base, rgba(0, 0, 0, 0.07)), 0 36px 80px 0 rgba(0, 0, 0, 0.03),
     0 13.141px 29.201px 0 rgba(0, 0, 0, 0.04), 0 6.38px 14.177px 0 rgba(0, 0, 0, 0.05),
     0 3.127px 6.95px 0 rgba(0, 0, 0, 0.06), 0 1.237px 2.748px 0 rgba(0, 0, 0, 0.09);
+  --shadow-sidebar-overlay:
+    0 100px 80px 0 rgba(0, 0, 0, 0.29), 0 41.778px 33.422px 0 rgba(0, 0, 0, 0.21),
+    0 22.336px 17.869px 0 rgba(0, 0, 0, 0.17), 0 12.522px 10.017px 0 rgba(0, 0, 0, 0.14),
+    0 6.65px 5.32px 0 rgba(0, 0, 0, 0.12), 0 2.767px 2.214px 0 rgba(0, 0, 0, 0.08);
 
   color-scheme: light;
   --text-mix-blend-mode: multiply;
@@ -212,6 +216,7 @@
   --border-weak-selected: var(--cobalt-light-alpha-5);
   --border-weak-disabled: var(--smoke-light-alpha-6);
   --border-weak-focus: var(--smoke-light-alpha-7);
+  --border-weaker-base: var(--smoke-light-alpha-3);
   --border-interactive-base: var(--cobalt-light-7);
   --border-interactive-hover: var(--cobalt-light-8);
   --border-interactive-active: var(--cobalt-light-9);
@@ -323,12 +328,6 @@
   --markdown-image-text: #318795;
   --markdown-code-block: #1a1a1a;
   --border-color: #ffffff;
-  --border-weaker-base: var(--smoke-light-alpha-3);
-  --border-weaker-hover: var(--smoke-light-alpha-4);
-  --border-weaker-active: var(--smoke-light-alpha-6);
-  --border-weaker-selected: var(--cobalt-light-alpha-4);
-  --border-weaker-disabled: var(--smoke-light-alpha-2);
-  --border-weaker-focus: var(--smoke-light-alpha-6);
   --button-ghost-hover: var(--smoke-light-alpha-2);
   --button-ghost-hover2: var(--smoke-light-alpha-3);
   --avatar-background-pink: #feeef8;
@@ -582,12 +581,7 @@
     --markdown-image-text: #56b6c2;
     --markdown-code-block: #eeeeee;
     --border-color: #ffffff;
-    --border-weaker-base: var(--smoke-dark-alpha-3);
-    --border-weaker-hover: var(--smoke-dark-alpha-4);
-    --border-weaker-active: var(--smoke-dark-alpha-6);
-    --border-weaker-selected: var(--cobalt-dark-alpha-3);
-    --border-weaker-disabled: var(--smoke-dark-alpha-2);
-    --border-weaker-focus: var(--smoke-dark-alpha-6);
+    --border-weaker-base: var(--smoke-dark-alpha-2);
     --button-ghost-hover: var(--smoke-dark-alpha-2);
     --button-ghost-hover2: var(--smoke-dark-alpha-3);
     --avatar-background-pink: #501b3f;
