@@ -58,7 +58,7 @@ describe("util.process", () => {
   }, 3000)
 
   test("uses cwd when spawning commands", async () => {
-    const out = await Process.run(node('process.stdout.write(process.cwd())'), {
+    const out = await Process.run(node("process.stdout.write(process.cwd())"), {
       cwd: "/tmp",
     })
     expect(out.stdout.toString()).toBe("/tmp")
