@@ -306,7 +306,7 @@ describe("prompt bar layout policy", () => {
     expect(source.includes("const el = this as BoxRenderable")).toBe(true)
     expect(source.includes("width: el.width")).toBe(true)
     expect(source.includes("height: el.height")).toBe(true)
-    expect(source.includes("buffer.fillRect(el.x + x, el.y + y, w, h, color)")).toBe(true)
+    expect(source.includes("buffer.fillRect(x, y, w, h, color)")).toBe(true)
     expect(
       source.includes(
         "backgroundColor={promptBarSurfaceStyle().shellBackground}\n          shouldFill={promptBarSurfaceStyle().shouldFill}\n          renderBefore={function (buffer) {",

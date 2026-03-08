@@ -1032,7 +1032,7 @@ export function Prompt(props: PromptProps) {
               width: el.width,
               height: el.height,
               fillRect(x: number, y: number, w: number, h: number, color: RGBA) {
-                buffer.fillRect(el.x + x, el.y + y, w, h, color)
+                buffer.fillRect(x, y, w, h, color)
               },
             }
             render({
