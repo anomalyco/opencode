@@ -1,4 +1,5 @@
 import { Auth } from "@/auth"
+import { createResource, onCleanup } from "solid-js"
 
 const endpoint = "https://chatgpt.com/backend-api/wham/usage"
 
@@ -63,4 +64,14 @@ export async function loadCodexUsage() {
   )
 
   return usage.toSorted((a, b) => a.id.localeCompare(b.id))
+}
+
+const interval = 30_000
+
+export function useCodexUsage() {
+  const [usage, controls] = createResource(loadCodexUsage)
+  const timer = setInterval(() => void controls.refetch(), interval)
+  timer.unref?.()
+  onCleanup(() => clearInterval(timer))
+  return [usage, controls] as const
 }

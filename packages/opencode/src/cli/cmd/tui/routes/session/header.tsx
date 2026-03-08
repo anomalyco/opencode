@@ -1,4 +1,4 @@
-import { type Accessor, createMemo, createResource, createSignal, Match, Show, Switch } from "solid-js"
+import { type Accessor, createMemo, createSignal, Match, Show, Switch } from "solid-js"
 import { useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { pipe, sumBy } from "remeda"
@@ -8,7 +8,7 @@ import type { AssistantMessage, Session } from "@opencode-ai/sdk/v2"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "../../context/keybind"
 import { useTerminalDimensions } from "@opentui/solid"
-import { loadCodexUsage } from "@/cli/cmd/tui/util/codex-usage"
+import { useCodexUsage } from "@/cli/cmd/tui/util/codex-usage"
 
 const Title = (props: { session: Accessor<Session> }) => {
   const { theme } = useTheme()
@@ -56,7 +56,7 @@ export function Header() {
   const sync = useSync()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
-  const [usage] = createResource(loadCodexUsage)
+  const [usage] = useCodexUsage()
 
   const cost = createMemo(() => {
     const total = pipe(

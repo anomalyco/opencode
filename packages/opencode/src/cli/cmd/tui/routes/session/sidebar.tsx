@@ -1,5 +1,5 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, createResource, For, Show, Switch, Match } from "solid-js"
+import { createMemo, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
@@ -11,7 +11,7 @@ import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
-import { loadCodexUsage } from "@/cli/cmd/tui/util/codex-usage"
+import { useCodexUsage } from "@/cli/cmd/tui/util/codex-usage"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
@@ -20,7 +20,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
-  const [usage] = createResource(loadCodexUsage)
+  const [usage] = useCodexUsage()
 
   const [expanded, setExpanded] = createStore({
     mcp: true,

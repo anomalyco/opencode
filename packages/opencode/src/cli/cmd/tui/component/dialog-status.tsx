@@ -3,8 +3,8 @@ import { fileURLToPath } from "bun"
 import { useTheme } from "../context/theme"
 import { useDialog } from "@tui/ui/dialog"
 import { useSync } from "@tui/context/sync"
-import { For, Match, Switch, Show, createMemo, createResource } from "solid-js"
-import { loadCodexUsage } from "@/cli/cmd/tui/util/codex-usage"
+import { For, Match, Switch, Show, createMemo } from "solid-js"
+import { useCodexUsage } from "@/cli/cmd/tui/util/codex-usage"
 
 export type DialogStatusProps = {}
 
@@ -12,7 +12,7 @@ export function DialogStatus() {
   const sync = useSync()
   const { theme } = useTheme()
   const dialog = useDialog()
-  const [usage] = createResource(loadCodexUsage)
+  const [usage] = useCodexUsage()
 
   const enabledFormatters = createMemo(() => sync.data.formatter.filter((f) => f.enabled))
 
