@@ -488,7 +488,6 @@ export const dict = {
   "workspace.cost.deletedSuffix": "(silindi)",
   "workspace.cost.empty": "Seçilen döneme ait kullanım verisi yok.",
   "workspace.cost.subscriptionShort": "abonelik",
-  "workspace.cost.liteShort": "lite",
 
   "workspace.keys.title": "API Anahtarları",
   "workspace.keys.subtitle": "opencode hizmetlerine erişim için API anahtarlarınızı yönetin.",
