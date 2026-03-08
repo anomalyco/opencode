@@ -65,7 +65,7 @@ export const WebCommand = cmd({
         UI.println(
           UI.Style.TEXT_INFO_BOLD + "  mDNS:              ",
           UI.Style.TEXT_NORMAL,
-          `${opts.mdnsDomain}:${server.port}`,
+          `${opts.mdnsDomain}:${server.port}/${dir}`,
         )
       }
 
