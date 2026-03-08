@@ -1,5 +1,5 @@
 import { test, expect } from "../fixtures"
-import { openSidebar, withSession } from "../actions"
+import { cleanupSession, openSidebar, withSession } from "../actions"
 import { promptSelector } from "../selectors"
 
 test("sidebar session links navigate to the selected session", async ({ page, slug, sdk, gotoSession }) => {
@@ -18,14 +18,13 @@ test("sidebar session links navigate to the selected session", async ({ page, sl
 
     const target = page.locator(`[data-session-id="${two.id}"] a`).first()
     await expect(target).toBeVisible()
-    await target.scrollIntoViewIfNeeded()
     await target.click()
 
     await expect(page).toHaveURL(new RegExp(`/${slug}/session/${two.id}(?:\\?|#|$)`))
     await expect(page.locator(promptSelector)).toBeVisible()
     await expect(page.locator(`[data-session-id="${two.id}"] a`).first()).toHaveClass(/\bactive\b/)
   } finally {
-    await sdk.session.delete({ sessionID: one.id }).catch(() => undefined)
-    await sdk.session.delete({ sessionID: two.id }).catch(() => undefined)
+    await cleanupSession({ sdk, sessionID: one.id })
+    await cleanupSession({ sdk, sessionID: two.id })
   }
 })
