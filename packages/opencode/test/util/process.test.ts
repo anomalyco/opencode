@@ -56,4 +56,20 @@ describe("util.process", () => {
     expect(out.code).not.toBe(0)
     expect(Date.now() - started).toBeLessThan(1000)
   }, 3000)
+
+  test("uses cwd when spawning commands", async () => {
+    const out = await Process.run(node("process.stdout.write(process.cwd())"), {
+      cwd: "/tmp",
+    })
+    expect(out.stdout.toString()).toBe("/tmp")
+  })
+
+  test("merges environment overrides", async () => {
+    const out = await Process.run(node('process.stdout.write(process.env.OPENCODE_TEST ?? "")'), {
+      env: {
+        OPENCODE_TEST: "set",
+      },
+    })
+    expect(out.stdout.toString()).toBe("set")
+  })
 })
