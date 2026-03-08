@@ -250,6 +250,7 @@ export function TerminalPanel() {
                           <div id={`terminal-wrapper-${id}`} class="absolute inset-0">
                             <Terminal
                               pty={pty()}
+                              onConnect={() => terminal.trim(id)}
                               onCleanup={terminal.update}
                               onConnectError={() => terminal.clone(id)}
                             />
