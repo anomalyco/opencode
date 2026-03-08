@@ -145,7 +145,7 @@ export const SessionReview = (props: SessionReviewProps) => {
   const searchHandles = new Map<string, FileSearchHandle>()
   const readyFiles = new Set<string>()
   const [store, setStore] = createStore<{ open: string[]; force: Record<string, boolean> }>({
-    open: props.diffs.length > 10 ? [] : props.diffs.map((d) => d.file),
+    open: [],
     force: {},
   })
 
@@ -554,7 +554,9 @@ export const SessionReview = (props: SessionReviewProps) => {
   return (
     <div data-component="session-review" class={props.class} classList={props.classList}>
       <div data-slot="session-review-header" class={props.classes?.header}>
-        <div data-slot="session-review-title">{props.title ?? i18n.t("ui.sessionReview.title")}</div>
+        <div data-slot="session-review-title">
+          {props.title === undefined ? i18n.t("ui.sessionReview.title") : props.title}
+        </div>
         <div data-slot="session-review-actions">
           <Show when={hasDiffs() && props.onDiffStyleChange}>
             <RadioGroup

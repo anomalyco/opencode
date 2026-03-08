@@ -30,8 +30,6 @@ export const sidebarNavSelector = '[data-component="sidebar-nav-desktop"]'
 export const projectSwitchSelector = (slug: string) =>
   `${sidebarNavSelector} [data-action="project-switch"][data-project="${slug}"]`
 
-export const projectCloseHoverSelector = (slug: string) => `[data-action="project-close-hover"][data-project="${slug}"]`
-
 export const projectMenuTriggerSelector = (slug: string) =>
   `${sidebarNavSelector} [data-action="project-menu"][data-project="${slug}"]`
 
@@ -52,6 +50,8 @@ export const dropdownMenuTriggerSelector = '[data-slot="dropdown-menu-trigger"]'
 export const dropdownMenuContentSelector = '[data-component="dropdown-menu-content"]'
 
 export const inlineInputSelector = '[data-component="inline-input"]'
+
+export const sessionTimelineHeaderSelector = "[data-session-title]"
 
 export const sessionItemSelector = (sessionID: string) => `${sidebarNavSelector} [data-session-id="${sessionID}"]`
 
