@@ -1,50 +1,35 @@
 import { semver } from "bun"
-import { text } from "node:stream/consumers"
 import { Log } from "../util/log"
-import { Process } from "../util/process"
 
 export namespace PackageRegistry {
   const log = Log.create({ service: "bun" })
 
-  function which() {
-    return process.execPath
-  }
-
-  export async function info(pkg: string, field: string, cwd?: string): Promise<string | null> {
-    const result = Process.spawn([which(), "info", pkg, field], {
-      cwd,
-      stdout: "pipe",
-      stderr: "pipe",
-      env: {
-        ...process.env,
-        BUN_BE_BUN: "1",
-      },
-    })
-
-    const code = await result.exited
-    const stdout = result.stdout ? await text(result.stdout) : ""
-    const stderr = result.stderr ? await text(result.stderr) : ""
-
-    if (code !== 0) {
-      log.warn("bun info failed", { pkg, field, code, stderr })
+  /**
+   * Query npm registry directly via HTTP instead of `bun info` to avoid
+   * bun's registry cache returning stale version data.
+   */
+  export async function latest(pkg: string): Promise<string | null> {
+    const res = await fetch(`https://registry.npmjs.org/${pkg}/latest`, {
+      headers: { Accept: "application/vnd.npm.install-v1+json" },
+      signal: AbortSignal.timeout(10_000),
+    }).catch(() => null)
+    if (!res?.ok) {
+      log.warn("registry fetch failed", { pkg, status: res?.status })
       return null
     }
-
-    const value = stdout.trim()
-    if (!value) return null
-    return value
+    const data = (await res.json().catch(() => null)) as { version?: string } | null
+    return data?.version ?? null
   }
 
-  export async function isOutdated(pkg: string, cachedVersion: string, cwd?: string): Promise<boolean> {
-    const latestVersion = await info(pkg, "version", cwd)
-    if (!latestVersion) {
-      log.warn("Failed to resolve latest version, using cached", { pkg, cachedVersion })
+  export async function isOutdated(pkg: string, cached: string): Promise<boolean> {
+    const version = await latest(pkg)
+    if (!version) {
+      log.warn("failed to resolve latest version, using cached", { pkg, cached })
       return false
     }
 
-    const isRange = /[\s^~*xX<>|=]/.test(cachedVersion)
-    if (isRange) return !semver.satisfies(latestVersion, cachedVersion)
+    if (/[\s^~*xX<>|=]/.test(cached)) return !semver.satisfies(version, cached)
 
-    return semver.order(cachedVersion, latestVersion) === -1
+    return semver.order(cached, version) === -1
   }
 }

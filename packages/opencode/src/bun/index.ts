@@ -75,7 +75,7 @@ export namespace BunProc {
     } else if (version !== "latest" && cachedVersion === version) {
       return mod
     } else if (version === "latest") {
-      const isOutdated = await PackageRegistry.isOutdated(pkg, cachedVersion, Global.Path.cache)
+      const isOutdated = await PackageRegistry.isOutdated(pkg, cachedVersion)
       if (!isOutdated) return mod
       log.info("Cached version is outdated, proceeding with install", { pkg, cachedVersion })
     }
@@ -86,7 +86,7 @@ export namespace BunProc {
       "--force",
       "--exact",
       // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
-      ...(proxied() || process.env.CI ? ["--no-cache"] : []),
+      ...(version === "latest" || proxied() || process.env.CI ? ["--no-cache"] : []),
       "--cwd",
       Global.Path.cache,
       pkg + "@" + version,
