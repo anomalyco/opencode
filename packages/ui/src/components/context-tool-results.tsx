@@ -58,11 +58,9 @@ export function ContextToolGroupHeader(props: {
     <ToolCall
       variant="row"
       icon="magnifying-glass-menu"
-      open={!props.pending && props.open}
-      showArrow={!props.pending}
-      onOpenChange={(v) => {
-        if (!props.pending) props.onOpenChange(v)
-      }}
+      open={props.open}
+      showArrow
+      onOpenChange={props.onOpenChange}
       trigger={
         <div data-component="context-tool-group-trigger" data-pending={props.pending || undefined}>
           <span
