@@ -39,6 +39,18 @@ Specify npm packages in your config file.
 
 Both regular and scoped npm packages are supported.
 
+Git-backed packages are also supported when you provide an explicit package
+name alias:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["my-plugin@git+https://github.com/my-org/my-plugin"]
+}
+```
+
+Use this `name@git+...` form for git installs so the package name is explicit.
+
 Browse available plugins in the [ecosystem](/docs/ecosystem#plugins).
 
 ---

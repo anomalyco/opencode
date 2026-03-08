@@ -1546,6 +1546,7 @@ describe("getPluginName", () => {
     expect(Config.getPluginName("oh-my-opencode@2.4.3")).toBe("oh-my-opencode")
     expect(Config.getPluginName("some-plugin@1.0.0")).toBe("some-plugin")
     expect(Config.getPluginName("plugin@latest")).toBe("plugin")
+    expect(Config.getPluginName("my-plugin@git+https://github.com/my-org/my-plugin")).toBe("my-plugin")
   })
 
   test("extracts name from scoped npm package", () => {
