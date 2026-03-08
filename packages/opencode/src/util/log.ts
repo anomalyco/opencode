@@ -59,7 +59,7 @@ export namespace Log {
 
   export async function init(options: Options) {
     if (options.level) level = options.level
-    cleanup(Global.Path.log)
+    await cleanup(Global.Path.log)
     if (options.print) return
     logpath = path.join(
       Global.Path.log,
@@ -77,15 +77,15 @@ export namespace Log {
     }
   }
 
-  async function cleanup(dir: string) {
+  export async function cleanup(dir: string) {
     const files = await Glob.scan("????-??-??T??????.log", {
       cwd: dir,
       absolute: true,
       include: "file",
     })
-    if (files.length <= 5) return
+    if (files.length <= 10) return
 
-    const filesToDelete = files.slice(0, -10)
+    const filesToDelete = files.sort().slice(0, -10)
     await Promise.all(filesToDelete.map((file) => fs.unlink(file).catch(() => {})))
   }
 
