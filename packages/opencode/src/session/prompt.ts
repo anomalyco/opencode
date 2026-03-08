@@ -322,7 +322,7 @@ export namespace SessionPrompt {
       ) {
         const hook = await Plugin.trigger("session.stopping", { sessionID }, { stop: true, message: undefined as string | undefined })
         if (!hook.stop && hook.message) {
-          log.info("session.stopping re-entered loop", { sessionID })
+          log.info("session.stopping hook prevented stop", { sessionID })
           await createUserMessage({ sessionID, parts: [{ type: "text", text: hook.message }] })
           continue
         }
