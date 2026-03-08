@@ -2280,7 +2280,7 @@ test("cloudflare-ai-gateway forwards config metadata options", async () => {
   })
 })
 
-test("provider loaded from env has no explicit timeout in options, confirming getSDK fallback applies", async () => {
+test("env-only provider has no timeout in listed options — getSDK ??= applies at call time", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
@@ -2299,15 +2299,14 @@ test("provider loaded from env has no explicit timeout in options, confirming ge
     fn: async () => {
       const providers = await Provider.list()
       expect(providers["anthropic"]).toBeDefined()
-      // No timeout configured in config or env — options.timeout is absent.
-      // getSDK sets options["timeout"] = 300000 when the key is missing, so
-      // the default applies at call time. This test confirms the pre-condition.
+      // Provider loaded from env only — no options block in config, so
+      // options.timeout is absent here. getSDK applies ??= 300000 at call time.
       expect(providers["anthropic"].options.timeout).toBeUndefined()
     },
   })
 })
 
-test("provider with timeout: false in config disables timeout in getSDK", async () => {
+test("timeout: false in config is preserved through Provider.list — ??= does not overwrite false", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
@@ -2333,7 +2332,7 @@ test("provider with timeout: false in config disables timeout in getSDK", async 
     fn: async () => {
       const providers = await Provider.list()
       expect(providers["anthropic"]).toBeDefined()
-      // Explicit false must override the { timeout: 300000, ... } spread default.
+      // false is not nullish, so options["timeout"] ??= 300000 leaves it as false.
       expect(providers["anthropic"].options.timeout).toBe(false)
     },
   })

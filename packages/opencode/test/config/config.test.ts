@@ -1996,9 +1996,14 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
 })
 
 describe("provider options timeout default", () => {
-  test("defaults to 300000 when options provided but timeout omitted", () => {
+  test("defaults to 300000 when options block present but timeout omitted", () => {
     const parsed = Config.Provider.parse({ options: {} })
     expect(parsed.options?.timeout).toBe(300000)
+  })
+
+  test("options block absent entirely — timeout not set by schema (getSDK ??= handles this)", () => {
+    const parsed = Config.Provider.parse({})
+    expect(parsed.options).toBeUndefined()
   })
 
   test("respects explicit timeout value", () => {
