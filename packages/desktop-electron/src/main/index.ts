@@ -1,14 +1,18 @@
-import { app, BrowserWindow, dialog } from "electron"
-import type { Event } from "electron"
-import pkg from "electron-updater"
 import { randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
 import { existsSync } from "node:fs"
+import { createServer } from "node:net"
 import { homedir } from "node:os"
 import { join } from "node:path"
-import { createServer } from "node:net"
+import type { Event } from "electron"
+import { app, type BrowserWindow, dialog } from "electron"
+import pkg from "electron-updater"
 
-const APP_NAMES: Record<string, string> = { dev: "OpenCode Dev", beta: "OpenCode Beta", prod: "OpenCode" }
+const APP_NAMES: Record<string, string> = {
+  dev: "OpenCode Dev",
+  beta: "OpenCode Beta",
+  prod: "OpenCode",
+}
 const APP_IDS: Record<string, string> = {
   dev: "ai.opencode.desktop.dev",
   beta: "ai.opencode.desktop.beta",
@@ -18,7 +22,9 @@ app.setName(app.isPackaged ? APP_NAMES[CHANNEL] : "OpenCode Dev")
 app.setPath("userData", join(app.getPath("appData"), app.isPackaged ? APP_IDS[CHANNEL] : "ai.opencode.desktop.dev"))
 const { autoUpdater } = pkg
 
+import type { InitStep, ServerReadyData, SqliteMigrationProgress, WslConfig } from "../preload/types"
 import { checkAppExists, resolveAppPath, wslPath } from "./apps"
+import type { CommandChild } from "./cli"
 import { installCli, syncCli } from "./cli"
 import { CHANNEL, UPDATER_ENABLED } from "./constants"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand, sendSqliteMigrationProgress } from "./ipc"
@@ -37,9 +43,6 @@ import {
 } from "./server"
 import { createLoadingWindow, createMainWindow, setDockIcon } from "./windows"
 
-import type { InitStep, ServerReadyData, SqliteMigrationProgress, WslConfig } from "../preload/types"
-import type { CommandChild } from "./cli"
-
 type ServerConnection =
   | { variant: "existing"; url: string }
   | {
@@ -56,16 +59,19 @@ const initEmitter = new EventEmitter()
 let initStep: InitStep = { phase: "server_waiting" }
 
 let mainWindow: BrowserWindow | null = null
-let loadingWindow: BrowserWindow | null = null
+const loadingWindow: BrowserWindow | null = null
 let sidecar: CommandChild | null = null
-let loadingComplete = defer<void>()
+const loadingComplete = defer<void>()
 
 const pendingDeepLinks: string[] = []
 
 const serverReady = defer<ServerReadyData>()
 const logger = initLogging()
 
-logger.log("app starting", { version: app.getVersion(), packaged: app.isPackaged })
+logger.log("app starting", {
+  version: app.getVersion(),
+  packaged: app.isPackaged,
+})
 
 setupApp()
 
@@ -162,7 +168,10 @@ async function initialize() {
   const loadingTask = (async () => {
     logger.log("setting up server connection")
     const serverConnection = await setupServerConnection()
-    logger.log("server connection ready", { variant: serverConnection.variant, url: serverConnection.url })
+    logger.log("server connection ready", {
+      variant: serverConnection.variant,
+      url: serverConnection.url,
+    })
 
     const cliHealthCheck = (() => {
       if (serverConnection.variant == "cli") {
@@ -175,7 +184,10 @@ async function initialize() {
             if (progress.type === "Done") sqliteDone?.resolve()
           })
           await health.wait
-          serverReady.resolve({ url: serverConnection.url, password: serverConnection.password })
+          serverReady.resolve({
+            url: serverConnection.url,
+            password: serverConnection.password,
+          })
         }
       } else {
         serverReady.resolve({ url: serverConnection.url, password: null })
@@ -370,8 +382,10 @@ async function checkUpdate() {
       files: updateInfo?.files?.map((file) => file.url) ?? [],
     })
     const version = result?.updateInfo?.version
-    if (!version) {
-      logger.log("no update available", { reason: "provider returned no newer version" })
+    if (result?.isUpdateAvailable === false || !version) {
+      logger.log("no update available", {
+        reason: "provider returned no newer version",
+      })
       return { updateAvailable: false }
     }
     logger.log("update available", { version })
