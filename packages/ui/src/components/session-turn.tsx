@@ -5,7 +5,7 @@ import { useFileComponent } from "../context/file"
 
 import { Binary } from "@opencode-ai/util/binary"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { createEffect, createMemo, createSignal, For, on, ParentProps, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, on, onCleanup, ParentProps, Show } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { AssistantParts, Message, Part, PART_MAPPING } from "./message-part"
 import { Card } from "./card"
@@ -86,10 +86,80 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
 
 const hidden = new Set(["todowrite", "todoread"])
 
-function partState(part: PartType, showReasoningSummaries: boolean) {
+const builtin = new Set([
+  "apply_patch",
+  "bash",
+  "batch",
+  "codesearch",
+  "edit",
+  "glob",
+  "grep",
+  "invalid",
+  "list",
+  "lsp",
+  "plan_exit",
+  "question",
+  "read",
+  "skill",
+  "task",
+  "todoread",
+  "todowrite",
+  "webfetch",
+  "websearch",
+  "write",
+])
+
+function text(value: unknown) {
+  if (typeof value !== "string") return
+  const next = value.trim()
+  if (!next) return
+  return next
+}
+
+function hook(input: Record<string, unknown>, metadata: Record<string, unknown>) {
+  const keys = ["hook", "hook_name", "hookName", "event", "name"]
+  for (const src of [metadata, input]) {
+    for (const key of keys) {
+      const value = text(src?.[key])
+      if (!value) continue
+      if (value.includes("-")) return value
+      if (value === "session-start") return value
+    }
+  }
+
+  const desc = text(input.description) ?? text(metadata.description)
+  if (!desc) return
+  const match = desc.match(/([a-z0-9]+(?:-[a-z0-9]+){1,})/i)
+  if (!match?.[1]) return
+  return match[1]
+}
+
+function hookMeta(input: Record<string, unknown>, metadata: Record<string, unknown>) {
+  const keys = ["hook", "hook_name", "hookName", "hook_type", "hookType", "event", "stage", "phase"]
+  for (const src of [metadata, input]) {
+    for (const key of keys) {
+      if (text(src?.[key])) return true
+    }
+  }
+  return false
+}
+
+function custom(part: PartType) {
+  if (part.type !== "tool") return false
+  const tool = part.tool.toLowerCase()
+  if (!builtin.has(tool)) return true
+  if (tool !== "bash") return false
+  const metadata = part.state.status === "pending" ? {} : (part.state.metadata ?? {})
+  const input = part.state.input ?? {}
+  return hookMeta(input, metadata) || !!hook(input, metadata)
+}
+
+function partState(part: PartType, showReasoningSummaries: boolean, showCustomHookParts: boolean) {
   if (part.type === "tool") {
-    if (hidden.has(part.tool)) return
-    if (part.tool === "question" && (part.state.status === "pending" || part.state.status === "running")) return
+    const tool = part.tool.toLowerCase()
+    if (hidden.has(tool)) return
+    if (!showCustomHookParts && custom(part)) return
+    if (tool === "question" && part.state.status === "pending") return
     return "visible" as const
   }
   if (part.type === "text") return part.text?.trim() ? ("visible" as const) : undefined
@@ -99,6 +169,16 @@ function partState(part: PartType, showReasoningSummaries: boolean) {
   }
   if (PART_MAPPING[part.type]) return "visible" as const
   return
+}
+
+function ghost(parts: PartType[]) {
+  return !parts.some((part) => {
+    if (part.type === "step-start" || part.type === "step-finish") return false
+    if (part.type === "reasoning") return false
+    if (part.type === "text") return !!part.text?.trim()
+    if (part.type === "tool") return true
+    return !!PART_MAPPING[part.type]
+  })
 }
 
 function clean(value: string) {
@@ -142,6 +222,7 @@ export function SessionTurn(
     sessionID: string
     messageID: string
     showReasoningSummaries?: boolean
+    showCustomHookParts?: boolean
     shellToolDefaultOpen?: boolean
     editToolDefaultOpen?: boolean
     active?: boolean
@@ -191,12 +272,22 @@ export function SessionTurn(
     return msg
   })
 
+  const status = createMemo(() => {
+    if (props.status !== undefined) return props.status
+    if (typeof props.active === "boolean" && !props.active) return idle
+    return data.store.session_status[props.sessionID] ?? idle
+  })
+
   const pending = createMemo(() => {
     if (typeof props.active === "boolean" && typeof props.queued === "boolean") return
+    const busy = status().type !== "idle"
     const messages = allMessages() ?? emptyMessages
-    return messages.findLast(
-      (item): item is AssistantMessage => item.role === "assistant" && typeof item.time.completed !== "number",
-    )
+    return messages.findLast((item): item is AssistantMessage => {
+      if (item.role !== "assistant") return false
+      if (typeof item.time.completed === "number") return false
+      if (busy) return true
+      return !ghost(list(data.store.part?.[item.id], emptyParts))
+    })
   })
 
   const pendingUser = createMemo(() => {
@@ -313,12 +404,38 @@ export function SessionTurn(
     return unwrap(String(msg))
   })
 
-  const status = createMemo(() => {
-    if (props.status !== undefined) return props.status
-    if (typeof props.active === "boolean" && !props.active) return idle
-    return data.store.session_status[props.sessionID] ?? idle
+  // Debounced working state to prevent flashing when status and time.completed update out of sync
+  const [stableWorking, setStableWorking] = createSignal(false)
+  let workingDebounceTimer: ReturnType<typeof setTimeout> | undefined
+
+  createEffect(() => {
+    const isWorking = status().type !== "idle" && active()
+
+    if (isWorking) {
+      // Immediately enter working state
+      if (workingDebounceTimer) {
+        clearTimeout(workingDebounceTimer)
+        workingDebounceTimer = undefined
+      }
+      setStableWorking(true)
+    } else {
+      // Delay exiting working state to avoid flashing during async state updates
+      if (workingDebounceTimer) clearTimeout(workingDebounceTimer)
+      workingDebounceTimer = setTimeout(() => {
+        setStableWorking(false)
+        workingDebounceTimer = undefined
+      }, 200)
+    }
   })
-  const working = createMemo(() => status().type !== "idle" && active())
+
+  onCleanup(() => {
+    if (workingDebounceTimer) {
+      clearTimeout(workingDebounceTimer)
+      workingDebounceTimer = undefined
+    }
+  })
+
+  const working = createMemo(() => stableWorking())
   const showReasoningSummaries = createMemo(() => props.showReasoningSummaries ?? true)
 
   const assistantCopyPartID = createMemo(() => {
@@ -343,14 +460,19 @@ export function SessionTurn(
   const assistantVisible = createMemo(() =>
     assistantMessages().reduce((count, message) => {
       const parts = list(data.store.part?.[message.id], emptyParts)
-      return count + parts.filter((part) => partState(part, showReasoningSummaries()) === "visible").length
+      return (
+        count +
+        parts.filter(
+          (part) => partState(part, showReasoningSummaries(), props.showCustomHookParts ?? true) === "visible",
+        ).length
+      )
     }, 0),
   )
   const assistantTailVisible = createMemo(() =>
     assistantMessages()
       .flatMap((message) => list(data.store.part?.[message.id], emptyParts))
       .flatMap((part) => {
-        if (partState(part, showReasoningSummaries()) !== "visible") return []
+        if (partState(part, showReasoningSummaries(), props.showCustomHookParts ?? true) !== "visible") return []
         if (part.type === "text") return ["text" as const]
         return ["other" as const]
       })
@@ -396,7 +518,12 @@ export function SessionTurn(
                 class={props.classes?.container}
               >
                 <div data-slot="session-turn-message-content" aria-live="off">
-                  <Message message={msg()} parts={parts()} interrupted={interrupted()} />
+                  <Message
+                    message={msg()}
+                    parts={parts()}
+                    interrupted={interrupted()}
+                    showCustomHookParts={props.showCustomHookParts}
+                  />
                 </div>
                 <Show when={compaction()}>
                   {(part) => (
@@ -413,6 +540,7 @@ export function SessionTurn(
                       turnDurationMs={turnDurationMs()}
                       working={working()}
                       showReasoningSummaries={showReasoningSummaries()}
+                      showCustomHookParts={props.showCustomHookParts}
                       shellToolDefaultOpen={props.shellToolDefaultOpen}
                       editToolDefaultOpen={props.editToolDefaultOpen}
                     />

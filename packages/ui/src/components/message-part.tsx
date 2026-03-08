@@ -196,6 +196,16 @@ function hookName(input: Record<string, any>, metadata: Record<string, any>) {
   return match[1]
 }
 
+function hookMeta(input: Record<string, any>, metadata: Record<string, any>) {
+  const keys = ["hook", "hook_name", "hookName", "hook_type", "hookType", "event", "stage", "phase"]
+  for (const src of [metadata, input]) {
+    for (const key of keys) {
+      if (text(src?.[key])) return true
+    }
+  }
+  return false
+}
+
 function hookType(input: Record<string, any>, metadata: Record<string, any>) {
   const keys = ["hook_type", "hookType", "stage", "phase", "event_type", "eventType"]
   for (const src of [metadata, input]) {
@@ -348,7 +358,8 @@ function customPart(part: ToolPart) {
   if (customTool(tool)) return true
   if (tool !== "bash") return false
   const metadata = part.state.status === "pending" ? {} : (part.state.metadata ?? {})
-  return !!hookName(part.state.input ?? {}, metadata)
+  const input = part.state.input ?? {}
+  return hookMeta(input, metadata) || !!hookName(input, metadata)
 }
 
 function list<T>(value: T[] | undefined | null, fallback: T[]) {
