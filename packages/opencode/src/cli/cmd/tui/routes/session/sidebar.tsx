@@ -1,5 +1,5 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, For, Show, Switch, Match } from "solid-js"
+import { createMemo, createSignal, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
@@ -25,6 +25,12 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     diff: true,
     todo: true,
     lsp: true,
+  })
+  const DIFF_PAGE_SIZE = 50
+  const [diffLimit, setDiffLimit] = createSignal(DIFF_PAGE_SIZE)
+  const visibleDiff = createMemo(() => {
+    const list = diff()
+    return list.slice(0, diffLimit())
   })
 
   // Sort MCP servers alphabetically for consistent display order
@@ -240,11 +246,11 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                     <text fg={theme.text}>{expanded.diff ? "▼" : "▶"}</text>
                   </Show>
                   <text fg={theme.text}>
-                    <b>Modified Files</b>
+                    <b>Modified Files ({diff().length})</b>
                   </text>
                 </box>
                 <Show when={diff().length <= 2 || expanded.diff}>
-                  <For each={diff() || []}>
+                  <For each={visibleDiff()}>
                     {(item) => {
                       return (
                         <box flexDirection="row" gap={1} justifyContent="space-between">
@@ -263,6 +269,14 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                       )
                     }}
                   </For>
+                  <Show when={diff().length > diffLimit()}>
+                    <text
+                      fg={theme.textMuted}
+                      onMouseDown={() => setDiffLimit(Math.min(diffLimit() + DIFF_PAGE_SIZE, diff().length))}
+                    >
+                      Show more ({diffLimit()} of {diff().length})
+                    </text>
+                  </Show>
                 </Show>
               </box>
             </Show>
