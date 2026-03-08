@@ -26,6 +26,22 @@ export const TuiOptions = z.object({
     .object({
       enabled: z.boolean().optional().describe("Enable prompt bar animation plugin styling"),
       plugin: z.string().optional().describe("Prompt bar animation plugin id"),
+      options: z
+        .object({
+          diagonal_ripple: z
+            .object({
+              speed: z.number().min(0).optional().describe("Ripple animation speed"),
+              intensity: z.number().min(0).max(1).optional().describe("Ripple effect intensity"),
+              direction: z
+                .enum(["down-right", "down-left", "up-right", "up-left"])
+                .optional()
+                .describe("Ripple propagation direction"),
+            })
+            .optional()
+            .describe("Diagonal ripple effect options"),
+        })
+        .optional()
+        .describe("Animation plugin options"),
     })
     .optional()
     .describe("Prompt bar animation settings"),

@@ -5,6 +5,7 @@ import { Log } from "@/util/log"
 import { pathToFileURL } from "node:url"
 import type { PromptBarAnimationInput, PromptBarAnimationPlugin } from "./prompt-bar-animation-plugin"
 import { resolvePromptBarOverlay } from "./prompt-bar-visual"
+import { computeRippleColor } from "./prompt-bar-ripple"
 
 export const DEFAULT_PROMPT_BAR_ANIMATION_PLUGIN = "legacy-cycle"
 const log = Log.create({ service: "tui.prompt-bar-animation.registry" })
@@ -62,10 +63,33 @@ const legacyCyclePlugin: PromptBarAnimationPlugin = {
   },
 }
 
+const diagonalRipplePlugin: PromptBarAnimationPlugin = {
+  id: "diagonal-ripple",
+  label: "Diagonal ripple",
+  interval_ms: 60,
+  resolve(input) {
+    if (input.state !== "idle") return legacyCyclePlugin.resolve(input)
+    if (input.hasContent) return input.theme.secondary
+    return undefined
+  },
+  render(input) {
+    if (input.data.state !== "idle" || input.data.hasContent || !input.data.idleCycleEnabled) return
+    const w = input.buffer.width
+    const h = input.buffer.height
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const color = computeRippleColor(x, y, w, h, input.data.idleCycleIndex, input.data.theme, input.ripple)
+        input.buffer.fillRect(x, y, 1, 1, color)
+      }
+    }
+  },
+}
+
 const registry = new Map<string, PromptBarAnimationPlugin>([
   [legacyCyclePlugin.id, legacyCyclePlugin],
   [themeWavePlugin.id, themeWavePlugin],
   [stateStaticPlugin.id, stateStaticPlugin],
+  [diagonalRipplePlugin.id, diagonalRipplePlugin],
 ])
 const seen = new Set<string>()
 let loading: Promise<void> | undefined
