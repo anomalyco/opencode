@@ -1262,7 +1262,7 @@ export default function Layout(props: ParentProps) {
       }
     }
 
-    if (project && project.vcs !== "git") return
+    if (project && project.vcs && project.vcs !== "git") return
 
     void globalSDK.client.project
       .current({ directory })
