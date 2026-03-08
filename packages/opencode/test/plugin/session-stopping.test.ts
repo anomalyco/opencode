@@ -74,13 +74,32 @@ describe("session.stopping hook", () => {
     })
   }, 30000)
 
-  test("stop=false without message does not satisfy re-entry condition", () => {
-    // The loop re-enters only when !hook.stop && hook.message.
-    // Verify the guard: stop=false alone is not enough.
-    const stop = false
-    const message = undefined
-    expect(!stop && !!message).toBe(false)
-  })
+  test("plugin returning stop=false but no message does not trigger re-entry", async () => {
+    // The loop guard is: !hook.stop && hook.message
+    // A plugin that sets stop=false but leaves message undefined must not re-enter.
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const plug = path.join(dir, ".opencode", "plugin")
+        await fs.mkdir(plug, { recursive: true })
+        await Bun.write(
+          path.join(plug, "no-msg.ts"),
+          ["export default async () => ({", '  "session.stopping": async (_input, output) => {', "    output.stop = false", "  },", "})"].join("\n"),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await Plugin.init()
+        // @ts-ignore — session.stopping is not yet in the published type
+        const out = await Plugin.trigger("session.stopping", { sessionID: "test-session" }, { stop: true, message: undefined as string | undefined })
+        expect(out.stop).toBe(false)
+        expect(out.message).toBeUndefined()
+        // Guard: re-entry requires both stop=false AND a message
+        expect(!out.stop && !!out.message).toBe(false)
+      },
+    })
+  }, 30000)
 
   test("hook message is written as a user message part in the session", async () => {
     await using tmp = await tmpdir({
