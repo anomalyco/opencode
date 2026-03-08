@@ -1,17 +1,8 @@
 import { Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js"
+import { animate, type AnimationPlaybackControls, GROW_SPRING } from "./motion"
 import { TextShimmer } from "./text-shimmer"
-
-function common(active: string, done: string) {
-  const a = Array.from(active)
-  const b = Array.from(done)
-  let i = 0
-  while (i < a.length && i < b.length && a[i] === b[i]) i++
-  return {
-    prefix: a.slice(0, i).join(""),
-    active: a.slice(i).join(""),
-    done: b.slice(i).join(""),
-  }
-}
+import { commonPrefix } from "./text-utils"
+import { prefersReducedMotion } from "../hooks/use-reduced-motion"
 
 function contentWidth(el: HTMLSpanElement | undefined) {
   if (!el) return 0
@@ -27,25 +18,59 @@ export function ToolStatusTitle(props: {
   class?: string
   split?: boolean
 }) {
-  const split = createMemo(() => common(props.activeText, props.doneText))
+  const split = createMemo(() => commonPrefix(props.activeText, props.doneText))
   const suffix = createMemo(
-    () => (props.split ?? true) && split().prefix.length >= 2 && split().active.length > 0 && split().done.length > 0,
+    () =>
+      (props.split ?? true) && split().prefix.length >= 2 && split().aSuffix.length > 0 && split().bSuffix.length > 0,
   )
   const prefixLen = createMemo(() => Array.from(split().prefix).length)
-  const activeTail = createMemo(() => (suffix() ? split().active : props.activeText))
-  const doneTail = createMemo(() => (suffix() ? split().done : props.doneText))
+  const activeTail = createMemo(() => (suffix() ? split().aSuffix : props.activeText))
+  const doneTail = createMemo(() => (suffix() ? split().bSuffix : props.doneText))
 
-  const [width, setWidth] = createSignal("auto")
   const [ready, setReady] = createSignal(false)
   let activeRef: HTMLSpanElement | undefined
   let doneRef: HTMLSpanElement | undefined
+  let swapRef: HTMLSpanElement | undefined
+  let tailRef: HTMLSpanElement | undefined
   let frame: number | undefined
   let readyFrame: number | undefined
+  let widthAnim: AnimationPlaybackControls | undefined
+
+  const node = () => (suffix() ? tailRef : swapRef)
+
+  const reduce = prefersReducedMotion
+
+  const setNodeWidth = (width: string) => {
+    if (swapRef) swapRef.style.width = width
+    if (tailRef) tailRef.style.width = width
+  }
 
   const measure = () => {
     const target = props.active ? activeRef : doneRef
-    const px = contentWidth(target)
-    if (px > 0) setWidth(`${px}px`)
+    const next = contentWidth(target)
+    if (next <= 0) return
+
+    const ref = node()
+    if (!ref || !ready() || reduce()) {
+      widthAnim?.stop()
+      setNodeWidth(`${next}px`)
+      return
+    }
+
+    const prev = Math.max(0, Math.ceil(ref.getBoundingClientRect().width))
+    if (Math.abs(next - prev) < 1) {
+      ref.style.width = `${next}px`
+      return
+    }
+
+    ref.style.width = `${prev}px`
+    widthAnim?.stop()
+    widthAnim = animate(ref, { width: `${next}px` }, GROW_SPRING)
+    widthAnim.finished.then(() => {
+      const el = node()
+      if (!el) return
+      el.style.width = `${next}px`
+    })
   }
 
   const schedule = () => {
@@ -90,6 +115,7 @@ export function ToolStatusTitle(props: {
   onCleanup(() => {
     if (frame !== undefined) cancelAnimationFrame(frame)
     if (readyFrame !== undefined) cancelAnimationFrame(readyFrame)
+    widthAnim?.stop()
   })
 
   return (
@@ -104,7 +130,7 @@ export function ToolStatusTitle(props: {
       <Show
         when={suffix()}
         fallback={
-          <span data-slot="tool-status-swap" style={{ width: width() }}>
+          <span data-slot="tool-status-swap" ref={swapRef}>
             <span data-slot="tool-status-active" ref={activeRef}>
               <TextShimmer text={activeTail()} active={props.active} offset={0} />
             </span>
@@ -118,7 +144,7 @@ export function ToolStatusTitle(props: {
           <span data-slot="tool-status-prefix">
             <TextShimmer text={split().prefix} active={props.active} offset={0} />
           </span>
-          <span data-slot="tool-status-tail" style={{ width: width() }}>
+          <span data-slot="tool-status-tail" ref={tailRef}>
             <span data-slot="tool-status-active" ref={activeRef}>
               <TextShimmer text={activeTail()} active={props.active} offset={prefixLen()} />
             </span>

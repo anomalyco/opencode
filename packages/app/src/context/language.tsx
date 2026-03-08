@@ -146,6 +146,7 @@ const DICT: Record<Locale, Dictionary> = {
 }
 
 const localeMatchers: Array<{ locale: Locale; match: (language: string) => boolean }> = [
+  { locale: "en", match: (language) => language.startsWith("en") },
   { locale: "zht", match: (language) => language.startsWith("zh") && language.includes("hant") },
   { locale: "zh", match: (language) => language.startsWith("zh") },
   { locale: "ko", match: (language) => language.startsWith("ko") },
@@ -217,6 +218,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     )
 
     const locale = createMemo<Locale>(() => normalizeLocale(store.locale))
+    console.log("locale", locale())
     const intl = createMemo(() => INTL[locale()])
 
     const dict = createMemo<Dictionary>(() => DICT[locale()])
