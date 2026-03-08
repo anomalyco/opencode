@@ -2280,7 +2280,7 @@ test("cloudflare-ai-gateway forwards config metadata options", async () => {
   })
 })
 
-test("env-only provider has no timeout in listed options — getSDK ??= applies at call time", async () => {
+test("env-only provider has no timeout in listed options — schema default does not apply", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
@@ -2299,8 +2299,9 @@ test("env-only provider has no timeout in listed options — getSDK ??= applies 
     fn: async () => {
       const providers = await Provider.list()
       expect(providers["anthropic"]).toBeDefined()
-      // Provider loaded from env only — no options block in config, so
-      // options.timeout is absent here. getSDK applies ??= 300000 at call time.
+      // No options block in config — provider.options comes from fromModelsDevProvider
+      // which initialises it as {}, so the Zod .default(300000) never runs.
+      // This is why the ??= in getSDK is necessary: it is the only fallback for this path.
       expect(providers["anthropic"].options.timeout).toBeUndefined()
     },
   })
