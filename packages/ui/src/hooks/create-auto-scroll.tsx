@@ -122,6 +122,14 @@ export function createAutoScroll(options: AutoScrollOptions) {
     stop()
   }
 
+  const handleTouchStart = () => {
+    // On mobile, any touch interaction should stop auto-scroll
+    if (!store.userScrolled) {
+      setStore("userScrolled", true)
+      options.onUserInteracted?.()
+    }
+  }
+
   const handleScroll = () => {
     const el = scroll
     if (!el) return
@@ -232,9 +240,11 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
       updateOverflowAnchor(el)
       el.addEventListener("wheel", handleWheel, { passive: true })
+      el.addEventListener("touchstart", handleTouchStart, { passive: true })
 
       cleanup = () => {
         el.removeEventListener("wheel", handleWheel)
+        el.removeEventListener("touchstart", handleTouchStart)
       }
     },
     contentRef: (el: HTMLElement | undefined) => setStore("contentRef", el),
