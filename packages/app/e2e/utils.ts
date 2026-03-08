@@ -7,11 +7,33 @@ export const serverPort = process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"
 export const serverUrl = `http://${serverHost}:${serverPort}`
 export const serverName = `${serverHost}:${serverPort}`
 
+const localHosts = ["127.0.0.1", "localhost"]
+
+const serverLabels = (() => {
+  const url = new URL(serverUrl)
+  if (!localHosts.includes(url.hostname)) return [serverName]
+  return localHosts.map((host) => `${host}:${url.port}`)
+})()
+
+export const serverNames = [...new Set(serverLabels)]
+
+export const serverUrls = serverNames.map((name) => `http://${name}`)
+
+const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+export const serverNamePattern = new RegExp(`(?:${serverNames.map(escape).join("|")})`)
+
 export const modKey = process.platform === "darwin" ? "Meta" : "Control"
 export const terminalToggleKey = "Control+Backquote"
 
 export function createSdk(directory?: string) {
   return createOpencodeClient({ baseUrl: serverUrl, directory, throwOnError: true })
+}
+
+export async function resolveDirectory(directory: string) {
+  return createSdk(directory)
+    .path.get()
+    .then((x) => x.data?.directory ?? directory)
 }
 
 export async function getWorktree() {

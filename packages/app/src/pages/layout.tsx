@@ -1960,7 +1960,7 @@ export default function Layout(props: ParentProps) {
                       }}
                       aria-label={language.t("common.moreOptions")}
                     />
-                    <DropdownMenu.Portal mount={!panelProps.mobile ? state.nav : undefined}>
+                    <DropdownMenu.Portal>
                       <DropdownMenu.Content class="mt-1">
                         <DropdownMenu.Item onSelect={() => showEditProjectDialog(p())}>
                           <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
@@ -2252,7 +2252,7 @@ export default function Layout(props: ParentProps) {
         >
           <main
             classList={{
-              "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base xl:border-l xl:rounded-tl-[12px]": true,
+              "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base bg-background-base xl:border-l xl:rounded-tl-[12px]": true,
             }}
           >
             <Show when={!autoselecting()} fallback={<div class="size-full" />}>
