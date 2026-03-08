@@ -1113,11 +1113,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     addPart,
   })
 
+  const accepting = createMemo(() => {
+    const id = params.id
+    if (!id) return false
+    return permission.isAutoAccepting(id, sdk.directory)
+  })
+
   const { abort, handleSubmit } = createPromptSubmit({
     info,
     imageAttachments,
     commentCount,
-    autoAccept: () => accepting(),
+    autoAccept: accepting,
     mode: () => store.mode,
     working,
     editor: () => editorRef,
@@ -1313,114 +1319,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
   }
 
-  const [agentsQuery, globalProvidersQuery, providersQuery] = useQueries(() => ({
-    queries: [
-      queryOptions.agents(pathKey(sdk.directory)),
-      queryOptions.providers(null),
-      queryOptions.providers(pathKey(sdk.directory)),
-    ],
-  }))
-
-  const agentsLoading = () => agentsQuery.isLoading
-  const agentsShouldFadeIn = createMemo((prev) => prev ?? agentsLoading())
-  const providersLoading = () => agentsLoading() || providersQuery.isLoading || globalProvidersQuery.isLoading
-  const providersShouldFadeIn = createMemo((prev) => prev ?? providersLoading())
-
-  const [promptReady] = createResource(
-    () => prompt.ready().promise,
-    (p) => p,
-  )
-
-  const designPlaceholder = () => {
-    if (store.mode === "shell") return placeholder()
-    return "Ask anything, / for commands, @ for context..."
-  }
-
-  const modelControl = () => (
-    <Show when={!providersLoading()}>
-      <Show
-        when={providers.paid().length > 0}
-        fallback={
-          <TooltipKeybind
-            placement="top"
-            gutter={4}
-            title={language.t("command.model.choose")}
-            keybind={command.keybind("model.choose")}
-          >
-            <Button
-              data-action="prompt-model"
-              as="div"
-              variant="ghost"
-              size="normal"
-              class="min-w-0 max-w-[220px] justify-start text-[13px] font-[440] leading-4 text-v2-text-text-faint group"
-              style={control()}
-              onClick={() => {
-                void import("@/components/dialog-select-model-unpaid").then((x) => {
-                  dialog.show(() => <x.DialogSelectModelUnpaid model={local.model} />)
-                })
-              }}
-            >
-              <Show when={local.model.current()?.provider?.id}>
-                <ProviderIcon
-                  id={local.model.current()?.provider?.id ?? ""}
-                  class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
-                  style={{ "will-change": "opacity", transform: "translateZ(0)" }}
-                />
-              </Show>
-              <span class="truncate">{local.model.current()?.name ?? language.t("dialog.model.select.title")}</span>
-              <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
-            </Button>
-          </TooltipKeybind>
-        }
-      >
-        <TooltipKeybind
-          placement="top"
-          gutter={4}
-          title={language.t("command.model.choose")}
-          keybind={command.keybind("model.choose")}
-        >
-          <ModelSelectorPopover
-            model={local.model}
-            triggerAs={Button}
-            triggerProps={{
-              variant: "ghost",
-              size: "normal",
-              style: control(),
-              class:
-                "min-w-0 max-w-[220px] justify-start text-[13px] font-[440] leading-4 text-v2-text-text-faint group",
-              "data-action": "prompt-model",
-            }}
-            onClose={restoreFocus}
-          >
-            <Show when={local.model.current()?.provider?.id}>
-              <ProviderIcon
-                id={local.model.current()?.provider?.id ?? ""}
-                class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
-                style={{ "will-change": "opacity", transform: "translateZ(0)" }}
-              />
-            </Show>
-            <span class="truncate">{local.model.current()?.name ?? language.t("dialog.model.select.title")}</span>
-            <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
-          </ModelSelectorPopover>
-        </TooltipKeybind>
-      </Show>
-    </Show>
-  )
-
-  const newSession = () => props.variant === "new-session"
-  const worktrees = createMemo(() => [MAIN_WORKTREE, ...(sync.project?.sandboxes ?? []), CREATE_WORKTREE])
-  const currentWorktree = createMemo(() => {
-    if (worktrees().includes(props.newSessionWorktree ?? MAIN_WORKTREE))
-      return props.newSessionWorktree ?? MAIN_WORKTREE
-    return MAIN_WORKTREE
-  })
-  const worktreeLabel = (value: string) => {
-    if (value === MAIN_WORKTREE) return MAIN_WORKTREE
-    if (value === CREATE_WORKTREE) return language.t("session.new.worktree.create")
-    return getFilename(value)
-  }
-
-  const USE_V2_INPUT = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
+  const variants = createMemo(() => ["default", ...local.model.variant.list()])
 
   return (
     <div class="relative size-full flex flex-col gap-0">
