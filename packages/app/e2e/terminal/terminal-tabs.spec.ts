@@ -44,12 +44,14 @@ async function store(page: Page, key: string) {
   }, key)
 }
 
-test("terminal tab buffers persist across tab switches", async ({ page, withProject }) => {
+test("inactive terminal tab buffers persist across tab switches", async ({ page, withProject }) => {
   await withProject(async ({ directory, gotoSession }) => {
     const key = workspacePersistKey(directory, "terminal")
     const one = `E2E_TERM_ONE_${Date.now()}`
     const two = `E2E_TERM_TWO_${Date.now()}`
     const tabs = page.locator('#terminal-panel [data-slot="tabs-trigger"]')
+    const first = tabs.filter({ hasText: /Terminal 1/ }).first()
+    const second = tabs.filter({ hasText: /Terminal 2/ }).first()
 
     await gotoSession()
     await open(page)
@@ -61,22 +63,39 @@ test("terminal tab buffers persist across tab switches", async ({ page, withProj
 
     await run(page, `echo ${two}`)
 
-    await tabs
-      .filter({ hasText: /Terminal 1/ })
-      .first()
-      .click()
-
+    await first.click()
+    await expect(first).toHaveAttribute("aria-selected", "true")
     await expect
       .poll(
         async () => {
           const state = await store(page, key)
           const first = state?.all.find((item) => item.titleNumber === 1)?.buffer ?? ""
           const second = state?.all.find((item) => item.titleNumber === 2)?.buffer ?? ""
-          return first.includes(one) && second.includes(two)
+          return {
+            first: first.includes(one),
+            second: second.includes(two),
+          }
         },
         { timeout: 30_000 },
       )
-      .toBe(true)
+      .toEqual({ first: false, second: true })
+
+    await second.click()
+    await expect(second).toHaveAttribute("aria-selected", "true")
+    await expect
+      .poll(
+        async () => {
+          const state = await store(page, key)
+          const first = state?.all.find((item) => item.titleNumber === 1)?.buffer ?? ""
+          const second = state?.all.find((item) => item.titleNumber === 2)?.buffer ?? ""
+          return {
+            first: first.includes(one),
+            second: second.includes(two),
+          }
+        },
+        { timeout: 30_000 },
+      )
+      .toEqual({ first: true, second: false })
   })
 })
 
