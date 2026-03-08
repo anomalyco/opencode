@@ -23,6 +23,9 @@ import {
   type SetSessionModelRequest,
   type SetSessionModeRequest,
   type SetSessionModeResponse,
+  type SetSessionConfigOptionRequest,
+  type SetSessionConfigOptionResponse,
+  type SessionConfigOption,
   type ToolCallContent,
   type ToolKind,
   type Usage,
@@ -49,6 +52,8 @@ type ModeOption = { id: string; name: string; description?: string }
 type ModelOption = { modelId: string; name: string }
 
 const DEFAULT_VARIANT_VALUE = "default"
+const THOUGHT_ID = "thought"
+const MODEL_ID = "model"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
@@ -586,6 +591,7 @@ export namespace ACP {
           sessionId,
           models: load.models,
           modes: load.modes,
+          configOptions: load.configOptions,
           _meta: load._meta,
         }
       } catch (e) {
@@ -1157,7 +1163,14 @@ export namespace ACP {
       if (currentVariant && !availableVariants.includes(currentVariant)) {
         this.sessionManager.setVariant(sessionId, undefined)
       }
-      const availableModels = buildAvailableModels(entries, { includeVariants: true })
+      const availableModels = buildAvailableModels(entries)
+      const currentModelId = formatModelIdWithVariant(model, currentVariant, availableVariants, false)
+      const configOptions = config(
+        availableModels,
+        currentModelId,
+        availableVariants,
+        this.sessionManager.getVariant(sessionId),
+      )
       const modeState = await this.resolveModeState(directory, sessionId)
       const currentModeId = modeState.currentModeId
       const modes = currentModeId
@@ -1240,10 +1253,11 @@ export namespace ACP {
       return {
         sessionId,
         models: {
-          currentModelId: formatModelIdWithVariant(model, currentVariant, availableVariants, true),
+          currentModelId,
           availableModels,
         },
         modes,
+        configOptions,
         _meta: buildVariantMeta({
           model,
           variant: this.sessionManager.getVariant(sessionId),
@@ -1263,7 +1277,12 @@ export namespace ACP {
       this.sessionManager.setVariant(session.id, selection.variant)
 
       const entries = sortProvidersByName(providers)
+      const models = buildAvailableModels(entries)
       const availableVariants = modelVariantsFromProviders(entries, selection.model)
+      const currentModelId = formatModelIdWithVariant(selection.model, selection.variant, availableVariants, false)
+      const configOptions = config(models, currentModelId, availableVariants, selection.variant)
+
+      await this.pushConfig(session.id, configOptions)
 
       return {
         _meta: buildVariantMeta({
@@ -1272,6 +1291,83 @@ export namespace ACP {
           availableVariants,
         }),
       }
+    }
+
+    async setSessionConfigOption(params: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse> {
+      if (params.configId !== THOUGHT_ID && params.configId !== MODEL_ID) {
+        throw RequestError.invalidParams(JSON.stringify({ error: `Unknown config option: ${params.configId}` }))
+      }
+
+      const session = this.sessionManager.get(params.sessionId)
+      const providers = await this.sdk.config
+        .providers({ directory: session.cwd }, { throwOnError: true })
+        .then((x) => x.data!.providers)
+      const entries = sortProvidersByName(providers)
+      const models = buildAvailableModels(entries)
+
+      const model = this.sessionManager.getModel(session.id) ?? (await defaultModel(this.config, session.cwd))
+      if (!this.sessionManager.getModel(session.id)) {
+        this.sessionManager.setModel(session.id, model)
+      }
+
+      const variants = modelVariantsFromProviders(entries, model)
+      if (params.configId === THOUGHT_ID) {
+        const values = levels(variants)
+        if (!values.includes(params.value)) {
+          throw RequestError.invalidParams(
+            JSON.stringify({ error: `Invalid value for ${params.configId}: ${params.value}` }),
+          )
+        }
+
+        this.sessionManager.setVariant(session.id, select(params.value))
+      }
+
+      if (params.configId === MODEL_ID) {
+        const values = models.map((item) => item.modelId)
+        if (!values.includes(params.value)) {
+          throw RequestError.invalidParams(
+            JSON.stringify({ error: `Invalid value for ${params.configId}: ${params.value}` }),
+          )
+        }
+
+        const selected = parseModelSelection(params.value, providers)
+        this.sessionManager.setModel(session.id, selected.model)
+
+        const nextVariants = modelVariantsFromProviders(entries, selected.model)
+        const candidate = selected.variant ?? this.sessionManager.getVariant(session.id)
+        this.sessionManager.setVariant(
+          session.id,
+          candidate && nextVariants.includes(candidate) && candidate !== DEFAULT_VARIANT_VALUE ? candidate : undefined,
+        )
+      }
+
+      const nextModel = this.sessionManager.getModel(session.id) ?? model
+      const nextVariants = modelVariantsFromProviders(entries, nextModel)
+      const nextModelId = formatModelIdWithVariant(
+        nextModel,
+        this.sessionManager.getVariant(session.id),
+        nextVariants,
+        false,
+      )
+      const configOptions = config(models, nextModelId, nextVariants, this.sessionManager.getVariant(session.id))
+
+      await this.pushConfig(session.id, configOptions)
+
+      return { configOptions }
+    }
+
+    private async pushConfig(sessionId: string, configOptions: SessionConfigOption[]) {
+      await this.connection
+        .sessionUpdate({
+          sessionId,
+          update: {
+            sessionUpdate: "config_option_update",
+            configOptions,
+          },
+        })
+        .catch((error) => {
+          log.error("failed to send config options update", { error })
+        })
     }
 
     async setSessionMode(params: SetSessionModeRequest): Promise<SetSessionModeResponse | void> {
@@ -1660,25 +1756,71 @@ export namespace ACP {
     return Object.keys(modelInfo.variants)
   }
 
+  function levels(variants: string[]): string[] {
+    const rest = variants.filter((item) => item !== DEFAULT_VARIANT_VALUE)
+    return [DEFAULT_VARIANT_VALUE, ...rest]
+  }
+
+  function thought(variants: string[], variant?: string): SessionConfigOption[] {
+    const values = levels(variants)
+    if (values.length < 2) return []
+    const current = variant && values.includes(variant) ? variant : DEFAULT_VARIANT_VALUE
+    return [
+      {
+        type: "select",
+        id: THOUGHT_ID,
+        name: "Thinking",
+        description: "Reasoning effort for this model",
+        category: "thought_level",
+        currentValue: current,
+        options: values.map((item) => ({
+          value: item,
+          name: item === DEFAULT_VARIANT_VALUE ? "Default" : item,
+        })),
+      },
+    ]
+  }
+
+  function models(models: ModelOption[], current: string): SessionConfigOption[] {
+    return [
+      {
+        type: "select",
+        id: MODEL_ID,
+        name: "Model",
+        category: "model",
+        currentValue: current,
+        options: models.map((item) => ({
+          value: item.modelId,
+          name: item.name,
+        })),
+      },
+    ]
+  }
+
+  function config(
+    modelsList: ModelOption[],
+    currentModel: string,
+    variants: string[],
+    variant?: string,
+  ): SessionConfigOption[] {
+    return [...models(modelsList, currentModel), ...thought(variants, variant)]
+  }
+
+  function select(value: string): string | undefined {
+    if (value === DEFAULT_VARIANT_VALUE) return undefined
+    return value
+  }
+
   function buildAvailableModels(
     providers: Array<{ id: string; name: string; models: Record<string, any> }>,
-    options: { includeVariants?: boolean } = {},
   ): ModelOption[] {
-    const includeVariants = options.includeVariants ?? false
     return providers.flatMap((provider) => {
       const models = Provider.sort(Object.values(provider.models) as any)
-      return models.flatMap((model) => {
-        const base: ModelOption = {
+      return models.map((model) => {
+        return {
           modelId: `${provider.id}/${model.id}`,
           name: `${provider.name}/${model.name}`,
         }
-        if (!includeVariants || !model.variants) return [base]
-        const variants = Object.keys(model.variants).filter((variant) => variant !== DEFAULT_VARIANT_VALUE)
-        const variantOptions = variants.map((variant) => ({
-          modelId: `${provider.id}/${model.id}/${variant}`,
-          name: `${provider.name}/${model.name} (${variant})`,
-        }))
-        return [base, ...variantOptions]
       })
     })
   }
