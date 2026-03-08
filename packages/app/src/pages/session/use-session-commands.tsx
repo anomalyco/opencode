@@ -261,24 +261,35 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     }),
   ])
 
+  const isAutoAcceptActive = () => {
+    const sessionID = params.id
+    if (sessionID) return permission.isAutoAccepting(sessionID, sdk.directory)
+    return permission.isAutoAcceptingDirectory(sdk.directory)
+  }
+
   const permissionCommands = createMemo(() => [
     permissionsCommand({
       id: "permissions.autoaccept",
-      title:
-        params.id && permission.isAutoAccepting(params.id, sdk.directory)
-          ? language.t("command.permissions.autoaccept.disable")
-          : language.t("command.permissions.autoaccept.enable"),
+      title: isAutoAcceptActive()
+        ? language.t("command.permissions.autoaccept.disable")
+        : language.t("command.permissions.autoaccept.enable"),
       keybind: "mod+shift+a",
-      disabled: !params.id || !permission.permissionsEnabled(),
+      disabled: false,
       onSelect: () => {
         const sessionID = params.id
-        if (!sessionID) return
-        permission.toggleAutoAccept(sessionID, sdk.directory)
+        if (sessionID) {
+          permission.toggleAutoAccept(sessionID, sdk.directory)
+        } else {
+          permission.toggleAutoAcceptDirectory(sdk.directory)
+        }
+        const active = sessionID
+          ? permission.isAutoAccepting(sessionID, sdk.directory)
+          : permission.isAutoAcceptingDirectory(sdk.directory)
         showToast({
-          title: permission.isAutoAccepting(sessionID, sdk.directory)
+          title: active
             ? language.t("toast.permissions.autoaccept.on.title")
             : language.t("toast.permissions.autoaccept.off.title"),
-          description: permission.isAutoAccepting(sessionID, sdk.directory)
+          description: active
             ? language.t("toast.permissions.autoaccept.on.description")
             : language.t("toast.permissions.autoaccept.off.description"),
         })
