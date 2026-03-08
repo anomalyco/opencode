@@ -3043,6 +3043,7 @@ export type SessionInitResponse = SessionInitResponses[keyof SessionInitResponse
 export type SessionForkData = {
   body?: {
     messageID?: string
+    parentID?: string
   }
   path: {
     sessionID: string

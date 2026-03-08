@@ -235,6 +235,7 @@ export namespace Session {
     z.object({
       sessionID: Identifier.schema("session"),
       messageID: Identifier.schema("message").optional(),
+      parentID: Identifier.schema("session").optional(),
     }),
     async (input) => {
       const original = await get(input.sessionID)
@@ -242,6 +243,7 @@ export namespace Session {
       const title = getForkedTitle(original.title)
       const session = await createNext({
         directory: Instance.directory,
+        parentID: input.parentID,
         title,
       })
       const msgs = await messages({ sessionID: input.sessionID })

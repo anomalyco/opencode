@@ -140,3 +140,23 @@ describe("step-finish token propagation via Bus event", () => {
     { timeout: 30000 },
   )
 })
+
+describe("Session.fork", () => {
+  test("can fork a session with an explicit parent", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const src = await Session.create({ title: "source-session" })
+        const parent = await Session.create({ title: "parent-session" })
+        const child = await Session.fork({ sessionID: src.id, parentID: parent.id })
+
+        expect(child.parentID).toBe(parent.id)
+        expect(child.title).toBe("source-session (fork #1)")
+
+        await Session.remove(child.id)
+        await Session.remove(parent.id)
+        await Session.remove(src.id)
+      },
+    })
+  })
+})

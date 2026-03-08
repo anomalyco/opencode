@@ -2421,6 +2421,10 @@
                   "messageID": {
                     "type": "string",
                     "pattern": "^msg.*"
+                  },
+                  "parentID": {
+                    "type": "string",
+                    "pattern": "^ses.*"
                   }
                 }
               }
