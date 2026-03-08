@@ -1,4 +1,5 @@
 import type { RGBA } from "@opentui/core"
+import type { PromptBarState } from "./prompt-bar-state"
 
 export type PromptBarLayoutSpec = {
   content_padding_left: number
@@ -54,6 +55,20 @@ export function promptBarPluginEnabled(useLegacyLayout: boolean) {
   return !useLegacyLayout
 }
 
+export function promptBarSpatialRippleActive(input: {
+  pluginEnabled: boolean
+  plugin: string
+  state: PromptBarState
+  hasContent: boolean
+  idleCycleEnabled: boolean
+}) {
+  if (!input.pluginEnabled) return false
+  if (input.plugin !== "diagonal-ripple") return false
+  if (input.state !== "idle") return false
+  if (input.hasContent) return false
+  return input.idleCycleEnabled
+}
+
 export function promptBarBackground(input: { useLegacyLayout: boolean; overlay: RGBA | undefined; background: RGBA }) {
   if (input.useLegacyLayout) return input.background
   return input.overlay ?? input.background
@@ -64,15 +79,21 @@ export function promptBarResetEnabled(current: string, configured: string, overr
   return override
 }
 
-export function promptBarSurface(input: { useLegacyLayout: boolean; background: RGBA; chromeVisible: boolean }) {
-  const separatorBackground = input.useLegacyLayout ? undefined : input.background
+export function promptBarSurface(input: {
+  useLegacyLayout: boolean
+  background: RGBA
+  chromeVisible: boolean
+  spatialRippleActive: boolean
+}) {
+  const background = input.spatialRippleActive ? undefined : input.background
   return {
-    shellBackground: input.useLegacyLayout ? undefined : input.background,
-    contentBackground: input.background,
-    separatorBackground,
-    separatorBorderColor: input.background,
+    shellBackground: input.useLegacyLayout || input.spatialRippleActive ? undefined : input.background,
+    contentBackground: background,
+    separatorBackground: input.useLegacyLayout || input.spatialRippleActive ? undefined : input.background,
+    separatorBorderColor: background,
     separatorVertical: input.chromeVisible ? "╹" : " ",
     separatorHorizontal: input.chromeVisible ? "▀" : " ",
+    shouldFill: !input.spatialRippleActive,
   }
 }
 

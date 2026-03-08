@@ -1,4 +1,12 @@
-import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, KeyEvent } from "@opentui/core"
+import type {
+  BoxRenderable,
+  TextareaRenderable,
+  MouseEvent,
+  PasteEvent,
+  KeyEvent,
+  OptimizedBuffer,
+  RGBA,
+} from "@opentui/core"
 import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
@@ -50,10 +58,12 @@ import {
   promptBarLayoutSpec,
   promptBarPluginEnabled,
   promptBarResetEnabled,
+  promptBarSpatialRippleActive,
   promptBarSurface,
   promptBarUseLegacyLayoutForTheme,
 } from "@tui/util/prompt-bar-layout-policy"
 import { useTuiConfig } from "@tui/context/tui-config"
+import { resolvePromptBarRippleConfig } from "@tui/util/prompt-bar-ripple"
 
 export type PromptProps = {
   sessionID?: string
@@ -99,6 +109,8 @@ export function Prompt(props: PromptProps) {
   const tuiConfig = useTuiConfig()
   const [pluginLoad, setPluginLoad] = createSignal(0)
   const kv = useKV()
+  const sandboxPromptEnabled = Bun.env.OPENCODE_SANDBOX_PROMPT_ENABLED
+  const sandboxPromptPlugin = Bun.env.OPENCODE_SANDBOX_PROMPT_PLUGIN
   const layout = promptBarLayoutSpec()
   const [store, setStore] = createStore<{
     prompt: PromptInfo
@@ -125,13 +137,27 @@ export function Prompt(props: PromptProps) {
     })
   })
   const hasPromptContent = createMemo(() => store.prompt.input.trim().length > 0 || store.prompt.parts.length > 0)
+  const promptBarAnimationEnabledFromEnv = createMemo(() => {
+    const value = sandboxPromptEnabled
+    if (!value) return undefined
+    const normalized = value.toLowerCase()
+    if (["1", "true", "yes", "on"].includes(normalized)) return true
+    if (["0", "false", "no", "off"].includes(normalized)) return false
+    return undefined
+  })
   const promptBarAnimationOverride = createMemo(() => kv.get("prompt_bar_animation_enabled_override", false))
   const isPromptBarAnimationEnabled = createMemo(() =>
-    promptBarAnimationEnabled(tuiConfig.prompt_bar_animation?.enabled, promptBarAnimationOverride()),
+    promptBarAnimationEnabled(
+      tuiConfig.prompt_bar_animation?.enabled ?? promptBarAnimationEnabledFromEnv(),
+      promptBarAnimationOverride(),
+    ),
   )
-  const promptBarAnimationConfigured = createMemo(
-    () => tuiConfig.prompt_bar_animation?.plugin ?? DEFAULT_PROMPT_BAR_ANIMATION_PLUGIN,
-  )
+  const promptBarAnimationConfigured = createMemo(() => {
+    if (tuiConfig.prompt_bar_animation?.plugin) return tuiConfig.prompt_bar_animation.plugin
+    if (sandboxPromptPlugin) return sandboxPromptPlugin
+    if (promptBarAnimationEnabledFromEnv() === true) return "diagonal-ripple"
+    return DEFAULT_PROMPT_BAR_ANIMATION_PLUGIN
+  })
   const promptBarAnimationCurrent = createMemo(() =>
     kv.get("prompt_bar_animation_plugin", promptBarAnimationConfigured()),
   )
@@ -146,16 +172,35 @@ export function Prompt(props: PromptProps) {
       theme.backgroundElement,
     ),
   )
+  const promptBarPluginEnabledFromEnv = createMemo(() => promptBarAnimationEnabledFromEnv() === true)
+  const isPromptBarPluginEnabled = createMemo(() => {
+    if (promptBarPluginEnabledFromEnv()) return true
+    if (!isPromptBarAnimationEnabled()) return false
+    if (promptBarAnimationPlugin().id === "diagonal-ripple") return true
+    return promptBarPluginEnabled(usePromptBarLegacyLayout())
+  })
   const promptBarColor = usePromptBarColorEffect({
     visible: () => props.visible !== false,
     state: promptBarState,
     hasContent: hasPromptContent,
     animationsEnabled: () => kv.get("animations_enabled", true),
-    pluginEnabled: () => promptBarPluginEnabled(usePromptBarLegacyLayout()),
+    pluginEnabled: isPromptBarPluginEnabled,
     plugin: promptBarAnimationPlugin,
     theme,
     requestRender: () => renderer.requestRender(),
   })
+  const promptBarRipple = createMemo(() =>
+    resolvePromptBarRippleConfig(tuiConfig.prompt_bar_animation?.options?.diagonal_ripple),
+  )
+  const promptBarSpatialRipple = createMemo(() =>
+    promptBarSpatialRippleActive({
+      pluginEnabled: isPromptBarPluginEnabled(),
+      plugin: promptBarColor.animation().plugin.id,
+      state: promptBarColor.animation().state,
+      hasContent: promptBarColor.animation().hasContent,
+      idleCycleEnabled: promptBarColor.animation().idleCycleEnabled,
+    }),
+  )
   const resolvedPromptBarBackground = createMemo(() =>
     promptBarBackground({
       useLegacyLayout: usePromptBarLegacyLayout(),
@@ -168,6 +213,7 @@ export function Prompt(props: PromptProps) {
       useLegacyLayout: usePromptBarLegacyLayout(),
       background: resolvedPromptBarBackground(),
       chromeVisible: theme.backgroundElement.a !== 0,
+      spatialRippleActive: promptBarSpatialRipple(),
     }),
   )
 
@@ -975,6 +1021,32 @@ export function Prompt(props: PromptProps) {
             bottomLeft: promptBarBottomLeft(usePromptBarLegacyLayout()),
           }}
           backgroundColor={promptBarSurfaceStyle().shellBackground}
+          shouldFill={promptBarSurfaceStyle().shouldFill}
+          renderBefore={function (buffer) {
+            if (!promptBarSpatialRipple()) return
+            const animation = promptBarColor.animation()
+            const render = animation.plugin.render
+            if (!render) return
+            const el = this as BoxRenderable
+            const scoped = {
+              width: el.width,
+              height: el.height,
+              fillRect(x: number, y: number, w: number, h: number, color: RGBA) {
+                buffer.fillRect(el.x + x, el.y + y, w, h, color)
+              },
+            }
+            render({
+              buffer: scoped as unknown as OptimizedBuffer,
+              ripple: promptBarRipple(),
+              data: {
+                state: animation.state,
+                hasContent: animation.hasContent,
+                idleCycleIndex: animation.idleCycleIndex,
+                idleCycleEnabled: animation.idleCycleEnabled,
+                theme,
+              },
+            })
+          }}
         >
           <box
             paddingLeft={layout.content_padding_left}
@@ -983,6 +1055,7 @@ export function Prompt(props: PromptProps) {
             flexShrink={0}
             backgroundColor={promptBarSurfaceStyle().contentBackground}
             flexGrow={1}
+            shouldFill={promptBarSurfaceStyle().shouldFill}
           >
             <textarea
               placeholder={placeholderText()}
@@ -1194,6 +1267,7 @@ export function Prompt(props: PromptProps) {
           border={["left"]}
           borderColor={highlight()}
           backgroundColor={promptBarSurfaceStyle().separatorBackground}
+          shouldFill={promptBarSurfaceStyle().shouldFill}
           customBorderChars={{
             ...EmptyBorder,
             vertical: promptBarSurfaceStyle().separatorVertical,
@@ -1204,6 +1278,7 @@ export function Prompt(props: PromptProps) {
             border={["bottom"]}
             borderColor={promptBarSurfaceStyle().separatorBorderColor}
             backgroundColor={promptBarSurfaceStyle().separatorBackground}
+            shouldFill={promptBarSurfaceStyle().shouldFill}
             customBorderChars={{
               ...EmptyBorder,
               horizontal: promptBarSurfaceStyle().separatorHorizontal,

@@ -1,3 +1,4 @@
+import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import {
   resolvePromptBarAnimationBackground,
   resolvePromptBarAnimationPlugin,
@@ -5,7 +6,6 @@ import {
 import type { PromptBarAnimationPlugin } from "@tui/util/prompt-bar-animation-plugin"
 import type { PromptBarState } from "@tui/util/prompt-bar-state"
 import type { PromptBarVisualTheme } from "@tui/util/prompt-bar-visual"
-import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 
 export function usePromptBarColorEffect(props: {
   visible: () => boolean
@@ -59,6 +59,14 @@ export function usePromptBarColorEffect(props: {
         })
       : undefined,
   )
+  const animation = createMemo(() => ({
+    plugin: props.plugin(),
+    state: props.state(),
+    hasContent: props.hasContent(),
+    idleCycleIndex: idleCycleIndex(),
+    idleCycleEnabled: idleCycleEnabled(),
+    renderBefore: !!props.plugin().render,
+  }))
 
-  return { background }
+  return { background, animation }
 }
