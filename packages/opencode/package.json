@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.2.18",
+  "version": "1.2.21",
   "name": "opencode",
   "type": "module",
   "license": "MIT",
@@ -43,9 +43,10 @@
     "@types/mime-types": "3.0.1",
     "@types/turndown": "5.0.5",
     "@types/yargs": "17.0.33",
+    "@types/which": "3.0.4",
     "@typescript/native-preview": "catalog:",
-    "drizzle-kit": "1.0.0-beta.12-a5629fb",
-    "drizzle-orm": "1.0.0-beta.12-a5629fb",
+    "drizzle-kit": "1.0.0-beta.16-ea816b6",
+    "drizzle-orm": "1.0.0-beta.16-ea816b6",
     "typescript": "catalog:",
     "vscode-languageserver-types": "3.17.5",
     "why-is-node-running": "3.2.2",
@@ -105,7 +106,7 @@
     "clipboardy": "4.0.0",
     "decimal.js": "10.5.0",
     "diff": "catalog:",
-    "drizzle-orm": "1.0.0-beta.12-a5629fb",
+    "drizzle-orm": "1.0.0-beta.16-ea816b6",
     "fuzzysort": "3.1.0",
     "glob": "13.0.5",
     "google-auth-library": "10.5.0",
@@ -127,12 +128,13 @@
     "ulid": "catalog:",
     "vscode-jsonrpc": "8.2.1",
     "web-tree-sitter": "0.25.10",
+    "which": "6.0.1",
     "xdg-basedir": "5.1.0",
     "yargs": "18.0.0",
     "zod": "catalog:",
     "zod-to-json-schema": "3.24.5"
   },
   "overrides": {
-    "drizzle-orm": "1.0.0-beta.12-a5629fb"
+    "drizzle-orm": "1.0.0-beta.16-ea816b6"
   }
 }
