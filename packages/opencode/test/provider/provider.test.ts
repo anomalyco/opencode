@@ -2300,8 +2300,8 @@ test("provider loaded from env has no explicit timeout in options, confirming ge
       const providers = await Provider.list()
       expect(providers["anthropic"]).toBeDefined()
       // No timeout configured in config or env — options.timeout is absent.
-      // getSDK spreads { timeout: 300000, ...provider.options } so the default
-      // applies at call time. This test confirms the pre-condition holds.
+      // getSDK sets options["timeout"] = 300000 when the key is missing, so
+      // the default applies at call time. This test confirms the pre-condition.
       expect(providers["anthropic"].options.timeout).toBeUndefined()
     },
   })
