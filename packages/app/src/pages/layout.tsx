@@ -57,6 +57,7 @@ import { Titlebar } from "@/components/titlebar"
 import { useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
 import {
+  autoWorkspaces,
   displayName,
   effectiveWorkspaceOrder,
   errorMessage,
@@ -543,6 +544,21 @@ export default function Layout(props: ParentProps) {
     if (!root) return
 
     return projects.find((p) => p.worktree === root)
+  })
+
+  createEffect(() => {
+    const project = currentProject()
+    if (!project) return
+    if (project.vcs !== "git") return
+    if (
+      !autoWorkspaces({
+        dir: currentDir(),
+        project,
+      })
+    ) {
+      return
+    }
+    layout.sidebar.setWorkspaces(project.worktree, true)
   })
 
   createEffect(

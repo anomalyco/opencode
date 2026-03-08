@@ -100,3 +100,13 @@ export const effectiveWorkspaceOrder = (local: string, dirs: string[], persisted
 }
 
 export const syncWorkspaceOrder = effectiveWorkspaceOrder
+
+export const autoWorkspaces = (input: {
+  dir?: string
+  project?: { worktree: string; sandboxes?: string[] }
+}) => {
+  if (!input.dir) return false
+  if (!input.project?.sandboxes?.length) return false
+  const dir = workspaceKey(input.dir)
+  return input.project.sandboxes.some((item) => workspaceKey(item) === dir)
+}
