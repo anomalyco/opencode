@@ -101,6 +101,7 @@ export const dict = {
   "ui.tool.todos.read": "Todo読み込み",
   "ui.tool.questions": "質問",
   "ui.tool.agent": "{{type}}エージェント",
+  "ui.tool.agent.default": "エージェント",
 
   "ui.common.file.one": "ファイル",
   "ui.common.file.other": "ファイル",

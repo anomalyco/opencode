@@ -9,6 +9,7 @@ import { Filesystem } from "../../util/filesystem"
 import { Process } from "../../util/process"
 import { EOL } from "os"
 import path from "path"
+import { which } from "../../util/which"
 
 function pagerCmd(): string[] {
   const lessOptions = ["-R", "-S"]
@@ -17,7 +18,7 @@ function pagerCmd(): string[] {
   }
 
   // user could have less installed via other options
-  const lessOnPath = Bun.which("less")
+  const lessOnPath = which("less")
   if (lessOnPath) {
     if (Filesystem.stat(lessOnPath)?.size) return [lessOnPath, ...lessOptions]
   }
@@ -27,7 +28,7 @@ function pagerCmd(): string[] {
     if (Filesystem.stat(less)?.size) return [less, ...lessOptions]
   }
 
-  const git = Bun.which("git")
+  const git = which("git")
   if (git) {
     const less = path.join(git, "..", "..", "usr", "bin", "less.exe")
     if (Filesystem.stat(less)?.size) return [less, ...lessOptions]
