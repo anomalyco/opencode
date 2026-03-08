@@ -63,10 +63,9 @@ export namespace Server {
       // TODO: Break server.ts into smaller route files to fix type inference
       app
         .onError((err, c) => {
-          log.error("failed", {
-            error: err,
-          })
           if (err instanceof NamedError) {
+            if (err instanceof NotFoundError) log.warn("not found", { error: err })
+            else log.error("failed", { error: err })
             let status: ContentfulStatusCode
             if (err instanceof NotFoundError) status = 404
             else if (err instanceof Provider.ModelNotFoundError) status = 400
@@ -75,6 +74,7 @@ export namespace Server {
             return c.json(err.toObject(), { status })
           }
           if (err instanceof HTTPException) return err.getResponse()
+          log.error("failed", { error: err })
           const message = err instanceof Error && err.stack ? err.stack : err.toString()
           return c.json(new NamedError.Unknown({ message }).toObject(), {
             status: 500,
