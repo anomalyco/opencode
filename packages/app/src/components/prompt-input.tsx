@@ -985,10 +985,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     addPart,
   })
 
+  const accepting = createMemo(() => {
+    const id = params.id
+    if (!id) return false
+    return permission.isAutoAccepting(id, sdk.directory)
+  })
+
   const { abort, handleSubmit } = createPromptSubmit({
     info,
     imageAttachments,
     commentCount,
+    autoAccept: accepting,
     mode: () => store.mode,
     working,
     editor: () => editorRef,
@@ -1169,11 +1176,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const variants = createMemo(() => ["default", ...local.model.variant.list()])
-  const accepting = createMemo(() => {
-    const id = params.id
-    if (!id) return false
-    return permission.isAutoAccepting(id, sdk.directory)
-  })
 
   return (
     <div class="relative size-full _max-h-[320px] flex flex-col gap-0">
