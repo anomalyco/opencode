@@ -2279,3 +2279,62 @@ test("cloudflare-ai-gateway forwards config metadata options", async () => {
     },
   })
 })
+
+test("provider loaded from env has no explicit timeout in options, confirming getSDK fallback applies", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("ANTHROPIC_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["anthropic"]).toBeDefined()
+      // No timeout configured in config or env — options.timeout is absent.
+      // getSDK spreads { timeout: 300000, ...provider.options } so the default
+      // applies at call time. This test confirms the pre-condition holds.
+      expect(providers["anthropic"].options.timeout).toBeUndefined()
+    },
+  })
+})
+
+test("provider with timeout: false in config disables timeout in getSDK", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            anthropic: {
+              options: {
+                timeout: false,
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("ANTHROPIC_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["anthropic"]).toBeDefined()
+      // Explicit false must override the { timeout: 300000, ... } spread default.
+      expect(providers["anthropic"].options.timeout).toBe(false)
+    },
+  })
+})
