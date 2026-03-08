@@ -459,6 +459,7 @@ export const dict = {
   "session.todo.title": "Tarefas",
   "session.todo.collapse": "Recolher",
   "session.todo.expand": "Expandir",
+  "session.new.title": "Crie qualquer coisa",
   "session.new.worktree.main": "Branch principal",
   "session.new.worktree.mainWithBranch": "Branch principal ({{branch}})",
   "session.new.worktree.create": "Criar novo worktree",
