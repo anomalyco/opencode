@@ -3,6 +3,7 @@ import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
 import { Log } from "../../../util/log"
 import { EOL } from "os"
+import { setTimeout as sleep } from "node:timers/promises"
 
 export const LSPCommand = cmd({
   command: "lsp",
@@ -19,7 +20,7 @@ const DiagnosticsCommand = cmd({
   async handler(args) {
     await bootstrap(process.cwd(), async () => {
       await LSP.touchFile(args.file, true)
-      await Bun.sleep(1000)
+      await sleep(1000)
       process.stdout.write(JSON.stringify(await LSP.diagnostics(), null, 2) + EOL)
     })
   },
