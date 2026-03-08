@@ -312,7 +312,7 @@ export function MessageTimeline(props: {
     messages: () => props.renderedUserMessages,
     config: stageCfg,
   })
-  const rendered = createMemo(() => staging.messages().map((message) => message.id))
+  const rendered = createMemo(() => staging.messages().filter((message) => message != null).map((message) => message.id))
 
   return (
     <Show
