@@ -3,6 +3,7 @@ Interact with Language Server Protocol (LSP) servers to get code intelligence fe
 Supported operations:
 - goToDefinition: Find where a symbol is defined
 - findReferences: Find all references to a symbol
+- diagnostics: Get diagnostics (errors/warnings) for a file
 - hover: Get hover information (documentation, type info) for a symbol
 - documentSymbol: Get all symbols (functions, classes, variables) in a document
 - workspaceSymbol: Search for symbols across the entire workspace
@@ -13,6 +14,8 @@ Supported operations:
 
 All operations require:
 - filePath: The file to operate on
+
+Position-based operations also require:
 - line: The line number (1-based, as shown in editors)
 - character: The character offset (1-based, as shown in editors)
 
