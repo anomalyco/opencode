@@ -14,6 +14,7 @@ import { readFileSync, readdirSync, existsSync } from "fs"
 import * as schema from "./schema"
 import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
+import { iife } from "@/util/iife"
 
 declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number; name: string }[] | undefined
 
@@ -27,15 +28,13 @@ export const NotFoundError = NamedError.create(
 const log = Log.create({ service: "db" })
 
 export namespace Database {
-  export function file(channel: string) {
-    if (channel === "latest" || Flag.OPENCODE_DISABLE_CHANNEL_DB) return "opencode.db"
+  export const Path = iife(() => {
+    const channel = Installation.CHANNEL
+    if (["latest", "beta"].includes(channel) || Flag.OPENCODE_DISABLE_CHANNEL_DB)
+      return path.join(Global.Path.data, "opencode.db")
     const safe = channel.replace(/[^a-zA-Z0-9._-]/g, "-")
-    return `opencode-${safe}.db`
-  }
-
-  export const Path = (() => {
-    return path.join(Global.Path.data, file(Installation.CHANNEL))
-  })()
+    return path.join(Global.Path.data, `opencode-${safe}.db`)
+  })
 
   type Schema = typeof schema
   export type Transaction = SQLiteTransaction<"sync", void, Schema>
@@ -106,6 +105,11 @@ export namespace Database {
         count: entries.length,
         mode: typeof OPENCODE_MIGRATIONS !== "undefined" ? "bundled" : "dev",
       })
+      if (Flag.OPENCODE_SKIP_MIGRATIONS) {
+        for (const item of entries) {
+          item.sql = "select 1;"
+        }
+      }
       migrate(db, entries)
     }
 

@@ -230,6 +230,7 @@
   [data-slot="session-turn-diffs-count"] {
     color: var(--text-base);
     font-family: var(--font-family-sans);
+    font-variant-numeric: tabular-nums;
     font-size: var(--font-size-base);
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-large);
