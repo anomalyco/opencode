@@ -38,8 +38,8 @@ Fix the idle prompt bar visual update so the cycle is visible when idle, while k
 
 ### Definition of Done (verifiable conditions with commands)
 
-- `bash /home/choza/projects/opencode-source/.sisyphus/evidence/run-sandbox-tui.sh idle` exits 0 and reports "Evidence OK".
-- `bash /home/choza/projects/opencode-source/scripts/compare-tui-baseline.sh idle` completes and outputs diff (if any) without stopping on upstream idle failure.
+- `bash /home/choza/projects/opencode-source/scripts/run-sandbox-tui.sh --use-real-auth idle` exits 0 and reports "Evidence OK".
+- `bash /home/choza/projects/opencode-source/scripts/compare-tui-baseline.sh --use-real-auth idle` completes and outputs diff (if any) without stopping on upstream idle failure.
 - `export PATH="$HOME/.bun/bin:$PATH"; bun run --cwd packages/opencode typecheck; bun run --cwd packages/opencode test; bun run --cwd packages/opencode build` completes without errors.
 
 ### Must Have
@@ -107,20 +107,20 @@ Wave 2: Verification runs (idle harness, baseline compare, typecheck/tests/build
   **Acceptance Criteria** (agent-executable only):
 
 - [x] `rg -n "requestRender" packages/opencode/src/cli/cmd/tui/component/prompt/index.tsx` shows the idle-cycle interval calling `renderer.requestRender()`.
-- [x] `OPENCODE_SANDBOX_MODEL=<valid> bash /home/choza/projects/opencode-source/.sisyphus/evidence/run-sandbox-tui.sh idle` exits 0 with "Evidence OK".
+- [x] `bash /home/choza/projects/opencode-source/scripts/run-sandbox-tui.sh --model <valid> --use-real-auth idle` exits 0 with "Evidence OK".
 
   **QA Scenarios** (MANDATORY - task incomplete without these):
 
   ```
   Scenario: Idle background changes on tick
     Tool: Bash
-    Steps: OPENCODE_SANDBOX_MODEL=<valid> bash /home/choza/projects/opencode-source/.sisyphus/evidence/run-sandbox-tui.sh idle
+    Steps: bash /home/choza/projects/opencode-source/scripts/run-sandbox-tui.sh --model <valid> --use-real-auth idle
     Expected: Script exits 0 and prints "Evidence OK: idle".
     Evidence: .sisyphus/evidence/task-1-idle-harness.txt
 
   Scenario: Idle check fails when captures identical
     Tool: Bash
-    Steps: cp /home/choza/projects/opencode-source/.sisyphus/evidence/task-2-idle-a.txt /home/choza/projects/opencode-source/.sisyphus/evidence/task-2-idle-b.txt; bash /home/choza/projects/opencode-source/.sisyphus/evidence/check-sandbox-evidence.sh idle
+    Steps: cp /home/choza/projects/opencode-source/.sisyphus/evidence/task-2-idle-a.txt /home/choza/projects/opencode-source/.sisyphus/evidence/task-2-idle-b.txt; bash /home/choza/projects/opencode-source/scripts/check-sandbox-evidence.sh idle
     Expected: Script exits non-zero and prints "Idle prompt bar background did not change".
     Evidence: .sisyphus/evidence/task-1-idle-fail.txt
   ```
@@ -129,7 +129,7 @@ Wave 2: Verification runs (idle harness, baseline compare, typecheck/tests/build
 
 - [x] 2. Harden sandbox harness + add upstream baseline comparison
 
-  **What to do**: Update `.sisyphus/evidence/run-sandbox-tui.sh` to accept `OPENCODE_SANDBOX_REPO_ROOT`, `OPENCODE_SANDBOX_OPENCODE_DIR`, `OPENCODE_SANDBOX_EVIDENCE_DIR`, and `OPENCODE_SANDBOX_MODEL`, and pass these into the check script. Update `.sisyphus/evidence/check-sandbox-evidence.sh` to select the prompt-bar line using model text (e.g., `GPT-5.2` or `OpenAI`) before falling back to `Build`/`Ask anything`. Add `scripts/compare-tui-baseline.sh` to run fork and upstream harness captures in isolated evidence dirs and produce diffs; ensure it continues even if upstream idle check fails and supports `OPENCODE_SANDBOX_MODEL` via env.
+  **What to do**: Update `scripts/run-sandbox-tui.sh` to accept flags (`--repo-root`, `--opencode-dir`, `--evidence-dir`, `--model`) and emit deprecation warnings for `OPENCODE_SANDBOX_*` env usage, passing the selected model into the check script. Update `scripts/check-sandbox-evidence.sh` to select the prompt-bar line using model text (e.g., `GPT-5.2` or `OpenAI`) before falling back to `Build`/`Ask anything`. Add `scripts/compare-tui-baseline.sh` to run fork and upstream harness captures in isolated evidence dirs and produce diffs; ensure it continues even if upstream idle check fails and supports `--model`.
   **Must NOT do**: Do not change TUI runtime code in this task.
 
   **Recommended Agent Profile**:
@@ -140,37 +140,37 @@ Wave 2: Verification runs (idle harness, baseline compare, typecheck/tests/build
   **Parallelization**: Can Parallel: YES | Wave 1 | Blocks: [3, 4] | Blocked By: []
 
   **References** (executor has NO interview context - be exhaustive):
-  - Pattern: `.sisyphus/evidence/run-sandbox-tui.sh` - harness entry point.
-  - Pattern: `.sisyphus/evidence/check-sandbox-evidence.sh` - idle background validation.
+  - Pattern: `scripts/run-sandbox-tui.sh` - harness entry point.
+  - Pattern: `scripts/check-sandbox-evidence.sh` - idle background validation.
   - Pattern: `packages/opencode/src/provider/models.ts` - model source used by dev builds.
 
   **Acceptance Criteria** (agent-executable only):
 
-- [x] `bash -n .sisyphus/evidence/run-sandbox-tui.sh` and `bash -n .sisyphus/evidence/check-sandbox-evidence.sh` exit 0.
+- [x] `bash -n scripts/run-sandbox-tui.sh` and `bash -n scripts/check-sandbox-evidence.sh` exit 0.
 - [x] `bash -n scripts/compare-tui-baseline.sh` exits 0.
-- [x] `OPENCODE_SANDBOX_MODEL=<valid> bash scripts/compare-tui-baseline.sh idle` runs both harnesses and prints diffs without aborting on upstream idle failure.
+- [x] `bash scripts/compare-tui-baseline.sh --model <valid> --use-real-auth idle` runs both harnesses and prints diffs without aborting on upstream idle failure.
 
   **QA Scenarios** (MANDATORY - task incomplete without these):
 
   ```
   Scenario: Baseline runner completes with model override
     Tool: Bash
-    Steps: OPENCODE_SANDBOX_MODEL=<valid> bash /home/choza/projects/opencode-source/scripts/compare-tui-baseline.sh idle
+    Steps: bash /home/choza/projects/opencode-source/scripts/compare-tui-baseline.sh --model <valid> --use-real-auth idle
     Expected: Both fork and upstream harnesses run; diff output is produced; script exits 0.
     Evidence: .sisyphus/evidence/task-2-baseline.txt
 
   Scenario: Missing idle evidence files is detected
     Tool: Bash
-    Steps: OPENCODE_SANDBOX_EVIDENCE_DIR=/tmp/oc-empty bash /home/choza/projects/opencode-source/.sisyphus/evidence/check-sandbox-evidence.sh idle
+    Steps: bash /home/choza/projects/opencode-source/scripts/check-sandbox-evidence.sh --evidence-dir /tmp/oc-empty idle
     Expected: Script exits non-zero and reports missing idle evidence files.
     Evidence: .sisyphus/evidence/task-2-baseline-error.txt
   ```
 
-  **Commit**: YES | Message: `chore(tui): harden sandbox harness and baseline compare` | Files: [`.sisyphus/evidence/run-sandbox-tui.sh`, `.sisyphus/evidence/check-sandbox-evidence.sh`, `scripts/compare-tui-baseline.sh`]
+  **Commit**: YES | Message: `chore(tui): harden sandbox harness and baseline compare` | Files: [`scripts/run-sandbox-tui.sh`, `scripts/check-sandbox-evidence.sh`, `scripts/compare-tui-baseline.sh`]
 
 - [x] 3. Verify idle cycle in fork vs upstream baseline
 
-  **What to do**: Run idle harness and baseline comparison with a known-valid model string for your account. If `OPENCODE_SANDBOX_MODEL` is unset, default it to `openai/gpt-4o-mini` before running. Save evidence logs to `.sisyphus/evidence` and confirm fork passes idle check while upstream shows no idle background change.
+  **What to do**: Run idle harness and baseline comparison with a known-valid model string for your account. If `--model` is omitted, pass `--model openai/gpt-4o-mini` before running. Save evidence logs to `.sisyphus/evidence` and confirm fork passes idle check while upstream shows no idle background change.
   **Must NOT do**: Do not modify code; verification only.
 
   **Recommended Agent Profile**:
@@ -181,26 +181,26 @@ Wave 2: Verification runs (idle harness, baseline compare, typecheck/tests/build
   **Parallelization**: Can Parallel: YES | Wave 2 | Blocks: [] | Blocked By: [1, 2]
 
   **References** (executor has NO interview context - be exhaustive):
-  - Pattern: `.sisyphus/evidence/run-sandbox-tui.sh`
+  - Pattern: `scripts/run-sandbox-tui.sh`
   - Pattern: `scripts/compare-tui-baseline.sh`
 
   **Acceptance Criteria** (agent-executable only):
 
-- [x] `OPENCODE_SANDBOX_MODEL=<valid> bash /home/choza/projects/opencode-source/.sisyphus/evidence/run-sandbox-tui.sh idle` exits 0.
-- [x] `OPENCODE_SANDBOX_MODEL=<valid> bash /home/choza/projects/opencode-source/scripts/compare-tui-baseline.sh idle` completes and prints diff output.
+- [x] `bash /home/choza/projects/opencode-source/scripts/run-sandbox-tui.sh --model <valid> --use-real-auth idle` exits 0.
+- [x] `bash /home/choza/projects/opencode-source/scripts/compare-tui-baseline.sh --model <valid> --use-real-auth idle` completes and prints diff output.
 
   **QA Scenarios** (MANDATORY - task incomplete without these):
 
   ```
   Scenario: Fork idle harness passes
     Tool: Bash
-    Steps: OPENCODE_SANDBOX_MODEL=<valid> bash /home/choza/projects/opencode-source/.sisyphus/evidence/run-sandbox-tui.sh idle
+    Steps: bash /home/choza/projects/opencode-source/scripts/run-sandbox-tui.sh --model <valid> --use-real-auth idle
     Expected: "Evidence OK: idle" appears and exit code is 0.
     Evidence: .sisyphus/evidence/task-3-idle-pass.txt
 
   Scenario: Upstream baseline shows no idle change
     Tool: Bash
-    Steps: OPENCODE_SANDBOX_MODEL=<valid> bash /home/choza/projects/opencode-source/scripts/compare-tui-baseline.sh idle
+    Steps: bash /home/choza/projects/opencode-source/scripts/compare-tui-baseline.sh --model <valid> --use-real-auth idle
     Expected: Output includes upstream idle failure message and diff output.
     Evidence: .sisyphus/evidence/task-3-idle-upstream.txt
   ```
