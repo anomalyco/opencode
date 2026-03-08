@@ -24,6 +24,15 @@ function normalizeLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
 }
 
+function detectLineEnding(text: string): "\n" | "\r\n" {
+  return text.includes("\r\n") ? "\r\n" : "\n"
+}
+
+function convertToLineEnding(text: string, ending: "\n" | "\r\n"): string {
+  if (ending === "\n") return text
+  return text.replaceAll("\n", "\r\n")
+}
+
 export const EditTool = Tool.define("edit", {
   description: DESCRIPTION,
   parameters: z.object({
@@ -78,7 +87,12 @@ export const EditTool = Tool.define("edit", {
       if (stats.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`)
       await FileTime.assert(ctx.sessionID, filePath)
       contentOld = await Filesystem.readText(filePath)
-      contentNew = replace(contentOld, params.oldString, params.newString, params.replaceAll)
+
+      const ending = detectLineEnding(contentOld)
+      const old = convertToLineEnding(normalizeLineEndings(params.oldString), ending)
+      const next = convertToLineEnding(normalizeLineEndings(params.newString), ending)
+
+      contentNew = replace(contentOld, old, next, params.replaceAll)
 
       diff = trimDiff(
         createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
