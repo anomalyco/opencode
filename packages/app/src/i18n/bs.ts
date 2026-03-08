@@ -613,6 +613,8 @@ export const dict = {
   "settings.general.row.theme.description": "Prilagodi temu OpenCode-a.",
   "settings.general.row.font.title": "Font",
   "settings.general.row.font.description": "Prilagodi monospace font koji se koristi u blokovima koda",
+  "settings.general.row.reducedMotion.title": "Smanji animacije",
+  "settings.general.row.reducedMotion.description": "Onemogući većinu animacija interfejsa.",
 
   "settings.general.row.shellToolPartsExpanded.title": "Proširi dijelove shell alata",
   "settings.general.row.shellToolPartsExpanded.description":

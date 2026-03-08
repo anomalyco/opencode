@@ -554,6 +554,8 @@ export const dict = {
   "settings.general.row.theme.description": "Personnaliser le thème d'OpenCode.",
   "settings.general.row.font.title": "Police",
   "settings.general.row.font.description": "Personnaliser la police mono utilisée dans les blocs de code",
+  "settings.general.row.reducedMotion.title": "Réduire les animations",
+  "settings.general.row.reducedMotion.description": "Désactiver la plupart des animations de l'interface.",
   "settings.general.row.shellToolPartsExpanded.title": "Développer les parties de l'outil shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "Afficher les parties de l'outil shell développées par défaut dans la chronologie",

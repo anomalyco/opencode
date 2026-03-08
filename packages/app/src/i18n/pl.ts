@@ -547,6 +547,8 @@ export const dict = {
   "settings.general.row.theme.description": "Dostosuj motyw OpenCode.",
   "settings.general.row.font.title": "Czcionka",
   "settings.general.row.font.description": "Dostosuj czcionkę mono używaną w blokach kodu",
+  "settings.general.row.reducedMotion.title": "Ogranicz ruch",
+  "settings.general.row.reducedMotion.description": "Wyłącz większość animacji interfejsu.",
   "settings.general.row.shellToolPartsExpanded.title": "Rozwijaj elementy narzędzia shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "Domyślnie pokazuj rozwinięte elementy narzędzia shell na osi czasu",

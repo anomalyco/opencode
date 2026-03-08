@@ -547,6 +547,8 @@ export const dict = {
   "settings.general.row.theme.description": "OpenCode 테마 사용자 지정",
   "settings.general.row.font.title": "글꼴",
   "settings.general.row.font.description": "코드 블록에 사용되는 고정폭 글꼴 사용자 지정",
+  "settings.general.row.reducedMotion.title": "모션 줄이기",
+  "settings.general.row.reducedMotion.description": "인터페이스 애니메이션 대부분을 비활성화합니다.",
   "settings.general.row.shellToolPartsExpanded.title": "shell 도구 파트 펼치기",
   "settings.general.row.shellToolPartsExpanded.description":
     "타임라인에서 기본적으로 shell 도구 파트를 펼친 상태로 표시합니다",

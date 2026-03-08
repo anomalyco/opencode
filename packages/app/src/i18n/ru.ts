@@ -614,6 +614,8 @@ export const dict = {
   "settings.general.row.theme.description": "Настройте оформление OpenCode.",
   "settings.general.row.font.title": "Шрифт",
   "settings.general.row.font.description": "Настройте моноширинный шрифт для блоков кода",
+  "settings.general.row.reducedMotion.title": "Уменьшить анимацию",
+  "settings.general.row.reducedMotion.description": "Отключить большинство анимаций интерфейса.",
 
   "settings.general.row.shellToolPartsExpanded.title": "Разворачивать элементы инструмента shell",
   "settings.general.row.shellToolPartsExpanded.description":

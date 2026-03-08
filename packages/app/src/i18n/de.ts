@@ -557,6 +557,8 @@ export const dict = {
   "settings.general.row.theme.description": "Das Thema von OpenCode anpassen.",
   "settings.general.row.font.title": "Schriftart",
   "settings.general.row.font.description": "Die in Codeblöcken verwendete Monospace-Schriftart anpassen",
+  "settings.general.row.reducedMotion.title": "Bewegung reduzieren",
+  "settings.general.row.reducedMotion.description": "Die meisten Oberflächenanimationen deaktivieren.",
   "settings.general.row.shellToolPartsExpanded.title": "Shell-Tool-Abschnitte ausklappen",
   "settings.general.row.shellToolPartsExpanded.description":
     "Shell-Tool-Abschnitte standardmäßig in der Timeline ausgeklappt anzeigen",

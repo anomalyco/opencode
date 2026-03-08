@@ -622,6 +622,8 @@ export const dict = {
   "settings.general.row.theme.description": "OpenCode'un temasını özelleştirin.",
   "settings.general.row.font.title": "Yazı Tipi",
   "settings.general.row.font.description": "Kod bloklarında kullanılan monospace yazı tipini özelleştirin",
+  "settings.general.row.reducedMotion.title": "Hareketi azalt",
+  "settings.general.row.reducedMotion.description": "Arayüz animasyonlarının çoğunu devre dışı bırak.",
   "settings.general.row.reasoningSummaries.title": "Akıl yürütme özetlerini göster",
   "settings.general.row.reasoningSummaries.description": "Zaman çizelgesinde model akıl yürütme özetlerini görüntüle",
   "settings.general.row.shellToolPartsExpanded.title": "Kabuk araç bileşenlerini genişlet",

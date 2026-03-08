@@ -1,5 +1,18 @@
 @import "@opencode-ai/ui/styles/tailwind";
 
+@layer base {
+  [data-reduced-motion="true"] *,
+  [data-reduced-motion="true"] *::before,
+  [data-reduced-motion="true"] *::after {
+    animation-duration: 0ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0ms !important;
+    transition-delay: 0ms !important;
+  }
+}
+
 @layer components {
   [data-component="getting-started"] {
     container-type: inline-size;

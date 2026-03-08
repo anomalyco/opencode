@@ -603,6 +603,8 @@ export const dict = {
   "settings.general.row.theme.description": "自訂 OpenCode 的主題。",
   "settings.general.row.font.title": "字型",
   "settings.general.row.font.description": "自訂程式碼區塊使用的等寬字型",
+  "settings.general.row.reducedMotion.title": "減少動態效果",
+  "settings.general.row.reducedMotion.description": "停用大多數介面動畫。",
 
   "settings.general.row.shellToolPartsExpanded.title": "展開 shell 工具區塊",
   "settings.general.row.shellToolPartsExpanded.description": "在時間軸中預設展開 shell 工具區塊",

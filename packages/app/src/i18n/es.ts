@@ -616,6 +616,8 @@ export const dict = {
   "settings.general.row.theme.description": "Personaliza el tema de OpenCode.",
   "settings.general.row.font.title": "Fuente",
   "settings.general.row.font.description": "Personaliza la fuente monoespaciada usada en bloques de código",
+  "settings.general.row.reducedMotion.title": "Reducir movimiento",
+  "settings.general.row.reducedMotion.description": "Desactiva la mayoría de las animaciones de la interfaz.",
 
   "settings.general.row.shellToolPartsExpanded.title": "Expandir partes de la herramienta shell",
   "settings.general.row.shellToolPartsExpanded.description":

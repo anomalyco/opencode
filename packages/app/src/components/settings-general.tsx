@@ -267,6 +267,18 @@ export const SettingsGeneral: Component = () => {
             )}
           </Select>
         </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.reducedMotion.title")}
+          description={language.t("settings.general.row.reducedMotion.description")}
+        >
+          <div data-action="settings-reduced-motion">
+            <Switch
+              checked={settings.general.reducedMotion()}
+              onChange={(checked) => settings.general.setReducedMotion(checked)}
+            />
+          </div>
+        </SettingsRow>
       </div>
     </div>
   )

@@ -616,6 +616,8 @@ export const dict = {
   "settings.general.row.theme.description": "Tilpass hvordan OpenCode er tematisert.",
   "settings.general.row.font.title": "Skrift",
   "settings.general.row.font.description": "Tilpass mono-skriften som brukes i kodeblokker",
+  "settings.general.row.reducedMotion.title": "Reduser bevegelse",
+  "settings.general.row.reducedMotion.description": "Deaktiver de fleste grensesnittanimasjoner.",
 
   "settings.general.row.shellToolPartsExpanded.title": "Utvid shell-verktøydeler",
   "settings.general.row.shellToolPartsExpanded.description": "Vis shell-verktøydeler utvidet som standard i tidslinjen",

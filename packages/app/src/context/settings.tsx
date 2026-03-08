@@ -22,6 +22,7 @@ export interface Settings {
   general: {
     autoSave: boolean
     releaseNotes: boolean
+    reducedMotion: boolean
     showReasoningSummaries: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
@@ -45,6 +46,7 @@ const defaultSettings: Settings = {
   general: {
     autoSave: true,
     releaseNotes: true,
+    reducedMotion: false,
     showReasoningSummaries: false,
     shellToolPartsExpanded: true,
     editToolPartsExpanded: false,
@@ -112,6 +114,15 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       document.documentElement.style.setProperty("--font-family-mono", monoFontFamily(store.appearance?.font))
     })
 
+    createEffect(() => {
+      if (typeof document === "undefined") return
+      if (store.general?.reducedMotion ?? defaultSettings.general.reducedMotion) {
+        document.documentElement.setAttribute("data-reduced-motion", "true")
+        return
+      }
+      document.documentElement.removeAttribute("data-reduced-motion")
+    })
+
     return {
       ready,
       get current() {
@@ -125,6 +136,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         releaseNotes: withFallback(() => store.general?.releaseNotes, defaultSettings.general.releaseNotes),
         setReleaseNotes(value: boolean) {
           setStore("general", "releaseNotes", value)
+        },
+        reducedMotion: withFallback(() => store.general?.reducedMotion, defaultSettings.general.reducedMotion),
+        setReducedMotion(value: boolean) {
+          setStore("general", "reducedMotion", value)
         },
         showReasoningSummaries: withFallback(
           () => store.general?.showReasoningSummaries,
