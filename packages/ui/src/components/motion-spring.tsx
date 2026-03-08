@@ -1,7 +1,7 @@
 import { attachSpring, motionValue } from "motion"
 import type { SpringOptions } from "motion"
 import { createEffect, createSignal, onCleanup } from "solid-js"
-import { prefersReducedMotion } from "../hooks/use-reduced-motion"
+import { useReducedMotion } from "../hooks/use-reduced-motion"
 
 type Opt = Pick<SpringOptions, "visualDuration" | "bounce" | "stiffness" | "damping" | "mass" | "velocity">
 const eq = (a: Opt | undefined, b: Opt | undefined) =>
@@ -14,7 +14,7 @@ const eq = (a: Opt | undefined, b: Opt | undefined) =>
 
 export function useSpring(target: () => number, options?: Opt | (() => Opt)) {
   const read = () => (typeof options === "function" ? options() : options)
-  const reduce = prefersReducedMotion
+  const reduce = useReducedMotion()
   const [value, setValue] = createSignal(target())
   const source = motionValue(value())
   const spring = motionValue(value())
