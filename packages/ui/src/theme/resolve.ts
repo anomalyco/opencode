@@ -43,8 +43,8 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   const backgroundHex = getHex(backgroundOverride)
   const overlay = noInk || (Boolean(backgroundOverride) && !backgroundHex)
   const content = (seed: HexColor, scale: HexColor[]) => {
-    if (isDark) return seed
-    return hexToOklch(seed).l > 0.82 ? scale[10] : seed
+    const value = isDark ? seed : hexToOklch(seed).l > 0.82 ? scale[10] : seed
+    return shift(value, { c: isDark ? 1.16 : 1.1 })
   }
   const modified = () => {
     if (!colors.compact) return isDark ? "#ffba92" : "#FF8C00"
@@ -157,23 +157,23 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["surface-brand-base"] = brandl[8]
   tokens["surface-brand-hover"] = brandl[9]
 
-  tokens["surface-interactive-base"] = interactive[2]
-  tokens["surface-interactive-hover"] = noInk && isDark ? interactive[2] : interactive[3]
-  tokens["surface-interactive-weak"] = interactive[1]
-  tokens["surface-interactive-weak-hover"] = noInk && isDark ? interl[2] : interactive[2]
+  tokens["surface-interactive-base"] = interactive[isDark ? 4 : 3]
+  tokens["surface-interactive-hover"] = interactive[isDark ? 5 : 4]
+  tokens["surface-interactive-weak"] = interactive[isDark ? 3 : 2]
+  tokens["surface-interactive-weak-hover"] = noInk && isDark ? interl[4] : interactive[isDark ? 4 : 3]
 
-  tokens["surface-success-base"] = success[2]
-  tokens["surface-success-weak"] = success[1]
-  tokens["surface-success-strong"] = success[8]
-  tokens["surface-warning-base"] = (noInk && isDark ? warningl : warning)[2]
-  tokens["surface-warning-weak"] = (noInk && isDark ? warningl : warning)[1]
-  tokens["surface-warning-strong"] = (noInk && isDark ? warningl : warning)[8]
-  tokens["surface-critical-base"] = error[2]
-  tokens["surface-critical-weak"] = error[1]
-  tokens["surface-critical-strong"] = error[8]
-  tokens["surface-info-base"] = (noInk && isDark ? infol : info)[2]
-  tokens["surface-info-weak"] = (noInk && isDark ? infol : info)[1]
-  tokens["surface-info-strong"] = (noInk && isDark ? infol : info)[8]
+  tokens["surface-success-base"] = success[isDark ? 4 : 3]
+  tokens["surface-success-weak"] = success[isDark ? 3 : 2]
+  tokens["surface-success-strong"] = success[9]
+  tokens["surface-warning-base"] = (noInk && isDark ? warningl : warning)[isDark ? 4 : 3]
+  tokens["surface-warning-weak"] = (noInk && isDark ? warningl : warning)[isDark ? 3 : 2]
+  tokens["surface-warning-strong"] = (noInk && isDark ? warningl : warning)[9]
+  tokens["surface-critical-base"] = error[isDark ? 4 : 3]
+  tokens["surface-critical-weak"] = error[isDark ? 3 : 2]
+  tokens["surface-critical-strong"] = error[9]
+  tokens["surface-info-base"] = (noInk && isDark ? infol : info)[isDark ? 4 : 3]
+  tokens["surface-info-weak"] = (noInk && isDark ? infol : info)[isDark ? 3 : 2]
+  tokens["surface-info-strong"] = (noInk && isDark ? infol : info)[9]
 
   tokens["surface-diff-unchanged-base"] = isDark ? neutral[0] : "#ffffff00"
   tokens["surface-diff-skip-base"] = isDark ? neutralAlpha[0] : neutral[1]
