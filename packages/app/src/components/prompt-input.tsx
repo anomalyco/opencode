@@ -957,6 +957,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return permission.isAutoAccepting(id, sdk.directory)
   })
 
+  const flip = () => {
+    if (!params.id) {
+      permission.toggleAutoAcceptDirectory(sdk.directory)
+      return
+    }
+    permission.toggleAutoAccept(params.id, sdk.directory)
+  }
+
   const { abort, handleSubmit } = createPromptSubmit({
     info,
     imageAttachments,
@@ -1467,41 +1475,32 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   )}
                   keybind={command.keybind("permissions.autoaccept")}
                 >
-                  <Button
-                    data-action="prompt-permissions"
-                    type="button"
-                    variant="ghost"
-                    class="size-7 p-0 flex items-center justify-center"
-                    style={{
+                  <Select
+                    size="normal"
+                    options={["default", "autoaccept"] as const}
+                    current={accepting() ? "autoaccept" : "default"}
+                    label={(x) =>
+                      x === "autoaccept"
+                        ? language.t("command.permissions.autoaccept.enable")
+                        : `${language.t("common.default")} ${language.t("command.category.permissions")}`
+                    }
+                    onSelect={(x) => {
+                      if (!x) return
+                      if (x === "autoaccept" && accepting()) return
+                      if (x === "default" && !accepting()) return
+                      flip()
+                    }}
+                    class="max-w-[220px]"
+                    valueClass="truncate text-13-regular"
+                    triggerStyle={{
+                      height: "28px",
                       opacity: buttonsSpring(),
                       transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
                       filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
                       "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
                     }}
-                    onClick={() => {
-                      if (!params.id) {
-                        permission.toggleAutoAcceptDirectory(sdk.directory)
-                        return
-                      }
-                      permission.toggleAutoAccept(params.id, sdk.directory)
-                    }}
-                    classList={{
-                      "text-text-base": !accepting(),
-                      "hover:bg-surface-success-base": accepting(),
-                    }}
-                    aria-label={
-                      accepting()
-                        ? language.t("command.permissions.autoaccept.disable")
-                        : language.t("command.permissions.autoaccept.enable")
-                    }
-                    aria-pressed={accepting()}
-                  >
-                    <Icon
-                      name="chevron-double-right"
-                      size="small"
-                      classList={{ "text-icon-success-base": accepting() }}
-                    />
-                  </Button>
+                    variant="ghost"
+                  />
                 </TooltipKeybind>
               </div>
             </div>
