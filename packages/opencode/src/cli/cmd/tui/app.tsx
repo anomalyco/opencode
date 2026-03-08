@@ -723,6 +723,17 @@ function App() {
         dialog.clear()
       },
     },
+    {
+      title: kv.get("sidebar", "auto") === "auto" ? "Hide sidebar" : "Show sidebar",
+      value: "app.toggle.sidebar",
+      keybind: "sidebar_toggle",
+      category: "System",
+      onSelect: (dialog) => {
+        const current = kv.get("sidebar", "auto")
+        kv.set("sidebar", current === "auto" ? "hide" : "auto")
+        dialog.clear()
+      },
+    },
   ])
 
   createEffect(() => {
