@@ -1,3 +1,4 @@
+import { usePageVisibility } from "@solid-primitives/page-visibility"
 import { Component, createEffect, createMemo, createSignal, For, Match, on, Show, Switch, type JSX } from "solid-js"
 import stripAnsi from "strip-ansi"
 import { createStore } from "solid-js/store"
@@ -254,8 +255,6 @@ function urls(text: string | undefined) {
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
 const HIDDEN_TOOLS = new Set(["todowrite", "todoread"])
 
-import { pageVisible } from "../hooks/use-page-visible"
-
 function createGroupOpenState() {
   const [state, setState] = createStore<Record<string, boolean>>({})
   const read = (key?: string, collapse?: boolean) => {
@@ -277,6 +276,7 @@ function createGroupOpenState() {
 function shouldCollapseGroup(
   statuses: (string | undefined)[],
   opts: { afterTool?: boolean; groupTail?: boolean; working?: boolean },
+  pageVisible: () => boolean,
 ) {
   if (opts.afterTool) return true
   if (opts.groupTail === false) return true
@@ -363,6 +363,7 @@ export function AssistantParts(props: {
 }) {
   const data = useData()
   const emptyParts: PartType[] = []
+  const pageVisible = usePageVisibility()
   const groupState = createGroupOpenState()
   const grouped = createMemo(() => {
     const keys: string[] = []
@@ -485,11 +486,15 @@ export function AssistantParts(props: {
               groupTail?: boolean,
               group?: { part: ToolPart; message: AssistantMessage }[],
             ) =>
-              shouldCollapseGroup(group?.map((item) => item.part.state.status) ?? [], {
-                afterTool,
-                groupTail,
-                working: props.working,
-              })
+              shouldCollapseGroup(
+                group?.map((item) => item.part.state.status) ?? [],
+                {
+                  afterTool,
+                  groupTail,
+                  working: props.working,
+                },
+                pageVisible,
+              )
             const value = ctx()
             if (value) return groupState.read(value.groupKey, collapse(value.afterTool, value.tail, value.parts))
             const entry = part()

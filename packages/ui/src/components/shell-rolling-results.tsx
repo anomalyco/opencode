@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
 import stripAnsi from "strip-ansi"
 import type { ToolPart } from "@opencode-ai/sdk/v2"
-import { prefersReducedMotion } from "../hooks/use-reduced-motion"
+import { useReducedMotion } from "../hooks/use-reduced-motion"
 import { useI18n } from "../context/i18n"
 import { RollingResults } from "./rolling-results"
 import { Icon } from "./icon"
@@ -178,6 +178,7 @@ function ShellExpanded(props: { cmd: string; out: string; open: boolean }) {
 
 export function ShellRollingResults(props: { part: ToolPart; animate?: boolean }) {
   const i18n = useI18n()
+  const reduce = useReducedMotion()
   const wiped = new Set<string>()
   const [mounted, setMounted] = createSignal(false)
   const [userToggled, setUserToggled] = createSignal(false)
@@ -208,7 +209,6 @@ export function ShellRollingResults(props: { part: ToolPart; animate?: boolean }
     if (typeof value === "string") return value
     return ""
   })
-  const reduce = prefersReducedMotion
   const skip = () => reduce() || props.animate === false
   const opacity = useSpring(() => (mounted() ? 1 : 0), GROW_SPRING)
   const blur = useSpring(() => (mounted() ? 0 : 2), GROW_SPRING)
