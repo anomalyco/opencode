@@ -1,4 +1,5 @@
 import { createEffect, createSignal, on, onCleanup, onMount } from "solid-js"
+import { useReducedMotion } from "../hooks/use-reduced-motion"
 import {
   animate,
   type AnimationPlaybackControls,
@@ -7,7 +8,6 @@ import {
   GROW_SPRING,
   WIPE_MASK,
 } from "./motion"
-import { prefersReducedMotion } from "../hooks/use-reduced-motion"
 
 const px = (value: number | string | undefined, fallback: number) => {
   if (typeof value === "number") return `${value}px`
@@ -143,12 +143,13 @@ export function TextWipe(props: { text?: string; class?: string; delay?: number;
   let ref: HTMLSpanElement | undefined
   let frame: number | undefined
   let anim: AnimationPlaybackControls | undefined
+  const reduce = useReducedMotion()
 
   const run = () => {
     if (props.animate === false) return
     const el = ref
     if (!el || !props.text || typeof window === "undefined") return
-    if (prefersReducedMotion()) return
+    if (reduce()) return
 
     const mask =
       typeof CSS !== "undefined" &&

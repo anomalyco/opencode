@@ -1,6 +1,6 @@
 import { createEffect, on, type JSX, onMount, onCleanup } from "solid-js"
+import { useReducedMotion } from "../hooks/use-reduced-motion"
 import { animate, tunableSpringValue, type AnimationPlaybackControls, GROW_SPRING, type SpringConfig } from "./motion"
-import { prefersReducedMotion } from "../hooks/use-reduced-motion"
 
 export interface GrowBoxProps {
   children: JSX.Element
@@ -49,7 +49,7 @@ export interface GrowBoxProps {
  * Used for timeline turns, assistant part groups, and user messages.
  */
 export function GrowBox(props: GrowBoxProps) {
-  const reduce = prefersReducedMotion
+  const reduce = useReducedMotion()
   const spring = () => props.spring ?? GROW_SPRING
   const toggleSpring = () => props.toggleSpring ?? spring()
   let mode: "mount" | "toggle" = "mount"
@@ -293,6 +293,18 @@ export function GrowBox(props: GrowBoxProps) {
       offChange()
     })
 
+    if (watch()) {
+      observer = new ResizeObserver(() => {
+        if (!open()) return
+        if (resizeFrame !== undefined) return
+        resizeFrame = requestAnimationFrame(() => {
+          resizeFrame = undefined
+          setHeight("mount")
+        })
+      })
+      observer.observe(body)
+    }
+
     if (!animated()) {
       setInstant(open())
       return
@@ -317,17 +329,6 @@ export function GrowBox(props: GrowBoxProps) {
         fadeBodyIn("mount")
         if (grow()) setHeight("mount")
       })
-    }
-    if (watch()) {
-      observer = new ResizeObserver(() => {
-        if (!open()) return
-        if (resizeFrame !== undefined) return
-        resizeFrame = requestAnimationFrame(() => {
-          resizeFrame = undefined
-          setHeight("mount")
-        })
-      })
-      observer.observe(body)
     }
   })
 
@@ -402,7 +403,12 @@ export function GrowBox(props: GrowBoxProps) {
       ref={root}
       data-slot={props.slot}
       class={props.class}
-      style={{ transform: "translateZ(0)", position: "relative" }}
+      style={{
+        transform: "translateZ(0)",
+        position: "relative",
+        height: open() ? undefined : "0px",
+        overflow: open() ? undefined : "clip",
+      }}
     >
       <div ref={body} style={{ "padding-top": gap() > 0 ? `${gap()}px` : undefined }}>
         {props.children}
