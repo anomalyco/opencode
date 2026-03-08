@@ -1,6 +1,6 @@
 import { For, Show, batch, createEffect, createMemo, createSignal, on, onCleanup, onMount, type JSX } from "solid-js"
+import { useReducedMotion } from "../hooks/use-reduced-motion"
 import { animate, clearMaskStyles, GROW_SPRING, type AnimationPlaybackControls, type SpringConfig } from "./motion"
-import { prefersReducedMotion } from "../hooks/use-reduced-motion"
 
 export type RollingResultsProps<T> = {
   items: T[]
@@ -27,8 +27,7 @@ export function RollingResults<T>(props: RollingResultsProps<T>) {
   let shift: AnimationPlaybackControls | undefined
   let resize: AnimationPlaybackControls | undefined
   let edgeFade: AnimationPlaybackControls | undefined
-
-  const reducedMotion = prefersReducedMotion
+  const reduce = useReducedMotion()
 
   const rows = createMemo(() => Math.max(1, Math.round(props.rows ?? 3)))
   const rowHeight = createMemo(() => Math.max(16, Math.round(props.rowHeight ?? 22)))
@@ -54,7 +53,7 @@ export function RollingResults<T>(props: RollingResultsProps<T>) {
     return count() - rendered().length
   })
   const open = createMemo(() => props.open !== false)
-  const active = createMemo(() => (props.animate !== false || props.spring !== undefined) && !reducedMotion())
+  const active = createMemo(() => (props.animate !== false || props.spring !== undefined) && !reduce())
   const noFade = () => props.noFadeOnCollapse === true
   const overflowing = createMemo(() => count() > rows())
   const shown = createMemo(() => Math.min(rows(), count()))
