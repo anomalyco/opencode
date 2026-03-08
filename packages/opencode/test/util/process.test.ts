@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Process } from "../../src/util/process"
+import { tmpdir } from "../fixture/fixture"
 
 function node(script: string) {
   return [process.execPath, "-e", script]
@@ -56,4 +57,21 @@ describe("util.process", () => {
     expect(out.code).not.toBe(0)
     expect(Date.now() - started).toBeLessThan(1000)
   }, 3000)
+
+  test("uses cwd when spawning commands", async () => {
+    await using tmp = await tmpdir()
+    const out = await Process.run(node("process.stdout.write(process.cwd())"), {
+      cwd: tmp.path,
+    })
+    expect(out.stdout.toString()).toBe(tmp.path)
+  })
+
+  test("merges environment overrides", async () => {
+    const out = await Process.run(node('process.stdout.write(process.env.OPENCODE_TEST ?? "")'), {
+      env: {
+        OPENCODE_TEST: "set",
+      },
+    })
+    expect(out.stdout.toString()).toBe("set")
+  })
 })
