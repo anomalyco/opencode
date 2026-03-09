@@ -15,6 +15,8 @@ import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import PROMPT_DOC_SYNTHESIS from "./prompt/doc_synthesis.txt"
 import PROMPT_BOTTLENECK_HUNT from "./prompt/bottleneck_hunt.txt"
+import PROMPT_TEST_SUITE_GEN from "./prompt/test_suite_gen.txt"
+import PROMPT_DEPENDENCY_UPGRADE from "./prompt/dependency_upgrade.txt"
 import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
@@ -125,6 +127,45 @@ export namespace Agent {
           }),
           user,
         ),
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+      test_suite_gen: {
+        name: "test_suite_gen",
+        description: `Specialized agent for generating comprehensive unit and integration test suites.`,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            todoread: "deny",
+            todowrite: "deny",
+            bash: "allow",
+            read: "allow",
+            edit: "allow",
+          }),
+          user,
+        ),
+        prompt: PROMPT_TEST_SUITE_GEN,
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+      dependency_upgrade: {
+        name: "dependency_upgrade",
+        description: `Specialized agent for upgrading project dependencies and fixing breaking changes.`,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            todoread: "deny",
+            todowrite: "deny",
+            bash: "allow",
+            read: "allow",
+            edit: "allow",
+            lsp: "allow",
+          }),
+          user,
+        ),
+        prompt: PROMPT_DEPENDENCY_UPGRADE,
         options: {},
         mode: "subagent",
         native: true,

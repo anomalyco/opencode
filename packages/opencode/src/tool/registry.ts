@@ -37,6 +37,8 @@ import { McpBridgeToolDefinition } from "./mcp_bridge"
 import { RepoArchitectToolDefinition } from "./repo_architect"
 import { PerfProfilerToolDefinition } from "./perf_profiler"
 import { DbExplorerToolDefinition } from "./db_explorer"
+import { LspPowerFixerToolDefinition } from "./lsp_power_fixer"
+import { EnvProvisionerToolDefinition } from "./env_provisioner"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -132,6 +134,8 @@ export namespace ToolRegistry {
       RepoArchitectToolDefinition,
       PerfProfilerToolDefinition,
       DbExplorerToolDefinition,
+      LspPowerFixerToolDefinition,
+      EnvProvisionerToolDefinition,
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),
       ...custom,

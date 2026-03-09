@@ -1,0 +1,6 @@
+This tool uses the Language Server Protocol (LSP) to automatically resolve common type errors, missing imports, and linting issues reported by the compiler.
+
+Parameters:
+- file: The file to fix.
+- error_id: The specific error ID to address (optional).
+- action: The code action to apply (e.g., 'quickfix', 'refactor').
