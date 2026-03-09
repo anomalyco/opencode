@@ -50,6 +50,7 @@ export function Tips() {
 
 const TIPS = [
   "Type {highlight}@{/highlight} followed by a filename to fuzzy search and attach files",
+  "While browsing {highlight}@{/highlight} mentions, press {highlight}Ctrl+X{/highlight} to open a file or {highlight}Alt+O{/highlight} to open its directory",
   "Start a message with {highlight}!{/highlight} to run shell commands directly (e.g., {highlight}!ls -la{/highlight})",
   "Press {highlight}Tab{/highlight} to cycle between Build and Plan agents",
   "Use {highlight}/undo{/highlight} to revert the last message and file changes",

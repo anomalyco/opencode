@@ -10,7 +10,16 @@ import { useTuiConfig } from "./tui-config"
 
 export type KeybindKey = keyof NonNullable<TuiConfig.Info["keybinds"]> & string
 
-export const { use: useKeybind, provider: KeybindProvider } = createSimpleContext({
+type KeybindContext = {
+  all: Record<string, Keybind.Info[]>
+  leader: boolean
+  captureLeader(enabled: boolean): void
+  parse(evt: ParsedKey): Keybind.Info
+  match(key: KeybindKey, evt: ParsedKey): boolean | undefined
+  print(key: KeybindKey): string
+}
+
+export const { use: useKeybind, provider: KeybindProvider } = createSimpleContext<KeybindContext, {}>({
   name: "Keybind",
   init: () => {
     const config = useTuiConfig()
@@ -22,8 +31,10 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
     })
     const [store, setStore] = createStore({
       leader: false,
+      capture: 0,
     })
     const renderer = useRenderer()
+    const captured = () => store.capture > 0
 
     let focus: Renderable | null
     let timeout: NodeJS.Timeout
@@ -51,7 +62,7 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
     }
 
     useKeyboard(async (evt) => {
-      if (!store.leader && result.match("leader", evt)) {
+      if (!store.leader && !captured() && result.match("leader", evt)) {
         leader(true)
         return
       }
@@ -72,6 +83,9 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
       },
       get leader() {
         return store.leader
+      },
+      captureLeader(enabled: boolean) {
+        setStore("capture", (count) => Math.max(0, count + (enabled ? -1 : 1)))
       },
       parse(evt: ParsedKey): Keybind.Info {
         // Handle special case for Ctrl+Underscore (represented as \x1F)
