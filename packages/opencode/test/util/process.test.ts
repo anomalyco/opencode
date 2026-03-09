@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Process } from "../../src/util/process"
+import { tmpdir } from "../fixture/fixture"
 
 function node(script: string) {
   return [process.execPath, "-e", script]
@@ -58,10 +59,11 @@ describe("util.process", () => {
   }, 3000)
 
   test("uses cwd when spawning commands", async () => {
+    await using tmp = await tmpdir()
     const out = await Process.run(node("process.stdout.write(process.cwd())"), {
-      cwd: "/tmp",
+      cwd: tmp.path,
     })
-    expect(out.stdout.toString()).toBe("/tmp")
+    expect(out.stdout.toString()).toBe(tmp.path)
   })
 
   test("merges environment overrides", async () => {
