@@ -13,6 +13,8 @@ import { WorkspaceTable } from "../../src/control-plane/workspace.sql"
 
 Log.init({ print: false })
 
+const pre = `${path.basename(Database.Path)}.before-project-repair.`
+
 describe("repairAll", () => {
   test("repairs duplicate project IDs for the same worktree", async () => {
     const p = Project
@@ -153,7 +155,7 @@ describe("repairAll", () => {
 
     const after = await fs.readdir(dir)
     const added = after.filter((f) => !before.includes(f))
-    expect(added.some((f) => f.startsWith("opencode.db.before-project-repair."))).toBe(false)
+    expect(added.some((f) => f.startsWith(pre))).toBe(false)
   })
 
   test("does not repair when only one git project exists for a worktree", async () => {
@@ -196,7 +198,7 @@ describe("repairAll", () => {
 
     const after = await fs.readdir(dir)
     const added = after.filter((f) => !before.includes(f))
-    expect(added.some((f) => f.startsWith("opencode.db.before-project-repair."))).toBe(false)
+    expect(added.some((f) => f.startsWith(pre))).toBe(false)
   })
 
   test("does not repair legacy git project without sessions", async () => {
@@ -226,7 +228,7 @@ describe("repairAll", () => {
 
     const after = await fs.readdir(dir)
     const added = after.filter((f) => !before.includes(f))
-    expect(added.some((f) => f.startsWith("opencode.db.before-project-repair."))).toBe(false)
+    expect(added.some((f) => f.startsWith(pre))).toBe(false)
   })
 
   test("does not consider legacy git projects needing repair when session directory is missing", async () => {
@@ -283,13 +285,13 @@ describe("repairAll", () => {
 
     const mid = await fs.readdir(dir)
     const added1 = mid.filter((f) => !before.includes(f))
-    expect(added1.some((f) => f.startsWith("opencode.db.before-project-repair."))).toBe(false)
+    expect(added1.some((f) => f.startsWith(pre))).toBe(false)
 
     await repairAll()
 
     const after = await fs.readdir(dir)
     const added2 = after.filter((f) => !mid.includes(f))
-    expect(added2.some((f) => f.startsWith("opencode.db.before-project-repair."))).toBe(false)
+    expect(added2.some((f) => f.startsWith(pre))).toBe(false)
   })
 
   test("does not consider legacy git projects needing repair when worktree is missing", async () => {
@@ -340,7 +342,7 @@ describe("repairAll", () => {
 
     const after = await fs.readdir(dir)
     const added = after.filter((f) => !before.includes(f))
-    expect(added.some((f) => f.startsWith("opencode.db.before-project-repair."))).toBe(false)
+    expect(added.some((f) => f.startsWith(pre))).toBe(false)
   })
 
   test("migrates legacy git project without sessions when permission exists", async () => {
@@ -381,7 +383,7 @@ describe("repairAll", () => {
 
     const mid = await fs.readdir(dir)
     const added1 = mid.filter((f) => !before.includes(f))
-    expect(added1.some((f) => f.startsWith("opencode.db.before-project-repair."))).toBe(true)
+    expect(added1.some((f) => f.startsWith(pre))).toBe(true)
 
     const id = await Bun.file(path.join(tmp.path, ".git", "opencode"))
       .text()
@@ -395,7 +397,7 @@ describe("repairAll", () => {
 
     const after = await fs.readdir(dir)
     const added2 = after.filter((f) => !mid.includes(f))
-    expect(added2.some((f) => f.startsWith("opencode.db.before-project-repair."))).toBe(false)
+    expect(added2.some((f) => f.startsWith(pre))).toBe(false)
   })
 
   test("migrates legacy git project without sessions when workspace exists", async () => {
@@ -439,7 +441,7 @@ describe("repairAll", () => {
 
     const mid = await fs.readdir(dir)
     const added1 = mid.filter((f) => !before.includes(f))
-    expect(added1.some((f) => f.startsWith("opencode.db.before-project-repair."))).toBe(true)
+    expect(added1.some((f) => f.startsWith(pre))).toBe(true)
 
     const id = await Bun.file(path.join(tmp.path, ".git", "opencode"))
       .text()
@@ -453,7 +455,7 @@ describe("repairAll", () => {
 
     const after = await fs.readdir(dir)
     const added2 = after.filter((f) => !mid.includes(f))
-    expect(added2.some((f) => f.startsWith("opencode.db.before-project-repair."))).toBe(false)
+    expect(added2.some((f) => f.startsWith(pre))).toBe(false)
   })
 
   test("migrates legacy git project ids during repairAll", async () => {
