@@ -41,6 +41,10 @@ export interface PartProps {
   last: boolean
 }
 
+function toolOutput(state: MessageV2.ToolStateCompleted): string {
+  return state.time?.compacted ? "[Old tool result content cleared]" : state.output
+}
+
 export function Part(props: PartProps) {
   const [copied, setCopied] = createSignal(false)
   const id = createMemo(() => props.message.id + "-" + props.index)
@@ -430,6 +434,7 @@ export function TodoWriteTool(props: ToolProps) {
 
 export function GrepTool(props: ToolProps) {
   const messages = useShareMessages()
+  const output = createMemo(() => toolOutput(props.state))
 
   return (
     <>
@@ -448,11 +453,11 @@ export function GrepTool(props: ToolProps) {
                 messages.match_other,
               )}
             >
-              <ContentText expand compact text={props.state.output} />
+              <ContentText expand compact text={output()} />
             </ResultsButton>
           </Match>
-          <Match when={props.state.output}>
-            <ContentText expand compact text={props.state.output} data-size="sm" data-color="dimmed" />
+          <Match when={output()}>
+            <ContentText expand compact text={output()} data-size="sm" data-color="dimmed" />
           </Match>
         </Switch>
       </div>
@@ -461,6 +466,7 @@ export function GrepTool(props: ToolProps) {
 }
 
 export function ListTool(props: ToolProps) {
+  const output = createMemo(() => toolOutput(props.state))
   const path = createMemo(() =>
     props.state.input?.path !== props.message.path.cwd
       ? stripWorkingDirectory(props.state.input?.path, props.message.path.cwd)
@@ -477,9 +483,9 @@ export function ListTool(props: ToolProps) {
       </div>
       <div data-component="tool-result">
         <Switch>
-          <Match when={props.state.output}>
+          <Match when={output()}>
             <ResultsButton>
-              <ContentText expand compact text={props.state.output} />
+              <ContentText expand compact text={output()} />
             </ResultsButton>
           </Match>
         </Switch>
@@ -490,6 +496,7 @@ export function ListTool(props: ToolProps) {
 
 export function WebFetchTool(props: ToolProps) {
   const messages = useShareMessages()
+  const output = createMemo(() => toolOutput(props.state))
 
   return (
     <>
@@ -502,9 +509,9 @@ export function WebFetchTool(props: ToolProps) {
           <Match when={props.state.metadata?.error}>
             <ContentError>{formatErrorString(props.state.output, messages.error)}</ContentError>
           </Match>
-          <Match when={props.state.output}>
+          <Match when={output()}>
             <ResultsButton>
-              <ContentCode lang={props.state.input.format || "text"} code={props.state.output} />
+              <ContentCode lang={props.state.input.format || "text"} code={output()} />
             </ResultsButton>
           </Match>
         </Switch>
@@ -515,6 +522,7 @@ export function WebFetchTool(props: ToolProps) {
 
 export function ReadTool(props: ToolProps) {
   const messages = useShareMessages()
+  const output = createMemo(() => toolOutput(props.state))
   const filePath = createMemo(() => stripWorkingDirectory(props.state.input?.filePath, props.message.path.cwd))
 
   return (
@@ -535,9 +543,9 @@ export function ReadTool(props: ToolProps) {
               <ContentCode lang={getShikiLang(filePath() || "")} code={props.state.metadata?.preview} />
             </ResultsButton>
           </Match>
-          <Match when={typeof props.state.metadata?.preview !== "string" && props.state.output}>
+          <Match when={typeof props.state.metadata?.preview !== "string" && output()}>
             <ResultsButton>
-              <ContentText expand compact text={props.state.output} />
+              <ContentText expand compact text={output()} />
             </ResultsButton>
           </Match>
         </Switch>
@@ -626,6 +634,7 @@ export function BashTool(props: ToolProps) {
 
 export function GlobTool(props: ToolProps) {
   const messages = useShareMessages()
+  const output = createMemo(() => toolOutput(props.state))
 
   return (
     <>
@@ -644,12 +653,12 @@ export function GlobTool(props: ToolProps) {
                 messages.result_other,
               )}
             >
-              <ContentText expand compact text={props.state.output} />
+              <ContentText expand compact text={output()} />
             </ResultsButton>
           </div>
         </Match>
-        <Match when={props.state.output}>
-          <ContentText expand text={props.state.output} data-size="sm" data-color="dimmed" />
+        <Match when={output()}>
+          <ContentText expand text={output()} data-size="sm" data-color="dimmed" />
         </Match>
       </Switch>
     </>
@@ -704,6 +713,7 @@ function ToolFooter(props: { time: number }) {
 
 function TaskTool(props: ToolProps) {
   const messages = useShareMessages()
+  const output = createMemo(() => toolOutput(props.state))
 
   return (
     <>
@@ -714,7 +724,7 @@ function TaskTool(props: ToolProps) {
       <div data-component="tool-input">&ldquo;{props.state.input.prompt}&rdquo;</div>
       <ResultsButton showCopy={messages.show_output} hideCopy={messages.hide_output}>
         <div data-component="tool-output">
-          <ContentMarkdown expand text={props.state.output} />
+          <ContentMarkdown expand text={output()} />
         </div>
       </ResultsButton>
     </>
@@ -722,6 +732,7 @@ function TaskTool(props: ToolProps) {
 }
 
 export function FallbackTool(props: ToolProps) {
+  const output = createMemo(() => toolOutput(props.state))
   return (
     <>
       <div data-component="tool-title">
@@ -739,10 +750,10 @@ export function FallbackTool(props: ToolProps) {
         </For>
       </div>
       <Switch>
-        <Match when={props.state.output}>
+        <Match when={output()}>
           <div data-component="tool-result">
             <ResultsButton>
-              <ContentText expand compact text={props.state.output} data-size="sm" data-color="dimmed" />
+              <ContentText expand compact text={output()} data-size="sm" data-color="dimmed" />
             </ResultsButton>
           </div>
         </Match>

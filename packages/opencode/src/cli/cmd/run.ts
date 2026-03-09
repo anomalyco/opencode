@@ -34,6 +34,11 @@ type ToolProps<T extends Tool.Info> = {
   part: ToolPart
 }
 
+function toolOutput(part: ToolPart): string | undefined {
+  if (part.state.status !== "completed") return undefined
+  return part.state.time?.compacted ? "[Old tool result content cleared]" : part.state.output
+}
+
 function props<T extends Tool.Info>(part: ToolPart): ToolProps<T> {
   const state = part.state
   return {
@@ -130,7 +135,7 @@ function write(info: ToolProps<typeof WriteTool>) {
       icon: "←",
       title: `Write ${normalizePath(info.input.filePath)}`,
     },
-    info.part.state.status === "completed" ? info.part.state.output : undefined,
+    toolOutput(info.part),
   )
 }
 
@@ -192,7 +197,7 @@ function skill(info: ToolProps<typeof SkillTool>) {
 }
 
 function bash(info: ToolProps<typeof BashTool>) {
-  const output = info.part.state.status === "completed" ? info.part.state.output?.trim() : undefined
+  const output = toolOutput(info.part)?.trim()
   block(
     {
       icon: "$",

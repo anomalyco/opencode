@@ -80,12 +80,16 @@ export function formatPart(part: Part, options: TranscriptOptions): string {
   }
 
   if (part.type === "tool") {
+    const output =
+      part.state.status === "completed"
+        ? (part.state.time?.compacted ? "[Old tool result content cleared]" : part.state.output)
+        : undefined
     let result = `**Tool: ${part.tool}**\n`
     if (options.toolDetails && part.state.input) {
       result += `\n**Input:**\n\`\`\`json\n${JSON.stringify(part.state.input, null, 2)}\n\`\`\`\n`
     }
-    if (options.toolDetails && part.state.status === "completed" && part.state.output) {
-      result += `\n**Output:**\n\`\`\`\n${part.state.output}\n\`\`\`\n`
+    if (options.toolDetails && part.state.status === "completed" && output) {
+      result += `\n**Output:**\n\`\`\`\n${output}\n\`\`\`\n`
     }
     if (options.toolDetails && part.state.status === "error" && part.state.error) {
       result += `\n**Error:**\n\`\`\`\n${part.state.error}\n\`\`\`\n`

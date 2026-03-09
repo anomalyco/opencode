@@ -1495,7 +1495,8 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
       return props.part.state.input ?? {}
     },
     get output() {
-      return props.part.state.status === "completed" ? props.part.state.output : undefined
+      if (props.part.state.status !== "completed") return undefined
+      return props.part.state.time?.compacted ? "[Old tool result content cleared]" : props.part.state.output
     },
     get permission() {
       const permissions = sync.data.permission[props.message.sessionID] ?? []
