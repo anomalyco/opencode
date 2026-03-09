@@ -41,4 +41,24 @@ describe("createScrollPersistence", () => {
       vi.useRealTimers()
     }
   })
+
+  test("reseeds empty cache after persisted snapshot loads", () => {
+    const snapshot = {
+      session: {},
+    } as Record<string, Record<string, { x: number; y: number }>>
+
+    const scroll = createScrollPersistence({
+      getSnapshot: (sessionKey) => snapshot[sessionKey],
+      onFlush: () => {},
+    })
+
+    expect(scroll.scroll("session", "review")).toBeUndefined()
+
+    snapshot.session = {
+      review: { x: 12, y: 34 },
+    }
+
+    expect(scroll.scroll("session", "review")).toEqual({ x: 12, y: 34 })
+    scroll.dispose()
+  })
 })

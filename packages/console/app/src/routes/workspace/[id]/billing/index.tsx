@@ -21,7 +21,7 @@ export default function () {
           <Show when={isBlack()}>
             <BlackSection />
           </Show>
-          <Show when={!isBlack() && sessionInfo()?.isBeta}>
+          <Show when={!isBlack()}>
             <LiteSection />
           </Show>
           <BillingSection />
