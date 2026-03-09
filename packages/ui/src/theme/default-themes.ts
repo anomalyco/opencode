@@ -34,8 +34,8 @@ export const gruvboxTheme = gruvboxThemeJson as DesktopTheme
 export const auraTheme = auraThemeJson as DesktopTheme
 
 export const DEFAULT_THEMES: Record<string, DesktopTheme> = {
-  "oc-1": oc1Theme,
   "oc-2": oc2Theme,
+  "oc-1": oc1Theme,
   aura: auraTheme,
   ayu: ayuTheme,
   carbonfox: carbonfoxTheme,
