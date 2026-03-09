@@ -798,25 +798,28 @@ export namespace Provider {
     const database = mapValues(modelsDev, fromModelsDevProvider)
 
     // Auto-detect local Ollama models and add to database
-    const { detectLocalOllamaModels } = await import("./ollama-autodetect")
+    const { detectLocalOllamaModels, convertOllamaModelToModel } = await import("./ollama-autodetect")
     const localModels = await detectLocalOllamaModels()
     if (localModels.length > 0) {
-      const { convertOllamaModelToModel } = await import("./ollama-autodetect")
-      const ollamaProvider: Info = {
-        id: "ollama",
-        source: "custom",
-        name: "Ollama (Local)",
-        env: [],
-        options: {
-          baseURL: "http://localhost:11434/v1",
-        },
-        models: {},
-      }
+      // Merge with existing ollama provider if it exists
+      const existingOllama = database["ollama"]
+      const ollamaProvider: Info = existingOllama 
+        ? { ...existingOllama, models: { ...existingOllama.models } }
+        : {
+            id: "ollama",
+            source: "custom",
+            name: "Ollama (Local)",
+            env: [],
+            options: {
+              baseURL: "http://localhost:11434/v1",
+            },
+            models: {},
+          }
       
       for (const model of localModels) {
         const modelInfo = convertOllamaModelToModel(model)
         ollamaProvider.models[modelInfo.id] = modelInfo
-        log.info("Added local Ollama model", { name: model.name })
+        log.info("Added local Ollama model", { name: model.name, id: modelInfo.id })
       }
       
       database["ollama"] = ollamaProvider

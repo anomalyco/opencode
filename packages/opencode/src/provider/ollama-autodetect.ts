@@ -166,7 +166,8 @@ export async function registerOllamaModels() {
 
 export function convertOllamaModelToModel(model: OllamaModel): Provider.Model {
   const capabilities = detectModelCapabilities(model)
-  const modelId = model.name.replace(/:/g, "-").replace(/\//g, "-")
+  // Use full model name with colons replaced, but ensure uniqueness
+  const modelId = model.name.replace(/\//g, "-").replace(/:/g, "--")
   
   return {
     id: modelId,
