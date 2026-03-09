@@ -10,13 +10,7 @@ A minimal demo of the MCP Apps integration in opencode.
 
 ## Setup
 
-**1. Enable the feature flag** — add to your shell or `.env`:
-
-```sh
-export OPENCODE_EXPERIMENTAL_MCP_APPS=true
-```
-
-**2. Register the MCP server** — add to `~/.config/opencode/config.json` (global) or `./opencode.json` (project):
+**1. Register the MCP server** — add to `~/.config/opencode/config.json` (global) or `./opencode.json` (project):
 
 ```json
 {
@@ -29,7 +23,7 @@ export OPENCODE_EXPERIMENTAL_MCP_APPS=true
 }
 ```
 
-**3. Start the dev backend + app:**
+**2. Start the dev backend + app:**
 
 ```sh
 # terminal 1 — backend
@@ -41,7 +35,7 @@ cd packages/app
 bun dev -- --port 4444
 ```
 
-**4. Open `http://localhost:4444`** and ask the agent to call the tool:
+**3. Open `http://localhost:4444`** and ask the agent to call the tool:
 
 > "Use demo_dashboard to show me a dashboard"
 

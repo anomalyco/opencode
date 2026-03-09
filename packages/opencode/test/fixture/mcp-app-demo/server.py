@@ -11,8 +11,6 @@ Run via opencode config:
     demo:
       type: local
       command: [python3, packages/opencode/test/fixture/mcp-app-demo/server.py]
-
-Or add OPENCODE_EXPERIMENTAL_MCP_APPS=true to your environment.
 """
 
 import asyncio

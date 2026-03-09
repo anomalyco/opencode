@@ -63,8 +63,6 @@ mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
   },
 }))
 
-process.env.OPENCODE_EXPERIMENTAL_MCP_APPS = "true"
-
 const { MCP } = await import("../../src/mcp/index")
 
 describe("structuredContent passthrough", () => {

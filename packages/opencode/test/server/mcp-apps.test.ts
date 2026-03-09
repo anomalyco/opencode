@@ -21,13 +21,13 @@ async function req(app: ReturnType<typeof Server.App>, path: string, init?: Requ
   })
 }
 
-describe("GET /experimental/mcp-app", () => {
+describe("GET /mcp-app", () => {
   test("returns 200 with empty object when no MCP apps connected", async () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
         const app = Server.App()
-        const res = await req(app, "/experimental/mcp-app")
+        const res = await req(app, "/mcp-app")
         expect(res.status).toBe(200)
         const body = await res.json()
         expect(typeof body).toBe("object")
@@ -36,13 +36,13 @@ describe("GET /experimental/mcp-app", () => {
   })
 })
 
-describe("GET /experimental/mcp-app/resource", () => {
+describe("GET /mcp-app/resource", () => {
   test("returns 400 when no matching resource found", async () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
         const app = Server.App()
-        const res = await req(app, "/experimental/mcp-app/resource?uri=ui%3A%2F%2Ftest%2Fapp.html&server=nonexistent")
+        const res = await req(app, "/mcp-app/resource?uri=ui%3A%2F%2Ftest%2Fapp.html&server=nonexistent")
         expect(res.status).toBe(400)
       },
     })
@@ -53,20 +53,20 @@ describe("GET /experimental/mcp-app/resource", () => {
       directory: projectRoot,
       fn: async () => {
         const app = Server.App()
-        const res = await req(app, "/experimental/mcp-app/resource")
+        const res = await req(app, "/mcp-app/resource")
         expect(res.status).toBe(400)
       },
     })
   })
 })
 
-describe("POST /experimental/mcp-app/tool-call", () => {
+describe("POST /mcp-app/tool-call", () => {
   test("returns 400 when server is not found", async () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
         const app = Server.App()
-        const res = await req(app, "/experimental/mcp-app/tool-call", {
+        const res = await req(app, "/mcp-app/tool-call", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ server: "nonexistent", name: "tool" }),
@@ -81,7 +81,7 @@ describe("POST /experimental/mcp-app/tool-call", () => {
       directory: projectRoot,
       fn: async () => {
         const app = Server.App()
-        const res = await req(app, "/experimental/mcp-app/tool-call", {
+        const res = await req(app, "/mcp-app/tool-call", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ invalid: "body" }),

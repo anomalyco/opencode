@@ -1,4 +1,4 @@
-import { test, expect, mock, beforeEach, afterEach } from "bun:test"
+import { test, expect, mock, beforeEach } from "bun:test"
 
 const toolsResult = {
   tools: [
@@ -66,7 +66,6 @@ mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
 }))
 
 beforeEach(() => {
-  process.env.OPENCODE_EXPERIMENTAL_MCP_APPS = "true"
   mockListTools = mock(() => Promise.resolve(toolsResult))
   mockReadResource = mock(({ uri }: { uri: string }) =>
     Promise.resolve({
@@ -74,10 +73,6 @@ beforeEach(() => {
     }),
   )
   mockConnect = mock(async () => {})
-})
-
-afterEach(() => {
-  delete process.env.OPENCODE_EXPERIMENTAL_MCP_APPS
 })
 
 const { MCP } = await import("../../src/mcp/index")
@@ -126,7 +121,7 @@ test("toolMeta returns visibility for app-only tools", async () => {
   })
 })
 
-test("apps() returns tools with ui resource metadata when flag is on", async () => {
+test("apps() returns tools with ui resource metadata", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
     directory: tmp.path,
@@ -140,21 +135,7 @@ test("apps() returns tools with ui resource metadata when flag is on", async () 
   })
 })
 
-test("apps() returns empty when flag is off", async () => {
-  process.env.OPENCODE_EXPERIMENTAL_MCP_APPS = "false"
-  await using tmp = await tmpdir()
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      await MCP.add("my_server", { type: "local", command: ["echo"] }).catch(() => {})
-      const result = await MCP.apps()
-      expect(Object.keys(result)).toHaveLength(0)
-    },
-  })
-})
-
 test("appResource fetches and caches HTML for a ui:// URI", async () => {
-  process.env.OPENCODE_EXPERIMENTAL_MCP_APPS = "true"
   await using tmp = await tmpdir()
   await Instance.provide({
     directory: tmp.path,
@@ -169,18 +150,6 @@ test("appResource fetches and caches HTML for a ui:// URI", async () => {
       const again = await MCP.appResource("my_server", "ui://my-server/dashboard.html")
       expect(again!.html).toBe(resourceHtml)
       expect(mockReadResource).toHaveBeenCalledTimes(1)
-    },
-  })
-})
-
-test("appResource returns undefined when flag is off", async () => {
-  process.env.OPENCODE_EXPERIMENTAL_MCP_APPS = "false"
-  await using tmp = await tmpdir()
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const resource = await MCP.appResource("my_server", "ui://my-server/dashboard.html")
-      expect(resource).toBeUndefined()
     },
   })
 })

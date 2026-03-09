@@ -2339,7 +2339,7 @@ ToolRegistry.register({
       bridge.oncalltool = async (params: { name: string; arguments?: Record<string, unknown> }) => {
         const srv = server()
         if (!srv) return { content: [] }
-        const res = await fetch(new URL("/experimental/mcp-app/tool-call", window.location.origin).href, {
+        const res = await fetch(new URL("/mcp-app/tool-call", window.location.origin).href, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ server: srv, name: params.name, arguments: params.arguments ?? {} }),
@@ -2374,7 +2374,7 @@ ToolRegistry.register({
     )
 
     return (
-      <ToolCall variant="panel" icon="code" status={props.status} trigger={trigger()} defaultOpen>
+      <BasicTool icon="code" status={props.status} trigger={trigger()} defaultOpen>
         <Show when={html()}>
           <div style={{ height: `${height()}px`, overflow: "hidden" }}>
             <iframe
@@ -2390,7 +2390,7 @@ ToolRegistry.register({
             />
           </div>
         </Show>
-      </ToolCall>
+      </BasicTool>
     )
   },
 })
