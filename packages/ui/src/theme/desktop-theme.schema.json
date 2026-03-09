@@ -36,12 +36,13 @@
     },
     "ColorValue": {
       "type": "string",
-      "pattern": "^(#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|var\(--[a-z0-9-]+\))$",
+      "pattern": "^(#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|var\\(--[a-z0-9-]+\\))$",
       "description": "Either a hex color value (#rgb/#rgba/#rrggbb/#rrggbbaa) or a CSS variable reference"
     },
     "ThemeSeedColors": {
       "type": "object",
-      "description": "The minimum set of colors needed to generate a theme",
+      "description": "The legacy semantic seed set used to generate a theme",
+      "additionalProperties": false,
       "required": ["neutral", "primary", "success", "warning", "error", "info", "interactive", "diffAdd", "diffDelete"],
       "properties": {
         "neutral": {
@@ -82,14 +83,70 @@
         }
       }
     },
+    "ThemePaletteColors": {
+      "type": "object",
+      "description": "A compact semantic palette used to derive the full theme programmatically",
+      "additionalProperties": false,
+      "required": ["neutral", "primary", "success", "warning", "error", "info"],
+      "properties": {
+        "neutral": {
+          "$ref": "#/definitions/HexColor",
+          "description": "Base neutral color for generating the gray scale"
+        },
+        "ink": {
+          "$ref": "#/definitions/HexColor",
+          "description": "Optional foreground or chrome color used to derive text and border tones"
+        },
+        "primary": {
+          "$ref": "#/definitions/HexColor",
+          "description": "Primary brand color used for brand surfaces and strong emphasis"
+        },
+        "success": {
+          "$ref": "#/definitions/HexColor",
+          "description": "Success state color"
+        },
+        "warning": {
+          "$ref": "#/definitions/HexColor",
+          "description": "Warning state color"
+        },
+        "error": {
+          "$ref": "#/definitions/HexColor",
+          "description": "Error or critical state color"
+        },
+        "info": {
+          "$ref": "#/definitions/HexColor",
+          "description": "Informational state color"
+        },
+        "accent": {
+          "$ref": "#/definitions/HexColor",
+          "description": "Optional extra expressive accent for syntax and rich content"
+        },
+        "interactive": {
+          "$ref": "#/definitions/HexColor",
+          "description": "Optional dedicated interactive color; falls back to primary"
+        },
+        "diffAdd": {
+          "$ref": "#/definitions/HexColor",
+          "description": "Optional diff-add seed; falls back to a softened success color"
+        },
+        "diffDelete": {
+          "$ref": "#/definitions/HexColor",
+          "description": "Optional diff-delete seed; falls back to error"
+        }
+      }
+    },
     "ThemeVariant": {
       "type": "object",
-      "description": "A theme variant (light or dark) with seed colors and optional overrides",
-      "required": ["seeds"],
+      "description": "A theme variant (light or dark) with either a compact palette or legacy seeds and optional overrides",
+      "oneOf": [{ "required": ["seeds"] }, { "required": ["palette"] }],
       "properties": {
         "seeds": {
           "$ref": "#/definitions/ThemeSeedColors",
-          "description": "Seed colors used to generate the full palette"
+          "description": "Legacy seed colors used to generate the full palette"
+        },
+        "palette": {
+          "$ref": "#/definitions/ThemePaletteColors",
+          "description": "Compact palette used to derive the full token set"
         },
         "overrides": {
           "type": "object",

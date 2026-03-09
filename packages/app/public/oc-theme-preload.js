@@ -1,6 +1,5 @@
 ;(function () {
-  var themeId = localStorage.getItem("opencode-theme-id")
-  if (!themeId) return
+  var themeId = localStorage.getItem("opencode-theme-id") || "oc-2"
 
   var scheme = localStorage.getItem("opencode-color-scheme") || "system"
   var isDark = scheme === "dark" || (scheme === "system" && matchMedia("(prefers-color-scheme: dark)").matches)
@@ -9,9 +8,9 @@
   document.documentElement.dataset.theme = themeId
   document.documentElement.dataset.colorScheme = mode
 
-  if (themeId === "oc-1") return
+  if (themeId === "oc-2") return
 
-  var css = localStorage.getItem("opencode-theme-css-" + themeId + "-" + mode)
+  var css = localStorage.getItem("opencode-theme-css-" + mode)
   if (css) {
     var style = document.createElement("style")
     style.id = "oc-theme-preload"
