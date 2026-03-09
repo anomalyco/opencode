@@ -51,14 +51,20 @@ export namespace ProviderTransform {
   ): ModelMessage[] {
     // Anthropic rejects messages with empty content - filter out empty string messages
     // and remove empty text/reasoning parts from array content.
-    // Assistant messages are excluded: their content must be replayed verbatim because
-    // thinking block signatures encode positional context. Removing an empty text part
-    // between two reasoning blocks changes the block arrangement and invalidates the
-    // cryptographic signatures, causing the API to reject the request.
+    // Assistant messages with reasoning blocks are excluded: their content must be
+    // replayed verbatim because thinking block signatures encode positional context.
+    // Removing an empty text part between two reasoning blocks changes the block
+    // arrangement and invalidates the cryptographic signatures, causing the API to
+    // reject the request. Assistant messages without reasoning blocks are filtered
+    // normally since there are no signatures to preserve.
     if (model.api.npm === "@ai-sdk/anthropic") {
       msgs = msgs
         .map((msg) => {
-          if (msg.role === "assistant") return msg
+          if (msg.role === "assistant") {
+            if (!Array.isArray(msg.content)) return msg
+            if (msg.content.some((part) => part.type === "reasoning")) return msg
+            // No reasoning blocks — safe to filter empty text
+          }
           if (typeof msg.content === "string") {
             if (msg.content === "") return undefined
             return msg

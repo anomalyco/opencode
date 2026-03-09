@@ -1052,7 +1052,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[1].content).toBe("World")
   })
 
-  test("preserves assistant messages with empty text alongside non-text parts", () => {
+  test("filters empty text from assistant messages without reasoning blocks", () => {
     const msgs = [
       {
         role: "assistant",
@@ -1065,16 +1065,34 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
 
     const result = ProviderTransform.message(msgs, anthropicModel, {})
 
-    // Assistant messages must be replayed verbatim — no filtering
+    // No reasoning blocks — empty text is filtered
     expect(result).toHaveLength(1)
-    expect(result[0].content).toHaveLength(2)
-    expect(result[0].content[0]).toEqual({ type: "text", text: "" })
-    expect(result[0].content[1]).toEqual({
+    expect(result[0].content).toHaveLength(1)
+    expect(result[0].content[0]).toEqual({
       type: "tool-call",
       toolCallId: "123",
       toolName: "bash",
       input: { command: "ls" },
     })
+  })
+
+  test("removes assistant message entirely when all parts are empty and no reasoning", () => {
+    // Reproduces the compaction summary bug: assistant message with only
+    // empty text parts and no reasoning blocks should be removed entirely.
+    const msgs = [
+      { role: "user", content: "Hello" },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "" }],
+      },
+      { role: "user", content: "World" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toBe("Hello")
+    expect(result[1].content).toBe("World")
   })
 
   test("preserves assistant messages with valid text alongside empty parts", () => {

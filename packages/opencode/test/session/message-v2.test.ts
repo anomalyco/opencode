@@ -695,6 +695,81 @@ describe("session.message-v2.toModelMessage", () => {
     expect(MessageV2.toModelMessages(input, model)).toStrictEqual([])
   })
 
+  test("preserves empty text between reasoning blocks in same-model assistant messages", () => {
+    // When Anthropic returns adaptive thinking with interleaved steps, the DB stores:
+    //   reasoning(signature) → text("") → reasoning(signature) → text("answer")
+    // The empty text between reasoning blocks encodes positional context in the
+    // thinking block signatures. The AI SDK's convertToModelMessages strips empty
+    // text parts that lack providerOptions, which shifts thinking block positions
+    // and invalidates signatures. toModelMessages must ensure the empty text
+    // survives by setting providerMetadata to a non-null value.
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "hello",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "reasoning",
+            text: "thinking step 1",
+            time: { start: 0, end: 1 },
+            metadata: { anthropic: { signature: "sig1" } },
+          },
+          {
+            ...basePart(assistantID, "a2"),
+            type: "text",
+            text: "",
+            // no metadata — this is the common case from the DB
+          },
+          {
+            ...basePart(assistantID, "a3"),
+            type: "reasoning",
+            text: "thinking step 2",
+            time: { start: 2, end: 3 },
+            metadata: { anthropic: { signature: "sig2" } },
+          },
+          {
+            ...basePart(assistantID, "a4"),
+            type: "text",
+            text: "answer",
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = MessageV2.toModelMessages(input, model)
+
+    expect(result).toHaveLength(2)
+    expect(result[1].role).toBe("assistant")
+    const content = (result[1] as any).content as any[]
+    // All 4 parts must be present — the empty text must not be stripped
+    expect(content).toHaveLength(4)
+    expect(content[0].type).toBe("reasoning")
+    expect(content[1].type).toBe("text")
+    expect(content[1].text).toBe("")
+    expect(content[2].type).toBe("reasoning")
+    expect(content[3].text).toBe("answer")
+    // The empty text part MUST have providerOptions set (even if empty object)
+    // so that the AI SDK's internal convertToLanguageModelPrompt does not strip
+    // it. That function filters: part.type !== "text" || part.text !== "" || part.providerOptions != null
+    // Without providerOptions, the empty text is removed, shifting thinking block
+    // positions and invalidating cryptographic signatures.
+    expect(content[1].providerOptions).toBeDefined()
+    expect(content[1].providerOptions).not.toBeNull()
+  })
+
   test("converts pending/running tool calls to error results to prevent dangling tool_use", () => {
     const userID = "m-user"
     const assistantID = "m-assistant"

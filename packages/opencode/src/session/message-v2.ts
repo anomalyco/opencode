@@ -625,7 +625,13 @@ export namespace MessageV2 {
             assistantMessage.parts.push({
               type: "text",
               text: part.text,
-              ...(differentModel ? {} : { providerMetadata: part.metadata }),
+              // Empty text parts between reasoning blocks must survive the AI SDK's
+              // internal convertToLanguageModelPrompt filter, which strips text parts
+              // where text==="" and providerOptions==null. Fall back to {} so the
+              // downstream filter sees a non-null value and preserves the part.
+              // Removing an empty text part shifts thinking block positions and
+              // invalidates cryptographic signatures.
+              ...(differentModel ? {} : { providerMetadata: part.text === "" && !part.metadata ? {} : part.metadata }),
             })
           if (part.type === "step-start")
             assistantMessage.parts.push({
