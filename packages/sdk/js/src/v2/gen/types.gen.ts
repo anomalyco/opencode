@@ -2764,6 +2764,7 @@ export type SessionCreateData = {
     parentID?: string
     title?: string
     permission?: PermissionRuleset
+    workspaceID?: string
   }
   path?: never
   query?: {
