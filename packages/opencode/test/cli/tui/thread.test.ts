@@ -102,6 +102,7 @@ describe("tui thread", () => {
       "mdns-domain": "opencode.local",
       mdnsDomain: "opencode.local",
       cors: [],
+      command: undefined,
     }
     return TuiThreadCommand.handler(args)
   }
