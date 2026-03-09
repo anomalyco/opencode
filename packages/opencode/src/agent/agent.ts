@@ -21,6 +21,17 @@ import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
 
 export namespace Agent {
+  export const ModelConfig = z.object({
+    modelID: z.string(),
+    providerID: z.string(),
+    role: z.enum(["primary", "reasoning", "coding", "assistant"]).default("assistant"),
+  })
+
+  export const LegacyModelConfig = z.object({
+    modelID: z.string(),
+    providerID: z.string(),
+  })
+
   export const Info = z
     .object({
       name: z.string(),
@@ -32,21 +43,23 @@ export namespace Agent {
       temperature: z.number().optional(),
       color: z.string().optional(),
       permission: PermissionNext.Ruleset,
-      model: z
-        .object({
-          modelID: z.string(),
-          providerID: z.string(),
-        })
-        .optional(),
+      model: LegacyModelConfig.optional(),
+      models: z.array(ModelConfig).optional(),
       variant: z.string().optional(),
       prompt: z.string().optional(),
       options: z.record(z.string(), z.any()),
       steps: z.number().int().positive().optional(),
+      multiAgent: z.object({
+        enabled: z.boolean().default(true),
+        parallel: z.boolean().default(true),
+        mergeStrategy: z.enum(["primary-wins", "reasoning-wins", "all-responses"]).default("all-responses"),
+      }).optional(),
     })
     .meta({
       ref: "Agent",
     })
   export type Info = z.infer<typeof Info>
+  export type ModelConfig = z.infer<typeof ModelConfig>
 
   const state = Instance.state(async () => {
     const cfg = await Config.get()
@@ -216,7 +229,17 @@ export namespace Agent {
           options: {},
           native: false,
         }
-      if (value.model) item.model = Provider.parseModel(value.model)
+      if (value.model) item.model = LegacyModelConfig.parse(Provider.parseModel(value.model))
+      if (value.models) {
+        item.models = value.models.map((m: any) => {
+          const parsed = Provider.parseModel(m.model)
+          return {
+            providerID: parsed.providerID,
+            modelID: parsed.modelID,
+            role: m.role ?? "assistant",
+          }
+        })
+      }
       item.variant = value.variant ?? item.variant
       item.prompt = value.prompt ?? item.prompt
       item.description = value.description ?? item.description
@@ -229,6 +252,13 @@ export namespace Agent {
       item.steps = value.steps ?? item.steps
       item.options = mergeDeep(item.options, value.options ?? {})
       item.permission = PermissionNext.merge(item.permission, PermissionNext.fromConfig(value.permission ?? {}))
+      if (value.multiAgent) {
+        item.multiAgent = {
+          enabled: value.multiAgent.enabled ?? true,
+          parallel: value.multiAgent.parallel ?? true,
+          mergeStrategy: value.multiAgent.mergeStrategy ?? "all-responses",
+        }
+      }
     }
 
     // Ensure Truncate.GLOB is allowed unless explicitly configured

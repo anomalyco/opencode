@@ -28,6 +28,7 @@ import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
 import { FileTime } from "../file/time"
 import { Flag } from "../flag/flag"
+import { executeMultiAgent, mergeMultiAgentResponses } from "./multi-agent"
 import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
@@ -648,11 +649,34 @@ export namespace SessionPrompt {
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
+      // Execute multi-agent parallel workflow if configured
+      const multiAgentResult = await executeMultiAgent({
+        sessionID,
+        agentName: agent.name,
+        userMessage: lastUser,
+        messages: msgs,
+        model,
+        abort,
+        tools,
+      })
+
       // Build system prompt, adding structured output instruction if needed
       const system = [...(await SystemPrompt.environment(model)), ...(await InstructionPrompt.system())]
       const format = lastUser.format ?? { type: "text" }
       if (format.type === "json_schema") {
         system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+      }
+
+      // Inject multi-agent responses into system prompt if configured
+      if (multiAgentResult) {
+        const mergePrompt = mergeMultiAgentResponses({
+          primary: multiAgentResult.primary,
+          responses: multiAgentResult.responses,
+          strategy: agent.multiAgent?.mergeStrategy ?? "all-responses",
+        })
+        if (mergePrompt) {
+          system.push(`\n\n<!-- Multi-agent collaboration insights -->\n${mergePrompt}\n`)
+        }
       }
 
       const result = await processor.process({

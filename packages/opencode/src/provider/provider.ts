@@ -610,6 +610,21 @@ export namespace Provider {
         },
       }
     },
+    async ollama(_input) {
+      const { registerOllamaModels } = await import("./ollama-autodetect")
+      const detected = await registerOllamaModels()
+      
+      if (!detected?.provider?.models || Object.keys(detected.provider.models).length === 0) {
+        return { autoload: false }
+      }
+
+      return {
+        autoload: true,
+        options: {
+          baseURL: detected.provider.api ?? "http://localhost:11434/v1",
+        },
+      }
+    },
   }
 
   export const Model = z
@@ -781,6 +796,31 @@ export namespace Provider {
     const config = await Config.get()
     const modelsDev = await ModelsDev.get()
     const database = mapValues(modelsDev, fromModelsDevProvider)
+
+    // Auto-detect local Ollama models and add to database
+    const { detectLocalOllamaModels } = await import("./ollama-autodetect")
+    const localModels = await detectLocalOllamaModels()
+    if (localModels.length > 0) {
+      const { convertOllamaModelToModel } = await import("./ollama-autodetect")
+      const ollamaProvider: Info = {
+        id: "ollama",
+        source: "custom",
+        name: "Ollama (Local)",
+        env: [],
+        options: {
+          baseURL: "http://localhost:11434/v1",
+        },
+        models: {},
+      }
+      
+      for (const model of localModels) {
+        const modelInfo = convertOllamaModelToModel(model)
+        ollamaProvider.models[modelInfo.id] = modelInfo
+        log.info("Added local Ollama model", { name: model.name })
+      }
+      
+      database["ollama"] = ollamaProvider
+    }
 
     const disabled = new Set(config.disabled_providers ?? [])
     const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
