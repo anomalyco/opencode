@@ -76,6 +76,21 @@ export function TerminalPanel() {
     ),
   )
 
+  createEffect(
+    on(
+      () => open(),
+      (isOpen, wasOpen) => {
+        if (!isOpen || wasOpen) return
+        const activeId = terminal.active()
+        if (!activeId) return
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur()
+        }
+        setTimeout(() => focusTerminalById(activeId), 0)
+      },
+    ),
+  )
+
   createEffect(() => {
     const dir = params.dir
     if (!dir) return
