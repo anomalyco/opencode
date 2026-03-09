@@ -156,6 +156,7 @@ export namespace LSPClient {
       })
     }
 
+    const MAX_OPEN_FILES = 1000
     const files: {
       [path: string]: number
     } = {}
@@ -224,6 +225,12 @@ export namespace LSPClient {
             },
           })
           files[input.path] = 0
+          // Evict oldest file if we exceed the limit
+          const keys = Object.keys(files)
+          if (keys.length > MAX_OPEN_FILES) {
+            const oldest = keys[0]
+            delete files[oldest]
+          }
           return
         },
       },
@@ -263,6 +270,7 @@ export namespace LSPClient {
         l.info("shutting down")
         diagnostics.clear()
         diagnosticOrder.length = 0
+        for (const key of Object.keys(files)) delete files[key]
         connection.end()
         connection.dispose()
         input.server.process.kill()

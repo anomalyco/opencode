@@ -29,6 +29,8 @@ import { SessionID, MessageID, PartID } from "./schema"
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { PermissionNext } from "@/permission/next"
+import { Question } from "@/question"
+import { FileTime } from "@/file/time"
 import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 import { iife } from "@/util/iife"
@@ -668,6 +670,11 @@ export namespace Session {
       for (const child of await children(sessionID)) {
         await remove(child.id)
       }
+      // Clean up per-session state before deleting
+      await PermissionNext.clearSession(sessionID)
+      await Question.clearSession(sessionID)
+      const ft = FileTime.state()
+      delete ft.read[sessionID]
       await unshare(sessionID).catch(() => {})
       // CASCADE delete handles messages and parts automatically
       Database.use((db) => {

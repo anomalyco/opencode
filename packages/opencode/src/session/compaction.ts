@@ -92,6 +92,10 @@ export namespace SessionCompaction {
       for (const part of toPrune) {
         if (part.state.status === "completed") {
           part.state.time.compacted = Date.now()
+          // Clear output and attachments to free memory — compacted parts
+          // are already replaced with placeholder text in toModelMessages
+          part.state.output = ""
+          part.state.attachments = undefined
           await Session.updatePart(part)
         }
       }
