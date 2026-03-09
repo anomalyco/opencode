@@ -1,8 +1,8 @@
 import { Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js"
+import { useReducedMotion } from "../hooks/use-reduced-motion"
 import { animate, type AnimationPlaybackControls, GROW_SPRING } from "./motion"
 import { TextShimmer } from "./text-shimmer"
 import { commonPrefix } from "./text-utils"
-import { prefersReducedMotion } from "../hooks/use-reduced-motion"
 
 function contentWidth(el: HTMLSpanElement | undefined) {
   if (!el) return 0
@@ -18,6 +18,7 @@ export function ToolStatusTitle(props: {
   class?: string
   split?: boolean
 }) {
+  const reduce = useReducedMotion()
   const split = createMemo(() => commonPrefix(props.activeText, props.doneText))
   const suffix = createMemo(
     () =>
@@ -37,8 +38,6 @@ export function ToolStatusTitle(props: {
   let widthAnim: AnimationPlaybackControls | undefined
 
   const node = () => (suffix() ? tailRef : swapRef)
-
-  const reduce = prefersReducedMotion
 
   const setNodeWidth = (width: string) => {
     if (swapRef) swapRef.style.width = width

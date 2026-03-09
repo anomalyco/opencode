@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
 import stripAnsi from "strip-ansi"
 import type { ToolPart } from "@opencode-ai/sdk/v2"
-import { prefersReducedMotion } from "../hooks/use-reduced-motion"
+import { useReducedMotion } from "../hooks/use-reduced-motion"
 import { useI18n } from "../context/i18n"
 import { RollingResults } from "./rolling-results"
 import { Icon } from "./icon"
@@ -10,15 +10,7 @@ import { TextShimmer } from "./text-shimmer"
 import { Tooltip } from "./tooltip"
 import { GROW_SPRING } from "./motion"
 import { useSpring } from "./motion-spring"
-import {
-  busy,
-  createThrottledValue,
-  hold,
-  updateScrollMask,
-  useCollapsible,
-  useRowWipe,
-  useToolFade,
-} from "./tool-utils"
+import { busy, createThrottledValue, updateScrollMask, useCollapsible, useRowWipe, useToolFade } from "./tool-utils"
 
 function ShellRollingSubtitle(props: { text: string; animate?: boolean }) {
   let ref: HTMLSpanElement | undefined
@@ -176,23 +168,17 @@ function ShellExpanded(props: { cmd: string; out: string; open: boolean }) {
   )
 }
 
-export function ShellRollingResults(props: { part: ToolPart; animate?: boolean }) {
+export function ShellRollingResults(props: { part: ToolPart; animate?: boolean; defaultOpen?: boolean }) {
   const i18n = useI18n()
+  const reduce = useReducedMotion()
   const wiped = new Set<string>()
   const [mounted, setMounted] = createSignal(false)
-  const [userToggled, setUserToggled] = createSignal(false)
-  const [userOpen, setUserOpen] = createSignal(false)
+  const [open, setOpen] = createSignal(props.defaultOpen ?? true)
   onMount(() => setMounted(true))
   const state = createMemo(() => props.part.state as Record<string, any>)
   const pending = createMemo(() => busy(props.part.state.status))
-  const autoOpen = hold(pending, 2000)
-  const effectiveOpen = createMemo(() => {
-    if (pending()) return true
-    if (userToggled()) return userOpen()
-    return autoOpen()
-  })
-  const expanded = createMemo(() => !pending() && !autoOpen() && userToggled() && userOpen())
-  const previewOpen = createMemo(() => effectiveOpen() && !expanded())
+  const expanded = createMemo(() => open() && !pending())
+  const previewOpen = createMemo(() => open() && pending())
   const command = createMemo(() => {
     const value = state().input?.command ?? state().metadata?.command
     if (typeof value === "string") return value
@@ -208,7 +194,6 @@ export function ShellRollingResults(props: { part: ToolPart; animate?: boolean }
     if (typeof value === "string") return value
     return ""
   })
-  const reduce = prefersReducedMotion
   const skip = () => reduce() || props.animate === false
   const opacity = useSpring(() => (mounted() ? 1 : 0), GROW_SPRING)
   const blur = useSpring(() => (mounted() ? 0 : 2), GROW_SPRING)
@@ -217,12 +202,10 @@ export function ShellRollingResults(props: { part: ToolPart; animate?: boolean }
   const headerHeight = useSpring(() => (mounted() ? 37 : 0), GROW_SPRING)
   let headerClipRef: HTMLDivElement | undefined
   const handleHeaderClick = () => {
-    if (pending()) return
     const el = headerClipRef
     const viewport = el?.closest(".scroll-view__viewport") as HTMLElement | null
     const beforeY = el?.getBoundingClientRect().top ?? 0
-    setUserToggled(true)
-    setUserOpen((prev) => !prev)
+    setOpen((prev) => !prev)
     if (viewport && el) {
       requestAnimationFrame(() => {
         const afterY = el.getBoundingClientRect().top
@@ -249,7 +232,7 @@ export function ShellRollingResults(props: { part: ToolPart; animate?: boolean }
         ref={headerClipRef}
         data-slot="shell-rolling-header-clip"
         data-scroll-preserve
-        data-clickable={!pending() ? "true" : "false"}
+        data-clickable="true"
         onClick={handleHeaderClick}
         style={{ height: `${skip() ? (mounted() ? 37 : 0) : headerHeight()}px`, overflow: "clip" }}
       >
@@ -258,13 +241,11 @@ export function ShellRollingResults(props: { part: ToolPart; animate?: boolean }
             <TextShimmer text={i18n.t("ui.tool.shell")} active={pending()} />
           </span>
           <Show when={subtitle()}>{(text) => <ShellRollingSubtitle text={text()} animate={props.animate} />}</Show>
-          <Show when={!pending()}>
-            <span data-slot="shell-rolling-actions">
-              <span data-slot="shell-rolling-arrow" data-open={effectiveOpen() ? "true" : "false"}>
-                <Icon name="chevron-down" size="small" />
-              </span>
+          <span data-slot="shell-rolling-actions">
+            <span data-slot="shell-rolling-arrow" data-open={open() ? "true" : "false"}>
+              <Icon name="chevron-down" size="small" />
             </span>
-          </Show>
+          </span>
         </div>
       </div>
       <div

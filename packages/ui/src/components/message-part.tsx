@@ -38,7 +38,7 @@ import { TextShimmer } from "./text-shimmer"
 import { list } from "./text-utils"
 import { GrowBox } from "./grow-box"
 import { COLLAPSIBLE_SPRING } from "./motion"
-import { busy, hold, createThrottledValue, useToolFade, useContextToolPending } from "./tool-utils"
+import { busy, createThrottledValue, useToolFade, useContextToolPending } from "./tool-utils"
 import { ContextToolGroupHeader, ContextToolExpandedList, ContextToolRollingResults } from "./context-tool-results"
 import { ShellRollingResults } from "./shell-rolling-results"
 
@@ -254,8 +254,6 @@ function urls(text: string | undefined) {
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
 const HIDDEN_TOOLS = new Set(["todowrite", "todoread"])
 
-import { pageVisible } from "../hooks/use-page-visible"
-
 function createGroupOpenState() {
   const [state, setState] = createStore<Record<string, boolean>>({})
   const read = (key?: string, collapse?: boolean) => {
@@ -272,18 +270,6 @@ function createGroupOpenState() {
     setState(key, value)
   }
   return { read, controlled, write }
-}
-
-function shouldCollapseGroup(
-  statuses: (string | undefined)[],
-  opts: { afterTool?: boolean; groupTail?: boolean; working?: boolean },
-) {
-  if (opts.afterTool) return true
-  if (opts.groupTail === false) return true
-  if (!pageVisible()) return false
-  if (opts.working) return false
-  if (!statuses.length) return false
-  return !statuses.some((s) => busy(s))
 }
 
 function renderable(part: PartType, showReasoningSummaries = true) {
@@ -480,20 +466,9 @@ export function AssistantParts(props: {
             return COLLAPSIBLE_SPRING
           })
           const contextOpen = createMemo(() => {
-            const collapse = (
-              afterTool?: boolean,
-              groupTail?: boolean,
-              group?: { part: ToolPart; message: AssistantMessage }[],
-            ) =>
-              shouldCollapseGroup(group?.map((item) => item.part.state.status) ?? [], {
-                afterTool,
-                groupTail,
-                working: props.working,
-              })
             const value = ctx()
-            if (value) return groupState.read(value.groupKey, collapse(value.afterTool, value.tail, value.parts))
-            const entry = part()
-            return groupState.read(entry?.groupKey, collapse(entry?.afterTool, entry?.groupTail, entry?.groupParts))
+            if (value) return groupState.read(value.groupKey, true)
+            return groupState.read(part()?.groupKey, true)
           })
           const visible = createMemo(() => {
             if (!context()) return true
@@ -539,9 +514,7 @@ export function AssistantParts(props: {
             ctxPartsPrev = result
             return result
           })
-          const ctxPendingRaw = useContextToolPending(ctxParts, () => !!(props.working && ctx()?.tail))
-          const ctxPending = ctxPendingRaw
-          const ctxHoldOpen = hold(ctxPendingRaw)
+          const ctxPending = useContextToolPending(ctxParts, () => !!(props.working && ctx()?.tail))
           const shell = createMemo(() => {
             const value = part()
             if (!value) return
@@ -593,12 +566,20 @@ export function AssistantParts(props: {
                           onOpenChange={(value: boolean) => groupState.write(entry().groupKey, value)}
                         />
                       </PartGrow>
-                      <ContextToolExpandedList parts={ctxParts()} expanded={!ctxPending() && contextOpen()} />
-                      <ContextToolRollingResults parts={ctxParts()} pending={ctxHoldOpen()} />
+                      <ContextToolExpandedList parts={ctxParts()} expanded={contextOpen() && !ctxPending()} />
+                      <ContextToolRollingResults parts={ctxParts()} pending={contextOpen() && ctxPending()} />
                     </>
                   )}
                 </Show>
-                <Show when={shell()}>{(value) => <ShellRollingResults part={value()} animate={props.animate} />}</Show>
+                <Show when={shell()}>
+                  {(value) => (
+                    <ShellRollingResults
+                      part={value()}
+                      animate={props.animate}
+                      defaultOpen={props.shellToolDefaultOpen}
+                    />
+                  )}
+                </Show>
                 <Show when={!shell() ? part() : undefined}>
                   {(entry) => (
                     <Show when={!entry().context}>
