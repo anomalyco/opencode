@@ -1061,6 +1061,20 @@ export namespace Provider {
     return state().then((state) => state.providers)
   }
 
+  function isModelClass(v: unknown): v is new (...args: any[]) => any {
+    return typeof v === "function" && !!v.prototype && "doGenerate" in v.prototype && "doStream" in v.prototype
+  }
+
+  function resolve(mod: Record<string, any>, name: string, options: Record<string, any>): SDK {
+    const factory = Object.keys(mod).find((k) => k.startsWith("create"))
+    if (factory) return mod[factory]({ name, ...options }) as SDK
+
+    const cls = Object.values(mod).find(isModelClass)
+    if (cls) return { languageModel: (id: string) => new cls(id, options) } as unknown as SDK
+
+    throw new Error(`No create* factory or LanguageModelV2 class found in module`)
+  }
+
   async function getSDK(model: Model) {
     try {
       using _ = log.time("getSDK", {
@@ -1153,14 +1167,9 @@ export namespace Provider {
       }
 
       const mod = await import(installedPath)
-
-      const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
-      const loaded = fn({
-        name: model.providerID,
-        ...options,
-      })
-      s.sdk.set(key, loaded)
-      return loaded as SDK
+      const sdk = resolve(mod, model.providerID, options)
+      s.sdk.set(key, sdk)
+      return sdk
     } catch (e) {
       throw new InitError({ providerID: model.providerID }, { cause: e })
     }
