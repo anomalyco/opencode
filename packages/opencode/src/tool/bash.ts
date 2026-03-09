@@ -23,6 +23,40 @@ const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 
 
 export const log = Log.create({ service: "bash-tool" })
 
+// Registry for active bash processes — enables server-level watchdog
+const active = new Map<
+  string,
+  {
+    pid: number
+    timeout: number
+    started: number
+    kill: () => void
+    done: () => void
+  }
+>()
+
+export function stale() {
+  const result: string[] = []
+  const now = Date.now()
+  for (const [id, entry] of active) {
+    if (now - entry.started > entry.timeout + 5000) result.push(id)
+  }
+  return result
+}
+
+export function reap(id: string) {
+  const entry = active.get(id)
+  if (!entry) return
+  log.info("reaping stuck process", {
+    callID: id,
+    pid: entry.pid,
+    age: Date.now() - entry.started,
+  })
+  entry.kill()
+  entry.done()
+  active.delete(id)
+}
+
 const resolveWasm = (asset: string) => {
   if (asset.startsWith("file://")) return fileURLToPath(asset)
   if (asset.startsWith("/") || /^[a-z]:/i.test(asset)) return asset
@@ -176,6 +210,14 @@ export const BashTool = Tool.define("bash", async () => {
         windowsHide: process.platform === "win32",
       })
 
+      if (!proc.pid) {
+        if (proc.exitCode !== null) {
+          log.info("process exited before pid could be read", { exitCode: proc.exitCode })
+        } else {
+          throw new Error(`Failed to spawn process: pid is undefined for command "${params.command}"`)
+        }
+      }
+
       const MAX_OUTPUT_BYTES = 10 * 1024 * 1024 // 10 MB cap
       const outputChunks: Buffer[] = []
       let outputLen = 0
@@ -232,24 +274,71 @@ export const BashTool = Tool.define("bash", async () => {
         void kill()
       }, timeout + 100)
 
+      const callID = ctx.callID
+      if (callID) {
+        active.set(callID, {
+          pid: proc.pid!,
+          timeout,
+          started: Date.now(),
+          kill: () => Shell.killTree(proc, { exited: () => exited }),
+          done: () => {},
+        })
+      }
+
       await new Promise<void>((resolve, reject) => {
+        let resolved = false
+
         const cleanup = () => {
+          if (resolved) return
+          resolved = true
           clearTimeout(timeoutTimer)
+          clearInterval(poll)
           ctx.abort.removeEventListener("abort", abortHandler)
         }
 
-        proc.once("exit", () => {
+        const done = () => {
+          if (resolved) return
           exited = true
           cleanup()
           resolve()
-        })
+        }
 
-        proc.once("error", (error) => {
+        // Update the active entry with the real done callback
+        if (callID) {
+          const entry = active.get(callID)
+          if (entry) entry.done = done
+        }
+
+        const fail = (error: Error) => {
+          if (resolved) return
           exited = true
           cleanup()
           reject(error)
-        })
+        }
+
+        proc.once("exit", done)
+        proc.once("close", done)
+        proc.once("error", fail)
+
+        // Polling watchdog: detect process exit when Bun's event loop
+        // fails to deliver the "exit" event (confirmed Bun bug in containers)
+        const poll = setInterval(() => {
+          if (proc.exitCode !== null || proc.signalCode !== null) {
+            done()
+            return
+          }
+          if (proc.pid && process.platform !== "win32") {
+            try {
+              process.kill(proc.pid, 0)
+            } catch {
+              done()
+              return
+            }
+          }
+        }, 1000)
       })
+
+      if (callID) active.delete(callID)
 
       let output = Buffer.concat(outputChunks).toString()
       // Free the chunks array

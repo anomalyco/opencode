@@ -79,20 +79,54 @@ export namespace Process {
     }
 
     const exited = new Promise<number>((resolve, reject) => {
-      const done = () => {
+      let resolved = false
+
+      const cleanup = () => {
+        if (resolved) return
+        resolved = true
         opts.abort?.removeEventListener("abort", abort)
         if (timer) clearTimeout(timer)
+        clearInterval(poll)
+      }
+
+      const finish = (code: number) => {
+        if (resolved) return
+        cleanup()
+        resolve(code)
+      }
+
+      const fail = (error: Error) => {
+        if (resolved) return
+        cleanup()
+        reject(error)
       }
 
       proc.once("exit", (code, signal) => {
-        done()
-        resolve(code ?? (signal ? 1 : 0))
+        finish(code ?? (signal ? 1 : 0))
       })
 
-      proc.once("error", (error) => {
-        done()
-        reject(error)
+      proc.once("close", (code, signal) => {
+        finish(code ?? (signal ? 1 : 0))
       })
+
+      proc.once("error", fail)
+
+      // Polling watchdog: detect process exit when Bun's event loop
+      // fails to deliver the "exit" event (confirmed Bun bug in containers)
+      const poll = setInterval(() => {
+        if (proc.exitCode !== null || proc.signalCode !== null) {
+          finish(proc.exitCode ?? (proc.signalCode ? 1 : 0))
+          return
+        }
+        if (proc.pid && process.platform !== "win32") {
+          try {
+            process.kill(proc.pid, 0)
+          } catch {
+            finish(proc.exitCode ?? 1)
+            return
+          }
+        }
+      }, 1000)
     })
 
     if (opts.abort) {
