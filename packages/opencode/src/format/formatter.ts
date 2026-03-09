@@ -1,3 +1,4 @@
+import path from "path"
 import { text } from "node:stream/consumers"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
@@ -9,9 +10,16 @@ import { Flag } from "@/flag/flag"
 export interface Info {
   name: string
   command: string[]
+  args?: string[]
   environment?: Record<string, string>
+  setup?(file: string): Promise<Setup | undefined>
   extensions: string[]
   enabled(): Promise<boolean>
+}
+
+export interface Setup {
+  directory?: string
+  placeholders?: Record<string, string>
 }
 
 export const gofmt: Info = {
@@ -347,6 +355,41 @@ export const rustfmt: Info = {
   extensions: [".rs"],
   async enabled() {
     return which("rustfmt") !== null
+  },
+}
+
+export const dotnetformat: Info = {
+  name: "dotnet-format",
+  command: ["dotnet", "format", "$TARGET", "--include", "$RELATIVE_FILE"],
+  async setup(file) {
+    let current = path.dirname(file)
+
+    while (true) {
+      for (const pattern of ["*.slnx", "*.sln", "*.csproj", "*.fsproj", "*.vbproj"]) {
+        const glob = new Bun.Glob(pattern)
+        const matches = Array.from(glob.scanSync({ cwd: current, absolute: true })).sort()
+        if (matches[0]) {
+          const root = path.dirname(matches[0])
+          const rel = path.relative(root, file)
+          if (!rel || rel.startsWith("..")) return
+          return {
+            directory: root,
+            placeholders: {
+              $TARGET: path.basename(matches[0]),
+              $RELATIVE_FILE: rel.split(path.sep).join("/"),
+            },
+          }
+        }
+      }
+
+      const parent = path.dirname(current)
+      if (parent === current) break
+      current = parent
+    }
+  },
+  extensions: [".cs", ".vb", ".fs", ".fsi", ".fsx", ".fsscript"],
+  async enabled() {
+    return which("dotnet") !== null
   },
 }
 

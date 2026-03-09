@@ -20,6 +20,7 @@ OpenCode comes with several built-in formatters for popular languages and framew
 | cljfmt               | .clj, .cljs, .cljc, .edn                                                                                 | `cljfmt` command available                                                                            |
 | dart                 | .dart                                                                                                    | `dart` command available                                                                              |
 | dfmt                 | .d                                                                                                       | `dfmt` command available                                                                              |
+| dotnet-format        | .cs, .vb, .fs, .fsi, .fsx, .fsscript                                                                     | `dotnet` command available and a nearest `.slnx`, `.sln`, `.csproj`, `.fsproj`, or `.vbproj`        |
 | gleam                | .gleam                                                                                                   | `gleam` command available                                                                             |
 | gofmt                | .go                                                                                                      | `gofmt` command available                                                                             |
 | htmlbeautifier       | .erb, .html.erb                                                                                          | `htmlbeautifier` command available                                                                    |
@@ -71,6 +72,7 @@ Each formatter configuration supports the following:
 
 | Property      | Type     | Description                                             |
 | ------------- | -------- | ------------------------------------------------------- |
+| `args`        | string[] | Additional arguments appended to the formatter command  |
 | `disabled`    | boolean  | Set this to `true` to disable the formatter             |
 | `command`     | string[] | The command to run for formatting                       |
 | `environment` | object   | Environment variables to set when running the formatter |
@@ -130,3 +132,5 @@ You can override the built-in formatters or add new ones by specifying the comma
 ```
 
 The **`$FILE` placeholder** in the command will be replaced with the path to the file being formatted.
+
+The `args` property is appended after the formatter command. Use it when you want to tweak a built-in formatter without replacing its full command. If you need complete control over argument order, override `command` instead.
