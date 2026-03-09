@@ -215,16 +215,25 @@ describe("Instance.containsPath", () => {
 
   test("returns true when project is accessed via external symlink", async () => {
     if (process.platform === "win32") return
+    // This test requires Filesystem.resolve() to resolve symlinks (realpathSync, from #16651).
+    // Skip if resolve() does not follow symlinks yet.
+    const probe = path.join(require("os").tmpdir(), `oc-symlink-probe-${Date.now()}`)
+    const probeTarget = path.join(require("os").tmpdir(), `oc-symlink-probe-target-${Date.now()}`)
+    await fs.mkdir(probeTarget)
+    await fs.symlink(probeTarget, probe)
+    const resolvesSymlinks = Filesystem.resolve(probe) === Filesystem.resolve(probeTarget)
+    await fs.unlink(probe).catch(() => {})
+    await fs.rm(probeTarget, { recursive: true }).catch(() => {})
+    if (!resolvesSymlinks) return
+
     await using tmp = await tmpdir({ git: true })
     await Bun.write(path.join(tmp.path, "file.txt"), "content")
-    // Create a symlink to the project directory from outside
     const externalLink = tmp.path + "-ext-symlink"
     await fs.symlink(tmp.path, externalLink)
     try {
       await Instance.provide({
         directory: tmp.path,
         fn: () => {
-          // A path via the external symlink should resolve to the canonical project dir
           expect(Instance.containsPath(path.join(externalLink, "file.txt"))).toBe(true)
         },
       })
@@ -235,17 +244,25 @@ describe("Instance.containsPath", () => {
 
   test("returns false for symlink that resolves outside project", async () => {
     if (process.platform === "win32") return
+    // Requires Filesystem.resolve() with realpathSync (#16651)
+    const probe = path.join(require("os").tmpdir(), `oc-symlink-probe-${Date.now()}`)
+    const probeTarget = path.join(require("os").tmpdir(), `oc-symlink-probe-target-${Date.now()}`)
+    await fs.mkdir(probeTarget)
+    await fs.symlink(probeTarget, probe)
+    const resolvesSymlinks = Filesystem.resolve(probe) === Filesystem.resolve(probeTarget)
+    await fs.unlink(probe).catch(() => {})
+    await fs.rm(probeTarget, { recursive: true }).catch(() => {})
+    if (!resolvesSymlinks) return
+
     await using tmp = await tmpdir({ git: true })
     await using outside = await tmpdir()
     await Bun.write(path.join(outside.path, "secret.txt"), "secret")
-    // Symlink inside project pointing to directory outside project
     const link = path.join(tmp.path, "escape-link")
     await fs.symlink(outside.path, link)
 
     await Instance.provide({
       directory: tmp.path,
       fn: () => {
-        // The symlink is inside the project, but its target is outside
         expect(Instance.containsPath(path.join(link, "secret.txt"))).toBe(false)
       },
     })
@@ -269,6 +286,16 @@ describe("Instance.containsPath", () => {
 
   test("propagates ELOOP from symlink cycle", async () => {
     if (process.platform === "win32") return
+    // Requires Filesystem.resolve() with realpathSync and narrowed catch (#16651)
+    const probe = path.join(require("os").tmpdir(), `oc-symlink-probe-${Date.now()}`)
+    const probeTarget = path.join(require("os").tmpdir(), `oc-symlink-probe-target-${Date.now()}`)
+    await fs.mkdir(probeTarget)
+    await fs.symlink(probeTarget, probe)
+    const resolvesSymlinks = Filesystem.resolve(probe) === Filesystem.resolve(probeTarget)
+    await fs.unlink(probe).catch(() => {})
+    await fs.rm(probeTarget, { recursive: true }).catch(() => {})
+    if (!resolvesSymlinks) return
+
     await using tmp = await tmpdir({ git: true })
     const a = path.join(tmp.path, "a")
     const b = path.join(tmp.path, "b")
