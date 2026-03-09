@@ -443,21 +443,19 @@ function App() {
       },
     },
     {
-      title: "Favorite cycle",
+      title: "Favorite model cycle",
       value: "model.cycle_favorite",
       keybind: "model_cycle_favorite",
       category: "Agent",
-      hidden: true,
       onSelect: () => {
         local.model.cycleFavorite(1)
       },
     },
     {
-      title: "Favorite cycle reverse",
+      title: "Favorite model cycle reverse",
       value: "model.cycle_favorite_reverse",
       keybind: "model_cycle_favorite_reverse",
       category: "Agent",
-      hidden: true,
       onSelect: () => {
         local.model.cycleFavorite(-1)
       },

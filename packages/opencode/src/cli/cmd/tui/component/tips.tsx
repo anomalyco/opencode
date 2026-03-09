@@ -3,6 +3,7 @@ import { DEFAULT_THEMES, useTheme } from "@tui/context/theme"
 
 const themeCount = Object.keys(DEFAULT_THEMES).length
 const themeTip = `Use {highlight}/themes{/highlight} or {highlight}Ctrl+X T{/highlight} to switch between ${themeCount} built-in themes`
+const meta = process.platform === "darwin" ? "Option" : "Alt"
 
 type TipPart = { text: string; highlight: boolean }
 
@@ -69,7 +70,7 @@ const TIPS = [
   "Press {highlight}Ctrl+P{/highlight} to see all available actions and commands",
   "Run {highlight}/connect{/highlight} to add API keys for 75+ supported LLM providers",
   "The leader key is {highlight}Ctrl+X{/highlight}; combine with other keys for quick actions",
-  "Press {highlight}F2{/highlight} to quickly switch between recently used models",
+  `Press {highlight}F2{/highlight} to quickly switch between recently used models, or {highlight}${meta}+C{/highlight}/{highlight}${meta}+X{/highlight} for favorite models`,
   "Press {highlight}Ctrl+X B{/highlight} to show/hide the sidebar panel",
   "Use {highlight}PageUp{/highlight}/{highlight}PageDown{/highlight} to navigate through conversation history",
   "Press {highlight}Ctrl+G{/highlight} or {highlight}Home{/highlight} to jump to the beginning of the conversation",

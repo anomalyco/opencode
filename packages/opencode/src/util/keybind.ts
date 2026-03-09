@@ -32,12 +32,13 @@ export namespace Keybind {
     }
   }
 
-  export function toString(info: Info | undefined): string {
+  export function toString(info: Info | undefined, opts?: { platform?: NodeJS.Platform }): string {
     if (!info) return ""
     const parts: string[] = []
+    const meta = (opts?.platform ?? process.platform) === "darwin" ? "option" : "alt"
 
     if (info.ctrl) parts.push("ctrl")
-    if (info.meta) parts.push("alt")
+    if (info.meta) parts.push(meta)
     if (info.super) parts.push("super")
     if (info.shift) parts.push("shift")
     if (info.name) {

@@ -22,6 +22,11 @@ describe("Keybind.toString", () => {
     expect(Keybind.toString(info)).toBe("ctrl+alt+g")
   })
 
+  test("should convert meta to option on macOS", () => {
+    const info: Keybind.Info = { ctrl: false, meta: true, shift: false, leader: false, name: "c" }
+    expect(Keybind.toString(info, { platform: "darwin" })).toBe("option+c")
+  })
+
   test("should convert all modifiers to string", () => {
     const info: Keybind.Info = { ctrl: true, meta: true, shift: true, leader: true, name: "h" }
     expect(Keybind.toString(info)).toBe("<leader> ctrl+alt+shift+h")

@@ -40,6 +40,19 @@ test("loads tui config with the same precedence order as server config paths", a
   })
 })
 
+test("loads default favorite model cycle keybinds", async () => {
+  await using tmp = await tmpdir()
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await TuiConfig.get()
+      expect(config.keybinds?.model_cycle_favorite).toBe("alt+c")
+      expect(config.keybinds?.model_cycle_favorite_reverse).toBe("alt+x")
+    },
+  })
+})
+
 test("migrates tui-specific keys from opencode.json when tui.json does not exist", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
