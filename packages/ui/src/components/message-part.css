@@ -1346,13 +1346,14 @@
       opacity: 0.6;
     }
 
-    &:focus-visible {
+    &:focus {
       outline: none;
       background-color: var(--background-base);
     }
 
-    &[data-picked="true"]:focus-visible {
+    &[data-picked="true"]:focus {
       outline: none;
+      background-color: var(--surface-interactive-base);
     }
   }
 
