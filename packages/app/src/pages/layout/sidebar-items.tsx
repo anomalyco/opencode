@@ -163,7 +163,6 @@ const SessionHoverPreview = (props: {
     gutter={16}
     shift={-2}
     trigger={props.trigger}
-    mount={!props.mobile ? props.nav() : undefined}
     open={props.hoverSession() === props.session.id}
     onOpenChange={(open) => props.setHoverSession(open ? props.session.id : undefined)}
   >
