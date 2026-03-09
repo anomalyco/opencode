@@ -51,7 +51,7 @@ const migrations = await Promise.all(
           Number(match[6]),
         )
       : 0
-    return { sql, timestamp }
+    return { sql, timestamp, name }
   }),
 )
 console.log(`Loaded ${migrations.length} migrations`)

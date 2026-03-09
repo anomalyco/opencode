@@ -16,6 +16,15 @@ const STORAGE_KEYS = {
 
 const THEME_STYLE_ID = "oc-theme"
 
+function normalize(id: string | null | undefined) {
+  return id === "oc-1" ? "oc-2" : id
+}
+
+function clear() {
+  localStorage.removeItem(STORAGE_KEYS.THEME_CSS_LIGHT)
+  localStorage.removeItem(STORAGE_KEYS.THEME_CSS_DARK)
+}
+
 function ensureThemeStyleElement(): HTMLStyleElement {
   const existing = document.getElementById(THEME_STYLE_ID) as HTMLStyleElement | null
   if (existing) return existing
@@ -35,7 +44,7 @@ function applyThemeCss(theme: DesktopTheme, themeId: string, mode: "light" | "da
   const tokens = resolveThemeVariant(variant, isDark)
   const css = themeToCss(tokens)
 
-  if (themeId !== "oc-1") {
+  if (themeId !== "oc-2") {
     try {
       localStorage.setItem(isDark ? STORAGE_KEYS.THEME_CSS_DARK : STORAGE_KEYS.THEME_CSS_LIGHT, css)
     } catch {}
@@ -54,7 +63,7 @@ function applyThemeCss(theme: DesktopTheme, themeId: string, mode: "light" | "da
 }
 
 function cacheThemeVariants(theme: DesktopTheme, themeId: string) {
-  if (themeId === "oc-1") return
+  if (themeId === "oc-2") return
   for (const mode of ["light", "dark"] as const) {
     const isDark = mode === "dark"
     const variant = isDark ? theme.dark : theme.light
@@ -71,7 +80,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   init: (props: { defaultTheme?: string }) => {
     const [store, setStore] = createStore({
       themes: DEFAULT_THEMES as Record<string, DesktopTheme>,
-      themeId: props.defaultTheme ?? "oc-1",
+      themeId: normalize(props.defaultTheme) ?? "oc-2",
       colorScheme: "system" as ColorScheme,
       mode: getSystemMode(),
       previewThemeId: null as string | null,
@@ -89,9 +98,14 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       onCleanup(() => mediaQuery.removeEventListener("change", handler))
 
       const savedTheme = localStorage.getItem(STORAGE_KEYS.THEME_ID)
+      const themeId = normalize(savedTheme)
       const savedScheme = localStorage.getItem(STORAGE_KEYS.COLOR_SCHEME) as ColorScheme | null
-      if (savedTheme && store.themes[savedTheme]) {
-        setStore("themeId", savedTheme)
+      if (themeId && store.themes[themeId]) {
+        setStore("themeId", themeId)
+      }
+      if (savedTheme && themeId && savedTheme !== themeId) {
+        localStorage.setItem(STORAGE_KEYS.THEME_ID, themeId)
+        clear()
       }
       if (savedScheme) {
         setStore("colorScheme", savedScheme)
@@ -113,14 +127,23 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     })
 
     const setTheme = (id: string) => {
-      const theme = store.themes[id]
+      const next = normalize(id)
+      if (!next) {
+        console.warn(`Theme "${id}" not found`)
+        return
+      }
+      const theme = store.themes[next]
       if (!theme) {
         console.warn(`Theme "${id}" not found`)
         return
       }
-      setStore("themeId", id)
-      localStorage.setItem(STORAGE_KEYS.THEME_ID, id)
-      cacheThemeVariants(theme, id)
+      setStore("themeId", next)
+      localStorage.setItem(STORAGE_KEYS.THEME_ID, next)
+      if (next === "oc-2") {
+        clear()
+        return
+      }
+      cacheThemeVariants(theme, next)
     }
 
     const setColorScheme = (scheme: ColorScheme) => {
@@ -138,15 +161,17 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       setColorScheme,
       registerTheme: (theme: DesktopTheme) => setStore("themes", theme.id, theme),
       previewTheme: (id: string) => {
-        const theme = store.themes[id]
+        const next = normalize(id)
+        if (!next) return
+        const theme = store.themes[next]
         if (!theme) return
-        setStore("previewThemeId", id)
+        setStore("previewThemeId", next)
         const previewMode = store.previewScheme
           ? store.previewScheme === "system"
             ? getSystemMode()
             : store.previewScheme
           : store.mode
-        applyThemeCss(theme, id, previewMode)
+        applyThemeCss(theme, next, previewMode)
       },
       previewColorScheme: (scheme: ColorScheme) => {
         setStore("previewScheme", scheme)

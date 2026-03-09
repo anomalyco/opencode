@@ -347,6 +347,21 @@ export namespace Project {
     return fromRow(row)
   }
 
+  export async function initGit(input: { directory: string; project: Info }) {
+    if (input.project.vcs === "git") return input.project
+    if (!which("git")) throw new Error("Git is not installed")
+
+    const result = await git(["init", "--quiet"], {
+      cwd: input.directory,
+    })
+    if (result.exitCode !== 0) {
+      const text = result.stderr.toString().trim() || result.text().trim()
+      throw new Error(text || "Failed to initialize git repository")
+    }
+
+    return (await fromDirectory(input.directory)).project
+  }
+
   export const update = fn(
     z.object({
       projectID: z.string(),
