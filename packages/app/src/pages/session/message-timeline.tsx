@@ -237,6 +237,42 @@ export function MessageTimeline(props: {
     return sync.data.session_status[id] ?? idle
   })
   const working = createMemo(() => !!pending() || sessionStatus().type !== "idle")
+
+  const [slot, setSlot] = createStore({
+    mode: "idle" as "idle" | "work" | "done",
+    fade: false,
+  })
+
+  let f: number | undefined
+  let g: number | undefined
+  const clear = () => {
+    if (f !== undefined) window.clearTimeout(f)
+    if (g !== undefined) window.clearTimeout(g)
+    f = undefined
+    g = undefined
+  }
+
+  onCleanup(clear)
+  createEffect(
+    on(
+      working,
+      (on, prev) => {
+        clear()
+        if (on) {
+          setSlot({ mode: "work", fade: false })
+          return
+        }
+        if (prev) {
+          setSlot({ mode: "done", fade: false })
+          f = window.setTimeout(() => setSlot("fade", true), 200)
+          g = window.setTimeout(() => setSlot({ mode: "idle", fade: false }), 400)
+          return
+        }
+        setSlot({ mode: "idle", fade: false })
+      },
+      { defer: true },
+    ),
+  )
   const activeMessageID = createMemo(() => {
     const parentID = pending()?.parentID
     if (parentID) {
@@ -575,10 +611,29 @@ export function MessageTimeline(props: {
                         aria-label={language.t("common.goBack")}
                       />
                     </Show>
-                    <div class="flex items-center gap-2 min-w-0 grow-1">
-                      <div class="size-4 shrink-0 flex items-center justify-center" aria-hidden="true">
-                        <Show when={working()}>
-                          <Spinner class="size-4" style={{ color: "var(--icon-interactive-base)" }} />
+                    <div class="flex items-center min-w-0 grow-1">
+                      <div
+                        class="shrink-0 flex items-center justify-center overflow-hidden transition-[width,margin] duration-200 ease-out"
+                        style={{
+                          width: slot.mode === "idle" ? "0px" : "16px",
+                          "margin-right": slot.mode === "idle" ? "0px" : "8px",
+                        }}
+                        aria-hidden="true"
+                      >
+                        <Show when={slot.mode !== "idle"}>
+                          <div
+                            class="transition-opacity duration-200 ease-out"
+                            classList={{
+                              "opacity-0": slot.mode === "done" && slot.fade,
+                            }}
+                          >
+                            <Show
+                              when={slot.mode === "work"}
+                              fallback={<Spinner class="size-4" style={{ color: "var(--icon-interactive-base)" }} />}
+                            >
+                              <Spinner class="size-4" style={{ color: "var(--icon-interactive-base)" }} />
+                            </Show>
+                          </div>
                         </Show>
                       </div>
                       <Show when={titleValue() || title.editing}>
