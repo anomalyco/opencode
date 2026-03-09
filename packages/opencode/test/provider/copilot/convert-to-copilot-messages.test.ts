@@ -1,6 +1,24 @@
 import { convertToOpenAICompatibleChatMessages as convertToCopilotMessages } from "@/provider/sdk/copilot/chat/convert-to-openai-compatible-chat-messages"
 import { describe, test, expect } from "bun:test"
 
+describe("system messages", () => {
+  test("should convert system message content to string", () => {
+    const result = convertToCopilotMessages([
+      {
+        role: "system",
+        content: "You are a helpful assistant with AGENTS.md instructions.",
+      },
+    ])
+
+    expect(result).toEqual([
+      {
+        role: "system",
+        content: "You are a helpful assistant with AGENTS.md instructions.",
+      },
+    ])
+  })
+})
+
 describe("user messages", () => {
   test("should convert messages with only a text part to a string content", () => {
     const result = convertToCopilotMessages([

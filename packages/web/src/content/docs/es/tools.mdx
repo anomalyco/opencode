@@ -1,0 +1,379 @@
+---
+title: Herramientas
+description: Administre las herramientas que puede usar un LLM.
+---
+
+Las herramientas permiten que LLM realice acciones en su código base. OpenCode viene con un conjunto de herramientas integradas, pero puede ampliarlo con [herramientas personalizadas](/docs/custom-tools) o [servidores MCP](/docs/mcp-servers).
+
+De forma predeterminada, todas las herramientas están **habilitadas** y no necesitan permiso para ejecutarse. Puede controlar el comportamiento de la herramienta a través de [permisos](/docs/permissions).
+
+---
+
+## Configuración
+
+Utilice el campo `permission` para controlar el comportamiento de la herramienta. Puede permitir, denegar o exigir aprobación para cada herramienta.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny",
+    "bash": "ask",
+    "webfetch": "allow"
+  }
+}
+```
+
+También puedes utilizar comodines para controlar varias herramientas a la vez. Por ejemplo, para solicitar aprobación para todas las herramientas de un servidor MCP:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "mymcp_*": "ask"
+  }
+}
+```
+
+[Más información](/docs/permissions) sobre la configuración de permisos.
+
+---
+
+## Integradas
+
+Aquí están todas las herramientas integradas disponibles en OpenCode.
+
+---
+
+### bash
+
+Ejecute comandos de shell en el entorno de su proyecto.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": "allow"
+  }
+}
+```
+
+Esta herramienta permite que LLM ejecute comandos de terminal como `npm install`, `git status` o cualquier otro comando de shell.
+
+---
+
+### edit
+
+Modifique archivos existentes utilizando reemplazos de cadenas exactas.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+Esta herramienta realiza ediciones precisas de archivos reemplazando coincidencias de texto exactas. Es la forma principal en que LLM modifica el código.
+
+---
+
+### write
+
+Cree nuevos archivos o sobrescriba los existentes.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+Utilice esto para permitir que LLM cree nuevos archivos. Sobrescribirá los archivos existentes si ya existen.
+
+:::note
+La herramienta `write` está controlada por el permiso `edit`, que cubre todas las modificaciones de archivos (`edit`, `write`, `patch`, `multiedit`).
+:::
+
+---
+
+### read
+
+Lea el contenido del archivo desde su base de código.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "read": "allow"
+  }
+}
+```
+
+Esta herramienta lee archivos y devuelve su contenido. Admite la lectura de rangos de líneas específicos para archivos grandes.
+
+---
+
+### grep
+
+Busque contenidos de archivos utilizando expresiones regulares.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "grep": "allow"
+  }
+}
+```
+
+Búsqueda rápida de contenido en su base de código. Admite sintaxis de expresiones regulares completa y filtrado de patrones de archivos.
+
+---
+
+### glob
+
+Encuentre archivos por coincidencia de patrones.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "glob": "allow"
+  }
+}
+```
+
+Busque archivos usando patrones globales como `**/*.js` o `src/**/*.ts`. Devuelve rutas de archivos coincidentes ordenadas por hora de modificación.
+
+---
+
+### list
+
+Enumere archivos y directorios en una ruta determinada.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "list": "allow"
+  }
+}
+```
+
+Esta herramienta enumera el contenido del directorio. Acepta patrones globales para filtrar resultados.
+
+---
+
+### lsp (experimental)
+
+Interactúe con sus servidores LSP configurados para obtener funciones de inteligencia de código como definiciones, referencias, información de desplazamiento y jerarquía de llamadas.
+
+:::note
+Esta herramienta solo está disponible cuando `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (o `OPENCODE_EXPERIMENTAL=true`).
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "lsp": "allow"
+  }
+}
+```
+
+Las operaciones admitidas incluyen `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls` y `outgoingCalls`.
+
+Para configurar qué servidores LSP están disponibles para su proyecto, consulte [Servidores LSP](/docs/lsp).
+
+---
+
+### patch
+
+Aplicar parches a los archivos.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+Esta herramienta aplica archivos de parche a su código base. Útil para aplicar diferencias y parches de diversas fuentes.
+
+:::note
+La herramienta `patch` está controlada por el permiso `edit`, que cubre todas las modificaciones de archivos (`edit`, `write`, `patch`, `multiedit`).
+:::
+
+---
+
+### skill
+
+Cargue una [habilidad](/docs/skills) (un archivo `SKILL.md`) y devuelva su contenido en la conversación.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "skill": "allow"
+  }
+}
+```
+
+---
+
+### todowrite
+
+Administre listas de tareas pendientes durante las sesiones de codificación.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "todowrite": "allow"
+  }
+}
+```
+
+Crea y actualiza listas de tareas para realizar un seguimiento del progreso durante operaciones complejas. El LLM usa esto para organizar tareas de varios pasos.
+
+:::note
+Esta herramienta está deshabilitada para los subagentes de forma predeterminada, pero puede habilitarla manualmente. [Más información](/docs/agents/#permissions)
+:::
+
+---
+
+### todoread
+
+Leer listas de tareas pendientes existentes.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "todoread": "allow"
+  }
+}
+```
+
+Lee el estado actual de la lista de tareas pendientes. Utilizado por LLM para rastrear qué tareas están pendientes o completadas.
+
+:::note
+Esta herramienta está deshabilitada para los subagentes de forma predeterminada, pero puede habilitarla manualmente. [Más información](/docs/agents/#permissions)
+:::
+
+---
+
+### webfetch
+
+Obtener contenido web.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "webfetch": "allow"
+  }
+}
+```
+
+Permite que LLM busque y lea páginas web. Útil para buscar documentación o investigar recursos en línea.
+
+---
+
+### websearch
+
+Busque información en la web.
+
+:::note
+Esta herramienta solo está disponible cuando se utiliza el proveedor OpenCode o cuando la variable de entorno `OPENCODE_ENABLE_EXA` está configurada en cualquier valor verdadero (por ejemplo, `true` o `1`).
+
+Para habilitar al iniciar OpenCode:
+
+```bash
+OPENCODE_ENABLE_EXA=1 opencode
+```
+
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "websearch": "allow"
+  }
+}
+```
+
+Realiza búsquedas web utilizando Exa AI para encontrar información relevante en línea. Útil para investigar temas, encontrar eventos actuales o recopilar información más allá del límite de datos de entrenamiento.
+
+No se requiere ninguna clave API: la herramienta se conecta directamente al servicio MCP alojado de Exa AI sin autenticación.
+
+:::tip
+Utilice `websearch` cuando necesite encontrar información (descubrimiento) y `webfetch` cuando necesite recuperar contenido de una URL específica (recuperación).
+:::
+
+---
+
+### question
+
+Haga preguntas al usuario durante la ejecución.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "question": "allow"
+  }
+}
+```
+
+Esta herramienta permite que LLM haga preguntas al usuario durante una tarea. Es útil para:
+
+- Recopilar preferencias o requisitos del usuario.
+- Aclarar instrucciones ambiguas
+- Tomar decisiones sobre las opciones de implementación.
+- Ofrecer opciones sobre qué dirección tomar.
+
+Cada pregunta incluye un encabezado, el texto de la pregunta y una lista de opciones. Los usuarios pueden seleccionar entre las opciones proporcionadas o escribir una respuesta personalizada. Cuando hay varias preguntas, los usuarios pueden navegar entre ellas antes de enviar todas las respuestas.
+
+---
+
+## Herramientas personalizadas
+
+Las herramientas personalizadas le permiten definir sus propias funciones a las que LLM puede llamar. Estos están definidos en su archivo de configuración y pueden ejecutar código arbitrario.
+
+[Más información](/docs/custom-tools) sobre la creación de herramientas personalizadas.
+
+---
+
+## Servidores MCP
+
+Los servidores MCP (Model Context Protocol) le permiten integrar herramientas y servicios externos. Esto incluye acceso a bases de datos, integraciones API y servicios de terceros.
+
+[Más información](/docs/mcp-servers) sobre la configuración de servidores MCP.
+
+---
+
+## Internos
+
+Internamente, herramientas como `grep`, `glob` y `list` usan [ripgrep](https://github.com/BurntSushi/ripgrep) bajo el capó. De forma predeterminada, ripgrep respeta los patrones `.gitignore`, lo que significa que los archivos y directorios enumerados en su `.gitignore` se excluirán de las búsquedas y listados.
+
+---
+
+### Ignorar patrones
+
+Para incluir archivos que normalmente se ignorarían, cree un archivo `.ignore` en la raíz de su proyecto. Este archivo puede permitir explícitamente ciertas rutas.
+
+```text title=".ignore"
+!node_modules/
+!dist/
+!build/
+```
+
+Por ejemplo, este archivo `.ignore` permite que ripgrep busque dentro de los directorios `node_modules/`, `dist/` y `build/` incluso si figuran en `.gitignore`.

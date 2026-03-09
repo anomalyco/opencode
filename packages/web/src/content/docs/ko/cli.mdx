@@ -1,0 +1,603 @@
+---
+title: CLI
+description: opencode CLI 옵션과 명령어.
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
+opencode CLI는 인수 없이 실행하면 기본적으로 [TUI](/docs/tui)를 시작합니다.
+
+```bash
+opencode
+```
+
+이 페이지에 나온 것처럼 명령을 함께 전달할 수도 있습니다. 이를 통해 opencode를 프로그래밍 방식으로 사용할 수 있습니다.
+
+```bash
+opencode run "Explain how closures work in JavaScript"
+```
+
+---
+
+### tui
+
+OpenCode 터미널 사용자 인터페이스를 시작합니다.
+
+```bash
+opencode [project]
+```
+
+#### 플래그
+
+| 플래그       | 축약 | 설명                                                                   |
+| ------------ | ---- | ---------------------------------------------------------------------- |
+| `--continue` | `-c` | 마지막 세션 이어서 실행                                                |
+| `--session`  | `-s` | 이어서 실행할 세션 ID                                                  |
+| `--fork`     |      | 세션을 이어갈 때 포크 생성 (`--continue` 또는 `--session`과 함께 사용) |
+| `--prompt`   |      | 사용할 프롬프트                                                        |
+| `--model`    | `-m` | 사용할 모델 (`provider/model` 형식)                                    |
+| `--agent`    |      | 사용할 에이전트                                                        |
+| `--port`     |      | 수신 포트                                                              |
+| `--hostname` |      | 수신 호스트명                                                          |
+
+---
+
+## 명령어
+
+opencode CLI는 아래 명령들도 제공합니다.
+
+---
+
+### agent
+
+opencode용 에이전트를 관리합니다.
+
+```bash
+opencode agent [command]
+```
+
+---
+
+### attach
+
+`serve` 또는 `web` 명령으로 이미 실행 중인 opencode 백엔드 서버에 터미널을 연결합니다.
+
+```bash
+opencode attach [url]
+```
+
+원격 opencode 백엔드와 TUI를 연결해 사용할 수 있습니다. 예:
+
+```bash
+# Start the backend server for web/mobile access
+opencode web --port 4096 --hostname 0.0.0.0
+
+# In another terminal, attach the TUI to the running backend
+opencode attach http://10.20.30.40:4096
+```
+
+#### 플래그
+
+| 플래그      | 축약 | 설명                       |
+| ----------- | ---- | -------------------------- |
+| `--dir`     |      | TUI를 시작할 작업 디렉터리 |
+| `--session` | `-s` | 이어서 실행할 세션 ID      |
+
+---
+
+#### create
+
+커스텀 설정으로 새 에이전트를 만듭니다.
+
+```bash
+opencode agent create
+```
+
+이 명령은 커스텀 시스템 프롬프트와 도구 설정을 사용해 새 에이전트를 만드는 과정을 안내합니다.
+
+---
+
+#### list
+
+사용 가능한 모든 에이전트를 표시합니다.
+
+```bash
+opencode agent list
+```
+
+---
+
+### auth
+
+provider 인증 정보와 로그인을 관리합니다.
+
+```bash
+opencode auth [command]
+```
+
+---
+
+#### login
+
+OpenCode는 [Models.dev](https://models.dev)의 provider 목록을 기반으로 동작하므로, `opencode auth login`으로 원하는 provider의 API 키를 설정할 수 있습니다. 인증 정보는 `~/.local/share/opencode/auth.json`에 저장됩니다.
+
+```bash
+opencode auth login
+```
+
+OpenCode 시작 시 인증 파일에서 provider 정보를 불러오며, 시스템 환경 변수나 프로젝트의 `.env`에 정의된 키도 함께 로드합니다.
+
+---
+
+#### list
+
+인증 파일에 저장된 provider 목록을 표시합니다.
+
+```bash
+opencode auth list
+```
+
+축약형도 사용할 수 있습니다.
+
+```bash
+opencode auth ls
+```
+
+---
+
+#### logout
+
+인증 파일에서 provider 정보를 제거해 로그아웃합니다.
+
+```bash
+opencode auth logout
+```
+
+---
+
+### github
+
+저장소 자동화를 위한 GitHub 에이전트를 관리합니다.
+
+```bash
+opencode github [command]
+```
+
+---
+
+#### install
+
+저장소에 GitHub 에이전트를 설치합니다.
+
+```bash
+opencode github install
+```
+
+필요한 GitHub Actions 워크플로를 설정하고 구성 과정을 안내합니다. [더 알아보기](/docs/github).
+
+---
+
+#### run
+
+GitHub 에이전트를 실행합니다. 보통 GitHub Actions에서 사용합니다.
+
+```bash
+opencode github run
+```
+
+##### 플래그
+
+| 플래그    | 설명                      |
+| --------- | ------------------------- |
+| `--event` | 실행할 GitHub 모의 이벤트 |
+| `--token` | GitHub 개인 액세스 토큰   |
+
+---
+
+### mcp
+
+Model Context Protocol 서버를 관리합니다.
+
+```bash
+opencode mcp [command]
+```
+
+---
+
+#### add
+
+구성에 MCP 서버를 추가합니다.
+
+```bash
+opencode mcp add
+```
+
+이 명령은 로컬 또는 원격 MCP 서버를 추가하는 과정을 안내합니다.
+
+---
+
+#### list
+
+구성된 MCP 서버와 연결 상태를 표시합니다.
+
+```bash
+opencode mcp list
+```
+
+축약형도 사용할 수 있습니다.
+
+```bash
+opencode mcp ls
+```
+
+---
+
+#### auth
+
+OAuth를 지원하는 MCP 서버를 인증합니다.
+
+```bash
+opencode mcp auth [name]
+```
+
+서버 이름을 입력하지 않으면 OAuth 지원 서버 목록에서 선택하라는 안내가 표시됩니다.
+
+OAuth 지원 서버와 인증 상태를 목록으로 볼 수도 있습니다.
+
+```bash
+opencode mcp auth list
+```
+
+축약형도 사용할 수 있습니다.
+
+```bash
+opencode mcp auth ls
+```
+
+---
+
+#### logout
+
+MCP 서버의 OAuth 인증 정보를 제거합니다.
+
+```bash
+opencode mcp logout [name]
+```
+
+---
+
+#### debug
+
+MCP 서버의 OAuth 연결 문제를 디버그합니다.
+
+```bash
+opencode mcp debug <name>
+```
+
+---
+
+### models
+
+구성된 provider에서 사용 가능한 모델 목록을 표시합니다.
+
+```bash
+opencode models [provider]
+```
+
+이 명령은 구성된 provider 전체에서 사용 가능한 모델을 `provider/model` 형식으로 출력합니다.
+
+[config](/docs/config/)에 지정할 정확한 모델명을 확인할 때 유용합니다.
+
+특정 provider ID를 넘겨 해당 provider의 모델만 필터링할 수도 있습니다.
+
+```bash
+opencode models anthropic
+```
+
+#### 플래그
+
+| 플래그      | 설명                                              |
+| ----------- | ------------------------------------------------- |
+| `--refresh` | models.dev에서 모델 캐시 새로고침                 |
+| `--verbose` | 더 자세한 모델 출력 사용(비용 등 메타데이터 포함) |
+
+`--refresh` 플래그를 사용하면 캐시된 모델 목록을 갱신할 수 있습니다. provider에 새 모델이 추가된 뒤 OpenCode에서 바로 확인하고 싶을 때 유용합니다.
+
+```bash
+opencode models --refresh
+```
+
+---
+
+### run
+
+프롬프트를 직접 전달해 비대화형 모드로 opencode를 실행합니다.
+
+```bash
+opencode run [message..]
+```
+
+스크립트, 자동화, 또는 전체 TUI를 띄우지 않고 빠른 응답이 필요할 때 유용합니다. 예:
+
+```bash "opencode run"
+opencode run Explain the use of context in Go
+```
+
+매번 MCP 서버 콜드 부트가 발생하지 않도록, 실행 중인 `opencode serve` 인스턴스에 붙어서 실행할 수도 있습니다.
+
+```bash
+# Start a headless server in one terminal
+opencode serve
+
+# In another terminal, run commands that attach to it
+opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+```
+
+#### 플래그
+
+| 플래그       | 축약 | 설명                                                                   |
+| ------------ | ---- | ---------------------------------------------------------------------- |
+| `--command`  |      | 실행할 명령(인수는 message로 전달)                                     |
+| `--continue` | `-c` | 마지막 세션 이어서 실행                                                |
+| `--session`  | `-s` | 이어서 실행할 세션 ID                                                  |
+| `--fork`     |      | 세션을 이어갈 때 포크 생성 (`--continue` 또는 `--session`과 함께 사용) |
+| `--share`    |      | 세션 공유                                                              |
+| `--model`    | `-m` | 사용할 모델 (`provider/model` 형식)                                    |
+| `--agent`    |      | 사용할 에이전트                                                        |
+| `--file`     | `-f` | 메시지에 첨부할 파일                                                   |
+| `--format`   |      | 출력 형식: default(포맷됨) 또는 json(원시 JSON 이벤트)                 |
+| `--title`    |      | 세션 제목(값이 없으면 프롬프트를 잘라 자동 생성)                       |
+| `--attach`   |      | 실행 중인 opencode 서버에 연결(예: http://localhost:4096)              |
+| `--port`     |      | 로컬 서버 포트(기본값: 랜덤 포트)                                      |
+
+---
+
+### serve
+
+API 접근용 headless OpenCode 서버를 시작합니다. 전체 HTTP 인터페이스는 [server docs](/docs/server)를 참고하세요.
+
+```bash
+opencode serve
+```
+
+이 명령은 TUI 없이 opencode 기능에 접근할 수 있는 HTTP 서버를 시작합니다. `OPENCODE_SERVER_PASSWORD`를 설정하면 HTTP basic auth가 활성화됩니다(기본 사용자명: `opencode`).
+
+#### 플래그
+
+| 플래그       | 설명                              |
+| ------------ | --------------------------------- |
+| `--port`     | 수신 포트                         |
+| `--hostname` | 수신 호스트명                     |
+| `--mdns`     | mDNS 검색 활성화                  |
+| `--cors`     | 허용할 추가 브라우저 origin(CORS) |
+
+---
+
+### session
+
+OpenCode 세션을 관리합니다.
+
+```bash
+opencode session [command]
+```
+
+---
+
+#### list
+
+OpenCode 세션 목록을 표시합니다.
+
+```bash
+opencode session list
+```
+
+##### 플래그
+
+| 플래그        | 축약 | 설명                                   |
+| ------------- | ---- | -------------------------------------- |
+| `--max-count` | `-n` | 최근 N개 세션만 표시                   |
+| `--format`    |      | 출력 형식: table 또는 json(기본 table) |
+
+---
+
+### stats
+
+OpenCode 세션의 토큰 사용량과 비용 통계를 표시합니다.
+
+```bash
+opencode stats
+```
+
+#### 플래그
+
+| 플래그      | 설명                                                         |
+| ----------- | ------------------------------------------------------------ |
+| `--days`    | 최근 N일 통계 표시(기본값: 전체 기간)                        |
+| `--tools`   | 표시할 도구 개수(기본값: 전체)                               |
+| `--models`  | 모델 사용량 상세 표시(기본 숨김). 숫자를 주면 상위 N개 표시  |
+| `--project` | 프로젝트 필터(기본: 전체 프로젝트, 빈 문자열: 현재 프로젝트) |
+
+---
+
+### export
+
+세션 데이터를 JSON으로 내보냅니다.
+
+```bash
+opencode export [sessionID]
+```
+
+세션 ID를 지정하지 않으면 사용 가능한 세션에서 선택하라는 안내가 표시됩니다.
+
+---
+
+### import
+
+JSON 파일 또는 OpenCode 공유 URL에서 세션 데이터를 가져옵니다.
+
+```bash
+opencode import <file>
+```
+
+로컬 파일이나 OpenCode 공유 URL에서 가져올 수 있습니다.
+
+```bash
+opencode import session.json
+opencode import https://opncd.ai/s/abc123
+```
+
+---
+
+### web
+
+웹 인터페이스를 포함한 headless OpenCode 서버를 시작합니다.
+
+```bash
+opencode web
+```
+
+이 명령은 HTTP 서버를 시작하고 웹 브라우저를 열어 웹 인터페이스로 OpenCode에 접속합니다. `OPENCODE_SERVER_PASSWORD`를 설정하면 HTTP basic auth가 활성화됩니다(기본 사용자명: `opencode`).
+
+#### 플래그
+
+| 플래그       | 설명                              |
+| ------------ | --------------------------------- |
+| `--port`     | 수신 포트                         |
+| `--hostname` | 수신 호스트명                     |
+| `--mdns`     | mDNS 검색 활성화                  |
+| `--cors`     | 허용할 추가 브라우저 origin(CORS) |
+
+---
+
+### acp
+
+ACP(Agent Client Protocol) 서버를 시작합니다.
+
+```bash
+opencode acp
+```
+
+이 명령은 nd-JSON 형식으로 stdin/stdout을 통해 통신하는 ACP 서버를 시작합니다.
+
+#### 플래그
+
+| 플래그       | 설명          |
+| ------------ | ------------- |
+| `--cwd`      | 작업 디렉터리 |
+| `--port`     | 수신 포트     |
+| `--hostname` | 수신 호스트명 |
+
+---
+
+### uninstall
+
+OpenCode를 제거하고 관련 파일을 삭제합니다.
+
+```bash
+opencode uninstall
+```
+
+#### 플래그
+
+| 플래그          | 축약 | 설명                            |
+| --------------- | ---- | ------------------------------- |
+| `--keep-config` | `-c` | 설정 파일 유지                  |
+| `--keep-data`   | `-d` | 세션 데이터와 스냅샷 유지       |
+| `--dry-run`     |      | 실제 삭제 없이 삭제 대상만 표시 |
+| `--force`       | `-f` | 확인 프롬프트 건너뛰기          |
+
+---
+
+### upgrade
+
+opencode를 최신 버전 또는 특정 버전으로 업데이트합니다.
+
+```bash
+opencode upgrade [target]
+```
+
+최신 버전으로 업그레이드:
+
+```bash
+opencode upgrade
+```
+
+특정 버전으로 업그레이드:
+
+```bash
+opencode upgrade v0.1.48
+```
+
+#### 플래그
+
+| 플래그     | 축약 | 설명                                       |
+| ---------- | ---- | ------------------------------------------ |
+| `--method` | `-m` | 설치 방식 지정: curl, npm, pnpm, bun, brew |
+
+---
+
+## 전역 플래그
+
+opencode CLI는 아래 전역 플래그를 지원합니다.
+
+| 플래그         | 축약 | 설명                                |
+| -------------- | ---- | ----------------------------------- |
+| `--help`       | `-h` | 도움말 표시                         |
+| `--version`    | `-v` | 버전 출력                           |
+| `--print-logs` |      | 로그를 stderr로 출력                |
+| `--log-level`  |      | 로그 레벨(DEBUG, INFO, WARN, ERROR) |
+
+---
+
+## 환경 변수
+
+OpenCode는 환경 변수로도 구성할 수 있습니다.
+
+| 변수                                  | 타입    | 설명                                           |
+| ------------------------------------- | ------- | ---------------------------------------------- |
+| `OPENCODE_AUTO_SHARE`                 | boolean | 세션 자동 공유                                 |
+| `OPENCODE_GIT_BASH_PATH`              | string  | Windows에서 Git Bash 실행 파일 경로            |
+| `OPENCODE_CONFIG`                     | string  | 설정 파일 경로                                 |
+| `OPENCODE_CONFIG_DIR`                 | string  | 설정 디렉터리 경로                             |
+| `OPENCODE_CONFIG_CONTENT`             | string  | 인라인 JSON 설정 내용                          |
+| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | 자동 업데이트 확인 비활성화                    |
+| `OPENCODE_DISABLE_PRUNE`              | boolean | 오래된 데이터 정리(prune) 비활성화             |
+| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | 터미널 제목 자동 업데이트 비활성화             |
+| `OPENCODE_PERMISSION`                 | string  | 인라인 JSON 권한 설정                          |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | 기본 플러그인 비활성화                         |
+| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | LSP 서버 자동 다운로드 비활성화                |
+| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | 실험적 모델 활성화                             |
+| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | 자동 컨텍스트 컴팩션 비활성화                  |
+| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | `.claude`(프롬프트 + 스킬) 읽기 비활성화       |
+| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | `~/.claude/CLAUDE.md` 읽기 비활성화            |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | `.claude/skills` 로드 비활성화                 |
+| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | 원격 소스에서 모델 목록 가져오기 비활성화      |
+| `OPENCODE_FAKE_VCS`                   | string  | 테스트용 가짜 VCS provider                     |
+| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolean | 최적화를 위한 파일 시간 검사 비활성화          |
+| `OPENCODE_CLIENT`                     | string  | 클라이언트 식별자(기본값: `cli`)               |
+| `OPENCODE_ENABLE_EXA`                 | boolean | Exa 웹 검색 도구 활성화                        |
+| `OPENCODE_SERVER_PASSWORD`            | string  | `serve`/`web` 기본 인증 활성화                 |
+| `OPENCODE_SERVER_USERNAME`            | string  | 기본 인증 사용자명 오버라이드(기본 `opencode`) |
+| `OPENCODE_MODELS_URL`                 | string  | 모델 설정을 가져올 사용자 지정 URL             |
+
+---
+
+### 실험적 기능
+
+아래 환경 변수는 변경되거나 제거될 수 있는 실험 기능을 활성화합니다.
+
+| 변수                                            | 타입    | 설명                           |
+| ----------------------------------------------- | ------- | ------------------------------ |
+| `OPENCODE_EXPERIMENTAL`                         | boolean | 모든 실험 기능 활성화          |
+| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | 아이콘 탐색 활성화             |
+| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | TUI에서 선택 시 복사 비활성화  |
+| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | bash 명령 기본 타임아웃(ms)    |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | LLM 응답 최대 출력 토큰 수     |
+| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | 전체 디렉터리 파일 감시 활성화 |
+| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | oxfmt 포매터 활성화            |
+| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | 실험적 LSP 도구 활성화         |
+| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | 파일 감시 비활성화             |
+| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | 실험적 Exa 기능 활성화         |
+| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | 실험적 LSP 타입 검사 활성화    |
+| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | 실험적 Markdown 기능 활성화    |
+| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Plan mode 활성화               |

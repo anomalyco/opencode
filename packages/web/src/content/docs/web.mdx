@@ -64,6 +64,12 @@ opencode web --mdns
 
 This automatically sets the hostname to `0.0.0.0` and advertises the server as `opencode.local`.
 
+You can customize the mDNS domain name to run multiple instances on the same network:
+
+```bash
+opencode web --mdns --mdns-domain myproject.local
+```
+
 ### CORS
 
 To allow additional domains for CORS (useful for custom frontends):

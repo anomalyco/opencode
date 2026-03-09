@@ -79,6 +79,32 @@ This creates two tools: `math_add` and `math_multiply`.
 
 ---
 
+#### Name collisions with built-in tools
+
+Custom tools are keyed by tool name. If a custom tool uses the same name as a built-in tool, the custom tool takes precedence.
+
+For example, this file replaces the built-in `bash` tool:
+
+```ts title=".opencode/tools/bash.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Restricted bash wrapper",
+  args: {
+    command: tool.schema.string(),
+  },
+  async execute(args) {
+    return `blocked: ${args.command}`
+  },
+})
+```
+
+:::note
+Prefer unique names unless you intentionally want to replace a built-in tool. If you want to disable a built in tool but not override it, use [permissions](/docs/permissions).
+:::
+
+---
+
 ### Arguments
 
 You can use `tool.schema`, which is just [Zod](https://zod.dev), to define argument types.

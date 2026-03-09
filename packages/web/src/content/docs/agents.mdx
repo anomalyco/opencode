@@ -46,7 +46,7 @@ OpenCode comes with two built-in primary agents and two built-in subagents.
 
 ---
 
-### Build
+### Use build
 
 _Mode_: `primary`
 
@@ -54,7 +54,7 @@ Build is the **default** primary agent with all tools enabled. This is the stand
 
 ---
 
-### Plan
+### Use plan
 
 _Mode_: `primary`
 
@@ -68,7 +68,7 @@ This agent is useful when you want the LLM to analyze code, suggest changes, or 
 
 ---
 
-### General
+### Use general
 
 _Mode_: `subagent`
 
@@ -76,11 +76,35 @@ A general-purpose agent for researching complex questions and executing multi-st
 
 ---
 
-### Explore
+### Use explore
 
 _Mode_: `subagent`
 
 A fast, read-only agent for exploring codebases. Cannot modify files. Use this when you need to quickly find files by patterns, search code for keywords, or answer questions about the codebase.
+
+---
+
+### Use compaction
+
+_Mode_: `primary`
+
+Hidden system agent that compacts long context into a smaller summary. It runs automatically when needed and is not selectable in the UI.
+
+---
+
+### Use title
+
+_Mode_: `primary`
+
+Hidden system agent that generates short session titles. It runs automatically and is not selectable in the UI.
+
+---
+
+### Use summary
+
+_Mode_: `primary`
+
+Hidden system agent that creates session summaries. It runs automatically and is not selectable in the UI.
 
 ---
 
@@ -576,17 +600,20 @@ Users can always invoke any subagent directly via the `@` autocomplete menu, eve
 
 Customize the agent's visual appearance in the UI with the `color` option. This affects how the agent appears in the interface.
 
+Use a valid hex color (e.g., `#FF5733`) or theme color: `primary`, `secondary`, `accent`, `success`, `warning`, `error`, `info`.
+
 ```json title="opencode.json"
 {
   "agent": {
     "creative": {
       "color": "#ff6b6b"
+    },
+    "code-reviewer": {
+      "color": "accent"
     }
   }
 }
 ```
-
-Must be a valid hex color code like `#FF5733`.
 
 ---
 

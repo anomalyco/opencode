@@ -1,0 +1,323 @@
+---
+title: Befehle
+description: Erstellen Sie benutzerdefinierte Befehle für sich wiederholende Aufgaben.
+---
+
+Mit benutzerdefinierten Befehlen können Sie eine Eingabeaufforderung angeben, die ausgeführt werden soll, wenn dieser Befehl im TUI ausgeführt wird.
+
+```bash frame="none"
+/my-command
+```
+
+Benutzerdefinierte Befehle gibt es zusätzlich zu den integrierten Befehlen wie `/init`, `/undo`, `/redo`, `/share`, `/help`. [Mehr erfahren](/docs/tui#commands).
+
+---
+
+## Befehlsdateien erstellen
+
+Erstellen Sie Markdown-Dateien im Verzeichnis `commands/`, um benutzerdefinierte Befehle zu definieren.
+
+Erstellen Sie `.opencode/commands/test.md`:
+
+```md title=".opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+Der Frontmatter definiert Befehlseigenschaften. Der Inhalt wird zur Vorlage.
+
+Verwenden Sie den Befehl, indem Sie `/` folgen vom Befehlsnamen eingeben.
+
+```bash frame="none"
+"/test"
+```
+
+---
+
+## Konfiguration
+
+Sie können benutzerdefinierte Befehle über die OpenCode-Konfiguration hinzufügen oder indem Sie Markdown-Dateien im Verzeichnis `commands/` erstellen.
+
+---
+
+### JSON
+
+Verwenden Sie die Option `command` in Ihrem OpenCode [config](/docs/config):
+
+```json title="opencode.jsonc" {4-12}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    // This becomes the name of the command
+    "test": {
+      // This is the prompt that will be sent to the LLM
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      // This is shown as the description in the TUI
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+Jetzt können Sie diesen Befehl im TUI ausführen:
+
+```bash frame="none"
+/test
+```
+
+---
+
+### Markdown
+
+Sie können Befehle auch mithilfe von Markdown-Dateien definieren. Platzieren Sie sie in:
+
+- Global: `~/.config/opencode/commands/`
+- Pro Projekt: `.opencode/commands/`
+
+```markdown title="~/.config/opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+Der Name der Markdown-Datei wird zum Befehlsnamen. Zum Beispiel `test.md` lässt
+Du läufst:
+
+```bash frame="none"
+/test
+```
+
+---
+
+## Prompt-Konfiguration
+
+Die Eingabeaufforderungen für die benutzerdefinierten Befehle unterstützen mehrere spezielle Platzhalter und Syntax.
+
+---
+
+### Argumente
+
+Übergeben Sie Argumente an Befehle mithilfe des Platzhalters `$ARGUMENTS`.
+
+```md title=".opencode/commands/component.md"
+---
+description: Create a new component
+---
+
+Create a new React component named $ARGUMENTS with TypeScript support.
+Include proper typing and basic structure.
+```
+
+Führen Sie den Befehl mit Argumenten aus:
+
+```bash frame="none"
+/component Button
+```
+
+Und `$ARGUMENTS` wird durch `Button` ersetzt.
+
+Sie können auch über Positionsparameter auf einzelne Argumente zugreifen:
+
+- `$1` – Erstes Argument
+- `$2` – Zweites Argument
+- `$3` – Drittes Argument
+- Und so weiter...
+
+Zum Beispiel:
+
+```md title=".opencode/commands/create-file.md"
+---
+description: Create a new file with content
+---
+
+Create a file named $1 in the directory $2
+with the following content: $3
+```
+
+Führen Sie den Befehl aus:
+
+```bash frame="none"
+/create-file config.json src "{ \"key\": \"value\" }"
+```
+
+Dies ersetzt:
+
+- `$1` mit `config.json`
+- `$2` mit `src`
+- `$3` mit `{ "key": "value" }`
+
+---
+
+### Shell-Ausgabe
+
+Verwenden Sie _!`command`_, um die Ausgabe [bash command](/docs/tui#bash-commands) in Ihre Eingabeaufforderung einzufügen.
+
+So erstellen Sie beispielsweise einen benutzerdefinierten Befehl, der die Testabdeckung analysiert:
+
+```md title=".opencode/commands/analyze-coverage.md"
+---
+description: Analyze test coverage
+---
+
+Here are the current test results:
+!`npm test`
+
+Based on these results, suggest improvements to increase coverage.
+```
+
+Oder um die letzten Änderungen zu überprüfen:
+
+```md title=".opencode/commands/review-changes.md"
+---
+description: Review recent changes
+---
+
+Recent git commits:
+!`git log --oneline -10`
+
+Review these changes and suggest any improvements.
+```
+
+Befehle werden im Stammverzeichnis Ihres Projekts ausgeführt und ihre Ausgabe wird Teil der Eingabeaufforderung.
+
+---
+
+### Dateiverweise
+
+Fügen Sie Dateien in Ihren Befehl ein, indem Sie `@` folgend vom Dateinamen verwenden.
+
+```md title=".opencode/commands/review-component.md"
+---
+description: Review component
+---
+
+Review the component in @src/components/Button.tsx.
+Check for performance issues and suggest improvements.
+```
+
+Der Dateiinhalt wird automatisch in die Eingabeaufforderung einbezogen.
+
+---
+
+## Optionen
+
+Schauen wir uns die Konfigurationsmöglichkeiten im Detail an.
+
+---
+
+### Template
+
+Die Option `template` die Eingabeaufforderung, die an LLM gesendet wird, wenn der Befehl ausgeführt wird.
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes."
+    }
+  }
+}
+```
+
+Dies ist eine **erforderliche** Konfigurationsoption.
+
+---
+
+### Description
+
+Verwenden Sie die Option `description`, um eine kurze Beschreibung der Funktion des Befehls bereitzustellen.
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "description": "Run tests with coverage"
+    }
+  }
+}
+```
+
+Dies wird als Beschreibung im TUI angezeigt, wenn Sie den Befehl eingeben.
+
+---
+
+### Agent
+
+Verwenden Sie die `agent`-Konfiguration, um optional anzugeben, welche [agent](/docs/agents) diesen Befehl ausführen soll.
+Wenn es sich um einen [subagent](/docs/agents/#subagents) handelt, löst der Befehl standardmäßig einen Subagentenaufruf aus.
+Um dieses Verhalten zu deaktivieren, setzen Sie `subtask` auf `false`.
+
+```json title="opencode.json"
+{
+  "command": {
+    "review": {
+      "agent": "plan"
+    }
+  }
+}
+```
+
+Dies ist eine **optionale** Konfigurationsoption. Wenn nicht angegeben, wird standardmäßig Ihr aktueller Agent verwendet.
+
+---
+
+### Subtask
+
+Verwenden Sie den booleschen Wert `subtask`, um zu erzwingen, dass der Befehl einen [subagent](/docs/agents/#subagents)-Aufruf auslöst.
+Dies ist nützlich, wenn Sie möchten, dass der Befehl Ihren primären Kontext nicht verunreinigt und den Agenten dazu zwingt, als Subagent zu fungieren.
+auch wenn `mode` in der [agent](/docs/agents)-Konfiguration auf `primary` gesetzt ist.
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "subtask": true
+    }
+  }
+}
+```
+
+Dies ist eine **optionale** Konfigurationsoption.
+
+---
+
+### Model
+
+Verwenden Sie die `model`-Konfiguration, um das Standardmodell für diesen Befehl zu überschreiben.
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+Dies ist eine **optionale** Konfigurationsoption.
+
+---
+
+## Integriert
+
+OpenCode enthält mehrere integrierte Befehle wie `/init`, `/undo`, `/redo`, `/share`, `/help`; [mehr erfahren](/docs/tui#commands).
+
+:::note
+Benutzerdefinierte Befehle können integrierte Befehle überschreiben.
+:::
+
+Wenn Sie einen benutzerdefinierten Befehl mit demselben Namen definieren, überschreibt dieser den integrierten Befehl.

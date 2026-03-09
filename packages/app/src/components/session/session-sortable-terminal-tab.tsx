@@ -1,5 +1,5 @@
 import type { JSX } from "solid-js"
-import { Show } from "solid-js"
+import { Show, createEffect, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSortable } from "@thisbeyond/solid-dnd"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -20,6 +20,8 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
     menuPosition: { x: 0, y: 0 },
     blurEnabled: false,
   })
+  let input: HTMLInputElement | undefined
+  let blurFrame: number | undefined
 
   const isDefaultTitle = () => {
     const number = props.terminal.titleNumber
@@ -77,13 +79,6 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
     setStore("blurEnabled", false)
     setStore("title", props.terminal.title)
     setStore("editing", true)
-    setTimeout(() => {
-      const input = document.getElementById(`terminal-title-input-${props.terminal.id}`) as HTMLInputElement
-      if (!input) return
-      input.focus()
-      input.select()
-      setTimeout(() => setStore("blurEnabled", true), 100)
-    }, 10)
   }
 
   const save = () => {
@@ -114,9 +109,25 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
     setStore("menuOpen", true)
   }
 
+  createEffect(() => {
+    if (!store.editing) return
+    if (!input) return
+    input.focus()
+    input.select()
+    if (blurFrame !== undefined) cancelAnimationFrame(blurFrame)
+    blurFrame = requestAnimationFrame(() => {
+      blurFrame = undefined
+      setStore("blurEnabled", true)
+    })
+  })
+
+  onCleanup(() => {
+    if (blurFrame === undefined) return
+    cancelAnimationFrame(blurFrame)
+  })
+
   return (
     <div
-      // @ts-ignore
       use:sortable
       class="outline-none focus:outline-none focus-visible:outline-none"
       classList={{
@@ -153,7 +164,7 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
         <Show when={store.editing}>
           <div class="absolute inset-0 flex items-center px-3 bg-muted z-10 pointer-events-auto">
             <input
-              id={`terminal-title-input-${props.terminal.id}`}
+              ref={input}
               type="text"
               value={store.title}
               onInput={(e) => setStore("title", e.currentTarget.value)}
