@@ -14,12 +14,15 @@ import { Storage } from "@/storage/storage"
 import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
 import { type SystemError } from "bun"
+import { Log } from "../util/log"
 import type { Provider } from "@/provider/provider"
 
 export namespace MessageV2 {
   export function isMedia(mime: string) {
     return mime.startsWith("image/") || mime === "application/pdf"
   }
+
+  const log = Log.create({ service: "message-v2" })
 
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
   export const AbortedError = NamedError.create("MessageAbortedError", z.object({ message: z.string() }))
@@ -368,6 +371,7 @@ export namespace MessageV2 {
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
     variant: z.string().optional(),
+    flux: z.string().optional(),
   }).meta({
     ref: "UserMessage",
   })
@@ -437,6 +441,7 @@ export namespace MessageV2 {
     structured: z.any().optional(),
     variant: z.string().optional(),
     finish: z.string().optional(),
+    flux: z.string().optional(),
   }).meta({
     ref: "AssistantMessage",
   })
@@ -554,8 +559,51 @@ export namespace MessageV2 {
       return { type: "json", value: output as never }
     }
 
+    // Prepend knowledge pack messages as the first user messages the LLM sees.
+    // They are stored with flux:"knowledge" and would otherwise be skipped below.
+    // KP messages are loaded separately by prompt.ts (fromSession) and prepended
+    // to sessionMessages before this call, since filterCompacted stops at the
+    // compaction breakpoint before reaching KP messages (time_created=1,2,...).
+    const kpCount = input.filter((m) => m.info.flux === "knowledge").length
+    log.debug("KNOWLEDGE PACK toModelMessages", {
+      totalInput: input.length,
+      kpMessages: kpCount,
+      kpIds: input.filter((m) => m.info.flux === "knowledge").map((m) => m.info.id),
+    })
+    let kpPushed = 0
+    for (const msg of input) {
+      if (msg.info.flux !== "knowledge") continue
+      if (msg.parts.length === 0) continue
+      const textParts = msg.parts.filter((p) => p.type === "text") as TextPart[]
+      if (textParts.length === 0) continue
+      log.debug("KNOWLEDGE PACK prepending to model messages", {
+        id: msg.info.id,
+        agent: (msg.info as User).agent,
+        textLen: textParts[0]?.text?.length ?? 0,
+      })
+      result.push({
+        id: msg.info.id,
+        role: "user",
+        parts: textParts.map((p) => ({ type: "text" as const, text: p.text })),
+      })
+      kpPushed++
+    }
+    // Append a user message delimiter after all knowledge pack messages.
+    // Because providers like Anthropic merge consecutive user messages into one,
+    // all KP text parts land in a single user message. This marker signals the
+    // start of real user content, making the boundary between injected KP content
+    // and the first real user message unambiguous, regardless of model or tokenizer.
+    if (kpPushed > 0) {
+      result.push({
+        id: Identifier.ascending("message"),
+        role: "user",
+        parts: [{ type: "text" as const, text: "=== USER MESSAGE ===\n" }],
+      })
+    }
+
     for (const msg of input) {
       if (msg.parts.length === 0) continue
+      if (msg.info.flux) continue
 
       if (msg.info.role === "user") {
         const userMessage: UIMessage = {
@@ -809,18 +857,54 @@ export namespace MessageV2 {
   export async function filterCompacted(stream: AsyncIterable<MessageV2.WithParts>) {
     const result = [] as MessageV2.WithParts[]
     const completed = new Set<string>()
+
     for await (const msg of stream) {
+      // Knowledge pack messages (flux:"knowledge") are always prepended explicitly by
+      // prompt.ts via KnowledgePack.fromSession(). Never include them here — doing so
+      // causes duplicates in the [...kpMsgs, ...msgs] merge at prompt.ts:704.
+      if ((msg.info as User).flux === "knowledge") continue
+
+      const hasCompactionPart = msg.parts.some((part) => part.type === "compaction")
+      // Recognize assistant summary for breakpoint detection - finish is not required
+      // (collapse compaction may not set finish, but summary: true is sufficient)
+      const isAssistantSummary = msg.info.role === "assistant" && (msg.info as Assistant).summary === true
+
       result.push(msg)
-      if (
-        msg.info.role === "user" &&
-        completed.has(msg.info.id) &&
-        msg.parts.some((part) => part.type === "compaction")
-      )
-        break
-      if (msg.info.role === "assistant" && msg.info.summary && msg.info.finish && !msg.info.error)
-        completed.add(msg.info.parentID)
+
+      // Debug: log potential breakpoint candidates
+      // Upstream guard: do not mark errored summaries as completed breakpoints.
+      // Collapse compaction may not set finish, but summary: true is sufficient;
+      // however an errored summary must not be treated as a valid breakpoint.
+      if (isAssistantSummary && !msg.info.error) {
+        const parentID = (msg.info as Assistant).parentID
+        log.debug("COLLAPSE filterCompacted found summary", {
+          msgId: msg.info.id,
+          parentID,
+          completedBefore: Array.from(completed),
+        })
+        completed.add(parentID)
+      }
+
+      // Check if this is a compaction breakpoint
+      if (msg.info.role === "user" && hasCompactionPart) {
+        log.debug("COLLAPSE filterCompacted user with compaction part", {
+          msgId: msg.info.id,
+          inCompleted: completed.has(msg.info.id),
+          completedSet: Array.from(completed),
+        })
+        if (completed.has(msg.info.id)) {
+          log.debug("COLLAPSE filterCompacted BREAKPOINT", { id: msg.info.id })
+          break
+        }
+      }
     }
+
     result.reverse()
+    log.debug("COLLAPSE filterCompacted result", {
+      count: result.length,
+      firstId: result[0]?.info.id,
+      lastId: result[result.length - 1]?.info.id,
+    })
     return result
   }
 

@@ -3206,6 +3206,336 @@
         ]
       }
     },
+    "/session/{sessionID}/knowledge-packs": {
+      "get": {
+        "operationId": "session.knowledgePacks",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Session ID"
+          }
+        ],
+        "summary": "List knowledge packs",
+        "description": "Get all knowledge pack messages injected into a session.",
+        "responses": {
+          "200": {
+            "description": "Knowledge packs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "displayName": {
+                        "type": "string"
+                      },
+                      "version": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["id", "name", "displayName", "version"]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.knowledgePacks({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/knowledge-packs/available": {
+      "get": {
+        "operationId": "session.knowledgePacksAvailable",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Session ID"
+          }
+        ],
+        "summary": "List available knowledge packs",
+        "description": "Get all knowledge packs available in the library directory (~/.config/opencode/llm_knowledge_packs/).",
+        "responses": {
+          "200": {
+            "description": "Available knowledge packs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "displayName": {
+                        "type": "string"
+                      },
+                      "version": {
+                        "type": "string"
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": ["name", "displayName", "version", "enabled"]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.knowledgePacksAvailable({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/knowledge-packs/{name}/{version}": {
+      "post": {
+        "operationId": "session.knowledgePackAdd",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Session ID"
+          },
+          {
+            "in": "path",
+            "name": "name",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Knowledge pack name"
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Knowledge pack version"
+          }
+        ],
+        "summary": "Add a knowledge pack to session",
+        "description": "Inject a knowledge pack from the library into the session.",
+        "responses": {
+          "200": {
+            "description": "Knowledge pack added",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.knowledgePackAdd({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "session.knowledgePackRemove",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Session ID"
+          },
+          {
+            "in": "path",
+            "name": "name",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Knowledge pack name"
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Knowledge pack version"
+          }
+        ],
+        "summary": "Remove a knowledge pack from session",
+        "description": "Remove an injected knowledge pack from the session.",
+        "responses": {
+          "200": {
+            "description": "Knowledge pack removed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.knowledgePackRemove({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/session/{sessionID}/message/{messageID}/part/{partID}": {
       "delete": {
         "operationId": "part.delete",
@@ -7259,6 +7589,9 @@
           },
           "variant": {
             "type": "string"
+          },
+          "flux": {
+            "type": "string"
           }
         },
         "required": ["id", "sessionID", "role", "time", "agent", "model"]
@@ -7545,6 +7878,9 @@
             "type": "string"
           },
           "finish": {
+            "type": "string"
+          },
+          "flux": {
             "type": "string"
           }
         },
@@ -10593,11 +10929,128 @@
                 "description": "Enable pruning of old tool outputs (default: true)",
                 "type": "boolean"
               },
+              "method": {
+                "description": "Compaction method: 'standard' summarizes entire conversation, 'collapse' extracts oldest messages and creates summary at breakpoint, 'float' automatically sub-collapses oldest chains before evaluating context overflow (default: standard)",
+                "type": "string",
+                "enum": ["standard", "collapse", "float"]
+              },
+              "trigger": {
+                "description": "Trigger compaction at this fraction of total context (default: 0.85 = 85%)",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "extractRatio": {
+                "description": "For collapse mode: fraction of oldest tokens to extract and summarize (default: 0.65)",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "recentRatio": {
+                "description": "For collapse mode: fraction of newest tokens to use as reference context (default: 0.15)",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "summaryMaxTokens": {
+                "description": "For collapse mode: target token count for the summary output (default: 10000)",
+                "type": "number",
+                "minimum": 1000,
+                "maximum": 50000
+              },
+              "previousSummaries": {
+                "description": "For collapse mode: number of previous summaries to include for context merging (default: 3)",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 10
+              },
+              "insertTriggers": {
+                "description": "Whether to insert compaction trigger messages in the stream. Standard compaction needs triggers (default: true), collapse compaction does not (default: false)",
+                "type": "boolean"
+              },
+              "splitChain": {
+                "description": "For collapse mode: allow inserting breakpoints in the middle of chains (default: true). When false, breakpoints only occur at chain boundaries to preserve conversation flow.",
+                "type": "boolean"
+              },
+              "splitChainMinThreshold": {
+                "description": "For collapse mode with splitChain=true: minimum fraction of extractTarget that must be covered when rewinding to chain boundary before falling back to mid-chain split (default: 0.75). E.g. 0.75 means the rewind must still extract at least 75% of the token target to be accepted.",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "float": {
+                "description": "Float mode settings for automatic chain sub-collapse",
+                "type": "object",
+                "properties": {
+                  "chainThreshold": {
+                    "description": "Number of chains before triggering sub-collapse on oldest chain (default: 3)",
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 20
+                  },
+                  "minFloat": {
+                    "description": "Minimum fraction of context window that must be used before sub-collapse chains are evaluated (default: 0.6 = 60%). Sub-collapse is skipped entirely when context usage is below this threshold, and stops between chains if usage drops below it.",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "algorithm": {
+                    "description": "Sub-collapse algorithm: 'full' includes all context, 'bookend' focuses on user request + final response + tools, 'minimal' uses only final response (default: bookend)",
+                    "type": "string",
+                    "enum": ["full", "bookend", "minimal"]
+                  },
+                  "subCollapseSummaryMaxTokens": {
+                    "description": "Target token count for sub-collapse summaries (default: 5000)",
+                    "type": "number",
+                    "minimum": 500,
+                    "maximum": 20000
+                  }
+                }
+              },
               "reserved": {
                 "description": "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 9007199254740991
+              }
+            }
+          },
+          "knowledge": {
+            "description": "Knowledge pack settings",
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "description": "Enable knowledge pack injection (default: true)",
+                "type": "boolean"
+              },
+              "paths": {
+                "description": "Additional directories to scan for .yaml knowledge pack files",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "packs": {
+                "description": "Knowledge packs to enable or disable by default",
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "description": "Knowledge pack name",
+                      "type": "string"
+                    },
+                    "version": {
+                      "description": "Knowledge pack version",
+                      "type": "string"
+                    },
+                    "enabled": {
+                      "description": "Whether to enable this knowledge pack by default",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["name", "version", "enabled"]
+                }
               }
             }
           },

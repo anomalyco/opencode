@@ -13,6 +13,7 @@ import { fn } from "@/util/fn"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
+import { CompactionExtension } from "./compaction-extension"
 import { ProviderTransform } from "@/provider/transform"
 
 export namespace SessionCompaction {
@@ -30,6 +31,13 @@ export namespace SessionCompaction {
   const COMPACTION_BUFFER = 20_000
 
   export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
+    // Use collapse/float overflow check if method is collapse or float (uses configurable trigger)
+    const method = await CompactionExtension.getMethod()
+    if (method === "collapse" || method === "float") {
+      return CompactionExtension.isOverflow(input)
+    }
+
+    // Standard overflow check
     const config = await Config.get()
     if (config.compaction?.auto === false) return false
     const context = input.model.limit.context
@@ -105,7 +113,45 @@ export namespace SessionCompaction {
     abort: AbortSignal
     auto: boolean
     overflow?: boolean
-  }) {
+  }): Promise<"continue" | "stop"> {
+    // Route to collapse/float compaction if configured
+    const method = await CompactionExtension.getMethod()
+    log.info("COLLAPSE compacting", { method, sessionID: input.sessionID })
+
+    // For float mode, we use the collapse compaction but with prior sub-collapse
+    // The sub-collapse is handled in prompt.ts before isOverflow is called
+    if (method === "collapse" || method === "float") {
+      const result = await CompactionExtension.process(input)
+      Bus.publish(Event.Compacted, { sessionID: input.sessionID })
+      // For overflow-triggered compaction in collapse/float mode, inject the
+      // overflow explanation message so the user knows their media was too large.
+      if (result === "continue" && input.auto && input.overflow) {
+        const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
+        const continueMsg = await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: input.sessionID,
+          time: { created: Date.now() },
+          agent: userMessage.agent,
+          model: userMessage.model,
+        })
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: continueMsg.id,
+          sessionID: input.sessionID,
+          type: "text",
+          synthetic: true,
+          text: "The previous request exceeded the provider's size limit due to large media attachments. The conversation was compacted and media files were removed from context. If the user was asking about attached images or files, explain that the attachments were too large to process and suggest they try again with smaller or fewer files.\n\nContinue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.",
+          time: {
+            start: Date.now(),
+            end: Date.now(),
+          },
+        })
+      }
+      return result
+    }
+
+    // Standard compaction
     const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
 
     let messages = input.messages

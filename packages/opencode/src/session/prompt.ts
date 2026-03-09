@@ -12,6 +12,7 @@ import { Agent } from "../agent/agent"
 import { Provider } from "../provider/provider"
 import { type Tool as AITool, tool, jsonSchema, type ToolCallOptions, asSchema } from "ai"
 import { SessionCompaction } from "./compaction"
+import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
@@ -22,6 +23,7 @@ import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { defer } from "../util/defer"
+import { clone } from "remeda"
 import { ToolRegistry } from "../tool/registry"
 import { MCP } from "../mcp"
 import { LSP } from "../lsp"
@@ -45,6 +47,7 @@ import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncation"
+import { KnowledgePack } from "./knowledge-pack"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -291,6 +294,31 @@ export namespace SessionPrompt {
 
     let step = 0
     const session = await Session.get(sessionID)
+
+    // Inject knowledge packs as flux:knowledge messages at the beginning of the session
+    const cfg = await Config.get()
+    if (cfg.knowledge?.enabled !== false) {
+      const dirs = [KnowledgePack.defaultDir(), ...(cfg.knowledge?.paths ?? [])]
+      await KnowledgePack.inject({ sessionID, dirs })
+    }
+
+    // Auto-enable any knowledge packs declared in config with enabled: true
+    const configPacks = cfg.knowledge?.packs?.filter((p) => p.enabled) ?? []
+    if (configPacks.length > 0) {
+      const active = await KnowledgePack.fromSession(sessionID)
+      const activeKeys = new Set(active.map((msg) => (msg.info as MessageV2.User).agent))
+      await Promise.all(
+        configPacks
+          .filter((p) => !activeKeys.has(`kp:${p.name}@${p.version}`))
+          .map((p) => KnowledgePack.add({ sessionID, name: p.name, version: p.version })),
+      )
+    }
+
+    // Propagate manually-enabled knowledge packs from parent session into this subagent session
+    if (session.parentID) {
+      await KnowledgePack.copyFromParent({ parentSessionID: session.parentID, sessionID })
+    }
+
     while (true) {
       SessionStatus.set(sessionID, { type: "busy" })
       log.info("loop", { step, sessionID })
@@ -320,6 +348,26 @@ export namespace SessionPrompt {
         !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
         lastUser.id < lastAssistant.id
       ) {
+        // Run float pre-check before exiting so sub-collapse fires on complete chains (stop finish)
+        // even when we are not about to make another LLM call.
+        if (lastFinished && lastFinished.summary !== true) {
+          const { CompactionExtension } = await import("./compaction-extension")
+          const method = await CompactionExtension.getMethod()
+          if (method === "float") {
+            const stopModel = await Provider.getModel(lastUser.model.providerID, lastUser.model.modelID).catch(
+              () => null,
+            )
+            if (stopModel) {
+              await CompactionExtension.floatModePreCheck({
+                sessionID,
+                messages: msgs,
+                abort,
+                tokens: lastFinished.tokens,
+                contextLimit: stopModel.limit.context,
+              })
+            }
+          }
+        }
         log.info("exiting loop", { sessionID })
         break
       }
@@ -539,23 +587,76 @@ export namespace SessionPrompt {
         continue
       }
 
+      // Float mode pre-check: sub-collapse oldest chains before evaluating overflow
+      // This runs before isOverflow to reduce token count via high-fidelity chain summaries
+      const { CompactionExtension } = await import("./compaction-extension")
+      const method = await CompactionExtension.getMethod()
+      log.info("COLLAPSE prompt float check", {
+        sessionID,
+        method,
+        hasLastFinished: !!lastFinished,
+        lastFinishedSummary: lastFinished?.summary,
+        willRunPreCheck: method === "float" && lastFinished && lastFinished.summary !== true,
+      })
+      if (method === "float" && lastFinished && lastFinished.summary !== true) {
+        const floatResult = await CompactionExtension.floatModePreCheck({
+          sessionID,
+          messages: msgs,
+          abort,
+          tokens: lastFinished.tokens,
+          contextLimit: model.limit.context,
+        })
+        if (floatResult.subCollapsed) {
+          // Reload and re-filter messages after sub-collapse, then continue loop
+          // This ensures proper filtering is applied via filterCompacted()
+          log.info("COLLAPSE float mode sub-collapsed, restarting loop iteration", { sessionID })
+          continue
+        }
+      }
+
       // context overflow, needs compaction
+      const config = await Config.get()
       if (
         lastFinished &&
         lastFinished.summary !== true &&
         (await SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model }))
       ) {
-        await SessionCompaction.create({
-          sessionID,
-          agent: lastUser.agent,
-          model: lastUser.model,
-          auto: true,
-        })
-        continue
+        const insertTriggers = config.compaction?.insertTriggers ?? method === "standard"
+
+        if (insertTriggers) {
+          // Standard compaction: create trigger message, loop will process it
+          await SessionCompaction.create({
+            sessionID,
+            agent: lastUser.agent,
+            model: lastUser.model,
+            auto: true,
+          })
+          continue
+        } else {
+          // Collapse/Float compaction: directly call process without trigger
+          const result = await SessionCompaction.process({
+            messages: msgs,
+            parentID: lastUser.id,
+            abort,
+            sessionID,
+            auto: true,
+          })
+          if (result === "stop") break
+          continue
+        }
       }
 
       // normal processing
-      const agent = await Agent.get(lastUser.agent)
+      const agentBase = await Agent.get(lastUser.agent)
+      // Apply any agent prompt overrides from active knowledge packs.
+      // If a KP in this session declares `agent.<agentName>.prompt`, it replaces
+      // the agent's built-in system prompt for this loop iteration only — the
+      // global Agent registry is never mutated.
+      const kpAgentPrompts = await KnowledgePack.agentPrompts(sessionID)
+      const agent =
+        kpAgentPrompts[agentBase.name] !== undefined
+          ? { ...agentBase, prompt: kpAgentPrompts[agentBase.name] }
+          : agentBase
       const maxSteps = agent.steps ?? Infinity
       const isLastStep = step >= maxSteps
       msgs = await insertReminders({
@@ -625,6 +726,26 @@ export namespace SessionPrompt {
           sessionID: sessionID,
           messageID: lastUser.id,
         })
+      }
+
+      // Load knowledge pack messages separately — they sit at time_created=1,2,...
+      // which is BEFORE any compaction breakpoint, so filterCompacted never returns them.
+      // We must load them from the full unfiltered message list and prepend explicitly.
+      const kpMsgs = await KnowledgePack.fromSession(sessionID)
+      log.debug("KNOWLEDGE PACK session messages", {
+        sessionID,
+        count: kpMsgs.length,
+        ids: kpMsgs.map((m: MessageV2.WithParts) => m.info.id),
+        names: kpMsgs.map((m: MessageV2.WithParts) => (m.info as MessageV2.User).agent),
+      })
+
+      // Prepend knowledge-pack messages into the working array so they flow
+      // through the plugin transform hook and into toModelMessages.
+      // kpMsgs sit at time_created=1,2,... which is before any compaction
+      // breakpoint, so filterCompacted never returns them — we must inject
+      // them explicitly here.
+      if (kpMsgs.length > 0) {
+        msgs.unshift(...clone(kpMsgs))
       }
 
       // Ephemerally wrap queued user messages with a reminder to stay on track

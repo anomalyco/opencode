@@ -103,6 +103,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     })
 
     const sdk = useSDK()
+    const fullSyncedSessions = new Set<string>()
 
     sdk.event.listen((e) => {
       const event = e.details
@@ -194,6 +195,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
 
         case "session.deleted": {
+          if (!store.session) break
           const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
           if (result.found) {
             setStore(
@@ -206,6 +208,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
         case "session.updated": {
+          if (!store.session) break
           const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
           if (result.found) {
             setStore("session", result.index, reconcile(event.properties.info))
@@ -222,6 +225,23 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
         case "session.status": {
           setStore("session_status", event.properties.sessionID, event.properties.status)
+          break
+        }
+
+        case "session.compacted": {
+          // Compaction modified messages, invalidate cache and reload
+          const sessionID = event.properties.sessionID
+          fullSyncedSessions.delete(sessionID)
+          sdk.client.session.messages({ sessionID, limit: 100 }).then((messages) => {
+            setStore(
+              produce((draft) => {
+                draft.message[sessionID] = messages.data!.map((x) => x.info)
+                for (const message of messages.data!) {
+                  draft.part[message.info.id] = message.parts
+                }
+              }),
+            )
+          })
           break
         }
 
@@ -266,6 +286,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
         case "message.removed": {
           const messages = store.message[event.properties.sessionID]
+          if (!messages) break
           const result = Binary.search(messages, event.properties.messageID, (m) => m.id)
           if (result.found) {
             setStore(
@@ -319,6 +340,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
         case "message.part.removed": {
           const parts = store.part[event.properties.messageID]
+          if (!parts) break
           const result = Binary.search(parts, event.properties.partID, (p) => p.id)
           if (result.found)
             setStore(
@@ -431,7 +453,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       bootstrap()
     })
 
-    const fullSyncedSessions = new Set<string>()
     const result = {
       data: store,
       set: setStore,

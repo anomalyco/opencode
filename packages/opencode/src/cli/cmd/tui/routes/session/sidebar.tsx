@@ -1,5 +1,5 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, For, Show, Switch, Match } from "solid-js"
+import { createMemo, createResource, createSignal, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
@@ -11,9 +11,12 @@ import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
+import { useSDK } from "@tui/context/sdk"
+import { usePromptRef } from "../../context/prompt"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
+  const sdk = useSDK()
   const { theme } = useTheme()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
@@ -60,6 +63,77 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     }
   })
 
+  type KPEntry = { id?: string; name: string; displayName: string; version: string; enabled: boolean }
+
+  // Whether the KP section is expanded to show all available packs
+  // Default true: new sessions show the full library so users can add packs immediately
+  const [kpExpanded, setKpExpanded] = createSignal(true)
+
+  // sdk transport helper — routes through Unix socket, not bare fetch
+  const sdkGet = (url: string, path: Record<string, string>) => (sdk.client as any).client.get({ url, path })
+  const sdkPost = (url: string, path: Record<string, string>) => (sdk.client as any).client.post({ url, path })
+  const sdkDelete = (url: string, path: Record<string, string>) => (sdk.client as any).client.delete({ url, path })
+
+  // Count of knowledge-pack messages in the sync store — changes whenever the server
+  // injects or removes a KP (message.updated / message.removed events), driving a refetch.
+  const kpMessageCount = createMemo(
+    () => (sync.data.message[props.sessionID] ?? []).filter((m) => (m as any).flux === "knowledge").length,
+  )
+
+  // When collapsed: fetch only active packs (fast, session-scoped)
+  const [activePacks, { refetch: refetchActive }] = createResource(
+    () => ({ sessionID: props.sessionID, kpCount: kpMessageCount() }),
+    async ({ sessionID }) => {
+      const res = await sdkGet("/session/{sessionID}/knowledge-packs", { sessionID })
+      if (res.error) return [] as KPEntry[]
+      return (res.data as { id: string; name: string; displayName: string; version?: string }[]).map(
+        (p) => ({ ...p, enabled: true }) as KPEntry,
+      )
+    },
+  )
+
+  // When expanded: fetch all available packs with enabled flag (reads library dir).
+  // Depends on activePacks() so it re-fetches whenever active packs change.
+  const [allPacks, { refetch: refetchAll }] = createResource(
+    () => (kpExpanded() ? { sessionID: props.sessionID, active: activePacks() } : null),
+    async ({ sessionID }) => {
+      const res = await sdkGet("/session/{sessionID}/knowledge-packs/available", { sessionID })
+      if (res.error) return [] as KPEntry[]
+      return res.data as KPEntry[]
+    },
+  )
+
+  const visiblePacks = () => (kpExpanded() ? (allPacks() ?? []) : (activePacks() ?? []))
+
+  function togglePack(name: string, version: string, enabled: boolean) {
+    const sessionID = props.sessionID
+    // Fire-and-forget the SDK call, then refetch once the server responds.
+    // The refetch is deferred with setTimeout so the DOM update happens
+    // outside opentui's mouse event processing — avoiding the race that
+    // destroys renderables mid-event and corrupts focus state.
+    const req = enabled
+      ? sdkDelete("/session/{sessionID}/knowledge-packs/{name}/{version}", { sessionID, name, version })
+      : sdkPost("/session/{sessionID}/knowledge-packs/{name}/{version}", { sessionID, name, version })
+    req.then(() => setTimeout(() => refetchActive(), 1))
+  }
+
+  const promptRef = usePromptRef()
+
+  // After any sidebar mouse interaction opentui clears currentFocusedRenderable
+  // because sidebar box elements are not focusable renderables. The native
+  // layer may also do post-processing (hover recheck, mouseUp dispatch) after
+  // the JS callback returns, so a synchronous focus() can be overwritten.
+  // Use setTimeout like the dialog system does, and schedule a second check
+  // to catch focus loss from async re-renders triggered by resource refetch.
+  function refocusPrompt() {
+    setTimeout(() => {
+      promptRef.current?.focus()
+    }, 1)
+    setTimeout(() => {
+      if (!promptRef.current?.focused) promptRef.current?.focus()
+    }, 50)
+  }
+
   const directory = useDirectory()
   const kv = useKV()
 
@@ -102,6 +176,13 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               <text fg={theme.text}>
                 <b>Context</b>
               </text>
+              <text fg={theme.textMuted}>
+                compact{" "}
+                {sync.data.config.compaction?.auto === false
+                  ? "disabled"
+                  : kv.get("compaction_method", sync.data.config.compaction?.method ?? "standard")}
+              </text>
+
               <text fg={theme.textMuted}>{context()?.tokens ?? 0} tokens</text>
               <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
               <text fg={theme.textMuted}>{cost()} spent</text>
@@ -111,7 +192,10 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 <box
                   flexDirection="row"
                   gap={1}
-                  onMouseDown={() => mcpEntries().length > 2 && setExpanded("mcp", !expanded.mcp)}
+                  onMouseDown={() => {
+                    mcpEntries().length > 2 && setExpanded("mcp", !expanded.mcp)
+                    refocusPrompt()
+                  }}
                 >
                   <Show when={mcpEntries().length > 2}>
                     <text fg={theme.text}>{expanded.mcp ? "▼" : "▶"}</text>
@@ -168,10 +252,53 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               </box>
             </Show>
             <box>
+              <box flexDirection="row" gap={1} justifyContent="space-between">
+                <text fg={theme.text}>
+                  <b>Knowledge Packs</b>
+                </text>
+                <text
+                  fg={theme.textMuted}
+                  onMouseDown={() => {
+                    setKpExpanded(!kpExpanded())
+                    if (!kpExpanded()) refetchAll()
+                    refocusPrompt()
+                  }}
+                >
+                  {kpExpanded() ? "−" : "+"}
+                </text>
+              </box>
+
+              <For each={visiblePacks()}>
+                {(kp) => (
+                  <box
+                    flexDirection="row"
+                    gap={1}
+                    onMouseDown={() => {
+                      togglePack(kp.name, kp.version, kp.enabled)
+                      refocusPrompt()
+                    }}
+                  >
+                    <text flexShrink={0} style={{ fg: kp.enabled ? theme.success : theme.textMuted }}>
+                      {kp.enabled ? "•" : "◦"}
+                    </text>
+                    <text fg={kp.enabled ? theme.text : theme.textMuted} wrapMode="word">
+                      {kp.displayName}
+                      <Show when={kp.version}>
+                        <span style={{ fg: theme.textMuted }}> {kp.version}</span>
+                      </Show>
+                    </text>
+                  </box>
+                )}
+              </For>
+            </box>
+            <box>
               <box
                 flexDirection="row"
                 gap={1}
-                onMouseDown={() => sync.data.lsp.length > 2 && setExpanded("lsp", !expanded.lsp)}
+                onMouseDown={() => {
+                  sync.data.lsp.length > 2 && setExpanded("lsp", !expanded.lsp)
+                  refocusPrompt()
+                }}
               >
                 <Show when={sync.data.lsp.length > 2}>
                   <text fg={theme.text}>{expanded.lsp ? "▼" : "▶"}</text>
@@ -215,7 +342,10 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 <box
                   flexDirection="row"
                   gap={1}
-                  onMouseDown={() => todo().length > 2 && setExpanded("todo", !expanded.todo)}
+                  onMouseDown={() => {
+                    todo().length > 2 && setExpanded("todo", !expanded.todo)
+                    refocusPrompt()
+                  }}
                 >
                   <Show when={todo().length > 2}>
                     <text fg={theme.text}>{expanded.todo ? "▼" : "▶"}</text>
@@ -234,7 +364,10 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 <box
                   flexDirection="row"
                   gap={1}
-                  onMouseDown={() => diff().length > 2 && setExpanded("diff", !expanded.diff)}
+                  onMouseDown={() => {
+                    diff().length > 2 && setExpanded("diff", !expanded.diff)
+                    refocusPrompt()
+                  }}
                 >
                   <Show when={diff().length > 2}>
                     <text fg={theme.text}>{expanded.diff ? "▼" : "▶"}</text>
@@ -288,7 +421,13 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                   <text fg={theme.text}>
                     <b>Getting started</b>
                   </text>
-                  <text fg={theme.textMuted} onMouseDown={() => kv.set("dismissed_getting_started", true)}>
+                  <text
+                    fg={theme.textMuted}
+                    onMouseDown={() => {
+                      kv.set("dismissed_getting_started", true)
+                      refocusPrompt()
+                    }}
+                  >
                     ✕
                   </text>
                 </box>

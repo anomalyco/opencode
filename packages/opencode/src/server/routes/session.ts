@@ -4,6 +4,7 @@ import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
 import { Session } from "../../session"
 import { MessageV2 } from "../../session/message-v2"
+import { KnowledgePack } from "../../session/knowledge-pack"
 import { SessionPrompt } from "../../session/prompt"
 import { SessionCompaction } from "../../session/compaction"
 import { SessionRevert } from "../../session/revert"
@@ -16,8 +17,60 @@ import { Log } from "../../util/log"
 import { PermissionNext } from "@/permission/next"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { SessionProxyMiddleware } from "../../control-plane/session-proxy-middleware"
+import { Config } from "../../config/config"
 
 const log = Log.create({ service: "server" })
+
+type KPEntry = { name: string; version: string; enabled: boolean }
+
+/**
+ * When the user ADDS a knowledge pack via the sidebar we must ensure the
+ * local project config reflects the full desired pack list.
+ *
+ * opencode does not merge the `knowledge.packs` array between global and
+ * project configs — once the project config defines that key the global
+ * array is completely ignored.  So before writing any local change we first
+ * mirror every globally-enabled pack into the project file, then apply the
+ * addition on top.  This matches the behaviour of `--kp-add` in the
+ * utils/coder CLI tool.
+ */
+async function addProjectKnowledgePack(name: string, version: string) {
+  const [global, project] = await Promise.all([Config.getGlobal(), Config.getProject()])
+  // Start from whatever the project file already has.
+  const local: KPEntry[] = project.knowledge?.packs ?? []
+  const byKey = new Map(local.map((p) => [`${p.name}@${p.version}`, p]))
+  // Mirror globally-enabled packs that are not yet in the project file.
+  for (const gp of global.knowledge?.packs ?? []) {
+    if (!gp.enabled) continue
+    const key = `${gp.name}@${gp.version}`
+    if (!byKey.has(key)) {
+      byKey.set(key, { name: gp.name, version: gp.version, enabled: true })
+      log.info("knowledge pack: mirroring global pack to project config", { name: gp.name, version: gp.version })
+    }
+  }
+  // Add the requested pack (or re-enable if already present but disabled).
+  const key = `${name}@${version}`
+  byKey.set(key, { name, version, enabled: true })
+  await Config.update({ knowledge: { packs: [...byKey.values()] } })
+}
+
+/**
+ * When the user REMOVES a knowledge pack via the sidebar we only touch the
+ * project config file — we do NOT mirror global packs, because the user only
+ * asked to remove one specific pack.  The entry is deleted entirely (not
+ * marked disabled) so it cleanly disappears from future sessions.
+ *
+ * This matches the behaviour of `--kp-remove` in the utils/coder CLI tool.
+ */
+async function removeProjectKnowledgePack(name: string, version: string) {
+  const project = await Config.getProject()
+  const existing = project.knowledge?.packs
+  if (!existing?.length) return
+  const packs = existing.filter((p) => !(p.name === name && p.version === version))
+  if (packs.length === existing.length) return
+  await Config.update({ knowledge: { packs } })
+}
 
 export const SessionRoutes = lazy(() =>
   new Hono()
@@ -616,6 +669,174 @@ export const SessionRoutes = lazy(() =>
           messageID: params.messageID,
         })
         return c.json(message)
+      },
+    )
+    .get(
+      "/:sessionID/knowledge-packs",
+      describeRoute({
+        summary: "List knowledge packs",
+        description: "Get all knowledge pack messages injected into a session.",
+        operationId: "session.knowledgePacks",
+        responses: {
+          200: {
+            description: "Knowledge packs",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.array(
+                    z.object({
+                      id: z.string(),
+                      name: z.string(),
+                      displayName: z.string(),
+                      version: z.string(),
+                    }),
+                  ),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: z.string().meta({ description: "Session ID" }),
+        }),
+      ),
+      async (c) => {
+        const { sessionID } = c.req.valid("param")
+        const [msgs, available] = await Promise.all([KnowledgePack.fromSession(sessionID), KnowledgePack.available()])
+        const library = new Map(available.map((p) => [p.name + "@" + p.version, p]))
+        const result = msgs.map((msg) => {
+          const user = msg.info as MessageV2.User
+          const key = user.agent.startsWith("kp:") ? user.agent.slice(3) : user.agent
+          const pack = library.get(key)
+          const [name, version] = key.split("@")
+          return {
+            id: msg.info.id,
+            name,
+            displayName: pack?.displayName ?? pack?.name ?? name,
+            version: pack?.version ?? version,
+          }
+        })
+        return c.json(result)
+      },
+    )
+    .get(
+      "/:sessionID/knowledge-packs/available",
+      describeRoute({
+        summary: "List available knowledge packs",
+        description:
+          "Get all knowledge packs available in the library directory (~/.config/opencode/llm_knowledge_packs/).",
+        operationId: "session.knowledgePacksAvailable",
+        responses: {
+          200: {
+            description: "Available knowledge packs",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.array(
+                    z.object({
+                      name: z.string(),
+                      displayName: z.string(),
+                      version: z.string(),
+                      enabled: z.boolean(),
+                    }),
+                  ),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: z.string().meta({ description: "Session ID" }),
+        }),
+      ),
+      async (c) => {
+        const { sessionID } = c.req.valid("param")
+        const [available, active] = await Promise.all([KnowledgePack.available(), KnowledgePack.fromSession(sessionID)])
+        const activeKeys = new Set(
+          active.map((msg) => {
+            const user = msg.info as MessageV2.User
+            return user.agent.startsWith("kp:") ? user.agent.slice(3) : user.agent
+          }),
+        )
+        return c.json(
+          available.map((p) => ({
+            name: p.name,
+            displayName: p.displayName ?? p.name,
+            version: p.version,
+            enabled: activeKeys.has(p.name + "@" + p.version),
+          })),
+        )
+      },
+    )
+    .post(
+      "/:sessionID/knowledge-packs/:name/:version",
+      describeRoute({
+        summary: "Add a knowledge pack to session",
+        description: "Inject a knowledge pack from the library into the session.",
+        operationId: "session.knowledgePackAdd",
+        responses: {
+          200: {
+            description: "Knowledge pack added",
+            content: { "application/json": { schema: resolver(z.boolean()) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: z.string().meta({ description: "Session ID" }),
+          name: z.string().meta({ description: "Knowledge pack name" }),
+          version: z.string().meta({ description: "Knowledge pack version" }),
+        }),
+      ),
+      async (c) => {
+        const { sessionID, name, version } = c.req.valid("param")
+        await KnowledgePack.add({ sessionID, name, version })
+        // Persist the addition to the local project config so future sessions
+        // also start with this pack enabled.  Global packs are mirrored into
+        // the project file first so they are not silently dropped.
+        await addProjectKnowledgePack(name, version)
+        return c.json(true)
+      },
+    )
+    .delete(
+      "/:sessionID/knowledge-packs/:name/:version",
+      describeRoute({
+        summary: "Remove a knowledge pack from session",
+        description: "Remove an injected knowledge pack from the session.",
+        operationId: "session.knowledgePackRemove",
+        responses: {
+          200: {
+            description: "Knowledge pack removed",
+            content: { "application/json": { schema: resolver(z.boolean()) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: z.string().meta({ description: "Session ID" }),
+          name: z.string().meta({ description: "Knowledge pack name" }),
+          version: z.string().meta({ description: "Knowledge pack version" }),
+        }),
+      ),
+      async (c) => {
+        const { sessionID, name, version } = c.req.valid("param")
+        await KnowledgePack.remove({ sessionID, name, version })
+        // Persist the removal to the local project config (entry deleted
+        // entirely, no global mirroring — matches --kp-remove behaviour).
+        await removeProjectKnowledgePack(name, version)
+        return c.json(true)
       },
     )
     .delete(

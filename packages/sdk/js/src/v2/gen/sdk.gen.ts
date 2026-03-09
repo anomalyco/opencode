@@ -122,6 +122,14 @@ import type {
   SessionGetResponses,
   SessionInitErrors,
   SessionInitResponses,
+  SessionKnowledgePackAddErrors,
+  SessionKnowledgePackAddResponses,
+  SessionKnowledgePackRemoveErrors,
+  SessionKnowledgePackRemoveResponses,
+  SessionKnowledgePacksAvailableErrors,
+  SessionKnowledgePacksAvailableResponses,
+  SessionKnowledgePacksErrors,
+  SessionKnowledgePacksResponses,
   SessionListResponses,
   SessionMessageErrors,
   SessionMessageResponses,
@@ -1941,6 +1949,158 @@ export class Session2 extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<SessionMessageResponses, SessionMessageErrors, ThrowOnError>({
       url: "/session/{sessionID}/message/{messageID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List knowledge packs
+   *
+   * Get all knowledge pack messages injected into a session.
+   */
+  public knowledgePacks<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SessionKnowledgePacksResponses,
+      SessionKnowledgePacksErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/knowledge-packs",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List available knowledge packs
+   *
+   * Get all knowledge packs available in the library directory (~/.config/opencode/llm_knowledge_packs/).
+   */
+  public knowledgePacksAvailable<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SessionKnowledgePacksAvailableResponses,
+      SessionKnowledgePacksAvailableErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/knowledge-packs/available",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Remove a knowledge pack from session
+   *
+   * Remove an injected knowledge pack from the session.
+   */
+  public knowledgePackRemove<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      name: string
+      version: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "name" },
+            { in: "path", key: "version" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      SessionKnowledgePackRemoveResponses,
+      SessionKnowledgePackRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/knowledge-packs/{name}/{version}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Add a knowledge pack to session
+   *
+   * Inject a knowledge pack from the library into the session.
+   */
+  public knowledgePackAdd<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      name: string
+      version: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "name" },
+            { in: "path", key: "version" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionKnowledgePackAddResponses,
+      SessionKnowledgePackAddErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/knowledge-packs/{name}/{version}",
       ...options,
       ...params,
     })

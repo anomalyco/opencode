@@ -743,6 +743,109 @@ export namespace Session {
     },
   )
 
+  /**
+   * Copy a user message to a new position between afterId and beforeId.
+   *
+   * Used when a mid-chain compaction split leaves orphaned assistant messages:
+   * a duplicate of the original chain's user message is inserted just before
+   * the orphaned tail so that detectChains can find it as a proper chain start.
+   *
+   * All parts from the source message are copied with new IDs that sort between
+   * the same anchors.
+   */
+  export const copyUserMessage = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      source: MessageV2.WithParts,
+      afterId: z.string(),
+      beforeId: z.string().optional(),
+    }),
+    async (input) => {
+      const { messageID, partID: firstPartID } = Identifier.insertCopy(input.afterId, input.beforeId)
+
+      const newInfo: MessageV2.User = {
+        ...(input.source.info as MessageV2.User),
+        id: messageID,
+        sessionID: input.sessionID,
+        time: { created: Identifier.timestamp(messageID) },
+      }
+
+      await updateMessage(newInfo)
+
+      // Copy all parts with new IDs sorted after the new message ID
+      let prevPartId = messageID
+      for (let i = 0; i < input.source.parts.length; i++) {
+        const srcPart = input.source.parts[i]
+        const newPartId = i === 0 ? firstPartID : Identifier.insert(prevPartId, input.beforeId, "part")
+        const newPart: MessageV2.Part = {
+          ...srcPart,
+          id: newPartId,
+          messageID,
+          sessionID: input.sessionID,
+        }
+        await updatePart(newPart)
+        prevPartId = newPartId
+      }
+
+      log.info("COLLAPSE copyUserMessage inserted duplicate chain anchor", {
+        sessionID: input.sessionID,
+        sourceId: input.source.info.id,
+        newId: messageID,
+        afterId: input.afterId,
+        beforeId: input.beforeId ?? "(none)",
+        partsCopied: input.source.parts.length,
+      })
+
+      return messageID
+    },
+  )
+
+  /**
+   * Re-parent a chain of orphaned assistant messages to a new parent.
+   *
+   * When a mid-chain compaction split is performed, assistant messages that
+   * were children of a now-extracted user message need to be re-parented to
+   * a new duplicate user message. This updates the parentID field on all
+   * assistant messages in the session that point to oldParentID and were
+   * created after afterTimestamp.
+   */
+  export const reparentChain = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      oldParentID: z.string(),
+      newParentID: z.string(),
+      afterTimestamp: z.number(),
+    }),
+    async (input) => {
+      // Load all messages in session and find orphaned ones matching criteria
+      const msgs = await messages({ sessionID: input.sessionID })
+      const orphans = msgs.filter(
+        (m) =>
+          m.info.role === "assistant" &&
+          (m.info as MessageV2.Assistant).parentID === input.oldParentID &&
+          m.info.time.created > input.afterTimestamp,
+      )
+
+      for (const orphan of orphans) {
+        const updated: MessageV2.Assistant = {
+          ...(orphan.info as MessageV2.Assistant),
+          parentID: input.newParentID,
+        }
+        await updateMessage(updated)
+      }
+
+      log.info("COLLAPSE reparentChain updated orphaned messages", {
+        sessionID: input.sessionID,
+        oldParentID: input.oldParentID,
+        newParentID: input.newParentID,
+        afterTimestamp: input.afterTimestamp,
+        count: orphans.length,
+      })
+
+      return orphans.length
+    },
+  )
+
   const UpdatePartInput = MessageV2.Part
 
   export const updatePart = fn(UpdatePartInput, async (part) => {
