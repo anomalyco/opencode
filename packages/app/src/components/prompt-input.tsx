@@ -55,6 +55,7 @@ import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
+import { attachFiles } from "./prompt-input/attach-files"
 
 interface PromptInputProps {
   class?: string
@@ -1177,22 +1178,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           onRemove={removeImageAttachment}
           removeLabel={language.t("prompt.attachment.remove")}
         />
-        <div
-          class="relative"
-          onMouseDown={(e) => {
-            const target = e.target
-            if (!(target instanceof HTMLElement)) return
-            if (
-              target.closest(
-                '[data-action="prompt-attach"], [data-action="prompt-submit"], [data-action="prompt-permissions"]',
-              )
-            ) {
-              return
-            }
-            editorRef?.focus()
-          }}
-        >
+        <div class="relative">
           <div class="relative max-h-[240px] overflow-y-auto no-scrollbar" ref={(el) => (scrollRef = el)}>
+            {/* biome-ignore lint/a11y/useSemanticElements: rich text prompt input requires contentEditable */}
             <div
               data-component="prompt-input"
               ref={(el) => {
@@ -1201,8 +1189,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               }}
               role="textbox"
               aria-multiline="true"
+              tabIndex={0}
+              contentEditable
               aria-label={placeholder()}
-              contenteditable="true"
               autocapitalize={store.mode === "normal" ? "sentences" : "off"}
               autocorrect={store.mode === "normal" ? "on" : "off"}
               spellcheck={store.mode === "normal"}
@@ -1234,11 +1223,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             <input
               ref={fileInputRef}
               type="file"
+              multiple
               accept={ACCEPTED_FILE_TYPES.join(",")}
               class="hidden"
               onChange={(e) => {
-                const file = e.currentTarget.files?.[0]
-                if (file) addImageAttachment(file)
+                void attachFiles(e.currentTarget.files, addImageAttachment)
                 e.currentTarget.value = ""
               }}
             />

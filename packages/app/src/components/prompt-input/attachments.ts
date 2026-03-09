@@ -38,22 +38,27 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
   const addImageAttachment = async (file: File) => {
     if (!ACCEPTED_FILE_TYPES.includes(file.type)) return
 
-    const reader = new FileReader()
-    reader.onload = () => {
-      const editor = input.editor()
-      if (!editor) return
-      const dataUrl = reader.result as string
-      const attachment: ImageAttachmentPart = {
-        type: "image",
-        id: uuid(),
-        filename: file.name,
-        mime: file.type,
-        dataUrl,
+    await new Promise<void>((resolve) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const editor = input.editor()
+        if (!editor) return resolve()
+        const dataUrl = reader.result as string
+        const attachment: ImageAttachmentPart = {
+          type: "image",
+          id: uuid(),
+          filename: file.name,
+          mime: file.type,
+          dataUrl,
+        }
+        const cursorPosition = prompt.cursor() ?? getCursorPosition(editor)
+        prompt.set([...prompt.current(), attachment], cursorPosition)
+        resolve()
       }
-      const cursorPosition = prompt.cursor() ?? getCursorPosition(editor)
-      prompt.set([...prompt.current(), attachment], cursorPosition)
-    }
-    reader.readAsDataURL(file)
+      reader.onerror = () => resolve()
+      reader.onabort = () => resolve()
+      reader.readAsDataURL(file)
+    })
   }
 
   const removeImageAttachment = (id: string) => {
