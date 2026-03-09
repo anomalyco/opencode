@@ -480,7 +480,6 @@ export const dict = {
   "workspace.cost.deletedSuffix": "(محذوف)",
   "workspace.cost.empty": "لا توجد بيانات استخدام متاحة للفترة المحددة.",
   "workspace.cost.subscriptionShort": "اشتراك",
-  "workspace.cost.liteShort": "lite",
 
   "workspace.keys.title": "مفاتيح API",
   "workspace.keys.subtitle": "إدارة مفاتيح API الخاصة بك للوصول إلى خدمات opencode.",

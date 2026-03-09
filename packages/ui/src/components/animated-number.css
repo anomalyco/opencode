@@ -9,19 +9,20 @@
     display: inline-flex;
     flex-direction: row-reverse;
     align-items: baseline;
-    justify-content: flex-end;
+    justify-content: flex-start;
     line-height: inherit;
     width: var(--animated-number-width, 1ch);
-    overflow: hidden;
-    transition: width var(--tool-motion-spring-ms, 560ms) var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1));
+    overflow: clip;
+    transition: width var(--tool-motion-spring-ms, 800ms) var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1));
   }
 
   [data-slot="animated-number-digit"] {
     display: inline-block;
+    flex-shrink: 0;
     width: 1ch;
     height: 1em;
     line-height: 1em;
-    overflow: hidden;
+    overflow: clip;
     vertical-align: baseline;
     -webkit-mask-image: linear-gradient(
       to bottom,
@@ -46,7 +47,7 @@
     flex-direction: column;
     transform: translateY(calc(var(--animated-number-offset, 10) * -1em));
     transition-property: transform;
-    transition-duration: var(--animated-number-duration, 560ms);
+    transition-duration: var(--animated-number-duration, 600ms);
     transition-timing-function: var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1));
   }
 

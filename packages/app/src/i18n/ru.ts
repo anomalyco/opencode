@@ -514,6 +514,7 @@ export const dict = {
   "session.todo.collapse": "Свернуть",
   "session.todo.expand": "Развернуть",
 
+  "session.new.title": "Создавайте что угодно",
   "session.new.worktree.main": "Основная ветка",
   "session.new.worktree.mainWithBranch": "Основная ветка ({{branch}})",
   "session.new.worktree.create": "Создать новый worktree",

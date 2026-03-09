@@ -7,7 +7,7 @@ import {
   openSharePopover,
   withSession,
 } from "../actions"
-import { sessionItemSelector, inlineInputSelector } from "../selectors"
+import { sessionItemSelector, inlineInputSelector, sessionTimelineHeaderSelector } from "../selectors"
 
 const shareDisabled = process.env.OPENCODE_DISABLE_SHARE === "true" || process.env.OPENCODE_DISABLE_SHARE === "1"
 
@@ -39,12 +39,14 @@ test("session can be renamed via header menu", async ({ page, sdk, gotoSession }
   await withSession(sdk, originalTitle, async (session) => {
     await seedMessage(sdk, session.id)
     await gotoSession(session.id)
-    await expect(page.getByRole("heading", { level: 1 }).first()).toHaveText(originalTitle)
+    await expect(page.locator(sessionTimelineHeaderSelector).getByRole("heading", { level: 1 }).first()).toHaveText(
+      originalTitle,
+    )
 
     const menu = await openSessionMoreMenu(page, session.id)
     await clickMenuItem(menu, /rename/i)
 
-    const input = page.locator(".scroll-view__viewport").locator(inlineInputSelector).first()
+    const input = page.locator(sessionTimelineHeaderSelector).locator(inlineInputSelector).first()
     await expect(input).toBeVisible()
     await expect(input).toBeFocused()
     await input.fill(renamedTitle)
@@ -61,7 +63,9 @@ test("session can be renamed via header menu", async ({ page, sdk, gotoSession }
       )
       .toBe(renamedTitle)
 
-    await expect(page.getByRole("heading", { level: 1 }).first()).toHaveText(renamedTitle)
+    await expect(page.locator(sessionTimelineHeaderSelector).getByRole("heading", { level: 1 }).first()).toHaveText(
+      renamedTitle,
+    )
   })
 })
 

@@ -316,6 +316,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       time: { created: Date.now() },
       agent,
       model,
+      variant,
     }
 
     const addOptimisticMessage = () =>
