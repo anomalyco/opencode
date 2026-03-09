@@ -108,6 +108,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       abort.abort()
       sse?.abort()
       if (timer) clearTimeout(timer)
+      queue.length = 0
     })
 
     return {
