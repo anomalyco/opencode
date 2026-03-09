@@ -932,9 +932,15 @@ function getSyntaxRules(theme: Theme) {
       },
     },
     {
-      scope: ["markup.raw", "markup.raw.block"],
+      scope: ["markup.raw"],
       style: {
         foreground: theme.markdownCode,
+      },
+    },
+    {
+      scope: ["markup.raw.block", "markup.raw.block.markdown", "markup.fenced_code.block"],
+      style: {
+        foreground: theme.markdownCodeBlock,
       },
     },
     {
