@@ -22,6 +22,7 @@ import { Flag } from "../flag/flag"
 import { Command } from "../command"
 import { Global } from "../global"
 import { WorkspaceContext } from "../control-plane/workspace-context"
+import { WorkspaceRouterMiddleware } from "../control-plane/workspace-router-middleware"
 import { ProjectRoutes } from "./routes/project"
 import { SessionRoutes } from "./routes/session"
 import { PtyRoutes } from "./routes/pty"
@@ -37,6 +38,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status"
 import { websocket } from "hono/bun"
 import { HTTPException } from "hono/http-exception"
 import { errors } from "./error"
+import { Filesystem } from "@/util/filesystem"
 import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
@@ -197,13 +199,15 @@ export namespace Server {
           if (c.req.path === "/log") return next()
           const workspaceID = c.req.query("workspace") || c.req.header("x-opencode-workspace")
           const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
-          const directory = (() => {
-            try {
-              return decodeURIComponent(raw)
-            } catch {
-              return raw
-            }
-          })()
+          const directory = Filesystem.resolve(
+            (() => {
+              try {
+                return decodeURIComponent(raw)
+              } catch {
+                return raw
+              }
+            })(),
+          )
 
           return WorkspaceContext.provide({
             workspaceID,
@@ -218,6 +222,7 @@ export namespace Server {
             },
           })
         })
+        .use(WorkspaceRouterMiddleware)
         .get(
           "/doc",
           openAPIRouteHandler(app, {

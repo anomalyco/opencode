@@ -1,4 +1,4 @@
-import { For, createMemo, type ValidComponent } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, type ValidComponent } from "solid-js"
 import { Dynamic } from "solid-js/web"
 
 export const TextShimmer = <T extends ValidComponent = "span">(props: {
@@ -6,31 +6,69 @@ export const TextShimmer = <T extends ValidComponent = "span">(props: {
   class?: string
   as?: T
   active?: boolean
-  stepMs?: number
-  durationMs?: number
+  offset?: number
 }) => {
-  const chars = createMemo(() => Array.from(props.text))
-  const active = () => props.active ?? true
+  const text = createMemo(() => props.text ?? "")
+  const active = createMemo(() => props.active ?? true)
+  const offset = createMemo(() => props.offset ?? 0)
+  const [run, setRun] = createSignal(active())
+  const swap = 220
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  createEffect(() => {
+    if (timer) {
+      clearTimeout(timer)
+      timer = undefined
+    }
+
+    if (active()) {
+      setRun(true)
+      return
+    }
+
+    timer = setTimeout(() => {
+      timer = undefined
+      setRun(false)
+    }, swap)
+  })
+
+  onCleanup(() => {
+    if (!timer) return
+    clearTimeout(timer)
+  })
+
+  const len = createMemo(() => Math.max(text().length, 1))
+  const shimmerSize = createMemo(() => Math.max(300, Math.round(200 + 1400 / len())))
+
+  // duration = len × (size - 1) / velocity → uniform perceived sweep speed
+  const VELOCITY = 0.01375 // ch per ms, ~10% faster than original 0.0125 baseline
+  const shimmerDuration = createMemo(() => {
+    const s = shimmerSize() / 100
+    return Math.max(1000, Math.min(2500, Math.round((len() * (s - 1)) / VELOCITY)))
+  })
 
   return (
     <Dynamic
-      component={props.as || "span"}
+      component={props.as ?? "span"}
       data-component="text-shimmer"
-      data-active={active()}
+      data-active={active() ? "true" : "false"}
       class={props.class}
-      aria-label={props.text}
+      aria-label={text()}
       style={{
-        "--text-shimmer-step": `${props.stepMs ?? 45}ms`,
-        "--text-shimmer-duration": `${props.durationMs ?? 1200}ms`,
+        "--text-shimmer-swap": `${swap}ms`,
+        "--text-shimmer-index": `${offset()}`,
+        "--text-shimmer-size": `${shimmerSize()}%`,
+        "--text-shimmer-duration": `${shimmerDuration()}ms`,
       }}
     >
-      <For each={chars()}>
-        {(char, index) => (
-          <span data-slot="text-shimmer-char" aria-hidden="true" style={{ "--text-shimmer-index": `${index()}` }}>
-            {char}
-          </span>
-        )}
-      </For>
+      <span data-slot="text-shimmer-char">
+        <span data-slot="text-shimmer-char-base" aria-hidden="true">
+          {text()}
+        </span>
+        <span data-slot="text-shimmer-char-shimmer" data-run={run() ? "true" : "false"} aria-hidden="true">
+          {text()}
+        </span>
+      </span>
     </Dynamic>
   )
 }
