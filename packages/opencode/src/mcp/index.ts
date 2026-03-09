@@ -9,6 +9,7 @@ import {
   type Tool as MCPToolDef,
   ToolListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js"
+import { StringDecoder } from "string_decoder"
 import { Config } from "../config/config"
 import { Log } from "../util/log"
 import { NamedError } from "@opencode-ai/util/error"
@@ -456,8 +457,9 @@ export namespace MCP {
           ...mcp.environment,
         },
       })
+      const stderrDecoder = new StringDecoder("utf8")
       transport.stderr?.on("data", (chunk: Buffer) => {
-        log.info(`mcp stderr: ${chunk.toString()}`, { key })
+        log.info(`mcp stderr: ${stderrDecoder.write(chunk)}`, { key })
       })
 
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
