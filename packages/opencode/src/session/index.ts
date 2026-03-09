@@ -11,6 +11,7 @@ import { Identifier } from "../id/id"
 import { Installation } from "../installation"
 
 import { Database, NotFoundError, eq, and, or, gte, isNull, desc, like, inArray, lt } from "../storage/db"
+import { Filesystem } from "../util/filesystem"
 import type { SQL } from "../storage/db"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
@@ -35,6 +36,30 @@ export namespace Session {
 
   const parentTitlePrefix = "New session - "
   const childTitlePrefix = "Child session - "
+
+  /**
+   * Normalize directory path for consistent comparison across platforms.
+   * On Windows, paths can have different representations (e.g., B: vs b:, / vs \).
+   * This function ensures consistent path comparison for session listing.
+   */
+  function normalizeDirectory(dir: string): string {
+    try {
+      // Use Filesystem.resolve to normalize the path - it handles:
+      // - Converting backslashes to forward slashes
+      // - Normalizing drive letter case
+      // - Resolving Git Bash, Cygwin, MSYS2 paths
+      return Filesystem.resolve(dir)
+    } catch {
+      // Fallback: basic normalization without filesystem calls
+      // This handles cases where the directory might not exist anymore
+      if (process.platform === "win32") {
+        return dir
+          .replace(/\\/g, "/")
+          .replace(/^([a-z]):/, (_, drive) => drive.toUpperCase() + ":")
+      }
+      return dir
+    }
+  }
 
   function createDefaultTitle(isChild = false) {
     return (isChild ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString()
@@ -545,7 +570,10 @@ export namespace Session {
       conditions.push(eq(SessionTable.workspace_id, WorkspaceContext.workspaceID))
     }
     if (input?.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+      // Normalize the directory path to handle Windows path variations
+      // (e.g., B: vs b:, / vs \)
+      const normalizedDir = normalizeDirectory(input.directory)
+      conditions.push(eq(SessionTable.directory, normalizedDir))
     }
     if (input?.roots) {
       conditions.push(isNull(SessionTable.parent_id))
@@ -585,7 +613,10 @@ export namespace Session {
     const conditions: SQL[] = []
 
     if (input?.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+      // Normalize the directory path to handle Windows path variations
+      // (e.g., B: vs b:, / vs \)
+      const normalizedDir = normalizeDirectory(input.directory)
+      conditions.push(eq(SessionTable.directory, normalizedDir))
     }
     if (input?.roots) {
       conditions.push(isNull(SessionTable.parent_id))
