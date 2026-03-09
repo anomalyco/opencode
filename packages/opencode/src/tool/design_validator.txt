@@ -1,0 +1,6 @@
+This tool scans CSS, SCSS, and component files to ensure compliance with the centralized design system (colors, spacing, typography).
+
+Parameters:
+- target: The directory or file to validate.
+- theme: The theme configuration to check against (default: system theme).
+- fix: Whether to automatically migrate hardcoded values to design tokens.

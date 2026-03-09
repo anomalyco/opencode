@@ -41,6 +41,8 @@ import { LspPowerFixerToolDefinition } from "./lsp_power_fixer"
 import { EnvProvisionerToolDefinition } from "./env_provisioner"
 import { SecurityScannerToolDefinition } from "./security_scanner"
 import { ApiSentinelToolDefinition } from "./api_sentinel"
+import { DesignValidatorToolDefinition } from "./design_validator"
+import { GitSurgeonToolDefinition } from "./git_surgeon"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -140,6 +142,8 @@ export namespace ToolRegistry {
       EnvProvisionerToolDefinition,
       SecurityScannerToolDefinition,
       ApiSentinelToolDefinition,
+      DesignValidatorToolDefinition,
+      GitSurgeonToolDefinition,
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),
       ...custom,

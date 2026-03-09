@@ -15,7 +15,7 @@ async function smokeTest() {
 
   console.log("\n--- Testing security_scanner ---")
   const scanTool = await SecurityScannerToolDefinition.init()
-  const scanResult = await scanTool.execute({ target: "packages/opencode/src/tool", level: "quick" }, ctx)
+  const scanResult = await scanTool.execute({ target: "packages/opencode/src/tool", level: "quick", fix: false }, ctx)
   console.log("Title:", scanResult.title)
   console.log("Output summary:", scanResult.output.split("\n")[0])
 
