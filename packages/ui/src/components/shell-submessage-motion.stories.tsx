@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { createEffect, createSignal, onCleanup } from "solid-js"
-import { BasicTool } from "./basic-tool"
+import { ToolCall } from "./basic-tool"
 import { animate } from "motion"
 
 export default {
@@ -192,7 +192,7 @@ export const Playground = {
       >
         <style>{shellCss}</style>
 
-        <BasicTool
+        <ToolCall
           icon="console"
           defaultOpen
           trigger={
@@ -218,7 +218,7 @@ export const Playground = {
           >
             {"$ cat <<'TOPIC1'"}
           </div>
-        </BasicTool>
+        </ToolCall>
 
         <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
           <button onClick={replay} style={btn()}>
