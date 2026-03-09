@@ -231,4 +231,10 @@ export interface Hooks {
    * Modify tool definitions (description and parameters) sent to LLM
    */
   "tool.definition"?: (input: { toolID: string }, output: { description: string; parameters: any }) => Promise<void>
+  /**
+   * Called when the OpenCode instance is shutting down. Use this hook to
+   * perform cleanup (e.g. gracefully stop background processes) before the
+   * process exits.
+   */
+  "shutdown"?: () => Promise<void>
 }

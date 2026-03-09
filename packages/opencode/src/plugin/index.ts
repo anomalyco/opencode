@@ -101,10 +101,14 @@ export namespace Plugin {
       hooks,
       input,
     }
+  }, async ({ hooks }) => {
+    for (const hook of hooks) {
+      await hook["shutdown"]?.()
+    }
   })
 
   export async function trigger<
-    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool">,
+    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool" | "shutdown">,
     Input = Parameters<Required<Hooks>[Name]>[0],
     Output = Parameters<Required<Hooks>[Name]>[1],
   >(name: Name, input: Input, output: Output): Promise<Output> {
