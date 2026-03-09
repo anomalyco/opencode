@@ -575,7 +575,7 @@ export function MessageTimeline(props: {
                         aria-label={language.t("common.goBack")}
                       />
                     </Show>
-                    <div class="flex items-center gap-2 min-w-0 grow-1 pl-2">
+                    <div class="flex items-center gap-2 min-w-0 grow-1">
                       <div class="size-4 shrink-0 flex items-center justify-center" aria-hidden="true">
                         <Show when={working()}>
                           <Spinner class="size-4" style={{ color: "var(--icon-interactive-base)" }} />
