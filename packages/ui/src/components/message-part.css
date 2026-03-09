@@ -168,7 +168,7 @@
     align-items: center;
     justify-content: flex-end;
     overflow: hidden;
-    gap: 6px;
+    gap: 0;
   }
 
   [data-slot="user-message-meta-tail"] {
