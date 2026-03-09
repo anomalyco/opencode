@@ -15,6 +15,8 @@ jobs:
         settings:
           - name: linux
             host: blacksmith-4vcpu-ubuntu-2404
+          - name: macos
+            host: macos-latest
           - name: windows
             host: blacksmith-4vcpu-windows-2025
     runs-on: ${{ matrix.settings.host }}
@@ -48,6 +50,9 @@ jobs:
           - name: linux
             host: blacksmith-4vcpu-ubuntu-2404
             playwright: bunx playwright install --with-deps
+          - name: macos
+            host: macos-latest
+            playwright: bunx playwright install
           - name: windows
             host: blacksmith-4vcpu-windows-2025
             playwright: bunx playwright install
