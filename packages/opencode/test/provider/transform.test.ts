@@ -1095,6 +1095,56 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[0].content[1]).toEqual({ type: "text", text: "Result" })
   })
 
+  test("preserves empty text between reasoning blocks in assistant messages (thinking block signatures are positionally sensitive)", () => {
+    // When Anthropic returns adaptive thinking, it commonly produces:
+    //   reasoning(sig1) → text("") → reasoning(sig2) → text("...") → tool_use
+    // The empty text between reasoning blocks encodes positional context in the
+    // thinking block signatures. Removing it changes the block arrangement,
+    // causing the API to reject the replayed message with:
+    //   "thinking blocks in the latest assistant message cannot be modified"
+    //
+    // Real-world DB evidence from session ses_330fc3f4dffe0Yjzl5J0topEED:
+    //   reasoning (767 chars, has signature) → text (0 chars) → reasoning (804 chars, has signature)
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "Let me analyze the API response structure...",
+            providerOptions: { anthropic: { signature: "EqoBCkgIARgCIkAa0MK2" } },
+          },
+          { type: "text", text: "" },
+          {
+            type: "reasoning",
+            text: "Now I need to check the authentication flow...",
+            providerOptions: { anthropic: { signature: "FrsBCkgIARgCIkDpN7Wx" } },
+          },
+          { type: "text", text: "Let me check the API endpoint." },
+          {
+            type: "tool-call",
+            toolCallId: "toolu_01ABC",
+            toolName: "grep",
+            input: { pattern: "endpoint" },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(1)
+    // All 5 parts must be preserved — the empty text between reasoning blocks
+    // is structurally significant for signature validation
+    const parts = result[0].content as any[]
+    expect(parts).toHaveLength(5)
+    expect(parts[0].type).toBe("reasoning")
+    expect(parts[1]).toEqual({ type: "text", text: "" })
+    expect(parts[2].type).toBe("reasoning")
+    expect(parts[3]).toEqual({ type: "text", text: "Let me check the API endpoint." })
+    expect(parts[4].type).toBe("tool-call")
+  })
+
   test("does not filter for non-anthropic providers", () => {
     const openaiModel = {
       ...anthropicModel,
