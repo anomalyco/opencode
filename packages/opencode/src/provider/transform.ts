@@ -345,14 +345,8 @@ export namespace ProviderTransform {
       id.includes("kimi") ||
       // TODO: Remove this after models.dev data is fixed to use "kimi-k2.5" instead of "k2p5"
       id.includes("k2p5")
-    ) {
-      // Skip variants for certain providers that need special handling in options()
-      // but allow variants for Ollama models since they use @ai-sdk/openai-compatible
-      if (model.providerID === "ollama") {
-        return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
-      }
+    )
       return {}
-    }
 
     // see: https://docs.x.ai/docs/guides/reasoning#control-how-hard-the-model-thinks
     if (id.includes("grok") && id.includes("grok-3-mini")) {
