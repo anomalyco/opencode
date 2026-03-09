@@ -2653,3 +2653,45 @@ describe("ProviderTransform.variants", () => {
     })
   })
 })
+
+describe("ProviderTransform.message - mistral family via openai-compatible", () => {
+  const ids = ["codestral-latest", "pixtral-large-latest", "mixtral-8x7b-instruct"]
+
+  for (const id of ids) {
+    test(`${id} normalizes tool call IDs to 9 alphanumeric chars`, () => {
+      const model = {
+        id: `dax/${id}`,
+        providerID: "dax",
+        api: { id, url: "https://dax.example/api", npm: "@ai-sdk/openai-compatible" },
+        name: id,
+        capabilities: {
+          temperature: true,
+          reasoning: false,
+          attachment: false,
+          toolcall: true,
+          input: { text: true, audio: false, image: false, video: false, pdf: false },
+          output: { text: true, audio: false, image: false, video: false, pdf: false },
+          interleaved: false,
+        },
+        cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+        limit: { context: 32768, output: 4096 },
+        status: "active",
+        options: {},
+        headers: {},
+        release_date: "2024-01-01",
+      }
+
+      const msgs = [
+        {
+          role: "assistant" as const,
+          content: [{ type: "tool-call" as const, toolCallId: "call-abc-xyz-123", toolName: "read", input: {} }],
+        },
+      ]
+
+      const result = ProviderTransform.message(msgs, model as any, {})
+      const part = Array.isArray(result[0]?.content) && result[0].content[0]
+
+      expect(part && "toolCallId" in part && part.toolCallId).toMatch(/^[a-zA-Z0-9]{9}$/)
+    })
+  }
+})

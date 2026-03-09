@@ -88,9 +88,9 @@ export namespace ProviderTransform {
       })
     }
     if (
-      model.providerID === "mistral" ||
-      model.api.id.toLowerCase().includes("mistral") ||
-      model.api.id.toLocaleLowerCase().includes("devstral")
+      ["codestral", "devstral", "mistral", "mixtral", "pixtral"].some(
+        (s) => model.providerID === s || model.api.id.toLowerCase().includes(s),
+      )
     ) {
       const result: ModelMessage[] = []
       for (let i = 0; i < msgs.length; i++) {
