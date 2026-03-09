@@ -21,15 +21,20 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
+      - name: Setup git committer
+        id: committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+
       - name: Run stats script
         run: bun script/stats.ts
 
       - name: Commit stats
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
           git add STATS.md
           git diff --staged --quiet || git commit -m "ignore: update download stats $(date -I)"
-          git push
+          git push origin HEAD:dev --no-verify
         env:
           POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
