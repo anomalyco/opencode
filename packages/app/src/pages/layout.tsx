@@ -2,6 +2,7 @@ import {
   batch,
   createEffect,
   createMemo,
+  createResource,
   createSignal,
   For,
   on,
@@ -130,6 +131,17 @@ export default function Layout(props: ParentProps) {
   }
   const colorSchemeLabel = (scheme: ColorScheme) => language.t(colorSchemeKey[scheme])
   const currentDir = createMemo(() => decode64(params.dir) ?? "")
+
+  const [pluginItems] = createResource(
+    () => currentDir(),
+    async (directory) => {
+      if (!directory) return []
+      return globalSDK.client.plugin
+        .sidebar({ directory })
+        .then((x) => x.data?.items ?? [])
+        .catch(() => [])
+    },
+  )
 
   const [state, setState] = createStore({
     autoselect: !initialDirectory,
@@ -2188,6 +2200,11 @@ export default function Layout(props: ParentProps) {
                   onOpenSettings={openSettings}
                   helpLabel={() => language.t("sidebar.help")}
                   onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+                  pluginItems={pluginItems}
+                  onOpenPluginItem={(href: string) => {
+                    if (href.startsWith("/")) navigate(href)
+                    else platform.openLink(href)
+                  }}
                   renderPanel={() => (
                     <Show when={currentProject()} keyed>
                       {(project) => <SidebarPanel project={project} merged />}
@@ -2266,6 +2283,12 @@ export default function Layout(props: ParentProps) {
                   onOpenSettings={openSettings}
                   helpLabel={() => language.t("sidebar.help")}
                   onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+                  pluginItems={pluginItems}
+                  onOpenPluginItem={(href: string) => {
+                    layout.mobileSidebar.hide()
+                    if (href.startsWith("/")) navigate(href)
+                    else platform.openLink(href)
+                  }}
                   renderPanel={() => <SidebarPanel project={currentProject()} mobile />}
                 />
               </nav>
