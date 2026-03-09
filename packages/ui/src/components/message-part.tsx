@@ -39,6 +39,7 @@ import { Card } from "./card"
 import { Collapsible } from "./collapsible"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
+import { ToolErrorCard } from "./tool-error-card"
 import { Checkbox } from "./checkbox"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
@@ -1189,25 +1190,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
                   </div>
                 )
               }
-              const [title, ...rest] = cleaned.split(": ")
-              return (
-                <Card variant="error">
-                  <div data-component="tool-error">
-                    <Icon name="circle-ban-sign" size="small" />
-                    <Switch>
-                      <Match when={title && title.length < 30}>
-                        <div data-slot="message-part-tool-error-content">
-                          <div data-slot="message-part-tool-error-title">{title}</div>
-                          <span data-slot="message-part-tool-error-message">{rest.join(": ")}</span>
-                        </div>
-                      </Match>
-                      <Match when={true}>
-                        <span data-slot="message-part-tool-error-message">{cleaned}</span>
-                      </Match>
-                    </Switch>
-                  </div>
-                </Card>
-              )
+              return <ToolErrorCard tool={part().tool} error={error()} />
             }}
           </Match>
           <Match when={true}>

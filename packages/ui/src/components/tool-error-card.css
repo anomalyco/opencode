@@ -1,0 +1,26 @@
+[data-component="card"][data-kind="tool-error-card"] {
+  padding: 0;
+
+  &::before {
+    content: none;
+  }
+
+  [data-component="tool-error-card-icon"] [data-component="icon"] {
+    color: var(--card-accent);
+  }
+
+  &[data-open="true"] [data-slot="tool-error-card-content"] {
+    position: relative;
+  }
+
+  &[data-open="true"] [data-slot="tool-error-card-content"]::before {
+    content: "";
+    position: absolute;
+    left: calc((var(--card-icon) / 2) - 1px);
+    top: calc(var(--card-gap) * -1);
+    bottom: 0;
+    width: 2px;
+    border-radius: 2px;
+    background-color: var(--card-accent);
+  }
+}
