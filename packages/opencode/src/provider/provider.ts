@@ -480,6 +480,7 @@ export namespace Provider {
 
       const aiGatewayHeaders = {
         "User-Agent": `opencode/${Installation.VERSION} gitlab-ai-provider/${GITLAB_PROVIDER_VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
+        "anthropic-beta": "context-1m-2025-08-07",
         ...(providerConfig?.options?.aiGatewayHeaders || {}),
       }
 
