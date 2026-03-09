@@ -56,5 +56,5 @@ export async function resolveNetworkOptions(args: NetworkOptions) {
   const argsCors = Array.isArray(args.cors) ? args.cors : args.cors ? [args.cors] : []
   const cors = [...configCors, ...argsCors]
 
-  return { hostname, port, mdns, mdnsDomain, cors }
+  return { hostname, port, mdns, mdnsDomain, cors, web: config?.server?.web }
 }

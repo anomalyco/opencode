@@ -52,6 +52,7 @@ export namespace Server {
 
   let _url: URL | undefined
   let _corsWhitelist: string[] = []
+  let _proxyDisabled = Flag.OPENCODE_DISABLE_WEB
 
   export function url(): URL {
     return _url ?? new URL("http://localhost:4096")
@@ -562,6 +563,7 @@ export namespace Server {
           },
         )
         .all("/*", async (c) => {
+          if (_proxyDisabled) return c.notFound()
           const path = c.req.path
 
           const response = await proxy(`https://app.opencode.ai${path}`, {
@@ -600,8 +602,10 @@ export namespace Server {
     mdns?: boolean
     mdnsDomain?: string
     cors?: string[]
+    web?: boolean
   }) {
     _corsWhitelist = opts.cors ?? []
+    if (opts.web === false) _proxyDisabled = true
 
     const args = {
       hostname: opts.hostname,
