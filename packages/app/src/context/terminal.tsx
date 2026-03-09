@@ -1,6 +1,6 @@
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { batch, createEffect, createMemo, createRoot, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, createRoot, on, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { useSDK } from "./sdk"
 import type { Platform } from "./platform"
@@ -37,6 +37,16 @@ type TerminalCacheEntry = {
 }
 
 const caches = new Set<Map<string, TerminalCacheEntry>>()
+
+const trimTerminal = (pty: LocalPTY) => {
+  if (!pty.buffer && pty.cursor === undefined && pty.scrollY === undefined) return pty
+  return {
+    ...pty,
+    buffer: undefined,
+    cursor: undefined,
+    scrollY: undefined,
+  }
+}
 
 export function clearWorkspaceTerminals(dir: string, sessionIDs?: string[], platform?: Platform) {
   const key = getWorkspaceTerminalCacheKey(dir)
@@ -188,6 +198,18 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
           console.error("Failed to update terminal", error)
         })
     },
+    trim(id: string) {
+      const index = store.all.findIndex((x) => x.id === id)
+      if (index === -1) return
+      setStore("all", index, (pty) => trimTerminal(pty))
+    },
+    trimAll() {
+      setStore("all", (all) => {
+        const next = all.map(trimTerminal)
+        if (next.every((pty, index) => pty === all[index])) return all
+        return next
+      })
+    },
     async clone(id: string) {
       const index = store.all.findIndex((x) => x.id === id)
       const pty = store.all[index]
@@ -322,12 +344,27 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
 
     const workspace = createMemo(() => loadWorkspace(params.dir!, params.id))
 
+    createEffect(
+      on(
+        () => ({ dir: params.dir, id: params.id }),
+        (next, prev) => {
+          if (!prev?.dir) return
+          if (next.dir === prev.dir && next.id === prev.id) return
+          if (next.dir === prev.dir && next.id) return
+          loadWorkspace(prev.dir, prev.id).trimAll()
+        },
+        { defer: true },
+      ),
+    )
+
     return {
       ready: () => workspace().ready(),
       all: () => workspace().all(),
       active: () => workspace().active(),
       new: () => workspace().new(),
       update: (pty: Partial<LocalPTY> & { id: string }) => workspace().update(pty),
+      trim: (id: string) => workspace().trim(id),
+      trimAll: () => workspace().trimAll(),
       clone: (id: string) => workspace().clone(id),
       open: (id: string) => workspace().open(id),
       close: (id: string) => workspace().close(id),
