@@ -1,8 +1,8 @@
-import fuzzysort from "fuzzysort"
-import { entries, flatMap, groupBy, map, pipe } from "remeda"
+import { entries, groupBy, map, pipe } from "remeda"
 import { createEffect, createMemo, createResource, on } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createList } from "solid-list"
+import { fuzzy, normalize } from "./filter-search"
 
 export interface FilteredListProps<T> {
   items: T[] | ((filter: string) => T[] | Promise<T[]>)
@@ -27,18 +27,16 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
       filter: store.filter,
       items: typeof props.items === "function" ? props.items(store.filter) : props.items,
     }),
-    async ({ filter, items }) => {
+    async ({ filter, items }: { filter: string; items: T[] | Promise<T[]> }) => {
       const query = filter ?? ""
-      const needle = query.toLowerCase()
+      const needle = normalize(query)
       const all = (await Promise.resolve(items)) || []
       const result = pipe(
         all,
-        (x) => {
+        (x: T[]) => {
           if (!needle) return x
-          if (!props.filterKeys && Array.isArray(x) && x.every((e) => typeof e === "string")) {
-            return fuzzysort.go(needle, x).map((x) => x.target) as T[]
-          }
-          return fuzzysort.go(needle, x, { keys: props.filterKeys! }).map((x) => x.obj)
+          if (props.filterKeys) return fuzzy(needle, x, props.filterKeys)
+          return fuzzy(needle, x)
         },
         groupBy((x) => (props.groupBy ? props.groupBy(x) : "")),
         entries(),
@@ -50,11 +48,8 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
     { initialValue: empty },
   )
 
-  const flat = createMemo(() => {
-    return pipe(
-      grouped.latest || [],
-      flatMap((x) => x.items),
-    )
+  const flat = createMemo<T[]>(() => {
+    return (grouped.latest || []).flatMap((item) => item.items)
   })
 
   function initialActive() {
