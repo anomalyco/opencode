@@ -11,6 +11,7 @@ import { decode64 } from "@/utils/base64"
 import { same } from "@/utils/same"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 import { createPathHelpers } from "./file/path"
+import { containingWorkspaceRoot } from "@/pages/layout/helpers"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
 const DEFAULT_PANEL_WIDTH = 344
@@ -437,8 +438,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const rootFor = (directory: string) => {
       const map = roots()
-      if (map.size === 0) return directory
-
       const visited = new Set<string>()
       const chain = [directory]
 
@@ -447,7 +446,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         if (!current) return directory
 
         const next = map.get(current)
-        if (!next) return current
+        if (!next) {
+          return (
+            containingWorkspaceRoot(
+              current,
+              server.projects.list().map((project) => project.worktree),
+            ) ?? current
+          )
+        }
 
         if (visited.has(next)) return directory
         visited.add(next)

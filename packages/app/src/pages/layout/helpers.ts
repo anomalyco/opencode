@@ -8,6 +8,24 @@ export const workspaceKey = (directory: string) => {
   return directory.replace(/[\\/]+$/, "")
 }
 
+function comparableWorkspaceKey(directory: string) {
+  return workspaceKey(directory).replaceAll("\\", "/")
+}
+
+function containsWorkspace(parent: string, child: string) {
+  const parentKey = comparableWorkspaceKey(parent)
+  const childKey = comparableWorkspaceKey(child)
+  if (parentKey === childKey) return true
+  if (parentKey === "/") return childKey.startsWith("/")
+  return childKey.startsWith(parentKey.endsWith("/") ? parentKey : `${parentKey}/`)
+}
+
+export function containingWorkspaceRoot(directory: string, roots: string[]) {
+  return [...roots]
+    .sort((a, b) => comparableWorkspaceKey(b).length - comparableWorkspaceKey(a).length)
+    .find((root) => containsWorkspace(root, directory))
+}
+
 export function sortSessions(now: number) {
   const oneMinuteAgo = now - 60 * 1000
   return (a: Session, b: Session) => {

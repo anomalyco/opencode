@@ -58,6 +58,7 @@ import { Titlebar } from "@/components/titlebar"
 import { useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
 import {
+  containingWorkspaceRoot,
   displayName,
   effectiveWorkspaceOrder,
   errorMessage,
@@ -1115,6 +1116,12 @@ export default function Layout(props: ParentProps) {
   }
 
   function projectRoot(directory: string) {
+    const openRoot = containingWorkspaceRoot(
+      directory,
+      layout.projects.list().map((item) => item.worktree),
+    )
+    if (openRoot) return openRoot
+
     const project = layout.projects
       .list()
       .find((item) => item.worktree === directory || item.sandboxes?.includes(directory))

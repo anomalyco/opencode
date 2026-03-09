@@ -6,9 +6,17 @@ import {
   parseDeepLink,
   parseNewSessionDeepLink,
 } from "./deep-links"
-import { displayName, errorMessage, getDraggableId, syncWorkspaceOrder, workspaceKey } from "./helpers"
+import {
+  containingWorkspaceRoot,
+  displayName,
+  errorMessage,
+  getDraggableId,
+  hasProjectPermissions,
+  latestRootSession,
+  syncWorkspaceOrder,
+  workspaceKey,
+} from "./helpers"
 import { type Session } from "@opencode-ai/sdk/v2/client"
-import { hasProjectPermissions, latestRootSession } from "./helpers"
 
 const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
   ({
@@ -107,6 +115,15 @@ describe("layout workspace helpers", () => {
     expect(workspaceKey("C:\\")).toBe("C:\\")
     expect(workspaceKey("C:\\\\\\")).toBe("C:\\")
     expect(workspaceKey("C:///")).toBe("C:/")
+  })
+
+  test("finds the deepest containing workspace root", () => {
+    expect(containingWorkspaceRoot("/repo/packages/app", ["/repo", "/repo/packages"]))
+      .toBe("/repo/packages")
+  })
+
+  test("does not match sibling workspace prefixes", () => {
+    expect(containingWorkspaceRoot("/repo-two/nested", ["/repo"])).toBeUndefined()
   })
 
   test("keeps local first while preserving known order", () => {
