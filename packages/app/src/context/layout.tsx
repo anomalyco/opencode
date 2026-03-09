@@ -100,6 +100,15 @@ type RootResult = {
   }
 }
 
+const norm = (dir: string) => {
+  const drive = dir.match(/^([A-Za-z]:)[\\/]+$/)
+  if (drive) return `${drive[1].toLowerCase()}/`
+  if (/^[\\/]+$/.test(dir)) return "/"
+  const key = dir.replace(/[\\/]+$/, "").replaceAll("\\", "/")
+  if (/^[A-Za-z]:\//.test(key) || key.startsWith("//")) return key.toLowerCase()
+  return key
+}
+
 function nextSessionTabsForOpen(current: SessionTabs | undefined, tab: string): SessionTabs {
   const all = current?.all ?? []
   if (tab === "review") return { all: all.filter((x) => x !== "review"), active: tab }
@@ -490,7 +499,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     createEffect(() => {
       const projects = server.projects.list()
-      const seen = new Set(projects.map((project) => project.worktree))
+      const seen = new Set(projects.map((project) => norm(project.worktree)))
 
       batch(() => {
         for (const project of projects) {
@@ -499,9 +508,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
           server.projects.close(project.worktree)
 
-          if (!seen.has(root)) {
+          const key = norm(root)
+          if (!seen.has(key)) {
             server.projects.open(root)
-            seen.add(root)
+            seen.add(key)
           }
 
           if (project.expanded) server.projects.expand(root)
@@ -601,7 +611,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         open(directory: string) {
           const root = rootFor(directory)
-          if (server.projects.list().find((x) => x.worktree === root)) return
+          const key = norm(root)
+          const exists = server.projects.list().some((x) => norm(x.worktree) === key)
+          if (exists) return
           globalSync.project.loadSessions(root)
           server.projects.open(root)
         },
