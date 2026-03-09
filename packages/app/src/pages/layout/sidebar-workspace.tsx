@@ -182,7 +182,7 @@ const WorkspaceActions = (props: {
           aria-label={props.language.t("common.moreOptions")}
         />
       </Tooltip>
-      <DropdownMenu.Portal mount={!props.mobile ? props.nav() : undefined}>
+      <DropdownMenu.Portal>
         <DropdownMenu.Content
           onCloseAutoFocus={(event) => {
             if (!props.pendingRename()) return
@@ -249,7 +249,7 @@ const WorkspaceSessionList = (props: {
   loadMore: () => Promise<void>
   language: ReturnType<typeof useLanguage>
 }): JSX.Element => (
-  <nav class="flex flex-col gap-1 px-2">
+  <nav class="flex flex-col gap-1 px-3">
     <Show when={props.showNew()}>
       <NewSessionItem
         slug={props.slug()}
@@ -490,7 +490,7 @@ export const LocalWorkspace = (props: {
       ref={(el) => props.ctx.setScrollContainerRef(el, props.mobile)}
       class="size-full flex flex-col py-2 overflow-y-auto no-scrollbar [overflow-anchor:none]"
     >
-      <nav class="flex flex-col gap-1 px-2">
+      <nav class="flex flex-col gap-1 px-3">
         <Show when={loading()}>
           <SessionSkeleton />
         </Show>

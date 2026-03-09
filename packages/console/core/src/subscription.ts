@@ -2,8 +2,54 @@ import { z } from "zod"
 import { fn } from "./util/fn"
 import { centsToMicroCents } from "./util/price"
 import { getWeekBounds, getMonthlyBounds } from "./util/date"
+import { Resource } from "@opencode-ai/console-resource"
 
 export namespace Subscription {
+  const LimitsSchema = z.object({
+    free: z.object({
+      promoTokens: z.number().int(),
+      dailyRequests: z.number().int(),
+      checkHeader: z.string(),
+      fallbackValue: z.number().int(),
+    }),
+    lite: z.object({
+      rollingLimit: z.number().int(),
+      rollingWindow: z.number().int(),
+      weeklyLimit: z.number().int(),
+      monthlyLimit: z.number().int(),
+    }),
+    black: z.object({
+      "20": z.object({
+        fixedLimit: z.number().int(),
+        rollingLimit: z.number().int(),
+        rollingWindow: z.number().int(),
+      }),
+      "100": z.object({
+        fixedLimit: z.number().int(),
+        rollingLimit: z.number().int(),
+        rollingWindow: z.number().int(),
+      }),
+      "200": z.object({
+        fixedLimit: z.number().int(),
+        rollingLimit: z.number().int(),
+        rollingWindow: z.number().int(),
+      }),
+    }),
+  })
+
+  export const validate = fn(LimitsSchema, (input) => {
+    return input
+  })
+
+  export const getLimits = fn(z.void(), () => {
+    const json = JSON.parse(Resource.ZEN_LIMITS.value)
+    return LimitsSchema.parse(json)
+  })
+
+  export const getFreeLimits = fn(z.void(), () => {
+    return getLimits()["free"]
+  })
+
   export const analyzeRollingUsage = fn(
     z.object({
       limit: z.number().int(),

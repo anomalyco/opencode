@@ -11,6 +11,8 @@ import { withActor } from "~/context/auth.withActor"
 import { queryBillingInfo } from "../../common"
 import styles from "./lite-section.module.css"
 import { useI18n } from "~/context/i18n"
+import { useLanguage } from "~/context/language"
+import { formError } from "~/lib/form-error"
 
 const queryLiteSubscription = query(async (workspaceID: string) => {
   "use server"
@@ -113,7 +115,7 @@ const createSessionUrl = action(async (workspaceID: string, returnUrl: string) =
 const setLiteUseBalance = action(async (form: FormData) => {
   "use server"
   const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: "Workspace ID is required" }
+  if (!workspaceID) return { error: formError.workspaceRequired }
   const useBalance = form.get("useBalance")?.toString() === "true"
 
   return json(
@@ -135,6 +137,7 @@ const setLiteUseBalance = action(async (form: FormData) => {
 export function LiteSection() {
   const params = useParams()
   const i18n = useI18n()
+  const language = useLanguage()
   const lite = createAsync(() => queryLiteSubscription(params.id!))
   const sessionAction = useAction(createSessionUrl)
   const sessionSubmission = useSubmission(createSessionUrl)
@@ -180,6 +183,13 @@ export function LiteSection() {
                     : i18n.t("workspace.lite.subscription.manage")}
                 </button>
               </div>
+            </div>
+            <div data-slot="beta-notice">
+              {i18n.t("workspace.lite.subscription.selectProvider")}{" "}
+              <a href={language.route("/docs/providers/#opencode-go")} target="_blank" rel="noopener noreferrer">
+                {i18n.t("common.learnMore")}
+              </a>
+              .
             </div>
             <div data-slot="usage">
               <div data-slot="usage-item">
@@ -252,6 +262,13 @@ export function LiteSection() {
             <h2>{i18n.t("workspace.lite.promo.title")}</h2>
           </div>
           <p data-slot="promo-description">{i18n.t("workspace.lite.promo.description")}</p>
+          <h3 data-slot="promo-models-title">{i18n.t("workspace.lite.promo.modelsTitle")}</h3>
+          <ul data-slot="promo-models">
+            <li>Kimi K2.5</li>
+            <li>GLM-5</li>
+            <li>MiniMax M2.5</li>
+          </ul>
+          <p data-slot="promo-description">{i18n.t("workspace.lite.promo.footer")}</p>
           <button
             data-slot="subscribe-button"
             data-color="primary"
