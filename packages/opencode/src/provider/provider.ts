@@ -873,11 +873,13 @@ export namespace Provider {
     }
 
     // Force-add ollama provider since it doesn't need API key for local
+    // Directly assign to providers instead of using mergeProvider
     const localModelsCount = (await detectLocalOllamaModels()).length
     log.info("Ollama force-add check", { count: localModelsCount, hasDbEntry: !!database["ollama"] })
-    if (localModelsCount > 0) {
-      mergeProvider("ollama", { source: "custom" })
-      log.info("Ollama provider merged", { modelsCount: Object.keys(providers["ollama"]?.models ?? {}).length })
+    if (localModelsCount > 0 && database["ollama"]) {
+      // Directly assign, don't merge (which might lose models)
+      providers["ollama"] = database["ollama"]
+      log.info("Ollama provider directly assigned", { modelsCount: Object.keys(providers["ollama"]?.models ?? {}).length })
     }
 
     // extend database from config
