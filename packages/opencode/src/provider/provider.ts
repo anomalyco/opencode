@@ -45,7 +45,6 @@ import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
-import { detect as detectOllama, parseModelName } from "./ollama"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -179,22 +178,6 @@ export namespace Provider {
           return shouldUseCopilotResponsesApi(modelID) ? sdk.responses(modelID) : sdk.chat(modelID)
         },
         options: {},
-      }
-    },
-    ollama: async (input) => {
-      const hasKey = await (async () => {
-        const env = Env.all()
-        if (input.env.some((item) => env[item])) return true
-        if (await Auth.get(input.id)) return true
-        return true
-      })()
-
-      return {
-        autoload: hasKey,
-        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          return sdk.chat(modelID)
-        },
-        options: { apiKey: "ollama" },
       }
     },
     azure: async () => {
@@ -1022,65 +1005,6 @@ export namespace Provider {
       if (provider.name) partial.name = provider.name
       if (provider.options) partial.options = provider.options
       mergeProvider(providerID, partial)
-    }
-
-    // Auto-detect Ollama if not already configured
-    const ollamaConfigured = providers["ollama"] || configProviders.some(([id]) => id === "ollama")
-    if (!ollamaConfigured) {
-      const ollama = await detectOllama()
-      if (ollama.running && ollama.models.length > 0) {
-        const ollamaProviderID = "ollama"
-        const ollamaModels: Record<string, Model> = {}
-
-        for (const ollamaModel of ollama.models) {
-          const { model, tag } = parseModelName(ollamaModel.name)
-          const modelID = tag ? `${model}:${tag}` : model
-          ollamaModels[modelID] = {
-            id: modelID,
-            providerID: ollamaProviderID,
-            name: model,
-            family: ollamaModel.details?.family ?? model,
-            api: {
-              id: modelID,
-              url: ollama.url,
-              npm: "@ai-sdk/openai-compatible",
-            },
-            status: "active",
-            capabilities: {
-              temperature: true,
-              reasoning: ollamaModel.details?.family?.includes("reasoning") ?? false,
-              attachment: false,
-              toolcall: true,
-              input: { text: true, audio: false, image: false, video: false, pdf: false },
-              output: { text: true, audio: false, image: false, video: false, pdf: false },
-              interleaved: false,
-            },
-            cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-            options: {},
-            limit: {
-              context: ollamaModel.details?.parameter_size ? 128000 : 8192,
-              output: 8192,
-            },
-            headers: {},
-            release_date: "",
-            variants: {},
-          }
-          ollamaModels[modelID].variants = mapValues(
-            ProviderTransform.variants(ollamaModels[modelID]),
-            (v) => v,
-          )
-        }
-
-        providers[ollamaProviderID] = {
-          id: ollamaProviderID,
-          name: "Ollama",
-          source: "api",
-          env: [],
-          options: { baseURL: `${ollama.url}/v1`, apiKey: "ollama" },
-          models: ollamaModels,
-        }
-        log.info("ollama auto-detected", { modelCount: ollamaModels.length })
-      }
     }
 
     for (const [providerID, provider] of Object.entries(providers)) {

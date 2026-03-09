@@ -24,10 +24,6 @@ export const ModelsCommand = cmd({
         describe: "refresh the models cache from models.dev",
         type: "boolean",
       })
-      .option("local", {
-        describe: "show only locally detected models (e.g. Ollama)",
-        type: "boolean",
-      })
   },
   handler: async (args) => {
     if (args.refresh) {
@@ -64,24 +60,13 @@ export const ModelsCommand = cmd({
           return
         }
 
-        let providerIDs = Object.keys(providers).sort((a, b) => {
+        const providerIDs = Object.keys(providers).sort((a, b) => {
           const aIsOpencode = a.startsWith("opencode")
           const bIsOpencode = b.startsWith("opencode")
           if (aIsOpencode && !bIsOpencode) return -1
           if (!aIsOpencode && bIsOpencode) return 1
           return a.localeCompare(b)
         })
-
-        if (args.local) {
-          const localProviders = Object.entries(providers)
-            .filter(([, p]) => p.source === "api")
-            .map(([id]) => id)
-          providerIDs = providerIDs.filter((id) => localProviders.includes(id))
-          if (providerIDs.length === 0) {
-            UI.println(UI.Style.TEXT_WARNING + "No local models detected. Make sure Ollama is running." + UI.Style.TEXT_NORMAL)
-            return
-          }
-        }
 
         for (const providerID of providerIDs) {
           printModels(providerID, args.verbose)
