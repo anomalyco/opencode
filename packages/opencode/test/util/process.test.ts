@@ -75,3 +75,39 @@ describe("util.process", () => {
     expect(out.stdout.toString()).toBe("set")
   })
 })
+
+describe("util.process defensive patterns", () => {
+  test("Process.run completes normally", async () => {
+    const result = await Process.run(node('process.stdout.write("hello")'))
+    expect(result.code).toBe(0)
+    expect(result.stdout.toString()).toContain("hello")
+  })
+
+  test("Process.run handles failing command", async () => {
+    expect(Process.run(node("process.exit(1)"))).rejects.toThrow()
+  })
+
+  test("Process.run with nothrow returns non-zero code", async () => {
+    const result = await Process.run(node("process.exit(1)"), { nothrow: true })
+    expect(result.code).not.toBe(0)
+  })
+
+  test("Process.spawn returns valid exited promise", async () => {
+    const proc = Process.spawn(node('process.stdout.write("test")'), { stdout: "pipe" })
+    const code = await proc.exited
+    expect(code).toBe(0)
+  })
+
+  test("Process.spawn abort kills process", async () => {
+    const controller = new AbortController()
+    const proc = Process.spawn(node("setInterval(() => {}, 60000)"), { abort: controller.signal })
+    setTimeout(() => controller.abort(), 200)
+    const code = await proc.exited
+    expect(typeof code).toBe("number")
+  })
+
+  test("Process.run completes for fast commands", async () => {
+    const result = await Process.run(node("process.exit(0)"))
+    expect(result.code).toBe(0)
+  })
+})

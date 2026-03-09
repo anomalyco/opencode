@@ -218,6 +218,13 @@ export const BashTool = Tool.define("bash", async () => {
         }
       }
 
+      log.info("spawned process", {
+        pid: proc.pid,
+        command: params.command.slice(0, 100),
+        cwd,
+        timeout,
+      })
+
       const MAX_OUTPUT_BYTES = 10 * 1024 * 1024 // 10 MB cap
       const outputChunks: Buffer[] = []
       let outputLen = 0
@@ -263,6 +270,7 @@ export const BashTool = Tool.define("bash", async () => {
       }
 
       const abortHandler = () => {
+        log.info("process abort triggered", { pid: proc.pid })
         aborted = true
         void kill()
       }
@@ -270,16 +278,19 @@ export const BashTool = Tool.define("bash", async () => {
       ctx.abort.addEventListener("abort", abortHandler, { once: true })
 
       const timeoutTimer = setTimeout(() => {
+        log.info("process timeout triggered", { pid: proc.pid, timeout })
         timedOut = true
         void kill()
       }, timeout + 100)
+
+      const started = Date.now()
 
       const callID = ctx.callID
       if (callID) {
         active.set(callID, {
           pid: proc.pid!,
           timeout,
-          started: Date.now(),
+          started,
           kill: () => Shell.killTree(proc, { exited: () => exited }),
           done: () => {},
         })
@@ -294,6 +305,8 @@ export const BashTool = Tool.define("bash", async () => {
           clearTimeout(timeoutTimer)
           clearInterval(poll)
           ctx.abort.removeEventListener("abort", abortHandler)
+          proc.stdout?.removeListener("end", check)
+          proc.stderr?.removeListener("end", check)
         }
 
         const done = () => {
@@ -316,21 +329,62 @@ export const BashTool = Tool.define("bash", async () => {
           reject(error)
         }
 
-        proc.once("exit", done)
-        proc.once("close", done)
+        proc.once("exit", () => {
+          log.info("process exit detected via 'exit' event", { pid: proc.pid, exitCode: proc.exitCode })
+          done()
+        })
+        proc.once("close", () => {
+          log.info("process exit detected via 'close' event", { pid: proc.pid, exitCode: proc.exitCode })
+          done()
+        })
         proc.once("error", fail)
+
+        // Redundancy: stdio end events fire when pipe file descriptors close
+        // independent of process exit monitoring — catches missed exit events
+        let streams = 0
+        const total = (proc.stdout ? 1 : 0) + (proc.stderr ? 1 : 0)
+        const check = () => {
+          streams++
+          if (streams < total) return
+          if (proc.exitCode !== null || proc.signalCode !== null) {
+            log.info("stdio end detected exit (exitCode already set)", {
+              pid: proc.pid,
+              exitCode: proc.exitCode,
+            })
+            done()
+            return
+          }
+          setTimeout(() => {
+            log.info("stdio end deferred check", {
+              pid: proc.pid,
+              exitCode: proc.exitCode,
+            })
+            done()
+          }, 50)
+        }
+        proc.stdout?.once("end", check)
+        proc.stderr?.once("end", check)
 
         // Polling watchdog: detect process exit when Bun's event loop
         // fails to deliver the "exit" event (confirmed Bun bug in containers)
         const poll = setInterval(() => {
           if (proc.exitCode !== null || proc.signalCode !== null) {
+            log.info("polling watchdog detected exit via exitCode/signalCode", {
+              exitCode: proc.exitCode,
+              signalCode: proc.signalCode,
+            })
             done()
             return
           }
+
+          // Check 2: process.kill(pid, 0) throws ESRCH if process is dead
           if (proc.pid && process.platform !== "win32") {
             try {
               process.kill(proc.pid, 0)
             } catch {
+              log.info("polling watchdog detected exit via kill(0) ESRCH", {
+                pid: proc.pid,
+              })
               done()
               return
             }
@@ -339,6 +393,14 @@ export const BashTool = Tool.define("bash", async () => {
       })
 
       if (callID) active.delete(callID)
+
+      log.info("process completed", {
+        pid: proc.pid,
+        exitCode: proc.exitCode,
+        duration: Date.now() - started,
+        timedOut,
+        aborted,
+      })
 
       let output = Buffer.concat(outputChunks).toString()
       // Free the chunks array
