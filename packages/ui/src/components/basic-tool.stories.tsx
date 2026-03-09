@@ -120,13 +120,13 @@ export const SubtitleAction = {
     return (
       <div style={{ display: "grid", gap: "8px" }}>
         <div style={{ "font-size": "12px", color: "var(--text-weak)" }}>{message()}</div>
-        <mod.ToolCall
+        <mod.BasicTool
           icon="mcp"
           trigger={{ title: "Clickable subtitle", subtitle: "Click me" }}
           onSubtitleClick={() => setMessage("Subtitle clicked")}
         >
           Subtitle action details
-        </mod.ToolCall>
+        </mod.BasicTool>
       </div>
     )
   },
