@@ -182,6 +182,12 @@ export function Session() {
     return new CustomSpeedScroll(3)
   })
 
+  createEffect(() => {
+    if (session()?.workspaceID) {
+      sdk.setWorkspace(session()?.workspaceID)
+    }
+  })
+
   createEffect(async () => {
     await sync.session
       .sync(route.sessionID)
