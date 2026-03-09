@@ -620,17 +620,32 @@ export namespace MessageV2 {
           role: "assistant",
           parts: [],
         }
+        // Track whether we've seen a tool part in the current step.
+        // If text/reasoning appears after a tool part without an intervening
+        // step-start, it means a step boundary was lost (e.g. finish-step
+        // handler threw during a retryable error). Inject a synthetic
+        // step-start to force the AI SDK to split content into separate blocks,
+        // preventing invalid interleaved tool_use/text in one assistant message.
+        let sawTool = false
         for (const part of msg.parts) {
+          if (part.type === "text" || part.type === "reasoning") {
+            if (sawTool) {
+              assistantMessage.parts.push({ type: "step-start" })
+              sawTool = false
+            }
+          }
           if (part.type === "text")
             assistantMessage.parts.push({
               type: "text",
               text: part.text,
               ...(differentModel ? {} : { providerMetadata: part.metadata }),
             })
-          if (part.type === "step-start")
+          if (part.type === "step-start") {
+            sawTool = false
             assistantMessage.parts.push({
               type: "step-start",
             })
+          }
           if (part.type === "tool") {
             toolNames.add(part.tool)
             if (part.state.status === "completed") {
@@ -683,6 +698,7 @@ export namespace MessageV2 {
                 errorText: "[Tool execution was interrupted]",
                 ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
               })
+            sawTool = true
           }
           if (part.type === "reasoning") {
             assistantMessage.parts.push({
