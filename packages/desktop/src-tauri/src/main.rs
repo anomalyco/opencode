@@ -19,24 +19,39 @@ fn configure_display_backend() -> Option<String> {
     let prefer_wayland = opencode_lib::linux_display::read_wayland().unwrap_or(false);
     let decision = select_backend(&session, prefer_wayland)?;
 
+    let disable_dmabuf = matches!(
+        env::var("OC_DISABLE_DMABUF_RENDERER")
+            .ok()
+            .as_deref()
+            .map(str::trim)
+            .map(str::to_ascii_lowercase)
+            .as_deref(),
+        Some("1" | "true" | "yes" | "on")
+    );
+
     match decision.backend {
         Backend::X11 => {
             set_env_if_absent("WINIT_UNIX_BACKEND", "x11");
             set_env_if_absent("GDK_BACKEND", "x11");
-            set_env_if_absent("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
         Backend::Wayland => {
             set_env_if_absent("WINIT_UNIX_BACKEND", "wayland");
             set_env_if_absent("GDK_BACKEND", "wayland");
-            set_env_if_absent("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
         Backend::Auto => {
             set_env_if_absent("GDK_BACKEND", "wayland,x11");
-            set_env_if_absent("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
     }
 
-    Some(decision.note)
+    if disable_dmabuf {
+        set_env_if_absent("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        return Some(format!(
+            "{} DMA-BUF renderer disabled due to OC_DISABLE_DMABUF_RENDERER=1.",
+            decision.note
+        ));
+    }
+
+    Some(format!("{} DMA-BUF renderer enabled by default.", decision.note))
 }
 
 fn main() {
