@@ -823,6 +823,9 @@ export namespace Provider {
       }
       
       database["ollama"] = ollamaProvider
+      
+      // Force-add ollama provider since it doesn't need API key for local
+      mergeProvider("ollama", { source: "custom" })
     }
 
     const disabled = new Set(config.disabled_providers ?? [])
