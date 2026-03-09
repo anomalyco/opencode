@@ -138,9 +138,8 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     })
   })
 
-  // Focus first option when changing questions
   createEffect(() => {
-    store.tab // track tab changes
+    store.tab
     if (!store.editing) focusFirstOption()
   })
 
@@ -247,7 +246,6 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   const commitCustom = () => {
     setStore("editing", false)
     customUpdate(input())
-    // Focus the custom option button after committing
     requestAnimationFrame(() => {
       const customIndex = options().length
       focusOption(customIndex)
@@ -326,14 +324,11 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
 
     const target = e.target as HTMLElement
 
-    // Don't intercept when editing custom input (except Escape which is handled by input)
     if (store.editing && target instanceof HTMLTextAreaElement) return
 
-    // Get current focus index by checking DOM
     const allOptions = root?.querySelectorAll('[data-slot="question-option"]') ?? []
     const currentIndex = Array.from(allOptions).findIndex((el) => el === document.activeElement)
 
-    // Only handle navigation keys when an option is focused
     if (currentIndex === -1) return
 
     const customOptionIndex = options().length
@@ -570,7 +565,6 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                   if (e.key === "Escape") {
                     e.preventDefault()
                     setStore("editing", false)
-                    // Focus the custom option button after closing
                     requestAnimationFrame(() => {
                       const customIndex = options().length
                       focusOption(customIndex)
