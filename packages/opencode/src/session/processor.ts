@@ -334,19 +334,7 @@ export namespace SessionProcessor {
                       end: Date.now(),
                     }
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata
-                    // Remove empty text parts that have no metadata (no thinking
-                    // signature significance). The part was already persisted at
-                    // text-start; clean it up to avoid sending empty text blocks
-                    // to the API on replay.
-                    if (currentText.text === "" && !currentText.metadata) {
-                      await Session.removePart({
-                        sessionID: currentText.sessionID,
-                        messageID: currentText.messageID,
-                        partID: currentText.id,
-                      })
-                    } else {
-                      await Session.updatePart(currentText)
-                    }
+                    await Session.updatePart(currentText)
                   }
                   currentText = undefined
                   break
