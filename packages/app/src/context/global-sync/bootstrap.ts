@@ -116,6 +116,7 @@ export async function bootstrapDirectory(input: {
   sdk: OpencodeClient
   store: Store<State>
   setStore: SetStoreFunction<State>
+  provider: ProviderListResponse
   vcsCache: VcsCache
   loadSessions: (directory: string) => Promise<void> | void
   translate: (key: string, vars?: Record<string, string | number>) => string
@@ -124,10 +125,12 @@ export async function bootstrapDirectory(input: {
 
   const blockingRequests = {
     project: () => input.sdk.project.current().then((x) => input.setStore("project", x.data!.id)),
-    provider: () =>
-      input.sdk.provider.list().then((x) => {
-        input.setStore("provider", normalizeProviderList(x.data!))
-      }),
+    provider: () => {
+      const setProvider = (list: ProviderListResponse) => input.setStore("provider", normalizeProviderList(list))
+      if (input.provider.all.length) return Promise.resolve(setProvider(input.provider))
+      if (input.store.provider.all.length) return Promise.resolve()
+      return input.sdk.provider.list().then((x) => setProvider(x.data!))
+    },
     agent: () => input.sdk.app.agents().then((x) => input.setStore("agent", x.data ?? [])),
     config: () => input.sdk.config.get().then((x) => input.setStore("config", x.data!)),
   }
