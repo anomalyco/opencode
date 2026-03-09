@@ -12,6 +12,8 @@ import { Session } from "../session"
 import { NamedError } from "@opencode-ai/util/error"
 import { CopilotAuthPlugin } from "./copilot"
 import { gitlabAuthPlugin as GitlabAuthPlugin } from "@gitlab/opencode-gitlab-auth"
+import { Filesystem } from "../util/filesystem"
+import path from "path"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -58,10 +60,8 @@ export namespace Plugin {
       if (plugin.includes("opencode-openai-codex-auth") || plugin.includes("opencode-copilot-auth")) continue
       log.info("loading plugin", { path: plugin })
       if (!plugin.startsWith("file://")) {
-        const lastAtIndex = plugin.lastIndexOf("@")
-        const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
-        const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
-        plugin = await BunProc.install(pkg, version).catch((err) => {
+        const { name: pkg, subpath, version } = parsePluginSpecifier(plugin)
+        let installed = await BunProc.install(pkg, version).catch((err) => {
           const cause = err instanceof Error ? err.cause : err
           const detail = cause instanceof Error ? cause.message : String(cause ?? err)
           log.error("failed to install plugin", { pkg, version, error: detail })
@@ -72,7 +72,8 @@ export namespace Plugin {
           })
           return ""
         })
-        if (!plugin) continue
+        if (!installed) continue
+        plugin = subpath ? await resolveSubpath(installed, subpath) : installed
       }
       // Prevent duplicate initialization when plugins export the same function
       // as both a named export and default export (e.g., `export const X` and `export default X`).
@@ -139,5 +140,71 @@ export namespace Plugin {
         })
       }
     })
+  }
+
+  /**
+   * Parse a plugin specifier into package name, optional subpath, and version.
+   *
+   * Examples:
+   *   "websxa"                  → { name: "websxa",      subpath: null,      version: "latest" }
+   *   "websxa/opencode"         → { name: "websxa",      subpath: "opencode", version: "latest" }
+   *   "websxa@1.0.0"            → { name: "websxa",      subpath: null,      version: "1.0.0"  }
+   *   "websxa/opencode@1.0.0"   → { name: "websxa",      subpath: "opencode", version: "1.0.0"  }
+   *   "@scope/pkg"              → { name: "@scope/pkg",  subpath: null,      version: "latest" }
+   *   "@scope/pkg/sub"          → { name: "@scope/pkg",  subpath: "sub",     version: "latest" }
+   *   "@scope/pkg/sub@2.0.0"    → { name: "@scope/pkg",  subpath: "sub",     version: "2.0.0"  }
+   */
+  function parsePluginSpecifier(specifier: string): { name: string; subpath: string | null; version: string } {
+    let version = "latest"
+    const lastAtIndex = specifier.lastIndexOf("@")
+    // For scoped packages, @ at position 0 is the scope prefix, not a version separator
+    if (lastAtIndex > 0) {
+      version = specifier.substring(lastAtIndex + 1)
+      specifier = specifier.substring(0, lastAtIndex)
+    }
+
+    if (specifier.startsWith("@")) {
+      // Scoped: @scope/name or @scope/name/subpath
+      const parts = specifier.split("/")
+      const name = parts.slice(0, 2).join("/")
+      const subpath = parts.length > 2 ? parts.slice(2).join("/") : null
+      return { name, subpath, version }
+    }
+
+    // Unscoped: name or name/subpath
+    const slashIndex = specifier.indexOf("/")
+    if (slashIndex > 0) {
+      return { name: specifier.substring(0, slashIndex), subpath: specifier.substring(slashIndex + 1), version }
+    }
+    return { name: specifier, subpath: null, version }
+  }
+
+  /**
+   * Resolve a subpath export from an installed package.
+   * Reads the package's exports map and resolves the file path.
+   * Falls back to direct path concatenation if no exports map is found.
+   */
+  async function resolveSubpath(installed: string, subpath: string): Promise<string> {
+    const pkgJson = await Filesystem.readJson<{ exports?: Record<string, unknown> }>(
+      path.join(installed, "package.json"),
+    ).catch(() => null)
+
+    const entry = pkgJson?.exports?.[`./${subpath}`]
+    const resolved = resolveExportEntry(entry)
+    if (resolved) return path.join(installed, resolved)
+
+    // Fallback: direct path (works for packages without an exports map)
+    return path.join(installed, subpath)
+  }
+
+  /** Extract an import path from a package.json exports entry. */
+  function resolveExportEntry(entry: unknown): string | null {
+    if (typeof entry === "string") return entry
+    if (entry && typeof entry === "object") {
+      const obj = entry as Record<string, unknown>
+      if (typeof obj.import === "string") return obj.import
+      if (typeof obj.default === "string") return obj.default
+    }
+    return null
   }
 }
