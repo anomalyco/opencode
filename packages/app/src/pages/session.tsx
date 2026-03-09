@@ -122,9 +122,13 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
       return
     }
     const beforeTop = el.scrollTop
+    const beforeHeight = el.scrollHeight
     fn()
-    void el.scrollHeight
-    el.scrollTop = beforeTop
+    requestAnimationFrame(() => {
+      const delta = el.scrollHeight - beforeHeight
+      if (!delta) return
+      el.scrollTop = beforeTop + delta
+    })
   }
 
   const backfillTurns = () => {
@@ -207,7 +211,7 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
     if (!input.userScrolled()) return
     const el = input.scroller()
     if (!el) return
-    if (el.scrollHeight - el.clientHeight + el.scrollTop >= turnScrollThreshold) return
+    if (el.scrollTop >= turnScrollThreshold) return
 
     const start = turnStart()
     if (start > 0) {
@@ -281,6 +285,7 @@ export default function Page() {
   const [ui, setUi] = createStore({
     git: false,
     pendingMessage: undefined as string | undefined,
+    reviewSnap: false,
     scrollGesture: 0,
     scroll: {
       overflow: false,
@@ -426,10 +431,12 @@ export default function Page() {
 
   createEffect(
     on(
-      () => params.id,
-      (id, prev) => {
-        if (id || !prev) return
-        resetSessionModel(local)
+      () => ({ dir: params.dir, id: params.id }),
+      (next, prev) => {
+        if (!prev) return
+        if (next.dir === prev.dir && next.id === prev.id) return
+        if (prev.id) sync.session.evict(prev.id, prev.dir)
+        if (!next.id) resetSessionModel(local)
       },
       { defer: true },
     ),
@@ -453,6 +460,21 @@ export default function Page() {
     }
     return key
   }, sessionKey())
+
+  let reviewFrame: number | undefined
+
+  createComputed((prev) => {
+    const open = desktopReviewOpen()
+    if (prev === undefined || prev === open) return open
+
+    if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
+    setUi("reviewSnap", true)
+    reviewFrame = requestAnimationFrame(() => {
+      reviewFrame = undefined
+      setUi("reviewSnap", false)
+    })
+    return open
+  }, desktopReviewOpen())
 
   const turnDiffs = createMemo(() => lastUserMessage()?.summary?.diffs ?? [])
   const reviewDiffs = createMemo(() => (store.changes === "session" ? diffs() : turnDiffs()))
@@ -1098,7 +1120,7 @@ export default function Page() {
   const updateScrollState = (el: HTMLDivElement) => {
     const max = el.scrollHeight - el.clientHeight
     const overflow = max > 1
-    const bottom = !overflow || Math.abs(el.scrollTop) <= 2 || !autoScroll.userScrolled()
+    const bottom = !overflow || el.scrollTop >= max - 2
 
     if (ui.scroll.overflow === overflow && ui.scroll.bottom === bottom) return
     setUi("scroll", { overflow, bottom })
@@ -1121,7 +1143,7 @@ export default function Page() {
 
   const resumeScroll = () => {
     setStore("messageId", undefined)
-    autoScroll.smoothScrollToBottom()
+    autoScroll.forceScrollToBottom()
     clearMessageHash()
 
     const el = scroller
@@ -1189,11 +1211,13 @@ export default function Page() {
 
       const el = scroller
       const delta = next - dockHeight
-      const stick = el ? Math.abs(el.scrollTop) < 10 + Math.max(0, delta) : false
+      const stick = el
+        ? !autoScroll.userScrolled() || el.scrollHeight - el.clientHeight - el.scrollTop < 10 + Math.max(0, delta)
+        : false
 
       dockHeight = next
 
-      if (stick) autoScroll.smoothScrollToBottom()
+      if (stick) autoScroll.forceScrollToBottom()
 
       if (el) scheduleScrollState(el)
       scrollSpy.markDirty()
@@ -1225,6 +1249,7 @@ export default function Page() {
   onCleanup(() => {
     document.removeEventListener("keydown", handleKeyDown)
     scrollSpy.destroy()
+    if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
     if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)
   })
 
@@ -1246,7 +1271,7 @@ export default function Page() {
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger flex-1 md:flex-none": true,
             "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
-              !size.active(),
+              !size.active() && !ui.reviewSnap,
           }}
           style={{
             width: sessionPanelWidth(),
@@ -1279,7 +1304,6 @@ export default function Page() {
                     onScrollSpyScroll={scrollSpy.onScroll}
                     onTurnBackfillScroll={historyWindow.onScrollerScroll}
                     onAutoScrollInteraction={autoScroll.handleInteraction}
-                    onPreserveScrollAnchor={autoScroll.preserve}
                     centered={centered()}
                     setContentRef={(el) => {
                       content = el
@@ -1362,6 +1386,7 @@ export default function Page() {
           reviewPanel={reviewPanel}
           activeDiff={tree.activeDiff}
           focusReviewDiff={focusReviewDiff}
+          reviewSnap={ui.reviewSnap}
           size={size}
         />
       </div>
