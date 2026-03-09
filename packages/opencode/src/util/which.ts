@@ -5,8 +5,8 @@ export function which(cmd: string, env?: NodeJS.ProcessEnv) {
   const pathExt = env?.PATHEXT ?? env?.PathExt ?? process.env.PATHEXT ?? process.env.PathExt
   const result = whichPkg.sync(cmd, {
     nothrow: true,
-    path: path,
-    pathExt: pathExt,
+    path,
+    pathExt
   })
   return typeof result === "string" ? result : null
 }
