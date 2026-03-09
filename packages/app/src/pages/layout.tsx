@@ -424,6 +424,17 @@ export default function Layout(props: ParentProps) {
           return
         }
 
+        if (
+          e.details?.type === "question.replied" ||
+          e.details?.type === "question.rejected" ||
+          e.details?.type === "permission.replied"
+        ) {
+          const props = e.details.properties as { sessionID: string }
+          const sessionKey = `${e.name}:${props.sessionID}`
+          dismissSessionAlert(sessionKey)
+          return
+        }
+
         if (e.details?.type !== "permission.asked" && e.details?.type !== "question.asked") return
         const title =
           e.details.type === "permission.asked"
