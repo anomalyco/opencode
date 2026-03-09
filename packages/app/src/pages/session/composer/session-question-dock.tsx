@@ -42,21 +42,6 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   })
 
   const last = createMemo(() => store.tab >= total() - 1)
-  const hints = createMemo(() => {
-    if (store.editing)
-      return [
-        { key: "Enter", label: language.t("ui.question.hintSave") },
-        { key: "Shift+Enter", label: language.t("ui.question.hintNewline") },
-        { key: "Esc", label: language.t("ui.question.hintCancel") },
-      ]
-
-    return [
-      { key: "↑↓", label: language.t("ui.question.hintMove") },
-      { key: "Enter/Space", label: language.t("ui.question.hintSelect") },
-      { key: "←", label: language.t("ui.question.hintPrev") },
-      { key: "→", label: language.t(last() ? "ui.question.hintSubmit" : "ui.question.hintNext") },
-    ]
-  })
 
   const customUpdate = (value: string, selected: boolean = on()) => {
     const prev = input().trim()
@@ -246,6 +231,11 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   const commitCustom = () => {
     setStore("editing", false)
     customUpdate(input())
+    const trimmed = input().trim()
+    if (!trimmed) {
+      setStore("customOn", store.tab, false)
+      setStore("answers", store.tab, [])
+    }
     requestAnimationFrame(() => {
       const customIndex = options().length
       focusOption(customIndex)
@@ -413,16 +403,6 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
           <Button variant="ghost" size="large" disabled={store.sending} onClick={reject}>
             {language.t("ui.common.dismiss")}
           </Button>
-          <div data-slot="question-keyboard-hints">
-            <For each={hints()}>
-              {(item) => (
-                <span data-slot="question-keyboard-hint">
-                  <span data-slot="question-keyboard-key">{item.key}</span>
-                  <span data-slot="question-keyboard-label">{item.label}</span>
-                </span>
-              )}
-            </For>
-          </div>
           <div data-slot="question-footer-actions">
             <Show when={store.tab > 0}>
               <Button variant="secondary" size="large" disabled={store.sending} onClick={back}>
@@ -506,7 +486,9 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
               </span>
               <span data-slot="question-option-main">
                 <span data-slot="option-label">{language.t("ui.messagePart.option.typeOwnAnswer")}</span>
-                <span data-slot="option-description">{input() || language.t("ui.question.custom.placeholder")}</span>
+                <span data-slot="option-description">
+                  {input().trim() || language.t("ui.question.custom.placeholder")}
+                </span>
               </span>
             </button>
           }

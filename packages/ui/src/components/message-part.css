@@ -1348,12 +1348,11 @@
 
     &:focus-visible {
       outline: none;
-      box-shadow: 0 0 0 2px var(--border-interactive-base);
       background-color: var(--background-base);
     }
 
     &[data-picked="true"]:focus-visible {
-      box-shadow: 0 0 0 2px var(--border-interactive-base);
+      outline: none;
     }
   }
 
@@ -1486,8 +1485,6 @@
     }
 
     &:focus-visible {
-      outline: 1px solid var(--border-interactive-base);
-      outline-offset: 2px;
       border-radius: var(--radius-xs);
     }
 
