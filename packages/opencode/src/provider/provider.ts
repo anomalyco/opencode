@@ -1024,23 +1024,6 @@ export namespace Provider {
       mergeProvider(providerID, partial)
     }
 
-    // Patterns to detect reasoning-capable Ollama models
-    const OLLAMA_REASONING_PATTERNS = [
-      /qwen[_\-]?3/i, // qwen3, qwen-3, qwen_3
-      /phi[_\-]?4/i, // phi4, phi-4
-      /gemma[_\-]?3/i, // gemma3, gemma-3
-      /llama[_\-]?3/i, // llama3, llama-3
-      /r1$/i, // deepseek-r1, etc.
-      /qwq/i, // QwQ
-      /deepseek/i, // DeepSeek family
-      /gpt-?oss/i, // GPT-OSS
-    ]
-
-    function isOllamaReasoningModel(modelName: string, family?: string, families?: string[]): boolean {
-      const searchText = `${modelName} ${family ?? ""} ${families?.join(" ") ?? ""}`
-      return OLLAMA_REASONING_PATTERNS.some(pattern => pattern.test(searchText))
-    }
-
     // Auto-detect Ollama if not already configured
     const ollamaConfigured = providers["ollama"] || configProviders.some(([id]) => id === "ollama")
     if (!ollamaConfigured) {
@@ -1052,19 +1035,6 @@ export namespace Provider {
         for (const ollamaModel of ollama.models) {
           const { model, tag } = parseModelName(ollamaModel.name)
           const modelID = tag ? `${model}:${tag}` : model
-
-          // Detect if this is a reasoning model based on patterns
-          const isReasoning = isOllamaReasoningModel(
-            model,
-            ollamaModel.details?.family,
-            ollamaModel.details?.families,
-          )
-
-          // Check for config overrides - allow forcing reasoning on/off
-          const configModel = config.provider?.ollama?.models?.[modelID]
-          const configForceReasoning = configModel?.capabilities?.reasoning // undefined = auto, true = force on, false = force off
-          const finalReasoning = configForceReasoning !== undefined ? configForceReasoning : isReasoning
-
           ollamaModels[modelID] = {
             id: modelID,
             providerID: ollamaProviderID,
@@ -1078,25 +1048,18 @@ export namespace Provider {
             status: "active",
             capabilities: {
               temperature: true,
-              reasoning: finalReasoning,
+              reasoning: ollamaModel.details?.family?.includes("reasoning") ?? false,
               attachment: false,
               toolcall: true,
               input: { text: true, audio: false, image: false, video: false, pdf: false },
               output: { text: true, audio: false, image: false, video: false, pdf: false },
-              interleaved: finalReasoning
-                ? configModel?.capabilities?.interleaved ?? { field: "reasoning_content" }
-                : false,
+              interleaved: false,
             },
             cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-            options:
-              finalReasoning
-                ? { reasoningEffort: configModel?.options?.reasoningEffort ?? "medium", ...configModel?.options }
-                : {},
+            options: {},
             limit: {
-              context:
-                configModel?.limit?.context ??
-                (finalReasoning ? 200000 : ollamaModel.details?.parameter_size ? 128000 : 8192),
-              output: configModel?.limit?.output ?? (finalReasoning ? 32768 : 8192),
+              context: ollamaModel.details?.parameter_size ? 128000 : 8192,
+              output: 8192,
             },
             headers: {},
             release_date: "",

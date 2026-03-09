@@ -756,28 +756,6 @@ export namespace ProviderTransform {
       result["enable_thinking"] = true
     }
 
-    // Enable thinking for Ollama reasoning models via the "think" parameter
-    // Ollama supports thinking for: DeepSeek R1, DeepSeek v3.1, Qwen 3, GPT-OSS
-    // Most models accept true/false, GPT-OSS accepts low/medium/high
-    if (
-      input.model.providerID === "ollama" &&
-      input.model.capabilities.reasoning &&
-      input.model.api.npm === "@ai-sdk/openai-compatible"
-    ) {
-      // Check if it's a GPT-OSS model (supports thinking levels)
-      if (input.model.id.toLowerCase().includes("gpt-oss")) {
-        result["think"] = input.model.options?.reasoningEffort ?? "medium"
-      } else {
-        // For most models, enable thinking when not disabled
-        const effort = input.model.options?.reasoningEffort
-        if (effort === "none") {
-          result["think"] = false
-        } else {
-          result["think"] = true
-        }
-      }
-    }
-
     if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
       if (!input.model.api.id.includes("gpt-5-pro")) {
         result["reasoningEffort"] = "medium"
