@@ -99,6 +99,32 @@ This will walk you through installing the GitHub app, creating the workflow, and
 
 3. Store the API keys in secrets. In your organization or project **settings**, expand **Secrets and variables** on the left and select **Actions**. Add the required API keys.
 
+## Actions
+
+This repo provides two GitHub Actions:
+
+### `anomalyco/opencode/github`
+
+Installs opencode and runs it on trigger comments (`/opencode`, `/oc`). This is the main action for most use cases.
+
+```yml
+- uses: anomalyco/opencode/github@latest
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  with:
+    model: anthropic/claude-sonnet-4-20250514
+```
+
+### `anomalyco/opencode/github/install`
+
+Just installs opencode without running it. Use this if you need to run custom opencode commands in your workflow.
+
+```yml
+- uses: anomalyco/opencode/github/install@latest
+- run: opencode run --some-custom-command
+```
+
 ## Support
 
 This is an early release. If you encounter issues or have feedback, please create an issue at https://github.com/anomalyco/opencode/issues.

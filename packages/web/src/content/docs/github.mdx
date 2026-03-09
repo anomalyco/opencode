@@ -79,6 +79,34 @@ Or you can set it up manually.
 
 ---
 
+## Actions
+
+OpenCode provides two GitHub Actions:
+
+### `anomalyco/opencode/github`
+
+Installs OpenCode and runs it on trigger comments (`/opencode`, `/oc`). This is the main action for most use cases.
+
+```yaml
+- uses: anomalyco/opencode/github@latest
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  with:
+    model: anthropic/claude-sonnet-4-20250514
+```
+
+### `anomalyco/opencode/github/install`
+
+Just installs OpenCode without running it. Use this if you need to run custom OpenCode commands in your workflow.
+
+```yaml
+- uses: anomalyco/opencode/github/install@latest
+- run: opencode run --some-custom-command
+```
+
+---
+
 ## Configuration
 
 - `model`: The model to use with OpenCode. Takes the format of `provider/model`. This is **required**.
