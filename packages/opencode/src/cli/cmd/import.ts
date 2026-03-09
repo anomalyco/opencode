@@ -131,7 +131,14 @@ export const ImportCommand = cmd({
         return
       }
 
-      Database.use((db) => db.insert(SessionTable).values(Session.toRow(exportData.info)).onConflictDoNothing().run())
+      const row = { ...Session.toRow(exportData.info), project_id: Instance.project.id }
+      Database.use((db) =>
+        db
+          .insert(SessionTable)
+          .values(row)
+          .onConflictDoUpdate({ target: SessionTable.id, set: { project_id: row.project_id } })
+          .run(),
+      )
 
       for (const msg of exportData.messages) {
         Database.use((db) =>

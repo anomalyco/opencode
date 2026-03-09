@@ -98,12 +98,15 @@ export const dict = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webfetch",
+  "ui.tool.websearch": "網頁搜尋",
+  "ui.tool.codesearch": "程式碼搜尋",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "修補",
   "ui.tool.todos": "待辦",
   "ui.tool.todos.read": "讀取待辦",
   "ui.tool.questions": "問題",
   "ui.tool.agent": "{{type}} 代理程式",
+  "ui.tool.agent.default": "代理程式",
 
   "ui.common.file.one": "個檔案",
   "ui.common.file.other": "個檔案",
@@ -130,6 +133,7 @@ export const dict = {
   "ui.message.copyResponse": "複製回覆",
   "ui.message.copied": "已複製！",
   "ui.message.interrupted": "已中斷",
+  "ui.message.queued": "排隊中",
   "ui.message.attachment.alt": "附件",
 
   "ui.patch.action.deleted": "已刪除",
