@@ -90,6 +90,16 @@ export function pruneSessionKeys(input: {
     .slice(input.max)
 }
 
+type RootResult = {
+  root: string
+  project?: {
+    id?: string
+    worktree?: string
+    vcs?: string
+    sandboxes?: string[]
+  }
+}
+
 function nextSessionTabsForOpen(current: SessionTabs | undefined, tab: string): SessionTabs {
   const all = current?.all ?? []
   if (tab === "review") return { all: all.filter((x) => x !== "review"), active: tab }
@@ -457,6 +467,27 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       return directory
     }
 
+    const resolveRoot = (directory: string): Promise<RootResult> => {
+      return globalSdk
+        .createClient({ directory, throwOnError: true })
+        .project.current()
+        .then((x) => {
+          const project = x.data
+          return {
+            root: project?.worktree && project.id !== "global" ? project.worktree : directory,
+            project: project
+              ? {
+                  id: project.id,
+                  worktree: project.worktree,
+                  vcs: project.vcs,
+                  sandboxes: project.sandboxes,
+                }
+              : undefined,
+          }
+        })
+        .catch(() => ({ root: directory }))
+    }
+
     createEffect(() => {
       const projects = server.projects.list()
       const seen = new Set(projects.map((project) => project.worktree))
@@ -565,6 +596,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       projects: {
         list,
+        resolve(directory: string) {
+          return resolveRoot(directory)
+        },
         open(directory: string) {
           const root = rootFor(directory)
           if (server.projects.list().find((x) => x.worktree === root)) return
