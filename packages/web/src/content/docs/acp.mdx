@@ -140,6 +140,31 @@ This config sets up CodeCompanion to use OpenCode as the ACP agent for chat.
 
 If you need to pass environment variables (like `OPENCODE_API_KEY`), refer to [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) in the CodeCompanion.nvim documentation for full details.
 
+---
+
+### marimo
+
+[marimo](https://marimo.io) connects to ACP agents over WebSocket. Use `stdio-to-ws` to bridge OpenCode's stdio transport:
+
+```bash title="macOS / Linux"
+npx stdio-to-ws "npx opencode-ai acp" --port 3023
+```
+
+```bash title="Windows"
+npx stdio-to-ws "cmd /c npx opencode-ai acp" --port 3023
+```
+
+Then open the agents panel in marimo's sidebar, select OpenCode from the dropdown, and start chatting.
+
+:::tip
+To have cells run automatically when the agent modifies your notebook, add this to your `pyproject.toml`:
+
+```toml title="pyproject.toml"
+[tool.marimo.runtime]
+watcher_on_save = "autorun"
+```
+:::
+
 ## Support
 
 OpenCode works the same via ACP as it does in the terminal. All features are supported:
