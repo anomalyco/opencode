@@ -103,7 +103,9 @@ export namespace Plugin {
     }
   }, async ({ hooks }) => {
     for (const hook of hooks) {
-      await hook["shutdown"]?.()
+      await hook["shutdown"]?.().catch((err: unknown) => {
+        log.error("plugin shutdown hook failed", { error: err })
+      })
     }
   })
 
