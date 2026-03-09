@@ -1239,6 +1239,12 @@ export default function Layout(props: ParentProps) {
   }
 
   async function openProject(directory: string, navigate = true) {
+    const match = layout.projects.list().find((item) => workspaceKey(item.worktree) === workspaceKey(directory))
+    if (match) {
+      if (navigate) await navigateToProject(match.worktree)
+      return match.worktree
+    }
+
     const { root, project } = await layout.projects.resolve(directory)
     await layout.projects.open(directory, { root, project })
     if (navigate) await navigateToProject(root)
