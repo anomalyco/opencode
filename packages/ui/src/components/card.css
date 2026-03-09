@@ -87,20 +87,4 @@
   :where([data-card="actions"], [data-slot="card-actions"]) {
     padding-left: var(--card-indent);
   }
-
-  &[data-variant="error"] {
-    --card-accent: var(--icon-critical-base);
-  }
-
-  &[data-variant="warning"] {
-    --card-accent: var(--icon-warning-active);
-  }
-
-  &[data-variant="success"] {
-    --card-accent: var(--icon-success-active);
-  }
-
-  &[data-variant="info"] {
-    --card-accent: var(--icon-info-active);
-  }
 }

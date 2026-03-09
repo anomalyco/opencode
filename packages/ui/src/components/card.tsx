@@ -29,9 +29,24 @@ function pick(variant: NonNullable<CardProps["variant"]>) {
   return
 }
 
+function mix(style: ComponentProps<"div">["style"], value?: string) {
+  if (!value) return style
+  if (!style) return { "--card-accent": value }
+  if (typeof style === "string") return `${style};--card-accent:${value};`
+  return { ...(style as Record<string, string | number>), "--card-accent": value }
+}
+
 export function Card(props: CardProps) {
-  const [split, rest] = splitProps(props, ["variant", "icon", "class", "classList"])
+  const [split, rest] = splitProps(props, ["variant", "icon", "style", "class", "classList"])
   const variant = () => split.variant || "normal"
+  const accent = () => {
+    const v = variant()
+    if (v === "error") return "var(--icon-critical-base)"
+    if (v === "warning") return "var(--icon-warning-active)"
+    if (v === "success") return "var(--icon-success-active)"
+    if (v === "info") return "var(--icon-info-active)"
+    return
+  }
   const mode = () => {
     if (split.icon === false || split.icon === null) return "none" as const
     if (typeof split.icon === "string") return "set" as const
@@ -49,6 +64,7 @@ export function Card(props: CardProps) {
         data-component="card"
         data-variant={variant()}
         data-icon={mode()}
+        style={mix(split.style, accent())}
         classList={{
           ...(split.classList ?? {}),
           [split.class ?? ""]: !!split.class,
