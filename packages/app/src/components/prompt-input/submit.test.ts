@@ -5,10 +5,20 @@ let createPromptSubmit: typeof import("./submit").createPromptSubmit
 
 const createdClients: string[] = []
 const createdSessions: string[] = []
+const enabledAutoAccept: Array<{ sessionID: string; directory: string }> = []
+const optimistic: Array<{
+  message: {
+    agent: string
+    model: { providerID: string; modelID: string }
+    variant?: string
+  }
+}> = []
 const sentShell: string[] = []
 const syncedDirectories: string[] = []
 
+let params: { id?: string } = {}
 let selected = "/repo/worktree-a"
+let variant: string | undefined
 
 const promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
 
@@ -25,6 +35,7 @@ const clientFor = (directory: string) => {
         return { data: undefined }
       },
       prompt: async () => ({ data: undefined }),
+      promptAsync: async () => ({ data: undefined }),
       command: async () => ({ data: undefined }),
       abort: async () => ({ data: undefined }),
     },
@@ -39,7 +50,7 @@ beforeAll(async () => {
 
   mock.module("@solidjs/router", () => ({
     useNavigate: () => () => undefined,
-    useParams: () => ({}),
+    useParams: () => params,
   }))
 
   mock.module("@opencode-ai/sdk/v2/client", () => ({
@@ -61,10 +72,18 @@ beforeAll(async () => {
     useLocal: () => ({
       model: {
         current: () => ({ id: "model", provider: { id: "provider" } }),
-        variant: { current: () => undefined },
+        variant: { current: () => variant },
       },
       agent: {
         current: () => ({ name: "agent" }),
+      },
+    }),
+  }))
+
+  mock.module("@/context/permission", () => ({
+    usePermission: () => ({
+      enableAutoAccept(sessionID: string, directory: string) {
+        enabledAutoAccept.push({ sessionID, directory })
       },
     }),
   }))
@@ -109,7 +128,11 @@ beforeAll(async () => {
       data: { command: [] },
       session: {
         optimistic: {
-          add: () => undefined,
+          add: (value: {
+            message: { agent: string; model: { providerID: string; modelID: string }; variant?: string }
+          }) => {
+            optimistic.push(value)
+          },
           remove: () => undefined,
         },
       },
@@ -145,9 +168,13 @@ beforeAll(async () => {
 beforeEach(() => {
   createdClients.length = 0
   createdSessions.length = 0
+  enabledAutoAccept.length = 0
+  optimistic.length = 0
+  params = {}
   sentShell.length = 0
   syncedDirectories.length = 0
   selected = "/repo/worktree-a"
+  variant = undefined
 })
 
 describe("prompt submit worktree selection", () => {
@@ -156,6 +183,7 @@ describe("prompt submit worktree selection", () => {
       info: () => undefined,
       imageAttachments: () => [],
       commentCount: () => 0,
+      autoAccept: () => false,
       mode: () => "shell",
       working: () => false,
       editor: () => undefined,
@@ -180,5 +208,67 @@ describe("prompt submit worktree selection", () => {
     expect(createdSessions).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
     expect(sentShell).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
     expect(syncedDirectories).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
+  })
+
+  test("applies auto-accept to newly created sessions", async () => {
+    const submit = createPromptSubmit({
+      info: () => undefined,
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => true,
+      mode: () => "shell",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      newSessionWorktree: () => selected,
+      onNewSessionWorktreeReset: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event)
+
+    expect(enabledAutoAccept).toEqual([{ sessionID: "session-1", directory: "/repo/worktree-a" }])
+  })
+
+  test("includes the selected variant on optimistic prompts", async () => {
+    params = { id: "session-1" }
+    variant = "high"
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event)
+
+    expect(optimistic).toHaveLength(1)
+    expect(optimistic[0]).toMatchObject({
+      message: {
+        agent: "agent",
+        model: { providerID: "provider", modelID: "model" },
+        variant: "high",
+      },
+    })
   })
 })
