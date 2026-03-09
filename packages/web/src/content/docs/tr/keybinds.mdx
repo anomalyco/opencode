@@ -28,6 +28,7 @@ opencode, `tui.json` aracılığıyla özelleştirebileceğiniz bir tuş bağlan
     "session_unshare": "none",
     "session_interrupt": "escape",
     "session_compact": "<leader>c",
+    "session_child_first": "<leader>down",
     "session_child_cycle": "<leader>right",
     "session_child_cycle_reverse": "<leader>left",
     "session_parent": "<leader>up",
@@ -134,21 +135,21 @@ Anahtarı yapılandırmanıza "none" değeriyle ekleyerek bir tuş atamasını d
 
 opencode masaüstü uygulaması bilgi istemi girişi, metni düzenlemek için yaygın Readline/Emacs tarzı kısayolları destekler. Bunlar yerleşiktir ve şu anda `opencode.json` aracılığıyla yapılandırılamaz.
 
-| Shortcut | Action                                   |
-| -------- | ---------------------------------------- |
-| `ctrl+a` | Geçerli satırın başına git               |
-| `ctrl+e` | Move to end of current line              |
-| `ctrl+b` | Move cursor back one character           |
-| `ctrl+f` | Move cursor forward one character        |
-| `alt+b`  | Move cursor back one word                |
-| `alt+f`  | Move cursor forward one word             |
-| `ctrl+d` | Delete character under cursor            |
-| `ctrl+k` | Kill to end of line                      |
-| `ctrl+u` | Satırın başına kadar öldür               |
-| `ctrl+w` | Kill previous word                       |
-| `alt+d`  | Kill next word                           |
-| `ctrl+t` | Transpose characters                     |
-| `ctrl+g` | Cancel popovers / abort running response |
+| Shortcut | Action                                              |
+| -------- | --------------------------------------------------- |
+| `ctrl+a` | Geçerli satırın başına git                          |
+| `ctrl+e` | Geçerli satırın sonuna git                          |
+| `ctrl+b` | İmleci bir karakter geri taşı                       |
+| `ctrl+f` | İmleci bir karakter ileri taşı                      |
+| `alt+b`  | İmleci bir kelime geri taşı                         |
+| `alt+f`  | İmleci bir kelime ileri taşı                        |
+| `ctrl+d` | İmleç altındaki karakteri sil                       |
+| `ctrl+k` | Satırın sonuna kadar sil                            |
+| `ctrl+u` | Satırın başına kadar sil                            |
+| `ctrl+w` | Önceki kelimeyi sil                                 |
+| `alt+d`  | Sonraki kelimeyi sil                                |
+| `ctrl+t` | Karakterlerin yerini değiştir                       |
+| `ctrl+g` | Açılır pencereleri iptal et / çalışan yanıtı durdur |
 
 ---
 
@@ -158,7 +159,7 @@ Bazı terminaller varsayılan olarak Enter ile değiştirici tuşlar göndermez.
 
 ### Windows Terminali
 
-`settings.json` cihazınızı şu adreste açın:
+`settings.json` dosyasını şurada açın:
 
 ```
 %LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
