@@ -195,4 +195,91 @@ describe("Instance.containsPath", () => {
       },
     })
   })
+
+  test("returns true for symlinked path that resolves inside project", async () => {
+    if (process.platform === "win32") return
+    await using tmp = await tmpdir({ git: true })
+    const target = path.join(tmp.path, "real-dir")
+    await fs.mkdir(target)
+    await Bun.write(path.join(target, "file.txt"), "content")
+    const link = path.join(tmp.path, "link-dir")
+    await fs.symlink(target, link)
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: () => {
+        expect(Instance.containsPath(path.join(link, "file.txt"))).toBe(true)
+      },
+    })
+  })
+
+  test("returns true when project is accessed via external symlink", async () => {
+    if (process.platform === "win32") return
+    await using tmp = await tmpdir({ git: true })
+    await Bun.write(path.join(tmp.path, "file.txt"), "content")
+    // Create a symlink to the project directory from outside
+    const externalLink = tmp.path + "-ext-symlink"
+    await fs.symlink(tmp.path, externalLink)
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: () => {
+          // A path via the external symlink should resolve to the canonical project dir
+          expect(Instance.containsPath(path.join(externalLink, "file.txt"))).toBe(true)
+        },
+      })
+    } finally {
+      await fs.unlink(externalLink).catch(() => {})
+    }
+  })
+
+  test("returns false for symlink that resolves outside project", async () => {
+    if (process.platform === "win32") return
+    await using tmp = await tmpdir({ git: true })
+    await using outside = await tmpdir()
+    await Bun.write(path.join(outside.path, "secret.txt"), "secret")
+    // Symlink inside project pointing to directory outside project
+    const link = path.join(tmp.path, "escape-link")
+    await fs.symlink(outside.path, link)
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: () => {
+        // The symlink is inside the project, but its target is outside
+        expect(Instance.containsPath(path.join(link, "secret.txt"))).toBe(false)
+      },
+    })
+  })
+
+  test("handles dangling symlink gracefully", async () => {
+    if (process.platform === "win32") return
+    await using tmp = await tmpdir({ git: true })
+    const link = path.join(tmp.path, "dangling")
+    await fs.symlink(path.join(tmp.path, "nonexistent"), link)
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: () => {
+        // Dangling symlink: resolve falls back to unresolved path (ENOENT),
+        // which is still lexically inside the project
+        expect(Instance.containsPath(link)).toBe(true)
+      },
+    })
+  })
+
+  test("propagates ELOOP from symlink cycle", async () => {
+    if (process.platform === "win32") return
+    await using tmp = await tmpdir({ git: true })
+    const a = path.join(tmp.path, "a")
+    const b = path.join(tmp.path, "b")
+    await fs.symlink(b, a)
+    await fs.symlink(a, b)
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: () => {
+        expect(() => Instance.containsPath(a)).toThrow()
+      },
+    })
+  })
 })
