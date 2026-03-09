@@ -764,11 +764,20 @@ export namespace ProviderTransform {
 
     // Enable thinking for Ollama reasoning models via the "think" parameter
     // Ollama supports thinking for: DeepSeek R1, DeepSeek v3.1, Qwen 3, GPT-OSS
-    // Most models accept true/false, GPT-OSS accepts low/medium/high
+    // Only these specific models support the think parameter
+    const OLLAMA_THINK_MODELS = [
+      /deepseek.*r1/i,
+      /deepseek.*v3/i,
+      /qwen3/i,
+      /qwq/i,
+      /gpt-?oss/i,
+    ]
+    const supportsThink = OLLAMA_THINK_MODELS.some((pattern) => pattern.test(input.model.id))
     if (
       input.model.providerID === "ollama" &&
       input.model.capabilities.reasoning &&
-      input.model.api.npm === "@ai-sdk/openai-compatible"
+      input.model.api.npm === "@ai-sdk/openai-compatible" &&
+      supportsThink
     ) {
       // Check if it's a GPT-OSS model (supports thinking levels)
       if (input.model.id.toLowerCase().includes("gpt-oss")) {
