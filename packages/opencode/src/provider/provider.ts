@@ -1062,7 +1062,7 @@ export namespace Provider {
 
           // Check for config overrides - allow forcing reasoning on/off
           const configModel = config.provider?.ollama?.models?.[modelID]
-          const configForceReasoning = configModel?.capabilities?.reasoning // undefined = auto, true = force on, false = force off
+          const configForceReasoning = configModel?.reasoning // undefined = auto, true = force on, false = force off
           const finalReasoning = configForceReasoning !== undefined ? configForceReasoning : isReasoning
 
           ollamaModels[modelID] = {
@@ -1084,7 +1084,7 @@ export namespace Provider {
               input: { text: true, audio: false, image: false, video: false, pdf: false },
               output: { text: true, audio: false, image: false, video: false, pdf: false },
               interleaved: finalReasoning
-                ? configModel?.capabilities?.interleaved ?? { field: "reasoning_content" }
+                ? configModel?.interleaved ?? { field: "reasoning_content" }
                 : false,
             },
             cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
