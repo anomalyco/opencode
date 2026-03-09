@@ -1238,7 +1238,49 @@ export default function Layout(props: ParentProps) {
     navigateWithSidebarReset(`/${base64Encode(session.directory)}/session/${session.id}`)
   }
 
+  function autoEnableWorkspacesIfSandbox(directory: string) {
+    const dir = workspaceKey(directory)
+    const project = layout.projects
+      .list()
+      .find(
+        (item) => workspaceKey(item.worktree) === dir || item.sandboxes?.some((entry) => workspaceKey(entry) === dir),
+      )
+
+    if (project?.vcs === "git") {
+      const root = workspaceKey(project.worktree)
+      const sandbox = project.sandboxes?.some((item) => workspaceKey(item) === dir)
+      if (root === dir) return
+      if (sandbox) {
+        const enabled = layout.sidebar.workspaces(project.worktree)()
+        if (!enabled) {
+          layout.sidebar.setWorkspaces(project.worktree, true)
+          return
+        }
+        return
+      }
+    }
+
+    if (project && project.vcs && project.vcs !== "git") return
+
+    void globalSDK
+      .createClient({ directory, throwOnError: true })
+      .project.current()
+      .then((x) => x.data)
+      .then((item) => {
+        if (!item) return
+        if (item.vcs !== "git") return
+        const root = workspaceKey(item.worktree)
+        const sandbox = item.sandboxes?.some((entry) => workspaceKey(entry) === dir)
+        if (root === dir) return
+        if (!sandbox) return
+        if (layout.sidebar.workspaces(item.worktree)()) return
+        layout.sidebar.setWorkspaces(item.worktree, true)
+      })
+      .catch(() => undefined)
+  }
+
   function openProject(directory: string, navigate = true) {
+    autoEnableWorkspacesIfSandbox(directory)
     layout.projects.open(directory)
     if (navigate) navigateToProject(directory)
   }
