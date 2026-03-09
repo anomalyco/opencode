@@ -293,6 +293,7 @@ export namespace Session {
     title?: string
     parentID?: string
     directory: string
+    workspaceID?: string
     permission?: PermissionNext.Ruleset
   }) {
     const result: Info = {
@@ -301,7 +302,7 @@ export namespace Session {
       version: Installation.VERSION,
       projectID: Instance.project.id,
       directory: input.directory,
-      workspaceID: WorkspaceContext.workspaceID,
+      workspaceID: input.workspaceID ?? WorkspaceContext.workspaceID,
       parentID: input.parentID,
       title: input.title ?? createDefaultTitle(!!input.parentID),
       permission: input.permission,
@@ -541,9 +542,22 @@ export namespace Session {
     const project = Instance.project
     const conditions = [eq(SessionTable.project_id, project.id)]
 
-    if (WorkspaceContext.workspaceID) {
-      conditions.push(eq(SessionTable.workspace_id, WorkspaceContext.workspaceID))
+    // Use explicit workspaceID parameter if provided, otherwise fall back to context.
+    // When filtering by workspace, also include sessions with NULL workspace_id
+    // (pre-migration sessions) so they are not silently hidden.
+    const wsID = input?.workspaceID ?? WorkspaceContext.workspaceID
+    if (wsID) {
+      conditions.push(
+        or(
+          eq(SessionTable.workspace_id, wsID),
+          isNull(SessionTable.workspace_id),
+        )!,
+      )
     }
+
+    // When multiple worktrees share the same project_id (e.g. git worktrees
+    // from the same repo), filter by directory to scope sessions to the
+    // current working directory.
     if (input?.directory) {
       conditions.push(eq(SessionTable.directory, input.directory))
     }

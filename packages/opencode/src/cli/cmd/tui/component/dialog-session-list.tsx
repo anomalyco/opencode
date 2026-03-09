@@ -26,6 +26,8 @@ export function DialogSessionList() {
 
   const [searchResults] = createResource(search, async (query) => {
     if (!query) return undefined
+    // The server-side session list already scopes to the current directory
+    // by default, so search results will also be directory-scoped.
     const result = await sdk.client.session.list({ search: query, limit: 30 })
     return result.data ?? []
   })

@@ -1,6 +1,7 @@
 import type { Argv } from "yargs"
 import { cmd } from "./cmd"
 import { Session } from "../../session"
+import { Instance } from "../../project/instance"
 import { bootstrap } from "../bootstrap"
 import { UI } from "../ui"
 import { Locale } from "../../util/locale"
@@ -88,7 +89,10 @@ export const SessionListCommand = cmd({
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
-      const sessions = [...Session.list({ roots: true, limit: args.maxCount })]
+      // Scope session list to the current working directory to prevent
+      // cross-worktree session leakage when multiple worktrees share the
+      // same git root commit (and thus the same project_id).
+      const sessions = [...Session.list({ roots: true, limit: args.maxCount, directory: Instance.directory })]
 
       if (sessions.length === 0) {
         return

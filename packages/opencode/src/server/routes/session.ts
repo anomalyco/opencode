@@ -16,6 +16,7 @@ import { Log } from "../../util/log"
 import { PermissionNext } from "@/permission/next"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { Instance } from "../../project/instance"
 
 const log = Log.create({ service: "server" })
 
@@ -42,6 +43,7 @@ export const SessionRoutes = lazy(() =>
         "query",
         z.object({
           directory: z.string().optional().meta({ description: "Filter sessions by project directory" }),
+          workspaceID: z.string().optional().meta({ description: "Filter sessions by workspace ID" }),
           roots: z.coerce.boolean().optional().meta({ description: "Only return root sessions (no parentID)" }),
           start: z.coerce
             .number()
@@ -53,9 +55,15 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const query = c.req.valid("query")
+        // Default to the current instance directory when no directory filter is
+        // specified. This ensures sessions are scoped to the active working
+        // directory, preventing cross-worktree session leakage when multiple
+        // worktrees share the same git root commit (and thus the same project_id).
+        const directory = query.directory ?? Instance.directory
         const sessions: Session.Info[] = []
         for await (const session of Session.list({
-          directory: query.directory,
+          directory,
+          workspaceID: query.workspaceID,
           roots: query.roots,
           start: query.start,
           search: query.search,

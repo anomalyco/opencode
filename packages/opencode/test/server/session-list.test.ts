@@ -3,6 +3,8 @@ import path from "path"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { Log } from "../../src/util/log"
+import { Database, eq } from "../../src/storage/db"
+import { SessionTable } from "../../src/session/session.sql"
 
 const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
@@ -84,6 +86,73 @@ describe("Session.list", () => {
 
         const sessions = [...Session.list({ limit: 2 })]
         expect(sessions.length).toBe(2)
+      },
+    })
+  })
+
+  test("includes sessions with NULL workspace_id when filtering by workspaceID", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        // Create a session (will have workspace_id = undefined since no workspace context)
+        const session = await Session.create({ title: "pre-migration-session" })
+
+        // Verify the session has no workspace_id
+        expect(session.workspaceID).toBeUndefined()
+
+        // When filtering by a workspaceID, sessions with NULL workspace_id
+        // should still be included (they are pre-migration sessions)
+        const sessions = [...Session.list({ workspaceID: "test-workspace-id" })]
+        const ids = sessions.map((s) => s.id)
+
+        expect(ids).toContain(session.id)
+      },
+    })
+  })
+
+  test("directory filter prevents cross-worktree session leakage", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        // Create a session in the current directory
+        const localSession = await Session.create({ title: "local-session" })
+
+        // Create a session in a different directory (simulating a different worktree)
+        const otherDir = path.join(projectRoot, "..", "__other_worktree")
+        const otherSession = await Instance.provide({
+          directory: otherDir,
+          fn: async () => Session.create({ title: "other-worktree-session" }),
+        })
+
+        // Both sessions share the same project_id (same git root)
+        expect(localSession.projectID).toBe(otherSession.projectID)
+
+        // Without directory filter, both sessions appear
+        const allSessions = [...Session.list({})]
+        const allIds = allSessions.map((s) => s.id)
+        expect(allIds).toContain(localSession.id)
+        expect(allIds).toContain(otherSession.id)
+
+        // With directory filter, only the local session appears
+        const scopedSessions = [...Session.list({ directory: projectRoot })]
+        const scopedIds = scopedSessions.map((s) => s.id)
+        expect(scopedIds).toContain(localSession.id)
+        expect(scopedIds).not.toContain(otherSession.id)
+      },
+    })
+  })
+
+  test("createNext accepts explicit workspaceID", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const session = await Session.createNext({
+          directory: projectRoot,
+          workspaceID: "explicit-workspace-123",
+          title: "session-with-workspace",
+        })
+
+        expect(session.workspaceID).toBe("explicit-workspace-123")
       },
     })
   })
