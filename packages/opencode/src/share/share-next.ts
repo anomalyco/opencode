@@ -63,6 +63,13 @@ export namespace ShareNext {
 
   const disabled = process.env["OPENCODE_DISABLE_SHARE"] === "true" || process.env["OPENCODE_DISABLE_SHARE"] === "1"
 
+  export function dispose() {
+    for (const [, entry] of queue) {
+      clearTimeout(entry.timeout)
+    }
+    queue.clear()
+  }
+
   export async function init() {
     if (disabled) return
     Bus.subscribe(Session.Event.Updated, async (evt) => {

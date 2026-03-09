@@ -36,14 +36,15 @@ export namespace State {
 
     let disposalFinished = false
 
-    setTimeout(() => {
+    const warnTimeout = setTimeout(() => {
       if (!disposalFinished) {
         log.warn(
           "state disposal is taking an unusually long time - if it does not complete in a reasonable time, please report this as a bug",
           { key },
         )
       }
-    }, 10000).unref()
+    }, 10000)
+    warnTimeout.unref()
 
     const tasks: Promise<void>[] = []
     for (const [init, entry] of entries) {
@@ -64,6 +65,7 @@ export namespace State {
     entries.clear()
     recordsByKey.delete(key)
 
+    clearTimeout(warnTimeout)
     disposalFinished = true
     log.info("state disposal completed", { key })
   }

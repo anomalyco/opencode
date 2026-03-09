@@ -234,6 +234,7 @@ export namespace Pty {
       }
     }
     session.subscribers.clear()
+    session.buffer = ""
     Bus.publish(Event.Deleted, { id: session.info.id })
   }
 

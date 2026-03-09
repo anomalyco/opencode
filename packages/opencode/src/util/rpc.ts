@@ -59,6 +59,7 @@ export namespace Rpc {
         handlers.add(handler)
         return () => {
           handlers!.delete(handler)
+          if (handlers!.size === 0) listeners.delete(event)
         }
       },
     }

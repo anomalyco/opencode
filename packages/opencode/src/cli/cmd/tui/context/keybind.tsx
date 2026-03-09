@@ -1,4 +1,4 @@
-import { createMemo } from "solid-js"
+import { createMemo, onCleanup } from "solid-js"
 import { Keybind } from "@/util/keybind"
 import { pipe, mapValues } from "remeda"
 import type { TuiConfig } from "@/config/tui"
@@ -27,6 +27,7 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
 
     let focus: Renderable | null
     let timeout: NodeJS.Timeout
+    onCleanup(() => { if (timeout) clearTimeout(timeout) })
     function leader(active: boolean) {
       if (active) {
         setStore("leader", true)
