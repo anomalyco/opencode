@@ -8,6 +8,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
+import { Spinner } from "@opencode-ai/ui/spinner"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import type { AssistantMessage, Message as MessageType, Part, TextPart, UserMessage } from "@opencode-ai/sdk/v2"
@@ -235,6 +236,7 @@ export function MessageTimeline(props: {
     if (!id) return idle
     return sync.data.session_status[id] ?? idle
   })
+  const working = createMemo(() => !!pending() || sessionStatus().type !== "idle")
   const activeMessageID = createMemo(() => {
     const parentID = pending()?.parentID
     if (parentID) {
@@ -573,43 +575,50 @@ export function MessageTimeline(props: {
                         aria-label={language.t("common.goBack")}
                       />
                     </Show>
-                    <Show when={titleValue() || title.editing}>
-                      <Show
-                        when={title.editing}
-                        fallback={
-                          <h1
-                            class="text-14-medium text-text-strong truncate grow-1 min-w-0 pl-2"
-                            onDblClick={openTitleEditor}
-                          >
-                            {titleValue()}
-                          </h1>
-                        }
-                      >
-                        <InlineInput
-                          ref={(el) => {
-                            titleRef = el
-                          }}
-                          value={title.draft}
-                          disabled={title.saving}
-                          class="text-14-medium text-text-strong grow-1 min-w-0 pl-2 rounded-[6px]"
-                          style={{ "--inline-input-shadow": "var(--shadow-xs-border-select)" }}
-                          onInput={(event) => setTitle("draft", event.currentTarget.value)}
-                          onKeyDown={(event) => {
-                            event.stopPropagation()
-                            if (event.key === "Enter") {
-                              event.preventDefault()
-                              void saveTitleEditor()
-                              return
-                            }
-                            if (event.key === "Escape") {
-                              event.preventDefault()
-                              closeTitleEditor()
-                            }
-                          }}
-                          onBlur={closeTitleEditor}
-                        />
+                    <div class="flex items-center gap-2 min-w-0 grow-1 pl-2">
+                      <div class="size-4 shrink-0 flex items-center justify-center" aria-hidden="true">
+                        <Show when={working()}>
+                          <Spinner class="size-4" style={{ color: "var(--icon-interactive-base)" }} />
+                        </Show>
+                      </div>
+                      <Show when={titleValue() || title.editing}>
+                        <Show
+                          when={title.editing}
+                          fallback={
+                            <h1
+                              class="text-14-medium text-text-strong truncate grow-1 min-w-0"
+                              onDblClick={openTitleEditor}
+                            >
+                              {titleValue()}
+                            </h1>
+                          }
+                        >
+                          <InlineInput
+                            ref={(el) => {
+                              titleRef = el
+                            }}
+                            value={title.draft}
+                            disabled={title.saving}
+                            class="text-14-medium text-text-strong grow-1 min-w-0 rounded-[6px]"
+                            style={{ "--inline-input-shadow": "var(--shadow-xs-border-select)" }}
+                            onInput={(event) => setTitle("draft", event.currentTarget.value)}
+                            onKeyDown={(event) => {
+                              event.stopPropagation()
+                              if (event.key === "Enter") {
+                                event.preventDefault()
+                                void saveTitleEditor()
+                                return
+                              }
+                              if (event.key === "Escape") {
+                                event.preventDefault()
+                                closeTitleEditor()
+                              }
+                            }}
+                            onBlur={closeTitleEditor}
+                          />
+                        </Show>
                       </Show>
-                    </Show>
+                    </div>
                   </div>
                   <Show when={sessionID()}>
                     {(id) => (
