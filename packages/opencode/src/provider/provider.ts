@@ -872,15 +872,6 @@ export namespace Provider {
       providers[providerID] = mergeDeep(match, provider)
     }
 
-    // Force-add ollama provider since it doesn't need API key for local
-    // Directly assign to providers instead of using mergeProvider
-    log.info("Ollama force-add check", { count: localModels?.length ?? 0, hasDbEntry: !!database["ollama"] })
-    if (localModels && localModels.length > 0 && database["ollama"]) {
-      // Directly assign, don't merge (which might lose models)
-      providers["ollama"] = database["ollama"]
-      log.info("Ollama provider directly assigned", { modelsCount: Object.keys(providers["ollama"]?.models ?? {}).length })
-    }
-
     // extend database from config
     for (const [providerID, provider] of configProviders) {
       const existing = database[providerID]
@@ -1098,6 +1089,12 @@ export namespace Provider {
       }
 
       log.info("found", { providerID })
+    }
+
+    // Force-add ollama provider at the very end, after all processing/filtering
+    if (localModels && localModels.length > 0 && database["ollama"]) {
+      providers["ollama"] = database["ollama"]
+      log.info("Ollama provider force-added at end", { modelsCount: Object.keys(providers["ollama"]?.models ?? {}).length })
     }
 
     return {
