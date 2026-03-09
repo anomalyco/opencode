@@ -32,22 +32,31 @@ This dictionary is used to identify the "human-understandable command" from an i
     env: 1, // env
     export: 1, // export PATH=/usr/bin
     grep: 1, // grep pattern file.txt
+    ionice: 1, // ionice -c 2 command
     kill: 1, // kill 1234
     killall: 1, // killall process
     ln: 1, // ln -s source target
     ls: 1, // ls -la
     mkdir: 1, // mkdir new-dir
     mv: 1, // mv old.txt new.txt
+    nice: 1, // nice -n 5 command
+    nohup: 1, // nohup command args
     ps: 1, // ps aux
     pwd: 1, // pwd
     rm: 1, // rm file.txt
     rmdir: 1, // rmdir empty-dir
     sleep: 1, // sleep 5
     source: 1, // source ~/.bashrc
+    stdbuf: 1, // stdbuf -oL command
+    sudo: 1, // sudo command
     tail: 1, // tail -f log.txt
+    time: 1, // time command
+    timeout: 1, // timeout 5 command
     touch: 1, // touch file.txt
     unset: 1, // unset VAR
+    watch: 1, // watch -n 1 command
     which: 1, // which node
+    xargs: 1, // xargs -I{} command
     aws: 3, // aws s3 ls
     az: 3, // az storage blob list
     bazel: 2, // bazel build

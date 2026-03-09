@@ -290,6 +290,90 @@ describe("tool.bash permissions", () => {
     })
   })
 
+  test("xargs inner command appears in permission request", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await bash.execute(
+          {
+            command: "xargs -I{} gh api -X DELETE repos/foo",
+            description: "Delete repos via xargs",
+          },
+          testCtx,
+        )
+        const bashReq = requests.find((r) => r.permission === "bash")
+        expect(bashReq).toBeDefined()
+        expect(bashReq!.patterns).toContain("gh api -X DELETE repos/foo")
+        expect(bashReq!.always.some((p) => p.startsWith("gh api"))).toBe(true)
+      },
+    })
+  })
+
+  test("nested wrappers produce inner command in patterns and always", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await bash.execute(
+          {
+            command: "timeout 5 sudo rm -rf /tmp/x",
+            description: "Remove with nested wrappers",
+          },
+          testCtx,
+        )
+        const bashReq = requests.find((r) => r.permission === "bash")
+        expect(bashReq).toBeDefined()
+        expect(bashReq!.patterns).toContain("rm -rf /tmp/x")
+        expect(bashReq!.always.some((p) => p.startsWith("rm "))).toBe(true)
+      },
+    })
+  })
+
+  test("simple wrapper produces inner command alongside wrapper command", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await bash.execute(
+          {
+            command: "nohup git log --oneline",
+            description: "Git log with nohup",
+          },
+          testCtx,
+        )
+        const bashReq = requests.find((r) => r.permission === "bash")
+        expect(bashReq).toBeDefined()
+        expect(bashReq!.patterns).toContain("nohup git log --oneline")
+        expect(bashReq!.patterns).toContain("git log --oneline")
+      },
+    })
+  })
+
   test("always pattern has space before wildcard to not include different commands", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({

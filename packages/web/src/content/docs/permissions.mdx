@@ -86,6 +86,28 @@ You can use `~` or `$HOME` at the start of a pattern to reference your home dire
 - `$HOME/projects/*` -> `/Users/username/projects/*`
 - `~` -> `/Users/username`
 
+### Command Wrappers
+
+OpenCode automatically extracts inner commands from common wrapper commands for permission matching. When a command is wrapped in `timeout`, `time`, `nice`, `nohup`, `ionice`, `stdbuf`, `watch`, `sudo`, `env`, `xargs`, or `find -exec`, both the wrapper and the inner command are checked against your permission rules.
+
+For example, with this config:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "allow",
+      "rm *": "deny"
+    }
+  }
+}
+```
+
+Running `sudo rm -rf /` is correctly denied because OpenCode extracts `rm -rf /` from the wrapper and matches it against `"rm *": "deny"`. Without wrapper extraction, only `sudo` would be matched, which would hit `"*": "allow"` and bypass the deny rule.
+
+Nested wrappers are also handled — `timeout 5 sudo gh api` extracts `gh api` from both layers.
+
 ### External Directories
 
 Use `external_directory` to allow tool calls that touch paths outside the working directory where OpenCode was started. This applies to any tool that takes a path as input (for example `read`, `edit`, `list`, `glob`, `grep`, and many `bash` commands).
@@ -233,5 +255,5 @@ Only analyze code and suggest changes.
 ```
 
 :::tip
-Use pattern matching for commands with arguments. `"grep *"` allows `grep pattern file.txt`, while `"grep"` alone would block it. Commands like `git status` work for default behavior but require explicit permission (like `"git status *"`) when arguments are passed.
+Use pattern matching for commands with arguments. `"grep *"` allows `grep pattern file.txt`, while `"grep"` alone would block it. Commands like `git status` work for default behavior but require explicit permission (like `"git status *"`) when arguments are passed. Rules also apply when commands are run through wrappers — `"git *": "allow"` works even when git is run via `timeout 5 git status`.
 :::

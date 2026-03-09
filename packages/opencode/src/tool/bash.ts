@@ -15,6 +15,7 @@ import { Flag } from "@/flag/flag.ts"
 import { Shell } from "@/shell/shell"
 
 import { BashArity } from "@/permission/arity"
+import { BashWrapper } from "@/permission/wrapper"
 import { Truncate } from "./truncation"
 import { Plugin } from "@/plugin"
 
@@ -138,6 +139,12 @@ export const BashTool = Tool.define("bash", async () => {
         if (command.length && command[0] !== "cd") {
           patterns.add(commandText)
           always.add(BashArity.prefix(command).join(" ") + " *")
+          for (const inner of BashWrapper.extract(command)) {
+            if (inner.length > 0 && inner[0] !== "cd") {
+              patterns.add(inner.join(" "))
+              always.add(BashArity.prefix(inner).join(" ") + " *")
+            }
+          }
         }
       }
 
