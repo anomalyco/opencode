@@ -21,7 +21,7 @@
   align-self: stretch;
   width: 100%;
   max-width: 100%;
-  gap: 8px;
+  gap: 0;
 
   &[data-interrupted] {
     color: var(--text-weak);
@@ -96,6 +96,10 @@
     display: flex;
     flex-direction: column;
     align-items: flex-end;
+  }
+
+  [data-slot="user-message-attachments"] + [data-slot="user-message-body"] {
+    margin-top: 8px;
   }
 
   [data-slot="user-message-text"] {
