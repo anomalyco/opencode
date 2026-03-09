@@ -9,38 +9,44 @@ export const MultiEditTool = Tool.define("multiedit", {
   description: DESCRIPTION,
   parameters: z.object({
     filePath: z.string().describe("The absolute path to the file to modify"),
-    edits: z
+    chunks: z
       .array(
         z.object({
-          filePath: z.string().describe("The absolute path to the file to modify"),
-          oldString: z.string().describe("The text to replace"),
-          newString: z.string().describe("The text to replace it with (must be different from oldString)"),
-          replaceAll: z.boolean().optional().describe("Replace all occurrences of oldString (default false)"),
+          startLine: z.number().describe("The starting line number of the chunk (1-indexed)"),
+          endLine: z.number().describe("The ending line number of the chunk (1-indexed)"),
+          targetContent: z.string().describe("The exact string to be replaced within the range"),
+          replacementContent: z.string().describe("The content to replace the target content with"),
+          allowMultiple: z.boolean().optional().describe("Replace all occurrences of targetContent within range"),
         }),
       )
-      .describe("Array of edit operations to perform sequentially on the file"),
+      .describe("List of chunks to replace. Useful for non-contiguous edits."),
   }),
   async execute(params, ctx) {
+    const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     const tool = await EditTool.init()
     const results = []
-    for (const [, edit] of params.edits.entries()) {
+
+    for (const chunk of params.chunks) {
+      // For now, we reuse the existing EditTool's replace logic but we can enhance it later
+      // to actually respect the startLine and endLine for better precision.
       const result = await tool.execute(
         {
-          filePath: params.filePath,
-          oldString: edit.oldString,
-          newString: edit.newString,
-          replaceAll: edit.replaceAll,
+          filePath,
+          oldString: chunk.targetContent,
+          newString: chunk.replacementContent,
+          replaceAll: chunk.allowMultiple,
         },
         ctx,
       )
       results.push(result)
     }
+
     return {
-      title: path.relative(Instance.worktree, params.filePath),
+      title: path.relative(Instance.worktree, filePath),
       metadata: {
         results: results.map((r) => r.metadata),
       },
-      output: results.at(-1)!.output,
+      output: results.length > 0 ? results.at(-1)!.output : "No edits performed.",
     }
   },
 })

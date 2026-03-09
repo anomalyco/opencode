@@ -30,6 +30,9 @@ import { Truncate } from "./truncation"
 import { ApplyPatchTool } from "./apply_patch"
 import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
+import { BrowserToolDefinition } from "./browser"
+import { GenerateImageToolDefinition } from "./generate_image"
+import { TaskBoundaryToolDefinition } from "./task_boundary"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -118,6 +121,9 @@ export namespace ToolRegistry {
       SkillTool,
       ApplyPatchTool,
       ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
+      BrowserToolDefinition,
+      GenerateImageToolDefinition,
+      TaskBoundaryToolDefinition,
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),
       ...custom,

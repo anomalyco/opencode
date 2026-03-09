@@ -1,0 +1,10 @@
+This tool allows you to interact with a web browser to perform tasks like navigating to URLs, clicking elements, typing text, and taking screenshots.
+
+It uses Playwright to drive a real browser instance.
+
+Parameters:
+- url: The URL to navigate to.
+- action: The action to perform (navigate, click, type, screenshot, etc.).
+- selector: The CSS selector for the element to interact with.
+- text: The text to type (if action is 'type').
+- wait_for: Element or timeout to wait for.

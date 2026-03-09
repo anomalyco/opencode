@@ -1,0 +1,7 @@
+This tool allows you to generate images based on a text prompt.
+
+Parameters:
+- prompt: The description of the image to generate.
+- name: The name of the image file to save.
+- width: The width of the image (default: 1024).
+- height: The height of the image (default: 1024).

@@ -7,16 +7,17 @@ Before using this tool:
 
 To make multiple file edits, provide the following:
 1. file_path: The absolute path to the file to modify (must be absolute, not relative)
-2. edits: An array of edit operations to perform, where each edit contains:
-   - oldString: The text to replace (must match the file contents exactly, including all whitespace and indentation)
-   - newString: The edited text to replace the oldString
-   - replaceAll: Replace all occurrences of oldString. This parameter is optional and defaults to false.
+2. chunks: An array of replacement chunks, where each chunk contains:
+   - startLine: The starting line number of the chunk (1-indexed)
+   - endLine: The ending line number of the chunk (1-indexed)
+   - targetContent: The exact string to be replaced (must match the file contents exactly)
+   - replacementContent: The content to replace it with
+   - allowMultiple: Replace all occurrences of targetContent within the range.
 
 IMPORTANT:
-- All edits are applied in sequence, in the order they are provided
-- Each edit operates on the result of the previous edit
-- All edits must be valid for the operation to succeed - if any edit fails, none will be applied
-- This tool is ideal when you need to make several changes to different parts of the same file
+- Chunks allow you to specify exactly where the edit should occur using line ranges.
+- This provides better precision and prevents accidental replacements in other parts of the file.
+- All edits are applied in sequence.
 
 CRITICAL REQUIREMENTS:
 1. All edits follow the same requirements as the single Edit tool

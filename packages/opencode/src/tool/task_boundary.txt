@@ -1,0 +1,7 @@
+This tool is used to indicate the start of a task or make an update to the current task's progress. It helps the user track complex, multi-step operations.
+
+Parameters:
+- name: The name of the task (e.g., 'Refactoring API').
+- status: The current status of the task (e.g., 'Searching for files').
+- summary: A concise summary of what has been accomplished so far.
+- mode: The current mode (PLANNING, EXECUTION, VERIFICATION).

@@ -14,6 +14,18 @@ export namespace Bus {
       directory: z.string(),
     }),
   )
+  
+  export const TaskBoundary = BusEvent.define(
+    "task.boundary",
+    z.object({
+      sessionID: z.string(),
+      messageID: z.string(),
+      name: z.string(),
+      status: z.string(),
+      summary: z.string(),
+      mode: z.enum(["PLANNING", "EXECUTION", "VERIFICATION"]),
+    }),
+  )
 
   const state = Instance.state(
     () => {
