@@ -207,6 +207,10 @@ Plugins can subscribe to events as seen below in the Examples section. Here is a
 - `tui.command.execute`
 - `tui.toast.show`
 
+#### Lifecycle Hooks
+
+- `shutdown` — called during process exit for cleanup
+
 ---
 
 ## Examples
@@ -387,3 +391,30 @@ Format as a structured prompt that a new agent can use to resume work.
 ```
 
 When `output.prompt` is set, it completely replaces the default compaction prompt. The `output.context` array is ignored in this case.
+
+---
+
+### Shutdown hooks
+
+Run cleanup logic when OpenCode exits:
+
+```ts title=".opencode/plugins/cleanup.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CleanupPlugin: Plugin = async ({ $ }) => {
+  // Start a background process during init
+  const proc = Bun.spawn(["my-server", "--port", "9000"])
+
+  return {
+    shutdown: async () => {
+      // Gracefully stop the background process before exit
+      proc.kill()
+      await proc.exited
+    },
+  }
+}
+```
+
+The `shutdown` hook fires during `Ctrl+C` or normal exit, before the process terminates. Use it to stop background services, flush buffers, or release resources that your plugin started.
+
+Unlike other hooks, `shutdown` takes no arguments and returns nothing. Each plugin's shutdown runs independently — if one plugin's shutdown throws, the remaining plugins still get a chance to clean up.
