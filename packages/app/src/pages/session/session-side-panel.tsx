@@ -31,6 +31,7 @@ export function SessionSidePanel(props: {
   reviewPanel: () => JSX.Element
   activeDiff?: string
   focusReviewDiff: (path: string) => void
+  reviewSnap: boolean
   size: Sizing
 }) {
   const params = useParams()
@@ -228,7 +229,7 @@ export function SessionSidePanel(props: {
         classList={{
           "pointer-events-none": !open(),
           "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
-            !props.size.active(),
+            !props.size.active() && !props.reviewSnap,
         }}
         style={{ width: panelWidth() }}
       >
