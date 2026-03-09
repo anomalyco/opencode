@@ -38,6 +38,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status"
 import { websocket } from "hono/bun"
 import { HTTPException } from "hono/http-exception"
 import { errors } from "./error"
+import { Filesystem } from "@/util/filesystem"
 import { QuestionRoutes } from "./routes/question"
 import { GitLabWorkflowModelSelectRoutes } from "./routes/gitlab-workflow-model-select"
 import { PermissionRoutes } from "./routes/permission"
@@ -199,13 +200,15 @@ export namespace Server {
           if (c.req.path === "/log") return next()
           const workspaceID = c.req.query("workspace") || c.req.header("x-opencode-workspace")
           const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
-          const directory = (() => {
-            try {
-              return decodeURIComponent(raw)
-            } catch {
-              return raw
-            }
-          })()
+          const directory = Filesystem.resolve(
+            (() => {
+              try {
+                return decodeURIComponent(raw)
+              } catch {
+                return raw
+              }
+            })(),
+          )
 
           return WorkspaceContext.provide({
             workspaceID,

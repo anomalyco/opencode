@@ -113,7 +113,6 @@ export function tui(input: {
   fetch?: typeof fetch
   headers?: RequestInit["headers"]
   events?: EventSource
-  onExit?: () => Promise<void>
 }) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
@@ -128,7 +127,6 @@ export function tui(input: {
 
     const onExit = async () => {
       unguard?.()
-      await input.onExit?.()
       resolve()
     }
 

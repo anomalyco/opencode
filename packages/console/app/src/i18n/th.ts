@@ -483,7 +483,6 @@ export const dict = {
   "workspace.cost.deletedSuffix": "(ลบแล้ว)",
   "workspace.cost.empty": "ไม่มีข้อมูลการใช้งานในช่วงเวลาที่เลือก",
   "workspace.cost.subscriptionShort": "sub",
-  "workspace.cost.liteShort": "lite",
 
   "workspace.keys.title": "API Keys",
   "workspace.keys.subtitle": "จัดการ API keys ของคุณสำหรับการเข้าถึงบริการ OpenCode",
