@@ -1,4 +1,4 @@
-import { For, Show, createMemo, onCleanup, onMount, type Component } from "solid-js"
+import { For, Show, createEffect, createMemo, onCleanup, onMount, type Component } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { DockPrompt } from "@opencode-ai/ui/dock-prompt"
@@ -42,6 +42,21 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   })
 
   const last = createMemo(() => store.tab >= total() - 1)
+  const hints = createMemo(() => {
+    if (store.editing)
+      return [
+        { key: "Enter", label: language.t("ui.question.hintSave") },
+        { key: "Shift+Enter", label: language.t("ui.question.hintNewline") },
+        { key: "Esc", label: language.t("ui.question.hintCancel") },
+      ]
+
+    return [
+      { key: "↑↓", label: language.t("ui.question.hintMove") },
+      { key: "Enter/Space", label: language.t("ui.question.hintSelect") },
+      { key: "←", label: language.t("ui.question.hintPrev") },
+      { key: "→", label: language.t(last() ? "ui.question.hintSubmit" : "ui.question.hintNext") },
+    ]
+  })
 
   const customUpdate = (value: string, selected: boolean = on()) => {
     const prev = input().trim()
@@ -97,6 +112,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
 
     update()
     window.addEventListener("resize", update)
+    document.addEventListener("keydown", handleKeyDown)
 
     const dock = root?.closest('[data-component="session-prompt-dock"]')
     const scroller = document.querySelector(".scroll-view__viewport")
@@ -106,6 +122,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
 
     onCleanup(() => {
       window.removeEventListener("resize", update)
+      document.removeEventListener("keydown", handleKeyDown)
       observer.disconnect()
       if (raf !== undefined) cancelAnimationFrame(raf)
     })
@@ -119,6 +136,12 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
       custom: store.custom.map((s) => s ?? ""),
       customOn: store.customOn.map((b) => b ?? false),
     })
+  })
+
+  // Focus first option when changing questions
+  createEffect(() => {
+    store.tab // track tab changes
+    if (!store.editing) focusFirstOption()
   })
 
   const fail = (err: unknown) => {
@@ -224,6 +247,11 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   const commitCustom = () => {
     setStore("editing", false)
     customUpdate(input())
+    // Focus the custom option button after committing
+    requestAnimationFrame(() => {
+      const customIndex = options().length
+      focusOption(customIndex)
+    })
   }
 
   const next = () => {
@@ -250,6 +278,112 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     if (store.sending) return
     setStore("tab", tab)
     setStore("editing", false)
+  }
+
+  const focusOption = (index: number) => {
+    const allOptions = root?.querySelectorAll('[data-slot="question-option"]')
+    if (!allOptions || allOptions.length === 0) return false
+
+    const clamped = Math.max(0, Math.min(index, allOptions.length - 1))
+    const el = allOptions[clamped]
+
+    if (el instanceof HTMLElement) {
+      el.focus()
+      return true
+    }
+    return false
+  }
+
+  const focusFirstOption = () => {
+    let retries = 0
+    const maxRetries = 10
+
+    const tryFocus = () => {
+      const dock = root?.closest('[data-component="session-prompt-dock"]')
+      if (!dock || dock.hasAttribute("hidden")) {
+        if (retries++ < maxRetries) {
+          requestAnimationFrame(tryFocus)
+        }
+        return
+      }
+
+      const opts = root?.querySelectorAll('[data-slot="question-option"]')
+      if (!opts || opts.length === 0) {
+        if (retries++ < maxRetries) {
+          requestAnimationFrame(tryFocus)
+        }
+        return
+      }
+
+      focusOption(0)
+    }
+
+    requestAnimationFrame(tryFocus)
+  }
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (store.sending) return
+
+    const target = e.target as HTMLElement
+
+    // Don't intercept when editing custom input (except Escape which is handled by input)
+    if (store.editing && target instanceof HTMLTextAreaElement) return
+
+    // Get current focus index by checking DOM
+    const allOptions = root?.querySelectorAll('[data-slot="question-option"]') ?? []
+    const currentIndex = Array.from(allOptions).findIndex((el) => el === document.activeElement)
+
+    // Only handle navigation keys when an option is focused
+    if (currentIndex === -1) return
+
+    const customOptionIndex = options().length
+    const totalOptions = customOptionIndex + 1
+
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault()
+        focusOption((currentIndex + 1) % totalOptions)
+        break
+
+      case "ArrowUp":
+        e.preventDefault()
+        focusOption((currentIndex - 1 + totalOptions) % totalOptions)
+        break
+
+      case "ArrowLeft":
+        if (store.tab > 0) {
+          e.preventDefault()
+          back()
+          focusFirstOption()
+        }
+        break
+
+      case "ArrowRight":
+        e.preventDefault()
+        next()
+        focusFirstOption()
+        break
+
+      case "Enter":
+      case " ":
+        e.preventDefault()
+        if (currentIndex === customOptionIndex) {
+          customOpen()
+        } else {
+          selectOption(currentIndex)
+        }
+        break
+
+      case "Home":
+        e.preventDefault()
+        focusOption(0)
+        break
+
+      case "End":
+        e.preventDefault()
+        focusOption(totalOptions - 1)
+        break
+    }
   }
 
   return (
@@ -284,6 +418,16 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
           <Button variant="ghost" size="large" disabled={store.sending} onClick={reject}>
             {language.t("ui.common.dismiss")}
           </Button>
+          <div data-slot="question-keyboard-hints">
+            <For each={hints()}>
+              {(item) => (
+                <span data-slot="question-keyboard-hint">
+                  <span data-slot="question-keyboard-key">{item.key}</span>
+                  <span data-slot="question-keyboard-label">{item.label}</span>
+                </span>
+              )}
+            </For>
+          </div>
           <div data-slot="question-footer-actions">
             <Show when={store.tab > 0}>
               <Button variant="secondary" size="large" disabled={store.sending} onClick={back}>
@@ -307,6 +451,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
             const picked = () => store.answers[store.tab]?.includes(opt.label) ?? false
             return (
               <button
+                type="button"
                 data-slot="question-option"
                 data-picked={picked()}
                 role={multi() ? "checkbox" : "radio"}
@@ -340,6 +485,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
           when={store.editing}
           fallback={
             <button
+              type="button"
               data-slot="question-option"
               data-custom="true"
               data-picked={on()}
@@ -408,13 +554,13 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
             <span data-slot="question-option-main">
               <span data-slot="option-label">{language.t("ui.messagePart.option.typeOwnAnswer")}</span>
               <textarea
-                ref={(el) =>
+                ref={(el) => {
                   setTimeout(() => {
                     el.focus()
                     el.style.height = "0px"
                     el.style.height = `${el.scrollHeight}px`
                   }, 0)
-                }
+                }}
                 data-slot="question-custom-input"
                 placeholder={language.t("ui.question.custom.placeholder")}
                 value={input()}
@@ -424,6 +570,11 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                   if (e.key === "Escape") {
                     e.preventDefault()
                     setStore("editing", false)
+                    // Focus the custom option button after closing
+                    requestAnimationFrame(() => {
+                      const customIndex = options().length
+                      focusOption(customIndex)
+                    })
                     return
                   }
                   if (e.key !== "Enter" || e.shiftKey) return
