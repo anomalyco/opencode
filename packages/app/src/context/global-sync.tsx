@@ -11,6 +11,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/util/path"
 import {
   createContext,
+  createEffect,
   getOwner,
   Match,
   onCleanup,
@@ -33,7 +34,7 @@ import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global
 import { trimSessions } from "./global-sync/session-trim"
 import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
-import { sanitizeProject } from "./global-sync/utils"
+import { normalizeProviderList, sanitizeProject } from "./global-sync/utils"
 import { formatServerError } from "@/utils/server-errors"
 
 type GlobalStore = {
@@ -164,6 +165,15 @@ function createGlobalSync() {
     },
   })
 
+  createEffect(() => {
+    const provider = globalStore.provider
+    if (!provider.all.length) return
+    const normalized = normalizeProviderList(provider)
+    for (const child of Object.values(children.children)) {
+      child[1]("provider", normalized)
+    }
+  })
+
   const sdkFor = (directory: string) => {
     const cached = sdkCache.get(directory)
     if (cached) return cached
@@ -258,6 +268,7 @@ function createGlobalSync() {
         sdk,
         store: child[0],
         setStore: child[1],
+        provider: globalStore.provider,
         vcsCache: cache,
         loadSessions,
         translate: language.t,
@@ -321,8 +332,11 @@ function createGlobalSync() {
     }
   })
 
+  let bootstrapPromise: Promise<void> | undefined
+
   async function bootstrap() {
-    await bootstrapGlobal({
+    if (bootstrapPromise) return bootstrapPromise
+    bootstrapPromise = bootstrapGlobal({
       globalSDK: globalSDK.client,
       connectErrorTitle: language.t("dialog.server.add.error"),
       connectErrorDescription: language.t("error.globalSync.connectFailed", {
@@ -332,7 +346,10 @@ function createGlobalSync() {
       translate: language.t,
       formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
       setGlobalStore: setBootStore,
+    }).finally(() => {
+      bootstrapPromise = undefined
     })
+    return bootstrapPromise
   }
 
   onMount(() => {
