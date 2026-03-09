@@ -15,7 +15,7 @@ async function smokeTest() {
 
   console.log("\n--- Testing design_validator ---")
   const designTool = await DesignValidatorToolDefinition.init()
-  const designResult = await designTool.execute({ target: "packages/common/ui", fix: true }, ctx)
+  const designResult = await designTool.execute({ target: "packages/common/ui", fix: true, theme: "system" }, ctx)
   console.log("Title:", designResult.title)
   console.log("Output summary:", designResult.output.split("\n")[0])
 
