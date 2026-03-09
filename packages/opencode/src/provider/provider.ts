@@ -823,9 +823,6 @@ export namespace Provider {
       }
       
       database["ollama"] = ollamaProvider
-      
-      // Force-add ollama provider since it doesn't need API key for local
-      mergeProvider("ollama", { source: "custom" })
     }
 
     const disabled = new Set(config.disabled_providers ?? [])
@@ -873,6 +870,12 @@ export namespace Provider {
       if (!match) return
       // @ts-expect-error
       providers[providerID] = mergeDeep(match, provider)
+    }
+
+    // Force-add ollama provider since it doesn't need API key for local
+    const localModelsCount = (await detectLocalOllamaModels()).length
+    if (localModelsCount > 0) {
+      mergeProvider("ollama", { source: "custom" })
     }
 
     // extend database from config
