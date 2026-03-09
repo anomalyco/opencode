@@ -1,16 +1,14 @@
 import "@/index.css"
-import { Code } from "@opencode-ai/ui/code"
+import { File } from "@opencode-ai/ui/file"
 import { I18nProvider } from "@opencode-ai/ui/context"
-import { CodeComponentProvider } from "@opencode-ai/ui/context/code"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
-import { DiffComponentProvider } from "@opencode-ai/ui/context/diff"
+import { FileComponentProvider } from "@opencode-ai/ui/context/file"
 import { MarkedProvider } from "@opencode-ai/ui/context/marked"
-import { Diff } from "@opencode-ai/ui/diff"
 import { Font } from "@opencode-ai/ui/font"
 import { ThemeProvider } from "@opencode-ai/ui/theme"
 import { MetaProvider } from "@solidjs/meta"
-import { Navigate, Route, Router } from "@solidjs/router"
-import { ErrorBoundary, type JSX, lazy, type ParentProps, Show, Suspense } from "solid-js"
+import { BaseRouterProps, Navigate, Route, Router } from "@solidjs/router"
+import { Component, ErrorBoundary, type JSX, lazy, type ParentProps, Show, Suspense } from "solid-js"
 import { CommandProvider } from "@/context/command"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
@@ -30,6 +28,7 @@ import { TerminalProvider } from "@/context/terminal"
 import DirectoryLayout from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
+import { Dynamic } from "solid-js/web"
 
 const Home = lazy(() => import("@/pages/home"))
 const Session = lazy(() => import("@/pages/session"))
@@ -122,9 +121,7 @@ export function AppBaseProviders(props: ParentProps) {
             <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
               <DialogProvider>
                 <MarkedProviderWithNativeParser>
-                  <DiffComponentProvider component={Diff}>
-                    <CodeComponentProvider component={Code}>{props.children}</CodeComponentProvider>
-                  </DiffComponentProvider>
+                  <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
                 </MarkedProviderWithNativeParser>
               </DialogProvider>
             </ErrorBoundary>
@@ -148,13 +145,15 @@ export function AppInterface(props: {
   children?: JSX.Element
   defaultServer: ServerConnection.Key
   servers?: Array<ServerConnection.Any>
+  router?: Component<BaseRouterProps>
 }) {
   return (
     <ServerProvider defaultServer={props.defaultServer} servers={props.servers}>
       <ServerKey>
         <GlobalSDKProvider>
           <GlobalSyncProvider>
-            <Router
+            <Dynamic
+              component={props.router ?? Router}
               root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
             >
               <Route path="/" component={HomeRoute} />
@@ -162,7 +161,7 @@ export function AppInterface(props: {
                 <Route path="/" component={SessionIndexRoute} />
                 <Route path="/session/:id?" component={SessionRoute} />
               </Route>
-            </Router>
+            </Dynamic>
           </GlobalSyncProvider>
         </GlobalSDKProvider>
       </ServerKey>

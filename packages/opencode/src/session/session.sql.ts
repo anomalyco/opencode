@@ -15,6 +15,7 @@ export const SessionTable = sqliteTable(
     project_id: text()
       .notNull()
       .references(() => ProjectTable.id, { onDelete: "cascade" }),
+    workspace_id: text(),
     parent_id: text(),
     slug: text().notNull(),
     directory: text().notNull(),
@@ -31,7 +32,11 @@ export const SessionTable = sqliteTable(
     time_compacting: integer(),
     time_archived: integer(),
   },
-  (table) => [index("session_project_idx").on(table.project_id), index("session_parent_idx").on(table.parent_id)],
+  (table) => [
+    index("session_project_idx").on(table.project_id),
+    index("session_workspace_idx").on(table.workspace_id),
+    index("session_parent_idx").on(table.parent_id),
+  ],
 )
 
 export const MessageTable = sqliteTable(

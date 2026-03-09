@@ -84,6 +84,7 @@ function createTestDb() {
     .map((entry) => ({
       sql: readFileSync(path.join(dir, entry.name, "migration.sql"), "utf-8"),
       timestamp: Number(entry.name.split("_")[0]),
+      name: entry.name,
     }))
     .sort((a, b) => a.timestamp - b.timestamp)
   migrate(drizzle({ client: sqlite }), migrations)

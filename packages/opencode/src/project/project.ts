@@ -14,9 +14,23 @@ import { GlobalBus } from "@/bus/global"
 import { existsSync } from "fs"
 import { git } from "../util/git"
 import { Glob } from "../util/glob"
+import { which } from "../util/which"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
+
+  function gitpath(cwd: string, name: string) {
+    if (!name) return cwd
+    // git output includes trailing newlines; keep path whitespace intact.
+    name = name.replace(/[\r\n]+$/, "")
+    if (!name) return cwd
+
+    name = Filesystem.windowsPath(name)
+
+    if (path.isAbsolute(name)) return path.normalize(name)
+    return path.resolve(cwd, name)
+  }
+
   export const Info = z
     .object({
       id: z.string(),
@@ -84,7 +98,7 @@ export namespace Project {
       if (dotgit) {
         let sandbox = path.dirname(dotgit)
 
-        const gitBinary = Bun.which("git")
+        const gitBinary = which("git")
 
         // cached id calculation
         let id = await Filesystem.readText(path.join(dotgit, "opencode"))
@@ -125,7 +139,7 @@ export namespace Project {
 
           id = roots[0]
           if (id) {
-            void Filesystem.write(path.join(dotgit, "opencode"), id).catch(() => undefined)
+            await Filesystem.write(path.join(dotgit, "opencode"), id).catch(() => undefined)
           }
         }
 
@@ -141,7 +155,7 @@ export namespace Project {
         const top = await git(["rev-parse", "--show-toplevel"], {
           cwd: sandbox,
         })
-          .then(async (result) => path.resolve(sandbox, (await result.text()).trim()))
+          .then(async (result) => gitpath(sandbox, await result.text()))
           .catch(() => undefined)
 
         if (!top) {
@@ -159,9 +173,9 @@ export namespace Project {
           cwd: sandbox,
         })
           .then(async (result) => {
-            const dirname = path.dirname((await result.text()).trim())
-            if (dirname === ".") return sandbox
-            return dirname
+            const common = gitpath(sandbox, await result.text())
+            // Avoid going to parent of sandbox when git-common-dir is empty.
+            return common === sandbox ? sandbox : path.dirname(common)
           })
           .catch(() => undefined)
 
@@ -331,6 +345,21 @@ export namespace Project {
     const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
     if (!row) return undefined
     return fromRow(row)
+  }
+
+  export async function initGit(input: { directory: string; project: Info }) {
+    if (input.project.vcs === "git") return input.project
+    if (!which("git")) throw new Error("Git is not installed")
+
+    const result = await git(["init", "--quiet"], {
+      cwd: input.directory,
+    })
+    if (result.exitCode !== 0) {
+      const text = result.stderr.toString().trim() || result.text().trim()
+      throw new Error(text || "Failed to initialize git repository")
+    }
+
+    return (await fromDirectory(input.directory)).project
   }
 
   export const update = fn(

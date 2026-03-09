@@ -46,7 +46,6 @@ export namespace FileWatcher {
 
   const state = Instance.state(
     async () => {
-      if (Instance.project.vcs !== "git") return {}
       log.info("init")
       const cfg = await Config.get()
       const backend = (() => {
@@ -88,26 +87,28 @@ export namespace FileWatcher {
         if (sub) subs.push(sub)
       }
 
-      const vcsDir = await $`git rev-parse --git-dir`
-        .quiet()
-        .nothrow()
-        .cwd(Instance.worktree)
-        .text()
-        .then((x) => path.resolve(Instance.worktree, x.trim()))
-        .catch(() => undefined)
-      if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
-        const gitDirContents = await readdir(vcsDir).catch(() => [])
-        const ignoreList = gitDirContents.filter((entry) => entry !== "HEAD")
-        const pending = w.subscribe(vcsDir, subscribe, {
-          ignore: ignoreList,
-          backend,
-        })
-        const sub = await withTimeout(pending, SUBSCRIBE_TIMEOUT_MS).catch((err) => {
-          log.error("failed to subscribe to vcsDir", { error: err })
-          pending.then((s) => s.unsubscribe()).catch(() => {})
-          return undefined
-        })
-        if (sub) subs.push(sub)
+      if (Instance.project.vcs === "git") {
+        const vcsDir = await $`git rev-parse --git-dir`
+          .quiet()
+          .nothrow()
+          .cwd(Instance.worktree)
+          .text()
+          .then((x) => path.resolve(Instance.worktree, x.trim()))
+          .catch(() => undefined)
+        if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
+          const gitDirContents = await readdir(vcsDir).catch(() => [])
+          const ignoreList = gitDirContents.filter((entry) => entry !== "HEAD")
+          const pending = w.subscribe(vcsDir, subscribe, {
+            ignore: ignoreList,
+            backend,
+          })
+          const sub = await withTimeout(pending, SUBSCRIBE_TIMEOUT_MS).catch((err) => {
+            log.error("failed to subscribe to vcsDir", { error: err })
+            pending.then((s) => s.unsubscribe()).catch(() => {})
+            return undefined
+          })
+          if (sub) subs.push(sub)
+        }
       }
 
       return { subs }

@@ -20,11 +20,8 @@ export const settingsNotificationsAgentSelector = '[data-action="settings-notifi
 export const settingsNotificationsPermissionsSelector = '[data-action="settings-notifications-permissions"]'
 export const settingsNotificationsErrorsSelector = '[data-action="settings-notifications-errors"]'
 export const settingsSoundsAgentSelector = '[data-action="settings-sounds-agent"]'
-export const settingsSoundsAgentEnabledSelector = '[data-action="settings-sounds-agent-enabled"]'
 export const settingsSoundsPermissionsSelector = '[data-action="settings-sounds-permissions"]'
-export const settingsSoundsPermissionsEnabledSelector = '[data-action="settings-sounds-permissions-enabled"]'
 export const settingsSoundsErrorsSelector = '[data-action="settings-sounds-errors"]'
-export const settingsSoundsErrorsEnabledSelector = '[data-action="settings-sounds-errors-enabled"]'
 export const settingsUpdatesStartupSelector = '[data-action="settings-updates-startup"]'
 export const settingsReleaseNotesSelector = '[data-action="settings-release-notes"]'
 
@@ -32,8 +29,6 @@ export const sidebarNavSelector = '[data-component="sidebar-nav-desktop"]'
 
 export const projectSwitchSelector = (slug: string) =>
   `${sidebarNavSelector} [data-action="project-switch"][data-project="${slug}"]`
-
-export const projectCloseHoverSelector = (slug: string) => `[data-action="project-close-hover"][data-project="${slug}"]`
 
 export const projectMenuTriggerSelector = (slug: string) =>
   `${sidebarNavSelector} [data-action="project-menu"][data-project="${slug}"]`

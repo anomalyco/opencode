@@ -619,6 +619,42 @@ export const SessionRoutes = lazy(() =>
       },
     )
     .delete(
+      "/:sessionID/message/:messageID",
+      describeRoute({
+        summary: "Delete message",
+        description:
+          "Permanently delete a specific message (and all of its parts) from a session. This does not revert any file changes that may have been made while processing the message.",
+        operationId: "session.deleteMessage",
+        responses: {
+          200: {
+            description: "Successfully deleted message",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: z.string().meta({ description: "Session ID" }),
+          messageID: z.string().meta({ description: "Message ID" }),
+        }),
+      ),
+      async (c) => {
+        const params = c.req.valid("param")
+        SessionPrompt.assertNotBusy(params.sessionID)
+        await Session.removeMessage({
+          sessionID: params.sessionID,
+          messageID: params.messageID,
+        })
+        return c.json(true)
+      },
+    )
+    .delete(
       "/:sessionID/message/:messageID/part/:partID",
       describeRoute({
         description: "Delete a part from a message",
