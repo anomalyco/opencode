@@ -265,8 +265,10 @@ export namespace Snapshot {
       ref: "FileDiff",
     })
   export type FileDiff = z.infer<typeof FileDiff>
-  export async function diffFull(from: string, to: string): Promise<FileDiff[]> {
-    const git = gitdir()
+  export async function diffFull(from: string, to: string, git?: string): Promise<FileDiff[]> {
+    if (! git) {
+      git = gitdir()
+    }
     const result: FileDiff[] = []
     const status = new Map<string, "added" | "deleted" | "modified">()
 

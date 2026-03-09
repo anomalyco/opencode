@@ -30,6 +30,7 @@ export namespace FileWatcher {
         event: z.union([z.literal("add"), z.literal("change"), z.literal("unlink")]),
       }),
     ),
+    GitStatusChanged: BusEvent.define("git.status.changed", z.object({})),
   }
 
   const watcher = lazy((): typeof import("@parcel/watcher") | undefined => {
@@ -102,6 +103,33 @@ export namespace FileWatcher {
           const sub = await withTimeout(pending, SUBSCRIBE_TIMEOUT_MS).catch((err) => {
             log.error("failed to subscribe to vcsDir", { error: err })
             pending.then((s) => s.unsubscribe()).catch(() => {})
+            return undefined
+          })
+          if (sub) subs.push(sub)
+        }
+      }
+
+      if (Instance.project.vcs === "git") {
+        const result = await git(["rev-parse", "--git-dir"], {
+          cwd: Instance.directory,
+        })
+        if (result.exitCode === 0 && result.text().trim()) {
+          const gitDir= result.text().trim()
+          const handleGitStatusChange: ParcelWatcher.SubscribeCallback = (err, evts) => {
+            if (err) {
+              return
+            }
+            for (const evt of evts) {
+              if (evt.path.endsWith("index") || evt.path.endsWith("HEAD")) {
+                Bus.publish(Event.GitStatusChanged, {})
+                break
+              }
+            }
+          }
+          const pending = w.subscribe(gitDir, handleGitStatusChange, { ignore: [], backend })
+          const sub = await withTimeout(pending, SUBSCRIBE_TIMEOUT_MS).catch(err => {
+            log.error("failed to subscribe to .git/index .git/HEAD", { error: err })
+            pending.then(s => s.unsubscribe()).catch(() => {})
             return undefined
           })
           if (sub) subs.push(sub)
