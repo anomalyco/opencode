@@ -1,6 +1,7 @@
 import { $ } from "bun"
 import path from "path"
 import fs from "fs/promises"
+import { Filesystem } from "../util/filesystem"
 import { Log } from "../util/log"
 import { Flag } from "../flag/flag"
 import { Global } from "../global"
@@ -271,13 +272,12 @@ export namespace Snapshot {
     const target = path.join(git, "info", "exclude")
     await fs.mkdir(path.join(git, "info"), { recursive: true })
     if (!file) {
-      await Bun.write(target, "")
+      await Filesystem.write(target, "")
       return
     }
-    const text = await Bun.file(file)
-      .text()
-      .catch(() => "")
-    await Bun.write(target, text)
+    const text = await Filesystem.readText(file).catch(() => "")
+
+    await Filesystem.write(target, text)
   }
 
   async function excludes() {

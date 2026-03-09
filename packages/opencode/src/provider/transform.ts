@@ -440,7 +440,9 @@ export namespace ProviderTransform {
         const copilotEfforts = iife(() => {
           if (id.includes("5.1-codex-max") || id.includes("5.2") || id.includes("5.3"))
             return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
-          return WIDELY_SUPPORTED_EFFORTS
+          const arr = [...WIDELY_SUPPORTED_EFFORTS]
+          if (id.includes("gpt-5") && model.release_date >= "2025-12-04") arr.push("xhigh")
+          return arr
         })
         return Object.fromEntries(
           copilotEfforts.map((effort) => [
@@ -897,6 +899,31 @@ export namespace ProviderTransform {
 
     // Convert integer enums to string enums for Google/Gemini
     if (model.providerID === "google" || model.api.id.includes("gemini")) {
+      const isPlainObject = (node: unknown): node is Record<string, any> =>
+        typeof node === "object" && node !== null && !Array.isArray(node)
+      const hasCombiner = (node: unknown) =>
+        isPlainObject(node) && (Array.isArray(node.anyOf) || Array.isArray(node.oneOf) || Array.isArray(node.allOf))
+      const hasSchemaIntent = (node: unknown) => {
+        if (!isPlainObject(node)) return false
+        if (hasCombiner(node)) return true
+        return [
+          "type",
+          "properties",
+          "items",
+          "prefixItems",
+          "enum",
+          "const",
+          "$ref",
+          "additionalProperties",
+          "patternProperties",
+          "required",
+          "not",
+          "if",
+          "then",
+          "else",
+        ].some((key) => key in node)
+      }
+
       const sanitizeGemini = (obj: any): any => {
         if (obj === null || typeof obj !== "object") {
           return obj
@@ -927,19 +954,18 @@ export namespace ProviderTransform {
           result.required = result.required.filter((field: any) => field in result.properties)
         }
 
-        if (result.type === "array") {
+        if (result.type === "array" && !hasCombiner(result)) {
           if (result.items == null) {
             result.items = {}
           }
-          // Ensure items has at least a type if it's an empty object
-          // This handles nested arrays like { type: "array", items: { type: "array", items: {} } }
-          if (typeof result.items === "object" && !Array.isArray(result.items) && !result.items.type) {
+          // Ensure items has a type only when it's still schema-empty.
+          if (isPlainObject(result.items) && !hasSchemaIntent(result.items)) {
             result.items.type = "string"
           }
         }
 
         // Remove properties/required from non-object types (Gemini rejects these)
-        if (result.type && result.type !== "object") {
+        if (result.type && result.type !== "object" && !hasCombiner(result)) {
           delete result.properties
           delete result.required
         }
