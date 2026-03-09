@@ -1129,28 +1129,6 @@ export namespace Provider {
       const configProvider = config.provider?.[providerID]
 
       for (const [modelID, model] of Object.entries(provider.models)) {
-        // Apply reasoning detection for Ollama models (both auto-detected and config-loaded)
-        if (providerID === "ollama") {
-          const isReasoning = isOllamaReasoningModel(modelID)
-          const configModel = config.provider?.ollama?.models?.[modelID]
-          const configForceReasoning = configModel?.reasoning
-          const finalReasoning = configForceReasoning !== undefined ? configForceReasoning : isReasoning
-
-          if (finalReasoning) {
-            model.capabilities.reasoning = true
-            if (!model.capabilities.interleaved) {
-              model.capabilities.interleaved = configModel?.interleaved ?? { field: "reasoning_content" }
-            }
-            model.options = { reasoningEffort: configModel?.options?.reasoningEffort ?? "medium", ...model.options }
-            if (!model.limit.output || model.limit.output < 32768) {
-              model.limit.output = configModel?.limit?.output ?? 32768
-            }
-            if (!model.limit.context || model.limit.context < 200000) {
-              model.limit.context = configModel?.limit?.context ?? 200000
-            }
-          }
-        }
-
         model.api.id = model.api.id ?? model.id ?? modelID
         if (modelID === "gpt-5-chat-latest" || (providerID === "openrouter" && modelID === "openai/gpt-5-chat"))
           delete provider.models[modelID]
