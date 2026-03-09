@@ -24,6 +24,17 @@ Place JavaScript or TypeScript files in the plugin directory.
 
 Files in these directories are automatically loaded at startup.
 
+You can also reference a local plugin file directly from `opencode.json`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["file:///absolute/path/to/my-plugin.ts"]
+}
+```
+
+Use the full `file://` URL with an absolute path.
+
 ---
 
 ### From npm
