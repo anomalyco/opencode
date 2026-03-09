@@ -86,6 +86,15 @@ import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from 
 import { SidebarContent } from "./layout/sidebar-shell"
 
 export default function Layout(props: ParentProps) {
+  const safe = new Set(["http:", "https:", "mailto:"])
+
+  const external = (href: string) => {
+    if (!URL.canParse(href)) return
+    const url = new URL(href)
+    if (!safe.has(url.protocol)) return
+    return url.href
+  }
+
   const [store, setStore, , ready] = persisted(
     Persist.global("layout.page", ["layout.page.v1"]),
     createStore({
@@ -1929,7 +1938,9 @@ export default function Layout(props: ParentProps) {
     const clearNotifications = () =>
       workspaces()
         .filter((directory) => notification.project.unseenCount(directory) > 0)
-        .forEach((directory) => notification.project.markViewed(directory))
+        .forEach((directory) => {
+          notification.project.markViewed(directory)
+        })
     const workspacesEnabled = createMemo(() => {
       const project = panelProps.project
       if (!project) return false
@@ -2203,7 +2214,10 @@ export default function Layout(props: ParentProps) {
                   pluginItems={pluginItems}
                   onOpenPluginItem={(href: string) => {
                     if (href.startsWith("/")) navigate(href)
-                    else platform.openLink(href)
+                    else {
+                      const url = external(href)
+                      if (url) platform.openLink(url)
+                    }
                   }}
                   renderPanel={() => (
                     <Show when={currentProject()} keyed>
@@ -2238,7 +2252,9 @@ export default function Layout(props: ParentProps) {
             />
 
             <div class="xl:hidden">
-              <div
+              <button
+                type="button"
+                aria-label={language.t("common.dismiss")}
                 classList={{
                   "fixed inset-x-0 top-10 bottom-0 z-40 transition-opacity duration-200": true,
                   "opacity-100 pointer-events-auto": layout.mobileSidebar.opened(),
@@ -2256,7 +2272,6 @@ export default function Layout(props: ParentProps) {
                   "translate-x-0": layout.mobileSidebar.opened(),
                   "-translate-x-full": !layout.mobileSidebar.opened(),
                 }}
-                onClick={(e) => e.stopPropagation()}
               >
                 <SidebarContent
                   mobile
@@ -2287,7 +2302,10 @@ export default function Layout(props: ParentProps) {
                   onOpenPluginItem={(href: string) => {
                     layout.mobileSidebar.hide()
                     if (href.startsWith("/")) navigate(href)
-                    else platform.openLink(href)
+                    else {
+                      const url = external(href)
+                      if (url) platform.openLink(url)
+                    }
                   }}
                   renderPanel={() => <SidebarPanel project={currentProject()} mobile />}
                 />
@@ -2317,7 +2335,7 @@ export default function Layout(props: ParentProps) {
               </main>
             </div>
 
-            <div
+            <aside
               classList={{
                 "hidden xl:flex absolute inset-y-0 left-16 z-30": true,
                 "opacity-100 translate-x-0 pointer-events-auto": peeked() && !layout.sidebar.opened(),
@@ -2339,7 +2357,7 @@ export default function Layout(props: ParentProps) {
               <Show when={peek()} keyed>
                 {(project) => <SidebarPanel project={project} merged={false} />}
               </Show>
-            </div>
+            </aside>
 
             <div
               classList={{

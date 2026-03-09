@@ -474,12 +474,14 @@ export namespace Config {
   async function loadPlugin(dir: string) {
     const plugins: string[] = []
 
-    for (const item of await Glob.scan("{plugin,plugins}/*.{ts,js}", {
-      cwd: dir,
-      absolute: true,
-      dot: true,
-      symlink: true,
-    })) {
+    for (const item of (
+      await Glob.scan("{plugin,plugins}/*.{ts,js}", {
+        cwd: dir,
+        absolute: true,
+        dot: true,
+        symlink: true,
+      })
+    ).sort((a, b) => a.localeCompare(b))) {
       plugins.push(pathToFileURL(item).href)
     }
     return plugins

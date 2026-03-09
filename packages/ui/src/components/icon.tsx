@@ -91,8 +91,8 @@ export interface IconProps extends ComponentProps<"svg"> {
 }
 
 export function getIconName(name: string): keyof typeof icons {
-  if (name in icons) return name as keyof typeof icons;
-  return "mcp";
+  if (Object.hasOwn(icons, name)) return name as keyof typeof icons
+  return "mcp"
 }
 
 export function Icon(props: IconProps) {
