@@ -784,6 +784,104 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ])
   })
+
+  test("does not produce interleaved tool-call and text/reasoning in a single assistant block when step boundaries are missing", () => {
+    // When the finish-step handler in processor.ts throws during a retryable error,
+    // step-finish for step 1 and step-start for step 2 are never saved. Both steps'
+    // content merges into one DB message without boundaries. On replay,
+    // convertToModelMessages() produces a single assistant block with interleaved
+    // tool_use/reasoning/text, which the Anthropic API rejects with:
+    //   "tool_use ids were found without tool_result blocks immediately after"
+    //   or "Expected thinking or redacted_thinking, but found tool_use"
+    //
+    // Real-world DB evidence from session ses_32fb35486ffeeJAHmplKU1gB2t:
+    //   step-start → text → tool(write, error, input={}) → [96s gap] → text → tool(write, completed) → step-finish
+    //   The error tool had "Tool execution aborted" and empty input — no step boundary between the two steps.
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "write the file",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "s1"),
+            type: "step-start",
+          },
+          {
+            ...basePart(assistantID, "t1"),
+            type: "text",
+            text: "Now let me write the implementation.",
+          },
+          {
+            // Step 1's tool — errored with empty input (aborted before tool-call event)
+            ...basePart(assistantID, "tool1"),
+            type: "tool",
+            callID: "call-1",
+            tool: "write",
+            state: {
+              status: "error",
+              input: {},
+              error: "Tool execution aborted",
+              time: { start: 0, end: 1 },
+            },
+          },
+          // NO step-finish or step-start here — the boundary was lost
+          {
+            ...basePart(assistantID, "t2"),
+            type: "text",
+            text: "Now let me write the implementation.",
+          },
+          {
+            // Step 2's tool — completed successfully on retry
+            ...basePart(assistantID, "tool2"),
+            type: "tool",
+            callID: "call-2",
+            tool: "write",
+            state: {
+              status: "completed",
+              input: { filePath: "/tmp/test.ts", content: "export const x = 1" },
+              output: "ok",
+              title: "Write",
+              metadata: {},
+              time: { start: 2, end: 3 },
+            },
+          },
+          // step-finish only exists for the final step
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = MessageV2.toModelMessages(input, model)
+
+    // Structural invariant: in every assistant ModelMessage, no text or reasoning
+    // part should appear AFTER a tool-call part. If it does, the Anthropic API
+    // will reject the message because it expects tool_result immediately after tool_use.
+    for (const msg of result) {
+      if (msg.role !== "assistant" || !Array.isArray(msg.content)) continue
+      let sawToolCall = false
+      for (const part of msg.content as any[]) {
+        if (part.type === "tool-call") sawToolCall = true
+        if (sawToolCall && (part.type === "text" || part.type === "reasoning")) {
+          throw new Error(
+            `Invalid interleaving: found "${part.type}" part after "tool-call" in the same assistant message. ` +
+              `This violates the Anthropic API requirement that tool_result must immediately follow tool_use. ` +
+              `Content types in this message: [${(msg.content as any[]).map((p: any) => p.type).join(", ")}]`,
+          )
+        }
+      }
+    }
+  })
 })
 
 describe("session.message-v2.fromError", () => {
