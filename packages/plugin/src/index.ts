@@ -145,6 +145,14 @@ export type AuthOuathResult = { url: string; instructions: string } & (
     }
 )
 
+export type SidebarItem = {
+  id: string
+  label: string
+  icon: string
+  href: string
+  order?: number
+}
+
 export interface Hooks {
   event?: (input: { event: Event }) => Promise<void>
   config?: (input: Config) => Promise<void>
@@ -165,6 +173,7 @@ export interface Hooks {
     },
     output: { message: UserMessage; parts: Part[] },
   ) => Promise<void>
+  "ui.sidebar"?: (input: {}, output: { items: SidebarItem[] }) => Promise<void>
   /**
    * Modify parameters sent to LLM
    */
