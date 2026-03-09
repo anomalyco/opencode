@@ -1917,7 +1917,7 @@ export default function Layout(props: ParentProps) {
     return (
       <div
         classList={{
-          "flex flex-col min-h-0 min-w-0 rounded-tl-[12px] px-2": true,
+          "flex flex-col min-h-0 min-w-0 box-border rounded-tl-[12px] px-2": true,
           "border border-b-0 border-border-weak-base": !merged(),
           "border-l border-t border-border-weaker-base": merged(),
           "bg-background-base": merged() || hover(),
