@@ -5,14 +5,6 @@ import { Instance } from "../../src/project/instance"
 async function smokeTest() {
   console.log("Starting Phase 5 Smoke Test...")
 
-  // Mock context
-  const ctx = {
-    sessionID: "test-session",
-    messageID: "test-message",
-    metadata: (meta: any) => console.log("Metadata:", meta),
-    ask: async () => ({ action: "allow" }),
-    extra: {},
-  } as any
 
   await Instance.provide({
     directory: process.cwd(),
