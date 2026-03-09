@@ -103,7 +103,7 @@ export function Header() {
           <Match when={session()?.parentID}>
             <box flexDirection="column" gap={1}>
               <box flexDirection={narrow() ? "column" : "row"} justifyContent="space-between" gap={narrow() ? 1 : 0}>
-                {Flag.OPENCODE_EXPERIMENTAL_WORKSPACES_TUI ? (
+                {Flag.OPENCODE_EXPERIMENTAL_WORKSPACES ? (
                   <box flexDirection="column">
                     <text fg={theme.text}>
                       <b>Subagent session</b>
@@ -154,7 +154,7 @@ export function Header() {
           </Match>
           <Match when={true}>
             <box flexDirection={narrow() ? "column" : "row"} justifyContent="space-between" gap={1}>
-              {Flag.OPENCODE_EXPERIMENTAL_WORKSPACES_TUI ? (
+              {Flag.OPENCODE_EXPERIMENTAL_WORKSPACES ? (
                 <box flexDirection="column">
                   <Title session={session} />
                   <WorkspaceInfo workspace={workspace} />
