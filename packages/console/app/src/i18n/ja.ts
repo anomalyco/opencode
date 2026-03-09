@@ -486,7 +486,6 @@ export const dict = {
   "workspace.cost.deletedSuffix": "(削除済み)",
   "workspace.cost.empty": "選択した期間の使用状況データはありません。",
   "workspace.cost.subscriptionShort": "サブ",
-  "workspace.cost.liteShort": "lite",
 
   "workspace.keys.title": "APIキー",
   "workspace.keys.subtitle": "OpenCodeサービスにアクセスするためのAPIキーを管理します。",
