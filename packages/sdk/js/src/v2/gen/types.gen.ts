@@ -4104,6 +4104,33 @@ export type ProviderOauthCallbackResponses = {
 
 export type ProviderOauthCallbackResponse = ProviderOauthCallbackResponses[keyof ProviderOauthCallbackResponses]
 
+export type PluginSidebarData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/plugin/sidebar"
+}
+
+export type PluginSidebarResponses = {
+  /**
+   * Plugin sidebar items
+   */
+  200: {
+    items: Array<{
+      id: string
+      label: string
+      icon: string
+      href: string
+      order?: number
+    }>
+  }
+}
+
+export type PluginSidebarResponse = PluginSidebarResponses[keyof PluginSidebarResponses]
+
 export type FindTextData = {
   body?: never
   path?: never
