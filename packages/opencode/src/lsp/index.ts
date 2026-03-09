@@ -140,6 +140,9 @@ export namespace LSP {
     },
     async (state) => {
       await Promise.all(state.clients.map((client) => client.shutdown()))
+      state.clients.length = 0
+      state.broken.clear()
+      state.spawning.clear()
     },
   )
 

@@ -125,6 +125,8 @@ export namespace Plugin {
     return state().then((x) => x.hooks)
   }
 
+  let unsub: (() => void) | undefined
+
   export async function init() {
     const hooks = await state().then((x) => x.hooks)
     const config = await Config.get()
@@ -132,7 +134,9 @@ export namespace Plugin {
       // @ts-expect-error this is because we haven't moved plugin to sdk v2
       await hook.config?.(config)
     }
-    Bus.subscribeAll(async (input) => {
+    // Unsubscribe previous wildcard subscriber to prevent stacking on re-init
+    unsub?.()
+    unsub = Bus.subscribeAll(async (input) => {
       const hooks = await state().then((x) => x.hooks)
       for (const hook of hooks) {
         hook["event"]?.({

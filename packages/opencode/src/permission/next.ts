@@ -279,6 +279,21 @@ export namespace PermissionNext {
     }
   }
 
+  export async function clearSession(sessionID: string) {
+    const s = await state()
+    for (const [id, pending] of Object.entries(s.pending)) {
+      if (pending.info.sessionID === sessionID) {
+        delete s.pending[id]
+        Bus.publish(Event.Replied, {
+          sessionID: pending.info.sessionID,
+          requestID: pending.info.id,
+          reply: "reject",
+        })
+        pending.reject(new RejectedError())
+      }
+    }
+  }
+
   export async function list() {
     const s = await state()
     return Object.values(s.pending).map((x) => x.info)

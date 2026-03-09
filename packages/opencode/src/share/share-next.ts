@@ -61,7 +61,11 @@ export namespace ShareNext {
 
   const disabled = process.env["OPENCODE_DISABLE_SHARE"] === "true" || process.env["OPENCODE_DISABLE_SHARE"] === "1"
 
+  const unsubs: (() => void)[] = []
+
   export function dispose() {
+    for (const fn of unsubs) fn()
+    unsubs.length = 0
     for (const [, entry] of queue) {
       clearTimeout(entry.timeout)
     }
@@ -70,15 +74,18 @@ export namespace ShareNext {
 
   export async function init() {
     if (disabled) return
-    Bus.subscribe(Session.Event.Updated, async (evt) => {
+    // Unsubscribe previous subscriptions to prevent stacking on re-init
+    for (const fn of unsubs) fn()
+    unsubs.length = 0
+    unsubs.push(Bus.subscribe(Session.Event.Updated, async (evt) => {
       await sync(evt.properties.info.id, [
         {
           type: "session",
           data: evt.properties.info,
         },
       ])
-    })
-    Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
+    }))
+    unsubs.push(Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
       await sync(evt.properties.info.sessionID, [
         {
           type: "message",
@@ -97,23 +104,23 @@ export namespace ShareNext {
           },
         ])
       }
-    })
-    Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
+    }))
+    unsubs.push(Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
       await sync(evt.properties.part.sessionID, [
         {
           type: "part",
           data: evt.properties.part,
         },
       ])
-    })
-    Bus.subscribe(Session.Event.Diff, async (evt) => {
+    }))
+    unsubs.push(Bus.subscribe(Session.Event.Diff, async (evt) => {
       await sync(evt.properties.sessionID, [
         {
           type: "session_diff",
           data: evt.properties.diff,
         },
       ])
-    })
+    }))
   }
 
   export async function create(sessionID: string) {

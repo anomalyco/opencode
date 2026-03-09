@@ -7,10 +7,25 @@ export function WorkspaceServerRoutes() {
     c.header("X-Accel-Buffering", "no")
     c.header("X-Content-Type-Options", "nosniff")
     return streamSSE(c, async (stream) => {
+      let done = false
+      let resolveStream: (() => void) | undefined
+
+      const cleanup = () => {
+        if (done) return
+        done = true
+        clearInterval(heartbeat)
+        GlobalBus.off("event", handler)
+        resolveStream?.()
+      }
+
       const send = async (event: unknown) => {
-        await stream.writeSSE({
-          data: JSON.stringify(event),
-        })
+        try {
+          await stream.writeSSE({
+            data: JSON.stringify(event),
+          })
+        } catch {
+          cleanup()
+        }
       }
       const handler = async (event: { directory?: string; payload: unknown }) => {
         await send(event.payload)
@@ -22,11 +37,8 @@ export function WorkspaceServerRoutes() {
       }, 10_000)
 
       await new Promise<void>((resolve) => {
-        stream.onAbort(() => {
-          clearInterval(heartbeat)
-          GlobalBus.off("event", handler)
-          resolve()
-        })
+        resolveStream = resolve
+        stream.onAbort(cleanup)
       })
     })
   })

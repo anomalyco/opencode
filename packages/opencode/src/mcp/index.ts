@@ -420,7 +420,9 @@ export namespace MCP {
                 duration: 8000,
               }).catch((e) => log.debug("failed to show toast", { error: e }))
             } else {
-              // Store transport for later finishAuth call
+              // Close any existing pending transport before storing the new one
+              const existing = pendingOAuthTransports.get(key)
+              if (existing) existing.close?.().catch(() => {})
               pendingOAuthTransports.set(key, transport)
               status = { status: "needs_auth" as const }
               // Show toast for needs_auth
@@ -942,6 +944,8 @@ export namespace MCP {
   export async function removeAuth(mcpName: string): Promise<void> {
     await McpAuth.remove(mcpName)
     McpOAuthCallback.cancelPending(mcpName)
+    const transport = pendingOAuthTransports.get(mcpName)
+    if (transport) transport.close?.().catch(() => {})
     pendingOAuthTransports.delete(mcpName)
     await McpAuth.clearOAuthState(mcpName)
     log.info("removed oauth credentials", { mcpName })

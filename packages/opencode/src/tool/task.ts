@@ -152,6 +152,12 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         "</task_result>",
       ].join("\n")
 
+      // Deallocate subagent session to free in-memory state (messages, parts, listeners)
+      // If the LLM later tries to resume via task_id, Session.get() will fail gracefully
+      if (!params.task_id) {
+        Session.remove(session.id).catch(() => {})
+      }
+
       return {
         title: params.description,
         metadata: {
