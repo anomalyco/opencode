@@ -38,6 +38,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       [key in Event["type"]]: Extract<Event, { type: key }>
     }>()
 
+    const MAX_EVENT_QUEUE = 1000
     let queue: Event[] = []
     let timer: Timer | undefined
     let last = 0
@@ -57,6 +58,10 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     }
 
     const handleEvent = (event: Event) => {
+      // Drop oldest events if queue is too large to prevent unbounded memory growth
+      if (queue.length >= MAX_EVENT_QUEUE) {
+        queue.splice(0, queue.length - MAX_EVENT_QUEUE + 1)
+      }
       queue.push(event)
       const elapsed = Date.now() - last
 

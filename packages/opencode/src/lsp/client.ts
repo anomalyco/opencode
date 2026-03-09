@@ -48,7 +48,9 @@ export namespace LSPClient {
       new StreamMessageWriter(input.server.process.stdin as any),
     )
 
+    const MAX_DIAGNOSTIC_FILES = 200
     const diagnostics = new Map<string, Diagnostic[]>()
+    const diagnosticOrder: string[] = [] // track insertion order for eviction
     connection.onNotification("textDocument/publishDiagnostics", (params) => {
       const filePath = Filesystem.normalizePath(fileURLToPath(params.uri))
       l.info("textDocument/publishDiagnostics", {
@@ -56,7 +58,29 @@ export namespace LSPClient {
         count: params.diagnostics.length,
       })
       const exists = diagnostics.has(filePath)
+
+      // If empty diagnostics, just remove the entry to free memory
+      if (params.diagnostics.length === 0) {
+        diagnostics.delete(filePath)
+        const idx = diagnosticOrder.indexOf(filePath)
+        if (idx !== -1) diagnosticOrder.splice(idx, 1)
+        if (exists) Bus.publish(Event.Diagnostics, { path: filePath, serverID: input.serverID })
+        return
+      }
+
       diagnostics.set(filePath, params.diagnostics)
+
+      // Update insertion order (move to end)
+      const idx = diagnosticOrder.indexOf(filePath)
+      if (idx !== -1) diagnosticOrder.splice(idx, 1)
+      diagnosticOrder.push(filePath)
+
+      // Evict oldest entries if we exceed the limit
+      while (diagnosticOrder.length > MAX_DIAGNOSTIC_FILES) {
+        const oldest = diagnosticOrder.shift()!
+        diagnostics.delete(oldest)
+      }
+
       if (!exists && input.serverID === "typescript") return
       Bus.publish(Event.Diagnostics, { path: filePath, serverID: input.serverID })
     })
@@ -237,6 +261,8 @@ export namespace LSPClient {
       },
       async shutdown() {
         l.info("shutting down")
+        diagnostics.clear()
+        diagnosticOrder.length = 0
         connection.end()
         connection.dispose()
         input.server.process.kill()
