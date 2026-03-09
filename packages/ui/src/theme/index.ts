@@ -1,5 +1,6 @@
 export type {
   DesktopTheme,
+  ThemePaletteColors,
   ThemeSeedColors,
   ThemeVariant,
   HexColor,
@@ -19,7 +20,10 @@ export {
   generateScale,
   generateNeutralScale,
   generateAlphaScale,
+  fitOklch,
+  blend,
   mixColors,
+  shift,
   lighten,
   darken,
   withAlpha,

@@ -9,6 +9,13 @@
   overflow-y: auto;
   scrollbar-width: none;
   outline: none;
+  display: block;
+  overflow-anchor: none;
+}
+
+.scroll-view__viewport[data-reverse="true"] {
+  display: flex;
+  flex-direction: column-reverse;
 }
 
 .scroll-view__viewport::-webkit-scrollbar {
@@ -42,18 +49,6 @@
 
 .scroll-view__thumb:hover::after,
 .scroll-view__thumb[data-dragging="true"]::after {
-  background-color: var(--border-strong-base);
-}
-
-.dark .scroll-view__thumb::after,
-[data-theme="dark"] .scroll-view__thumb::after {
-  background-color: var(--border-weak-base);
-}
-
-.dark .scroll-view__thumb:hover::after,
-[data-theme="dark"] .scroll-view__thumb:hover::after,
-.dark .scroll-view__thumb[data-dragging="true"]::after,
-[data-theme="dark"] .scroll-view__thumb[data-dragging="true"]::after {
   background-color: var(--border-strong-base);
 }
 
