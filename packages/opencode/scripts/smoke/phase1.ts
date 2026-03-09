@@ -15,13 +15,13 @@ async function smokeTest() {
 
   console.log("\n--- Testing repo_architect ---")
   const archTool = await RepoArchitectToolDefinition.init()
-  const archResult = await archTool.execute({ depth: 2, format: "text" }, ctx)
+  const archResult = await archTool.execute({ depth: 2, format: "text" }, ctx as any)
   console.log("Title:", archResult.title)
   console.log("Output summary:", archResult.output.split("\n")[0])
 
   console.log("\n--- Testing mcp_bridge ---")
   const mcpTool = await McpBridgeToolDefinition.init()
-  const mcpResult = await mcpTool.execute({ server_name: "test-server", action: "list_tools" }, ctx)
+  const mcpResult = await mcpTool.execute({ server_name: "test-server", action: "list_tools" }, ctx as any)
   console.log("Title:", mcpResult.title)
   console.log("Output:", mcpResult.output)
 

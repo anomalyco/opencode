@@ -15,13 +15,13 @@ async function smokeTest() {
 
   console.log("\n--- Testing security_scanner ---")
   const scanTool = await SecurityScannerToolDefinition.init()
-  const scanResult = await scanTool.execute({ target: "packages/opencode/src/tool", level: "quick", fix: false }, ctx)
+  const scanResult = await scanTool.execute({ target: "packages/opencode/src/tool", level: "quick", fix: false }, ctx as any)
   console.log("Title:", scanResult.title)
   console.log("Output summary:", scanResult.output.split("\n")[0])
 
   console.log("\n--- Testing api_sentinel ---")
   const apiTool = await ApiSentinelToolDefinition.init()
-  const apiResult = await apiTool.execute({ endpoint: "https://api.example.com/v1", action: "verify_schema" }, ctx)
+  const apiResult = await apiTool.execute({ endpoint: "https://api.example.com/v1", action: "verify_schema" }, ctx as any)
   console.log("Title:", apiResult.title)
   console.log("Output summary:", apiResult.output.split("\n")[0])
 

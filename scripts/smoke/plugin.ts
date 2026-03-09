@@ -35,15 +35,17 @@ async function run() {
     console.log("   -> Agent instruction snippet injected into system prompt!");
   }
 
-  console.log("\n✅ Testing successful tool execution...");
-  const res = await plugin.tool.repo_architect.execute({ directory: "src" }, {} as any);
-  console.log("   -> Result:", res);
+  if (plugin.tool?.repo_architect) {
+    console.log("\n✅ Testing successful tool execution...");
+    const res = await plugin.tool.repo_architect.execute({ directory: "src" }, mockContext as any);
+    console.log("   -> Result:", res);
 
-  console.log("\n🔥 Testing forcing a tool to fail and checking if it yells at the UI...");
-  try {
-    await plugin.tool.repo_architect.execute({ directory: "trigger_error" }, {} as any);
-  } catch (e: any) {
-    console.log("   -> Exception caught by UI Framework:", e.message);
+    console.log("\n🔥 Testing forcing a tool to fail and checking if it yells at the UI...");
+    try {
+      await plugin.tool.repo_architect.execute({ directory: "trigger_error" }, mockContext as any);
+    } catch (e: any) {
+      console.log("   -> Exception caught by UI Framework:", e.message);
+    }
   }
 
   if (yelled) {

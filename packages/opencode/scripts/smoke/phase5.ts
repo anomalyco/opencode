@@ -15,13 +15,13 @@ async function smokeTest() {
 
   console.log("\n--- Testing design_validator ---")
   const designTool = await DesignValidatorToolDefinition.init()
-  const designResult = await designTool.execute({ target: "packages/common/ui", fix: true, theme: "system" }, ctx)
+  const designResult = await designTool.execute({ target: "packages/common/ui", fix: true, theme: "system" }, ctx as any)
   console.log("Title:", designResult.title)
   console.log("Output summary:", designResult.output.split("\n")[0])
 
   console.log("\n--- Testing git_surgeon ---")
   const gitTool = await GitSurgeonToolDefinition.init()
-  const gitResult = await gitTool.execute({ action: "resolve_conflicts", strategy: "logical" }, ctx)
+  const gitResult = await gitTool.execute({ action: "resolve_conflicts", strategy: "logical" }, ctx as any)
   console.log("Title:", gitResult.title)
   console.log("Output summary:", gitResult.output.split("\n")[0])
 

@@ -35,4 +35,8 @@ export function tool<Args extends z.ZodRawShape>(input: {
 }
 tool.schema = z
 
-export type ToolDefinition = ReturnType<typeof tool>
+export type ToolDefinition = {
+  description: string
+  args: z.ZodRawShape
+  execute(args: any, context: ToolContext): Promise<string>
+}

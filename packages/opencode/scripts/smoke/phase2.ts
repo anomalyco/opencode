@@ -15,13 +15,13 @@ async function smokeTest() {
 
   console.log("\n--- Testing perf_profiler ---")
   const perfTool = await PerfProfilerToolDefinition.init()
-  const perfResult = await perfTool.execute({ target: "api/v1/users", mode: "cpu", duration: 5000 }, ctx)
+  const perfResult = await perfTool.execute({ target: "api/v1/users", mode: "cpu", duration: 5000 }, ctx as any)
   console.log("Title:", perfResult.title)
   console.log("Output summary:", perfResult.output.split("\n")[0])
 
   console.log("\n--- Testing db_explorer ---")
   const dbTool = await DbExplorerToolDefinition.init()
-  const dbResult = await dbTool.execute({ action: "list_tables" }, ctx)
+  const dbResult = await dbTool.execute({ action: "list_tables" }, ctx as any)
   console.log("Title:", dbResult.title)
   console.log("Output summary:", dbResult.output.split("\n")[0])
 

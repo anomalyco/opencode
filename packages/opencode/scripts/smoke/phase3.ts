@@ -15,13 +15,13 @@ async function smokeTest() {
 
   console.log("\n--- Testing lsp_power_fixer ---")
   const lspTool = await LspPowerFixerToolDefinition.init()
-  const lspResult = await lspTool.execute({ file: "src/tool/mcp_bridge.ts", action: "quickfix" }, ctx)
+  const lspResult = await lspTool.execute({ file: "src/tool/mcp_bridge.ts", action: "quickfix" }, ctx as any)
   console.log("Title:", lspResult.title)
   console.log("Output summary:", lspResult.output.split("\n")[0])
 
   console.log("\n--- Testing env_provisioner ---")
   const envTool = await EnvProvisionerToolDefinition.init()
-  const envResult = await envTool.execute({ action: "check" }, ctx)
+  const envResult = await envTool.execute({ action: "check" }, ctx as any)
   console.log("Title:", envResult.title)
   console.log("Output summary:", envResult.output.split("\n")[0])
 
