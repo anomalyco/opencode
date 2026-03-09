@@ -15,21 +15,10 @@ import { existsSync } from "fs"
 import { git } from "../util/git"
 import { Glob } from "../util/glob"
 import { which } from "../util/which"
+import { cachePath, canonical, gitpath, legacy, writeCache } from "./identity"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
-
-  function gitpath(cwd: string, name: string) {
-    if (!name) return cwd
-    // git output includes trailing newlines; keep path whitespace intact.
-    name = name.replace(/[\r\n]+$/, "")
-    if (!name) return cwd
-
-    name = Filesystem.windowsPath(name)
-
-    if (path.isAbsolute(name)) return path.normalize(name)
-    return path.resolve(cwd, name)
-  }
 
   export const Info = z
     .object({
@@ -100,8 +89,9 @@ export namespace Project {
 
         const gitBinary = which("git")
 
-        // cached id calculation
-        let id = await Filesystem.readText(path.join(dotgit, "opencode"))
+        // cached id calculation (fallback for non-git environments)
+        let id = await Bun.file(path.join(dotgit, "opencode"))
+          .text()
           .then((x) => x.trim())
           .catch(() => undefined)
 
@@ -114,53 +104,20 @@ export namespace Project {
           }
         }
 
-        // generate id from root commit
-        if (!id) {
-          const roots = await git(["rev-list", "--max-parents=0", "--all"], {
-            cwd: sandbox,
-          })
-            .then(async (result) =>
-              (await result.text())
-                .split("\n")
-                .filter(Boolean)
-                .map((x) => x.trim())
-                .toSorted(),
-            )
-            .catch(() => undefined)
-
-          if (!roots) {
-            return {
-              id: "global",
-              worktree: sandbox,
-              sandbox: sandbox,
-              vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
-            }
-          }
-
-          id = roots[0]
-          if (id) {
-            await Filesystem.write(path.join(dotgit, "opencode"), id).catch(() => undefined)
-          }
-        }
-
-        if (!id) {
-          return {
-            id: "global",
-            worktree: sandbox,
-            sandbox: sandbox,
-            vcs: "git",
-          }
-        }
-
+        // Resolve the worktree root for this directory.
+        // NOTE: This must happen before computing a project ID. In worktrees, `.git` can be
+        // per-worktree and `git rev-list ...` can observe different refs depending on cwd.
+        // Normalizing to the top-level and using the git common dir keeps the computed ID
+        // stable across all worktrees for the same repo.
         const top = await git(["rev-parse", "--show-toplevel"], {
           cwd: sandbox,
         })
-          .then(async (result) => gitpath(sandbox, await result.text()))
+          .then((result) => gitpath(sandbox, result.text()))
           .catch(() => undefined)
 
         if (!top) {
           return {
-            id,
+            id: id ?? "global",
             sandbox,
             worktree: sandbox,
             vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
@@ -169,30 +126,70 @@ export namespace Project {
 
         sandbox = top
 
-        const worktree = await git(["rev-parse", "--git-common-dir"], {
+        // Resolve the git *common* dir so all worktrees share the same project ID cache.
+        const common = await git(["rev-parse", "--git-common-dir"], {
           cwd: sandbox,
         })
-          .then(async (result) => {
-            const common = gitpath(sandbox, await result.text())
-            // Avoid going to parent of sandbox when git-common-dir is empty.
-            return common === sandbox ? sandbox : path.dirname(common)
-          })
+          .then((result) => result.text().trim())
           .catch(() => undefined)
 
-        if (!worktree) {
+        if (!common) {
           return {
-            id,
+            id: id ?? "global",
             sandbox,
             worktree: sandbox,
-            vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+            vcs: "git",
+          }
+        }
+
+        const commonDir = gitpath(sandbox, common)
+        const worktree = path.dirname(commonDir)
+        const cacheFile = cachePath(commonDir)
+
+        const head = await git(["rev-parse", "--verify", "HEAD"], {
+          cwd: sandbox,
+          env: {
+            GIT_DIR: commonDir,
+            GIT_WORK_TREE: sandbox,
+          },
+        })
+
+        if (head.exitCode !== 0) {
+          return {
+            id: "global",
+            sandbox,
+            worktree,
+            vcs: "git",
+          }
+        }
+
+        const cached = await Bun.file(cacheFile)
+          .text()
+          .then((x) => x.trim())
+          .catch(() => undefined)
+
+        if (cached && !legacy(cached)) {
+          id = cached
+        } else {
+          id = crypto.randomUUID()
+          writeCache(commonDir, id)
+        }
+
+        if (!id) {
+          return {
+            id: "global",
+            sandbox,
+            worktree,
+            vcs: "git",
           }
         }
 
         return {
           id,
-          sandbox,
           worktree,
+          sandbox,
           vcs: "git",
+          cache: cacheFile,
         }
       }
 
@@ -204,11 +201,22 @@ export namespace Project {
       }
     })
 
-    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, data.id)).get())
+    // If the DB already has a project row for this worktree, reuse it to keep existing
+    // sessions/icons/permissions compatible.
+    const canonicalRow = data.id === "global" ? undefined : canonical(data.worktree)
+
+    const id = legacy(canonicalRow?.id ?? "") ? data.id : (canonicalRow?.id ?? data.id)
+    if (id !== data.id && data.cache) {
+      void Bun.file(data.cache)
+        .write(id)
+        .catch(() => undefined)
+    }
+
+    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
     const existing = await iife(async () => {
       if (row) return fromRow(row)
       const fresh: Info = {
-        id: data.id,
+        id,
         worktree: data.worktree,
         vcs: data.vcs as Info["vcs"],
         sandboxes: [],
@@ -217,8 +225,8 @@ export namespace Project {
           updated: Date.now(),
         },
       }
-      if (data.id !== "global") {
-        await migrateFromGlobal(data.id, data.worktree)
+      if (id !== "global") {
+        await migrateFromGlobal(id, data.worktree)
       }
       return fresh
     })

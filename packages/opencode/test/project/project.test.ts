@@ -6,27 +6,23 @@ import path from "path"
 import { tmpdir } from "../fixture/fixture"
 import { Filesystem } from "../../src/util/filesystem"
 import { GlobalBus } from "../../src/bus/global"
+import fs from "fs/promises"
 
 Log.init({ print: false })
 
 const gitModule = await import("../../src/util/git")
 const originalGit = gitModule.git
 
-type Mode = "none" | "rev-list-fail" | "top-fail" | "common-dir-fail"
+type Mode = "none" | "head-fail" | "top-fail" | "common-dir-fail"
 let mode: Mode = "none"
 
 mock.module("../../src/util/git", () => ({
   git: (args: string[], opts: { cwd: string; env?: Record<string, string> }) => {
     const cmd = ["git", ...args].join(" ")
-    if (
-      mode === "rev-list-fail" &&
-      cmd.includes("git rev-list") &&
-      cmd.includes("--max-parents=0") &&
-      cmd.includes("--all")
-    ) {
+    if (mode === "head-fail" && cmd.includes("git rev-parse") && cmd.includes("--verify") && cmd.includes("HEAD")) {
       return Promise.resolve({
         exitCode: 128,
-        text: () => Promise.resolve(""),
+        text: () => "",
         stdout: Buffer.from(""),
         stderr: Buffer.from("fatal"),
       })
@@ -34,7 +30,7 @@ mock.module("../../src/util/git", () => ({
     if (mode === "top-fail" && cmd.includes("git rev-parse") && cmd.includes("--show-toplevel")) {
       return Promise.resolve({
         exitCode: 128,
-        text: () => Promise.resolve(""),
+        text: () => "",
         stdout: Buffer.from(""),
         stderr: Buffer.from("fatal"),
       })
@@ -42,7 +38,7 @@ mock.module("../../src/util/git", () => ({
     if (mode === "common-dir-fail" && cmd.includes("git rev-parse") && cmd.includes("--git-common-dir")) {
       return Promise.resolve({
         exitCode: 128,
-        text: () => Promise.resolve(""),
+        text: () => "",
         stdout: Buffer.from(""),
         stderr: Buffer.from("fatal"),
       })
@@ -99,12 +95,12 @@ describe("Project.fromDirectory", () => {
     expect(fileExists).toBe(true)
   })
 
-  test("keeps git vcs when rev-list exits non-zero with empty output", async () => {
+  test("keeps git vcs when HEAD is missing", async () => {
     const p = await loadProject()
     await using tmp = await tmpdir()
     await $`git init`.cwd(tmp.path).quiet()
 
-    await withMode("rev-list-fail", async () => {
+    await withMode("head-fail", async () => {
       const { project } = await p.fromDirectory(tmp.path)
       expect(project.vcs).toBe("git")
       expect(project.id).toBe("global")
@@ -197,6 +193,124 @@ describe("Project.fromDirectory with worktrees", () => {
         .cwd(tmp.path)
         .quiet()
         .catch(() => {})
+    }
+  })
+
+  test("returns a coherent project when called from root or any worktree", async () => {
+    const p = await loadProject()
+    await using tmp = await tmpdir({ git: true })
+
+    const worktreePath = path.join(tmp.path, "..", path.basename(tmp.path) + "-worktree")
+    try {
+      await $`git worktree add ${worktreePath} -b test-branch-${Date.now()}`.cwd(tmp.path).quiet()
+
+      const root = await p.fromDirectory(tmp.path)
+      const wt = await p.fromDirectory(worktreePath)
+
+      expect(root.project.id).not.toBe("global")
+      expect(wt.project.id).toBe(root.project.id)
+
+      expect(root.project.worktree).toBe(tmp.path)
+      expect(wt.project.worktree).toBe(tmp.path)
+
+      expect(root.sandbox).toBe(tmp.path)
+      expect(wt.sandbox).toBe(worktreePath)
+
+      expect(wt.project.sandboxes).toContain(worktreePath)
+      expect(wt.project.sandboxes).not.toContain(tmp.path)
+    } finally {
+      await $`git worktree remove ${worktreePath}`
+        .cwd(tmp.path)
+        .quiet()
+        .catch(() => {})
+    }
+  })
+
+  test("reuses canonical DB project id when cache is different", async () => {
+    const p = await loadProject()
+    await using tmp = await tmpdir({ git: true })
+
+    const worktreePath = path.join(tmp.path, "..", path.basename(tmp.path) + "-worktree")
+    try {
+      await $`git worktree add ${worktreePath} -b test-branch-${Date.now()}`.cwd(tmp.path).quiet()
+
+      const initial = await p.fromDirectory(worktreePath)
+      const canonicalId = initial.project.id
+      expect(canonicalId).not.toBe("global")
+
+      const common = await $`git rev-parse --git-common-dir`
+        .cwd(tmp.path)
+        .quiet()
+        .then((r) => r.text())
+        .then((s) => s.trim())
+      const commonDir = path.isAbsolute(common) ? common : path.resolve(tmp.path, common)
+      const cacheFile = path.join(commonDir, "opencode")
+
+      await Bun.write(cacheFile, "bogus-project-id")
+
+      const again = await p.fromDirectory(worktreePath)
+      expect(again.project.id).toBe(canonicalId)
+      expect(again.project.sandboxes).toContain(worktreePath)
+      expect(await Bun.file(cacheFile).text()).toBe(canonicalId)
+    } finally {
+      await $`git worktree remove ${worktreePath}`
+        .cwd(tmp.path)
+        .quiet()
+        .catch(() => {})
+    }
+  })
+})
+
+describe("Project.fromDirectory across clones", () => {
+  test("separate clones of the same repo do not share project identity", async () => {
+    const p = await loadProject()
+    await using tmp = await tmpdir({ git: true })
+
+    const clonePath = path.join(tmp.path, "..", path.basename(tmp.path) + "-clone")
+    try {
+      await $`git clone ${tmp.path} ${clonePath}`.quiet()
+
+      const a = await p.fromDirectory(tmp.path)
+      const b = await p.fromDirectory(clonePath)
+
+      expect(a.project.id).not.toBe("global")
+      expect(b.project.id).not.toBe("global")
+      expect(a.project.id).not.toBe(b.project.id)
+      expect(a.project.worktree).toBe(tmp.path)
+      expect(b.project.worktree).toBe(clonePath)
+    } finally {
+      await fs.rm(clonePath, { recursive: true, force: true })
+    }
+  })
+
+  test("upgrades legacy root-commit cache without colliding across clones", async () => {
+    const p = await loadProject()
+    await using tmp = await tmpdir({ git: true })
+
+    const clonePath = path.join(tmp.path, "..", path.basename(tmp.path) + "-clone")
+    try {
+      await $`git clone ${tmp.path} ${clonePath}`.quiet()
+
+      const root = await $`git rev-list --max-parents=0 HEAD`
+        .cwd(tmp.path)
+        .quiet()
+        .then((r) => r.text())
+        .then((s) => s.trim())
+
+      await Bun.write(path.join(tmp.path, ".git", "opencode"), root)
+      await Bun.write(path.join(clonePath, ".git", "opencode"), root)
+
+      const a = await p.fromDirectory(tmp.path)
+      const b = await p.fromDirectory(clonePath)
+
+      expect(a.project.id).not.toBe(root)
+      expect(b.project.id).not.toBe(root)
+      expect(a.project.id).not.toBe(b.project.id)
+
+      expect(await Bun.file(path.join(tmp.path, ".git", "opencode")).text()).toBe(a.project.id)
+      expect(await Bun.file(path.join(clonePath, ".git", "opencode")).text()).toBe(b.project.id)
+    } finally {
+      await fs.rm(clonePath, { recursive: true, force: true })
     }
   })
 })
@@ -298,8 +412,9 @@ describe("Project.update", () => {
 
   test("should throw error when project not found", async () => {
     await using tmp = await tmpdir({ git: true })
+    void tmp.path
 
-    await expect(
+    return expect(
       Project.update({
         projectID: "nonexistent-project-id",
         name: "Should Fail",
