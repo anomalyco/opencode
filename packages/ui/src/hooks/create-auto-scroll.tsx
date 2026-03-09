@@ -1,6 +1,8 @@
 import { createEffect, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { animate, type AnimationPlaybackControls } from "motion"
+import { FAST_SPRING } from "../components/motion"
 
 export interface AutoScrollOptions {
   working: () => boolean
@@ -9,13 +11,28 @@ export interface AutoScrollOptions {
   bottomThreshold?: number
 }
 
+const SETTLE_MS = 500
+const AUTO_SCROLL_GRACE_MS = 120
+const AUTO_SCROLL_EPSILON = 0.5
+const MANUAL_ANCHOR_MS = 3000
+const MANUAL_ANCHOR_QUIET_FRAMES = 24
+
 export function createAutoScroll(options: AutoScrollOptions) {
   let scroll: HTMLElement | undefined
   let settling = false
   let settleTimer: ReturnType<typeof setTimeout> | undefined
-  let autoTimer: ReturnType<typeof setTimeout> | undefined
   let cleanup: (() => void) | undefined
-  let auto: { top: number; time: number } | undefined
+  let programmaticUntil = 0
+  let scrollAnim: AnimationPlaybackControls | undefined
+  let hold:
+    | {
+        el: HTMLElement
+        top: number
+        until: number
+        quiet: number
+        frame: number | undefined
+      }
+    | undefined
 
   const threshold = () => options.bottomThreshold ?? 10
 
@@ -27,77 +44,160 @@ export function createAutoScroll(options: AutoScrollOptions) {
   const active = () => options.working() || settling
 
   const distanceFromBottom = (el: HTMLElement) => {
-    return el.scrollHeight - el.clientHeight - el.scrollTop
+    // With column-reverse, scrollTop=0 is at the bottom, negative = scrolled up
+    return Math.abs(el.scrollTop)
   }
 
   const canScroll = (el: HTMLElement) => {
     return el.scrollHeight - el.clientHeight > 1
   }
 
-  // Browsers can dispatch scroll events asynchronously. If new content arrives
-  // between us calling `scrollTo()` and the subsequent `scroll` event firing,
-  // the handler can see a non-zero `distanceFromBottom` and incorrectly assume
-  // the user scrolled.
-  const markAuto = (el: HTMLElement) => {
-    auto = {
-      top: Math.max(0, el.scrollHeight - el.clientHeight),
-      time: Date.now(),
-    }
-
-    if (autoTimer) clearTimeout(autoTimer)
-    autoTimer = setTimeout(() => {
-      auto = undefined
-      autoTimer = undefined
-    }, 1500)
+  const markProgrammatic = () => {
+    programmaticUntil = Date.now() + AUTO_SCROLL_GRACE_MS
   }
 
-  const isAuto = (el: HTMLElement) => {
-    const a = auto
-    if (!a) return false
+  const clearHold = () => {
+    const next = hold
+    if (!next) return
+    if (next.frame !== undefined) cancelAnimationFrame(next.frame)
+    hold = undefined
+  }
 
-    if (Date.now() - a.time > 1500) {
-      auto = undefined
+  const tickHold = () => {
+    const next = hold
+    const el = scroll
+    if (!next || !el) return false
+    if (Date.now() > next.until) {
+      clearHold()
+      return false
+    }
+    if (!next.el.isConnected) {
+      clearHold()
       return false
     }
 
-    return Math.abs(el.scrollTop - a.top) < 2
-  }
-
-  const scrollToBottomNow = (behavior: ScrollBehavior) => {
-    const el = scroll
-    if (!el) return
-    markAuto(el)
-    if (behavior === "smooth") {
-      el.scrollTo({ top: el.scrollHeight, behavior })
-      return
+    const current = next.el.getBoundingClientRect().top
+    if (!Number.isFinite(current)) {
+      clearHold()
+      return false
     }
 
-    // `scrollTop` assignment bypasses any CSS `scroll-behavior: smooth`.
-    el.scrollTop = el.scrollHeight
+    const delta = current - next.top
+    if (Math.abs(delta) <= AUTO_SCROLL_EPSILON) {
+      next.quiet += 1
+      if (next.quiet > MANUAL_ANCHOR_QUIET_FRAMES) {
+        clearHold()
+        return false
+      }
+      return true
+    }
+
+    next.quiet = 0
+    if (!store.userScrolled) {
+      setStore("userScrolled", true)
+      options.onUserInteracted?.()
+    }
+    el.scrollTop += delta
+    markProgrammatic()
+    return true
+  }
+
+  const scheduleHold = () => {
+    const next = hold
+    if (!next) return
+    if (next.frame !== undefined) return
+
+    next.frame = requestAnimationFrame(() => {
+      const value = hold
+      if (!value) return
+      value.frame = undefined
+      if (!tickHold()) return
+      scheduleHold()
+    })
+  }
+
+  const preserve = (target: HTMLElement) => {
+    const el = scroll
+    if (!el) return
+
+    if (!store.userScrolled) {
+      setStore("userScrolled", true)
+      options.onUserInteracted?.()
+    }
+
+    const top = target.getBoundingClientRect().top
+    if (!Number.isFinite(top)) return
+
+    clearHold()
+    hold = {
+      el: target,
+      top,
+      until: Date.now() + MANUAL_ANCHOR_MS,
+      quiet: 0,
+      frame: undefined,
+    }
+    scheduleHold()
   }
 
   const scrollToBottom = (force: boolean) => {
     if (!force && !active()) return
+
+    clearHold()
 
     if (force && store.userScrolled) setStore("userScrolled", false)
 
     const el = scroll
     if (!el) return
 
+    if (scrollAnim) cancelSmooth()
     if (!force && store.userScrolled) return
 
-    const distance = distanceFromBottom(el)
-    if (distance < 2) {
-      markAuto(el)
+    // With column-reverse, scrollTop=0 is at the bottom
+    if (Math.abs(el.scrollTop) <= AUTO_SCROLL_EPSILON) {
+      markProgrammatic()
       return
     }
 
-    // For auto-following content we prefer immediate updates to avoid
-    // visible "catch up" animations while content is still settling.
-    scrollToBottomNow("auto")
+    el.scrollTop = 0
+    markProgrammatic()
   }
 
-  const stop = () => {
+  const cancelSmooth = () => {
+    if (scrollAnim) {
+      scrollAnim.stop()
+      scrollAnim = undefined
+    }
+  }
+
+  const smoothScrollToBottom = () => {
+    const el = scroll
+    if (!el) return
+
+    cancelSmooth()
+    if (store.userScrolled) setStore("userScrolled", false)
+
+    // With column-reverse, scrollTop=0 is at the bottom
+    if (Math.abs(el.scrollTop) <= AUTO_SCROLL_EPSILON) {
+      markProgrammatic()
+      return
+    }
+
+    scrollAnim = animate(el.scrollTop, 0, {
+      ...FAST_SPRING,
+      onUpdate: (v) => {
+        markProgrammatic()
+        el.scrollTop = v
+      },
+      onComplete: () => {
+        scrollAnim = undefined
+        markProgrammatic()
+      },
+    })
+  }
+
+  const stop = (input?: { hold?: boolean }) => {
+    if (input?.hold !== false) clearHold()
+
     const el = scroll
     if (!el) return
     if (!canScroll(el)) {
@@ -106,15 +206,25 @@ export function createAutoScroll(options: AutoScrollOptions) {
     }
     if (store.userScrolled) return
 
+    markProgrammatic()
     setStore("userScrolled", true)
     options.onUserInteracted?.()
   }
 
   const handleWheel = (e: WheelEvent) => {
+    if (e.deltaY !== 0) clearHold()
+
+    if (e.deltaY > 0) {
+      const el = scroll
+      if (!el) return
+      if (distanceFromBottom(el) >= threshold()) return
+      if (store.userScrolled) setStore("userScrolled", false)
+      markProgrammatic()
+      return
+    }
+
     if (e.deltaY >= 0) return
-    // If the user is scrolling within a nested scrollable region (tool output,
-    // code block, etc), don't treat it as leaving the "follow bottom" mode.
-    // Those regions opt in via `data-scrollable`.
+    cancelSmooth()
     const el = scroll
     const target = e.target instanceof Element ? e.target : undefined
     const nested = target?.closest("[data-scrollable]")
@@ -126,23 +236,27 @@ export function createAutoScroll(options: AutoScrollOptions) {
     const el = scroll
     if (!el) return
 
+    if (hold) {
+      if (Date.now() < programmaticUntil) return
+      clearHold()
+    }
+
     if (!canScroll(el)) {
       if (store.userScrolled) setStore("userScrolled", false)
+      markProgrammatic()
       return
     }
 
     if (distanceFromBottom(el) < threshold()) {
+      if (Date.now() < programmaticUntil) return
       if (store.userScrolled) setStore("userScrolled", false)
+      markProgrammatic()
       return
     }
 
-    // Ignore scroll events triggered by our own scrollToBottom calls.
-    if (!store.userScrolled && isAuto(el)) {
-      scrollToBottom(false)
-      return
-    }
+    if (!store.userScrolled && Date.now() < programmaticUntil) return
 
-    stop()
+    stop({ hold: false })
   }
 
   const handleInteraction = () => {
@@ -154,6 +268,11 @@ export function createAutoScroll(options: AutoScrollOptions) {
   }
 
   const updateOverflowAnchor = (el: HTMLElement) => {
+    if (hold) {
+      el.style.overflowAnchor = "none"
+      return
+    }
+
     const mode = options.overflowAnchor ?? "dynamic"
 
     if (mode === "none") {
@@ -173,15 +292,17 @@ export function createAutoScroll(options: AutoScrollOptions) {
     () => store.contentRef,
     () => {
       const el = scroll
+      if (hold) {
+        scheduleHold()
+        return
+      }
       if (el && !canScroll(el)) {
         if (store.userScrolled) setStore("userScrolled", false)
+        markProgrammatic()
         return
       }
       if (!active()) return
       if (store.userScrolled) return
-      // ResizeObserver fires after layout, before paint.
-      // Keep the bottom locked in the same frame to avoid visible
-      // "jump up then catch up" artifacts while streaming content.
       scrollToBottom(false)
     },
   )
@@ -200,13 +321,11 @@ export function createAutoScroll(options: AutoScrollOptions) {
       settling = true
       settleTimer = setTimeout(() => {
         settling = false
-      }, 300)
+      }, SETTLE_MS)
     }),
   )
 
   createEffect(() => {
-    // Track `userScrolled` even before `scrollRef` is attached, so we can
-    // update overflow anchoring once the element exists.
     store.userScrolled
     const el = scroll
     if (!el) return
@@ -215,7 +334,8 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
   onCleanup(() => {
     if (settleTimer) clearTimeout(settleTimer)
-    if (autoTimer) clearTimeout(autoTimer)
+    clearHold()
+    cancelSmooth()
     if (cleanup) cleanup()
   })
 
@@ -228,8 +348,12 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
       scroll = el
 
-      if (!el) return
+      if (!el) {
+        clearHold()
+        return
+      }
 
+      markProgrammatic()
       updateOverflowAnchor(el)
       el.addEventListener("wheel", handleWheel, { passive: true })
 
@@ -240,13 +364,18 @@ export function createAutoScroll(options: AutoScrollOptions) {
     contentRef: (el: HTMLElement | undefined) => setStore("contentRef", el),
     handleScroll,
     handleInteraction,
+    preserve,
     pause: stop,
-    resume: () => {
-      if (store.userScrolled) setStore("userScrolled", false)
-      scrollToBottom(true)
-    },
-    scrollToBottom: () => scrollToBottom(false),
     forceScrollToBottom: () => scrollToBottom(true),
+    smoothScrollToBottom,
+    snapToBottom: () => {
+      const el = scroll
+      if (!el) return
+      if (store.userScrolled) setStore("userScrolled", false)
+      // With column-reverse, scrollTop=0 is at the bottom
+      el.scrollTop = 0
+      markProgrammatic()
+    },
     userScrolled: () => store.userScrolled,
   }
 }

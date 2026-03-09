@@ -13,6 +13,7 @@ import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
 import { Process } from "../../util/process"
 import { text } from "node:stream/consumers"
+import { setTimeout as sleep } from "node:timers/promises"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
 
@@ -47,7 +48,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
   const method = plugin.auth.methods[index]
 
   // Handle prompts for all auth types
-  await Bun.sleep(10)
+  await sleep(10)
   const inputs: Record<string, string> = {}
   if (method.prompts) {
     for (const prompt of method.prompts) {

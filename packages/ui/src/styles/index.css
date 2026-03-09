@@ -40,6 +40,7 @@
 @import "../components/progress-circle.css" layer(components);
 @import "../components/radio-group.css" layer(components);
 @import "../components/resize-handle.css" layer(components);
+@import "../components/rolling-results.css" layer(components);
 @import "../components/select.css" layer(components);
 @import "../components/spinner.css" layer(components);
 @import "../components/switch.css" layer(components);
