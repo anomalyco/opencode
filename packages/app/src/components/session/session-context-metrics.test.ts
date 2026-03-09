@@ -8,6 +8,7 @@ const assistant = (
   cost: number,
   providerID = "openai",
   modelID = "gpt-4.1",
+  summary?: boolean,
 ) => {
   return {
     id,
@@ -15,6 +16,7 @@ const assistant = (
     providerID,
     modelID,
     cost,
+    summary,
     tokens: {
       input: tokens.input,
       output: tokens.output,
@@ -97,5 +99,61 @@ describe("getSessionContextMetrics", () => {
 
     expect(metrics.totalCost).toBe(0)
     expect(metrics.context).toBeUndefined()
+  })
+
+  test("uses only output tokens when last message is a compaction summary", () => {
+    // A compaction message has a large `input` (the full pre-compaction history
+    // fed to the summarizer) and a small `output` (the resulting summary text).
+    // Displaying input+output would show the pre-compaction size, not the
+    // reduced context the next turn will actually use.
+    const messages = [
+      user("u1"),
+      assistant("a1", { input: 150000, output: 3000, reasoning: 0, read: 0, write: 0 }, 0.5, "openai", "gpt-4.1", true),
+    ]
+    const providers = [
+      {
+        id: "openai",
+        name: "OpenAI",
+        models: { "gpt-4.1": { name: "GPT-4.1", limit: { context: 200000 } } },
+      },
+    ]
+
+    const metrics = getSessionContextMetrics(messages, providers)
+
+    // total should be output-only (3000), not input+output (153000)
+    expect(metrics.context?.total).toBe(3000)
+    expect(metrics.context?.usage).toBe(2)
+  })
+
+  test("uses full token sum when last message is not a compaction summary", () => {
+    const messages = [
+      user("u1"),
+      assistant("a1", { input: 150000, output: 3000, reasoning: 0, read: 0, write: 0 }, 0.5),
+    ]
+    const providers = [
+      {
+        id: "openai",
+        name: "OpenAI",
+        models: { "gpt-4.1": { name: "GPT-4.1", limit: { context: 200000 } } },
+      },
+    ]
+
+    const metrics = getSessionContextMetrics(messages, providers)
+
+    expect(metrics.context?.total).toBe(153000)
+  })
+
+  test("still exposes raw token breakdown fields unchanged after compaction", () => {
+    // The individual input/output/reasoning fields should remain unmodified so
+    // the context breakdown panel can still show the full compaction details.
+    const messages = [
+      user("u1"),
+      assistant("a1", { input: 150000, output: 3000, reasoning: 0, read: 0, write: 0 }, 0.5, "openai", "gpt-4.1", true),
+    ]
+
+    const metrics = getSessionContextMetrics(messages, [])
+
+    expect(metrics.context?.input).toBe(150000)
+    expect(metrics.context?.output).toBe(3000)
   })
 })

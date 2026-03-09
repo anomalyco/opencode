@@ -51,8 +51,13 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const context = createMemo(() => {
     const last = messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage
     if (!last) return
-    const total =
-      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
+    // When the last message is a compaction summary, its `input` tokens reflect
+    // the full pre-compaction history that was fed to the summarizer -- not what
+    // the next turn will actually see. Use only the summary's `output` tokens so
+    // the sidebar immediately shows the reduced context after /compact completes.
+    const total = last.summary
+      ? last.tokens.output
+      : last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
     const model = sync.data.provider.find((x) => x.id === last.providerID)?.models[last.modelID]
     return {
       tokens: total.toLocaleString(),

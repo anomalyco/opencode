@@ -55,7 +55,12 @@ const build = (messages: Message[] = [], providers: Provider[] = []): Metrics =>
   const provider = providers.find((item) => item.id === message.providerID)
   const model = provider?.models[message.modelID]
   const limit = model?.limit.context
-  const total = tokenTotal(message)
+
+  // When the last message is a compaction summary, its `input` tokens reflect
+  // the full pre-compaction history fed to the summarizer -- not what the next
+  // turn will actually see. Use only the summary's `output` tokens so the
+  // context display immediately shows the reduced size after /compact completes.
+  const total = message.summary ? message.tokens.output : tokenTotal(message)
 
   return {
     totalCost,
