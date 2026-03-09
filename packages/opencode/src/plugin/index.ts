@@ -25,8 +25,7 @@ export namespace Plugin {
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
       directory: Instance.directory,
-      // @ts-ignore - fetch type incompatibility
-      fetch: async (...args) => Server.App().fetch(...args),
+      fetch: async (...args) => Server.Default().fetch(...args),
     })
     const config = await Config.get()
     const hooks: Hooks[] = []
@@ -35,7 +34,9 @@ export namespace Plugin {
       project: Instance.project,
       worktree: Instance.worktree,
       directory: Instance.directory,
-      serverUrl: Server.url(),
+      get serverUrl(): URL {
+        throw new Error("Server URL is no longer supported in plugins")
+      },
       $: Bun.$,
     }
 
