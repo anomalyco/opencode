@@ -50,6 +50,25 @@ export namespace SessionProcessor {
           try {
             let currentText: MessageV2.TextPart | undefined
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
+            const ensureCurrentText = async (providerMetadata?: MessageV2.TextPart["metadata"]) => {
+              if (currentText) {
+                if (providerMetadata) currentText.metadata = providerMetadata
+                return currentText
+              }
+              currentText = {
+                id: Identifier.ascending("part"),
+                messageID: input.assistantMessage.id,
+                sessionID: input.assistantMessage.sessionID,
+                type: "text",
+                text: "",
+                time: {
+                  start: Date.now(),
+                },
+                metadata: providerMetadata,
+              }
+              await Session.updatePart(currentText)
+              return currentText
+            }
             const stream = await LLM.stream(streamInput)
 
             for await (const value of stream.fullStream) {
@@ -288,33 +307,22 @@ export namespace SessionProcessor {
                   break
 
                 case "text-start":
-                  currentText = {
-                    id: Identifier.ascending("part"),
-                    messageID: input.assistantMessage.id,
-                    sessionID: input.assistantMessage.sessionID,
-                    type: "text",
-                    text: "",
-                    time: {
-                      start: Date.now(),
-                    },
-                    metadata: value.providerMetadata,
-                  }
-                  await Session.updatePart(currentText)
+                  await ensureCurrentText(value.providerMetadata)
                   break
 
-                case "text-delta":
-                  if (currentText) {
-                    currentText.text += value.text
-                    if (value.providerMetadata) currentText.metadata = value.providerMetadata
-                    await Session.updatePartDelta({
-                      sessionID: currentText.sessionID,
-                      messageID: currentText.messageID,
-                      partID: currentText.id,
-                      field: "text",
-                      delta: value.text,
-                    })
-                  }
+                case "text-delta": {
+                  const textPart = await ensureCurrentText(value.providerMetadata)
+                  textPart.text += value.text
+                  if (value.providerMetadata) textPart.metadata = value.providerMetadata
+                  await Session.updatePartDelta({
+                    sessionID: textPart.sessionID,
+                    messageID: textPart.messageID,
+                    partID: textPart.id,
+                    field: "text",
+                    delta: value.text,
+                  })
                   break
+                }
 
                 case "text-end":
                   if (currentText) {
