@@ -46,6 +46,7 @@ import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncation"
+import { stale, reap } from "@/tool/bash"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -289,6 +290,13 @@ export namespace SessionPrompt {
     }
 
     using _ = defer(() => cancel(sessionID))
+
+    const watchdog = setInterval(() => {
+      for (const id of stale()) {
+        reap(id)
+      }
+    }, 5000)
+    using _watchdog = defer(() => clearInterval(watchdog))
 
     // Structured output state
     // Note: On session resumption, state is reset but outputFormat is preserved
