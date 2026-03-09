@@ -424,7 +424,7 @@ export const BashTool = Tool.define("bash", async () => {
         title: params.description,
         metadata: {
           output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
-          exit: proc.exitCode,
+          exit: proc.exitCode ?? (proc.signalCode ? 1 : 0),
           description: params.description,
         },
         output,
