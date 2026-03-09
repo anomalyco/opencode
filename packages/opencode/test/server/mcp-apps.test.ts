@@ -14,20 +14,20 @@ function authHeaders(): Record<string, string> {
   return { Authorization: `Basic ${creds}` }
 }
 
-async function req(app: ReturnType<typeof Server.App>, path: string, init?: RequestInit) {
+async function req(app: ReturnType<typeof Server.createApp>, path: string, init?: RequestInit) {
   return app.request(path, {
     ...init,
     headers: { ...authHeaders(), ...(init?.headers as Record<string, string> | undefined) },
   })
 }
 
-describe("GET /mcp-app", () => {
+describe("GET /mcp/app", () => {
   test("returns 200 with empty object when no MCP apps connected", async () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
-        const app = Server.App()
-        const res = await req(app, "/mcp-app")
+        const app = Server.createApp({})
+        const res = await req(app, "/mcp/app")
         expect(res.status).toBe(200)
         const body = await res.json()
         expect(typeof body).toBe("object")
@@ -36,13 +36,13 @@ describe("GET /mcp-app", () => {
   })
 })
 
-describe("GET /mcp-app/resource", () => {
+describe("GET /mcp/app/resource", () => {
   test("returns 400 when no matching resource found", async () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
-        const app = Server.App()
-        const res = await req(app, "/mcp-app/resource?uri=ui%3A%2F%2Ftest%2Fapp.html&server=nonexistent")
+        const app = Server.createApp({})
+        const res = await req(app, "/mcp/app/resource?uri=ui%3A%2F%2Ftest%2Fapp.html&server=nonexistent")
         expect(res.status).toBe(400)
       },
     })
@@ -52,21 +52,21 @@ describe("GET /mcp-app/resource", () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
-        const app = Server.App()
-        const res = await req(app, "/mcp-app/resource")
+        const app = Server.createApp({})
+        const res = await req(app, "/mcp/app/resource")
         expect(res.status).toBe(400)
       },
     })
   })
 })
 
-describe("POST /mcp-app/tool-call", () => {
+describe("POST /mcp/app/tool-call", () => {
   test("returns 400 when server is not found", async () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
-        const app = Server.App()
-        const res = await req(app, "/mcp-app/tool-call", {
+        const app = Server.createApp({})
+        const res = await req(app, "/mcp/app/tool-call", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ server: "nonexistent", name: "tool" }),
@@ -80,8 +80,8 @@ describe("POST /mcp-app/tool-call", () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
-        const app = Server.App()
-        const res = await req(app, "/mcp-app/tool-call", {
+        const app = Server.createApp({})
+        const res = await req(app, "/mcp/app/tool-call", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ invalid: "body" }),

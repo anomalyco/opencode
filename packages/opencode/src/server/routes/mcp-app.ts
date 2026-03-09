@@ -1,9 +1,11 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
-import { MCP } from "../../mcp"
+import { MCP } from "@/mcp"
 import { errors } from "../error"
-import { lazy } from "../../util/lazy"
+import { lazy } from "@/util/lazy"
+import { Effect } from "effect"
+import { jsonRequest } from "./instance/trace"
 
 export const McpAppRoutes = lazy(() =>
   new Hono()
@@ -12,30 +14,29 @@ export const McpAppRoutes = lazy(() =>
       describeRoute({
         summary: "List MCP App tools",
         description: "List all MCP tools that declare a UI resource via _meta.ui.resourceUri.",
-        operationId: "mcp-app.list",
+        operationId: "mcp.app.list",
         responses: {
           200: {
-            description: "MCP App tools",
+            description: "Map of tool key to app meta",
             content: {
               "application/json": {
-                schema: resolver(
-                  z.record(z.string(), MCP.AppMeta.extend({ server: z.string() }).meta({ ref: "McpAppToolEntry" })),
-                ),
+                schema: resolver(z.record(z.string(), MCP.AppMeta)),
               },
             },
           },
         },
       }),
       async (c) => {
-        return c.json(await MCP.apps())
+        const result = MCP.apps()
+        return c.json(result)
       },
     )
     .get(
       "/resource",
       describeRoute({
-        summary: "Get MCP App HTML resource",
-        description: "Fetch and cache the HTML bundle for a ui:// resource URI.",
-        operationId: "mcp-app.resource",
+        summary: "Get MCP App resource HTML",
+        description: "Read the HTML resource for an MCP App tool.",
+        operationId: "mcp.app.resource",
         responses: {
           200: {
             description: "HTML bundle",
@@ -56,19 +57,26 @@ export const McpAppRoutes = lazy(() =>
           force: z.coerce.boolean().optional(),
         }),
       ),
-      async (c) => {
-        const query = c.req.valid("query")
-        const resource = await MCP.appResource(query.server, query.uri, query.force)
-        if (!resource) return c.json({ error: "resource not found" }, 400)
-        return c.json(resource)
-      },
+      async (c) =>
+        jsonRequest("McpAppRoutes.resource", c, function* () {
+          const query = c.req.valid("query")
+          const mcp = yield* MCP.Service
+          const resource = yield* Effect.promise(async () => {
+            const readResourceFn = async (server: string, uri: string) => {
+              return Effect.runPromise(mcp.readResource(server, uri))
+            }
+            return MCP.appResource(query.server, query.uri, readResourceFn, query.force)
+          })
+          if (!resource) return c.json({ error: "resource not found" }, 400)
+          return c.json(resource)
+        }),
     )
     .post(
       "/tool-call",
       describeRoute({
         summary: "Proxy tool call from MCP App iframe",
         description: "Forward a tools/call request from an MCP App iframe to the originating MCP server.",
-        operationId: "mcp-app.tool-call",
+        operationId: "mcp.app.tool-call",
         responses: {
           200: {
             description: "Tool call result",
@@ -89,15 +97,17 @@ export const McpAppRoutes = lazy(() =>
           arguments: z.record(z.string(), z.unknown()).optional(),
         }),
       ),
-      async (c) => {
-        const body = c.req.valid("json")
-        const snap = await MCP.clients()
-        const client = snap[body.server]
-        if (!client) return c.json({ error: "server not found" }, 400)
-        const result = await client
-          .callTool({ name: body.name, arguments: body.arguments ?? {} })
-          .catch((e: Error) => ({ error: e.message }))
-        return c.json(result)
-      },
+      async (c) =>
+        jsonRequest("McpAppRoutes.toolCall", c, function* () {
+          const body = c.req.valid("json")
+          const mcp = yield* MCP.Service
+          const clients = yield* mcp.clients()
+          const client = clients[body.server]
+          if (!client) return c.json({ error: "server not found" }, 400)
+          const result = yield* Effect.tryPromise(() =>
+            client.callTool({ name: body.name, arguments: body.arguments ?? {} }),
+          )
+          return c.json(result)
+        }),
     ),
 )

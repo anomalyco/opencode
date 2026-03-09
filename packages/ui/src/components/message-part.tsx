@@ -2339,7 +2339,7 @@ ToolRegistry.register({
       bridge.oncalltool = async (params: { name: string; arguments?: Record<string, unknown> }) => {
         const srv = server()
         if (!srv) return { content: [] }
-        const res = await fetch(new URL("/mcp-app/tool-call", window.location.origin).href, {
+        const res = await fetch(new URL("/mcp/app/tool-call", window.location.origin).href, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ server: srv, name: params.name, arguments: params.arguments ?? {} }),
