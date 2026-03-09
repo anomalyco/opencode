@@ -239,17 +239,15 @@ export function MessageTimeline(props: {
   const working = createMemo(() => !!pending() || sessionStatus().type !== "idle")
 
   const [slot, setSlot] = createStore({
-    mode: "idle" as "idle" | "work" | "done",
+    open: false,
+    show: false,
     fade: false,
   })
 
   let f: number | undefined
-  let g: number | undefined
   const clear = () => {
     if (f !== undefined) window.clearTimeout(f)
-    if (g !== undefined) window.clearTimeout(g)
     f = undefined
-    g = undefined
   }
 
   onCleanup(clear)
@@ -259,16 +257,15 @@ export function MessageTimeline(props: {
       (on, prev) => {
         clear()
         if (on) {
-          setSlot({ mode: "work", fade: false })
+          setSlot({ open: true, show: true, fade: false })
           return
         }
         if (prev) {
-          setSlot({ mode: "done", fade: false })
-          f = window.setTimeout(() => setSlot("fade", true), 200)
-          g = window.setTimeout(() => setSlot({ mode: "idle", fade: false }), 400)
+          setSlot({ open: false, show: true, fade: true })
+          f = window.setTimeout(() => setSlot({ show: false, fade: false }), 260)
           return
         }
-        setSlot({ mode: "idle", fade: false })
+        setSlot({ open: false, show: false, fade: false })
       },
       { defer: true },
     ),
@@ -613,26 +610,21 @@ export function MessageTimeline(props: {
                     </Show>
                     <div class="flex items-center min-w-0 grow-1">
                       <div
-                        class="shrink-0 flex items-center justify-center overflow-hidden transition-[width,margin] duration-200 ease-out"
+                        class="shrink-0 flex items-center justify-center overflow-hidden transition-[width,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
                         style={{
-                          width: slot.mode === "idle" ? "0px" : "16px",
-                          "margin-right": slot.mode === "idle" ? "0px" : "8px",
+                          width: slot.open ? "16px" : "0px",
+                          "margin-right": slot.open ? "8px" : "0px",
                         }}
                         aria-hidden="true"
                       >
-                        <Show when={slot.mode !== "idle"}>
+                        <Show when={slot.show}>
                           <div
                             class="transition-opacity duration-200 ease-out"
                             classList={{
-                              "opacity-0": slot.mode === "done" && slot.fade,
+                              "opacity-0": slot.fade,
                             }}
                           >
-                            <Show
-                              when={slot.mode === "work"}
-                              fallback={<Spinner class="size-4" style={{ color: "var(--icon-interactive-base)" }} />}
-                            >
-                              <Spinner class="size-4" style={{ color: "var(--icon-interactive-base)" }} />
-                            </Show>
+                            <Spinner class="size-4" style={{ color: "var(--icon-interactive-base)" }} />
                           </div>
                         </Show>
                       </div>
