@@ -254,19 +254,23 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           )
           const updated = store.message[event.properties.info.sessionID]
           if (updated.length > 100) {
-            const oldest = updated[0]
+            // Remove excess messages beyond the limit, cleaning up their parts too
+            const excess = updated.length - 100
+            const removedMessages = updated.slice(0, excess)
             batch(() => {
               setStore(
                 "message",
                 event.properties.info.sessionID,
                 produce((draft) => {
-                  draft.shift()
+                  draft.splice(0, excess)
                 }),
               )
               setStore(
                 "part",
                 produce((draft) => {
-                  delete draft[oldest.id]
+                  for (const msg of removedMessages) {
+                    delete draft[msg.id]
+                  }
                 }),
               )
             })
@@ -442,6 +446,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     })
 
     const fullSyncedSessions = new Set<string>()
+    let currentSessionID: string | undefined
     const result = {
       data: store,
       set: setStore,
@@ -468,6 +473,27 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           return last.time.completed ? "idle" : "working"
         },
         async sync(sessionID: string) {
+          // Clean up previous session's data from memory when switching sessions
+          if (currentSessionID && currentSessionID !== sessionID) {
+            const oldMessages = store.message[currentSessionID]
+            if (oldMessages) {
+              setStore(
+                produce((draft) => {
+                  // Clean up parts for old session's messages
+                  for (const msg of oldMessages) {
+                    delete draft.part[msg.id]
+                  }
+                  // Clean up old session's messages
+                  delete draft.message[currentSessionID!]
+                  // Clean up old session's diff
+                  delete draft.session_diff[currentSessionID!]
+                }),
+              )
+            }
+            fullSyncedSessions.delete(currentSessionID)
+          }
+          currentSessionID = sessionID
+
           if (fullSyncedSessions.has(sessionID)) return
           const [session, messages, todo, diff] = await Promise.all([
             sdk.client.session.get({ sessionID }, { throwOnError: true }),

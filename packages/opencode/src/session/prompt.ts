@@ -263,6 +263,11 @@ export namespace SessionPrompt {
       return
     }
     match.abort.abort()
+    // Reject any pending callbacks to prevent promise/closure leaks
+    for (const cb of match.callbacks) {
+      cb.reject(new Error("Session cancelled"))
+    }
+    match.callbacks.length = 0
     delete s[sessionID]
     SessionStatus.set(sessionID, { type: "idle" })
     return
