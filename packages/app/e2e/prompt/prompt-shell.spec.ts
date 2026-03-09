@@ -14,7 +14,7 @@ const isBash = (part: unknown): part is ToolPart => {
 test("shell mode runs a command in the project directory", async ({ page, withProject }) => {
   test.setTimeout(120_000)
 
-  await withProject(async ({ directory, gotoSession }) => {
+  await withProject(async ({ directory, gotoSession, trackSession }) => {
     const sdk = createSdk(directory)
     const prompt = page.locator(promptSelector)
     const cmd = process.platform === "win32" ? "dir" : "ls"
@@ -31,6 +31,7 @@ test("shell mode runs a command in the project directory", async ({ page, withPr
 
     const id = sessionIDFromUrl(page.url())
     if (!id) throw new Error(`Failed to parse session id from url: ${page.url()}`)
+    trackSession(id, directory)
 
     await expect
       .poll(
