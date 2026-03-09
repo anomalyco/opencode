@@ -16,7 +16,7 @@ export namespace Snapshot {
   const prune = "7.days"
 
   function args(git: string, cmd: string[]) {
-    return ["--git-dir", git, "--work-tree", Instance.worktree, ...cmd]
+    return ["--git-dir", git, "--work-tree", Instance.worktree, ...cmd.filter(Boolean)]
   }
 
   export function init() {
@@ -265,8 +265,10 @@ export namespace Snapshot {
       ref: "FileDiff",
     })
   export type FileDiff = z.infer<typeof FileDiff>
-  export async function diffFull(from: string, to: string): Promise<FileDiff[]> {
-    const git = gitdir()
+  export async function diffFull(from: string, to: string, git?: string): Promise<FileDiff[]> {
+    if (! git) {
+      git = gitdir()
+    }
     const result: FileDiff[] = []
     const status = new Map<string, "added" | "deleted" | "modified">()
 

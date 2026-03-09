@@ -17,6 +17,8 @@ import { git } from "@/util/git"
 
 const SUBSCRIBE_TIMEOUT_MS = 10_000
 
+const GIT_STATUS_CHANGE_DEBOUNCE = 200
+
 declare const OPENCODE_LIBC: string | undefined
 
 export namespace FileWatcher {
@@ -30,6 +32,7 @@ export namespace FileWatcher {
         event: z.union([z.literal("add"), z.literal("change"), z.literal("unlink")]),
       }),
     ),
+    GitStatusChanged: BusEvent.define("git.status.changed", z.object({ directory: z.string() })),
   }
 
   const watcher = lazy((): typeof import("@parcel/watcher") | undefined => {
@@ -101,6 +104,32 @@ export namespace FileWatcher {
           })
           const sub = await withTimeout(pending, SUBSCRIBE_TIMEOUT_MS).catch((err) => {
             log.error("failed to subscribe to vcsDir", { error: err })
+            pending.then((s) => s.unsubscribe()).catch(() => {})
+            return undefined
+          })
+          if (sub) subs.push(sub)
+        }
+      }
+
+      if (Instance.project.vcs === "git") {
+        const result = await git(["rev-parse", "--absolute-git-dir"], {
+          cwd: Instance.directory,
+        })
+        if (result.exitCode === 0 && result.text().trim()) {
+          const gitDir = result.text().trim()
+          const directory = path.dirname(gitDir)
+          let debounceTimer: ReturnType<typeof setTimeout> | undefined
+          const handleGitStatusChange: ParcelWatcher.SubscribeCallback = (err) => {
+            if (err) return
+            if (debounceTimer) clearTimeout(debounceTimer)
+            debounceTimer = setTimeout(() => {
+              Bus.publish(Event.GitStatusChanged, { directory: directory })
+            }, GIT_STATUS_CHANGE_DEBOUNCE)
+          }
+          const pending = w.subscribe(gitDir, handleGitStatusChange, { ignore: [], backend })
+          const sub = await withTimeout(pending, SUBSCRIBE_TIMEOUT_MS).catch((err) => {
+            log.error("failed to subscribe to .git change", { error: err, cwd: Instance.directory })
+            if (debounceTimer) clearTimeout(debounceTimer)
             pending.then((s) => s.unsubscribe()).catch(() => {})
             return undefined
           })
