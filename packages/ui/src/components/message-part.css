@@ -1351,6 +1351,10 @@
       box-shadow: 0 0 0 2px var(--border-interactive-base);
       background-color: var(--background-base);
     }
+
+    &[data-picked="true"]:focus-visible {
+      box-shadow: 0 0 0 2px var(--border-interactive-base);
+    }
   }
 
   [data-slot="question-option-check"] {
