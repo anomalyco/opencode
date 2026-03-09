@@ -515,6 +515,7 @@ export const dict = {
   "session.todo.collapse": "Sažmi",
   "session.todo.expand": "Proširi",
 
+  "session.new.title": "Napravi bilo šta",
   "session.new.worktree.main": "Glavna grana",
   "session.new.worktree.mainWithBranch": "Glavna grana ({{branch}})",
   "session.new.worktree.create": "Kreiraj novi worktree",

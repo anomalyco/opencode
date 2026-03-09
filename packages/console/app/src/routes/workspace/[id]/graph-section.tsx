@@ -218,7 +218,7 @@ export function GraphSection() {
     const colorTextSecondary = styles.getPropertyValue("--color-text-secondary").trim()
     const colorBorder = styles.getPropertyValue("--color-border").trim()
     const subSuffix = ` (${i18n.t("workspace.cost.subscriptionShort")})`
-    const liteSuffix = ` (${i18n.t("workspace.cost.liteShort")})`
+    const liteSuffix = " (go)"
 
     const dailyDataRegular = new Map<string, Map<string, number>>()
     const dailyDataSub = new Map<string, Map<string, number>>()

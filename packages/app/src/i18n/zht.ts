@@ -507,6 +507,7 @@ export const dict = {
   "session.todo.collapse": "折疊",
   "session.todo.expand": "展開",
 
+  "session.new.title": "建構任何東西",
   "session.new.worktree.main": "主分支",
   "session.new.worktree.mainWithBranch": "主分支 ({{branch}})",
   "session.new.worktree.create": "建立新的 worktree",
