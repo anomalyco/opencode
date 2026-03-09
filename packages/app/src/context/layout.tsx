@@ -609,13 +609,15 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         resolve(directory: string) {
           return resolveRoot(directory)
         },
-        open(directory: string) {
-          const root = rootFor(directory)
+        async open(directory: string, resolved?: RootResult) {
+          const value = resolved ?? (await resolveRoot(directory))
+          const root = value.root
           const key = norm(root)
           const exists = server.projects.list().some((x) => norm(x.worktree) === key)
-          if (exists) return
+          if (exists) return value
           globalSync.project.loadSessions(root)
           server.projects.open(root)
+          return value
         },
         close(directory: string) {
           server.projects.close(directory)

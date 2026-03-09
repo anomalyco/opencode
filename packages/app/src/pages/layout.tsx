@@ -1253,26 +1253,29 @@ export default function Layout(props: ParentProps) {
     layout.sidebar.setWorkspaces(root, true)
   }
 
-  function openProject(directory: string, navigate = true) {
-    void layout.projects
-      .resolve(directory)
-      .then((result) => {
-        autoEnableWorkspacesIfSandbox(directory, result.root, result.project)
-      })
-      .catch(() => undefined)
-    layout.projects.open(directory)
-    if (navigate) navigateToProject(directory)
+  async function openProject(directory: string, navigate = true) {
+    const match = layout.projects.list().find((item) => workspaceKey(item.worktree) === workspaceKey(directory))
+    if (match) {
+      if (navigate) await navigateToProject(match.worktree)
+      return match.worktree
+    }
+
+    const { root, project } = await layout.projects.resolve(directory)
+    autoEnableWorkspacesIfSandbox(directory, root, project)
+    await layout.projects.open(directory, { root, project })
+    if (navigate) await navigateToProject(root)
+    return root
   }
 
   const handleDeepLinks = (urls: string[]) => {
     if (!server.isLocal()) return
 
     for (const directory of collectOpenProjectDeepLinks(urls)) {
-      openProject(directory)
+      void openProject(directory)
     }
 
     for (const link of collectNewSessionDeepLinks(urls)) {
-      openProject(link.directory, false)
+      void openProject(link.directory, false)
       const slug = base64Encode(link.directory)
       if (link.prompt) {
         setSessionHandoff(slug, { prompt: link.prompt })
@@ -1352,14 +1355,13 @@ export default function Layout(props: ParentProps) {
   const showEditProjectDialog = (project: LocalProject) => dialog.show(() => <DialogEditProject project={project} />)
 
   async function chooseProject() {
-    function resolve(result: string | string[] | null) {
+    async function resolve(result: string | string[] | null) {
       if (Array.isArray(result)) {
-        for (const directory of result) {
-          openProject(directory, false)
-        }
-        navigateToProject(result[0])
+        const roots = await Promise.all(result.map((directory) => openProject(directory, false)))
+        if (!roots[0]) return
+        await navigateToProject(roots[0])
       } else if (result) {
-        openProject(result)
+        await openProject(result)
       }
     }
 
@@ -1368,11 +1370,11 @@ export default function Layout(props: ParentProps) {
         title: language.t("command.project.open"),
         multiple: true,
       })
-      resolve(result)
+      void resolve(result)
     } else {
       dialog.show(
-        () => <DialogSelectDirectory multiple={true} onSelect={resolve} />,
-        () => resolve(null),
+        () => <DialogSelectDirectory multiple={true} onSelect={(result) => void resolve(result)} />,
+        () => void resolve(null),
       )
     }
   }
