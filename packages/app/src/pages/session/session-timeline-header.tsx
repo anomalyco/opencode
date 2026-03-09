@@ -2,10 +2,10 @@ import { createEffect, createMemo, on, onCleanup, Show } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { useNavigate, useParams } from "@solidjs/router"
 import { Button } from "@opencode-ai/ui/button"
+import { useReducedMotion } from "@opencode-ai/ui/hooks"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
-import { prefersReducedMotion } from "@opencode-ai/ui/hooks"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { animate, type AnimationPlaybackControls, clearFadeStyles, FAST_SPRING } from "@opencode-ai/ui/motion"
 import { showToast } from "@opencode-ai/ui/toast"
@@ -32,7 +32,7 @@ export function SessionTimelineHeader(props: {
   const sync = useSync()
   const dialog = useDialog()
   const language = useLanguage()
-  const reduce = prefersReducedMotion
+  const reduce = useReducedMotion()
 
   const [title, setTitle] = createStore({
     draft: "",

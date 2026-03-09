@@ -1,4 +1,6 @@
+import type { ToolPart } from "@opencode-ai/sdk/v2"
 import { createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js"
+import { useReducedMotion } from "../hooks/use-reduced-motion"
 import {
   animate,
   type AnimationPlaybackControls,
@@ -8,8 +10,6 @@ import {
   GROW_SPRING,
   WIPE_MASK,
 } from "./motion"
-import { prefersReducedMotion } from "../hooks/use-reduced-motion"
-import type { ToolPart } from "@opencode-ai/sdk/v2"
 
 export const TEXT_RENDER_THROTTLE_MS = 100
 
@@ -106,57 +106,67 @@ export function useCollapsible(options: {
   measure?: () => number
   onOpen?: () => void
 }) {
+  const reduce = useReducedMotion()
   let heightAnim: AnimationPlaybackControls | undefined
   let fadeAnim: AnimationPlaybackControls | undefined
   let gen = 0
 
   createEffect(
-    on(
-      options.open,
-      (isOpen) => {
-        const content = options.content()
-        const body = options.body()
-        if (!content || !body) return
-        heightAnim?.stop()
-        fadeAnim?.stop()
-        const id = ++gen
+    on(options.open, (isOpen) => {
+      const content = options.content()
+      const body = options.body()
+      if (!content || !body) return
+      heightAnim?.stop()
+      fadeAnim?.stop()
+      if (reduce()) {
+        body.style.opacity = ""
+        body.style.filter = ""
         if (isOpen) {
           content.style.display = ""
-          content.style.height = "0px"
-          body.style.opacity = "0"
-          body.style.filter = "blur(2px)"
-          fadeAnim = animate(body, { opacity: [0, 1], filter: ["blur(2px)", "blur(0px)"] }, COLLAPSIBLE_SPRING)
-          queueMicrotask(() => {
-            if (gen !== id) return
-            const c = options.content()
-            if (!c) return
-            const h = options.measure?.() ?? Math.ceil(body.getBoundingClientRect().height)
-            heightAnim = animate(c, { height: ["0px", `${h}px`] }, COLLAPSIBLE_SPRING)
-            heightAnim.finished.then(
-              () => {
-                if (gen !== id) return
-                c.style.height = "auto"
-                options.onOpen?.()
-              },
-              () => {},
-            )
-          })
+          content.style.height = "auto"
+          options.onOpen?.()
           return
         }
+        content.style.height = "0px"
+        content.style.display = "none"
+        return
+      }
+      const id = ++gen
+      if (isOpen) {
+        content.style.display = ""
+        content.style.height = "0px"
+        body.style.opacity = "0"
+        body.style.filter = "blur(2px)"
+        fadeAnim = animate(body, { opacity: [0, 1], filter: ["blur(2px)", "blur(0px)"] }, COLLAPSIBLE_SPRING)
+        queueMicrotask(() => {
+          if (gen !== id) return
+          const c = options.content()
+          if (!c) return
+          const h = options.measure?.() ?? Math.ceil(body.getBoundingClientRect().height)
+          heightAnim = animate(c, { height: ["0px", `${h}px`] }, COLLAPSIBLE_SPRING)
+          heightAnim.finished.then(
+            () => {
+              if (gen !== id) return
+              c.style.height = "auto"
+              options.onOpen?.()
+            },
+            () => {},
+          )
+        })
+        return
+      }
 
-        const h = content.getBoundingClientRect().height
-        heightAnim = animate(content, { height: [`${h}px`, "0px"] }, COLLAPSIBLE_SPRING)
-        fadeAnim = animate(body, { opacity: [1, 0], filter: ["blur(0px)", "blur(2px)"] }, COLLAPSIBLE_SPRING)
-        heightAnim.finished.then(
-          () => {
-            if (gen !== id) return
-            content.style.display = "none"
-          },
-          () => {},
-        )
-      },
-      { defer: true },
-    ),
+      const h = content.getBoundingClientRect().height
+      heightAnim = animate(content, { height: [`${h}px`, "0px"] }, COLLAPSIBLE_SPRING)
+      fadeAnim = animate(body, { opacity: [1, 0], filter: ["blur(0px)", "blur(2px)"] }, COLLAPSIBLE_SPRING)
+      heightAnim.finished.then(
+        () => {
+          if (gen !== id) return
+          content.style.display = "none"
+        },
+        () => {},
+      )
+    }),
   )
 
   onCleanup(() => {
@@ -181,7 +191,7 @@ export function useRowWipe(opts: {
   ref: () => HTMLElement | undefined
   seen: Set<string>
 }) {
-  const reduce = prefersReducedMotion
+  const reduce = useReducedMotion()
 
   createEffect(() => {
     const id = opts.id()
@@ -265,13 +275,14 @@ export function useToolFade(
   const delay = options?.delay ?? 0
   const wipe = options?.wipe ?? false
   const active = options?.animate !== false
+  const reduce = useReducedMotion()
 
   onMount(() => {
     if (!active) return
 
     const el = ref()
     if (!el || typeof window === "undefined") return
-    if (prefersReducedMotion()) return
+    if (reduce()) return
 
     const mask =
       wipe &&

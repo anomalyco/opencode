@@ -1,9 +1,10 @@
-import { createSignal } from "solid-js"
+import { isHydrated } from "@solid-primitives/lifecycle"
+import { createMediaQuery } from "@solid-primitives/media"
+import { createHydratableSingletonRoot } from "@solid-primitives/rootless"
 
-export const prefersReducedMotion = /* @__PURE__ */ (() => {
-  if (typeof window === "undefined") return () => false
-  const mql = window.matchMedia("(prefers-reduced-motion: reduce)")
-  const [reduced, setReduced] = createSignal(mql.matches)
-  mql.addEventListener("change", () => setReduced(mql.matches))
-  return reduced
-})()
+const query = "(prefers-reduced-motion: reduce)"
+
+export const useReducedMotion = createHydratableSingletonRoot(() => {
+  const value = createMediaQuery(query)
+  return () => !isHydrated() || value()
+})
