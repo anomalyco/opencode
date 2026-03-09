@@ -192,6 +192,7 @@ export namespace Provider {
       return {
         autoload: hasKey,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          if (sdk.responses === undefined && sdk.chat === undefined) return sdk.languageModel(modelID)
           return sdk.chat(modelID)
         },
         options: { apiKey: "ollama" },
