@@ -1,5 +1,11 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "@tsconfig/bun/tsconfig.json",
-  "compilerOptions": {}
+  "compilerOptions": {
+    "esModuleInterop": true,
+    "paths": {
+      "@/*": ["packages/opencode/src/*"],
+      "@tui/*": ["packages/opencode/src/cli/cmd/tui/*"]
+    }
+  }
 }

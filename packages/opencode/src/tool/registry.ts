@@ -25,6 +25,7 @@ import { CodeSearchTool } from "./codesearch"
 import { Flag } from "@/flag/flag"
 import { Log } from "@/util/log"
 import { LspTool } from "./lsp"
+import { BrowserTools } from "@/browser/tools"
 import { Truncate } from "./truncation"
 
 import { ApplyPatchTool } from "./apply_patch"
@@ -118,6 +119,7 @@ export namespace ToolRegistry {
       SkillTool,
       ApplyPatchTool,
       ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
+      ...(Flag.OPENCODE_ENABLE_BROWSER || config.experimental?.browser === true ? BrowserTools : []),
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),
       ...custom,

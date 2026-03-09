@@ -86,4 +86,19 @@ export namespace Tool {
       },
     }
   }
+
+  /**
+   * Attach a convenience execute method to a tool for testing and legacy callers
+   * This creates a shorthand that doesn't require passing through the full init flow
+   */
+  export function attachExecute<T extends Info>(
+    tool: T,
+  ): T & { execute: (args: InferParameters<T>, ctx: Context) => Promise<any> } {
+    const toolWithExecute = tool as T & { execute: (args: InferParameters<T>, ctx: Context) => Promise<any> }
+    toolWithExecute.execute = async (args, ctx) => {
+      const initialized = await tool.init()
+      return initialized.execute(args, ctx)
+    }
+    return toolWithExecute
+  }
 }
