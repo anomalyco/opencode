@@ -25,6 +25,7 @@ const Ctx = createContext<Ctx>()
 function pick(variant: NonNullable<CardProps["variant"]>) {
   if (variant === "error") return "circle-ban-sign" as const
   if (variant === "warning") return "warning" as const
+  if (variant === "success") return "circle-check" as const
   if (variant === "info") return "help" as const
   return
 }
