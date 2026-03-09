@@ -10,7 +10,7 @@ import { Log } from "../util/log"
 import { NamedError } from "@opencode-ai/util/error"
 import z from "zod"
 import path from "path"
-import { readFileSync, readdirSync, existsSync } from "fs"
+import { readFileSync, readdirSync, existsSync, mkdirSync, statSync, chmodSync, accessSync, unlinkSync, constants as fsConstants } from "fs"
 import * as schema from "./schema"
 import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
@@ -80,11 +80,51 @@ export namespace Database {
     return sql.sort((a, b) => a.timestamp - b.timestamp)
   }
 
-  export const Client = lazy(() => {
-    log.info("opening database", { path: Path })
+  /**
+   * Ensure the database file and its WAL/SHM companion files are writable.
+   * On macOS (especially when launched from a desktop app through a login shell),
+   * these files can end up read-only due to inherited umask settings or
+   * stale files left behind by a crashed process. This fixes permissions
+   * before SQLite tries to open the database, preventing the
+   * "attempt to write a readonly database" error.
+   */
+  function ensureDbWritable(dbPath: string) {
+    const dir = path.dirname(dbPath)
 
-    const sqlite = new BunDatabase(Path, { create: true })
-    state.sqlite = sqlite
+    // Ensure parent directory exists and is writable
+    try {
+      mkdirSync(dir, { recursive: true, mode: 0o755 })
+    } catch {
+      // directory may already exist, that's fine
+    }
+
+    // Check and fix permissions on the database file and its WAL/SHM companions
+    const files = [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]
+    for (const file of files) {
+      try {
+        const stat = statSync(file)
+        // If the file exists but is not writable by the owner, fix it
+        // eslint-disable-next-line no-bitwise
+        if ((stat.mode & 0o200) === 0) {
+          log.info("fixing readonly permissions", { file })
+          // eslint-disable-next-line no-bitwise
+          chmodSync(file, stat.mode | 0o600)
+        }
+      } catch {
+        // File doesn't exist yet, that's fine — SQLite will create it
+      }
+    }
+
+    // Verify the directory is writable
+    try {
+      accessSync(dir, fsConstants.W_OK)
+    } catch {
+      log.error("database directory is not writable", { dir })
+    }
+  }
+
+  function openDatabase(dbPath: string): BunDatabase {
+    const sqlite = new BunDatabase(dbPath, { create: true })
 
     sqlite.run("PRAGMA journal_mode = WAL")
     sqlite.run("PRAGMA synchronous = NORMAL")
@@ -92,6 +132,44 @@ export namespace Database {
     sqlite.run("PRAGMA cache_size = -64000")
     sqlite.run("PRAGMA foreign_keys = ON")
     sqlite.run("PRAGMA wal_checkpoint(PASSIVE)")
+
+    return sqlite
+  }
+
+  export const Client = lazy(() => {
+    log.info("opening database", { path: Path })
+
+    ensureDbWritable(Path)
+
+    let sqlite: BunDatabase
+    try {
+      sqlite = openDatabase(Path)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      if (message.includes("readonly")) {
+        // The database or its WAL/SHM files may be stale or corrupted.
+        // Remove the WAL and SHM files and retry — SQLite will recreate
+        // them on the next write. This handles the case where a previous
+        // process crashed and left behind files with wrong permissions
+        // or in an inconsistent state.
+        log.warn("database is readonly, removing WAL/SHM files and retrying", {
+          path: Path,
+          error: message,
+        })
+        for (const suffix of ["-wal", "-shm"]) {
+          try {
+            unlinkSync(`${Path}${suffix}`)
+          } catch {
+            // file may not exist
+          }
+        }
+        ensureDbWritable(Path)
+        sqlite = openDatabase(Path)
+      } else {
+        throw err
+      }
+    }
+    state.sqlite = sqlite
 
     const db = drizzle({ client: sqlite, schema })
 
