@@ -8,32 +8,6 @@ import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 import { useKeybind } from "../context/keybind"
 import * as fuzzysort from "fuzzysort"
 
-const normalize = (value: string) =>
-  value
-    .toLowerCase()
-    .normalize("NFKC")
-    .replaceAll(",", ".")
-    .replace(/[\s._\-/\\]+/g, "")
-
-type Row<T> = { val: T; text: string; ord: number }
-
-const search = <T extends { title?: string; category?: string; description?: string }>(needle: string, list: T[]) => {
-  const rows: Row<T>[] = list.map((val, ord) => ({
-    val,
-    ord,
-    text: normalize([val.title, val.category, val.description].filter((x): x is string => !!x).join(" ")),
-  }))
-  return Array.from(fuzzysort.go(needle, rows, { key: "text" }))
-    .sort((a, b) => {
-      const ab = Number(a.obj.text.startsWith(needle))
-      const bb = Number(b.obj.text.startsWith(needle))
-      if (ab !== bb) return bb - ab
-      if (a.score !== b.score) return b.score - a.score
-      return a.obj.ord - b.obj.ord
-    })
-    .map((hit) => hit.obj.val)
-}
-
 export function useConnected() {
   const sync = useSync()
   return createMemo(() =>
@@ -54,7 +28,7 @@ export function DialogModel(props: { providerID?: string }) {
   const showExtra = createMemo(() => connected() && !props.providerID)
 
   const options = createMemo(() => {
-    const needle = normalize(query().trim())
+    const needle = query().trim()
     const showSections = showExtra() && needle.length === 0
     const favorites = connected() ? local.model.favorite() : []
     const recents = local.model.recent()
@@ -146,7 +120,10 @@ export function DialogModel(props: { providerID?: string }) {
       : []
 
     if (needle) {
-      return [...search(needle, providerOptions), ...search(needle, popularProviders)]
+      return [
+        ...fuzzysort.go(needle, providerOptions, { keys: ["title", "category"] }).map((x) => x.obj),
+        ...fuzzysort.go(needle, popularProviders, { keys: ["title"] }).map((x) => x.obj),
+      ]
     }
 
     return [...favoriteOptions, ...recentOptions, ...providerOptions, ...popularProviders]
