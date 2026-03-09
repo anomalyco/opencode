@@ -1546,7 +1546,12 @@ describe("getPluginName", () => {
     expect(Config.getPluginName("oh-my-opencode@2.4.3")).toBe("oh-my-opencode")
     expect(Config.getPluginName("some-plugin@1.0.0")).toBe("some-plugin")
     expect(Config.getPluginName("plugin@latest")).toBe("plugin")
-    expect(Config.getPluginName("my-plugin@git+https://github.com/my-org/my-plugin")).toBe("my-plugin")
+    expect(Config.getPluginName("opencode-wakatime@git+https://github.com/angristan/opencode-wakatime")).toBe(
+      "opencode-wakatime",
+    )
+    expect(
+      Config.getPluginName("opencode-helicone-session@git+https://github.com/H2Shami/opencode-helicone-session"),
+    ).toBe("opencode-helicone-session")
   })
 
   test("extracts name from scoped npm package", () => {
@@ -1588,6 +1593,21 @@ describe("deduplicatePlugins", () => {
     const result = Config.deduplicatePlugins(plugins)
 
     expect(result).toEqual(["a-plugin@1.0.0", "b-plugin@1.0.0", "c-plugin@1.0.0"])
+  })
+
+  test("treats git alias plugin entries as the same plugin name for precedence", () => {
+    const plugins = [
+      "opencode-wakatime@1.2.3",
+      "opencode-helicone-session@0.4.0",
+      "opencode-wakatime@git+https://github.com/angristan/opencode-wakatime",
+    ]
+
+    const result = Config.deduplicatePlugins(plugins)
+
+    expect(result).toContain("opencode-helicone-session@0.4.0")
+    expect(result).toContain("opencode-wakatime@git+https://github.com/angristan/opencode-wakatime")
+    expect(result).not.toContain("opencode-wakatime@1.2.3")
+    expect(result.length).toBe(2)
   })
 
   test("local plugin directory overrides global opencode.json plugin", async () => {
