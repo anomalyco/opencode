@@ -1,0 +1,6 @@
+This tool performs complex, automated git operations including surgical conflict resolution and multi-branch synchronization.
+
+Parameters:
+- action: The git action (resolve_conflicts, sync_branches, rebase_cleanly).
+- branches: The branches involved in the sync (optional).
+- strategy: The resolution strategy (logical, ours, theirs).

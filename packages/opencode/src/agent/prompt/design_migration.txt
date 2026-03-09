@@ -1,0 +1,1 @@
+Specialized agent for bulk migration of hardcoded UI values to centralized design tokens. Use this when you need to enforce design system compliance across a large set of components. specify the target directory and the design token map. specify the desired refactor level: "safe" for automated replacements, or "complex" for manual-style logic consolidation of themes.

@@ -33,6 +33,16 @@ import { pathToFileURL } from "url"
 import { BrowserToolDefinition } from "./browser"
 import { GenerateImageToolDefinition } from "./generate_image"
 import { TaskBoundaryToolDefinition } from "./task_boundary"
+import { McpBridgeToolDefinition } from "./mcp_bridge"
+import { RepoArchitectToolDefinition } from "./repo_architect"
+import { PerfProfilerToolDefinition } from "./perf_profiler"
+import { DbExplorerToolDefinition } from "./db_explorer"
+import { LspPowerFixerToolDefinition } from "./lsp_power_fixer"
+import { EnvProvisionerToolDefinition } from "./env_provisioner"
+import { SecurityScannerToolDefinition } from "./security_scanner"
+import { ApiSentinelToolDefinition } from "./api_sentinel"
+import { DesignValidatorToolDefinition } from "./design_validator"
+import { GitSurgeonToolDefinition } from "./git_surgeon"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -124,6 +134,16 @@ export namespace ToolRegistry {
       BrowserToolDefinition,
       GenerateImageToolDefinition,
       TaskBoundaryToolDefinition,
+      McpBridgeToolDefinition,
+      RepoArchitectToolDefinition,
+      PerfProfilerToolDefinition,
+      DbExplorerToolDefinition,
+      LspPowerFixerToolDefinition,
+      EnvProvisionerToolDefinition,
+      SecurityScannerToolDefinition,
+      ApiSentinelToolDefinition,
+      DesignValidatorToolDefinition,
+      GitSurgeonToolDefinition,
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),
       ...custom,

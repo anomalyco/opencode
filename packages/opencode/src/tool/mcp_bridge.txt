@@ -1,0 +1,8 @@
+This tool bridges oh-my-opencode with the Model Context Protocol (MCP). It allows the agent to call tools and access resources from any running MCP server.
+
+Parameters:
+- server_name: The name of the MCP server to interact with.
+- action: The MCP action (list_tools, call_tool, list_resources, read_resource).
+- tool_name: The name of the tool to call (if action is 'call_tool').
+- arguments: The arguments for the tool call.
+- resource_uri: The URI of the resource to read (if action is 'read_resource').

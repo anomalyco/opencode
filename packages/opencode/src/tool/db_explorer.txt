@@ -1,0 +1,7 @@
+This tool provides a safe, schema-aware interface for querying local or remote databases. It can explore schemas, run read-only queries, and suggest migrations.
+
+Parameters:
+- connection_string: The database connection string (if not default).
+- action: The action to perform (list_tables, describe_table, query, suggest_migration).
+- query: The SQL query to execute (for 'query' action).
+- table: The table name (for 'describe_table' action).

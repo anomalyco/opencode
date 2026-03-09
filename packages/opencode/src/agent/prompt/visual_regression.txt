@@ -1,0 +1,1 @@
+Specialized agent for visual regression testing and UI verification. Use this to compare the current rendered UI against a baseline or a generated mockup. specify the target URL and the baseline image path. specify the desired tolerance: "strict" for pixel-perfect comparison, or "layout" for structural alignment checks mapping to the design system.

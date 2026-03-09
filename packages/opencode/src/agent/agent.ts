@@ -13,6 +13,15 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import PROMPT_DOC_SYNTHESIS from "./prompt/doc_synthesis.txt"
+import PROMPT_BOTTLENECK_HUNT from "./prompt/bottleneck_hunt.txt"
+import PROMPT_TEST_SUITE_GEN from "./prompt/test_suite_gen.txt"
+import PROMPT_DEPENDENCY_UPGRADE from "./prompt/dependency_upgrade.txt"
+import PROMPT_SECURITY_AUDIT from "./prompt/security_audit.txt"
+import PROMPT_DESIGN_MIGRATION from "./prompt/design_migration.txt"
+import PROMPT_A11Y_FIX from "./prompt/a11y_fix.txt"
+import PROMPT_VISUAL_REGRESSION from "./prompt/visual_regression.txt"
+import PROMPT_DOC_ALIGNMENT from "./prompt/doc_alignment.txt"
 import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
@@ -123,6 +132,175 @@ export namespace Agent {
           }),
           user,
         ),
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+      design_migration: {
+        name: "design_migration",
+        description: `Specialized agent for bulk migration of hardcoded UI values to tokens.`,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            todoread: "deny",
+            todowrite: "deny",
+            read: "allow",
+            edit: "allow",
+          }),
+          user,
+        ),
+        prompt: PROMPT_DESIGN_MIGRATION,
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+      a11y_fix: {
+        name: "a11y_fix",
+        description: `Specialized agent for accessibility (A11y) auditing and repair.`,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            todoread: "deny",
+            todowrite: "deny",
+            browser: "allow",
+            read: "allow",
+            edit: "allow",
+          }),
+          user,
+        ),
+        prompt: PROMPT_A11Y_FIX,
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+      visual_regression: {
+        name: "visual_regression",
+        description: `Specialized agent for visual regression testing and UI verification.`,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            todoread: "deny",
+            todowrite: "deny",
+            browser: "allow",
+            read: "allow",
+          }),
+          user,
+        ),
+        prompt: PROMPT_VISUAL_REGRESSION,
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+      doc_alignment: {
+        name: "doc_alignment",
+        description: `Specialized agent for ensuring documentation remains synchronized with implementation.`,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            todoread: "deny",
+            todowrite: "deny",
+            read: "allow",
+            edit: "allow",
+          }),
+          user,
+        ),
+        prompt: PROMPT_DOC_ALIGNMENT,
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+      security_audit: {
+        name: "security_audit",
+        description: `Specialized agent for performing structural code security audits.`,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            todoread: "deny",
+            todowrite: "deny",
+            read: "allow",
+            grep: "allow",
+            bash: "allow",
+          }),
+          user,
+        ),
+        prompt: PROMPT_SECURITY_AUDIT,
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+      test_suite_gen: {
+        name: "test_suite_gen",
+        description: `Specialized agent for generating comprehensive unit and integration test suites.`,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            todoread: "deny",
+            todowrite: "deny",
+            bash: "allow",
+            read: "allow",
+            edit: "allow",
+          }),
+          user,
+        ),
+        prompt: PROMPT_TEST_SUITE_GEN,
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+      dependency_upgrade: {
+        name: "dependency_upgrade",
+        description: `Specialized agent for upgrading project dependencies and fixing breaking changes.`,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            todoread: "deny",
+            todowrite: "deny",
+            bash: "allow",
+            read: "allow",
+            edit: "allow",
+            lsp: "allow",
+          }),
+          user,
+        ),
+        prompt: PROMPT_DEPENDENCY_UPGRADE,
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+      bottleneck_hunt: {
+        name: "bottleneck_hunt",
+        description: `Specialized agent for identifying performance bottlenecks in user flows.`,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            todoread: "deny",
+            todowrite: "deny",
+            browser: "allow",
+            read: "allow",
+            bash: "allow",
+          }),
+          user,
+        ),
+        prompt: PROMPT_BOTTLENECK_HUNT,
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+      doc_synthesis: {
+        name: "doc_synthesis",
+        description: `Dedicated agent for researching documentation and synthesizing API usage patterns.`,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            todoread: "deny",
+            todowrite: "deny",
+            webfetch: "allow",
+            websearch: "allow",
+            read: "allow",
+          }),
+          user,
+        ),
+        prompt: PROMPT_DOC_SYNTHESIS,
         options: {},
         mode: "subagent",
         native: true,

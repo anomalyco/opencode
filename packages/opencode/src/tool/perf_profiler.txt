@@ -1,0 +1,6 @@
+This tool performs runtime performance analysis on specific functions, API endpoints, or user flows. It can detect performance regressions and suggest optimizations.
+
+Parameters:
+- target: The function, file, or endpoint to profile.
+- duration: Duration of the profiling session in milliseconds (default: 5000).
+- mode: Profiling mode (cpu, memory, network).

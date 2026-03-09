@@ -1,0 +1,5 @@
+This tool automates the setup and repair of the local development environment. It can install missing dependencies, fix system configurations, and ensure the build is "green".
+
+Parameters:
+- action: The provision action (check, repair, install_deps).
+- target: The specific component or dependency to target (optional).

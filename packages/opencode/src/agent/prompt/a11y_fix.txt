@@ -1,0 +1,1 @@
+Specialized agent for accessibility (A11y) auditing and repair. Use this to ensure HTML and components follow ARIA standards and WCAG guidelines. specify the target route or component. specify the desired detail level: "audit" for a report of issues, or "fix" for automated remediation of missing labels, incorrect roles, and contrast issues.

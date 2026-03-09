@@ -1,0 +1,1 @@
+Dedicated agent for researching documentation, synthesizing API usage patterns, and providing implementation examples. Use this when you need an in-depth understanding of a new library or complex API before implementation. specify the desired detail level: "summary" for high-level overview, "full" for detailed technical documentation, or "examples" for code-centric synthesis.
