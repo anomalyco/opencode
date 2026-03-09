@@ -1130,7 +1130,30 @@ export namespace LSPServer {
 
   export const JDTLS: Info = {
     id: "jdtls",
-    root: NearestRoot(["pom.xml", "build.gradle", "build.gradle.kts", ".project", ".classpath"]),
+    root: async (file) => {
+      // Without exclusions, NearestRoot defaults to instance directory so we can't
+      // distinguish between a) no project found and b) project found at instance dir.
+      // So we can't choose the root from (potential) monorepo markers first.
+      // Look for potential subproject markers first while excluding potential monorepo markers.
+      const settingsMarkers = ["settings.gradle", "settings.gradle.kts"]
+      const gradleMarkers = ["gradlew", "gradlew.bat"]
+      const exclusionsForMonorepos = gradleMarkers.concat(settingsMarkers)
+
+      const [projectRoot, wrapperRoot, settingsRoot] = await Promise.all([
+        NearestRoot(
+          ["pom.xml", "build.gradle", "build.gradle.kts", ".project", ".classpath"],
+          exclusionsForMonorepos,
+        )(file),
+        NearestRoot(gradleMarkers, settingsMarkers)(file),
+        NearestRoot(settingsMarkers)(file),
+      ])
+
+      // If projectRoot is undefined we know we are in a monorepo or no project at all.
+      // So can safely fall through to the other roots
+      if (projectRoot) return projectRoot
+      if (wrapperRoot) return wrapperRoot
+      if (settingsRoot) return settingsRoot
+    },
     extensions: [".java"],
     async spawn(root) {
       const java = which("java")
