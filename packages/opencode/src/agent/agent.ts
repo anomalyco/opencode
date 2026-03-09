@@ -13,6 +13,8 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import PROMPT_DOC_SYNTHESIS from "./prompt/doc_synthesis.txt"
+import PROMPT_BOTTLENECK_HUNT from "./prompt/bottleneck_hunt.txt"
 import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
@@ -123,6 +125,44 @@ export namespace Agent {
           }),
           user,
         ),
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+      bottleneck_hunt: {
+        name: "bottleneck_hunt",
+        description: `Specialized agent for identifying performance bottlenecks in user flows.`,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            todoread: "deny",
+            todowrite: "deny",
+            browser: "allow",
+            read: "allow",
+            bash: "allow",
+          }),
+          user,
+        ),
+        prompt: PROMPT_BOTTLENECK_HUNT,
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+      doc_synthesis: {
+        name: "doc_synthesis",
+        description: `Dedicated agent for researching documentation and synthesizing API usage patterns.`,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            todoread: "deny",
+            todowrite: "deny",
+            webfetch: "allow",
+            websearch: "allow",
+            read: "allow",
+          }),
+          user,
+        ),
+        prompt: PROMPT_DOC_SYNTHESIS,
         options: {},
         mode: "subagent",
         native: true,

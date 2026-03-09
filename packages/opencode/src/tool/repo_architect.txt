@@ -1,0 +1,7 @@
+This tool generates a high-level "skeleton" or "map" of the repository's architecture. It uses AST parsing to identify key classes, functions, and their relationships.
+
+Parameters:
+- directory: The directory to analyze (default: project root).
+- depth: How deep to traverse the directory tree (default: 3).
+- format: The output format (text, json, mermaid).
+- include_dependencies: Whether to attempt mapping dependencies between modules.
