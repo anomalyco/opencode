@@ -17,6 +17,7 @@ import PROMPT_DOC_SYNTHESIS from "./prompt/doc_synthesis.txt"
 import PROMPT_BOTTLENECK_HUNT from "./prompt/bottleneck_hunt.txt"
 import PROMPT_TEST_SUITE_GEN from "./prompt/test_suite_gen.txt"
 import PROMPT_DEPENDENCY_UPGRADE from "./prompt/dependency_upgrade.txt"
+import PROMPT_SECURITY_AUDIT from "./prompt/security_audit.txt"
 import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
@@ -127,6 +128,25 @@ export namespace Agent {
           }),
           user,
         ),
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+      security_audit: {
+        name: "security_audit",
+        description: `Specialized agent for performing structural code security audits.`,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            todoread: "deny",
+            todowrite: "deny",
+            read: "allow",
+            grep: "allow",
+            bash: "allow",
+          }),
+          user,
+        ),
+        prompt: PROMPT_SECURITY_AUDIT,
         options: {},
         mode: "subagent",
         native: true,

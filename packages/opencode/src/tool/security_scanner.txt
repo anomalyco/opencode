@@ -1,0 +1,6 @@
+This tool scans the codebase for secrets (API keys), vulnerable dependencies, and common security pitfalls (command injection, path traversal).
+
+Parameters:
+- target: The directory or file to scan (default: project root).
+- level: Scan level (quick, thorough).
+- fix: Whether to attempt automated mitigation for detected issues.

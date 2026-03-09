@@ -1,0 +1,6 @@
+This tool performs automated API contract testing. It can generate requests, verify JSON schemas, and detect breaking changes in API endpoints.
+
+Parameters:
+- endpoint: The API endpoint URL to test.
+- action: The test action (verify_schema, detect_breaking_changes, fuzz_parameters).
+- schema: The expected JSON schema (optional).

@@ -39,6 +39,8 @@ import { PerfProfilerToolDefinition } from "./perf_profiler"
 import { DbExplorerToolDefinition } from "./db_explorer"
 import { LspPowerFixerToolDefinition } from "./lsp_power_fixer"
 import { EnvProvisionerToolDefinition } from "./env_provisioner"
+import { SecurityScannerToolDefinition } from "./security_scanner"
+import { ApiSentinelToolDefinition } from "./api_sentinel"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -136,6 +138,8 @@ export namespace ToolRegistry {
       DbExplorerToolDefinition,
       LspPowerFixerToolDefinition,
       EnvProvisionerToolDefinition,
+      SecurityScannerToolDefinition,
+      ApiSentinelToolDefinition,
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),
       ...custom,
