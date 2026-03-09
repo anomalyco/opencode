@@ -95,12 +95,15 @@ export const dict = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "ดึงจากเว็บ",
+  "ui.tool.websearch": "ค้นหาเว็บ",
+  "ui.tool.codesearch": "ค้นหาโค้ด",
   "ui.tool.shell": "เชลล์",
   "ui.tool.patch": "แพตช์",
   "ui.tool.todos": "รายการงาน",
   "ui.tool.todos.read": "อ่านรายการงาน",
   "ui.tool.questions": "คำถาม",
   "ui.tool.agent": "เอเจนต์ {{type}}",
+  "ui.tool.agent.default": "เอเจนต์",
 
   "ui.common.file.one": "ไฟล์",
   "ui.common.file.other": "ไฟล์",
@@ -127,6 +130,7 @@ export const dict = {
   "ui.message.copyResponse": "คัดลอกคำตอบ",
   "ui.message.copied": "คัดลอกแล้ว!",
   "ui.message.interrupted": "ถูกขัดจังหวะ",
+  "ui.message.queued": "อยู่ในคิว",
   "ui.message.attachment.alt": "ไฟล์แนบ",
 
   "ui.patch.action.deleted": "ลบ",

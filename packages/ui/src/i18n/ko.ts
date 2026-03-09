@@ -94,12 +94,15 @@ export const dict = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "웹 가져오기",
+  "ui.tool.websearch": "웹 검색",
+  "ui.tool.codesearch": "코드 검색",
   "ui.tool.shell": "셸",
   "ui.tool.patch": "패치",
   "ui.tool.todos": "할 일",
   "ui.tool.todos.read": "할 일 읽기",
   "ui.tool.questions": "질문",
   "ui.tool.agent": "{{type}} 에이전트",
+  "ui.tool.agent.default": "에이전트",
 
   "ui.common.file.one": "파일",
   "ui.common.file.other": "파일",
@@ -126,6 +129,7 @@ export const dict = {
   "ui.message.copyResponse": "응답 복사",
   "ui.message.copied": "복사됨!",
   "ui.message.interrupted": "중단됨",
+  "ui.message.queued": "대기 중",
   "ui.message.attachment.alt": "첨부 파일",
 
   "ui.patch.action.deleted": "삭제됨",

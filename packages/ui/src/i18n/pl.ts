@@ -93,12 +93,15 @@ export const dict = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Pobieranie sieciowe",
+  "ui.tool.websearch": "Wyszukiwanie w sieci",
+  "ui.tool.codesearch": "Wyszukiwanie kodu",
   "ui.tool.shell": "Terminal",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Zadania",
   "ui.tool.todos.read": "Czytaj zadania",
   "ui.tool.questions": "Pytania",
   "ui.tool.agent": "Agent {{type}}",
+  "ui.tool.agent.default": "Agent",
 
   "ui.common.file.one": "plik",
   "ui.common.file.other": "pliki",
@@ -125,6 +128,7 @@ export const dict = {
   "ui.message.copyResponse": "Kopiuj odpowiedź",
   "ui.message.copied": "Skopiowano!",
   "ui.message.interrupted": "Przerwano",
+  "ui.message.queued": "W kolejce",
   "ui.message.attachment.alt": "załącznik",
 
   "ui.patch.action.deleted": "Usunięto",
