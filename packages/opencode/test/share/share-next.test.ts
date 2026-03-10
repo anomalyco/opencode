@@ -68,7 +68,7 @@ test("ShareNext.request fails when org account has no token", async () => {
   Account.token = mock(async () => undefined)
 
   try {
-    await expect(ShareNext.request()).rejects.toThrow("No active OpenControl token available for sharing")
+    await expect(ShareNext.request()).rejects.toThrow("No active account token available for sharing")
   } finally {
     Account.active = originalActive
     Account.token = originalToken
