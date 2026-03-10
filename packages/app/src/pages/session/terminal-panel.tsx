@@ -81,12 +81,19 @@ export function TerminalPanel() {
     ),
   )
 
+  const promptHasFocus = () => {
+    const active = document.activeElement
+    if (!(active instanceof HTMLElement)) return false
+    return !!active.closest('[data-component="prompt-input"]')
+  }
+
   const focus = (id: string) => {
-    focusTerminalById(id)
+    if (!promptHasFocus()) focusTerminalById(id)
 
     const frame = requestAnimationFrame(() => {
       if (!opened()) return
       if (terminal.active() !== id) return
+      if (promptHasFocus()) return
       focusTerminalById(id)
     })
 
@@ -94,6 +101,7 @@ export function TerminalPanel() {
       window.setTimeout(() => {
         if (!opened()) return
         if (terminal.active() !== id) return
+        if (promptHasFocus()) return
         focusTerminalById(id)
       }, ms),
     )
