@@ -12,7 +12,6 @@ import type {
   Config,
 } from "@opencode-ai/sdk"
 
-import type { BunShell } from "./shell.js"
 import { type ToolDefinition } from "./tool.js"
 
 export * from "./tool.js"
@@ -28,8 +27,6 @@ export type PluginInput = {
   project: Project
   directory: string
   worktree: string
-  serverUrl: URL
-  $: BunShell
 }
 
 export type Plugin = (input: PluginInput) => Promise<Hooks>
