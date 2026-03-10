@@ -29,7 +29,7 @@ export namespace ShareNext {
   }
 
   const legacyApi = apiEndpoints("share")
-  const controlApi = apiEndpoints("shares")
+  const consoleApi = apiEndpoints("shares")
 
   export async function url() {
     const req = await request()
@@ -51,12 +51,12 @@ export namespace ShareNext {
 
     const token = await Account.token(active.id)
     if (!token) {
-      throw new Error("No active OpenControl token available for sharing")
+      throw new Error("No active account token available for sharing")
     }
 
     headers["authorization"] = `Bearer ${token}`
     headers["x-org-id"] = active.active_org_id
-    return { headers, api: controlApi, baseUrl: active.url }
+    return { headers, api: consoleApi, baseUrl: active.url }
   }
 
   const disabled = process.env["OPENCODE_DISABLE_SHARE"] === "true" || process.env["OPENCODE_DISABLE_SHARE"] === "1"

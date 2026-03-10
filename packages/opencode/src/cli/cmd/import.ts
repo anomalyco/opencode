@@ -24,9 +24,9 @@ export function parseShareUrl(url: string): string | null {
   return match ? match[1] : null
 }
 
-export function shouldAttachShareAuthHeaders(shareUrl: string, controlBaseUrl: string): boolean {
+export function shouldAttachShareAuthHeaders(shareUrl: string, accountBaseUrl: string): boolean {
   try {
-    return new URL(shareUrl).origin === new URL(controlBaseUrl).origin
+    return new URL(shareUrl).origin === new URL(accountBaseUrl).origin
   } catch {
     return false
   }
