@@ -24,7 +24,7 @@ const parameters = z.object({
   command: z.string().describe("The command that triggered this task").optional(),
 })
 
-export const TaskTool = Tool.define("task", async (ctx) => {
+export const TaskTool = Tool.define<typeof parameters, Record<string, any>>("task", async (ctx) => {
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
 
   // Filter agents by permissions if agent provided
@@ -49,7 +49,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           metadata: {
             refused: "self",
             subagent_type: params.subagent_type,
-          },
+          } as Record<string, any>,
           output: `Refused to launch subagent "${params.subagent_type}" from itself. Continue in the current session instead.`,
         }
       }
