@@ -1,4 +1,8 @@
 [data-component="card"] {
+  --card-pad-y: 10px;
+  --card-pad-r: 12px;
+  --card-pad-l: 10px;
+
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -6,7 +10,7 @@
   background: transparent;
   border: none;
   border-radius: var(--radius-md);
-  padding: 10px 12px 10px 10px;
+  padding: var(--card-pad-y) var(--card-pad-r) var(--card-pad-y) var(--card-pad-l);
 
   &:has([data-slot="card-title"]) {
     gap: 8px;
@@ -24,6 +28,7 @@
   --card-gap: 8px;
   --card-icon: 16px;
   --card-indent: calc(var(--card-icon) + var(--card-gap));
+  --card-line-pad: 8px;
 
   --card-accent: var(--icon-active);
 
@@ -35,8 +40,8 @@
     content: "";
     position: absolute;
     left: 0;
-    top: 8px;
-    bottom: 8px;
+    top: var(--card-line-pad);
+    bottom: var(--card-line-pad);
     width: 2px;
     border-radius: 2px;
     background-color: var(--card-accent);
