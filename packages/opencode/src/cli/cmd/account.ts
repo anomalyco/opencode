@@ -54,20 +54,38 @@ const loginEffect = Effect.fn("login")(function* (url?: string) {
 
 const logoutEffect = Effect.fn("logout")(function* (email?: string) {
   const service = yield* AccountService
+  const accounts = yield* service.list()
+  if (accounts.length === 0) return yield* println("Not logged in")
 
   if (email) {
-    const accounts = yield* service.list()
     const match = accounts.find((a) => a.email === email)
     if (!match) return yield* println("Account not found: " + email)
     yield* service.remove(match.id)
-    yield* println("Logged out from " + email)
+    yield* Prompt.outro("Logged out from " + email)
     return
   }
 
   const active = yield* service.active()
-  if (Option.isNone(active)) return yield* println("Not logged in")
-  yield* service.remove(active.value.id)
-  yield* println("Logged out from " + active.value.email)
+  const activeID = Option.map(active, (a) => a.id)
+
+  yield* Prompt.intro("Log out")
+
+  const opts = accounts.map((a) => {
+    const isActive = Option.isSome(activeID) && activeID.value === a.id
+    const server = UI.Style.TEXT_DIM + a.url + UI.Style.TEXT_NORMAL
+    return {
+      value: a,
+      label: isActive
+        ? `${a.email} ${server}` + UI.Style.TEXT_DIM + " (active)"
+        : `${a.email} ${server}`,
+    }
+  })
+
+  const selected = yield* Prompt.select({ message: "Select account to log out", options: opts })
+  if (Option.isNone(selected)) return
+
+  yield* service.remove(selected.value.id)
+  yield* Prompt.outro("Logged out from " + selected.value.email)
 })
 
 interface OrgChoice {
