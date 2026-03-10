@@ -5,6 +5,7 @@ import {
   createSignal,
   For,
   Match,
+  on,
   onMount,
   Show,
   Switch,
@@ -436,8 +437,8 @@ function groupParts(parts: { messageID: string; part: PartType }[]) {
   return result
 }
 
-function partByID(parts: readonly PartType[], partID: string) {
-  return parts.find((part) => part.id === partID)
+function partMap(parts: readonly PartType[]) {
+  return new Map(parts.map((part) => [part.id, part] as const))
 }
 
 function renderable(part: PartType, showReasoningSummaries = true) {
@@ -471,8 +472,10 @@ export function AssistantParts(props: {
   editToolDefaultOpen?: boolean
 }) {
   const data = useData()
+  const i18n = useI18n()
   const emptyParts: PartType[] = []
   const emptyTools: ToolPart[] = []
+  const [cap, setCap] = createSignal(0)
 
   const grouped = createMemo(
     () =>
@@ -490,69 +493,112 @@ export function AssistantParts(props: {
     { equals: sameGroups },
   )
 
-  const last = createMemo(() => grouped().at(-1)?.key)
+  const lastKey = () => grouped().at(-1)?.key
+  const msgById = (id: string) => props.messages.find((m) => m.id === id)
+  const partById = (messageId: string, partId: string) => {
+    const parts = list(data.store.part?.[messageId], emptyParts)
+    return parts.find((p) => p.id === partId)
+  }
+
+  let frame: number | undefined
+  const cancel = () => {
+    if (frame === undefined) return
+    cancelAnimationFrame(frame)
+    frame = undefined
+  }
+
+  createEffect(
+    on(
+      () => grouped().length,
+      (len) => {
+        cancel()
+        if (len <= 0) {
+          setCap(0)
+          return
+        }
+
+        const init = Math.min(len, 6)
+        setCap(init)
+        if (init >= len) return
+
+        const step = () => {
+          setCap((value) => {
+            const next = Math.min(len, value + 6)
+            if (next < len) frame = requestAnimationFrame(step)
+            return next
+          })
+        }
+
+        frame = requestAnimationFrame(step)
+      },
+    ),
+  )
+
+  onCleanup(cancel)
+
+  const visible = () => grouped().slice(0, cap())
 
   return (
-    <Index each={grouped()}>
-      {(entryAccessor) => {
-        const entryType = createMemo(() => entryAccessor().type)
+    <>
+      <Index each={visible()}>
+        {(entryAccessor) => {
+          const entry = entryAccessor()
 
-        return (
-          <Switch>
-            <Match when={entryType() === "context"}>
-              {(() => {
-                const parts = createMemo(
-                  () => {
-                    const entry = entryAccessor()
+          return (
+            <Switch>
+              <Match when={entry.type === "context"}>
+                {(() => {
+                  const partsList = () => {
                     if (entry.type !== "context") return emptyTools
                     return entry.refs
-                      .map((ref) => partByID(list(data.store.part?.[ref.messageID], emptyParts), ref.partID))
+                      .map((ref) => partById(ref.messageID, ref.partID))
                       .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
-                  },
-                  emptyTools,
-                  { equals: same },
-                )
-                const busy = createMemo(() => props.working && last() === entryAccessor().key)
+                  }
+                  const isBusy = () => props.working && lastKey() === entry.key
 
-                return (
-                  <Show when={parts().length > 0}>
-                    <ContextToolGroup parts={parts()} busy={busy()} />
-                  </Show>
-                )
-              })()}
-            </Match>
-            <Match when={entryType() === "part"}>
-              {(() => {
-                const message = createMemo(() => {
-                  const entry = entryAccessor()
-                  if (entry.type !== "part") return
-                  return props.messages.find((item) => item.id === entry.ref.messageID)
-                })
-                const part = createMemo(() => {
-                  const entry = entryAccessor()
-                  if (entry.type !== "part") return
-                  return partByID(list(data.store.part?.[entry.ref.messageID], emptyParts), entry.ref.partID)
-                })
-
-                return (
-                  <Show when={message()}>
-                    <Show when={part()}>
-                      <Part
-                        part={part()!}
-                        message={message()!}
-                        showAssistantCopyPartID={props.showAssistantCopyPartID}
-                        turnDurationMs={props.turnDurationMs}
-                        defaultOpen={partDefaultOpen(part()!, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
-                      />
+                  return (
+                    <Show when={partsList().length > 0}>
+                      <ContextToolGroup parts={partsList()} busy={isBusy()} />
                     </Show>
-                  </Show>
-                )
-              })()}
-            </Match>
-          </Switch>
-        )
-      }}
-    </Index>
+                  )
+                })()}
+              </Match>
+              <Match when={entry.type === "part"}>
+                {(() => {
+                  const message = () => {
+                    if (entry.type !== "part") return
+                    return msgById(entry.ref.messageID)
+                  }
+                  const part = () => {
+                    if (entry.type !== "part") return
+                    return partById(entry.ref.messageID, entry.ref.partID)
+                  }
+
+                  return (
+                    <Show when={message()}>
+                      <Show when={part()}>
+                        <Part
+                          part={part()!}
+                          message={message()!}
+                          showAssistantCopyPartID={props.showAssistantCopyPartID}
+                          turnDurationMs={props.turnDurationMs}
+                          defaultOpen={partDefaultOpen(part()!, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
+                        />
+                      </Show>
+                    </Show>
+                  )
+                })()}
+              </Match>
+            </Switch>
+          )
+        }}
+      </Index>
+      <Show when={cap() < grouped().length}>
+        <div data-component="assistant-parts-deferred" class="text-12-regular text-text-weak px-2 py-1.5">
+          {i18n.t("ui.sessionTurn.status.thinking")}
+        </div>
+      </Show>
+    </>
   )
 }
 
@@ -708,41 +754,37 @@ export function AssistantMessageDisplay(props: {
     { equals: sameGroups },
   )
 
+  const partById = (id: string) => props.parts.find((p) => p.id === id)
+
   return (
     <Index each={grouped()}>
       {(entryAccessor) => {
-        const entryType = createMemo(() => entryAccessor().type)
+        const entry = entryAccessor()
 
         return (
           <Switch>
-            <Match when={entryType() === "context"}>
+            <Match when={entry.type === "context"}>
               {(() => {
-                const parts = createMemo(
-                  () => {
-                    const entry = entryAccessor()
-                    if (entry.type !== "context") return emptyTools
-                    return entry.refs
-                      .map((ref) => partByID(props.parts, ref.partID))
-                      .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
-                  },
-                  emptyTools,
-                  { equals: same },
-                )
+                const partsList = () => {
+                  if (entry.type !== "context") return emptyTools
+                  return entry.refs
+                    .map((ref) => partById(ref.partID))
+                    .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
+                }
 
                 return (
-                  <Show when={parts().length > 0}>
-                    <ContextToolGroup parts={parts()} />
+                  <Show when={partsList().length > 0}>
+                    <ContextToolGroup parts={partsList()} />
                   </Show>
                 )
               })()}
             </Match>
-            <Match when={entryType() === "part"}>
+            <Match when={entry.type === "part"}>
               {(() => {
-                const part = createMemo(() => {
-                  const entry = entryAccessor()
+                const part = () => {
                   if (entry.type !== "part") return
-                  return partByID(props.parts, entry.ref.partID)
-                })
+                  return partById(entry.ref.partID)
+                }
 
                 return (
                   <Show when={part()}>
@@ -765,11 +807,9 @@ export function AssistantMessageDisplay(props: {
 function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
   const i18n = useI18n()
   const [open, setOpen] = createSignal(false)
-  const pending = createMemo(
-    () =>
-      !!props.busy || props.parts.some((part) => part.state.status === "pending" || part.state.status === "running"),
-  )
-  const summary = createMemo(() => contextToolSummary(props.parts))
+  const pending = () =>
+    !!props.busy || props.parts.some((part) => part.state.status === "pending" || part.state.status === "running")
+  const summary = () => contextToolSummary(props.parts)
 
   return (
     <Collapsible open={open()} onOpenChange={setOpen} variant="ghost">
@@ -823,10 +863,9 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
         <div data-component="context-tool-group-list">
           <Index each={props.parts}>
             {(partAccessor) => {
-              const trigger = createMemo(() => contextToolTrigger(partAccessor(), i18n))
-              const running = createMemo(
-                () => partAccessor().state.status === "pending" || partAccessor().state.status === "running",
-              )
+              const part = partAccessor()
+              const trigger = () => contextToolTrigger(part, i18n)
+              const running = () => part.state.status === "pending" || part.state.status === "running"
               return (
                 <div data-slot="context-tool-group-item">
                   <div data-component="tool-trigger">
@@ -1067,19 +1106,62 @@ function HighlightedText(props: { text: string; references: FilePart[]; agents: 
 }
 
 export function Part(props: MessagePartProps) {
-  const component = createMemo(() => PART_MAPPING[props.part.type])
+  const component = () => PART_MAPPING[props.part.type]
+  const [ready, setReady] = createSignal(typeof window === "undefined")
+  let root: HTMLDivElement | undefined
+
+  onMount(() => {
+    if (ready()) return
+    if (typeof IntersectionObserver === "undefined") {
+      setReady(true)
+      return
+    }
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    const obs = new IntersectionObserver(
+      (list) => {
+        if (!list.some((item) => item.isIntersecting)) return
+        if (timeout) {
+          clearTimeout(timeout)
+          timeout = undefined
+        }
+        setReady(true)
+        obs.disconnect()
+      },
+      { rootMargin: "300px 0px" },
+    )
+    if (root) obs.observe(root)
+    timeout = setTimeout(() => {
+      timeout = undefined
+      setReady(true)
+      obs.disconnect()
+    }, 1200)
+    onCleanup(() => {
+      if (timeout) clearTimeout(timeout)
+      obs.disconnect()
+    })
+  })
+
+  const placeholder = () =>
+    props.part.type === "tool" ? (
+      <div data-component="part-placeholder" class="h-8" />
+    ) : (
+      <div data-component="part-placeholder" class="h-5" />
+    )
+
   return (
-    <Show when={component()}>
-      <Dynamic
-        component={component()}
-        part={props.part}
-        message={props.message}
-        hideDetails={props.hideDetails}
-        defaultOpen={props.defaultOpen}
-        showAssistantCopyPartID={props.showAssistantCopyPartID}
-        turnDurationMs={props.turnDurationMs}
-      />
-    </Show>
+    <div ref={root}>
+      <Show when={ready() && component()} fallback={placeholder()}>
+        <Dynamic
+          component={component()}
+          part={props.part}
+          message={props.message}
+          hideDetails={props.hideDetails}
+          defaultOpen={props.defaultOpen}
+          showAssistantCopyPartID={props.showAssistantCopyPartID}
+          turnDurationMs={props.turnDurationMs}
+        />
+      </Show>
+    </div>
   )
 }
 
@@ -1859,6 +1941,7 @@ ToolRegistry.register({
       return list[0]
     })
     const [expanded, setExpanded] = createSignal<string[]>([])
+    const expandedSet = createMemo(() => new Set(expanded()))
     let seeded = false
 
     createEffect(() => {
@@ -1899,7 +1982,7 @@ ToolRegistry.register({
                 >
                   <For each={files()}>
                     {(file) => {
-                      const active = createMemo(() => expanded().includes(file.filePath))
+                      const active = createMemo(() => expandedSet().has(file.filePath))
                       const [visible, setVisible] = createSignal(false)
 
                       createEffect(() => {
