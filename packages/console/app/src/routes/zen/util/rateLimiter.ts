@@ -6,17 +6,25 @@ import { i18n } from "~/i18n"
 import { localeFromRequest } from "~/lib/language"
 import { Subscription } from "@opencode-ai/console-core/subscription.js"
 
-export function createRateLimiter(allowAnonymous: boolean | undefined, rawIp: string, request: Request) {
+export function createRateLimiter(
+  modelId: string,
+  allowAnonymous: boolean | undefined,
+  rateLimit: number | undefined,
+  rawIp: string,
+  request: Request,
+) {
   if (!allowAnonymous) return
   const dict = i18n(localeFromRequest(request))
 
   const limits = Subscription.getFreeLimits()
   const limitValue =
-    limits.checkHeader && !request.headers.get(limits.checkHeader) ? limits.fallbackValue : limits.dailyRequests
+    limits.checkHeader && !request.headers.get(limits.checkHeader)
+      ? limits.fallbackValue
+      : (rateLimit ?? limits.dailyRequests)
 
   const ip = !rawIp.length ? "unknown" : rawIp
   const now = Date.now()
-  const interval = buildYYYYMMDD(now)
+  const interval = rateLimit ? `${buildYYYYMMDD(now)}${modelId.substring(0, 2)}` : buildYYYYMMDD(now)
 
   return {
     track: async () => {
