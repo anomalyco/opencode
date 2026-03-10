@@ -83,7 +83,6 @@
 
   :where([data-card="description"], [data-slot="card-description"]) {
     color: var(--text-base);
-    padding-left: var(--card-indent);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     word-break: break-word;

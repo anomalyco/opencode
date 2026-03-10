@@ -2,6 +2,8 @@ import { type ComponentProps, createMemo, createSignal, Show, splitProps } from 
 import { Card, CardDescription } from "./card"
 import { Collapsible } from "./collapsible"
 import { Icon } from "./icon"
+import { IconButton } from "./icon-button"
+import { Tooltip } from "./tooltip"
 import { useI18n } from "../context/i18n"
 
 export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "children" | "variant" | "icon"> {
@@ -12,6 +14,7 @@ export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "c
 export function ToolErrorCard(props: ToolErrorCardProps) {
   const i18n = useI18n()
   const [open, setOpen] = createSignal(true)
+  const [copied, setCopied] = createSignal(false)
   const [split, rest] = splitProps(props, ["tool", "error"])
   const name = createMemo(() => {
     const map: Record<string, string> = {
@@ -52,6 +55,14 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
     return parts.slice(1).join(": ").trim() || cleaned()
   })
 
+  const copy = async () => {
+    const text = cleaned()
+    if (!text) return
+    await navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   return (
     <Card {...rest} data-kind="tool-error-card" data-open={open() ? "true" : "false"} variant="error">
       <Collapsible class="tool-collapsible" data-open={open() ? "true" : "false"} open={open()} onOpenChange={setOpen}>
@@ -75,6 +86,23 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
         </Collapsible.Trigger>
         <Collapsible.Content>
           <div data-slot="tool-error-card-content">
+            <Show when={open()}>
+              <div data-slot="tool-error-card-copy">
+                <Tooltip value={copied() ? i18n.t("ui.message.copied") : "Copy error"} placement="top" gutter={4}>
+                  <IconButton
+                    icon={copied() ? "check" : "copy"}
+                    size="normal"
+                    variant="ghost"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      copy()
+                    }}
+                    aria-label={copied() ? i18n.t("ui.message.copied") : "Copy error"}
+                  />
+                </Tooltip>
+              </div>
+            </Show>
             <Show when={body()}>{(value) => <CardDescription>{value()}</CardDescription>}</Show>
           </div>
         </Collapsible.Content>
