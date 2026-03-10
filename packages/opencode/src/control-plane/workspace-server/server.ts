@@ -60,6 +60,20 @@ export namespace WorkspaceServer {
       fetch: App().fetch,
     })
     server.listen(opts.port, opts.hostname)
-    return server
+    return {
+      hostname: opts.hostname,
+      port: opts.port,
+      stop() {
+        return new Promise<void>((resolve, reject) => {
+          server.close((err) => {
+            if (err) {
+              reject(err)
+              return
+            }
+            resolve()
+          })
+        })
+      },
+    }
   }
 }
