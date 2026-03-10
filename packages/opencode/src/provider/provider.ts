@@ -6,9 +6,10 @@ import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
+import { Hash } from "../util/hash"
 import { Plugin } from "../plugin"
-import { ModelsDev } from "./models"
 import { NamedError } from "@opencode-ai/util/error"
+import { ModelsDev } from "./models"
 import { Auth } from "../auth"
 import { Env } from "../env"
 import { Instance } from "../project/instance"
@@ -44,6 +45,8 @@ import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
+
+const DEFAULT_CHUNK_TIMEOUT = 120_000
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -81,6 +84,54 @@ export namespace Provider {
     return raw.replace(/\$\{([^}]+)\}/g, (match, key) => {
       const val = Env.get(String(key)) ?? vars?.[String(key) as keyof typeof vars]
       return val ?? match
+    })
+  }
+
+  function wrapSSE(res: Response, ms: number, ctl: AbortController) {
+    if (typeof ms !== "number" || ms <= 0) return res
+    if (!res.body) return res
+    if (!res.headers.get("content-type")?.includes("text/event-stream")) return res
+
+    const reader = res.body.getReader()
+    const body = new ReadableStream<Uint8Array>({
+      async pull(ctrl) {
+        const part = await new Promise<Awaited<ReturnType<typeof reader.read>>>((resolve, reject) => {
+          const id = setTimeout(() => {
+            const err = new Error("SSE read timed out")
+            ctl.abort(err)
+            void reader.cancel(err)
+            reject(err)
+          }, ms)
+
+          reader.read().then(
+            (part) => {
+              clearTimeout(id)
+              resolve(part)
+            },
+            (err) => {
+              clearTimeout(id)
+              reject(err)
+            },
+          )
+        })
+
+        if (part.done) {
+          ctrl.close()
+          return
+        }
+
+        ctrl.enqueue(part.value)
+      },
+      async cancel(reason) {
+        ctl.abort(reason)
+        await reader.cancel(reason)
+      },
+    })
+
+    return new Response(body, {
+      headers: new Headers(res.headers),
+      status: res.status,
+      statusText: res.statusText,
     })
   }
 
@@ -479,6 +530,7 @@ export namespace Provider {
 
       const aiGatewayHeaders = {
         "User-Agent": `opencode/${Installation.VERSION} gitlab-ai-provider/${GITLAB_PROVIDER_VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
+        "anthropic-beta": "context-1m-2025-08-07",
         ...(providerConfig?.options?.aiGatewayHeaders || {}),
       }
 
@@ -795,7 +847,7 @@ export namespace Provider {
     const modelLoaders: {
       [providerID: string]: CustomModelLoader
     } = {}
-    const sdk = new Map<number, SDK>()
+    const sdk = new Map<string, SDK>()
 
     log.info("init")
 
@@ -1085,26 +1137,28 @@ export namespace Provider {
           ...model.headers,
         }
 
-      const key = Bun.hash.xxHash32(JSON.stringify({ providerID: model.providerID, npm: model.api.npm, options }))
+      const key = Hash.fast(JSON.stringify({ providerID: model.providerID, npm: model.api.npm, options }))
       const existing = s.sdk.get(key)
       if (existing) return existing
 
       const customFetch = options["fetch"]
+      const chunkTimeout = options["chunkTimeout"] || DEFAULT_CHUNK_TIMEOUT
+      delete options["chunkTimeout"]
 
       options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
         // Preserve custom fetch if it exists, wrap it with timeout logic
         const fetchFn = customFetch ?? fetch
         const opts = init ?? {}
+        const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
+        const signals: AbortSignal[] = []
 
-        if (options["timeout"] !== undefined && options["timeout"] !== null) {
-          const signals: AbortSignal[] = []
-          if (opts.signal) signals.push(opts.signal)
-          if (options["timeout"] !== false) signals.push(AbortSignal.timeout(options["timeout"]))
+        if (opts.signal) signals.push(opts.signal)
+        if (chunkAbortCtl) signals.push(chunkAbortCtl.signal)
+        if (options["timeout"] !== undefined && options["timeout"] !== null && options["timeout"] !== false)
+          signals.push(AbortSignal.timeout(options["timeout"]))
 
-          const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
-
-          opts.signal = combined
-        }
+        const combined = signals.length === 0 ? null : signals.length === 1 ? signals[0] : AbortSignal.any(signals)
+        if (combined) opts.signal = combined
 
         // Strip openai itemId metadata following what codex does
         // Codex uses #[serde(skip_serializing)] on id fields for all item types:
@@ -1124,11 +1178,14 @@ export namespace Provider {
           }
         }
 
-        return fetchFn(input, {
+        const res = await fetchFn(input, {
           ...opts,
           // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
           timeout: false,
         })
+
+        if (!chunkAbortCtl) return res
+        return wrapSSE(res, chunkTimeout, chunkAbortCtl)
       }
 
       const bundledFn = BUNDLED_PROVIDERS[model.api.npm]
@@ -1285,12 +1342,6 @@ export namespace Provider {
           }
         }
       }
-    }
-
-    // Check if opencode provider is available before using it
-    const opencodeProvider = await state().then((state) => state.providers["opencode"])
-    if (opencodeProvider && opencodeProvider.models["gpt-5-nano"]) {
-      return getModel("opencode", "gpt-5-nano")
     }
 
     return undefined
