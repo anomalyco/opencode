@@ -7,8 +7,8 @@ import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { Log } from "@/util/log"
 import { WorkspaceTable } from "./workspace.sql"
-import { Config } from "./config"
 import { getAdaptor } from "./adaptors"
+import { WorkspaceInfo } from "./types"
 import { parseSSE } from "./sse"
 
 export namespace Workspace {
@@ -27,72 +27,64 @@ export namespace Workspace {
     ),
   }
 
-  export const Info = z
-    .object({
-      id: Identifier.schema("workspace"),
-      branch: z.string().nullable(),
-      projectID: z.string(),
-      config: Config,
-    })
-    .meta({
-      ref: "Workspace",
-    })
+  export const Info = WorkspaceInfo.meta({
+    ref: "Workspace",
+  })
   export type Info = z.infer<typeof Info>
 
   function fromRow(row: typeof WorkspaceTable.$inferSelect): Info {
     return {
       id: row.id,
+      type: row.type,
       branch: row.branch,
+      name: row.name,
+      directory: row.directory,
+      extra: row.extra,
       projectID: row.project_id,
-      config: row.config,
     }
   }
 
-  export const create = fn(
-    z.object({
-      id: Identifier.schema("workspace").optional(),
-      projectID: Info.shape.projectID,
-      branch: Info.shape.branch,
-      config: Info.shape.config,
-    }),
-    async (input) => {
-      const id = Identifier.ascending("workspace", input.id)
+  const CreateInput = z.object({
+    id: Identifier.schema("workspace").optional(),
+    type: Info.shape.type,
+    branch: Info.shape.branch,
+    projectID: Info.shape.projectID,
+    extra: Info.shape.extra,
+  })
 
-      const { config, init } = await getAdaptor(input.config).create(input.config, input.branch)
+  export const create = fn(CreateInput, async (input) => {
+    const id = Identifier.ascending("workspace", input.id)
+    const adaptor = await getAdaptor(input.type)
 
-      const info: Info = {
-        id,
-        projectID: input.projectID,
-        branch: input.branch,
-        config,
-      }
+    const config = await adaptor.configure({ ...input, id, name: null, directory: null })
 
-      setTimeout(async () => {
-        await init()
+    const info: Info = {
+      id,
+      type: config.type,
+      branch: config.branch ?? null,
+      name: config.name ?? null,
+      directory: config.directory ?? null,
+      extra: config.extra ?? null,
+      projectID: input.projectID,
+    }
 
-        Database.use((db) => {
-          db.insert(WorkspaceTable)
-            .values({
-              id: info.id,
-              branch: info.branch,
-              project_id: info.projectID,
-              config: info.config,
-            })
-            .run()
+    Database.use((db) => {
+      db.insert(WorkspaceTable)
+        .values({
+          id: info.id,
+          type: info.type,
+          branch: info.branch,
+          name: info.name,
+          directory: info.directory,
+          extra: info.extra,
+          project_id: info.projectID,
         })
+        .run()
+    })
 
-        GlobalBus.emit("event", {
-          directory: id,
-          payload: {
-            type: Event.Ready.type,
-            properties: {},
-          },
-        })
-      }, 0)
-
-      return info
-    },
-  )
+    await adaptor.create(config)
+    return info
+  })
 
   export function list(project: Project.Info) {
     const rows = Database.use((db) =>
@@ -111,7 +103,8 @@ export namespace Workspace {
     const row = Database.use((db) => db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).get())
     if (row) {
       const info = fromRow(row)
-      await getAdaptor(info.config).remove(info.config)
+      const adaptor = await getAdaptor(row.type)
+      adaptor.remove(info)
       Database.use((db) => db.delete(WorkspaceTable).where(eq(WorkspaceTable.id, id)).run())
       return info
     }
@@ -120,9 +113,8 @@ export namespace Workspace {
 
   async function workspaceEventLoop(space: Info, stop: AbortSignal) {
     while (!stop.aborted) {
-      const res = await getAdaptor(space.config)
-        .request(space.config, "GET", "/event", undefined, stop)
-        .catch(() => undefined)
+      const adaptor = await getAdaptor(space.type)
+      const res = await adaptor.fetch(space, "/event", { method: "GET", signal: stop }).catch(() => undefined)
       if (!res || !res.ok || !res.body) {
         await Bun.sleep(1000)
         continue
@@ -140,7 +132,7 @@ export namespace Workspace {
 
   export function startSyncing(project: Project.Info) {
     const stop = new AbortController()
-    const spaces = list(project).filter((space) => space.config.type !== "worktree")
+    const spaces = list(project).filter((space) => space.type !== "worktree")
 
     spaces.forEach((space) => {
       void workspaceEventLoop(space, stop.signal).catch((error) => {

@@ -1,6 +1,6 @@
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { batch, createEffect, createMemo, createRoot, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, createRoot, on, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { useSDK } from "./sdk"
 import type { Platform } from "./platform"
@@ -20,6 +20,71 @@ export type LocalPTY = {
 const WORKSPACE_KEY = "__workspace__"
 const MAX_TERMINAL_SESSIONS = 20
 
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function text(value: unknown) {
+  return typeof value === "string" ? value : undefined
+}
+
+function num(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined
+}
+
+function numberFromTitle(title: string) {
+  const match = title.match(/^Terminal (\d+)$/)
+  if (!match) return
+  const value = Number(match[1])
+  if (!Number.isFinite(value) || value <= 0) return
+  return value
+}
+
+function pty(value: unknown): LocalPTY | undefined {
+  if (!record(value)) return
+
+  const id = text(value.id)
+  if (!id) return
+
+  const title = text(value.title) ?? ""
+  const number = num(value.titleNumber)
+  const rows = num(value.rows)
+  const cols = num(value.cols)
+  const buffer = text(value.buffer)
+  const scrollY = num(value.scrollY)
+  const cursor = num(value.cursor)
+
+  return {
+    id,
+    title,
+    titleNumber: number && number > 0 ? number : (numberFromTitle(title) ?? 0),
+    ...(rows !== undefined ? { rows } : {}),
+    ...(cols !== undefined ? { cols } : {}),
+    ...(buffer !== undefined ? { buffer } : {}),
+    ...(scrollY !== undefined ? { scrollY } : {}),
+    ...(cursor !== undefined ? { cursor } : {}),
+  }
+}
+
+export function migrateTerminalState(value: unknown) {
+  if (!record(value)) return value
+
+  const seen = new Set<string>()
+  const all = (Array.isArray(value.all) ? value.all : []).flatMap((item) => {
+    const next = pty(item)
+    if (!next || seen.has(next.id)) return []
+    seen.add(next.id)
+    return [next]
+  })
+
+  const active = text(value.active)
+
+  return {
+    active: active && seen.has(active) ? active : all[0]?.id,
+    all,
+  }
+}
+
 export function getWorkspaceTerminalCacheKey(dir: string) {
   return `${dir}:${WORKSPACE_KEY}`
 }
@@ -37,6 +102,16 @@ type TerminalCacheEntry = {
 }
 
 const caches = new Set<Map<string, TerminalCacheEntry>>()
+
+const trimTerminal = (pty: LocalPTY) => {
+  if (!pty.buffer && pty.cursor === undefined && pty.scrollY === undefined) return pty
+  return {
+    ...pty,
+    buffer: undefined,
+    cursor: undefined,
+    scrollY: undefined,
+  }
+}
 
 export function clearWorkspaceTerminals(dir: string, sessionIDs?: string[], platform?: Platform) {
   const key = getWorkspaceTerminalCacheKey(dir)
@@ -61,16 +136,11 @@ export function clearWorkspaceTerminals(dir: string, sessionIDs?: string[], plat
 function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, legacySessionID?: string) {
   const legacy = getLegacyTerminalStorageKeys(dir, legacySessionID)
 
-  const numberFromTitle = (title: string) => {
-    const match = title.match(/^Terminal (\d+)$/)
-    if (!match) return
-    const value = Number(match[1])
-    if (!Number.isFinite(value) || value <= 0) return
-    return value
-  }
-
   const [store, setStore, _, ready] = persisted(
-    Persist.workspace(dir, "terminal", legacy),
+    {
+      ...Persist.workspace(dir, "terminal", legacy),
+      migrate: migrateTerminalState,
+    },
     createStore<{
       active?: string
       all: LocalPTY[]
@@ -117,26 +187,6 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
     removeExited(event.properties.id)
   })
   onCleanup(unsub)
-
-  const meta = { migrated: false }
-
-  createEffect(() => {
-    if (!ready()) return
-    if (meta.migrated) return
-    meta.migrated = true
-
-    setStore("all", (all) => {
-      const next = all.map((pty) => {
-        const direct = Number.isFinite(pty.titleNumber) && pty.titleNumber > 0 ? pty.titleNumber : undefined
-        if (direct !== undefined) return pty
-        const parsed = numberFromTitle(pty.title)
-        if (parsed === undefined) return pty
-        return { ...pty, titleNumber: parsed }
-      })
-      if (next.every((pty, index) => pty === all[index])) return all
-      return next
-    })
-  })
 
   return {
     ready,
@@ -187,6 +237,18 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
           }
           console.error("Failed to update terminal", error)
         })
+    },
+    trim(id: string) {
+      const index = store.all.findIndex((x) => x.id === id)
+      if (index === -1) return
+      setStore("all", index, (pty) => trimTerminal(pty))
+    },
+    trimAll() {
+      setStore("all", (all) => {
+        const next = all.map(trimTerminal)
+        if (next.every((pty, index) => pty === all[index])) return all
+        return next
+      })
     },
     async clone(id: string) {
       const index = store.all.findIndex((x) => x.id === id)
@@ -322,12 +384,27 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
 
     const workspace = createMemo(() => loadWorkspace(params.dir!, params.id))
 
+    createEffect(
+      on(
+        () => ({ dir: params.dir, id: params.id }),
+        (next, prev) => {
+          if (!prev?.dir) return
+          if (next.dir === prev.dir && next.id === prev.id) return
+          if (next.dir === prev.dir && next.id) return
+          loadWorkspace(prev.dir, prev.id).trimAll()
+        },
+        { defer: true },
+      ),
+    )
+
     return {
       ready: () => workspace().ready(),
       all: () => workspace().all(),
       active: () => workspace().active(),
       new: () => workspace().new(),
       update: (pty: Partial<LocalPTY> & { id: string }) => workspace().update(pty),
+      trim: (id: string) => workspace().trim(id),
+      trimAll: () => workspace().trimAll(),
       clone: (id: string) => workspace().clone(id),
       open: (id: string) => workspace().open(id),
       close: (id: string) => workspace().close(id),

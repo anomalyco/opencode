@@ -64,6 +64,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "正在考虑下一步",
 
   "ui.messagePart.questions.dismissed": "问题已忽略",
+  "ui.messagePart.compaction": "历史已压缩",
   "ui.messagePart.context.read.one": "{{count}} 次读取",
   "ui.messagePart.context.read.other": "{{count}} 次读取",
   "ui.messagePart.context.search.one": "{{count}} 次搜索",
@@ -97,12 +98,15 @@ export const dict = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webfetch",
+  "ui.tool.websearch": "网络搜索",
+  "ui.tool.codesearch": "代码搜索",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "补丁",
   "ui.tool.todos": "待办",
   "ui.tool.todos.read": "读取待办",
   "ui.tool.questions": "问题",
   "ui.tool.agent": "{{type}} 智能体",
+  "ui.tool.agent.default": "智能体",
 
   "ui.common.file.one": "个文件",
   "ui.common.file.other": "个文件",
@@ -129,6 +133,7 @@ export const dict = {
   "ui.message.copyResponse": "复制回复",
   "ui.message.copied": "已复制！",
   "ui.message.interrupted": "已中断",
+  "ui.message.queued": "排队中",
   "ui.message.attachment.alt": "附件",
 
   "ui.patch.action.deleted": "已删除",

@@ -1,5 +1,6 @@
 export type {
   DesktopTheme,
+  ThemePaletteColors,
   ThemeSeedColors,
   ThemeVariant,
   HexColor,
@@ -19,7 +20,10 @@ export {
   generateScale,
   generateNeutralScale,
   generateAlphaScale,
+  fitOklch,
+  blend,
   mixColors,
+  shift,
   lighten,
   darken,
   withAlpha,
@@ -31,7 +35,6 @@ export { ThemeProvider, useTheme, type ColorScheme } from "./context"
 
 export {
   DEFAULT_THEMES,
-  oc1Theme,
   oc2Theme,
   tokyonightTheme,
   draculaTheme,
