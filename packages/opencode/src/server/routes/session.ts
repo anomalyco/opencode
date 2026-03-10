@@ -837,6 +837,43 @@ export const SessionRoutes = lazy(() =>
       },
     )
     .post(
+      "/:sessionID/commands",
+      describeRoute({
+        summary: "Send multiple commands",
+        description: "Send multiple commands sequentially to a session, executing them as a single user turn.",
+        operationId: "session.commands",
+        responses: {
+          200: {
+            description: "Last created message",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    info: MessageV2.Assistant,
+                    parts: MessageV2.Part.array(),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: z.string().meta({ description: "Session ID" }),
+        }),
+      ),
+      validator("json", SessionPrompt.MultiCommandInput.omit({ sessionID: true })),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const body = c.req.valid("json")
+        const msg = await SessionPrompt.multiCommand({ ...body, sessionID })
+        return c.json(msg)
+      },
+    )
+    .post(
       "/:sessionID/shell",
       describeRoute({
         summary: "Run shell command",

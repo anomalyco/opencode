@@ -89,6 +89,8 @@ export function Autocomplete(props: {
     input: "keyboard" as "keyboard" | "mouse",
   })
 
+  let selecting = false
+
   const [positionTick, setPositionTick] = createSignal(0)
 
   createEffect(() => {
@@ -365,9 +367,11 @@ export function Autocomplete(props: {
         onSelect: () => {
           const newText = "/" + serverCommand.name + " "
           const cursor = props.input().logicalCursor
-          props.input().deleteRange(0, 0, cursor.row, cursor.col)
+          props.input().cursorOffset = store.index
+          const startCursor = props.input().logicalCursor
+          props.input().deleteRange(startCursor.row, startCursor.col, cursor.row, cursor.col)
           props.input().insertText(newText)
-          props.input().cursorOffset = Bun.stringWidth(newText)
+          props.input().cursorOffset = store.index + Bun.stringWidth(newText)
         },
       })
     }
@@ -450,8 +454,10 @@ export function Autocomplete(props: {
   function select() {
     const selected = options()[store.selected]
     if (!selected) return
-    hide()
+    hide(false)
+    selecting = true
     selected.onSelect?.()
+    selecting = false
   }
 
   function expandDirectory() {
@@ -483,15 +489,20 @@ export function Autocomplete(props: {
     })
   }
 
-  function hide() {
-    const text = props.input().plainText
-    if (store.visible === "/" && !text.endsWith(" ") && text.startsWith("/")) {
-      const cursor = props.input().logicalCursor
-      props.input().deleteRange(0, 0, cursor.row, cursor.col)
-      // Sync the prompt store immediately since onContentChange is async
-      props.setPrompt((draft) => {
-        draft.input = props.input().plainText
-      })
+  function hide(cancel = true) {
+    if (cancel) {
+      const text = props.input().plainText
+      if (store.visible === "/" && !text.endsWith(" ")) {
+        props.input().cursorOffset = store.index
+        const startCursor = props.input().logicalCursor
+        props.input().cursorOffset = props.input().plainText.length
+        const endCursor = props.input().logicalCursor
+        props.input().deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
+        // Sync the prompt store immediately since onContentChange is async
+        props.setPrompt((draft) => {
+          draft.input = props.input().plainText
+        })
+      }
     }
     command.keybinds(true)
     setStore("visible", false)
@@ -503,14 +514,13 @@ export function Autocomplete(props: {
         return store.visible
       },
       onInput(value) {
+        if (selecting) return
         if (store.visible) {
           if (
             // Typed text before the trigger
             props.input().cursorOffset <= store.index ||
             // There is a space between the trigger and the cursor
-            props.input().getTextRange(store.index, props.input().cursorOffset).match(/\s/) ||
-            // "/<command>" is not the sole content
-            (store.visible === "/" && value.match(/^\S+\s+\S+\s*$/))
+            props.input().getTextRange(store.index, props.input().cursorOffset).match(/\s/)
           ) {
             hide()
           }
@@ -521,19 +531,24 @@ export function Autocomplete(props: {
         const offset = props.input().cursorOffset
         if (offset === 0) return
 
-        // Check for "/" at position 0 - reopen slash commands
-        if (value.startsWith("/") && !value.slice(0, offset).match(/\s/)) {
-          show("/")
-          setStore("index", 0)
-          return
+        // Check for "/" before cursor with no whitespace between — reopen slash commands
+        const textBefore = value.slice(0, offset)
+        const slashIdx = textBefore.lastIndexOf("/")
+        if (slashIdx !== -1) {
+          const before = slashIdx === 0 ? undefined : value[slashIdx - 1]
+          const between = textBefore.slice(slashIdx)
+          if ((before === undefined || /\s/.test(before)) && !between.match(/\s/)) {
+            show("/")
+            setStore("index", slashIdx)
+            return
+          }
         }
 
         // Check for "@" trigger - find the nearest "@" before cursor with no whitespace between
-        const text = value.slice(0, offset)
-        const idx = text.lastIndexOf("@")
+        const idx = textBefore.lastIndexOf("@")
         if (idx === -1) return
 
-        const between = text.slice(idx)
+        const between = textBefore.slice(idx)
         const before = idx === 0 ? undefined : value[idx - 1]
         if ((before === undefined || /\s/.test(before)) && !between.match(/\s/)) {
           show("@")
@@ -590,7 +605,9 @@ export function Autocomplete(props: {
           }
 
           if (e.name === "/") {
-            if (props.input().cursorOffset === 0) show("/")
+            const off = props.input().cursorOffset
+            const before = off === 0 ? undefined : props.input().getTextRange(off - 1, off)
+            if (before === undefined || before === "" || /\s/.test(before)) show("/")
           }
         }
       },

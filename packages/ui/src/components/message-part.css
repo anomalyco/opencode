@@ -21,7 +21,7 @@
   align-self: stretch;
   width: 100%;
   max-width: 100%;
-  gap: 0;
+  gap: 8px;
 
   &[data-interrupted] {
     color: var(--text-weak);
@@ -98,10 +98,6 @@
     align-items: flex-end;
   }
 
-  [data-slot="user-message-attachments"] + [data-slot="user-message-body"] {
-    margin-top: 8px;
-  }
-
   [data-slot="user-message-text"] {
     display: inline-block;
     white-space: pre-wrap;
@@ -172,7 +168,7 @@
     align-items: center;
     justify-content: flex-end;
     overflow: hidden;
-    gap: 0;
+    gap: 6px;
   }
 
   [data-slot="user-message-meta-tail"] {

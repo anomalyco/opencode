@@ -1371,17 +1371,27 @@ export namespace ACP {
 
       log.info("parts", { parts })
 
-      const cmd = (() => {
+      // Collect all slash commands from text parts
+      const cmds = (() => {
         const text = parts
           .filter((p): p is { type: "text"; text: string } => p.type === "text")
           .map((p) => p.text)
           .join("")
           .trim()
 
-        if (!text.startsWith("/")) return
+        if (!text.startsWith("/")) return []
 
-        const [name, ...rest] = text.slice(1).split(/\s+/)
-        return { name, args: rest.join(" ").trim() }
+        const tokens = text.split(/(?=\/)/).filter(Boolean)
+        return tokens
+          .map((seg) => {
+            const trimmed = seg.trim()
+            if (!trimmed.startsWith("/")) return null
+            const spaceIdx = trimmed.indexOf(" ")
+            const name = spaceIdx === -1 ? trimmed.slice(1) : trimmed.slice(1, spaceIdx)
+            const args = spaceIdx === -1 ? "" : trimmed.slice(spaceIdx + 1).trim()
+            return { name, args }
+          })
+          .filter((x): x is { name: string; args: string } => x !== null)
       })()
 
       const buildUsage = (msg: AssistantMessage): Usage => ({
@@ -1398,7 +1408,7 @@ export namespace ACP {
         cachedWriteTokens: msg.tokens.cache?.write || undefined,
       })
 
-      if (!cmd) {
+      if (cmds.length === 0) {
         const response = await this.sdk.session.prompt({
           sessionID,
           model: {
@@ -1421,47 +1431,47 @@ export namespace ACP {
         }
       }
 
-      const command = await this.config.sdk.command
-        .list({ directory }, { throwOnError: true })
-        .then((x) => x.data!.find((c) => c.name === cmd.name))
-      if (command) {
+      const known = await this.config.sdk.command.list({ directory }, { throwOnError: true }).then((x) => x.data!)
+
+      // Filter to recognized commands; handle /compact separately
+      const recognized = cmds.filter((c) => known.find((k) => k.name === c.name))
+      const hasCompact = cmds.some((c) => c.name === "compact" && !known.find((k) => k.name === c.name))
+
+      if (hasCompact) {
+        await this.config.sdk.session.summarize(
+          { sessionID, directory, providerID: model.providerID, modelID: model.modelID },
+          { throwOnError: true },
+        )
+      }
+
+      let lastMsg: AssistantMessage | undefined
+      if (recognized.length === 1) {
+        const item = recognized[0]!
         const response = await this.sdk.session.command({
           sessionID,
-          command: command.name,
-          arguments: cmd.args,
+          command: item.name,
+          arguments: item.args,
           model: model.providerID + "/" + model.modelID,
           agent,
           directory,
         })
-        const msg = response.data?.info
-
-        await sendUsageUpdate(this.connection, this.sdk, sessionID, directory)
-
-        return {
-          stopReason: "end_turn" as const,
-          usage: msg ? buildUsage(msg) : undefined,
-          _meta: {},
-        }
-      }
-
-      switch (cmd.name) {
-        case "compact":
-          await this.config.sdk.session.summarize(
-            {
-              sessionID,
-              directory,
-              providerID: model.providerID,
-              modelID: model.modelID,
-            },
-            { throwOnError: true },
-          )
-          break
+        lastMsg = response.data?.info
+      } else if (recognized.length > 1) {
+        const response = await this.sdk.session.commands({
+          sessionID,
+          agent,
+          model: model.providerID + "/" + model.modelID,
+          directory,
+          commands: recognized.map((c) => ({ command: c.name, arguments: c.args })),
+        })
+        lastMsg = response.data?.info
       }
 
       await sendUsageUpdate(this.connection, this.sdk, sessionID, directory)
 
       return {
         stopReason: "end_turn" as const,
+        usage: lastMsg ? buildUsage(lastMsg) : undefined,
         _meta: {},
       }
     }

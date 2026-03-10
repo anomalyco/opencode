@@ -872,11 +872,16 @@ export function UserMessageDisplay(props: {
   const i18n = useI18n()
   const [copied, setCopied] = createSignal(false)
 
-  const textPart = createMemo(
-    () => props.parts?.find((p) => p.type === "text" && !(p as TextPart).synthetic) as TextPart | undefined,
+  const textParts = createMemo(
+    () => (props.parts?.filter((p) => p.type === "text" && !(p as TextPart).synthetic) as TextPart[]) ?? [],
   )
 
-  const text = createMemo(() => textPart()?.text || "")
+  const text = createMemo(
+    () =>
+      textParts()
+        .map((p) => p.text)
+        .join("\n\n") || "",
+  )
 
   const files = createMemo(() => (props.parts?.filter((p) => p.type === "file") as FilePart[]) ?? [])
 

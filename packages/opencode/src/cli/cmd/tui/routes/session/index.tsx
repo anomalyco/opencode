@@ -1236,7 +1236,13 @@ function UserMessage(props: {
 }) {
   const ctx = use()
   const local = useLocal()
-  const text = createMemo(() => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0])
+  const textParts = createMemo(() => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : [])))
+  const text = createMemo(() => {
+    const parts = textParts()
+    if (!parts.length) return undefined
+    if (parts.length === 1) return parts[0]
+    return { ...parts[0]!, text: parts.map((x) => x.text).join("\n\n") }
+  })
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const sync = useSync()
   const { theme } = useTheme()

@@ -110,6 +110,8 @@ import type {
   SessionChildrenResponses,
   SessionCommandErrors,
   SessionCommandResponses,
+  SessionCommandsErrors,
+  SessionCommandsResponses,
   SessionCreateErrors,
   SessionCreateResponses,
   SessionDeleteErrors,
@@ -2056,6 +2058,62 @@ export class Session2 extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<SessionCommandResponses, SessionCommandErrors, ThrowOnError>({
       url: "/session/{sessionID}/command",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Send multiple commands
+   *
+   * Send multiple commands sequentially to a session, executing them as a single user turn.
+   */
+  public commands<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      agent?: string
+      model?: string
+      variant?: string
+      commands?: Array<{
+        command: string
+        arguments: string
+        parts?: Array<{
+          id?: string
+          type: "file"
+          mime: string
+          filename?: string
+          url: string
+          source?: FilePartSource
+        }>
+      }>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "agent" },
+            { in: "body", key: "model" },
+            { in: "body", key: "variant" },
+            { in: "body", key: "commands" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionCommandsResponses, SessionCommandsErrors, ThrowOnError>({
+      url: "/session/{sessionID}/commands",
       ...options,
       ...params,
       headers: {

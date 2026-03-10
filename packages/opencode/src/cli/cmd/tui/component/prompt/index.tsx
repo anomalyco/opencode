@@ -601,33 +601,59 @@ export function Prompt(props: PromptProps) {
     } else if (
       inputText.startsWith("/") &&
       iife(() => {
-        const firstLine = inputText.split("\n")[0]
-        const command = firstLine.split(" ")[0].slice(1)
-        return sync.data.command.some((x) => x.name === command)
+        // Check if at least one token starting with "/" matches a known command
+        const tokens = inputText.match(/\/\S+/g) ?? []
+        return tokens.some((t) => sync.data.command.some((x) => x.name === t.slice(1).split(" ")[0]))
       })
     ) {
-      // Parse command from first line, preserve multi-line content in arguments
-      const firstLineEnd = inputText.indexOf("\n")
-      const firstLine = firstLineEnd === -1 ? inputText : inputText.slice(0, firstLineEnd)
-      const [command, ...firstLineArgs] = firstLine.split(" ")
-      const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
-      const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
+      // Tokenize into command segments: each "/" starts a new segment
+      const segments: { command: string; arguments: string }[] = []
+      const raw = inputText.split(/(?=\/)/).filter(Boolean)
+      for (const seg of raw) {
+        const trimmed = seg.trim()
+        if (!trimmed.startsWith("/")) continue
+        const spaceIdx = trimmed.indexOf(" ")
+        const name = spaceIdx === -1 ? trimmed.slice(1) : trimmed.slice(1, spaceIdx)
+        if (!sync.data.command.some((x) => x.name === name)) continue
+        const args = spaceIdx === -1 ? "" : trimmed.slice(spaceIdx + 1).trim()
+        segments.push({ command: name, arguments: args })
+      }
 
-      sdk.client.session.command({
-        sessionID,
-        command: command.slice(1),
-        arguments: args,
-        agent: local.agent.current().name,
-        model: `${selectedModel.providerID}/${selectedModel.modelID}`,
-        messageID,
-        variant,
-        parts: nonTextParts
-          .filter((x) => x.type === "file")
-          .map((x) => ({
-            id: Identifier.ascending("part"),
-            ...x,
+      if (segments.length === 1) {
+        const seg = segments[0]!
+        sdk.client.session.command({
+          sessionID,
+          command: seg.command,
+          arguments: seg.arguments,
+          agent: local.agent.current().name,
+          model: `${selectedModel.providerID}/${selectedModel.modelID}`,
+          messageID,
+          variant,
+          parts: nonTextParts
+            .filter((x) => x.type === "file")
+            .map((x) => ({
+              id: Identifier.ascending("part"),
+              ...x,
+            })),
+        })
+      } else {
+        sdk.client.session.commands({
+          sessionID,
+          agent: local.agent.current().name,
+          model: `${selectedModel.providerID}/${selectedModel.modelID}`,
+          variant,
+          commands: segments.map((seg) => ({
+            command: seg.command,
+            arguments: seg.arguments,
+            parts: nonTextParts
+              .filter((x) => x.type === "file")
+              .map((x) => ({
+                id: Identifier.ascending("part"),
+                ...x,
+              })),
           })),
-      })
+        })
+      }
     } else {
       sdk.client.session
         .prompt({

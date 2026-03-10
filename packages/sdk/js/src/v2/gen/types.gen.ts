@@ -3617,6 +3617,62 @@ export type SessionCommandResponses = {
 
 export type SessionCommandResponse = SessionCommandResponses[keyof SessionCommandResponses]
 
+export type SessionCommandsData = {
+  body?: {
+    agent?: string
+    model?: string
+    variant?: string
+    commands: Array<{
+      command: string
+      arguments: string
+      parts?: Array<{
+        id?: string
+        type: "file"
+        mime: string
+        filename?: string
+        url: string
+        source?: FilePartSource
+      }>
+    }>
+  }
+  path: {
+    /**
+     * Session ID
+     */
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/commands"
+}
+
+export type SessionCommandsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionCommandsError = SessionCommandsErrors[keyof SessionCommandsErrors]
+
+export type SessionCommandsResponses = {
+  /**
+   * Last created message
+   */
+  200: {
+    info: AssistantMessage
+    parts: Array<Part>
+  }
+}
+
+export type SessionCommandsResponse = SessionCommandsResponses[keyof SessionCommandsResponses]
+
 export type SessionShellData = {
   body?: {
     agent: string

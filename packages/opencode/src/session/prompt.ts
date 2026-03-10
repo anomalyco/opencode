@@ -1888,6 +1888,128 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     return result
   }
 
+  export const MultiCommandInput = z.object({
+    sessionID: Identifier.schema("session"),
+    agent: z.string().optional(),
+    model: z.string().optional(),
+    variant: z.string().optional(),
+    commands: z.array(
+      z.object({
+        command: z.string(),
+        arguments: z.string(),
+        parts: z
+          .array(
+            z.discriminatedUnion("type", [
+              MessageV2.FilePart.omit({
+                messageID: true,
+                sessionID: true,
+              }).partial({
+                id: true,
+              }),
+            ]),
+          )
+          .optional(),
+      }),
+    ),
+  })
+  export type MultiCommandInput = z.infer<typeof MultiCommandInput>
+
+  export async function multiCommand(input: MultiCommandInput) {
+    type Resolved = {
+      parts: PromptInput["parts"]
+      agentName: string
+      model: { providerID: string; modelID: string }
+    }
+
+    const resolved = await Promise.all(
+      input.commands.map(async (item): Promise<Resolved> => {
+        const cmd = await Command.get(item.command)
+        const agentName = cmd.agent ?? input.agent ?? (await Agent.defaultAgent())
+
+        const raw = item.arguments.match(argsRegex) ?? []
+        const args = raw.map((a) => a.replace(quoteTrimRegex, ""))
+
+        const templateCommand = await cmd.template
+        const placeholders = templateCommand.match(placeholderRegex) ?? []
+        let last = 0
+        for (const p of placeholders) {
+          const v = Number(p.slice(1))
+          if (v > last) last = v
+        }
+
+        const withArgs = templateCommand.replaceAll(placeholderRegex, (_, index) => {
+          const pos = Number(index)
+          const idx = pos - 1
+          if (idx >= args.length) return ""
+          if (pos === last) return args.slice(idx).join(" ")
+          return args[idx]
+        })
+        const usesArgs = templateCommand.includes("$ARGUMENTS")
+        let template = withArgs.replaceAll("$ARGUMENTS", item.arguments)
+        if (placeholders.length === 0 && !usesArgs && item.arguments.trim()) {
+          template = template + "\n\n" + item.arguments
+        }
+
+        const shell = ConfigMarkdown.shell(template)
+        if (shell.length > 0) {
+          const results = await Promise.all(
+            shell.map(async ([, s]) => {
+              try {
+                return await $`${{ raw: s }}`.quiet().nothrow().text()
+              } catch (error) {
+                return `Error executing command: ${error instanceof Error ? error.message : String(error)}`
+              }
+            }),
+          )
+          let i = 0
+          template = template.replace(bashRegex, () => results[i++])
+        }
+        template = template.trim()
+
+        const model = await (async () => {
+          if (cmd.model) return Provider.parseModel(cmd.model)
+          if (cmd.agent) {
+            const a = await Agent.get(cmd.agent)
+            if (a?.model) return a.model
+          }
+          if (input.model) return Provider.parseModel(input.model)
+          return await lastModel(input.sessionID)
+        })()
+
+        await Plugin.trigger(
+          "command.execute.before",
+          { command: item.command, sessionID: input.sessionID, arguments: item.arguments },
+          { parts: [] },
+        )
+
+        const templateParts = await resolvePromptParts(template)
+        return { parts: [...templateParts, ...(item.parts ?? [])], agentName, model }
+      }),
+    )
+
+    const first = resolved[0]!
+    const allParts = resolved.flatMap((r) => r.parts)
+
+    const result = (await prompt({
+      sessionID: input.sessionID,
+      model: first.model,
+      agent: first.agentName,
+      parts: allParts,
+      variant: input.variant,
+    })) as MessageV2.WithParts
+
+    for (const item of input.commands) {
+      Bus.publish(Command.Event.Executed, {
+        name: item.command,
+        sessionID: input.sessionID,
+        arguments: item.arguments,
+        messageID: result.info.id,
+      })
+    }
+
+    return result
+  }
+
   async function ensureTitle(input: {
     session: Session.Info
     history: MessageV2.WithParts[]
