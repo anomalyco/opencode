@@ -93,36 +93,22 @@ function backgroundMessage(input: {
   return [title, `task_id: ${input.sessionID}`, `state: ${input.state}`, "", `<${tag}>`, input.text, `</${tag}>`].join(
     "\n",
   )
-}
-
-function errorText(error: unknown) {
-  if (error instanceof Error) return error.message
-  return String(error)
-}
-
-export const TaskTool = Tool.define(
-  id,
-  Effect.gen(function* () {
-    const agent = yield* Agent.Service
-    const background = yield* BackgroundJob.Service
-    const bus = yield* Bus.Service
-    const config = yield* Config.Service
-    const sessions = yield* Session.Service
-    const scope = yield* Scope.Scope
-    const status = yield* SessionStatus.Service
-    const flags = yield* RuntimeFlags.Service
-
-    const run = Effect.fn("TaskTool.execute")(function* (
-      params: Schema.Schema.Type<typeof Parameters>,
-      ctx: Tool.Context,
-    ) {
-      const cfg = yield* config.get()
-      const runInBackground = params.background === true
-      if (runInBackground && !flags.experimentalBackgroundSubagents) {
-        return yield* Effect.fail(
-          new Error("Background subagents require OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true"),
-        )
+  return {
+    description,
+    parameters,
+    async execute(params: z.infer<typeof parameters>, ctx) {
+      if (ctx.agent && params.subagent_type === ctx.agent) {
+        return {
+          title: params.description,
+          metadata: {
+            refused: "self",
+            subagent_type: params.subagent_type,
+          },
+          output: `Refused to launch subagent "${params.subagent_type}" from itself. Continue in the current session instead.`,
+        }
       }
+
+      const config = await Config.get()
 
       if (!ctx.extra?.bypassAgentCheck) {
         yield* ctx.ask({
