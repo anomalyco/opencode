@@ -22,11 +22,13 @@ let simulateAuthFlow = true
 // Mock the transport constructors to simulate OAuth auto-auth on 401
 mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
   StreamableHTTPClientTransport: class MockStreamableHTTP {
-    authProvider: {
-      state?: () => Promise<string>
-      redirectToAuthorization?: (url: URL) => Promise<void>
-      saveCodeVerifier?: (v: string) => Promise<void>
-    } | undefined
+    authProvider:
+      | {
+          state?: () => Promise<string>
+          redirectToAuthorization?: (url: URL) => Promise<void>
+          saveCodeVerifier?: (v: string) => Promise<void>
+        }
+      | undefined
     constructor(url: URL, options?: { authProvider?: unknown }) {
       this.authProvider = options?.authProvider as typeof this.authProvider
       transportCalls.push({
