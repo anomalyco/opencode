@@ -849,6 +849,9 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
 
             // handle failed chunk parsing / validation:
             if (!chunk.success) {
+              if (empty(chunk.rawValue)) {
+                return
+              }
               finishReason = "error"
               controller.enqueue({ type: "error", error: chunk.error })
               return
@@ -1622,6 +1625,18 @@ function isResponseReasoningSummaryTextDeltaChunk(
 
 function isErrorChunk(chunk: z.infer<typeof openaiResponsesChunkSchema>): chunk is z.infer<typeof errorChunkSchema> {
   return chunk.type === "error"
+}
+
+function empty(raw: unknown) {
+  if (raw == null) {
+    return true
+  }
+
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    return false
+  }
+
+  return Object.keys(raw).length === 0
 }
 
 type ResponsesModelConfig = {

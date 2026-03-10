@@ -7,7 +7,7 @@ import {
   parseNewSessionDeepLink,
 } from "./deep-links"
 import { displayName, errorMessage, getDraggableId, syncWorkspaceOrder, workspaceKey } from "./helpers"
-import { type Session } from "@opencode-ai/sdk/v2/client"
+import { type PermissionRequest, type Session } from "@opencode-ai/sdk/v2/client"
 import { hasProjectPermissions, latestRootSession } from "./helpers"
 
 const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
@@ -20,6 +20,8 @@ const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
     time: { created: 0, updated: 0, archived: undefined },
     ...input,
   }) as Session
+
+const perm = (id: string) => ({ id }) as PermissionRequest
 
 describe("layout deep links", () => {
   test("parses open-project deep links", () => {
@@ -140,11 +142,16 @@ describe("layout workspace helpers", () => {
 
   test("detects project permissions with a filter", () => {
     const result = hasProjectPermissions(
+      [
+        session({ id: "root", directory: "/workspace" }),
+        session({ id: "child", directory: "/workspace", parentID: "root" }),
+      ],
       {
-        root: [{ id: "perm-root" }, { id: "perm-hidden" }],
-        child: [{ id: "perm-child" }],
+        root: [perm("perm-root"), perm("perm-hidden")],
+        child: [perm("perm-child")],
       },
-      (item) => item.id === "perm-child",
+      "/workspace",
+      (item: PermissionRequest) => item.id === "perm-child",
     )
 
     expect(result).toBe(true)
@@ -152,9 +159,11 @@ describe("layout workspace helpers", () => {
 
   test("ignores project permissions filtered out", () => {
     const result = hasProjectPermissions(
+      [session({ id: "root", directory: "/workspace" })],
       {
-        root: [{ id: "perm-root" }],
+        root: [perm("perm-root")],
       },
+      "/workspace",
       () => false,
     )
 

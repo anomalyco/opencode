@@ -71,6 +71,9 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
   const turnPrefetchBuffer = 16
   const prefetchCooldownMs = 400
   const prefetchNoGrowthLimit = 2
+  const turnBottomThreshold = 24
+
+  let prevTop = 0
 
   const [state, setState] = createStore({
     turnID: undefined as string | undefined,
@@ -210,7 +213,15 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
     if (!input.userScrolled()) return
     const el = input.scroller()
     if (!el) return
-    if (el.scrollTop >= turnScrollThreshold) return
+
+    const top = el.scrollTop
+    const max = Math.max(0, el.scrollHeight - el.clientHeight)
+    const down = top > prevTop
+    prevTop = top
+
+    if (max - top <= turnBottomThreshold) return
+    if (down) return
+    if (top >= turnScrollThreshold) return
 
     const start = turnStart()
     if (start > 0) {
@@ -228,6 +239,7 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
     on(
       input.sessionID,
       () => {
+        prevTop = 0
         setState({ prefetchUntil: 0, prefetchNoGrowth: 0 })
       },
       { defer: true },
@@ -421,10 +433,7 @@ export default function Page() {
       () => {
         const msg = lastUserMessage()
         if (!msg) return
-        if (msg.agent) {
-          local.agent.set(msg.agent)
-          if (local.agent.current()?.model) return
-        }
+        if (msg.agent) local.agent.set(msg.agent)
         if (msg.model) local.model.set(msg.model)
       },
     ),
@@ -455,7 +464,7 @@ export default function Page() {
   const newSessionWorktree = createMemo(() => {
     if (store.newSessionWorktree === "create") return "create"
     const project = sync.project
-    const directory = sync.data.path.directory
+    const directory = sdk.directory
     if (project && directory && directory.trim() !== "" && directory !== project.worktree) {
       return directory
     }

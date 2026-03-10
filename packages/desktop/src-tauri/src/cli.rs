@@ -418,6 +418,10 @@ pub fn spawn_command(
             "XDG_STATE_HOME".to_string(),
             state_dir.to_string_lossy().to_string(),
         ),
+        (
+            "OPENCODE_DISABLE_CHANNEL_DB".to_string(),
+            "true".to_string(),
+        ),
     ];
     envs.extend(
         extra_env
@@ -445,6 +449,7 @@ pub fn spawn_command(
                 "OPENCODE_EXPERIMENTAL_FILEWATCHER=true".to_string(),
                 "OPENCODE_CLIENT=desktop".to_string(),
                 "XDG_STATE_HOME=\"$HOME/.local/state\"".to_string(),
+                "OPENCODE_DISABLE_CHANNEL_DB=true".to_string(),
             ];
             env_prefix.extend(
                 envs.iter()
@@ -452,6 +457,7 @@ pub fn spawn_command(
                     .filter(|(key, _)| key != "OPENCODE_EXPERIMENTAL_FILEWATCHER")
                     .filter(|(key, _)| key != "OPENCODE_CLIENT")
                     .filter(|(key, _)| key != "XDG_STATE_HOME")
+                    .filter(|(key, _)| key != "OPENCODE_DISABLE_CHANNEL_DB")
                     .map(|(key, value)| format!("{}={}", key, shell_escape(value))),
             );
 

@@ -90,6 +90,7 @@ type TimelineStageInput = {
   sessionKey: () => string
   turnStart: () => number
   messages: () => UserMessage[]
+  scroller: () => HTMLDivElement | undefined
   config: StageConfig
 }
 
@@ -154,9 +155,18 @@ function createTimelineStaging(input: TimelineStageInput) {
             frame = undefined
             return
           }
+          const el = input.scroller()
+          const gap = el ? el.scrollHeight - el.clientHeight - el.scrollTop : 0
           const currentTotal = input.messages().length
           count = Math.min(currentTotal, count + input.config.batch)
           startTransition(() => setState("count", count))
+          if (el) {
+            requestAnimationFrame(() => {
+              if (input.sessionKey() !== sessionKey) return
+              const next = el.scrollHeight - el.clientHeight - gap
+              el.scrollTop = next > 0 ? next : 0
+            })
+          }
           if (count >= currentTotal) {
             setState({ completedSession: sessionKey, activeSession: "" })
             frame = undefined
@@ -204,6 +214,7 @@ export function MessageTimeline(props: {
   onUnregisterMessage: (id: string) => void
 }) {
   let touchGesture: number | undefined
+  let scroll: HTMLDivElement | undefined
 
   const params = useParams()
   const navigate = useNavigate()
@@ -228,6 +239,7 @@ export function MessageTimeline(props: {
     sessionKey,
     turnStart: () => props.turnStart,
     messages: () => props.renderedUserMessages,
+    scroller: () => scroll,
     config: stageCfg,
   })
 
@@ -460,7 +472,10 @@ export function MessageTimeline(props: {
           </button>
         </div>
         <ScrollView
-          viewportRef={props.setScrollRef}
+          viewportRef={(el) => {
+            scroll = el
+            props.setScrollRef(el)
+          }}
           onWheel={(e) => {
             const root = e.currentTarget
             const delta = normalizeWheelDelta({

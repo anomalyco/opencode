@@ -425,8 +425,13 @@ export function Markdown(
         }
       }
 
-      const next = await marked.parse(normalized)
-      const safe = sanitize(next)
+      let safe = ""
+      try {
+        safe = sanitize(await marked.parse(normalized))
+      } catch (err) {
+        console.error("markdown render failed", err)
+        safe = fallback(normalized)
+      }
       if (key && hash) touch(key, { hash, html: safe })
       return safe
     },

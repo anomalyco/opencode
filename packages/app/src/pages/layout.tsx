@@ -2026,16 +2026,24 @@ export default function Layout(props: ParentProps) {
 
   createEffect(
     on(
-      () => ({ ready: pageReady(), dir: params.dir, id: params.id }),
+      () => ({
+        ready: pageReady(),
+        notifications: notification.ready(),
+        dir: params.dir,
+        id: params.id,
+        list: layout.projects.list(),
+        order: store.workspaceOrder,
+      }),
       (value) => {
         if (!value.ready) return
+        if (!value.notifications) return
         const dir = value.dir
         if (!dir) return
         const directory = decode64(dir)
         if (!directory) return
         const root = projectRoot(directory)
-        const project = layout.projects.list().find((item) => item.worktree === root)
-        Array.from(new Set([root, directory, ...(store.workspaceOrder[root] ?? []), ...(project?.sandboxes ?? [])]))
+        const project = value.list.find((item) => item.worktree === root)
+        Array.from(new Set([root, directory, ...(value.order[root] ?? []), ...(project?.sandboxes ?? [])]))
           .filter((item) => notification.project.unseenCount(item) > 0)
           .forEach((item) => notification.project.markViewed(item))
         const at = Date.now()

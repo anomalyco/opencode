@@ -17,7 +17,7 @@ import { Icon } from "./icon"
 import { TextShimmer } from "./text-shimmer"
 import { SessionRetry } from "./session-retry"
 import { TextReveal } from "./text-reveal"
-import { createAutoScroll } from "../hooks"
+import { createAutoScroll, suppressAutoScrollResize } from "../hooks"
 import { useI18n } from "../context/i18n"
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -343,6 +343,10 @@ export function SessionTurn(
   const edited = createMemo(() => diffs().length)
   const [open, setOpen] = createSignal(false)
   const [expanded, setExpanded] = createSignal<string[]>([])
+  const onOpenChange = (value: boolean) => {
+    suppressAutoScrollResize()
+    setOpen(value)
+  }
 
   createEffect(
     on(
@@ -562,7 +566,7 @@ export function SessionTurn(
                 <SessionRetry status={status()} show={active()} />
                 <Show when={edited() > 0 && !working()}>
                   <div data-slot="session-turn-diffs">
-                    <Collapsible open={open()} onOpenChange={setOpen} variant="ghost">
+                    <Collapsible open={open()} onOpenChange={onOpenChange} variant="ghost">
                       <Collapsible.Trigger>
                         <div data-component="session-turn-diffs-trigger">
                           <div data-slot="session-turn-diffs-title">

@@ -53,7 +53,30 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     if (!last) return
     const total =
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
-    const model = sync.data.provider.find((x) => x.id === last.providerID)?.models[last.modelID]
+    const list = [
+      ...sync.data.provider,
+      ...sync.data.provider_next.all.map((x) => ({
+        id: x.id,
+        models: x.models,
+      })),
+    ]
+    const provider = list.find((x) => x.id === last.providerID)
+    const parts = last.modelID.split("/")
+    const ids = parts.flatMap((_, i, arr) =>
+      arr.slice(i).flatMap((__, j, sub) => sub.slice(0, sub.length - j).join("/")),
+    )
+    const model =
+      ids.flatMap((id) => {
+        const item = provider?.models[id]
+        return item ? [item] : []
+      })[0] ??
+      ids.flatMap((id) => {
+        const item = list.flatMap((x) => {
+          const model = x.models[id]
+          return model ? [model] : []
+        })
+        return item
+      })[0]
     return {
       tokens: total.toLocaleString(),
       percentage: model?.limit.context ? Math.round((total / model.limit.context) * 100) : null,
