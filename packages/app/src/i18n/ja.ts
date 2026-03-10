@@ -457,6 +457,7 @@ export const dict = {
   "session.todo.title": "ToDo",
   "session.todo.collapse": "折りたたむ",
   "session.todo.expand": "展開",
+  "session.new.title": "何でも作る",
   "session.new.worktree.main": "メインブランチ",
   "session.new.worktree.mainWithBranch": "メインブランチ ({{branch}})",
   "session.new.worktree.create": "新しいワークツリーを作成",
