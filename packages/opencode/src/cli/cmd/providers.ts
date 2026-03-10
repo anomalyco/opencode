@@ -33,7 +33,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
   }
   const method = plugin.auth.methods[index]
 
-  await Bun.sleep(10)
+  await new Promise((r) => setTimeout(r, 10))
   const inputs: Record<string, string> = {}
   if (method.prompts) {
     for (const prompt of method.prompts) {
