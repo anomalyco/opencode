@@ -139,7 +139,11 @@ export function Session() {
   })
 
   const pending = createMemo(() => {
-    return messages().findLast((x) => x.role === "assistant" && !x.time.completed)?.id
+    const lastMessage = messages().at(-1)
+    if (!lastMessage || lastMessage.role !== "assistant") return
+    if (lastMessage.time.completed) return
+    if (lastMessage.error) return
+    return lastMessage.id
   })
 
   const lastAssistant = createMemo(() => {
