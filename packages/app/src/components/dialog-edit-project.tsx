@@ -83,7 +83,6 @@ export function DialogEditProject(props: { project: LocalProject }) {
         if (props.project.id && props.project.id !== "global") {
           await globalSDK.client.project.update({
             projectID: props.project.id,
-            directory: props.project.worktree,
             name,
             icon: { color: store.color, url: store.iconUrl },
             commands: { start },

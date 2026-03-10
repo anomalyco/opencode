@@ -31,6 +31,12 @@ export function getAvatarColors(key?: string) {
   }
 }
 
+export function pickProjectIcon(input: { child?: string; meta?: { url?: string; override?: string } }) {
+  const url = input.child ?? input.meta?.url ?? input.meta?.override
+  const override = input.child ?? input.meta?.override ?? input.meta?.url
+  return { url, override }
+}
+
 type SessionTabs = {
   active?: string
   all: string[]
@@ -402,8 +408,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         ...(metadata ?? {}),
         ...project,
         icon: {
-          url: metadata?.icon?.url ?? metadata?.icon?.override ?? childStore.icon,
-          override: metadata?.icon?.override ?? metadata?.icon?.url ?? childStore.icon,
+          ...pickProjectIcon({ child: childStore.icon, meta: metadata?.icon }),
           color: metadata?.icon?.color,
         },
       }
@@ -423,60 +428,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
       }
     }
-
-    const roots = createMemo(() => {
-      const map = new Map<string, string>()
-      for (const project of globalSync.data.project) {
-        const sandboxes = project.sandboxes ?? []
-        for (const sandbox of sandboxes) {
-          map.set(sandbox, project.worktree)
-        }
-      }
-      return map
-    })
-
-    const rootFor = (directory: string) => {
-      const map = roots()
-      if (map.size === 0) return directory
-
-      const visited = new Set<string>()
-      const chain = [directory]
-
-      while (chain.length) {
-        const current = chain[chain.length - 1]
-        if (!current) return directory
-
-        const next = map.get(current)
-        if (!next) return current
-
-        if (visited.has(next)) return directory
-        visited.add(next)
-        chain.push(next)
-      }
-
-      return directory
-    }
-
-    createEffect(() => {
-      const projects = server.projects.list()
-      const seen = new Set(projects.map((project) => project.worktree))
-
-      batch(() => {
-        for (const project of projects) {
-          const root = rootFor(project.worktree)
-          if (root === project.worktree) continue
-
-          server.projects.close(project.worktree)
-
-          if (!seen.has(root)) {
-            server.projects.open(root)
-            seen.add(root)
-          }
-
-          if (project.expanded) server.projects.expand(root)
-        }
-      })
-    })
 
     const enriched = createMemo(() => server.projects.list().map(enrich))
     const list = createMemo(() => {
@@ -566,10 +517,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       projects: {
         list,
         open(directory: string) {
-          const root = rootFor(directory)
-          if (server.projects.list().find((x) => x.worktree === root)) return
-          globalSync.project.loadSessions(root)
-          server.projects.open(root)
+          if (server.projects.list().find((x) => x.worktree === directory)) return
+          globalSync.project.loadSessions(directory)
+          server.projects.open(directory)
         },
         close(directory: string) {
           server.projects.close(directory)

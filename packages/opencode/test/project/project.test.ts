@@ -199,6 +199,23 @@ describe("Project.fromDirectory with worktrees", () => {
         .catch(() => {})
     }
   })
+
+  test("should prefer sandbox .opencode icon over worktree icon", async () => {
+    const p = await loadProject()
+    await using tmp = await tmpdir({ git: true })
+    const child = path.join(tmp.path, "child")
+    const root = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x01, 0x02, 0x03, 0x04])
+    const local = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x09, 0x08, 0x07, 0x06])
+
+    await Filesystem.write(path.join(tmp.path, ".opencode", "icon.png"), root)
+    await Filesystem.write(path.join(child, ".opencode", "icon.png"), local)
+
+    const { project } = await p.fromDirectory(child)
+
+    expect(project.worktree).toBe(tmp.path)
+    expect(project.icon?.url).toContain(local.toString("base64"))
+    expect(project.icon?.url).not.toContain(root.toString("base64"))
+  })
 })
 
 describe("Project.discover", () => {

@@ -75,6 +75,18 @@ export namespace Project {
       return { url }
     }
 
+    const roots = await Glob.scan(".opencode/icon.{ico,png,svg,jpg,jpeg,webp,avif,gif,url}", {
+      cwd: worktree,
+      absolute: true,
+      include: "file",
+    })
+
+    for (const file of roots.toSorted(sortPath)) {
+      const url = await iconData(file).catch(() => undefined)
+      if (!url) continue
+      return { url }
+    }
+
     const favicons = await Glob.scan(".opencode/**/favicon.{ico,png,svg,jpg,jpeg,webp,avif,gif,url}", {
       cwd: worktree,
       absolute: true,
@@ -291,7 +303,12 @@ export namespace Project {
       return fresh
     })
 
-    const icon = await configuredIcon(data.worktree)
+    const icon = await configuredIcon(directory)
+      .then(async (item) => {
+        if (item) return item
+        if (directory === data.worktree) return
+        return configuredIcon(data.worktree)
+      })
       .then((item) => {
         if (!item) return existing.icon
         return {
