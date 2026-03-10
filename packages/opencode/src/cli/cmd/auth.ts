@@ -208,7 +208,7 @@ export const AuthCommand = cmd({
   describe: "manage credentials",
   builder: (yargs) =>
     yargs.command(AuthLoginCommand).command(AuthLogoutCommand).command(AuthListCommand).demandCommand(),
-  async handler() {},
+  async handler() { },
 })
 
 export const AuthListCommand = cmd({
@@ -310,7 +310,7 @@ export const AuthLoginCommand = cmd({
           prompts.outro("Done")
           return
         }
-        await ModelsDev.refresh().catch(() => {})
+        await ModelsDev.refresh().catch(() => { })
 
         const config = await Config.get()
 
@@ -424,10 +424,10 @@ export const AuthLoginCommand = cmd({
         if (provider === "amazon-bedrock") {
           prompts.log.info(
             "Amazon Bedrock authentication priority:\n" +
-              "  1. Bearer token (AWS_BEARER_TOKEN_BEDROCK or /connect)\n" +
-              "  2. AWS credential chain (profile, access keys, IAM roles, EKS IRSA)\n\n" +
-              "Configure via opencode.json options (profile, region, endpoint) or\n" +
-              "AWS environment variables (AWS_PROFILE, AWS_REGION, AWS_ACCESS_KEY_ID, AWS_WEB_IDENTITY_TOKEN_FILE).",
+            "  1. Bearer token (AWS_BEARER_TOKEN_BEDROCK or /connect)\n" +
+            "  2. AWS credential chain (profile, access keys, IAM roles, EKS IRSA)\n\n" +
+            "Configure via opencode.json options (profile, region, endpoint) or\n" +
+            "AWS environment variables (AWS_PROFILE, AWS_REGION, AWS_ACCESS_KEY_ID, AWS_WEB_IDENTITY_TOKEN_FILE).",
           )
         }
 
@@ -443,6 +443,30 @@ export const AuthLoginCommand = cmd({
           prompts.log.info(
             "Cloudflare AI Gateway can be configured with CLOUDFLARE_GATEWAY_ID, CLOUDFLARE_ACCOUNT_ID, and CLOUDFLARE_API_TOKEN environment variables. Read more: https://opencode.ai/docs/providers/#cloudflare-ai-gateway",
           )
+        }
+
+        if (provider === "lmstudio") {
+          const baseURL = await prompts.text({
+            message: "Enter LM Studio server address",
+            placeholder: "http://127.0.0.1:1234/v1",
+            defaultValue: "http://127.0.0.1:1234/v1",
+            validate: (x) => (x && x.startsWith("http") ? undefined : "Must start with http:// or https://"),
+          })
+          if (prompts.isCancel(baseURL)) throw new UI.CancelledError()
+
+          const key = await prompts.password({
+            message: "Enter LM Studio API key (optional)",
+          })
+          if (prompts.isCancel(key)) throw new UI.CancelledError()
+
+          await Auth.set(provider, {
+            type: "api",
+            key: key || "sk-nothing",
+            baseURL,
+          })
+
+          prompts.outro("Done")
+          return
         }
 
         const key = await prompts.password({
