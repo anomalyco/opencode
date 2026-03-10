@@ -542,19 +542,20 @@ export function AssistantParts(props: {
     <>
       <Index each={visible()}>
         {(entryAccessor) => {
-          const entry = entryAccessor()
+          const entry = () => entryAccessor()
 
           return (
             <Switch>
-              <Match when={entry.type === "context"}>
+              <Match when={entry().type === "context"}>
                 {(() => {
                   const partsList = () => {
-                    if (entry.type !== "context") return emptyTools
-                    return entry.refs
+                    const item = entry()
+                    if (item.type !== "context") return emptyTools
+                    return item.refs
                       .map((ref) => partById(ref.messageID, ref.partID))
                       .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
                   }
-                  const isBusy = () => props.working && lastKey() === entry.key
+                  const isBusy = () => props.working && lastKey() === entry().key
 
                   return (
                     <Show when={partsList().length > 0}>
@@ -563,15 +564,17 @@ export function AssistantParts(props: {
                   )
                 })()}
               </Match>
-              <Match when={entry.type === "part"}>
+              <Match when={entry().type === "part"}>
                 {(() => {
                   const message = () => {
-                    if (entry.type !== "part") return
-                    return msgById(entry.ref.messageID)
+                    const item = entry()
+                    if (item.type !== "part") return
+                    return msgById(item.ref.messageID)
                   }
                   const part = () => {
-                    if (entry.type !== "part") return
-                    return partById(entry.ref.messageID, entry.ref.partID)
+                    const item = entry()
+                    if (item.type !== "part") return
+                    return partById(item.ref.messageID, item.ref.partID)
                   }
 
                   return (
@@ -759,15 +762,16 @@ export function AssistantMessageDisplay(props: {
   return (
     <Index each={grouped()}>
       {(entryAccessor) => {
-        const entry = entryAccessor()
+        const entry = () => entryAccessor()
 
         return (
           <Switch>
-            <Match when={entry.type === "context"}>
+            <Match when={entry().type === "context"}>
               {(() => {
                 const partsList = () => {
-                  if (entry.type !== "context") return emptyTools
-                  return entry.refs
+                  const item = entry()
+                  if (item.type !== "context") return emptyTools
+                  return item.refs
                     .map((ref) => partById(ref.partID))
                     .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
                 }
@@ -779,11 +783,12 @@ export function AssistantMessageDisplay(props: {
                 )
               })()}
             </Match>
-            <Match when={entry.type === "part"}>
+            <Match when={entry().type === "part"}>
               {(() => {
                 const part = () => {
-                  if (entry.type !== "part") return
-                  return partById(entry.ref.partID)
+                  const item = entry()
+                  if (item.type !== "part") return
+                  return partById(item.ref.partID)
                 }
 
                 return (
@@ -863,9 +868,9 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
         <div data-component="context-tool-group-list">
           <Index each={props.parts}>
             {(partAccessor) => {
-              const part = partAccessor()
-              const trigger = () => contextToolTrigger(part, i18n)
-              const running = () => part.state.status === "pending" || part.state.status === "running"
+              const part = () => partAccessor()
+              const trigger = () => contextToolTrigger(part(), i18n)
+              const running = () => part().state.status === "pending" || part().state.status === "running"
               return (
                 <div data-slot="context-tool-group-item">
                   <div data-component="tool-trigger">
