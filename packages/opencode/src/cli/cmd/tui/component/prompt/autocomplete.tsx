@@ -12,6 +12,7 @@ import { useCommandDialog } from "@tui/component/dialog-command"
 import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "@/util/locale"
 import type { PromptInfo } from "./history"
+import { scan } from "./autocomplete-slash"
 import { useFrecency } from "./frecency"
 
 function removeLineRange(input: string) {
@@ -139,6 +140,38 @@ export function Autocomplete(props: {
     const next = filter()
     setSearch(next ? next : "")
   })
+
+  function write() {
+    props.setPrompt((draft) => {
+      draft.input = props.input().plainText
+    })
+  }
+
+  function cut() {
+    if (store.visible !== "/") return
+
+    const input = props.input()
+    const hit = scan(input.plainText, input.cursorOffset)
+    if (!hit || hit.start !== store.index) return
+
+    input.cursorOffset = hit.start
+    const start = input.logicalCursor
+    input.cursorOffset = hit.end
+    const end = input.logicalCursor
+
+    input.deleteRange(start.row, start.col, end.row, end.col)
+    input.cursorOffset = hit.start
+    write()
+    return hit
+  }
+
+  function lead(text: string) {
+    const input = props.input()
+    input.cursorOffset = 0
+    input.insertText(text)
+    input.cursorOffset = Bun.stringWidth(input.plainText)
+    write()
+  }
 
   // When the filter changes due to how TUI works, the mousemove might still be triggered
   // via a synthetic event as the layout moves underneath the cursor. This is a workaround to make sure the input mode remains keyboard so
@@ -363,11 +396,7 @@ export function Autocomplete(props: {
         display: "/" + serverCommand.name + label,
         description: serverCommand.description,
         onSelect: () => {
-          const newText = "/" + serverCommand.name + " "
-          const cursor = props.input().logicalCursor
-          props.input().deleteRange(0, 0, cursor.row, cursor.col)
-          props.input().insertText(newText)
-          props.input().cursorOffset = Bun.stringWidth(newText)
+          lead("/" + serverCommand.name + " ")
         },
       })
     }
@@ -484,15 +513,7 @@ export function Autocomplete(props: {
   }
 
   function hide() {
-    const text = props.input().plainText
-    if (store.visible === "/" && !text.endsWith(" ") && text.startsWith("/")) {
-      const cursor = props.input().logicalCursor
-      props.input().deleteRange(0, 0, cursor.row, cursor.col)
-      // Sync the prompt store immediately since onContentChange is async
-      props.setPrompt((draft) => {
-        draft.input = props.input().plainText
-      })
-    }
+    cut()
     command.keybinds(true)
     setStore("visible", false)
   }
@@ -504,13 +525,17 @@ export function Autocomplete(props: {
       },
       onInput(value) {
         if (store.visible) {
+          if (store.visible === "/") {
+            const hit = scan(value, props.input().cursorOffset)
+            if (!hit || hit.start !== store.index) {
+              hide()
+            }
+            return
+          }
+
           if (
-            // Typed text before the trigger
             props.input().cursorOffset <= store.index ||
-            // There is a space between the trigger and the cursor
-            props.input().getTextRange(store.index, props.input().cursorOffset).match(/\s/) ||
-            // "/<command>" is not the sole content
-            (store.visible === "/" && value.match(/^\S+\s+\S+\s*$/))
+            props.input().getTextRange(store.index, props.input().cursorOffset).match(/\s/)
           ) {
             hide()
           }
@@ -521,10 +546,10 @@ export function Autocomplete(props: {
         const offset = props.input().cursorOffset
         if (offset === 0) return
 
-        // Check for "/" at position 0 - reopen slash commands
-        if (value.startsWith("/") && !value.slice(0, offset).match(/\s/)) {
+        const hit = scan(value, offset)
+        if (hit) {
           show("/")
-          setStore("index", 0)
+          setStore("index", hit.start)
           return
         }
 
@@ -590,7 +615,7 @@ export function Autocomplete(props: {
           }
 
           if (e.name === "/") {
-            if (props.input().cursorOffset === 0) show("/")
+            show("/")
           }
         }
       },

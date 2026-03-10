@@ -14,6 +14,7 @@ import { createStore, produce } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { usePromptStash } from "./stash"
+import { lead } from "./edit"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
@@ -340,11 +341,11 @@ export function Prompt(props: PromptProps) {
           dialog.replace(() => (
             <DialogSkill
               onSelect={(skill) => {
-                input.setText(`/${skill} `)
-                setStore("prompt", {
-                  input: `/${skill} `,
-                  parts: [],
-                })
+                syncExtmarksWithPromptParts()
+                const next = lead(store.prompt, `/${skill} `)
+                input.setText(next.input)
+                setStore("prompt", next)
+                restoreExtmarksFromParts(next.parts)
                 input.gotoBufferEnd()
               }}
             />
