@@ -28,6 +28,7 @@ export namespace ZenData {
     stickyProvider: z.enum(["strict", "prefer"]).optional(),
     trialProvider: z.string().optional(),
     fallbackProvider: z.string().optional(),
+    rateLimit: z.number().optional(),
     providers: z.array(
       z.object({
         id: z.string(),
