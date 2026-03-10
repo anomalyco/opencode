@@ -43,6 +43,17 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     description,
     parameters,
     async execute(params: z.infer<typeof parameters>, ctx) {
+      if (ctx.agent && params.subagent_type === ctx.agent) {
+        return {
+          title: params.description,
+          metadata: {
+            refused: "self",
+            subagent_type: params.subagent_type,
+          },
+          output: `Refused to launch subagent "${params.subagent_type}" from itself. Continue in the current session instead.`,
+        }
+      }
+
       const config = await Config.get()
 
       // Skip permission check when user explicitly invoked via @ or command subtask
