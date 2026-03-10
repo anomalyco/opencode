@@ -45,6 +45,12 @@ import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
+import {
+  getOpenAICompatibleToolParsers,
+  rewriteOpenAICompatibleJsonResponse,
+  rewriteOpenAICompatibleRequestBody,
+  rewriteOpenAICompatibleStreamResponse,
+} from "./openai-compatible-compat"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -1092,6 +1098,9 @@ export namespace Provider {
       if (existing) return existing
 
       const customFetch = options["fetch"]
+      const toolParsers = model.api.npm.includes("@ai-sdk/openai-compatible")
+        ? getOpenAICompatibleToolParsers(options)
+        : []
 
       options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
         // Preserve custom fetch if it exists, wrap it with timeout logic
@@ -1126,11 +1135,53 @@ export namespace Provider {
           }
         }
 
-        return fetchFn(input, {
+        if (toolParsers.length > 0 && opts.body && opts.method === "POST") {
+          try {
+            const body = JSON.parse(opts.body as string)
+            opts.body = JSON.stringify(rewriteOpenAICompatibleRequestBody(body, toolParsers))
+          } catch {}
+        }
+
+        const response = await fetchFn(input, {
           ...opts,
           // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
           timeout: false,
         })
+
+        if (toolParsers.length === 0) {
+          return response
+        }
+
+        const headers = new Headers(response.headers)
+        headers.delete("content-length")
+        const contentType = headers.get("content-type") ?? ""
+        if (contentType.includes("text/event-stream")) {
+          const text = await response.text()
+          return new Response(rewriteOpenAICompatibleStreamResponse(text, toolParsers), {
+            status: response.status,
+            statusText: response.statusText,
+            headers,
+          })
+        }
+
+        if (contentType.includes("application/json")) {
+          const text = await response.text()
+          try {
+            return new Response(JSON.stringify(rewriteOpenAICompatibleJsonResponse(JSON.parse(text), toolParsers)), {
+              status: response.status,
+              statusText: response.statusText,
+              headers,
+            })
+          } catch {
+            return new Response(text, {
+              status: response.status,
+              statusText: response.statusText,
+              headers,
+            })
+          }
+        }
+
+        return response
       }
 
       const bundledFn = BUNDLED_PROVIDERS[model.api.npm]
