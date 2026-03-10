@@ -1,4 +1,4 @@
-import { semver } from "bun"
+import semver from "semver"
 import { text } from "node:stream/consumers"
 import { Log } from "../util/log"
 import { Process } from "../util/process"
@@ -45,6 +45,6 @@ export namespace PackageRegistry {
     const isRange = /[\s^~*xX<>|=]/.test(cachedVersion)
     if (isRange) return !semver.satisfies(latestVersion, cachedVersion)
 
-    return semver.order(cachedVersion, latestVersion) === -1
+    return semver.lt(cachedVersion, latestVersion)
   }
 }
