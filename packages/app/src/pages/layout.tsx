@@ -586,6 +586,20 @@ export default function Layout(props: ParentProps) {
     ),
   )
 
+  createEffect(
+    on(
+      () => ({ ready: pageReady(), layoutReady: layoutReady(), dir: currentDir() }),
+      (value) => {
+        if (!value.ready) return
+        if (!value.layoutReady) return
+        if (!value.dir) return
+        const list = layout.projects.list()
+        if (list.find((p) => p.worktree === value.dir || p.sandboxes?.includes(value.dir))) return
+        openProject(value.dir, false)
+      },
+    ),
+  )
+
   const workspaceName = (directory: string, projectId?: string, branch?: string) => {
     const key = workspaceKey(directory)
     const direct = store.workspaceName[key] ?? store.workspaceName[directory]
