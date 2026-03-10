@@ -1,5 +1,5 @@
 import { test as base, expect, type Page } from "@playwright/test"
-import { cleanupTestProject, createTestProject, seedProjects } from "./actions"
+import { cleanupSession, cleanupTestProject, createTestProject, seedProjects, sessionIDFromUrl } from "./actions"
 import { promptSelector } from "./selectors"
 import { createSdk, dirSlug, getWorktree, sessionPath } from "./utils"
 
@@ -13,6 +13,8 @@ type TestFixtures = {
       directory: string
       slug: string
       gotoSession: (sessionID?: string) => Promise<void>
+      trackSession: (sessionID: string, directory?: string) => void
+      trackDirectory: (directory: string) => void
     }) => Promise<T>,
     options?: { extra?: string[] },
   ) => Promise<T>
@@ -51,20 +53,36 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   },
   withProject: async ({ page }, use) => {
     await use(async (callback, options) => {
-      const directory = await createTestProject()
-      const slug = dirSlug(directory)
-      await seedStorage(page, { directory, extra: options?.extra })
+      const root = await createTestProject()
+      const slug = dirSlug(root)
+      const sessions = new Map<string, string>()
+      const dirs = new Set<string>()
+      await seedStorage(page, { directory: root, extra: options?.extra })
 
       const gotoSession = async (sessionID?: string) => {
-        await page.goto(sessionPath(directory, sessionID))
+        await page.goto(sessionPath(root, sessionID))
         await expect(page.locator(promptSelector)).toBeVisible()
+        const current = sessionIDFromUrl(page.url())
+        if (current) trackSession(current)
+      }
+
+      const trackSession = (sessionID: string, directory?: string) => {
+        sessions.set(sessionID, directory ?? root)
+      }
+
+      const trackDirectory = (directory: string) => {
+        if (directory !== root) dirs.add(directory)
       }
 
       try {
         await gotoSession()
-        return await callback({ directory, slug, gotoSession })
+        return await callback({ directory: root, slug, gotoSession, trackSession, trackDirectory })
       } finally {
-        await cleanupTestProject(directory)
+        await Promise.allSettled(
+          Array.from(sessions, ([sessionID, directory]) => cleanupSession({ sessionID, directory })),
+        )
+        await Promise.allSettled(Array.from(dirs, (directory) => cleanupTestProject(directory)))
+        await cleanupTestProject(root)
       }
     })
   },

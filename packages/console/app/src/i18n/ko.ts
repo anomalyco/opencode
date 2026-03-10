@@ -480,7 +480,6 @@ export const dict = {
   "workspace.cost.deletedSuffix": "(삭제됨)",
   "workspace.cost.empty": "선택한 기간에 사용 데이터가 없습니다.",
   "workspace.cost.subscriptionShort": "구독",
-  "workspace.cost.liteShort": "lite",
 
   "workspace.keys.title": "API 키",
   "workspace.keys.subtitle": "OpenCode 서비스 액세스를 위한 API 키를 관리하세요.",
