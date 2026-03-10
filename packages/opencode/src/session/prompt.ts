@@ -733,6 +733,61 @@ export namespace SessionPrompt {
     return Provider.defaultModel()
   }
 
+  function extractDefRef(value: unknown) {
+    if (typeof value !== "string") return
+    if (!value.startsWith("#/$defs/")) return
+    return value.slice("#/$defs/".length)
+  }
+
+  function hasCircularDefRefs(schema: unknown) {
+    if (!schema || typeof schema !== "object") return false
+    const defs = (schema as any).$defs
+    if (!defs || typeof defs !== "object") return false
+
+    const graph = new Map<string, Set<string>>()
+
+    const visitNode = (value: unknown, refs: Set<string>) => {
+      if (!value || typeof value !== "object") return
+      if (Array.isArray(value)) {
+        for (const entry of value) visitNode(entry, refs)
+        return
+      }
+
+      const ref = extractDefRef((value as any).$ref)
+      if (ref) refs.add(ref)
+
+      for (const child of Object.values(value as Record<string, unknown>)) {
+        visitNode(child, refs)
+      }
+    }
+
+    for (const [name, defSchema] of Object.entries(defs as Record<string, unknown>)) {
+      const refs = new Set<string>()
+      visitNode(defSchema, refs)
+      graph.set(name, refs)
+    }
+
+    const visiting = new Set<string>()
+    const visited = new Set<string>()
+
+    const dfs = (name: string): boolean => {
+      if (visiting.has(name)) return true
+      if (visited.has(name)) return false
+      visiting.add(name)
+      for (const next of graph.get(name) ?? []) {
+        if (graph.has(next) && dfs(next)) return true
+      }
+      visiting.delete(name)
+      visited.add(name)
+      return false
+    }
+
+    for (const name of graph.keys()) {
+      if (dfs(name)) return true
+    }
+    return false
+  }
+
   /** @internal Exported for testing */
   export async function resolveTools(input: {
     agent: Agent.Info
@@ -833,7 +888,17 @@ export namespace SessionPrompt {
       if (!execute) continue
 
       const transformed = ProviderTransform.schema(input.model, asSchema(item.inputSchema).jsonSchema)
-      item.inputSchema = jsonSchema(transformed)
+      if (hasCircularDefRefs(transformed)) {
+        log.warn("mcp tool schema has circular $defs refs, falling back to permissive input schema", {
+          tool: key,
+        })
+        item.inputSchema = jsonSchema({
+          type: "object",
+          additionalProperties: true,
+        } as any)
+      } else {
+        item.inputSchema = jsonSchema(transformed)
+      }
       // Wrap execute to add plugin hooks and format output
       item.execute = async (args, opts) => {
         const ctx = context(args, opts)
