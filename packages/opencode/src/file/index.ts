@@ -11,6 +11,7 @@ import { Ripgrep } from "./ripgrep"
 import fuzzysort from "fuzzysort"
 import { Global } from "../global"
 import { git } from "@/util/git"
+import { Protected } from "./protected"
 
 export namespace File {
   const log = Log.create({ service: "file" })
@@ -345,10 +346,7 @@ export namespace File {
 
       if (isGlobalHome) {
         const dirs = new Set<string>()
-        const ignore = new Set<string>()
-
-        if (process.platform === "darwin") ignore.add("Library")
-        if (process.platform === "win32") ignore.add("AppData")
+        const ignore = Protected.names()
 
         const ignoreNested = new Set(["node_modules", "dist", "build", "target", "vendor"])
         const shouldIgnore = (name: string) => name.startsWith(".") || ignore.has(name)
@@ -586,6 +584,9 @@ export namespace File {
     // TODO: On Windows, cross-drive paths bypass this check. Consider realpath canonicalization.
     if (!Instance.containsPath(resolved)) {
       throw new Error(`Access denied: path escapes project directory`)
+    }
+    if (Protected.contains(resolved)) {
+      throw new Error(`Access denied: path is a system-protected directory`)
     }
 
     const nodes: Node[] = []
