@@ -25,6 +25,6 @@ export function resolveTextareaCursor(theme: CursorTheme, tui?: CursorConfig, fa
 function resolveCursorColor(theme: CursorTheme, color?: string): RGBA | undefined {
   if (!color) return
   if (color.startsWith("#")) return RGBA.fromHex(color)
-  const maybeThemeColor = theme[color as keyof Theme]
+  const maybeThemeColor = theme[color]
   if (maybeThemeColor instanceof RGBA) return maybeThemeColor
 }

@@ -22,6 +22,13 @@ export const TuiOptions = z.object({
     .enum(["auto", "stacked"])
     .optional()
     .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+  cursor_style: z.enum(["block", "line", "underline"]).optional().describe("Cursor style for TUI textareas"),
+  cursor_blink: z.boolean().optional().describe("Whether TUI textarea cursor blinks"),
+  cursor_color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$|^[a-zA-Z][a-zA-Z0-9_]*$/, "Invalid cursor color format")
+    .optional()
+    .describe("Cursor color for TUI textareas. Supports hex (#RRGGBB) or theme color name."),
 })
 
 export const TuiInfo = z
