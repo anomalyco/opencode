@@ -44,19 +44,8 @@ const BaseParameters = Schema.Struct({
   command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
 })
 
-export const Parameters = Schema.Struct({
-  description: Schema.String.annotate({ description: "A short (3-5 words) description of the task" }),
-  prompt: Schema.String.annotate({ description: "The task for the agent to perform" }),
-  subagent_type: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
-  task_id: Schema.optional(Schema.String).annotate({
-    description:
-      "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
-  }),
-  command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
-  background: Schema.optional(Schema.Boolean).annotate({
-    description: "When true, launch the subagent in the background and return immediately",
-  }),
-})
+export const TaskTool = Tool.define<typeof parameters, Record<string, any>>("task", async (ctx) => {
+  const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
 
 function output(sessionID: SessionID, text: string) {
   return [
@@ -103,7 +92,7 @@ function backgroundMessage(input: {
           metadata: {
             refused: "self",
             subagent_type: params.subagent_type,
-          },
+          } as Record<string, any>,
           output: `Refused to launch subagent "${params.subagent_type}" from itself. Continue in the current session instead.`,
         }
       }
