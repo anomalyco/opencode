@@ -263,25 +263,61 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
 
     if (text.startsWith("/")) {
-      const [cmdName, ...args] = text.split(" ")
-      const commandName = cmdName.slice(1)
-      const customCommand = sync.data.command.find((c) => c.name === commandName)
-      if (customCommand) {
+      const fileParts = images.map((attachment) => ({
+        id: Identifier.ascending("part"),
+        type: "file" as const,
+        mime: attachment.mime,
+        url: attachment.dataUrl,
+        filename: attachment.filename,
+      }))
+
+      // Parse all slash-command segments from the input
+      const segments: { command: string; arguments: string }[] = []
+      for (const seg of text.split(/(?=\/)/).filter(Boolean)) {
+        const t = seg.trim()
+        if (!t.startsWith("/")) continue
+        const spaceIdx = t.indexOf(" ")
+        const name = spaceIdx === -1 ? t.slice(1) : t.slice(1, spaceIdx)
+        if (!sync.data.command.some((c) => c.name === name)) continue
+        const args = spaceIdx === -1 ? "" : t.slice(spaceIdx + 1).trim()
+        segments.push({ command: name, arguments: args })
+      }
+
+      if (segments.length === 1) {
+        const seg = segments[0]!
         clearInput()
         client.session
           .command({
             sessionID: session.id,
-            command: commandName,
-            arguments: args.join(" "),
+            command: seg.command,
+            arguments: seg.arguments,
             agent,
             model: `${model.providerID}/${model.modelID}`,
             variant,
-            parts: images.map((attachment) => ({
-              id: Identifier.ascending("part"),
-              type: "file" as const,
-              mime: attachment.mime,
-              url: attachment.dataUrl,
-              filename: attachment.filename,
+            parts: fileParts,
+          })
+          .catch((err) => {
+            showToast({
+              title: language.t("prompt.toast.commandSendFailed.title"),
+              description: formatServerError(err, language.t, language.t("common.requestFailed")),
+            })
+            restoreInput()
+          })
+        return
+      }
+
+      if (segments.length > 1) {
+        clearInput()
+        client.session
+          .commands({
+            sessionID: session.id,
+            agent,
+            model: `${model.providerID}/${model.modelID}`,
+            variant,
+            commands: segments.map((seg) => ({
+              command: seg.command,
+              arguments: seg.arguments,
+              parts: fileParts,
             })),
           })
           .catch((err) => {
