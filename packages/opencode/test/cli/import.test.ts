@@ -1,5 +1,10 @@
 import { test, expect } from "bun:test"
-import { parseShareUrl, transformShareData, type ShareData } from "../../src/cli/cmd/import"
+import {
+  parseShareUrl,
+  shouldAttachShareAuthHeaders,
+  transformShareData,
+  type ShareData,
+} from "../../src/cli/cmd/import"
 
 // parseShareUrl tests
 test("parses valid share URLs", () => {
@@ -13,6 +18,19 @@ test("rejects invalid URLs", () => {
   expect(parseShareUrl("https://opncd.ai/share/")).toBeNull()
   expect(parseShareUrl("https://opncd.ai/share/id/extra")).toBeNull()
   expect(parseShareUrl("not-a-url")).toBeNull()
+})
+
+test("only attaches share auth headers for same-origin URLs", () => {
+  expect(shouldAttachShareAuthHeaders("https://control.example.com/share/abc", "https://control.example.com")).toBe(
+    true,
+  )
+  expect(
+    shouldAttachShareAuthHeaders("https://other.example.com/share/abc", "https://control.example.com"),
+  ).toBe(false)
+  expect(shouldAttachShareAuthHeaders("https://control.example.com:443/share/abc", "https://control.example.com")).toBe(
+    true,
+  )
+  expect(shouldAttachShareAuthHeaders("not-a-url", "https://control.example.com")).toBe(false)
 })
 
 // transformShareData tests
