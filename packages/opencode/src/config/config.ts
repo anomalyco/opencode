@@ -981,35 +981,6 @@ export namespace Config {
     })
   export type Provider = z.infer<typeof Provider>
 
-  export const Icon = z.union([
-    z
-      .string()
-      .describe(
-        "Path, URL, or data URL for the project icon. Relative paths are resolved from the config file location.",
-      ),
-    z
-      .object({
-        path: z
-          .string()
-          .optional()
-          .describe("Path to an icon file. Relative paths are resolved from the config file location."),
-        url: z.string().optional().describe("URL or data URL for the project icon"),
-        color: z.string().optional().describe("Avatar fallback color token or hex value"),
-      })
-      .strict(),
-  ])
-  export type Icon = z.infer<typeof Icon>
-
-  export const Project = z
-    .object({
-      icon: Icon.optional(),
-    })
-    .strict()
-    .meta({
-      ref: "ProjectConfig",
-    })
-  export type Project = z.infer<typeof Project>
-
   export const Info = z
     .object({
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
@@ -1019,8 +990,6 @@ export namespace Config {
         .record(z.string(), Command)
         .optional()
         .describe("Command configuration, see https://opencode.ai/docs/commands"),
-      icon: Icon.optional().describe("Shorthand workspace icon configuration"),
-      project: Project.optional().describe("Project metadata, such as workspace icon configuration"),
       skills: Skills.optional().describe("Additional skill folder paths"),
       watcher: z
         .object({

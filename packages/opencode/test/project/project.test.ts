@@ -202,50 +202,32 @@ describe("Project.fromDirectory with worktrees", () => {
 })
 
 describe("Project.discover", () => {
-  test("should prefer top-level icon configured in opencode.json", async () => {
+  test("should prefer icon from .opencode/icon", async () => {
     const p = await loadProject()
     const iconData = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0xaa, 0xbb, 0xcc])
-    await using tmp = await tmpdir({
-      git: true,
-      config: {
-        icon: {
-          path: "./project-icon.png",
-          color: "#123456",
-        },
-      },
-    })
-    await Bun.write(path.join(tmp.path, "project-icon.png"), iconData)
+    await using tmp = await tmpdir({ git: true })
+    await Filesystem.write(path.join(tmp.path, ".opencode", "icon", "project-icon.png"), iconData)
     await Bun.write(path.join(tmp.path, "favicon.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]))
 
     const { project } = await p.fromDirectory(tmp.path)
 
     expect(project.icon?.url).toContain(iconData.toString("base64"))
     expect(project.icon?.override).toContain(iconData.toString("base64"))
-    expect(project.icon?.color).toBe("#123456")
+    expect(project.icon?.color).toBeUndefined()
   })
 
-  test("should prefer project icon configured in opencode.json", async () => {
+  test("should prefer favicon under .opencode", async () => {
     const p = await loadProject()
-    const iconData = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0xaa, 0xbb, 0xcc])
-    await using tmp = await tmpdir({
-      git: true,
-      config: {
-        project: {
-          icon: {
-            path: "./project-icon.png",
-            color: "#123456",
-          },
-        },
-      },
-    })
-    await Bun.write(path.join(tmp.path, "project-icon.png"), iconData)
+    const localData = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x11, 0x22, 0x33, 0x44])
+    await using tmp = await tmpdir({ git: true })
+    await Filesystem.write(path.join(tmp.path, ".opencode", "assets", "favicon.png"), localData)
     await Bun.write(path.join(tmp.path, "favicon.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]))
 
     const { project } = await p.fromDirectory(tmp.path)
 
-    expect(project.icon?.url).toContain(iconData.toString("base64"))
-    expect(project.icon?.override).toContain(iconData.toString("base64"))
-    expect(project.icon?.color).toBe("#123456")
+    expect(project.icon?.url).toContain(localData.toString("base64"))
+    expect(project.icon?.override).toContain(localData.toString("base64"))
+    expect(project.icon?.color).toBeUndefined()
   })
 
   test("should discover favicon.png in root", async () => {

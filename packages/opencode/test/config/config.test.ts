@@ -56,56 +56,6 @@ test("loads JSON config file", async () => {
   })
 })
 
-test("loads project icon configuration", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await writeConfig(dir, {
-        $schema: "https://opencode.ai/config.json",
-        project: {
-          icon: {
-            path: "./project-icon.png",
-            color: "#123456",
-          },
-        },
-      })
-    },
-  })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const config = await Config.get()
-      expect(config.project?.icon).toEqual({
-        path: "./project-icon.png",
-        color: "#123456",
-      })
-    },
-  })
-})
-
-test("loads top-level icon configuration", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await writeConfig(dir, {
-        $schema: "https://opencode.ai/config.json",
-        icon: {
-          path: "./project-icon.png",
-          color: "#123456",
-        },
-      })
-    },
-  })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const config = await Config.get()
-      expect(config.icon).toEqual({
-        path: "./project-icon.png",
-        color: "#123456",
-      })
-    },
-  })
-})
-
 test("ignores legacy tui keys in opencode config", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

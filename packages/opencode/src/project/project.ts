@@ -14,31 +14,9 @@ import { GlobalBus } from "@/bus/global"
 import { existsSync } from "fs"
 import { git } from "../util/git"
 import { Glob } from "../util/glob"
-import { ConfigPaths } from "@/config/paths"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
-  const IconConfig = z.union([
-    z.string(),
-    z
-      .object({
-        path: z.string().optional(),
-        url: z.string().optional(),
-        color: z.string().optional(),
-      })
-      .strict(),
-  ])
-  const ProjectConfig = z
-    .object({
-      icon: IconConfig.optional(),
-      project: z
-        .object({
-          icon: IconConfig.optional(),
-        })
-        .strict()
-        .optional(),
-    })
-    .passthrough()
 
   function gitpath(cwd: string, name: string) {
     if (!name) return cwd
@@ -52,45 +30,61 @@ export namespace Project {
     return path.resolve(cwd, name)
   }
 
-  async function iconURL(file: string, input: string) {
-    if (input.startsWith("data:")) return input
-    if (input.startsWith("http://") || input.startsWith("https://")) return input
-    const target = path.isAbsolute(input) ? input : path.resolve(path.dirname(file), input)
-    const buffer = await Filesystem.readBytes(target)
+  function sortPath(a: string, b: string) {
+    if (a.length !== b.length) return a.length - b.length
+    return a.localeCompare(b)
+  }
+
+  async function iconURL(file: string) {
+    const text = await Filesystem.readText(file)
+      .then((x) => x.trim())
+      .catch(() => undefined)
+    if (!text) return
+    if (text.startsWith("data:")) return text
+    if (text.startsWith("http://") || text.startsWith("https://")) return text
+    const line = text
+      .split(/\r?\n/)
+      .map((x) => x.trim())
+      .find((x) => x.toUpperCase().startsWith("URL="))
+    if (!line) return
+    const url = line.slice(4).trim()
+    if (!url.startsWith("data:") && !url.startsWith("http://") && !url.startsWith("https://")) return
+    return url
+  }
+
+  async function iconData(file: string) {
+    if (path.extname(file).toLowerCase() === ".url") return iconURL(file)
+    const mime = Filesystem.mimeType(file)
+    if (!mime.startsWith("image/")) return
+    const buffer = await Filesystem.readBytes(file)
     const base64 = buffer.toString("base64")
-    const mime = Filesystem.mimeType(target) || "image/png"
     return `data:${mime};base64,${base64}`
   }
 
-  async function configuredIcon(directory: string, worktree: string) {
-    if (Flag.OPENCODE_DISABLE_PROJECT_CONFIG) return
-    const files = await ConfigPaths.projectFiles("opencode", directory, worktree)
-    const resolved = await iife(async () => {
-      let icon: z.infer<typeof IconConfig> | undefined
-      let file: string | undefined
-      for (const item of files) {
-        const text = await ConfigPaths.readFile(item)
-        if (!text) continue
-        const json = await ConfigPaths.parseText(text, item, "empty").catch(() => undefined)
-        if (!json) continue
-        const parsed = ProjectConfig.safeParse(json)
-        if (!parsed.success) continue
-        const configured = parsed.data.icon ?? parsed.data.project?.icon
-        if (!configured) continue
-        icon = configured
-        file = item
-      }
-      if (!icon || !file) return
-      const config = typeof icon === "string" ? { path: icon } : icon
-      const ref = config.url ?? config.path
-      const url = ref ? await iconURL(file, ref).catch(() => undefined) : undefined
-      if (!url && !config.color) return
-      return {
-        url,
-        color: config.color,
-      }
+  async function configuredIcon(worktree: string) {
+    const files = await Glob.scan(".opencode/icon/**/*", {
+      cwd: worktree,
+      absolute: true,
+      include: "file",
     })
-    return resolved
+
+    for (const file of files.toSorted(sortPath)) {
+      const url = await iconData(file).catch(() => undefined)
+      if (!url) continue
+      return { url }
+    }
+
+    const favicons = await Glob.scan(".opencode/**/favicon.{ico,png,svg,jpg,jpeg,webp,avif,gif,url}", {
+      cwd: worktree,
+      absolute: true,
+      include: "file",
+    })
+
+    for (const file of favicons.toSorted(sortPath)) {
+      const url = await iconData(file).catch(() => undefined)
+      if (!url) continue
+      return { url }
+    }
   }
 
   export const Info = z
@@ -285,7 +279,7 @@ export namespace Project {
       return fresh
     })
 
-    const icon = await configuredIcon(directory, data.worktree)
+    const icon = await configuredIcon(data.worktree)
       .then((item) => {
         if (!item) return existing.icon
         return {
@@ -295,7 +289,7 @@ export namespace Project {
         }
       })
       .catch((error) => {
-        log.warn("failed to load project icon from config", { error, directory, worktree: data.worktree })
+        log.warn("failed to load project icon from .opencode", { error, directory, worktree: data.worktree })
         return existing.icon
       })
     const seeded = {
@@ -357,24 +351,28 @@ export namespace Project {
     if (input.vcs !== "git") return
     if (input.icon?.override) return
     if (input.icon?.url) return
-    const matches = await Glob.scan("**/favicon.{ico,png,svg,jpg,jpeg,webp}", {
+    const preferred = await Glob.scan(".opencode/**/favicon.{ico,png,svg,jpg,jpeg,webp,avif,gif,url}", {
       cwd: input.worktree,
       absolute: true,
       include: "file",
     })
-    const shortest = matches.sort((a, b) => a.length - b.length)[0]
-    if (!shortest) return
-    const buffer = await Filesystem.readBytes(shortest)
-    const base64 = buffer.toString("base64")
-    const mime = Filesystem.mimeType(shortest) || "image/png"
-    const url = `data:${mime};base64,${base64}`
-    await update({
-      projectID: input.id,
-      icon: {
-        url,
-      },
+    const discovered = await Glob.scan("**/favicon.{ico,png,svg,jpg,jpeg,webp,avif,gif,url}", {
+      cwd: input.worktree,
+      absolute: true,
+      include: "file",
     })
-    return
+    const files = [...preferred.toSorted(sortPath), ...discovered.toSorted(sortPath)]
+    for (const file of files) {
+      const url = await iconData(file).catch(() => undefined)
+      if (!url) continue
+      await update({
+        projectID: input.id,
+        icon: {
+          url,
+        },
+      })
+      return
+    }
   }
 
   async function migrateFromGlobal(id: string, worktree: string) {
