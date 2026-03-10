@@ -244,6 +244,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
             event.stopPropagation()
             if (e.key === "Escape") {
               event.preventDefault()
+              e.currentTarget.blur()
               split.onCancel()
               return
             }

@@ -8,12 +8,40 @@
   justify-content: flex-start;
 
   [data-slot="basic-tool-tool-trigger-content"] {
-    width: 100%;
-    min-width: 0;
+    width: auto;
     display: flex;
     align-items: center;
     align-self: stretch;
     gap: 8px;
+  }
+
+  [data-slot="basic-tool-tool-indicator"] {
+    width: 16px;
+    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    [data-component="spinner"] {
+      width: 16px;
+      height: 16px;
+    }
+  }
+
+  [data-slot="basic-tool-tool-spinner"] {
+    width: 16px;
+    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--text-weak);
+
+    [data-component="spinner"] {
+      width: 16px;
+      height: 16px;
+    }
   }
 
   [data-slot="icon-svg"] {
@@ -21,15 +49,13 @@
   }
 
   [data-slot="basic-tool-tool-info"] {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-width: 0;
     font-size: 14px;
   }
 
   [data-slot="basic-tool-tool-info-structured"] {
     width: auto;
-    max-width: 100%;
-    min-width: 0;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -37,12 +63,11 @@
   }
 
   [data-slot="basic-tool-tool-info-main"] {
-    flex: 0 1 auto;
     display: flex;
-    align-items: center;
+    align-items: baseline;
     gap: 8px;
     min-width: 0;
-    overflow: clip;
+    overflow: hidden;
   }
 
   [data-slot="basic-tool-tool-title"] {
@@ -54,14 +79,22 @@
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
     color: var(--text-strong);
+
+    &.capitalize {
+      text-transform: capitalize;
+    }
+
+    &.agent-title {
+      color: var(--text-strong);
+      font-weight: var(--font-weight-medium);
+    }
   }
 
   [data-slot="basic-tool-tool-subtitle"] {
-    display: inline-block;
-    flex: 0 1 auto;
-    max-width: 100%;
+    flex-shrink: 1;
     min-width: 0;
-    overflow: clip;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
     font-family: var(--font-family-sans);
     font-variant-numeric: tabular-nums;
@@ -106,7 +139,8 @@
   [data-slot="basic-tool-tool-arg"] {
     flex-shrink: 1;
     min-width: 0;
-    overflow: clip;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
     font-family: var(--font-family-sans);
     font-variant-numeric: tabular-nums;
