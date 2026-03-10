@@ -150,7 +150,7 @@ const orgsEffect = Effect.fn("orgs")(function* () {
 
 export const LoginCommand = cmd({
   command: "login [url]",
-  describe: "log in to an opencode account",
+  describe: false,
   builder: (yargs) =>
     yargs.positional("url", {
       describe: "server URL",
@@ -164,7 +164,7 @@ export const LoginCommand = cmd({
 
 export const LogoutCommand = cmd({
   command: "logout [email]",
-  describe: "log out from an account",
+  describe: false,
   builder: (yargs) =>
     yargs.positional("email", {
       describe: "account email to log out from",
@@ -178,7 +178,7 @@ export const LogoutCommand = cmd({
 
 export const SwitchCommand = cmd({
   command: "switch",
-  describe: "switch active org",
+  describe: false,
   async handler() {
     UI.empty()
     await runtime.runPromise(switchEffect())
@@ -187,7 +187,7 @@ export const SwitchCommand = cmd({
 
 export const OrgsCommand = cmd({
   command: "orgs",
-  describe: "list all orgs",
+  describe: false,
   async handler() {
     UI.empty()
     await runtime.runPromise(orgsEffect())
