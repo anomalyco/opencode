@@ -29,14 +29,19 @@ export type PluginInput = {
   directory: string
   worktree: string
   serverUrl: URL
+  getAuth?: (provider: string) => Promise<Auth | null>
   $: BunShell
 }
 
 export type Plugin = (input: PluginInput) => Promise<Hooks>
 
+export type AuthLoaderResult = Record<string, any> & {
+  getModel?: (sdk: any, modelID: string, options?: Record<string, any>) => any
+}
+
 export type AuthHook = {
   provider: string
-  loader?: (auth: () => Promise<Auth>, provider: Provider) => Promise<Record<string, any>>
+  loader?: (auth: () => Promise<Auth>, provider: Provider) => Promise<AuthLoaderResult>
   methods: (
     | {
         type: "oauth"
@@ -231,4 +236,18 @@ export interface Hooks {
    * Modify tool definitions (description and parameters) sent to LLM
    */
   "tool.definition"?: (input: { toolID: string }, output: { description: string; parameters: any }) => Promise<void>
+  /**
+   * Register HTTP routes for this plugin.
+   * Routes are mounted under /plugin/<prefix>/ where prefix is
+   * `route.prefix`, `auth.provider`, or "unknown".
+   */
+  route?: { prefix: string; handler: (app: any) => void } | ((app: any) => void)
+  /**
+   * Called when a model is selected. Allows plugins to resolve sub-models
+   * (e.g., workflow model discovery).
+   */
+  "model.select"?: (
+    input: { providerID: string; modelID: string; sessionID?: string },
+    output: { subModel?: string; displayName?: string },
+  ) => Promise<void>
 }

@@ -105,7 +105,7 @@ export namespace Plugin {
   })
 
   export async function trigger<
-    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool">,
+    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool" | "route">,
     Input = Parameters<Required<Hooks>[Name]>[0],
     Output = Parameters<Required<Hooks>[Name]>[1],
   >(name: Name, input: Input, output: Output): Promise<Output> {
