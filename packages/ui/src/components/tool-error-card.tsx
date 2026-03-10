@@ -6,7 +6,7 @@ import { IconButton } from "./icon-button"
 import { Tooltip } from "./tooltip"
 import { useI18n } from "../context/i18n"
 
-export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "children" | "variant" | "icon"> {
+export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "children" | "variant"> {
   tool: string
   error: string
 }

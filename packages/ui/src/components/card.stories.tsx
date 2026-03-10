@@ -49,7 +49,7 @@ export default {
   render: (props: { variant?: "normal" | "error" | "warning" | "success" | "info" }) => {
     return (
       <Card variant={props.variant}>
-        <CardTitle>Card title</CardTitle>
+        <CardTitle variant={props.variant}>Card title</CardTitle>
         <CardDescription>Small supporting text.</CardDescription>
         <CardActions>
           <Button size="small" variant="secondary">

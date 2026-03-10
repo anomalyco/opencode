@@ -12,10 +12,6 @@
   border-radius: var(--radius-md);
   padding: var(--card-pad-y) var(--card-pad-r) var(--card-pad-y) var(--card-pad-l);
 
-  &:has([data-slot="card-title"]) {
-    gap: 8px;
-  }
-
   /* text-14-regular */
   font-family: var(--font-family-sans);
   font-size: var(--font-size-base);
@@ -27,13 +23,17 @@
 
   --card-gap: 8px;
   --card-icon: 16px;
-  --card-indent: calc(var(--card-icon) + var(--card-gap));
+  --card-indent: 0px;
   --card-line-pad: 8px;
 
   --card-accent: var(--icon-active);
 
-  &[data-icon="none"] {
-    --card-indent: 0px;
+  &:has([data-slot="card-title"]) {
+    gap: 8px;
+  }
+
+  &:has([data-slot="card-title-icon"]) {
+    --card-indent: calc(var(--card-icon) + var(--card-gap));
   }
 
   &::before {
