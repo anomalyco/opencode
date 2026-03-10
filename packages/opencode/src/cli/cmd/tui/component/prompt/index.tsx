@@ -9,6 +9,7 @@ import { EmptyBorder } from "@tui/component/border"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
+import { useTuiConfig } from "@tui/context/tui-config"
 import { Identifier } from "@/id/id"
 import { createStore, produce } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
@@ -34,6 +35,7 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { resolveTextareaCursor } from "../../util/textarea-cursor"
 
 export type PromptProps = {
   sessionID?: string
@@ -78,6 +80,8 @@ export function Prompt(props: PromptProps) {
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
   const kv = useKV()
+  const tuiConfig = useTuiConfig()
+  const textareaCursor = createMemo(() => resolveTextareaCursor(theme, tuiConfig))
 
   function promptModelWarning() {
     toast.show({
@@ -110,8 +114,9 @@ export function Prompt(props: PromptProps) {
   })
 
   createEffect(() => {
+    input.cursorStyle = textareaCursor().cursorStyle
     if (props.disabled) input.cursorColor = theme.backgroundElement
-    if (!props.disabled) input.cursorColor = theme.text
+    if (!props.disabled) input.cursorColor = textareaCursor().cursorColor
   })
 
   const lastUserMessage = createMemo(() => {
@@ -1004,12 +1009,14 @@ export function Prompt(props: PromptProps) {
                 setTimeout(() => {
                   // setTimeout is a workaround and needs to be addressed properly
                   if (!input || input.isDestroyed) return
-                  input.cursorColor = theme.text
+                  input.cursorColor = textareaCursor().cursorColor
+                  input.cursorStyle = textareaCursor().cursorStyle
                 }, 0)
               }}
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
               focusedBackgroundColor={theme.backgroundElement}
-              cursorColor={theme.text}
+              cursorColor={textareaCursor().cursorColor}
+              cursorStyle={textareaCursor().cursorStyle}
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>

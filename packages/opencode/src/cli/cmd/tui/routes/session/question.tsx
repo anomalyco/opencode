@@ -9,12 +9,16 @@ import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
 import { useTextareaKeybindings } from "../../component/textarea-keybindings"
 import { useDialog } from "../../ui/dialog"
+import { useTuiConfig } from "../../context/tui-config"
+import { resolveTextareaCursor } from "../../util/textarea-cursor"
 
 export function QuestionPrompt(props: { request: QuestionRequest }) {
   const sdk = useSDK()
   const { theme } = useTheme()
   const keybind = useKeybind()
   const bindings = useTextareaKeybindings()
+  const tuiConfig = useTuiConfig()
+  const cursor = createMemo(() => resolveTextareaCursor(theme, tuiConfig, theme.primary))
 
   const questions = createMemo(() => props.request.questions)
   const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
@@ -391,7 +395,8 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                         maxHeight={6}
                         textColor={theme.text}
                         focusedTextColor={theme.text}
-                        cursorColor={theme.primary}
+                        cursorColor={cursor().cursorColor}
+                        cursorStyle={cursor().cursorStyle}
                         keyBindings={bindings()}
                       />
                     </box>

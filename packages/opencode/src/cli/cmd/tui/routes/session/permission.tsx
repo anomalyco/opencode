@@ -16,6 +16,7 @@ import { Locale } from "@/util/locale"
 import { Global } from "@/global"
 import { useDialog } from "../../ui/dialog"
 import { useTuiConfig } from "../../context/tui-config"
+import { resolveTextareaCursor } from "../../util/textarea-cursor"
 
 type PermissionStage = "permission" | "always" | "reject"
 
@@ -473,6 +474,8 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
   const dimensions = useTerminalDimensions()
   const narrow = createMemo(() => dimensions().width < 80)
   const dialog = useDialog()
+  const tuiConfig = useTuiConfig()
+  const cursor = createMemo(() => resolveTextareaCursor(theme, tuiConfig, theme.primary))
 
   useKeyboard((evt) => {
     if (dialog.stack.length > 0) return
@@ -521,7 +524,8 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
           focused
           textColor={theme.text}
           focusedTextColor={theme.text}
-          cursorColor={theme.primary}
+          cursorColor={cursor().cursorColor}
+          cursorStyle={cursor().cursorStyle}
           keyBindings={textareaKeybindings()}
         />
         <box flexDirection="row" gap={2} flexShrink={0}>

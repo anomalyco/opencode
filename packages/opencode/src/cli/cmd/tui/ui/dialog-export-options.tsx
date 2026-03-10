@@ -4,6 +4,8 @@ import { useDialog, type DialogContext } from "./dialog"
 import { createStore } from "solid-js/store"
 import { onMount, Show, type JSX } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
+import { useTuiConfig } from "../context/tui-config"
+import { resolveTextareaCursor } from "../util/textarea-cursor"
 
 export type DialogExportOptionsProps = {
   defaultFilename: string
@@ -24,6 +26,8 @@ export type DialogExportOptionsProps = {
 export function DialogExportOptions(props: DialogExportOptionsProps) {
   const dialog = useDialog()
   const { theme } = useTheme()
+  const tuiConfig = useTuiConfig()
+  const cursor = () => resolveTextareaCursor(theme, tuiConfig)
   let textarea: TextareaRenderable
   const [store, setStore] = createStore({
     thinking: props.defaultThinking,
@@ -105,7 +109,8 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
           placeholder="Enter filename"
           textColor={theme.text}
           focusedTextColor={theme.text}
-          cursorColor={theme.text}
+          cursorColor={cursor().cursorColor}
+          cursorStyle={cursor().cursorStyle}
         />
       </box>
       <box flexDirection="column">

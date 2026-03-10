@@ -3,6 +3,8 @@ import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 import { onMount, type JSX } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
+import { useTuiConfig } from "../context/tui-config"
+import { resolveTextareaCursor } from "../util/textarea-cursor"
 
 export type DialogPromptProps = {
   title: string
@@ -16,6 +18,8 @@ export type DialogPromptProps = {
 export function DialogPrompt(props: DialogPromptProps) {
   const dialog = useDialog()
   const { theme } = useTheme()
+  const tuiConfig = useTuiConfig()
+  const cursor = () => resolveTextareaCursor(theme, tuiConfig)
   let textarea: TextareaRenderable
 
   useKeyboard((evt) => {
@@ -56,7 +60,8 @@ export function DialogPrompt(props: DialogPromptProps) {
           placeholder={props.placeholder ?? "Enter text"}
           textColor={theme.text}
           focusedTextColor={theme.text}
-          cursorColor={theme.text}
+          cursorColor={cursor().cursorColor}
+          cursorStyle={cursor().cursorStyle}
         />
       </box>
       <box paddingBottom={1} gap={1} flexDirection="row">
