@@ -1,26 +1,20 @@
 [data-component="card"][data-kind="tool-error-card"] {
-  padding: 0;
+  --card-pad-y: 8px;
+  --card-line-pad: 12px;
 
-  &::before {
-    content: none;
+  > [data-component="collapsible"].tool-collapsible {
+    gap: 0px;
+  }
+
+  > [data-component="collapsible"].tool-collapsible[data-open="true"] {
+    gap: 4px;
   }
 
   [data-component="tool-error-card-icon"] [data-component="icon"] {
     color: var(--card-accent);
   }
 
-  &[data-open="true"] [data-slot="tool-error-card-content"] {
-    position: relative;
-  }
-
-  &[data-open="true"] [data-slot="tool-error-card-content"]::before {
-    content: "";
-    position: absolute;
-    left: calc((var(--card-icon) / 2) - 1px);
-    top: calc(var(--card-gap) * -1);
-    bottom: 0;
-    width: 2px;
-    border-radius: 2px;
-    background-color: var(--card-accent);
+  [data-slot="tool-error-card-content"] {
+    margin-bottom: 8px;
   }
 }
