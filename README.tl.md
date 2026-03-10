@@ -7,7 +7,7 @@
     </picture>
   </a>
 </p>
-<p align="center">Ang open source na AI coding agent.</p>
+<p align="center">Isang AI na ahente sa coding na bukas para sa lahat.</p>
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
@@ -49,7 +49,7 @@
 # YOLO
 curl -fsSL https://opencode.ai/install | bash
 
-# Mga Package Manager
+# Mga Tagapamahala ng Package
 npm i -g opencode-ai@latest         # o bun/pnpm/yarn
 scoop install opencode              # Windows
 choco install opencode              # Windows
@@ -62,13 +62,13 @@ nix run nixpkgs#opencode            # o github:anomalyco/opencode para sa napapa
 ```
 
 > [!TIP]
-> Alisin ang mga bersyong mas luma sa 0.1.x bago i-install.
+> Tanggalin ang mga bersyong mas mababa sa 0.1.x bago mag-install.
 
 ### Aplikasyon sa Desktop (BETA)
 
-Makukuha rin ang OpenCode bilang aplikasyon sa desktop. I-download nang direkta mula sa [releases page](https://github.com/anomalyco/opencode/releases) o [opencode.ai/download](https://opencode.ai/download).
+Magagamit din ang OpenCode bilang desktop na aplikasyon. I-download ito nang direkta mula sa [releases page](https://github.com/anomalyco/opencode/releases) o [opencode.ai/download](https://opencode.ai/download).
 
-| Plataforma            | I-download                            |
+| Sistemang Operatibo   | Pag-download                          |
 | --------------------- | ------------------------------------- |
 | macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
 | macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
@@ -82,13 +82,13 @@ brew install --cask opencode-desktop
 scoop bucket add extras; scoop install extras/opencode-desktop
 ```
 
-#### Direktoryo ng Pag-install
+#### Lokasyon ng Pag-install
 
-Iginagalang ng install script ang sumusunod na pagkakasunud-sunod ng prayoridad para sa landas ng pag-install:
+Ang skript ng pag-install ay sumusunod sa ganitong prayoridad para sa lokasyon ng pag-install:
 
-1. `$OPENCODE_INSTALL_DIR` - Pasadyang direktoryo ng pag-install
-2. `$XDG_BIN_DIR` - Landas na sumusunod sa espesipikasyon ng XDG Base Directory
-3. `$HOME/bin` - Karaniwang direktoryo ng binary ng gumagamit (kung mayroon o maaaring malikha)
+1. `$OPENCODE_INSTALL_DIR` - Pasadyang lokasyon ng pag-install
+2. `$XDG_BIN_DIR` - Landas na sumusunod sa pamantayan ng XDG Base Directory
+3. `$HOME/bin` - Karaniwang lokasyon ng mga binary ng gumagamit (kung mayroon o puwedeng malikha)
 4. `$HOME/.opencode/bin` - Default na fallback
 
 ```bash
@@ -97,44 +97,44 @@ OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bas
 XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ```
 
-### Agents
+### Mga Agent
 
-Kasama sa OpenCode ang dalawang nakapaloob na agent na maaari mong magamit sa pamamagitan ng `Tab` key.
+Kasama sa OpenCode ang dalawang built-in na agent na maaari mong gamitin gamit ang `Tab` key:
 
-- **build** - Default, kumpletong access sa agent para sa mga gawaing pag buo
-- **plan** - Read-only agent para sa pagsusuri at paggalugad ng code
-  - Tinatanggihan ang mga pag-edit ng file bilang default
+- **build** – Default agent na may kumpletong access para sa mga gawaing pagbuo
+- **plan** – Read-only na agent para sa pagsusuri at paggalugad ng code
+  - Hindi pinapayagang mag-edit ng mga file bilang default
   - Humihingi ng pahintulot bago patakbuhin ang mga utos ng bash
-  - Mainam para sa paggalugad ng mga hindi pamilyar na codebase o pagpaplano ng mga pagbabago
+  - Mainam para sa paggalugad ng hindi pamilyar na codebase o pagpaplano ng mga pagbabago
 
-Kasama rin ang isang **general** subagent para sa mga kumplikadong paghahanap at mga gawaing may maraming hakbang.
-Ginagamit ito sa loob at maaaring gamitin sa pamamagitan ng `@general` sa mensahe.
+Kasama rin ang isang **general** subagent para sa mga kumplikadong paghahanap at gawaing may maraming hakbang.  
+Ginagamit ito sa loob at maaaring tawagin gamit ang `@general` sa mga mensahe.
 
 Matuto nang higit pa tungkol sa [agents](https://opencode.ai/docs/agents).
 
 ### Dokumentasyon
 
-Para sa karagdagang impormasyon kung paano i-configure ang OpenCode, [**head over to our docs**](https://opencode.ai/docs).
+Para sa karagdagang impormasyon kung paano i-configure ang OpenCode, bisitahin ang aming [dokumentasyon](https://opencode.ai/docs).
 
 ### Kontribusyon
 
-Kung interesado kang mag-ambag sa OpenCode, pakibasa ang aming [mga dokumentong nag-aambag](./CONTRIBUTING.md) bago magsumite ng pull request.
+Kung nais mong mag-ambag sa OpenCode, basahin muna ang aming [mga dokumentong nag-aambag](./CONTRIBUTING.md) bago magsumite ng pull request.
 
 ### Pagbuo gamit ang OpenCode
 
-Kung ikaw ay nagtatrabaho sa isang proyektong may kaugnayan sa OpenCode at ginagamit ang "opencode" bilang bahagi ng pangalan nito, halimbawa "opencode-dashboard" o "opencode-mobile", mangyaring magdagdag ng tala sa iyong README upang linawin na hindi ito ginawa ng pangkat ng OpenCode at hindi kaakibat sa amin sa anumang paraan.
+Kung nagtatrabaho ka sa proyektong may kaugnayan sa OpenCode at ginagamit ang "opencode" sa pangalan nito, tulad ng "opencode-dashboard" o "opencode-mobile", maglagay ng paalala sa iyong README upang linawin na hindi ito ginawa ng koponan ng OpenCode at hindi kaakibat sa amin.
 
-### Mga Madalas Itanong
+### Mga Kadalasang Tanong
 
-#### Paano ito naiiba sa Claude Code?
+#### Paano naiiba ang OpenCode sa Claude Code?
 
-Ito ay halos kapareho ng Claude Code sa usapin ng kakayahan. Narito ang mga pangunahing pagkakaiba:
+Halos pareho ang OpenCode sa Claude Code sa kakayahan, ngunit narito ang mga pangunahing pagkakaiba:
 
-- 100 poryestong open source
-- Hindi konektado sa kahit anong provider. Bagama't inirerekomenda namin ang mga modelong ibinibigay namin sa pamamagitan ng [OpenCode Zen](https://opencode.ai/zen), maaaring gamitin ang OpenCode kasama ng Claude, OpenAI, Google, o kahit ng mga lokal na modelo. Habang umuunlad ang mga modelo, magsasara ang mga agwat sa pagitan ng mga ito at bababa ang presyo, kaya mahalaga ang pagiging agnostiko sa provider.
-- Agad na supporta sa LSP
-- Nakatuon sa TUI. Ang OpenCode ay binuo ng mga gumagamit ng neovim at ng mga tagalikha ng [terminal.shop](https://terminal.shop); susubukan naming lampasan ang mga limitasyon ng kung ano ang posible sa terminal.
-- Isang arkitektura ng kliyente/server. Halimbawa, maaari nitong payagan ang OpenCode na tumakbo sa iyong computer habang ginagamit mo ito nang malayuan mula sa isang mobile app, ibig sabihin ang TUI frontend ay isa lamang sa mga posibleng kliyente.
+- 100% bukas na pinagmulan
+- Hindi nakadepende sa anumang provider. Bagama’t inirerekomenda namin ang mga modelong makukuha sa pamamagitan ng [OpenCode Zen](https://opencode.ai/zen), puwede mong gamitin ang OpenCode kasama ng Claude, OpenAI, Google, o lokal na mga modelo. Habang umuunlad ang mga modelo, magsasara ang mga agwat at bababa ang presyo, kaya mahalaga ang pagiging provider-agnostic.
+- Agad na suporta para sa LSP
+- Nakatuon sa TUI. Ang OpenCode ay binuo ng mga gumagamit ng neovim at ng mga tagalikha ng [terminal.shop](https://terminal.shop), layunin naming lampasan ang mga limitasyon ng terminal.
+- May arkitektura ng kliyente/server. Halimbawa, puwede nitong patakbuhin ang OpenCode sa iyong computer habang ginagamit mo ito nang malayuan mula sa aplikasyon sa telepono, ibig sabihin, ang TUI frontend ay isa lamang sa maraming posibleng kliyente.
 
 ---
 
