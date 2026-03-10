@@ -91,8 +91,8 @@ export function Home() {
       () => sync.ready && local.model.ready,
       (ready) => {
         if (!ready) return
-        if (!args.prompt) return
-        if (prompt.current?.input !== args.prompt) return
+        if (!args.data.prompt) return
+        if (prompt.current?.input !== args.data.prompt) return
         prompt.submit()
       },
     ),
