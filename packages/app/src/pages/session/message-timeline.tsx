@@ -146,13 +146,97 @@ const markBoundaryGesture = (input: {
 function TimelineThinkingRow(props: { reasoningHeading?: string; showReasoningSummaries: boolean }) {
   const language = useLanguage()
 
-  return (
-    <div data-slot="session-turn-thinking">
-      <TextShimmer text={language.t("ui.sessionTurn.status.thinking")} />
-      <Show when={!props.showReasoningSummaries}>
-        <TextReveal text={props.reasoningHeading} class="session-turn-thinking-heading" travel={25} duration={700} />
-      </Show>
-    </div>
+type TimelineStageInput = {
+  sessionKey: () => string
+  turnStart: () => number
+  messages: () => UserMessage[]
+  scroller: () => HTMLDivElement | undefined
+  config: StageConfig
+}
+
+/**
+ * Defer-mounts small timeline windows so revealing older turns does not
+ * block first paint with a large DOM mount.
+ *
+ * Once staging completes for a session it never re-stages — backfill and
+ * new messages render immediately.
+ */
+function createTimelineStaging(input: TimelineStageInput) {
+  const [state, setState] = createStore({
+    activeSession: "",
+    completedSession: "",
+    count: 0,
+  })
+
+  const stagedCount = createMemo(() => {
+    const total = input.messages().length
+    if (input.turnStart() <= 0) return total
+    if (state.completedSession === input.sessionKey()) return total
+    const init = Math.min(total, input.config.init)
+    if (state.count <= init) return init
+    if (state.count >= total) return total
+    return state.count
+  })
+
+  const stagedUserMessages = createMemo(() => {
+    const list = input.messages()
+    const count = stagedCount()
+    if (count >= list.length) return list
+    return list.slice(Math.max(0, list.length - count))
+  })
+
+  let frame: number | undefined
+  const cancel = () => {
+    if (frame === undefined) return
+    cancelAnimationFrame(frame)
+    frame = undefined
+  }
+
+  createEffect(
+    on(
+      () => [input.sessionKey(), input.turnStart() > 0, input.messages().length] as const,
+      ([sessionKey, isWindowed, total]) => {
+        cancel()
+        const shouldStage =
+          isWindowed &&
+          total > input.config.init &&
+          state.completedSession !== sessionKey &&
+          state.activeSession !== sessionKey
+        if (!shouldStage) {
+          setState({ activeSession: "", count: total })
+          return
+        }
+
+        let count = Math.min(total, input.config.init)
+        setState({ activeSession: sessionKey, count })
+
+        const step = () => {
+          if (input.sessionKey() !== sessionKey) {
+            frame = undefined
+            return
+          }
+          const el = input.scroller()
+          const gap = el ? el.scrollHeight - el.clientHeight - el.scrollTop : 0
+          const currentTotal = input.messages().length
+          count = Math.min(currentTotal, count + input.config.batch)
+          startTransition(() => setState("count", count))
+          if (el) {
+            requestAnimationFrame(() => {
+              if (input.sessionKey() !== sessionKey) return
+              const next = el.scrollHeight - el.clientHeight - gap
+              el.scrollTop = next > 0 ? next : 0
+            })
+          }
+          if (count >= currentTotal) {
+            setState({ completedSession: sessionKey, activeSession: "" })
+            frame = undefined
+            return
+          }
+          frame = requestAnimationFrame(step)
+        }
+        frame = requestAnimationFrame(step)
+      },
+    ),
   )
 }
 
@@ -271,6 +355,7 @@ export function MessageTimeline(props: {
   setRevealMessage?: (fn: (id: string) => void) => void
 }) {
   let touchGesture: number | undefined
+  let scroll: HTMLDivElement | undefined
 
   const navigate = useNavigate()
   const globalSDK = useGlobalSDK()
@@ -388,140 +473,13 @@ export function MessageTimeline(props: {
     return language.t("command.session.new")
   })
   const showHeader = createMemo(() => !!(titleValue() || parentID()))
-
-  const messageRowMemos = createMemo(
-    mapArray(
-      () => props.userMessages,
-      (userMessage, indexAccessor) => {
-        return createMemo((previous: TimelineRow.TimelineRow[] | undefined) => {
-          const rows = Timeline.constructMessageRows(
-            userMessage,
-            getMsgParts,
-            assistantMessagesByParent().get(userMessage.id) ?? emptyAssistantMessages,
-            indexAccessor(),
-            settings.general.showReasoningSummaries(),
-            sessionStatus().type,
-            activeMessageID() === userMessage.id,
-          )
-
-          return reuseTimelineRows(previous, rows)
-        })
-      },
-    ),
-  )
-
-  const timelineRows = createMemo((previous: TimelineRow.TimelineRow[] | undefined) => {
-    const rows = messageRowMemos().flatMap((memo) => memo())
-    if (rows.length === 0) return rows
-    return reuseTimelineRows(previous, [...rows, new TimelineRow.BottomSpacer()])
-  })
-  const timelineRowByKey = createMemo(() => new Map(timelineRows().map((row) => [TimelineRow.key(row), row] as const)))
-  const timelineRowKeys = createMemo(() => [...timelineRowByKey().keys()], [] as string[], { equals: sameKeys })
-  const virtualCache = createMemo(() => readTimelineCache(sessionKey(), timelineRowKeys()))
-  const messageRowIndex = createMemo(() => {
-    const result = new Map<string, number>()
-    timelineRows().forEach((row, index) => {
-      if (!("userMessageID" in row)) return
-      if (result.has(row.userMessageID)) return
-      result.set(row.userMessageID, index)
-    })
-    return result
-  })
-  const keepMounted = createMemo(() => {
-    const id = activeMessageID()
-    if (!id) return
-    const rows = timelineRows()
-    const index = rows.findLastIndex((row) => "userMessageID" in row && row.userMessageID === id)
-    if (index < 0) return
-    return [index]
-  })
-  const activeAssistantMessages = createMemo(() => {
-    const id = activeMessageID() ?? props.userMessages[props.userMessages.length - 1]?.id
-    if (!id) return emptyAssistantMessages
-    return assistantMessagesByParent().get(id) ?? emptyAssistantMessages
-  })
-  const activeAssistantContentVersion = createMemo(() =>
-    activeAssistantMessages()
-      .flatMap((message) => [
-        `${message.id}:${message.time.completed ?? ""}:${message.error?.name ?? ""}`,
-        ...getMsgParts(message.id).map((part) => {
-          if (part.type === "text" || part.type === "reasoning") return `${part.id}:${part.type}:${part.text.length}`
-          if (part.type === "tool") {
-            const metadata = "metadata" in part.state ? part.state.metadata : undefined
-            const output =
-              "output" in part.state && typeof part.state.output === "string" ? part.state.output.length : 0
-            const metadataOutput =
-              metadata && typeof metadata === "object" && "output" in metadata && typeof metadata.output === "string"
-                ? metadata.output.length
-                : 0
-            return `${part.id}:${part.tool}:${part.state.status}:${output}:${metadataOutput}`
-          }
-          return `${part.id}:${part.type}`
-        }),
-      ])
-      .join("|"),
-  )
-
-  createEffect(
-    on(
-      () => [timelineRowKeys(), activeAssistantContentVersion(), sessionStatus().type] as const,
-      () => {
-        if (!virtualizer) return
-        if (!props.shouldAnchorBottom() && !measuredBottomAnchored) return
-        const keys = timelineRowKeys()
-        if (keys.length === 0) return
-        virtualizer.scrollToIndex(keys.length - 1, { align: "end" })
-        scheduleMeasuredBottomAnchor()
-      },
-      { defer: true },
-    ),
-  )
-
-  createEffect(() => {
-    props.setRevealMessage?.((id) => {
-      const index = messageRowIndex().get(id)
-      if (index === undefined) return
-      virtualizer?.scrollToIndex(index, { align: "center" })
-    })
-  })
-
-  let cacheSessionKey = sessionKey()
-  let cacheRowKeys = timelineRowKeys()
-  let virtualizerSessionKey = cacheSessionKey
-  let virtualizerRowKeys = cacheRowKeys
-  let bottomAnchorSessionKey = ""
-
-  const maybeAnchorBottom = () => {
-    const key = sessionKey()
-    if (bottomAnchorSessionKey === key) return
-    if (!virtualizer) return
-    const keys = timelineRowKeys()
-    if (keys.length === 0) return
-    bottomAnchorSessionKey = key
-    if (!props.shouldAnchorBottom()) return
-    virtualizer.scrollToIndex(keys.length - 1, { align: "end" })
-  }
-
-  createEffect(
-    on(
-      () => [sessionKey(), timelineRowKeys()] as const,
-      (next, prev) => {
-        if (prev && prev[0] !== next[0]) writeTimelineCache(prev[0], prev[1], virtualizer)
-        cacheSessionKey = next[0]
-        cacheRowKeys = next[1]
-        if (virtualizer) {
-          virtualizerSessionKey = cacheSessionKey
-          virtualizerRowKeys = cacheRowKeys
-          maybeAnchorBottom()
-        }
-      },
-      { defer: true },
-    ),
-  )
-
-  onCleanup(() => {
-    writeTimelineCache(virtualizerSessionKey, virtualizerRowKeys, virtualizer)
-    props.setRevealMessage?.(() => {})
+  const stageCfg = { init: 1, batch: 3 }
+  const staging = createTimelineStaging({
+    sessionKey,
+    turnStart: () => props.turnStart,
+    messages: () => props.renderedUserMessages,
+    scroller: () => scroll,
+    config: stageCfg,
   })
 
   const [title, setTitle] = createStore({
@@ -942,7 +900,51 @@ export function MessageTimeline(props: {
     )
   }
 
-  const workingTurn = (userMessageID: string) => sessionStatus().type !== "idle" && activeMessageID() === userMessageID
+  return (
+    <Show
+      when={!props.mobileChanges}
+      fallback={<div class="relative h-full overflow-hidden">{props.mobileFallback}</div>}
+    >
+      <div class="relative w-full h-full min-w-0">
+        <div
+          class="absolute left-1/2 -translate-x-1/2 bottom-6 z-[60] pointer-events-none transition-all duration-200 ease-out"
+          classList={{
+            "opacity-100 translate-y-0 scale-100":
+              props.scroll.overflow && !props.scroll.bottom && !staging.isStaging(),
+            "opacity-0 translate-y-2 scale-95 pointer-events-none":
+              !props.scroll.overflow || props.scroll.bottom || staging.isStaging(),
+          }}
+        >
+          <button
+            class="pointer-events-auto size-8 flex items-center justify-center rounded-full bg-background-base border border-border-base shadow-sm text-text-base hover:bg-background-stronger transition-colors"
+            onClick={props.onResumeScroll}
+          >
+            <Icon name="arrow-down-to-line" />
+          </button>
+        </div>
+        <ScrollView
+          viewportRef={(el) => {
+            scroll = el
+            props.setScrollRef(el)
+          }}
+          onWheel={(e) => {
+            const root = e.currentTarget
+            const delta = normalizeWheelDelta({
+              deltaY: e.deltaY,
+              deltaMode: e.deltaMode,
+              rootHeight: root.clientHeight,
+            })
+            if (!delta) return
+            markBoundaryGesture({ root, target: e.target, delta, onMarkScrollGesture: props.onMarkScrollGesture })
+          }}
+          onTouchStart={(e) => {
+            touchGesture = e.touches[0]?.clientY
+          }}
+          onTouchMove={(e) => {
+            const next = e.touches[0]?.clientY
+            const prev = touchGesture
+            touchGesture = next
+            if (next === undefined || prev === undefined) return
 
   const turnDurationMs = (userMessageID: string) => {
     const message = messageByID().get(userMessageID)

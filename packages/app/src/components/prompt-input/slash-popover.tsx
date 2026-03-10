@@ -59,7 +59,7 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
                     return (
                       <button
                         class="w-full flex items-center gap-x-2 rounded-md px-2 py-0.5"
-                        classList={{ "bg-surface-raised-base-hover": props.atActive === key }}
+                        classList={{ "bg-surface-raised-base-active": props.atActive === key }}
                         onClick={() => props.onAtSelect(item)}
                         onMouseEnter={() => props.setAtActive(key)}
                       >
@@ -76,7 +76,7 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
                   return (
                     <button
                       class="w-full flex items-center gap-x-2 rounded-md px-2 py-0.5"
-                      classList={{ "bg-surface-raised-base-hover": props.atActive === key }}
+                      classList={{ "bg-surface-raised-base-active": props.atActive === key }}
                       onClick={() => props.onAtSelect(item)}
                       onMouseEnter={() => props.setAtActive(key)}
                     >

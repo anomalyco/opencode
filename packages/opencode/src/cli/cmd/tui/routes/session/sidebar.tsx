@@ -13,14 +13,81 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const project = useProject()
   const sync = useSync()
   const { theme } = useTheme()
-  const tuiConfig = useTuiConfig()
-  const session = createMemo(() => sync.session.get(props.sessionID))
-  const workspace = () => {
-    const workspaceID = session()?.workspaceID
-    if (!workspaceID) return
-    return project.workspace.get(workspaceID)
-  }
-  const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
+  const session = createMemo(() => sync.session.get(props.sessionID)!)
+  const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
+  const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
+  const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
+
+  const [expanded, setExpanded] = createStore({
+    mcp: true,
+    diff: true,
+    todo: true,
+    lsp: true,
+  })
+
+  // Sort MCP servers alphabetically for consistent display order
+  const mcpEntries = createMemo(() => Object.entries(sync.data.mcp).sort(([a], [b]) => a.localeCompare(b)))
+
+  // Count connected and error MCP servers for collapsed header display
+  const connectedMcpCount = createMemo(() => mcpEntries().filter(([_, item]) => item.status === "connected").length)
+  const errorMcpCount = createMemo(
+    () =>
+      mcpEntries().filter(
+        ([_, item]) =>
+          item.status === "failed" || item.status === "needs_auth" || item.status === "needs_client_registration",
+      ).length,
+  )
+
+  const cost = createMemo(() => {
+    const total = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+    }).format(total)
+  })
+
+  const context = createMemo(() => {
+    const last = messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage
+    if (!last) return
+    const total =
+      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
+    const list = [
+      ...sync.data.provider,
+      ...sync.data.provider_next.all.map((x) => ({
+        id: x.id,
+        models: x.models,
+      })),
+    ]
+    const provider = list.find((x) => x.id === last.providerID)
+    const parts = last.modelID.split("/")
+    const ids = parts.flatMap((_, i, arr) =>
+      arr.slice(i).flatMap((__, j, sub) => sub.slice(0, sub.length - j).join("/")),
+    )
+    const model =
+      ids.flatMap((id) => {
+        const item = provider?.models[id]
+        return item ? [item] : []
+      })[0] ??
+      ids.flatMap((id) => {
+        const item = list.flatMap((x) => {
+          const model = x.models[id]
+          return model ? [model] : []
+        })
+        return item
+      })[0]
+    return {
+      tokens: total.toLocaleString(),
+      percentage: model?.limit.context ? Math.round((total / model.limit.context) * 100) : null,
+    }
+  })
+
+  const directory = useDirectory()
+  const kv = useKV()
+
+  const hasProviders = createMemo(() =>
+    sync.data.provider.some((x) => x.id !== "opencode" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
+  )
+  const gettingStartedDismissed = createMemo(() => kv.get("dismissed_getting_started", false))
 
   return (
     <Show when={session()}>

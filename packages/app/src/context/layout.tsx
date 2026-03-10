@@ -164,11 +164,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         if (!isRecord(fileTree)) return fileTree
         if (fileTree.tab === "changes" || fileTree.tab === "all") return fileTree
 
-        const width = typeof fileTree.width === "number" ? fileTree.width : DEFAULT_FILE_TREE_WIDTH
+        const width = typeof fileTree.width === "number" ? fileTree.width : DEFAULT_PANEL_WIDTH
+        const opened = typeof fileTree.opened === "boolean" ? fileTree.opened : true
         return {
           ...fileTree,
-          opened: true,
-          width: width === 260 ? DEFAULT_FILE_TREE_WIDTH : width,
+          opened,
+          width: width === 260 ? DEFAULT_PANEL_WIDTH : width,
           tab: "changes",
         }
       })()
@@ -177,7 +178,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         if (!isRecord(review)) return review
         if (typeof review.panelOpened === "boolean") return review
 
-        const opened = isRecord(fileTree) && typeof fileTree.opened === "boolean" ? fileTree.opened : true
+        const opened = isRecord(fileTree) && typeof fileTree.opened === "boolean" ? fileTree.opened : false
         return {
           ...review,
           panelOpened: opened,

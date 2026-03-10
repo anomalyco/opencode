@@ -8,6 +8,33 @@ import { Spinner } from "./spinner"
 import { TextShimmer } from "./text-shimmer"
 import { suppressAutoScrollResize } from "../hooks/create-auto-scroll"
 
+const BUILTIN_TOOLS = new Set([
+  "apply_patch",
+  "bash",
+  "batch",
+  "codesearch",
+  "edit",
+  "glob",
+  "grep",
+  "invalid",
+  "list",
+  "lsp",
+  "plan_exit",
+  "question",
+  "read",
+  "skill",
+  "task",
+  "todoread",
+  "todowrite",
+  "webfetch",
+  "websearch",
+  "write",
+])
+
+function customTool(tool: string) {
+  return !BUILTIN_TOOLS.has(tool.toLowerCase())
+}
+
 export type TriggerTitle = {
   title: string
   titleClass?: string
@@ -307,14 +334,15 @@ export function GenericTool(props: {
   hideDetails?: boolean
   input?: Record<string, unknown>
 }) {
-  const i18n = useI18n()
+  const hook = customTool(props.tool)
 
   return (
     <BasicTool
       icon="mcp"
       status={props.status}
       trigger={{
-        title: i18n.t("ui.basicTool.called", { tool: props.tool }),
+        title: `Called \`${props.tool}\``,
+        titleClass: hook ? "hook-name" : undefined,
         subtitle: label(props.input),
         args: args(props.input),
       }}

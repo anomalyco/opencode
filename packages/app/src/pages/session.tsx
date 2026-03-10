@@ -118,9 +118,22 @@ type SessionHistoryWindowInput = {
   scroller: () => HTMLDivElement | undefined
 }
 
-function createSessionHistoryLoader(input: SessionHistoryWindowInput) {
-  const historyScrollThreshold = 200
-  let shiftFrame: number | undefined
+/**
+ * Maintains the rendered history window for a session timeline.
+ *
+ * It keeps initial paint bounded to recent turns, reveals cached turns in
+ * small batches while scrolling upward, and prefetches older history near top.
+ */
+function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
+  const turnInit = 10
+  const turnBatch = 8
+  const turnScrollThreshold = 200
+  const turnPrefetchBuffer = 16
+  const prefetchCooldownMs = 400
+  const prefetchNoGrowthLimit = 2
+  const turnBottomThreshold = 24
+
+  let prevTop = 0
 
   const [state, setState] = createStore({
     shift: false,
@@ -199,7 +212,24 @@ export default function Page() {
     if (!input.userScrolled()) return
     const el = input.scroller()
     if (!el) return
-    if (el.scrollTop >= historyScrollThreshold) return
+
+    const top = el.scrollTop
+    const max = Math.max(0, el.scrollHeight - el.clientHeight)
+    const down = top > prevTop
+    prevTop = top
+
+    if (max - top <= turnBottomThreshold) return
+    if (down) return
+    if (top >= turnScrollThreshold) return
+
+    const start = turnStart()
+    if (start > 0) {
+      if (start <= turnPrefetchBuffer) {
+        void fetchOlderMessages({ prefetch: true })
+      }
+      backfillTurns()
+      return
+    }
 
     void fetchOlderMessages()
   }
@@ -208,8 +238,8 @@ export default function Page() {
     on(
       input.sessionID,
       () => {
-        cancelShiftReset()
-        setState({ shift: false })
+        prevTop = 0
+        setState({ prefetchUntil: 0, prefetchNoGrowth: 0 })
       },
       { defer: true },
     ),
@@ -418,7 +448,8 @@ export default function Page() {
       () => {
         const msg = lastUserMessage()
         if (!msg) return
-        syncSessionModel(local, msg)
+        if (msg.agent) local.agent.set(msg.agent)
+        if (msg.model) local.model.set(msg.model)
       },
     ),
   )
@@ -556,7 +587,7 @@ export default function Page() {
   const newSessionWorktree = createMemo(() => {
     if (store.newSessionWorktree === "create") return "create"
     const project = sync.project
-    const directory = sync.data.path.directory
+    const directory = sdk.directory
     if (project && directory && directory.trim() !== "" && directory !== project.worktree) {
       return directory
     }

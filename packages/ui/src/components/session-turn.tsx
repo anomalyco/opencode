@@ -21,7 +21,7 @@ import { Icon } from "./icon"
 import { TextShimmer } from "./text-shimmer"
 import { SessionRetry } from "./session-retry"
 import { TextReveal } from "./text-reveal"
-import { createAutoScroll } from "../hooks"
+import { createAutoScroll, suppressAutoScrollResize } from "../hooks"
 import { useI18n } from "../context/i18n"
 import { normalize } from "./session-diff"
 
@@ -345,18 +345,22 @@ export function SessionTurn(
   })
   const MAX_FILES = 10
   const edited = createMemo(() => diffs().length)
-  const [state, setState] = createStore({
-    showAll: false,
-    expanded: [] as string[],
-  })
-  const showAll = () => state.showAll
-  const expanded = () => state.expanded
-  const overflow = createMemo(() => Math.max(0, edited() - MAX_FILES))
-  const visible = createMemo(() => (showAll() ? diffs() : diffs().slice(0, MAX_FILES)))
-  const toggleAll = () => {
-    autoScroll.pause()
-    setState("showAll", !showAll())
+  const [open, setOpen] = createSignal(false)
+  const [expanded, setExpanded] = createSignal<string[]>([])
+  const onOpenChange = (value: boolean) => {
+    suppressAutoScrollResize()
+    setOpen(value)
   }
+
+  createEffect(
+    on(
+      open,
+      (value, prev) => {
+        if (!value && prev) setExpanded([])
+      },
+      { defer: true },
+    ),
+  )
 
   const assistantMessages = createMemo(
     () => {
@@ -555,179 +559,25 @@ export function SessionTurn(
                         duration={700}
                       />
                     </Show>
-                    <div data-slot="session-turn-sticky" ref={setStickyRef}>
-                      {/* User Message */}
-                      <div data-slot="session-turn-message-content" aria-live="off">
-                        <Message message={msg()} parts={stickyParts()} />
-                      </div>
-
-                      {/* Trigger (sticky) */}
-                      <Show when={working() || hasSteps()}>
-                        <div data-slot="session-turn-response-trigger">
-                          <Show when={identityMessage()}>
-                            {(assistant) => (
-                              <div data-slot="session-turn-model-meta" aria-live="off">
-                                <Tag size="normal" data-slot="session-turn-meta-agent">
-                                  {assistant().agent}
-                                </Tag>
-                                <Tag size="normal" data-slot="session-turn-meta-provider">
-                                  {assistant().providerID}
-                                </Tag>
-                                <Tag size="normal" data-slot="session-turn-meta-model">
-                                  {assistant().modelID}
-                                </Tag>
-                              </div>
-                            )}
-                          </Show>
-                          <Button
-                            data-expandable={assistantMessages().length > 0}
-                            data-slot="session-turn-collapsible-trigger-content"
-                            variant="ghost"
-                            size="small"
-                            onClick={props.onStepsExpandedToggle ?? (() => {})}
-                            aria-expanded={props.stepsExpanded}
-                          >
-                            <Switch>
-                              <Match when={working()}>
-                                <Spinner />
-                              </Match>
-                              <Match when={!props.stepsExpanded}>
-                                <svg
-                                  width="10"
-                                  height="10"
-                                  viewBox="0 0 10 10"
-                                  fill="none"
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  data-slot="session-turn-trigger-icon"
-                                >
-                                  <path
-                                    d="M8.125 1.875H1.875L5 8.125L8.125 1.875Z"
-                                    fill="currentColor"
-                                    stroke="currentColor"
-                                    stroke-linejoin="round"
-                                  />
-                                </svg>
-                              </Match>
-                              <Match when={props.stepsExpanded}>
-                                <svg
-                                  width="10"
-                                  height="10"
-                                  viewBox="0 0 10 10"
-                                  fill="none"
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  class="text-icon-base"
-                                >
-                                  <path
-                                    d="M8.125 8.125H1.875L5 1.875L8.125 8.125Z"
-                                    fill="currentColor"
-                                    stroke="currentColor"
-                                    stroke-linejoin="round"
-                                  />
-                                </svg>
-                              </Match>
-                            </Switch>
-                            <Switch>
-                              <Match when={retry()}>
-                                <span data-slot="session-turn-retry-message">
-                                  {(() => {
-                                    const r = retry()
-                                    if (!r) return ""
-                                    const msg = unwrap(r.message)
-                                    return msg.length > 60 ? msg.slice(0, 60) + "..." : msg
-                                  })()}
-                                </span>
-                                <span data-slot="session-turn-retry-seconds">
-                                  · {i18n.t("ui.sessionTurn.retry.retrying")}
-                                  {store.retrySeconds > 0
-                                    ? " " + i18n.t("ui.sessionTurn.retry.inSeconds", { seconds: store.retrySeconds })
-                                    : ""}
-                                </span>
-                                <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
-                              </Match>
-                              <Match when={working()}>
-                                <span data-slot="session-turn-status-text">
-                                  {store.status ?? i18n.t("ui.sessionTurn.status.consideringNextSteps")}
-                                </span>
-                              </Match>
-                              <Match when={props.stepsExpanded}>
-                                <span data-slot="session-turn-status-text">{i18n.t("ui.sessionTurn.steps.hide")}</span>
-                              </Match>
-                              <Match when={!props.stepsExpanded}>
-                                <span data-slot="session-turn-status-text">{i18n.t("ui.sessionTurn.steps.show")}</span>
-                              </Match>
-                            </Switch>
-                            <span aria-hidden="true">·</span>
-                            <span aria-live="off">{store.duration}</span>
-                          </Button>
-                        </div>
-                      </Show>
-                    </div>
-                    {/* Response */}
-                    <Show when={props.stepsExpanded && assistantMessages().length > 0}>
-                      <div data-slot="session-turn-collapsible-content-inner" aria-hidden={working()}>
-                        <For each={assistantMessages()}>
-                          {(assistantMessage) => (
-                            <AssistantMessageItem
-                              message={assistantMessage}
-                              responsePartId={responsePartId()}
-                              hideResponsePart={hideResponsePart()}
-                              hideReasoning={!working()}
-                              hidden={hidden}
-                            />
-                          )}
-                        </For>
-                        <Show when={error()}>
-                          <Card variant="error" class="error-card">
-                            {errorText()}
-                          </Card>
-                        </Show>
-                      </div>
-                    </Show>
-                    <Show when={!props.stepsExpanded && answeredQuestionParts().length > 0}>
-                      <div data-slot="session-turn-answered-question-parts">
-                        <For each={answeredQuestionParts()}>
-                          {({ part, message }) => <Part part={part} message={message} />}
-                        </For>
-                      </div>
-                    </Show>
-                    {/* Response */}
-                    <div class="sr-only" aria-live="polite">
-                      {!working() && response() ? response() : ""}
-                    </div>
-                    <Show when={!working() && response()}>
-                      <div data-slot="session-turn-summary-section">
-                        <div data-slot="session-turn-summary-header">
-                          <div data-slot="session-turn-summary-title-row">
-                            <h2 data-slot="session-turn-summary-title">{i18n.t("ui.sessionTurn.summary.response")}</h2>
-                            <Show when={response()}>
-                              <div data-slot="session-turn-response-copy-wrapper">
-                                <Tooltip
-                                  value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
-                                  placement="top"
-                                  gutter={8}
-                                >
-                                  <IconButton
-                                    icon={copied() ? "check" : "copy"}
-                                    size="small"
-                                    variant="secondary"
-                                    onMouseDown={(e) => e.preventDefault()}
-                                    onClick={(event) => {
-                                      event.stopPropagation()
-                                      handleCopy()
-                                    }}
-                                    aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
-                                  />
-                                </Tooltip>
-                              </div>
-                            </Show>
-                          </div>
-                          <div data-slot="session-turn-response">
-                            <Markdown
-                              data-slot="session-turn-markdown"
-                              data-diffs={hasDiffs()}
-                              text={response() ?? ""}
-                              cacheKey={responsePartId()}
-                            />
+                  </div>
+                </Show>
+                <SessionRetry status={status()} show={active()} />
+                <Show when={edited() > 0 && !working()}>
+                  <div data-slot="session-turn-diffs">
+                    <Collapsible open={open()} onOpenChange={onOpenChange} variant="ghost">
+                      <Collapsible.Trigger>
+                        <div data-component="session-turn-diffs-trigger">
+                          <div data-slot="session-turn-diffs-title">
+                            <span data-slot="session-turn-diffs-label">
+                              {i18n.t("ui.sessionReview.change.modified")}
+                            </span>
+                            <span data-slot="session-turn-diffs-count">
+                              {edited()} {i18n.t(edited() === 1 ? "ui.common.file.one" : "ui.common.file.other")}
+                            </span>
+                            <div data-slot="session-turn-diffs-meta">
+                              <DiffChanges changes={diffs()} variant="bars" />
+                              <Collapsible.Arrow />
+                            </div>
                           </div>
                         </div>
                       </div>

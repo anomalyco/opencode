@@ -1,6 +1,5 @@
-import { getFilename } from "@opencode-ai/core/util/path"
-import { type Session } from "@opencode-ai/sdk/v2/client"
-import { pathKey } from "@/utils/path-key"
+import { getFilename } from "@opencode-ai/util/path"
+import { type PermissionRequest, type Session } from "@opencode-ai/sdk/v2/client"
 
 type SessionStore = {
   session?: Session[]
@@ -32,11 +31,29 @@ export const sortedRootSessions = (store: SessionStore, now: number) => roots(st
 export const latestRootSession = (stores: SessionStore[], now: number) =>
   stores.flatMap(roots).sort(sortSessions(now))[0]
 
-export function hasProjectPermissions<T>(
-  request: Record<string, T[] | undefined> | undefined,
-  include: (item: T) => boolean = () => true,
+export function hasProjectPermissions(
+  session: Session[],
+  request: Record<string, PermissionRequest[] | undefined>,
+  directory: string,
+  include: (item: PermissionRequest) => boolean = () => true,
 ) {
-  return Object.values(request ?? {}).some((list) => list?.some(include))
+  const children = childMapByParent(session)
+  return session
+    .filter((item) => isRootVisibleSession(item, directory))
+    .some((root) => {
+      const seen = new Set([root.id])
+      const ids = [root.id]
+      for (const id of ids) {
+        const list = children.get(id)
+        if (!list) continue
+        for (const child of list) {
+          if (seen.has(child)) continue
+          seen.add(child)
+          ids.push(child)
+        }
+      }
+      return ids.some((id) => request[id]?.some(include))
+    })
 }
 
 export const childSessionOnPath = (sessions: Session[] | undefined, rootID: string, activeID?: string) => {

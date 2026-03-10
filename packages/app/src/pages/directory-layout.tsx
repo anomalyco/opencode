@@ -1,21 +1,23 @@
+import { createEffect, createMemo, Show, type ParentProps } from "solid-js"
+import { createStore } from "solid-js/store"
+import { useNavigate, useParams } from "@solidjs/router"
+import { SDKProvider } from "@/context/sdk"
+import { SyncProvider, useSync } from "@/context/sync"
+import { LocalProvider } from "@/context/local"
+
 import { DataProvider } from "@opencode-ai/ui/context"
+import { decode64 } from "@/utils/base64"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { createEffect, createMemo, createResource, type ParentProps, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
-import { LocalProvider } from "@/context/local"
-import { SDKProvider } from "@/context/sdk"
-import { useSync } from "@/context/sync"
-import { decode64 } from "@/utils/base64"
-import { Schema } from "effect"
 
 function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
-  const location = useLocation()
+  const params = useParams()
   const navigate = useNavigate()
   const params = useParams()
   const sync = useSync()
-  const slug = createMemo(() => base64Encode(props.directory))
 
   createEffect(() => {
     const next = sync.data.path.directory
@@ -33,8 +35,8 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
     <DataProvider
       data={sync.data}
       directory={props.directory}
-      onNavigateToSession={(sessionID: string) => navigate(`/${slug()}/session/${sessionID}`)}
-      onSessionHref={(sessionID: string) => `/${slug()}/session/${sessionID}`}
+      onNavigateToSession={(sessionID: string) => navigate(`/${params.dir}/session/${sessionID}`)}
+      onSessionHref={(sessionID: string) => `/${params.dir}/session/${sessionID}`}
     >
       <LocalProvider>{props.children}</LocalProvider>
     </DataProvider>
@@ -52,28 +54,16 @@ export function decodeDirectory(dir: string): ProjectDirString | undefined {
 
 export default function Layout(props: ParentProps) {
   const params = useParams()
-  const language = useLanguage()
   const navigate = useNavigate()
-  let invalid = ""
-  const directory = createMemo(() => {
-    const decoded = decode64(params.dir) ?? ""
-    console.log("[DEBUG DirectoryLayout] directory memo", {
-      paramsDir: params.dir,
-      decoded,
-      decodedLength: decoded.length,
-    })
-    return decoded
-  })
+  const language = useLanguage()
+  const [state, setState] = createStore({ invalid: "" })
+  const directory = createMemo(() => decode64(params.dir) ?? "")
 
   createEffect(() => {
-    const dir = params.dir
-    if (!dir) return
-    if (resolved()) {
-      invalid = ""
-      return
-    }
-    if (invalid === dir) return
-    invalid = dir
+    if (!params.dir) return
+    if (directory()) return
+    if (state.invalid === params.dir) return
+    setState("invalid", params.dir)
     showToast({
       variant: "error",
       title: language.t("common.requestFailed"),
@@ -83,12 +73,12 @@ export default function Layout(props: ParentProps) {
   })
 
   return (
-    <Show when={resolved()} keyed>
-      {(resolved) => (
-        <SDKProvider directory={resolved}>
-          <DirectoryDataProvider directory={resolved}>{props.children}</DirectoryDataProvider>
-        </SDKProvider>
-      )}
+    <Show when={directory()}>
+      <SDKProvider directory={directory}>
+        <SyncProvider>
+          <DirectoryDataProvider directory={directory()}>{props.children}</DirectoryDataProvider>
+        </SyncProvider>
+      </SDKProvider>
     </Show>
   )
 }
