@@ -16,5 +16,7 @@
 
   [data-slot="tool-error-card-content"] {
     margin-bottom: 8px;
+    -webkit-user-select: text;
+    user-select: text;
   }
 }
