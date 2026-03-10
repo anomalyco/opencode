@@ -1,6 +1,6 @@
 import { test, expect } from "../fixtures"
 import { openSettings, closeDialog, withSession } from "../actions"
-import { keybindButtonSelector, terminalSelector } from "../selectors"
+import { keybindButtonSelector, terminalPanelSelector, terminalSelector } from "../selectors"
 import { modKey } from "../utils"
 
 test("changing sidebar toggle keybind works", async ({ page, gotoSession }) => {
@@ -298,14 +298,16 @@ test("changing terminal toggle keybind works", async ({ page, gotoSession }) => 
 
   await closeDialog(page, dialog)
 
+  const terminalPanel = page.locator(terminalPanelSelector)
   const terminal = page.locator(terminalSelector)
-  await expect(terminal).not.toBeVisible()
+  await expect(terminalPanel).toHaveCount(0)
 
   await page.keyboard.press(`${modKey}+Y`)
+  await expect(terminalPanel).toBeVisible()
   await expect(terminal).toBeVisible()
 
   await page.keyboard.press(`${modKey}+Y`)
-  await expect(terminal).not.toBeVisible()
+  await expect(terminalPanel).toHaveCount(0)
 })
 
 test("terminal toggle keybind persists after reload", async ({ page, gotoSession }) => {

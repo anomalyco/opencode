@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
-import { terminalSelector } from "../selectors"
+import { terminalPanelSelector, terminalSelector } from "../selectors"
 import { terminalToggleKey, workspacePersistKey } from "../utils"
 
 type State = {
@@ -14,9 +14,11 @@ type State = {
 }
 
 async function open(page: Page) {
+  const terminalPanel = page.locator(terminalPanelSelector)
   const terminal = page.locator(terminalSelector)
-  const visible = await terminal.isVisible().catch(() => false)
+  const visible = await terminalPanel.isVisible().catch(() => false)
   if (!visible) await page.keyboard.press(terminalToggleKey)
+  await expect(terminalPanel).toBeVisible()
   await expect(terminal).toBeVisible()
   await expect(terminal.locator("textarea")).toHaveCount(1)
 }

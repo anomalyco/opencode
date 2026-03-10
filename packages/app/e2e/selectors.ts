@@ -1,4 +1,5 @@
 export const promptSelector = '[data-component="prompt-input"]'
+export const terminalPanelSelector = "#terminal-panel"
 export const terminalSelector = '[data-component="terminal"]'
 export const sessionComposerDockSelector = '[data-component="session-prompt-dock"]'
 export const questionDockSelector = '[data-component="dock-prompt"][data-kind="question"]'
