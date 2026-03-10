@@ -23,6 +23,8 @@ export namespace Pty {
     close: (code?: number, reason?: string) => void
   }
 
+  const key = (ws: Socket) => (ws.data && typeof ws.data === "object" ? ws.data : ws)
+
   // WebSocket control frame: 0x00 + UTF-8 JSON.
   const meta = (cursor: number) => {
     const json = JSON.stringify({ cursor })
@@ -97,9 +99,9 @@ export namespace Pty {
         try {
           session.process.kill()
         } catch {}
-        for (const [key, ws] of session.subscribers.entries()) {
+        for (const [id, ws] of session.subscribers.entries()) {
           try {
-            if (ws.data === key) ws.close()
+            if (key(ws) === id) ws.close()
           } catch {
             // ignore
           }
@@ -170,21 +172,21 @@ export namespace Pty {
     ptyProcess.onData((chunk) => {
       session.cursor += chunk.length
 
-      for (const [key, ws] of session.subscribers.entries()) {
+      for (const [id, ws] of session.subscribers.entries()) {
         if (ws.readyState !== 1) {
-          session.subscribers.delete(key)
+          session.subscribers.delete(id)
           continue
         }
 
-        if (ws.data !== key) {
-          session.subscribers.delete(key)
+        if (key(ws) !== id) {
+          session.subscribers.delete(id)
           continue
         }
 
         try {
           ws.send(chunk)
         } catch {
-          session.subscribers.delete(key)
+          session.subscribers.delete(id)
         }
       }
 
@@ -226,9 +228,9 @@ export namespace Pty {
     try {
       session.process.kill()
     } catch {}
-    for (const [key, ws] of session.subscribers.entries()) {
+    for (const [id, ws] of session.subscribers.entries()) {
       try {
-        if (ws.data === key) ws.close()
+        if (key(ws) === id) ws.close()
       } catch {
         // ignore
       }
@@ -259,16 +261,13 @@ export namespace Pty {
     }
     log.info("client connected to session", { id })
 
-    // Use ws.data as the unique key for this connection lifecycle.
-    // If ws.data is undefined, fallback to ws object.
-    const connectionKey = ws.data && typeof ws.data === "object" ? ws.data : ws
+    const sub = key(ws)
 
-    // Optionally cleanup if the key somehow exists
-    session.subscribers.delete(connectionKey)
-    session.subscribers.set(connectionKey, ws)
+    session.subscribers.delete(sub)
+    session.subscribers.set(sub, ws)
 
     const cleanup = () => {
-      session.subscribers.delete(connectionKey)
+      session.subscribers.delete(sub)
     }
 
     const start = session.bufferCursor

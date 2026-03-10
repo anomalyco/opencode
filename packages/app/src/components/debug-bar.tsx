@@ -49,14 +49,19 @@ const bad = (n: number | undefined, limit: number, low = false) => {
 
 const session = (path: string) => path.includes("/session")
 
-function Cell(props: { bad?: boolean; dim?: boolean; label: string; tip: string; value: string }) {
+function Cell(props: { bad?: boolean; dim?: boolean; label: string; tip: string; value: string; wide?: boolean }) {
   return (
-    <Tooltip value={props.tip} placement="left">
-      <div class="flex w-full flex-col items-center px-0.5 py-1 text-center">
-        <div class="text-[7px] font-black uppercase tracking-[0.04em] opacity-70 leading-none">{props.label}</div>
+    <Tooltip value={props.tip} placement="top">
+      <div
+        classList={{
+          "flex min-h-[42px] w-full min-w-0 flex-col items-center justify-center rounded-[8px] bg-white/5 px-0.5 py-1 text-center": true,
+          "col-span-2": !!props.wide,
+        }}
+      >
+        <div class="text-[10px] leading-none font-black uppercase tracking-[0.04em] opacity-70">{props.label}</div>
         <div
           classList={{
-            "text-[9px] font-semibold leading-none tabular-nums": true,
+            "text-[13px] leading-none font-bold tabular-nums sm:text-[14px]": true,
             "text-text-on-critical-base": !!props.bad,
             "opacity-70": !!props.dim,
           }}
@@ -355,10 +360,13 @@ export function DebugBar() {
   return (
     <aside
       aria-label="Development performance diagnostics"
-      class="pointer-events-auto h-full min-h-0 w-[36px] shrink-0 overflow-y-auto text-text-on-interactive-base no-scrollbar sm:w-[38px]"
-      style={{ "background-color": "color-mix(in srgb, var(--icon-interactive-base) 42%, black)" }}
+      class="pointer-events-auto fixed bottom-3 right-3 z-50 w-[308px] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border p-0.5 text-text-on-interactive-base shadow-[var(--shadow-lg-border-base)] sm:bottom-4 sm:right-4 sm:w-[324px]"
+      style={{
+        "background-color": "color-mix(in srgb, var(--icon-interactive-base) 42%, black)",
+        "border-color": "color-mix(in srgb, white 14%, transparent)",
+      }}
     >
-      <div class="flex min-h-full flex-col gap-0.5 py-2 font-mono">
+      <div class="grid grid-cols-5 gap-px font-mono">
         <Cell
           label="NAV"
           tip="Last completed route transition touching a session page, measured from router start until the first paint after it settles."
@@ -425,6 +433,7 @@ export function DebugBar() {
           value={heapv()}
           bad={bad(heap(), 0.8)}
           dim={state.heap.used === undefined}
+          wide
         />
       </div>
     </aside>
