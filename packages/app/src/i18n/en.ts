@@ -23,6 +23,10 @@ export const dict = {
   "theme.scheme.dark": "Dark",
 
   "command.sidebar.toggle": "Toggle sidebar",
+  "command.page.find": "Find in page",
+  "command.page.find.description": "Search for text in the current page",
+  "command.page.find.previous": "Previous match",
+  "command.page.find.next": "Next match",
   "command.project.open": "Open project",
   "command.project.switch": "Switch project",
   "command.provider.connect": "Connect provider",

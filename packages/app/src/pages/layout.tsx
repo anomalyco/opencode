@@ -180,33 +180,43 @@ export default function Layout(props: ParentProps) {
   const [update, setUpdate] = createStore({
     installing: false,
   })
-  const updateQuery = useQuery(() => ({
-    queryKey: ["desktop", "update"] as const,
-    enabled: () =>
-      !!platform.checkUpdate && !!platform.updateAndRestart && settings.ready() && settings.updates.startup(),
-    queryFn: () => platform.checkUpdate?.() ?? Promise.resolve({ updateAvailable: false, version: undefined }),
-    refetchInterval: (query) => (query.state.data?.updateAvailable ? false : 10 * 60 * 1000),
-  }))
-  const updateVersion = () => {
-    if (!settings.ready()) return
-    if (!settings.updates.startup()) return
-    if (!updateQuery.data?.updateAvailable) return
-    return updateQuery.data.version ?? ""
-  }
-  const installUpdate = () => {
-    if (!platform.updateAndRestart) return
-    setUpdate("installing", true)
-    void platform.updateAndRestart().catch(() => {
-      setUpdate("installing", false)
-    })
-  }
-  const titlebarUpdate: TitlebarUpdate = {
-    version: updateVersion,
-    installing: () => update.installing,
-    install: installUpdate,
+  const [findbar, setFindbar] = createStore({
+    open: false,
+    q: "",
+  })
+  let findInput: HTMLInputElement | undefined
+
+  const closeFindbar = () => {
+    setFindbar("open", false)
   }
 
-  const editor = createInlineEditorController()
+  const openFindbar = (seed?: string) => {
+    const q = seed?.trim() || findbar.q
+    setFindbar({ open: true, q })
+    queueMicrotask(() => {
+      findInput?.focus()
+      findInput?.select()
+    })
+  }
+
+  const runFindbar = (dir: 1 | -1) => {
+    const q = findbar.q.trim()
+    if (!q) return
+    void platform.find?.(q, dir)
+  }
+
+  const findbarKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Escape") {
+      event.preventDefault()
+      event.stopPropagation()
+      closeFindbar()
+      return
+    }
+    if (event.key !== "Enter") return
+    event.preventDefault()
+    event.stopPropagation()
+    runFindbar(event.shiftKey ? -1 : 1)
+  }
   const setBusy = (directory: string, value: boolean) => {
     const key = pathKey(directory)
     if (value) {
@@ -1101,6 +1111,15 @@ export default function Layout(props: ParentProps) {
         category: language.t("command.category.view"),
         keybind: "mod+b",
         onSelect: () => layout.sidebar.toggle(),
+      },
+      {
+        id: "page.find",
+        title: language.t("command.page.find"),
+        description: language.t("command.page.find.description"),
+        category: language.t("command.category.view"),
+        keybind: "mod+f",
+        disabled: !platform.find,
+        onSelect: () => openFindbar(window.getSelection?.()?.toString().trim() || ""),
       },
       {
         id: "project.open",
@@ -3725,120 +3744,62 @@ export default function Layout(props: ParentProps) {
               <div class="@container w-full h-full contain-strict">{sidebarContent()}</div>
             </nav>
 
-            <Show when={layout.sidebar.opened()}>
-              <div
-                class="hidden xl:block absolute inset-y-0 z-30 w-0 overflow-visible"
-                style={{ left: `${side()}px` }}
-                onPointerDown={() => setState("sizing", true)}
-              >
-                <ResizeHandle
-                  direction="horizontal"
-                  size={layout.sidebar.width()}
-                  min={244}
-                  max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
-                  onResize={(w) => {
-                    setState("sizing", true)
-                    if (sizet !== undefined) clearTimeout(sizet)
-                    sizet = window.setTimeout(() => setState("sizing", false), 120)
-                    layout.sidebar.resize(w)
-                  }}
-                />
+        <main
+          classList={{
+            "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base": true,
+            "xl:border-l xl:rounded-tl-[12px]": !layout.sidebar.opened(),
+          }}
+        >
+          <Show when={findbar.open && platform.find}>
+            <div class="pointer-events-none absolute top-3 right-3 z-30 w-[min(480px,calc(100%-24px))]">
+              <div class="pointer-events-auto flex flex-row items-center gap-2 rounded-2xl border border-border-weak-base bg-background-stronger/92 px-2 py-2 shadow-lg backdrop-blur-xl">
+                <div class="flex flex-1 min-w-0 flex-row items-center gap-2 rounded-xl bg-surface-panel px-3 ring-1 ring-border-weaker-base/70">
+                  <Icon name="magnifying-glass" size="small" class="shrink-0 text-text-weaker" />
+                  <InlineInput
+                    ref={findInput}
+                    value={findbar.q}
+                    autofocus
+                    placeholder={language.t("common.search.placeholder")}
+                    style={{ "--inline-input-shadow": "none" }}
+                    class="h-10 flex-1 min-w-0 bg-transparent text-14-regular text-text-strong placeholder:text-text-weaker"
+                    onInput={(event) => setFindbar("q", event.currentTarget.value)}
+                    onKeyDown={findbarKeyDown}
+                  />
+                </div>
+                <div class="flex flex-row items-center gap-1 rounded-xl bg-surface-panel px-1.5 py-1 ring-1 ring-border-weaker-base/70">
+                  <IconButton
+                    icon="arrow-left"
+                    variant="ghost"
+                    size="large"
+                    class="rounded-lg text-text-weak hover:text-text-strong"
+                    aria-label={language.t("command.page.find.previous")}
+                    onClick={() => runFindbar(-1)}
+                  />
+                  <IconButton
+                    icon="arrow-right"
+                    variant="ghost"
+                    size="large"
+                    class="rounded-lg text-text-weak hover:text-text-strong"
+                    aria-label={language.t("command.page.find.next")}
+                    onClick={() => runFindbar(1)}
+                  />
+                  <div class="mx-0.5 h-5 w-px bg-border-weaker-base" />
+                  <IconButton
+                    icon="close"
+                    variant="ghost"
+                    size="large"
+                    class="rounded-lg text-text-weak hover:text-text-strong"
+                    aria-label={language.t("common.close")}
+                    onClick={closeFindbar}
+                  />
+                </div>
               </div>
-            </Show>
-
-            <div
-              class="hidden xl:block pointer-events-none absolute top-0 right-0 z-0 border-t border-border-weaker-base"
-              style={{ left: "calc(4rem + 12px)" }}
-            />
-
-            <div class="xl:hidden">
-              <div
-                classList={{
-                  "fixed inset-x-0 top-10 bottom-0 z-40 transition-opacity duration-200": true,
-                  "opacity-100 pointer-events-auto": layout.mobileSidebar.opened(),
-                  "opacity-0 pointer-events-none": !layout.mobileSidebar.opened(),
-                }}
-                onClick={(e) => {
-                  if (e.target === e.currentTarget) layout.mobileSidebar.hide()
-                }}
-              />
-              <nav
-                aria-label={language.t("sidebar.nav.projectsAndSessions")}
-                data-component="sidebar-nav-mobile"
-                classList={{
-                  "@container fixed top-10 bottom-0 left-0 z-50 w-full max-w-[400px] overflow-hidden border-r border-border-weaker-base bg-background-base transition-transform duration-200 ease-out": true,
-                  "translate-x-0": layout.mobileSidebar.opened(),
-                  "-translate-x-full": !layout.mobileSidebar.opened(),
-                }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                {sidebarContent(true)}
-              </nav>
             </div>
-
-            <div
-              classList={{
-                "absolute inset-0": true,
-                "xl:inset-y-0 xl:right-0 xl:left-[var(--main-left)]": true,
-                "z-20": true,
-                "transition-[left] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[left] motion-reduce:transition-none":
-                  !state.sizing,
-              }}
-              style={{
-                "--main-left": layout.sidebar.opened() ? `${side()}px` : "4rem",
-              }}
-            >
-              <main
-                classList={{
-                  "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base bg-background-base xl:border-l xl:rounded-tl-[12px]": true,
-                }}
-              >
-                <Show when={!autoselecting.loading} fallback={<div class="size-full" />}>
-                  {props.children}
-                </Show>
-              </main>
-            </div>
-
-            <div
-              classList={{
-                "hidden xl:flex absolute inset-y-0 left-16 z-30": true,
-                "opacity-100 translate-x-0 pointer-events-auto": state.peeked && !layout.sidebar.opened(),
-                "opacity-0 -translate-x-2 pointer-events-none": !state.peeked || layout.sidebar.opened(),
-                "transition-[opacity,transform] motion-reduce:transition-none": true,
-                "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
-                "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
-              }}
-              onMouseMove={disarm}
-              onMouseEnter={() => {
-                disarm()
-                aim.reset()
-              }}
-              onPointerDown={disarm}
-              onMouseLeave={() => {
-                arm()
-              }}
-            >
-              <Show when={peekProject()}>
-                <SidebarPanel project={peekProject} merged={false} />
-              </Show>
-            </div>
-
-            <div
-              classList={{
-                "hidden xl:block pointer-events-none absolute inset-y-0 right-0 z-25 overflow-hidden": true,
-                "opacity-100 translate-x-0": state.peeked && !layout.sidebar.opened(),
-                "opacity-0 -translate-x-2": !state.peeked || layout.sidebar.opened(),
-                "transition-[opacity,transform] motion-reduce:transition-none": true,
-                "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
-                "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
-              }}
-              style={{ left: `calc(4rem + ${panel()}px)` }}
-            >
-              <div class="h-full w-px" style={{ "box-shadow": "var(--shadow-sidebar-overlay)" }} />
-            </div>
-          </div>
-        </div>
-        {import.meta.env.DEV && <DebugBar />}
+          </Show>
+          <Show when={!autoselecting()} fallback={<div class="size-full" />}>
+            {props.children}
+          </Show>
+        </main>
       </div>
       <Toast.Region />
     </div>

@@ -125,6 +125,12 @@ export type Platform = {
 
   /** Filter paths to return only directories (desktop only) */
   filterDirectories?(paths: string[]): Promise<string[]>
+
+  /** Read image from clipboard (desktop only) */
+  readClipboardImage?(): Promise<File | null>
+
+  /** Search for text in the current page (desktop only) */
+  find?(query: string, dir?: 1 | -1): Promise<boolean | void>
 }
 
 export type DisplayBackend = "auto" | "wayland"
