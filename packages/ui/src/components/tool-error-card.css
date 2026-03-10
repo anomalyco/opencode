@@ -19,4 +19,14 @@
     -webkit-user-select: text;
     user-select: text;
   }
+
+  [data-slot="tool-error-card-content"] :where(*)::selection {
+    background: var(--surface-critical-base);
+    color: var(--text-on-critical-base);
+  }
+
+  [data-slot="tool-error-card-content"] :where(*)::-moz-selection {
+    background: var(--surface-critical-base);
+    color: var(--text-on-critical-base);
+  }
 }
