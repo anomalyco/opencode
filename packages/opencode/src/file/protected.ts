@@ -5,7 +5,7 @@ const home = os.homedir()
 
 // macOS directories that trigger TCC (Transparency, Consent, and Control)
 // permission prompts when accessed by a non-sandboxed process.
-const DARWIN_NAMES = [
+const DARWIN_HOME = [
   // Media
   "Music",
   "Pictures",
@@ -35,13 +35,13 @@ const DARWIN_LIBRARY = [
 
 const DARWIN_ROOT = ["/.DocumentRevisions-V100", "/.Spotlight-V100", "/.Trashes", "/.fseventsd"]
 
-const WIN32_NAMES = ["AppData", "Downloads", "Desktop", "Documents", "Pictures", "Music", "Videos", "OneDrive"]
+const WIN32_HOME = ["AppData", "Downloads", "Desktop", "Documents", "Pictures", "Music", "Videos", "OneDrive"]
 
 export namespace Protected {
   /** Directory basenames to skip when scanning the home directory. */
   export function names(): ReadonlySet<string> {
-    if (process.platform === "darwin") return new Set(DARWIN_NAMES)
-    if (process.platform === "win32") return new Set(WIN32_NAMES)
+    if (process.platform === "darwin") return new Set(DARWIN_HOME)
+    if (process.platform === "win32") return new Set(WIN32_HOME)
     return new Set()
   }
 
@@ -49,11 +49,11 @@ export namespace Protected {
   export function paths(): string[] {
     if (process.platform === "darwin")
       return [
-        ...DARWIN_NAMES.map((n) => path.join(home, n)),
+        ...DARWIN_HOME.map((n) => path.join(home, n)),
         ...DARWIN_LIBRARY.map((n) => path.join(home, "Library", n)),
         ...DARWIN_ROOT,
       ]
-    if (process.platform === "win32") return WIN32_NAMES.map((n) => path.join(home, n))
+    if (process.platform === "win32") return WIN32_HOME.map((n) => path.join(home, n))
     return []
   }
 }
