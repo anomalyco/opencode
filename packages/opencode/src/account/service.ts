@@ -248,9 +248,7 @@ export class AccountService extends ServiceMap.Service<
         return Option.some(parsed.config)
       })
 
-      const login = Effect.fn("AccountService.login")(function* (url: string) {
-        const server = url
-
+      const login = Effect.fn("AccountService.login")(function* (server: string) {
         const response = yield* executeEffect(
           "login",
           HttpClientRequest.post(`${server}/auth/device/code`).pipe(
