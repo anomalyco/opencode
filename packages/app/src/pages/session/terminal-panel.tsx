@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, on } from "solid-js"
+import { For, Show, createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { useParams } from "@solidjs/router"
@@ -17,7 +17,7 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { terminalTabLabel } from "@/pages/session/terminal-label"
-import { createPresence, createSizing, focusTerminalById } from "@/pages/session/helpers"
+import { createSizing, focusTerminalById } from "@/pages/session/helpers"
 import { getTerminalHandoff, setTerminalHandoff } from "@/pages/session/handoff"
 
 export function TerminalPanel() {
@@ -33,7 +33,6 @@ export function TerminalPanel() {
 
   const opened = createMemo(() => view().terminal.opened())
   const open = createMemo(() => isDesktop() && opened())
-  const panel = createPresence(open)
   const size = createSizing()
   const height = createMemo(() => layout.terminal.height())
   const close = () => view().terminal.close()
@@ -66,21 +65,42 @@ export function TerminalPanel() {
     ),
   )
 
+  const focus = (id: string) => {
+    focusTerminalById(id)
+
+    const frame = requestAnimationFrame(() => {
+      if (!open()) return
+      if (terminal.active() !== id) return
+      focusTerminalById(id)
+    })
+
+    const timers = [120, 240].map((ms) =>
+      window.setTimeout(() => {
+        if (!open()) return
+        if (terminal.active() !== id) return
+        focusTerminalById(id)
+      }, ms),
+    )
+
+    return () => {
+      cancelAnimationFrame(frame)
+      for (const timer of timers) clearTimeout(timer)
+    }
+  }
+
   createEffect(
     on(
-      () => terminal.active(),
-      (activeId) => {
-        if (!activeId || !panel.open()) return
-        if (document.activeElement instanceof HTMLElement) {
-          document.activeElement.blur()
-        }
-        setTimeout(() => focusTerminalById(activeId), 0)
+      () => [open(), terminal.active()] as const,
+      ([next, id]) => {
+        if (!next || !id) return
+        const stop = focus(id)
+        onCleanup(stop)
       },
     ),
   )
 
   createEffect(() => {
-    if (panel.open()) return
+    if (open()) return
     const active = document.activeElement
     if (!(active instanceof HTMLElement)) return
     if (!root?.contains(active)) return
@@ -138,30 +158,38 @@ export function TerminalPanel() {
 
     const activeId = terminal.active()
     if (!activeId) return
-    setTimeout(() => {
+    requestAnimationFrame(() => {
+      if (terminal.active() !== activeId) return
       focusTerminalById(activeId)
-    }, 0)
+    })
   }
 
   return (
-    <Show when={panel.show()}>
+    <Show when={isDesktop()}>
       <div
         ref={root}
         id="terminal-panel"
         role="region"
         aria-label={language.t("terminal.title")}
-        aria-hidden={!panel.open()}
-        inert={!panel.open()}
+        aria-hidden={!open()}
+        inert={!open()}
         class="relative w-full shrink-0 overflow-hidden"
         classList={{
-          "opacity-100": panel.open(),
-          "opacity-0 pointer-events-none": !panel.open(),
-          "transition-[height,opacity] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[height] motion-reduce:transition-none":
+          "transition-[height] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[height] motion-reduce:transition-none":
             !size.active(),
         }}
-        style={{ height: panel.open() ? `${height()}px` : "0px" }}
+        style={{ height: open() ? `${height()}px` : "0px" }}
       >
-        <div class="size-full flex flex-col border-t border-border-weak-base">
+        <div
+          class="absolute inset-x-0 top-0 flex flex-col border-t border-border-weak-base"
+          classList={{
+            "translate-y-0 opacity-100": open(),
+            "translate-y-full opacity-0 pointer-events-none": !open(),
+            "transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[transform,opacity] motion-reduce:transition-none":
+              !size.active(),
+          }}
+          style={{ height: `${height()}px` }}
+        >
           <div onPointerDown={() => size.start()}>
             <ResizeHandle
               direction="vertical"
