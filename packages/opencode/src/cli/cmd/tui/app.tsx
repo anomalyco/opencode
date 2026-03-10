@@ -1,3 +1,6 @@
+import fs from "fs"
+import path from "path"
+import { Global } from "@/global"
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { Selection } from "@tui/util/selection"
@@ -568,6 +571,44 @@ function App() {
       },
       onSelect: () => {
         dialog.replace(() => <DialogHelp />)
+      },
+      category: "System",
+    },
+    {
+      title: "Open TUI settings",
+      value: "config.tui",
+      slash: {
+        name: "tui",
+        aliases: ["tuisettings"],
+      },
+      onSelect: () => {
+        const tuiPath = path.join(Global.Path.config, "tui.json")
+        if (!fs.existsSync(tuiPath)) {
+          fs.writeFileSync(tuiPath, JSON.stringify({
+            $schema: "https://opencode.ai/tui.json"
+          }, null, 2))
+        }
+        open(tuiPath).catch(() => {})
+        dialog.clear()
+      },
+      category: "System",
+    },
+    {
+      title: "Open global config",
+      value: "config.global",
+      slash: {
+        name: "config",
+        aliases: ["settings"],
+      },
+      onSelect: () => {
+        const configPath = path.join(Global.Path.config, "opencode.json")
+        if (!fs.existsSync(configPath)) {
+          fs.writeFileSync(configPath, JSON.stringify({
+            $schema: "https://opencode.ai/config.json"
+          }, null, 2))
+        }
+        open(configPath).catch(() => {})
+        dialog.clear()
       },
       category: "System",
     },
