@@ -40,8 +40,13 @@ export namespace ProviderError {
     return /^4(00|13)\s*(status code)?\s*\(no body\)/i.test(message)
   }
 
+  function html(body?: string) {
+    if (!body) return false
+    return /^\s*<!doctype|^\s*<html/i.test(body)
+  }
+
   function error(providerID: string, error: APICallError) {
-    if (providerID.includes("github-copilot") && error.statusCode === 403) {
+    if (providerID.includes("github-copilot") && error.statusCode === 403 && !html(error.responseBody)) {
       return "Please reauthenticate with the copilot provider to ensure your credentials work properly with OpenCode."
     }
 
@@ -79,7 +84,7 @@ export namespace ProviderError {
 
       // If responseBody is HTML (e.g. from a gateway or proxy error page),
       // provide a human-readable message instead of dumping raw markup
-      if (/^\s*<!doctype|^\s*<html/i.test(e.responseBody)) {
+      if (html(e.responseBody)) {
         if (e.statusCode === 401) {
           return "Unauthorized: request was blocked by a gateway or proxy. Your authentication token may be missing or expired — try running `opencode auth login <your provider URL>` to re-authenticate."
         }

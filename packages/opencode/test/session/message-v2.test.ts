@@ -871,6 +871,35 @@ describe("session.message-v2.fromError", () => {
     })
   })
 
+  test("maps github-copilot 403 html body to proxy guidance", () => {
+    const error = new APICallError({
+      message: "Forbidden",
+      url: "https://api.githubcopilot.com/v1/chat/completions",
+      requestBodyValues: {},
+      statusCode: 403,
+      responseHeaders: { "content-type": "text/html" },
+      responseBody: "<html><body><h1>403 Forbidden</h1></body></html>",
+      isRetryable: false,
+    })
+
+    const result = MessageV2.fromError(error, { providerID: "github-copilot" })
+
+    expect(result).toStrictEqual({
+      name: "APIError",
+      data: {
+        message:
+          "Forbidden: request was blocked by a gateway or proxy. You may not have permission to access this resource — check your account and provider settings.",
+        statusCode: 403,
+        isRetryable: false,
+        responseHeaders: { "content-type": "text/html" },
+        responseBody: "<html><body><h1>403 Forbidden</h1></body></html>",
+        metadata: {
+          url: "https://api.githubcopilot.com/v1/chat/completions",
+        },
+      },
+    })
+  })
+
   test("detects context overflow from APICallError provider messages", () => {
     const cases = [
       "prompt is too long: 213462 tokens > 200000 maximum",
