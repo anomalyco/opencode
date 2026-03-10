@@ -109,6 +109,7 @@ export namespace Database {
 
   export function close() {
     Client().$client.close()
+    Client.reset()
   }
 
   export type TxOrDb = Transaction | Client
