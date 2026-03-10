@@ -20,7 +20,14 @@ function resolveScheme(value: unknown): ColorScheme {
 const channel = addons.getChannel()
 
 const Scheme = (props: { value?: unknown }) => {
-  const theme = useTheme()
+  const theme = (() => {
+    try {
+      return useTheme()
+    } catch {
+      return
+    }
+  })()
+  if (!theme) return null
   const apply = (value?: unknown) => {
     theme.setColorScheme(resolveScheme(value))
   }
