@@ -1,6 +1,6 @@
 ---
-title: Commands
-description: Create custom commands for repetitive tasks.
+title: 명령어
+description: 반복적인 작업을 위한 커스텀 명령을 만드세요.
 ---
 
 커스텀 명령을 사용하면 TUI에서 해당 명령이 실행될 때 사용할 프롬프트를 미리 정의할 수 있습니다.
@@ -109,7 +109,7 @@ Markdown 파일명이 명령 이름이 됩니다. 예를 들어 `test.md`라면 
 
 ---
 
-### 인수(Arguments)
+### 인수
 
 `$ARGUMENTS` 플레이스홀더로 명령 인수를 전달할 수 있습니다.
 
@@ -219,7 +219,7 @@ Check for performance issues and suggest improvements.
 
 ---
 
-### Template
+### 템플릿
 
 `template` 옵션은 명령 실행 시 LLM에 전달할 프롬프트를 정의합니다.
 
@@ -237,7 +237,7 @@ Check for performance issues and suggest improvements.
 
 ---
 
-### Description
+### 설명
 
 `description` 옵션으로 명령의 짧은 설명을 추가할 수 있습니다.
 
@@ -255,7 +255,7 @@ Check for performance issues and suggest improvements.
 
 ---
 
-### Agent
+### 에이전트
 
 `agent` 설정으로 이 명령을 실행할 [agent](/docs/agents)를 지정할 수 있습니다.
 지정한 값이 [subagent](/docs/agents/#subagents)면 기본적으로 subagent 호출이 실행됩니다.
@@ -275,7 +275,7 @@ Check for performance issues and suggest improvements.
 
 ---
 
-### Subtask
+### 서브태스크
 
 `subtask` 불리언(boolean)을 사용하면 명령이 [subagent](/docs/agents/#subagents) 호출을 강제로 트리거합니다.
 주 컨텍스트를 오염시키고 싶지 않을 때 유용하며, [agent](/docs/agents) 설정의 `mode`가 `primary`여도 subagent로 실행합니다.
@@ -294,7 +294,7 @@ Check for performance issues and suggest improvements.
 
 ---
 
-### Model
+### 모델
 
 `model` 설정으로 이 명령의 기본 모델을 오버라이드할 수 있습니다.
 
@@ -312,7 +312,7 @@ Check for performance issues and suggest improvements.
 
 ---
 
-## Built-in
+## 내장 명령
 
 OpenCode는 `/init`, `/undo`, `/redo`, `/share`, `/help` 등 여러 내장 명령을 제공합니다. [더 알아보기](/docs/tui#commands).
 

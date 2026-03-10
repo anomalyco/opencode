@@ -63,17 +63,19 @@ export namespace SessionProcessor {
                   if (value.id in reasoningMap) {
                     continue
                   }
-                  reasoningMap[value.id] = {
+                  const reasoningPart = {
                     id: Identifier.ascending("part"),
                     messageID: input.assistantMessage.id,
                     sessionID: input.assistantMessage.sessionID,
-                    type: "reasoning",
+                    type: "reasoning" as const,
                     text: "",
                     time: {
                       start: Date.now(),
                     },
                     metadata: value.providerMetadata,
                   }
+                  reasoningMap[value.id] = reasoningPart
+                  await Session.updatePart(reasoningPart)
                   break
 
                 case "reasoning-delta":
@@ -81,7 +83,13 @@ export namespace SessionProcessor {
                     const part = reasoningMap[value.id]
                     part.text += value.text
                     if (value.providerMetadata) part.metadata = value.providerMetadata
-                    if (part.text) await Session.updatePart({ part, delta: value.text })
+                    await Session.updatePartDelta({
+                      sessionID: part.sessionID,
+                      messageID: part.messageID,
+                      partID: part.id,
+                      field: "text",
+                      delta: value.text,
+                    })
                   }
                   break
 
@@ -271,7 +279,10 @@ export namespace SessionProcessor {
                     sessionID: input.sessionID,
                     messageID: input.assistantMessage.parentID,
                   })
-                  if (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model })) {
+                  if (
+                    !input.assistantMessage.summary &&
+                    (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model }))
+                  ) {
                     needsCompaction = true
                   }
                   break
@@ -288,17 +299,20 @@ export namespace SessionProcessor {
                     },
                     metadata: value.providerMetadata,
                   }
+                  await Session.updatePart(currentText)
                   break
 
                 case "text-delta":
                   if (currentText) {
                     currentText.text += value.text
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata
-                    if (currentText.text)
-                      await Session.updatePart({
-                        part: currentText,
-                        delta: value.text,
-                      })
+                    await Session.updatePartDelta({
+                      sessionID: currentText.sessionID,
+                      messageID: currentText.messageID,
+                      partID: currentText.id,
+                      field: "text",
+                      delta: value.text,
+                    })
                   }
                   break
 
@@ -343,27 +357,32 @@ export namespace SessionProcessor {
             })
             const error = MessageV2.fromError(e, { providerID: input.model.providerID })
             if (MessageV2.ContextOverflowError.isInstance(error)) {
-              // TODO: Handle context overflow error
-            }
-            const retry = SessionRetry.retryable(error)
-            if (retry !== undefined) {
-              attempt++
-              const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
-              SessionStatus.set(input.sessionID, {
-                type: "retry",
-                attempt,
-                message: retry,
-                next: Date.now() + delay,
+              needsCompaction = true
+              Bus.publish(Session.Event.Error, {
+                sessionID: input.sessionID,
+                error,
               })
-              await SessionRetry.sleep(delay, input.abort).catch(() => {})
-              continue
+            } else {
+              const retry = SessionRetry.retryable(error)
+              if (retry !== undefined) {
+                attempt++
+                const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
+                SessionStatus.set(input.sessionID, {
+                  type: "retry",
+                  attempt,
+                  message: retry,
+                  next: Date.now() + delay,
+                })
+                await SessionRetry.sleep(delay, input.abort).catch(() => {})
+                continue
+              }
+              input.assistantMessage.error = error
+              Bus.publish(Session.Event.Error, {
+                sessionID: input.assistantMessage.sessionID,
+                error: input.assistantMessage.error,
+              })
+              SessionStatus.set(input.sessionID, { type: "idle" })
             }
-            input.assistantMessage.error = error
-            Bus.publish(Session.Event.Error, {
-              sessionID: input.assistantMessage.sessionID,
-              error: input.assistantMessage.error,
-            })
-            SessionStatus.set(input.sessionID, { type: "idle" })
           }
           if (snapshot) {
             const patch = await Snapshot.patch(snapshot)

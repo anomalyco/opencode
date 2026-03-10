@@ -7,12 +7,12 @@ Du kan gi tilpassede instruksjoner for å OpenCode ved å opprette en `AGENTS.md
 
 ---
 
-## Initialiser
+## Initialisering
 
 For å lage en ny `AGENTS.md` fil, kan du kjøre kommandoen `/init` i OpenCode.
 
 :::tip
-Du bør overgi prosjektets `AGENTS.md`-fil til Git.
+Du bør sjekke inn prosjektets `AGENTS.md`-fil i Git.
 :::
 
 Dette vil skanne prosjektet og alt dets innhold for å forstå hva prosjektet handler om og generere en `AGENTS.md`-fil med det. Dette hjelper OpenCode å navigere i prosjektet bedre.
@@ -118,13 +118,13 @@ Du kan også bruke eksterne URL-er for å laste instruksjoner fra nettet.
 }
 ```
 
-Fjerninstruksjoner hentes med 5 sekunders tidsavbrudd.
+Eksterne instruksjoner hentes med 5 sekunders tidsavbrudd.
 
 Alle instruksjonsfilene er kombinert med `AGENTS.md`-filene dine.
 
 ---
 
-## Refererer til eksterne filer
+## Referere til eksterne filer
 
 Selv om OpenCode ikke automatisk analyserer filreferanser i `AGENTS.md`, kan du oppnå lignende funksjonalitet på to måter:
 
@@ -170,10 +170,10 @@ Read the following file immediately as it's relevant to all workflows: @rules/ge
 
 Denne tilnærmingen lar deg:
 
-- Lag modulære, gjenbrukbare regelfiler
-- Del regler på tvers av prosjekter via symbolkoblinger eller git-undermoduler
-- Hold AGENTS.md kortfattet mens du refererer til detaljerte retningslinjer
-- Sørg for at OpenCode laster filer kun når det er nødvendig for den spesifikke oppgaven
+- Lage modulære, gjenbrukbare regelfiler
+- Dele regler på tvers av prosjekter via symbolkoblinger eller git-undermoduler
+- Holde AGENTS.md kortfattet mens du refererer til detaljerte retningslinjer
+- Sørge for at OpenCode laster filer kun når det er nødvendig for den spesifikke oppgaven
 
 :::tip
 For monorepos eller prosjekter med delte standarder er bruk av `opencode.json` med glob-mønstre (som `packages/*/AGENTS.md`) mer vedlikeholdbart enn manuelle instruksjoner.

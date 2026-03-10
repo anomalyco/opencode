@@ -8,8 +8,16 @@ on:
   workflow_dispatch:
 jobs:
   unit:
-    name: unit (linux)
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    name: unit (${{ matrix.settings.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - name: linux
+            host: blacksmith-4vcpu-ubuntu-2404
+          - name: windows
+            host: blacksmith-4vcpu-windows-2025
+    runs-on: ${{ matrix.settings.host }}
     defaults:
       run:
         shell: bash

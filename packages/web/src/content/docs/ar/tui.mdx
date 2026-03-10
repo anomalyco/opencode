@@ -290,12 +290,12 @@ How is auth handled in @packages/functions/src/api/index.ts?
 <Tabs>
   <TabItem label="Linux/macOS">
     ```bash
-    # Example for nano or vim
+    # مثال لـ nano أو vim
     export EDITOR=nano
     export EDITOR=vim
 
-    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
-    # include --wait
+    # للمحررات الرسومية، VS Code، Cursor، VSCodium، Windsurf، Zed، إلخ.
+    # قم بتضمين --wait
     export EDITOR="code --wait"
     ```
 
@@ -308,8 +308,8 @@ How is auth handled in @packages/functions/src/api/index.ts?
     ```bash
     set EDITOR=notepad
 
-    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
-    # include --wait
+    # للمحررات الرسومية، VS Code، Cursor، VSCodium، Windsurf، Zed، إلخ.
+    # قم بتضمين --wait
     set EDITOR=code --wait
     ```
 
@@ -321,8 +321,8 @@ How is auth handled in @packages/functions/src/api/index.ts?
     ```powershell
     $env:EDITOR = "notepad"
 
-    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
-    # include --wait
+    # للمحررات الرسومية، VS Code، Cursor، VSCodium، Windsurf، Zed، إلخ.
+    # قم بتضمين --wait
     $env:EDITOR = "code --wait"
     ```
 
@@ -370,6 +370,9 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 - `scroll_acceleration` - فعّل تسارع التمرير على نمط macOS لتمرير سلس وطبيعي. عند تفعيله، تزداد سرعة التمرير مع إيماءات التمرير السريعة وتبقى دقيقة للحركات الأبطأ. **يتقدّم هذا الإعداد على `scroll_speed` ويستبدله عند تفعيله.**
 - `scroll_speed` - يتحكم في سرعة تمرير واجهة TUI عند استخدام أوامر التمرير (الحد الأدنى: `1`). القيمة الافتراضية هي `3`. **ملاحظة: يتم تجاهل هذا إذا تم ضبط `scroll_acceleration.enabled` على `true`.**
+- `diff_style` - يتحكم في عرض الفروقات (diff). القيمة `"auto"` تتكيف مع عرض terminal، و`"stacked"` تعرض عمودًا واحدًا دائمًا.
+
+استخدم `OPENCODE_TUI_CONFIG` لتحميل مسار إعدادات TUI مخصص.
 
 ---
 

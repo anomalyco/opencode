@@ -1,17 +1,17 @@
 ---
 title: GitLab
-description: Bruk opencode i GitLab-problemer og sammenslåingsforespørsler.
+description: Bruk opencode i GitLab-problemer og Merge Requests.
 ---
 
 OpenCode integreres med GitLab arbeidsflyten gjennom GitLab CI/CD pipeline eller med GitLab Duo.
 
-I begge tilfeller vil OpenCode kjøre på GitLab-løperne dine.
+I begge tilfeller vil OpenCode kjøre på GitLab Runners.
 
 ---
 
 ## GitLab CI
 
-OpenCode fungerer i en vanlig GitLab-pipeline. Du kan bygge den inn i en pipeline som en [CI komponent](https://docs.gitlab.com/ee/ci/components/)
+OpenCode fungerer i en vanlig GitLab-pipeline. Du kan bygge den inn i en pipeline som en [CI-komponent](https://docs.gitlab.com/ee/ci/components/)
 
 Her bruker vi en fellesskapsskapt CI/CD-komponent for OpenCode — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
 
@@ -27,7 +27,7 @@ Her bruker vi en fellesskapsskapt CI/CD-komponent for OpenCode — [nagyv/gitlab
 
 ### Oppsett
 
-1. Lagre OpenCode-autentiseringen JSON som en filtype CI miljøvariabler under **Innstillinger** > **CI/CD** > **Variabler**. Sørg for å merke dem som "Masket og skjult".
+1. Lagre OpenCode sin autentiserings-JSON som en CI-miljøvariabel av typen Fil under **Innstillinger** > **CI/CD** > **Variabler**. Sørg for å merke dem som "Masked and hidden".
 2. Legg til følgende i `.gitlab-ci.yml`-filen.
 
    ```yaml title=".gitlab-ci.yml"
@@ -47,16 +47,16 @@ For flere inndata og brukstilfeller [sjekk ut dokumentene](https://gitlab.com/ex
 ## GitLab Duo
 
 OpenCode integreres med din GitLab arbeidsflyt.
-Nevn `@opencode` i en kommentar, og OpenCode vil utføre oppgaver innenfor din GitLab CI pipeline.
+Nevn `@opencode` i en kommentar, og OpenCode vil utføre oppgaver innenfor din GitLab CI-pipeline.
 
 ---
 
 ### Funksjoner
 
-- **Triage-problemer**: Be OpenCode se på et problem og forklare det for deg.
-- **Fiks og implementer**: Be OpenCode om å fikse et problem eller implementere en funksjon.
-  Det vil opprette en ny gren og sende en sammenslåingsforespørsel med endringene.
-- **Sikkert**: OpenCode kjører på GitLab-løperne dine.
+- **Triage av saker**: Be OpenCode se på en sak og forklare den for deg.
+- **Fiks og implementer**: Be OpenCode om å fikse en sak eller implementere en funksjon.
+  Det vil opprette en ny gren og sende en Merge Request med endringene.
+- **Sikkert**: OpenCode kjører på GitLab Runners.
 
 ---
 
@@ -164,7 +164,7 @@ Her er noen eksempler på hvordan du kan bruke OpenCode i GitLab.
 Du kan konfigurere til å bruke en annen triggerfrase enn `@opencode`.
 :::
 
-- **Forklar et problem**
+- **Forklar en sak**
 
   Legg til denne kommentaren i en GitLab-sak.
 
@@ -172,9 +172,9 @@ Du kan konfigurere til å bruke en annen triggerfrase enn `@opencode`.
   @opencode explain this issue
   ```
 
-  OpenCode vil lese problemet og svare med en klar forklaring.
+  OpenCode vil lese saken og svare med en klar forklaring.
 
-- **Fiks et problem**
+- **Fiks en sak**
 
   I en GitLab-sak, si:
 
@@ -182,14 +182,14 @@ Du kan konfigurere til å bruke en annen triggerfrase enn `@opencode`.
   @opencode fix this
   ```
 
-  OpenCode vil opprette en ny gren, implementere endringene og åpne en sammenslåingsforespørsel med endringene.
+  OpenCode vil opprette en ny gren, implementere endringene og åpne en Merge Request med endringene.
 
-- **Gjennomgå sammenslåingsforespørsler**
+- **Review av Merge Requests**
 
-  Legg igjen følgende kommentar på en GitLab-sammenslåingsforespørsel.
+  Legg igjen følgende kommentar på en GitLab Merge Request.
 
   ```
   @opencode review this merge request
   ```
 
-  OpenCode vil gjennomgå sammenslåingsforespørselen og gi tilbakemelding.
+  OpenCode vil gjennomgå Merge Request-en og gi tilbakemelding.

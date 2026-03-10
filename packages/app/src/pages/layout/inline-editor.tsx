@@ -1,8 +1,9 @@
 import { createStore } from "solid-js/store"
-import { Show, type Accessor } from "solid-js"
+import { onCleanup, Show, type Accessor } from "solid-js"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
 
 export function createInlineEditorController() {
+  // This controller intentionally supports one active inline editor at a time.
   const [editor, setEditor] = createStore({
     active: "" as string,
     value: "",
@@ -47,6 +48,13 @@ export function createInlineEditorController() {
     stopPropagation?: boolean
     openOnDblClick?: boolean
   }) => {
+    let frame: number | undefined
+
+    onCleanup(() => {
+      if (frame === undefined) return
+      cancelAnimationFrame(frame)
+    })
+
     const isEditing = () => props.editing ?? editorOpen(props.id)
     const stopEvents = () => props.stopPropagation ?? false
     const allowDblClick = () => props.openOnDblClick ?? true
@@ -78,7 +86,12 @@ export function createInlineEditorController() {
       >
         <InlineInput
           ref={(el) => {
-            requestAnimationFrame(() => el.focus())
+            if (frame !== undefined) cancelAnimationFrame(frame)
+            frame = requestAnimationFrame(() => {
+              frame = undefined
+              if (!el.isConnected) return
+              el.focus()
+            })
           }}
           value={editorValue()}
           class={props.class}

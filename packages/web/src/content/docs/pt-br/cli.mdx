@@ -27,7 +27,7 @@ Inicie a interface de usuário do terminal do opencode.
 opencode [project]
 ```
 
-#### Flags
+#### Opções
 
 | Flag         | Curto | Descrição                                                                  |
 | ------------ | ----- | -------------------------------------------------------------------------- |
@@ -69,14 +69,14 @@ opencode attach [url]
 Isso permite usar o TUI com um backend opencode remoto. Por exemplo:
 
 ```bash
-# Start the backend server for web/mobile access
+# Inicie o servidor backend para acesso web/mobile
 opencode web --port 4096 --hostname 0.0.0.0
 
-# In another terminal, attach the TUI to the running backend
+# Em outro terminal, anexe o TUI ao backend em execução
 opencode attach http://10.20.30.40:4096
 ```
 
-#### Flags
+#### Opções
 
 | Flag        | Curto | Descrição                                |
 | ----------- | ----- | ---------------------------------------- |
@@ -185,7 +185,7 @@ Execute o agente do GitHub. Isso é tipicamente usado em GitHub Actions.
 opencode github run
 ```
 
-##### Flags
+##### Opções
 
 | Flag      | Descrição                                        |
 | --------- | ------------------------------------------------ |
@@ -294,7 +294,7 @@ Você pode opcionalmente passar um ID de provedor para filtrar modelos por esse 
 opencode models anthropic
 ```
 
-#### Flags
+#### Opções
 
 | Flag        | Descrição                                                             |
 | ----------- | --------------------------------------------------------------------- |
@@ -320,20 +320,20 @@ opencode run [message..]
 Isso é útil para scripts, automação ou quando você deseja uma resposta rápida sem iniciar o TUI completo. Por exemplo.
 
 ```bash "opencode run"
-opencode run Explain the use of context in Go
+opencode run Explique o uso de context em Go
 ```
 
 Você também pode se anexar a uma instância em execução do `opencode serve` para evitar tempos de inicialização a frio do servidor MCP em cada execução:
 
 ```bash
-# Start a headless server in one terminal
+# Inicie um servidor sem cabeça em um terminal
 opencode serve
 
-# In another terminal, run commands that attach to it
-opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+# Em outro terminal, execute comandos que se anexam a ele
+opencode run --attach http://localhost:4096 "Explique async/await em JavaScript"
 ```
 
-#### Flags
+#### Opções
 
 | Flag         | Curto | Descrição                                                                     |
 | ------------ | ----- | ----------------------------------------------------------------------------- |
@@ -362,7 +362,7 @@ opencode serve
 
 Isso inicia um servidor HTTP que fornece acesso à funcionalidade do opencode sem a interface TUI. Defina `OPENCODE_SERVER_PASSWORD` para habilitar a autenticação básica HTTP (o nome de usuário padrão é `opencode`).
 
-#### Flags
+#### Opções
 
 | Flag         | Descrição                                             |
 | ------------ | ----------------------------------------------------- |
@@ -391,7 +391,7 @@ Liste todas as sessões do opencode.
 opencode session list
 ```
 
-##### Flags
+##### Opções
 
 | Flag          | Curto | Descrição                                 |
 | ------------- | ----- | ----------------------------------------- |
@@ -408,7 +408,7 @@ Mostre o uso de tokens e estatísticas de custo para suas sessões do opencode.
 opencode stats
 ```
 
-#### Flags
+#### Opções
 
 | Flag        | Descrição                                                                                            |
 | ----------- | ---------------------------------------------------------------------------------------------------- |
@@ -458,7 +458,7 @@ opencode web
 
 Isso inicia um servidor HTTP e abre um navegador para acessar o opencode através de uma interface web. Defina `OPENCODE_SERVER_PASSWORD` para habilitar a autenticação básica HTTP (o nome de usuário padrão é `opencode`).
 
-#### Flags
+#### Opções
 
 | Flag         | Descrição                                             |
 | ------------ | ----------------------------------------------------- |
@@ -479,7 +479,7 @@ opencode acp
 
 Este comando inicia um servidor ACP que se comunica via stdin/stdout usando nd-JSON.
 
-#### Flags
+#### Opções
 
 | Flag         | Descrição                 |
 | ------------ | ------------------------- |
@@ -497,7 +497,7 @@ Desinstale o opencode e remova todos os arquivos relacionados.
 opencode uninstall
 ```
 
-#### Flags
+#### Opções
 
 | Flag            | Curto | Descrição                                |
 | --------------- | ----- | ---------------------------------------- |
@@ -528,7 +528,7 @@ Para atualizar para uma versão específica.
 opencode upgrade v0.1.48
 ```
 
-#### Flags
+#### Opções
 
 | Flag       | Curto | Descrição                                                        |
 | ---------- | ----- | ---------------------------------------------------------------- |
@@ -536,7 +536,7 @@ opencode upgrade v0.1.48
 
 ---
 
-## Flags Globais
+## Opções Globais
 
 A CLI do opencode aceita as seguintes flags globais.
 

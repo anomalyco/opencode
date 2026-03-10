@@ -35,6 +35,15 @@ describe("buildRequestParts", () => {
       result.requestParts.some((part) => part.type === "file" && part.url.startsWith("file:///repo/src/foo.ts")),
     ).toBe(true)
     expect(result.requestParts.some((part) => part.type === "text" && part.synthetic)).toBe(true)
+    expect(
+      result.requestParts.some(
+        (part) =>
+          part.type === "text" &&
+          part.synthetic &&
+          part.metadata?.opencodeComment &&
+          (part.metadata.opencodeComment as { comment?: string }).comment === "check this",
+      ),
+    ).toBe(true)
 
     expect(result.optimisticParts).toHaveLength(result.requestParts.length)
     expect(result.optimisticParts.every((part) => part.sessionID === "ses_1" && part.messageID === "msg_1")).toBe(true)

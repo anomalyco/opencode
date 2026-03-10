@@ -1,6 +1,6 @@
 ---
 title: Outils personnalisés
-description: Créez des outils que LLM peut appeler dans opencode.
+description: Créez des outils que le LLM peut appeler dans opencode.
 ---
 
 Les outils personnalisés sont des fonctions que vous créez et que le LLM peut appeler pendant les conversations. Ils fonctionnent avec les [outils intégrés](/docs/tools) de opencode comme `read`, `write` et `bash`.
@@ -9,7 +9,7 @@ Les outils personnalisés sont des fonctions que vous créez et que le LLM peut 
 
 ## Création d'un outil
 
-Les outils sont définis sous forme de fichiers **TypeScript** ou **JavaScript**. Cependant, la définition de l'outil peut appeler des scripts écrits dans **n'importe quel langage** : TypeScript ou JavaScript n'est utilisé que pour la définition de l'outil elle-même.
+Les outils sont définis sous forme de fichiers **TypeScript** ou **JavaScript**. Cependant, la définition de l'outil peut appeler des scripts écrits dans **n'importe quel langage** : TypeScript ou JavaScript n'est utilisé que pour la définition de l'outil elle-même.
 
 ---
 
@@ -24,7 +24,7 @@ Ils peuvent être définis :
 
 ### Structure
 
-Le moyen le plus simple de créer des outils consiste à utiliser l'assistant `tool()` qui fournit la sécurité et la validation du type.
+Le moyen le plus simple de créer des outils est d'utiliser l'assistant `tool()` qui fournit la sécurité et la validation de type.
 
 ```ts title=".opencode/tools/database.ts" {1}
 import { tool } from "@opencode-ai/plugin"
@@ -47,7 +47,7 @@ Le **nom de fichier** devient le **nom de l'outil**. Ce qui précède crée un o
 
 #### Plusieurs outils par fichier
 
-Vous pouvez également exporter plusieurs outils à partir d'un seul fichier. Chaque exportation devient **un outil distinct** portant le nom **`<filename>_<exportname>`** :
+Vous pouvez également exporter plusieurs outils à partir d'un seul fichier. Chaque exportation devient **un outil distinct** portant le nom **`<filename>_<exportname>`** :
 
 ```ts title=".opencode/tools/math.ts"
 import { tool } from "@opencode-ai/plugin"
@@ -75,7 +75,7 @@ export const multiply = tool({
 })
 ```
 
-Cela crée deux outils : `math_add` et `math_multiply`.
+Cela crée deux outils : `math_add` et `math_multiply`.
 
 ---
 
@@ -89,7 +89,7 @@ args: {
 }
 ```
 
-Vous pouvez également importer [Zod](https://zod.dev) directement et renvoyer un objet simple :
+Vous pouvez également importer [Zod](https://zod.dev) directement et renvoyer un objet simple :
 
 ```ts {6}
 import { z } from "zod"
@@ -110,7 +110,7 @@ export default {
 
 ### Contexte
 
-Les outils reçoivent du contexte sur la session en cours :
+Les outils reçoivent le contexte de la session en cours :
 
 ```ts title=".opencode/tools/project.ts" {8}
 import { tool } from "@opencode-ai/plugin"
@@ -127,7 +127,7 @@ export default tool({
 ```
 
 Utilisez `context.directory` pour le répertoire de travail de la session.
-Utilisez `context.worktree` pour la racine de git worktree.
+Utilisez `context.worktree` pour la racine du worktree git.
 
 ---
 
@@ -135,9 +135,9 @@ Utilisez `context.worktree` pour la racine de git worktree.
 
 ### Écrire un outil en Python
 
-Vous pouvez écrire vos outils dans la langue de votre choix. Voici un exemple qui ajoute deux nombres à l'aide de Python.
+Vous pouvez écrire vos outils dans le langage de votre choix. Voici un exemple qui ajoute deux nombres à l'aide de Python.
 
-Tout d'abord, créez l'outil en tant que script Python :
+Tout d'abord, créez l'outil en tant que script Python :
 
 ```python title=".opencode/tools/add.py"
 import sys
@@ -147,7 +147,7 @@ b = int(sys.argv[2])
 print(a + b)
 ```
 
-Créez ensuite la définition d'outil qui l'invoque :
+Créez ensuite la définition d'outil qui l'invoque :
 
 ```ts title=".opencode/tools/python-add.ts" {10}
 import { tool } from "@opencode-ai/plugin"

@@ -3,11 +3,11 @@ title: ปุ่มลัด
 description: ปรับแต่งปุ่มลัดของคุณ
 ---
 
-OpenCode มีรายการปุ่มลัดที่คุณปรับแต่งได้ผ่านการกำหนดค่า OpenCode
+OpenCode มีรายการปุ่มลัดที่คุณปรับแต่งได้ผ่าน `tui.json`
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -28,6 +28,7 @@ OpenCode มีรายการปุ่มลัดที่คุณปร�
     "session_unshare": "none",
     "session_interrupt": "escape",
     "session_compact": "<leader>c",
+    "session_child_first": "<leader>down",
     "session_child_cycle": "<leader>right",
     "session_child_cycle_reverse": "<leader>left",
     "session_parent": "<leader>up",
@@ -105,7 +106,7 @@ OpenCode มีรายการปุ่มลัดที่คุณปร�
 
 ---
 
-## Leader key
+## ปุ่ม Leader
 
 OpenCode ใช้ปุ่ม `leader` สำหรับการเชื่อมโยงคีย์ส่วนใหญ่ วิธีนี้จะหลีกเลี่ยงความขัดแย้งใน terminal ของคุณ
 
@@ -117,11 +118,11 @@ OpenCode ใช้ปุ่ม `leader` สำหรับการเชื่�
 
 ## ปิดการใช้งานการผูกปุ่ม
 
-คุณสามารถปิดการใช้งานการผูกปุ่มได้โดยการเพิ่มคีย์ลงในการกำหนดค่าของคุณด้วยค่า "none"
+คุณสามารถปิดการใช้งานการผูกปุ่มได้โดยการเพิ่มคีย์ลงใน `tui.json` ด้วยค่า "none"
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "session_compact": "none"
   }
@@ -156,7 +157,7 @@ OpenCode ใช้ปุ่ม `leader` สำหรับการเชื่�
 
 terminal บางตัวไม่ส่งคีย์ตัวปรับแต่งพร้อม Enter เป็นค่าเริ่มต้น คุณอาจต้องกำหนดค่า terminal ของคุณให้ส่ง `Shift+Enter` เป็นลำดับหลีก
 
-### terminal Windows
+### Windows Terminal
 
 เปิด `settings.json` ของคุณที่:
 

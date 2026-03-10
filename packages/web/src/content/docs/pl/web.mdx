@@ -7,7 +7,7 @@ opencode może działać jako aplikacja internetowa w przeglądarce, zapewniają
 
 ![Sieć opencode - Nowa sesja](../../../assets/web/web-homepage-new-session.png)
 
-## Getting Started
+## Pierwsze kroki
 
 Uruchom interfejs sieciowy, uruchamiając:
 
@@ -27,7 +27,7 @@ Aby uzyskać najlepsze wyniki, uruchom `opencode web` z [WSL](/docs/windows-wsl)
 
 ---
 
-## Configuration
+## Konfiguracja
 
 Możesz skonfigurować serwer WWW za pomocą flag wiersza poleceń lub w [pliku konfiguracyjnym] (./config).
 
@@ -39,7 +39,7 @@ Domyślnie opencode wybiera dostępny port. Możesz określić port:
 opencode web --port 4096
 ```
 
-### Hostname
+### Nazwa hosta
 
 Domyślnie serwer łączy się z `127.0.0.1` (tylko localhost). Aby udostępnić opencode w swojej sieci:
 
@@ -54,7 +54,7 @@ Podczas korzystania z `0.0.0.0` opencode wyświetli zarówno adresy lokalne, jak
   Network access:     http://192.168.1.100:4096
 ```
 
-### mDNS Discovery
+### Wykrywanie mDNS
 
 Włącz mDNS, aby Twój serwer był wykrywalny w sieci lokalnej:
 
@@ -78,7 +78,7 @@ Aby zezwolić na dodatkowe domeny dla CORS (przydatne w przypadku niestandardowy
 opencode web --cors https://example.com
 ```
 
-### Authentication
+### Uwierzytelnianie
 
 Aby chronić dostęp, ustaw hasło za pomocą zmiennej środowiskowej `OPENCODE_SERVER_PASSWORD`:
 
@@ -94,7 +94,7 @@ Domyślna nazwa użytkownika to `opencode`, ale można ją zmienić za pomocą `
 
 Po uruchomieniu interfejs sieciowy zapewnia dostęp do sesji opencode.
 
-### Sessions
+### Sesje
 
 Przeglądaj sesje i zarządzaj nimi ze strony głównej. Możesz zobaczyć aktywne sesje i rozpocząć nowe.
 
@@ -108,7 +108,7 @@ Kliknij „Zobacz serwery”, aby wyświetlić podłączone serwery i ich status
 
 ---
 
-## Attaching a Terminal
+## Podłączanie terminala
 
 Możesz podłączyć terminal TUI do działającego serwera WWW:
 
@@ -124,7 +124,7 @@ Umożliwia to jednoczesne korzystanie z interfejsu sieciowego i terminala, wspó
 
 ---
 
-## Config File
+## Plik konfiguracyjny
 
 Możesz także skonfigurować ustawienia serwera w pliku konfiguracyjnym `opencode.json`:
 

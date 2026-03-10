@@ -75,6 +75,20 @@ test("explore agent denies edit and write", async () => {
   })
 })
 
+test("explore agent asks for external directories and allows Truncate.GLOB", async () => {
+  const { Truncate } = await import("../../src/tool/truncation")
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const explore = await Agent.get("explore")
+      expect(explore).toBeDefined()
+      expect(PermissionNext.evaluate("external_directory", "/some/other/path", explore!.permission).action).toBe("ask")
+      expect(PermissionNext.evaluate("external_directory", Truncate.GLOB, explore!.permission).action).toBe("allow")
+    },
+  })
+})
+
 test("general agent denies todo tools", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({

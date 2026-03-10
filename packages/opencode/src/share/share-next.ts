@@ -1,10 +1,10 @@
 import { Bus } from "@/bus"
 import { Config } from "@/config/config"
-import { ulid } from "ulid"
 import { Provider } from "@/provider/provider"
 import { Session } from "@/session"
 import { MessageV2 } from "@/session/message-v2"
-import { Storage } from "@/storage/storage"
+import { Database, eq } from "@/storage/db"
+import { SessionShareTable } from "./share.sql"
 import { Log } from "@/util/log"
 import type * as SDK from "@opencode-ai/sdk/v2"
 
@@ -77,17 +77,26 @@ export namespace ShareNext {
     })
       .then((x) => x.json())
       .then((x) => x as { id: string; url: string; secret: string })
-    await Storage.write(["session_share", sessionID], result)
+    Database.use((db) =>
+      db
+        .insert(SessionShareTable)
+        .values({ session_id: sessionID, id: result.id, secret: result.secret, url: result.url })
+        .onConflictDoUpdate({
+          target: SessionShareTable.session_id,
+          set: { id: result.id, secret: result.secret, url: result.url },
+        })
+        .run(),
+    )
     fullSync(sessionID)
     return result
   }
 
   function get(sessionID: string) {
-    return Storage.read<{
-      id: string
-      secret: string
-      url: string
-    }>(["session_share", sessionID])
+    const row = Database.use((db) =>
+      db.select().from(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID)).get(),
+    )
+    if (!row) return
+    return { id: row.id, secret: row.secret, url: row.url }
   }
 
   type Data =
@@ -112,27 +121,42 @@ export namespace ShareNext {
         data: SDK.Model[]
       }
 
+  function key(item: Data) {
+    switch (item.type) {
+      case "session":
+        return "session"
+      case "message":
+        return `message/${item.data.id}`
+      case "part":
+        return `part/${item.data.messageID}/${item.data.id}`
+      case "session_diff":
+        return "session_diff"
+      case "model":
+        return "model"
+    }
+  }
+
   const queue = new Map<string, { timeout: NodeJS.Timeout; data: Map<string, Data> }>()
   async function sync(sessionID: string, data: Data[]) {
     if (disabled) return
     const existing = queue.get(sessionID)
     if (existing) {
       for (const item of data) {
-        existing.data.set("id" in item ? (item.id as string) : ulid(), item)
+        existing.data.set(key(item), item)
       }
       return
     }
 
     const dataMap = new Map<string, Data>()
     for (const item of data) {
-      dataMap.set("id" in item ? (item.id as string) : ulid(), item)
+      dataMap.set(key(item), item)
     }
 
     const timeout = setTimeout(async () => {
       const queued = queue.get(sessionID)
       if (!queued) return
       queue.delete(sessionID)
-      const share = await get(sessionID).catch(() => undefined)
+      const share = get(sessionID)
       if (!share) return
 
       await fetch(`${await url()}/api/share/${share.id}/sync`, {
@@ -152,7 +176,7 @@ export namespace ShareNext {
   export async function remove(sessionID: string) {
     if (disabled) return
     log.info("removing share", { sessionID })
-    const share = await get(sessionID)
+    const share = get(sessionID)
     if (!share) return
     await fetch(`${await url()}/api/share/${share.id}`, {
       method: "DELETE",
@@ -163,7 +187,7 @@ export namespace ShareNext {
         secret: share.secret,
       }),
     })
-    await Storage.remove(["session_share", sessionID])
+    Database.use((db) => db.delete(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID)).run())
   }
 
   async function fullSync(sessionID: string) {
@@ -172,10 +196,14 @@ export namespace ShareNext {
     const diffs = await Session.diff(sessionID)
     const messages = await Array.fromAsync(MessageV2.stream(sessionID))
     const models = await Promise.all(
-      messages
-        .filter((m) => m.info.role === "user")
-        .map((m) => (m.info as SDK.UserMessage).model)
-        .map((m) => Provider.getModel(m.providerID, m.modelID).then((m) => m)),
+      Array.from(
+        new Map(
+          messages
+            .filter((m) => m.info.role === "user")
+            .map((m) => (m.info as SDK.UserMessage).model)
+            .map((m) => [`${m.providerID}/${m.modelID}`, m] as const),
+        ).values(),
+      ).map((m) => Provider.getModel(m.providerID, m.modelID).then((item) => item)),
     )
     await sync(sessionID, [
       {

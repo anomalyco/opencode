@@ -1,15 +1,15 @@
 ---
 title: Formatadores
-description: opencode usa formatadores específicos de linguagem.
+description: O opencode usa formatadores específicos de linguagem.
 ---
 
-opencode formata automaticamente arquivos após serem escritos ou editados usando formatadores específicos de linguagem. Isso garante que o código gerado siga os estilos de código do seu projeto.
+O opencode formata automaticamente arquivos após serem escritos ou editados usando formatadores específicos de linguagem. Isso garante que o código gerado siga os estilos de código do seu projeto.
 
 ---
 
-## Integrado
+## Integrados
 
-opencode vem com vários formatadores integrados para linguagens e frameworks populares. Abaixo está uma lista dos formatadores, extensões de arquivo suportadas e comandos ou opções de configuração necessárias.
+O opencode vem com vários formatadores integrados para linguagens e frameworks populares. Abaixo está uma lista dos formatadores, extensões de arquivo suportadas e comandos ou opções de configuração necessárias.
 
 | Formatador           | Extensões                                                                                              | Requisitos                                                                                               |
 | -------------------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
@@ -29,6 +29,7 @@ opencode vem com vários formatadores integrados para linguagens e frameworks po
 | htmlbeautifier       | .erb, .html.erb                                                                                        | Comando `htmlbeautifier` disponível                                                                      |
 | air                  | .R                                                                                                     | Comando `air` disponível                                                                                 |
 | dart                 | .dart                                                                                                  | Comando `dart` disponível                                                                                |
+| dfmt                 | .d                                                                                                     | Comando `dfmt` disponível                                                                                |
 | ocamlformat          | .ml, .mli                                                                                              | Comando `ocamlformat` disponível e arquivo de configuração `.ocamlformat`                                |
 | terraform            | .tf, .tfvars                                                                                           | Comando `terraform` disponível                                                                           |
 | gleam                | .gleam                                                                                                 | Comando `gleam` disponível                                                                               |
@@ -54,7 +55,7 @@ Esse processo acontece em segundo plano, garantindo que seus estilos de código 
 
 ---
 
-## Configurar
+## Configuração
 
 Você pode personalizar os formatadores através da seção `formatter` em sua configuração do opencode.
 

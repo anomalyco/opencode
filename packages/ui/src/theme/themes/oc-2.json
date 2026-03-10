@@ -1,0 +1,31 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "OC-2",
+  "id": "oc-2",
+  "light": {
+    "palette": {
+      "neutral": "#8f8f8f",
+      "primary": "#dcde8d",
+      "success": "#12c905",
+      "warning": "#ffdc17",
+      "error": "#fc533a",
+      "info": "#a753ae",
+      "interactive": "#034cff",
+      "diffAdd": "#9ff29a",
+      "diffDelete": "#fc533a"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#707070",
+      "primary": "#fab283",
+      "success": "#12c905",
+      "warning": "#fcd53a",
+      "error": "#fc533a",
+      "info": "#edb2f1",
+      "interactive": "#034cff",
+      "diffAdd": "#c8ffc4",
+      "diffDelete": "#fc533a"
+    }
+  }
+}

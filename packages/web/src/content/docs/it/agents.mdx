@@ -21,7 +21,7 @@ In OpenCode esistono due tipi di agenti: agenti primari e subagenti.
 
 ### Agenti primari
 
-Gli agenti primari sono gli assistenti principali con cui interagisci direttamente. Puoi scorrerli usando il tasto **Tab** o la scorciatoia `switch_agent` configurata. Questi agenti gestiscono la conversazione principale. L'accesso agli strumenti si configura tramite i permessi: per esempio, Build ha tutti gli strumenti abilitati, mentre Plan e' limitato.
+Gli agenti primari sono gli assistenti principali con cui interagisci direttamente. Puoi scorrerli usando il tasto **Tab** o la scorciatoia `switch_agent` configurata. Questi agenti gestiscono la conversazione principale. L'accesso agli strumenti si configura tramite i permessi: per esempio, Build ha tutti gli strumenti abilitati, mentre Plan è limitato.
 
 :::tip
 Puoi usare **Tab** per passare tra gli agenti primari durante una sessione.
@@ -45,65 +45,65 @@ OpenCode include due agenti primari integrati e due subagenti integrati.
 
 ---
 
-### Usa build
+### Build
 
 _Mode_: `primary`
 
-Build e' l'agente primario **predefinito** con tutti gli strumenti abilitati. E' l'agente standard per lavoro di sviluppo quando ti serve pieno accesso a operazioni sui file e comandi di sistema.
+Build è l'agente primario **predefinito** con tutti gli strumenti abilitati. È l'agente standard per lavoro di sviluppo quando ti serve pieno accesso a operazioni sui file e comandi di sistema.
 
 ---
 
-### Usa plan
+### Plan
 
 _Mode_: `primary`
 
-Un agente limitato pensato per pianificazione e analisi. Usiamo un sistema di permessi per darti piu' controllo e prevenire modifiche non intenzionali.
+Un agente limitato pensato per pianificazione e analisi. Usiamo un sistema di permessi per darti più controllo e prevenire modifiche non intenzionali.
 Di default, tutte le seguenti sono impostate a `ask`:
 
 - `file edits`: tutte le scritture, patch ed edit
 - `bash`: tutti i comandi bash
 
-Questo agente e' utile quando vuoi che l'LLM analizzi il codice, suggerisca modifiche o crei piani senza effettuare alcuna modifica reale al codebase.
+Questo agente è utile quando vuoi che l'LLM analizzi il codice, suggerisca modifiche o crei piani senza effettuare alcuna modifica reale al codebase.
 
 ---
 
-### Usa general
+### General
 
 _Mode_: `subagent`
 
-Un agente general-purpose per ricercare domande complesse ed eseguire task multi-step. Ha accesso completo agli strumenti (tranne todo), quindi puo' modificare file quando serve. Usalo per eseguire piu' unita' di lavoro in parallelo.
+Un agente general-purpose per ricercare domande complesse ed eseguire task multi-step. Ha accesso completo agli strumenti (tranne todo), quindi può modificare file quando serve. Usalo per eseguire più unità di lavoro in parallelo.
 
 ---
 
-### Usa explore
+### Explore
 
 _Mode_: `subagent`
 
-Un agente rapido in sola lettura per esplorare codebase. Non puo' modificare file. Usalo quando devi trovare rapidamente file tramite pattern, cercare nel codice per keyword o rispondere a domande sul codebase.
+Un agente rapido in sola lettura per esplorare codebase. Non può modificare file. Usalo quando devi trovare rapidamente file tramite pattern, cercare nel codice per keyword o rispondere a domande sul codebase.
 
 ---
 
-### Usa compaction
+### Compaction
 
 _Mode_: `primary`
 
-Agente di sistema nascosto che compatta contesti lunghi in un riassunto piu' piccolo. Viene eseguito automaticamente quando serve e non e' selezionabile nella UI.
+Agente di sistema nascosto che compatta contesti lunghi in un riassunto più piccolo. Viene eseguito automaticamente quando serve e non è selezionabile nella UI.
 
 ---
 
-### Usa title
+### Title
 
 _Mode_: `primary`
 
-Agente di sistema nascosto che genera titoli brevi per le sessioni. Viene eseguito automaticamente quando serve e non e' selezionabile nella UI.
+Agente di sistema nascosto che genera titoli brevi per le sessioni. Viene eseguito automaticamente quando serve e non è selezionabile nella UI.
 
 ---
 
-### Usa summary
+### Summary
 
 _Mode_: `primary`
 
-Agente di sistema nascosto che crea riassunti di sessione. Viene eseguito automaticamente quando serve e non e' selezionabile nella UI.
+Agente di sistema nascosto che crea riassunti di sessione. Viene eseguito automaticamente quando serve e non è selezionabile nella UI.
 
 ---
 
@@ -113,21 +113,20 @@ Agente di sistema nascosto che crea riassunti di sessione. Viene eseguito automa
 
 2. I subagenti possono essere invocati:
    - **Automaticamente** dagli agenti primari per task specializzati in base alle loro descrizioni.
-   - Manualmente **menzionando con @** un subagente nel tuo messaggio. Per esempio.
+   - Manualmente **menzionando con @** un subagente nel tuo messaggio. Per esempio:
 
      ```txt frame="none"
      @general help me search for this function
      ```
-
-3. **Navigazione tra sessioni**: quando i subagenti creano le loro child session, puoi navigare tra la sessione padre e tutte le sessioni figlie usando:
+   3. **Navigazione tra sessioni**: quando i subagenti creano le loro child session, puoi navigare tra la sessione padre e tutte le sessioni figlie usando:
    - **\<Leader>+Right** (o la scorciatoia `session_child_cycle` configurata) per ciclare in avanti tra parent → child1 → child2 → ... → parent
    - **\<Leader>+Left** (o la scorciatoia `session_child_cycle_reverse` configurata) per ciclare indietro tra parent ← child1 ← child2 ← ... ← parent
 
-   Questo ti permette di passare senza soluzione di continuita' tra la conversazione principale e il lavoro specializzato dei subagenti.
+   Questo ti permette di passare senza soluzione di continuità tra la conversazione principale e il lavoro specializzato dei subagenti.
 
 ---
 
-## Configura
+## Configurazione
 
 Puoi personalizzare gli agenti integrati o crearne di tuoi tramite configurazione. Gli agenti possono essere configurati in due modi:
 
@@ -229,15 +228,15 @@ Usa l'opzione `description` per fornire una breve descrizione di cosa fa l'agent
 }
 ```
 
-Questa e' un'opzione di configurazione **obbligatoria**.
+Questa è un'opzione di configurazione **obbligatoria**.
 
 ---
 
 ### Temperatura
 
-Controlla casualita' e creativita' delle risposte dell'LLM con la config `temperature`.
+Controlla casualità e creatività delle risposte dell'LLM con la config `temperature`.
 
-Valori bassi rendono le risposte piu' focalizzate e deterministiche, mentre valori alti aumentano creativita' e variabilita'.
+Valori bassi rendono le risposte più focalizzate e deterministiche, mentre valori alti aumentano creatività e variabilità.
 
 ```json title="opencode.json"
 {
@@ -255,8 +254,8 @@ Valori bassi rendono le risposte piu' focalizzate e deterministiche, mentre valo
 I valori di temperature tipicamente vanno da 0.0 a 1.0:
 
 - **0.0-0.2**: risposte molto focalizzate e deterministiche, ideali per analisi del codice e pianificazione
-- **0.3-0.5**: risposte bilanciate con un po' di creativita', adatte a task generali di sviluppo
-- **0.6-1.0**: risposte piu' creative e varie, utili per brainstorming ed esplorazione
+- **0.3-0.5**: risposte bilanciate con un po' di creatività, adatte a task generali di sviluppo
+- **0.6-1.0**: risposte più creative e varie, utili per brainstorming ed esplorazione
 
 ```json title="opencode.json"
 {
@@ -282,9 +281,9 @@ Se non specifichi una temperature, OpenCode usa i default specifici del modello;
 
 ### Passi massimi
 
-Controlla il numero massimo di iterazioni agentiche che un agente puo' eseguire prima di essere forzato a rispondere solo con testo. Questo permette a chi vuole controllare i costi di impostare un limite alle azioni agentiche.
+Controlla il numero massimo di iterazioni agentiche che un agente può eseguire prima di essere forzato a rispondere solo con testo. Questo permette a chi vuole controllare i costi di impostare un limite alle azioni agentiche.
 
-Se non e' impostato, l'agente continuera' a iterare finche' il modello sceglie di fermarsi o l'utente interrompe la sessione.
+Se non è impostato, l'agente continuerà a iterare finché il modello sceglie di fermarsi o l'utente interrompe la sessione.
 
 ```json title="opencode.json"
 {
@@ -301,12 +300,12 @@ Se non e' impostato, l'agente continuera' a iterare finche' il modello sceglie d
 Quando viene raggiunto il limite, l'agente riceve un system prompt speciale che lo istruisce a rispondere con un riassunto del lavoro svolto e con i task rimanenti consigliati.
 
 :::caution
-Il campo legacy `maxSteps` e' deprecato. Usa `steps`.
+Il campo legacy `maxSteps` è deprecato. Usa `steps`.
 :::
 
 ---
 
-### Disabilita
+### Disabilitazione
 
 Imposta a `true` per disabilitare l'agente.
 
@@ -336,13 +335,13 @@ Specifica un file di system prompt personalizzato per questo agente tramite la c
 }
 ```
 
-Questo path e' relativo alla posizione del file di configurazione. Quindi funziona sia per la config globale di OpenCode sia per la config specifica del progetto.
+Questo path è relativo alla posizione del file di configurazione. Quindi funziona sia per la config globale di OpenCode sia per la config specifica del progetto.
 
 ---
 
 ### Modello
 
-Usa la config `model` per sovrascrivere il modello per questo agente. Utile per usare modelli diversi ottimizzati per task diversi. Per esempio, un modello piu' veloce per la pianificazione e uno piu' capace per l'implementazione.
+Usa la config `model` per sovrascrivere il modello per questo agente. Utile per usare modelli diversi ottimizzati per task diversi. Per esempio, un modello più veloce per la pianificazione e uno più capace per l'implementazione.
 
 :::tip
 Se non specifichi un modello, gli agenti primari usano il [modello configurato globalmente](/docs/config#models), mentre i subagenti useranno il modello dell'agente primario che li ha invocati.
@@ -388,7 +387,7 @@ Controlla quali strumenti sono disponibili per questo agente tramite la config `
 La configurazione specifica dell'agente sovrascrive la configurazione globale.
 :::
 
-Puoi anche usare wildcard per controllare piu' strumenti in una volta. Per esempio, per disabilitare tutti gli strumenti di un server MCP:
+Puoi anche usare wildcard per controllare più strumenti in una volta. Per esempio, per disabilitare tutti gli strumenti di un server MCP:
 
 ```json title="opencode.json"
 {
@@ -405,13 +404,13 @@ Puoi anche usare wildcard per controllare piu' strumenti in una volta. Per esemp
 }
 ```
 
-[Scopri di piu' sugli strumenti](/docs/tools).
+[Scopri di più sugli strumenti](/docs/tools).
 
 ---
 
 ### Permessi
 
-Puoi configurare i permessi per gestire quali azioni un agente puo' eseguire. Attualmente, i permessi per gli strumenti `edit`, `bash` e `webfetch` possono essere configurati come:
+Puoi configurare i permessi per gestire quali azioni un agente può eseguire. Attualmente, i permessi per gli strumenti `edit`, `bash` e `webfetch` possono essere configurati come:
 
 - `"ask"` — chiede approvazione prima di eseguire lo strumento
 - `"allow"` — consente tutte le operazioni senza approvazione
@@ -481,7 +480,7 @@ Puoi impostare permessi per comandi bash specifici.
 }
 ```
 
-Questo puo' usare un glob pattern.
+Questo può usare un glob pattern.
 
 ```json title="opencode.json" {7}
 {
@@ -517,13 +516,13 @@ Dato che l'ultima regola che corrisponde ha la precedenza, metti prima la wildca
 }
 ```
 
-[Scopri di piu' sui permessi](/docs/permissions).
+[Scopri di più sui permessi](/docs/permissions).
 
 ---
 
-### Modalita'
+### Modalità
 
-Controlla la modalita' dell'agente con la config `mode`. L'opzione `mode` determina come l'agente puo' essere usato.
+Controlla la modalità dell'agente con la config `mode`. L'opzione `mode` determina come l'agente può essere usato.
 
 ```json title="opencode.json"
 {
@@ -535,7 +534,7 @@ Controlla la modalita' dell'agente con la config `mode`. L'opzione `mode` determ
 }
 ```
 
-`mode` puo' essere `primary`, `subagent` o `all`. Se `mode` non e' specificato, il default e' `all`.
+`mode` può essere `primary`, `subagent` o `all`. Se `mode` non è specificato, il default è `all`.
 
 ---
 
@@ -554,7 +553,7 @@ Nascondi un subagente dal menu autocomplete di `@` con `hidden: true`. Utile per
 }
 ```
 
-Questo influisce solo sulla visibilita' per l'utente nel menu autocomplete. Gli agenti nascosti possono comunque essere invocati dal modello tramite lo strumento Task se i permessi lo consentono.
+Questo influisce solo sulla visibilità per l'utente nel menu autocomplete. Gli agenti nascosti possono comunque essere invocati dal modello tramite lo strumento Task se i permessi lo consentono.
 
 :::note
 Si applica solo ad agenti con `mode: subagent`.
@@ -564,7 +563,7 @@ Si applica solo ad agenti con `mode: subagent`.
 
 ### Permessi Task
 
-Controlla quali subagenti un agente puo' invocare tramite lo strumento Task con `permission.task`. Usa glob pattern per un matching flessibile.
+Controlla quali subagenti un agente può invocare tramite lo strumento Task con `permission.task`. Usa glob pattern per un matching flessibile.
 
 ```json title="opencode.json"
 {
@@ -583,10 +582,10 @@ Controlla quali subagenti un agente puo' invocare tramite lo strumento Task con 
 }
 ```
 
-Quando e' impostato a `deny`, il subagente viene rimosso interamente dalla descrizione dello strumento Task, quindi il modello non provera' a invocarlo.
+Quando è impostato a `deny`, il subagente viene rimosso interamente dalla descrizione dello strumento Task, quindi il modello non proverà a invocarlo.
 
 :::tip
-Le regole vengono valutate in ordine e **vince l'ultima regola che corrisponde**. Nell'esempio sopra, `orchestrator-planner` corrisponde sia a `*` (deny) sia a `orchestrator-*` (allow), ma dato che `orchestrator-*` viene dopo `*`, il risultato e' `allow`.
+Le regole vengono valutate in ordine e **vince l'ultima regola che corrisponde**. Nell'esempio sopra, `orchestrator-planner` corrisponde sia a `*` (deny) sia a `orchestrator-*` (allow), ma dato che `orchestrator-*` viene dopo `*`, il risultato è `allow`.
 :::
 
 :::tip
@@ -618,7 +617,7 @@ Usa un colore hex valido (ad es. `#FF5733`) o un colore tema: `primary`, `second
 
 ### Top P
 
-Controlla la diversita' delle risposte con l'opzione `top_p`. Alternativa alla temperature per controllare la casualita'.
+Controlla la diversità delle risposte con l'opzione `top_p`. Alternativa alla temperature per controllare la casualità.
 
 ```json title="opencode.json"
 {
@@ -630,13 +629,13 @@ Controlla la diversita' delle risposte con l'opzione `top_p`. Alternativa alla t
 }
 ```
 
-I valori vanno da 0.0 a 1.0. Valori piu' bassi sono piu' focalizzati, valori piu' alti piu' diversi.
+I valori vanno da 0.0 a 1.0. Valori più bassi sono più focalizzati, valori più alti più diversi.
 
 ---
 
 ### Opzioni aggiuntive
 
-Qualsiasi altra opzione che specifichi nella configurazione dell'agente verra' **passata direttamente** al provider come opzione del modello. Questo ti permette di usare feature e parametri specifici del provider.
+Qualsiasi altra opzione che specifichi nella configurazione dell'agente verrà **passata direttamente** al provider come opzione del modello. Questo ti permette di usare feature e parametri specifici del provider.
 
 Per esempio, con i modelli di reasoning di OpenAI, puoi controllare lo sforzo di ragionamento:
 
@@ -661,7 +660,7 @@ Esegui `opencode models` per vedere la lista dei modelli disponibili.
 
 ---
 
-## Crea agenti
+## Creazione agenti
 
 Puoi creare nuovi agenti usando il comando seguente:
 
@@ -674,7 +673,7 @@ Questo comando interattivo:
 1. Chiede dove salvare l'agente: globale o specifico del progetto.
 2. Chiede una descrizione di cosa dovrebbe fare l'agente.
 3. Genera un system prompt appropriato e un identificatore.
-4. Ti fa selezionare a quali strumenti l'agente puo' accedere.
+4. Ti fa selezionare a quali strumenti l'agente può accedere.
 5. Infine, crea un file markdown con la configurazione dell'agente.
 
 ---
@@ -685,7 +684,7 @@ Ecco alcuni casi d'uso comuni per agenti diversi.
 
 - **Build agent**: sviluppo completo con tutti gli strumenti abilitati
 - **Plan agent**: analisi e pianificazione senza apportare modifiche
-- **Review agent**: code review con accesso in sola lettura piu' strumenti documentazione
+- **Review agent**: code review con accesso in sola lettura più strumenti documentazione
 - **Debug agent**: focalizzato sull'investigazione con strumenti bash e read abilitati
 - **Docs agent**: scrittura documentazione con operazioni sui file ma senza comandi di sistema
 

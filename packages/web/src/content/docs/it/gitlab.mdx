@@ -17,7 +17,7 @@ Qui usiamo un componente CI/CD creato dalla community per OpenCode — [nagyv/gi
 
 ---
 
-### Funzionalita'
+### Funzionalità
 
 - **Configurazione personalizzata per job**: configura OpenCode con una directory di configurazione personalizzata, ad esempio `./config/#custom-directory`, per abilitare o disabilitare funzionalita' per ogni invocazione di OpenCode.
 - **Setup minimo**: il componente CI prepara OpenCode in background; devi solo creare la configurazione OpenCode e il prompt iniziale.
@@ -25,7 +25,7 @@ Qui usiamo un componente CI/CD creato dalla community per OpenCode — [nagyv/gi
 
 ---
 
-### Setup
+### Configurazione
 
 1. Salva il JSON di autenticazione di OpenCode come variabile d'ambiente CI di tipo File in **Settings** > **CI/CD** > **Variables**. Assicurati di marcarla come "Masked and hidden".
 2. Aggiungi quanto segue al tuo file `.gitlab-ci.yml`.
@@ -51,7 +51,7 @@ Menziona `@opencode` in un commento e OpenCode eseguira' i task dentro la tua pi
 
 ---
 
-### Funzionalita'
+### Funzionalità
 
 - **Triage delle issue**: chiedi a OpenCode di indagare su una issue e spiegartela.
 - **Fix e implementazioni**: chiedi a OpenCode di risolvere una issue o implementare una feature.
@@ -60,7 +60,7 @@ Menziona `@opencode` in un commento e OpenCode eseguira' i task dentro la tua pi
 
 ---
 
-### Setup
+### Configurazione
 
 OpenCode gira nella pipeline GitLab CI/CD. Ecco cosa ti serve per configurarlo:
 

@@ -14,10 +14,11 @@ OpenCode รองรับทั้งรูปแบบ **JSON** และ **J
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  // Theme configuration
-  "theme": "opencode",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
+  "server": {
+    "port": 4096,
+  },
 }
 ```
 
@@ -34,7 +35,7 @@ OpenCode รองรับทั้งรูปแบบ **JSON** และ **J
 
 ไฟล์การกำหนดค่าจะถูกรวมเข้าด้วยกัน โดยไม่มีการแทนที่ การตั้งค่าจากตำแหน่งการกำหนดค่าต่อไปนี้จะรวมกัน การกำหนดค่าในภายหลังจะแทนที่การกำหนดค่าก่อนหน้าสำหรับคีย์ที่ขัดแย้งกันเท่านั้น การตั้งค่าที่ไม่ขัดแย้งจากการกำหนดค่าทั้งหมดจะยังคงอยู่
 
-ตัวอย่างเช่น หากการกำหนดค่าส่วนกลางของคุณตั้งค่า `theme: "opencode"` และ `autoupdate: true` และการกำหนดค่าโปรเจ็กต์ของคุณตั้งค่า `model: "anthropic/claude-sonnet-4-5"` การกำหนดค่าสุดท้ายจะรวมการตั้งค่าทั้งสามรายการไว้ด้วย
+ตัวอย่างเช่น หากการกำหนดค่าส่วนกลางของคุณตั้งค่า `autoupdate: true` และการกำหนดค่าโปรเจ็กต์ของคุณตั้งค่า `model: "anthropic/claude-sonnet-4-5"` การกำหนดค่าสุดท้ายจะรวมการตั้งค่าทั้งสองรายการไว้ด้วย
 
 ---
 
@@ -95,7 +96,9 @@ OpenCode รองรับทั้งรูปแบบ **JSON** และ **J
 
 ### ทั่วโลก
 
-วางการกำหนดค่า OpenCode ส่วนกลางของคุณใน `~/.config/opencode/opencode.json` ใช้การกำหนดค่าส่วนกลางสำหรับการตั้งค่าทั้งผู้ใช้ เช่น ธีม ผู้ให้บริการ หรือปุ่มลัด
+วางการกำหนดค่า OpenCode ส่วนกลางของคุณใน `~/.config/opencode/opencode.json` ใช้การกำหนดค่าส่วนกลางสำหรับการตั้งค่าทั้งผู้ใช้ เช่น ผู้ให้บริการ รุ่น และสิทธิ์
+
+สำหรับการตั้งค่าเฉพาะ TUI ให้ใช้ `~/.config/opencode/tui.json`
 
 การกำหนดค่าส่วนกลางจะแทนที่ค่าเริ่มต้นขององค์กรระยะไกล
 
@@ -104,6 +107,8 @@ OpenCode รองรับทั้งรูปแบบ **JSON** และ **J
 ### ต่อโครงการ
 
 เพิ่ม `opencode.json` ในรูทโปรเจ็กต์ของคุณ การกำหนดค่าโปรเจ็กต์มีความสำคัญสูงสุดในบรรดาไฟล์กำหนดค่ามาตรฐาน โดยจะแทนที่การกำหนดค่าทั้งส่วนกลางและระยะไกล
+
+สำหรับการตั้งค่า TUI เฉพาะโครงการ ให้เพิ่ม `tui.json` ควบคู่ไปกับมัน
 
 :::tip
 วางการกำหนดค่าเฉพาะโปรเจ็กต์ไว้ที่รากของโปรเจ็กต์ของคุณ
@@ -148,38 +153,36 @@ opencode run "Hello world"
 
 ไฟล์กำหนดค่ามีสคีมาที่กำหนดไว้ใน [**`opencode.ai/config.json`**](https://opencode.ai/config.json)
 
+การกำหนดค่า TUI ใช้ [**`opencode.ai/tui.json`**](https://opencode.ai/tui.json)
+
 ผู้แก้ไขของคุณควรสามารถตรวจสอบและเติมข้อความอัตโนมัติตามสคีมาได้
 
 ---
 
 ### TUI
 
-คุณสามารถกำหนดการตั้งค่าเฉพาะ TUI ผ่านตัวเลือก `tui`
+ใช้ไฟล์ `tui.json` (หรือ `tui.jsonc`) เฉพาะสำหรับการตั้งค่าเฉพาะ TUI
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "tui": {
-    "scroll_speed": 3,
-    "scroll_acceleration": {
-      "enabled": true
-    },
-    "diff_style": "auto"
-  }
+  "$schema": "https://opencode.ai/tui.json",
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": true
+  },
+  "diff_style": "auto"
 }
 ```
 
-ตัวเลือกที่มี:
+ใช้ `OPENCODE_TUI_CONFIG` เพื่อชี้ไปยังไฟล์กำหนดค่า TUI ที่กำหนดเอง
 
-- `scroll_acceleration.enabled` - ​​เปิดใช้งานการเร่งความเร็วการเลื่อนแบบ macOS **มีลำดับความสำคัญมากกว่า `scroll_speed`.**
-- `scroll_speed` - ​​ตัวคูณความเร็วการเลื่อนแบบกำหนดเอง (ค่าเริ่มต้น: `3` ขั้นต่ำ: `1`) ไม่สนใจหาก `scroll_acceleration.enabled` คือ `true`
-- `diff_style` - ​​ควบคุมการเรนเดอร์ต่าง `"auto"` ปรับให้เข้ากับความกว้างของ terminal `"stacked"` จะแสดงคอลัมน์เดียวเสมอ
+คีย์ `theme`, `keybinds` และ `tui` แบบเดิมใน `opencode.json` เลิกใช้แล้วและจะถูกย้ายโดยอัตโนมัติเมื่อเป็นไปได้
 
-[เรียนรู้เพิ่มเติมเกี่ยวกับการใช้ TUI ที่นี่](/docs/tui)
+[เรียนรู้เพิ่มเติมเกี่ยวกับการใช้ TUI ที่นี่](/docs/tui#configure)
 
 ---
 
-### Server
+### เซิร์ฟเวอร์
 
 คุณสามารถกำหนดการตั้งค่าเซิร์ฟเวอร์สำหรับคำสั่ง `opencode serve` และ `opencode web` ผ่านตัวเลือก `server`
 
@@ -208,7 +211,7 @@ opencode run "Hello world"
 
 ---
 
-### Tools
+### เครื่องมือ
 
 คุณสามารถจัดการเครื่องมือที่ LLM สามารถใช้ได้ผ่านตัวเลือก `tools`
 
@@ -301,12 +304,12 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 
 ### Themes
 
-คุณสามารถกำหนดค่าธีมที่คุณต้องการใช้ในการกำหนดค่า OpenCode ของคุณได้ผ่านตัวเลือก `theme`
+ตั้งค่าธีม UI ของคุณใน `tui.json`
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "theme": ""
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "tokyonight"
 }
 ```
 
@@ -378,7 +381,7 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 
 ---
 
-### Commands
+### คำสั่ง
 
 คุณสามารถกำหนดค่าคำสั่งที่กำหนดเองสำหรับงานซ้ำๆ ได้ผ่านตัวเลือก `command`
 
@@ -404,13 +407,13 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 
 ---
 
-### Keybinds
+### คีย์ลัด
 
-คุณสามารถปรับแต่งปุ่มลัดของคุณได้ผ่านตัวเลือก `keybinds`
+ปรับแต่งปุ่มลัดใน `tui.json`
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {}
 }
 ```
@@ -419,7 +422,7 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 
 ---
 
-### Autoupdate
+### อัปเดตอัตโนมัติ
 
 OpenCode จะดาวน์โหลดการอัปเดตใหม่โดยอัตโนมัติเมื่อเริ่มต้นระบบ คุณสามารถปิดการใช้งานนี้ได้โดยใช้ตัวเลือก `autoupdate`
 
@@ -435,7 +438,7 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 ---
 
-### Formatters
+### ตัวจัดรูปแบบ
 
 คุณสามารถกำหนดค่าตัวจัดรูปแบบโค้ดผ่านตัวเลือก `formatter`
 
@@ -461,7 +464,7 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 ---
 
-### Permissions
+### การอนุญาต
 
 ตามค่าเริ่มต้น opencode **อนุญาตการดำเนินการทั้งหมด** โดยไม่ต้องมีการอนุมัติอย่างชัดเจน คุณสามารถเปลี่ยนสิ่งนี้ได้โดยใช้ตัวเลือก `permission`
 
@@ -481,7 +484,7 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 ---
 
-### Compaction
+### การบีบอัด
 
 คุณสามารถควบคุมลักษณะการทำงานของการบีบอัดบริบทได้โดยใช้ตัวเลือก `compaction`
 
@@ -490,17 +493,19 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
     "auto": true,
-    "prune": true
+    "prune": true,
+    "reserved": 10000
   }
 }
 ```
 
 - `auto` - ​​กระชับเซสชันโดยอัตโนมัติเมื่อบริบทเต็ม (ค่าเริ่มต้น: `true`)
 - `prune` - ​​ลบเอาท์พุตเครื่องมือเก่าเพื่อบันทึก tokens (ค่าเริ่มต้น: `true`)
+- `reserved` - บัฟเฟอร์โทเค็นสำหรับการบีบอัด ให้หน้าต่างเพียงพอเพื่อหลีกเลี่ยงการล้นระหว่างการบีบอัด
 
 ---
 
-### Watcher
+### ตัวเฝ้าดู
 
 คุณสามารถกำหนดค่ารูปแบบการละเว้นตัวเฝ้าดูไฟล์ได้ผ่านตัวเลือก `watcher`
 
@@ -532,7 +537,7 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 ---
 
-### Plugins
+### ปลั๊กอิน
 
 [ปลั๊กอิน](/docs/plugins) ขยาย OpenCode ด้วยเครื่องมือที่กำหนดเอง hooks และการผสานรวม
 
@@ -549,7 +554,7 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 ---
 
-### Instructions
+### คำแนะนำ
 
 คุณสามารถกำหนดค่าคำแนะนำสำหรับรุ่นที่คุณใช้ผ่านตัวเลือก `instructions`
 
@@ -609,7 +614,7 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 ---
 
-### Experimental
+### ขั้นทดลอง
 
 ปุ่ม `experimental` มีตัวเลือกที่อยู่ระหว่างการพัฒนา
 

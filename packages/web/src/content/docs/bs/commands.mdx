@@ -13,7 +13,7 @@ Prilagođene komande su dodatak ugrađenim komandama kao što su `/init`, `/undo
 
 ---
 
-## Kreirajte komandne fajlove
+## Kreiranje datoteka naredbi
 
 Kreirajte markdown fajlove u direktorijumu `commands/` da definišete prilagođene komande.
 Kreiraj `.opencode/commands/test.md`:
@@ -38,7 +38,7 @@ Koristite komandu tako što ćete upisati `/` nakon čega slijedi naziv komande.
 
 ---
 
-## Konfiguriši
+## Konfiguracija
 
 Možete dodati prilagođene komande kroz OpenCode konfiguraciju ili kreiranjem markdown datoteka u direktoriju `commands/`.
 
@@ -99,7 +99,7 @@ Ime markdown datoteke postaje ime naredbe. Na primjer, `test.md` vam omogućava 
 
 ---
 
-## Prompt config
+## Konfiguracija upita
 
 Promptovi za prilagođene komande podržavaju nekoliko posebnih čuvara mjesta i sintakse.
 
@@ -190,7 +190,7 @@ Naredbe se pokreću u korijenskom direktoriju vašeg projekta i njihov izlaz pos
 
 ---
 
-### Reference fajlova
+### Reference datoteka
 
 Uključite datoteke u svoju naredbu koristeći `@` nakon čega slijedi naziv datoteke.
 
@@ -213,7 +213,7 @@ Pogledajmo detaljno opcije konfiguracije.
 
 ---
 
-### Template
+### Šablon
 
 Opcija `template` definira prompt koji će biti poslan LLM-u kada se naredba izvrši.
 
@@ -269,7 +269,7 @@ Ovo je **opciona** opcija konfiguracije. Ako nije navedeno, podrazumevano je va�
 
 ---
 
-### Subtask
+### Podzadatak
 
 Koristite `subtask` boolean da prisilite naredbu da pokrene [subagent](/docs/agents/#subagents) pozivanje.
 Ovo je korisno ako želite da naredba ne zagađuje vaš primarni kontekst i da će **primorati** agenta da djeluje kao subagent,
@@ -307,9 +307,9 @@ Ovo je **opciona** opcija konfiguracije.
 
 ---
 
-## Ugrađene
+## Ugrađene naredbe
 
-opencode uključuje nekoliko ugrađenih naredbi kao što su `/init`, `/undo`, `/redo`, `/share`, `/help`; [saznaj više](/docs/tui#commands).
+OpenCode uključuje nekoliko ugrađenih naredbi kao što su `/init`, `/undo`, `/redo`, `/share`, `/help`; [saznaj više](/docs/tui#commands).
 :::note
 Prilagođene komande mogu nadjačati ugrađene komande.
 :::

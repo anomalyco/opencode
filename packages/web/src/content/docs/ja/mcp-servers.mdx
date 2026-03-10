@@ -3,7 +3,7 @@ title: MCPサーバー
 description: ローカルおよびリモートの MCP ツールを追加します。
 ---
 
-_Model Context Protocol_ (MCP) を使用して、OpenCode に外部ツールを追加できます。 OpenCode は、ローカル サーバーとリモート サーバーの両方をサポートします。
+_Model Context Protocol_ (MCP) を使用して、OpenCode に外部ツールを追加できます。 OpenCode は、ローカルサーバーとリモートサーバーの両方をサポートします。
 
 MCP ツールを追加すると、組み込みツールとともに LLM で自動的に使用できるようになります。
 
@@ -16,13 +16,14 @@ MCP サーバーを使用すると、コンテキストが追加されます。�
 :::tip
 MCP サーバーはコンテキストに追加されるため、どのサーバーを有効にするかには注意してください。
 :::
-Certain MCP サーバーなどの特定の MCP サーバーは、大量のトークンを追加する傾向があり、コンテキスト制限を簡単に超える可能性があります。
+
+特定の MCP サーバー (GitHub MCP サーバーなど) は、大量のトークンを追加する傾向があり、コンテキスト制限を簡単に超える可能性があります。
 
 ---
 
-## 有効にする
+## 有効化
 
-MCP サーバーは、`mcp` の下の [OpenCode Config](https://opencode.ai/docs/config/) で定義できます。各 MCP を一意の名前で追加します。 LLM にプロンプ​​トを表示するときに、その MCP を名前で参照できます。
+MCP サーバーは、`mcp` の下の [OpenCode 設定](https://opencode.ai/docs/config/) で定義できます。各 MCP を一意の名前で追加します。 LLM にプロンプ​​トを表示するときに、その MCP を名前で参照できます。
 
 ```jsonc title="opencode.jsonc" {6}
 {
@@ -39,7 +40,7 @@ MCP サーバーは、`mcp` の下の [OpenCode Config](https://opencode.ai/docs
 }
 ```
 
-`enabled` を `false` に設定してサーバーを無効にすることもできます。これは、サーバーを構成から削除せずに一時的に無効にする場合に便利です。
+`enabled` を `false` に設定してサーバーを無効にすることもできます。これは、サーバーを設定から削除せずに一時的に無効にする場合に便利です。
 
 ---
 
@@ -47,7 +48,7 @@ MCP サーバーは、`mcp` の下の [OpenCode Config](https://opencode.ai/docs
 
 組織は、`.well-known/opencode` エンドポイント経由でデフォルトの MCP サーバーを提供できます。これらのサーバーはデフォルトで無効になっている場合があり、ユーザーは必要なサーバーにオプトインできます。
 
-組織のリモート構成から特定のサーバーを有効にするには、`enabled: true` を使用してローカル構成に追加します。
+組織のリモート設定から特定のサーバーを有効にするには、`enabled: true` を使用してローカル設定に追加します。
 
 ```json title="opencode.json"
 {
@@ -62,11 +63,11 @@ MCP サーバーは、`mcp` の下の [OpenCode Config](https://opencode.ai/docs
 }
 ```
 
-ローカルの設定値はリモートのデフォルト値をオーバーライドします。詳細については、「config precedence](/docs/config#precedence-order)」を参照してください。
+ローカルの設定値はリモートのデフォルト値をオーバーライドします。詳細については、「[設定の優先順位](/docs/config#precedence-order)」を参照してください。
 
 ---
 
-## Local
+## ローカル
 
 MCP オブジェクト内の `type` から `"local"` を使用してローカル MCP サーバーを追加します。
 
@@ -89,7 +90,7 @@ MCP オブジェクト内の `type` から `"local"` を使用してローカル
 
 このコマンドは、ローカル MCP サーバーの起動方法を示します。環境変数のリストを渡すこともできます。
 
-たとえば、テスト [`@modelcontextprotocol/server-everything`](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) MCP サーバー] を追加する方法は次のとおりです。
+たとえば、テスト [`@modelcontextprotocol/server-everything`](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) MCP サーバーを追加する方法は次のとおりです。
 
 ```jsonc title="opencode.jsonc"
 {
@@ -121,7 +122,7 @@ use the mcp_everything tool to add the number 3 and 4
 | `command`     | 配列         | Y    | MCP サーバーを実行するためのコマンドと引数。                                               |
 | `environment` | オブジェクト |      | サーバーの実行時に設定する環境変数。                                                       |
 | `enabled`     | ブール値     |      | 起動時に MCP サーバーを有効または無効にします。                                            |
-| `timeout`     | 番号         |      | MCP サーバーからツールを取得する際のタイムアウト (ミリ秒)。デフォルトは 5000 (5 秒) です。 |
+| `timeout`     | 数値         |      | MCP サーバーからツールを取得する際のタイムアウト (ミリ秒)。デフォルトは 5000 (5 秒) です。 |
 
 ---
 
@@ -157,8 +158,8 @@ use the mcp_everything tool to add the number 3 and 4
 | `url`      | 文字列       | Y    | リモート MCP サーバーの URL。                                                              |
 | `enabled`  | ブール値     |      | 起動時に MCP サーバーを有効または無効にします。                                            |
 | `headers`  | オブジェクト |      | リクエストとともに送信するヘッダー。                                                       |
-| `oauth`    | オブジェクト |      | OAuth認証構成。以下の「OAuth](#oauth)」セクションを参照してください。                      |
-| `timeout`  | 番号         |      | MCP サーバーからツールを取得する際のタイムアウト (ミリ秒)。デフォルトは 5000 (5 秒) です。 |
+| `oauth`    | オブジェクト |      | OAuth 認証設定。以下の「[OAuth](#oauth)」セクションを参照してください。                    |
+| `timeout`  | 数値         |      | MCP サーバーからツールを取得する際のタイムアウト (ミリ秒)。デフォルトは 5000 (5 秒) です。 |
 
 ---
 
@@ -188,7 +189,7 @@ OpenCode は、リモート MCP サーバーの OAuth 認証を自動的に処�
 }
 ```
 
-サーバーが認証を必要とする場合、OpenCode を初めて使用しようとすると、認証を求めるプロンプトが表示されます。そうでない場合は、`opencode mcp auth <server-name>` を使用して flow](#authenticating) を手動でトリガーできます。
+サーバーが認証を必要とする場合、OpenCode を初めて使用しようとすると、認証を求めるプロンプトが表示されます。そうでない場合は、`opencode mcp auth <server-name>` を使用して [flow](#authenticating) を手動でトリガーできます。
 
 ---
 
@@ -265,7 +266,7 @@ opencode mcp logout my-oauth-server
 
 #### OAuth オプション
 
-| Option         | Type            | Description                                                                      |
+| オプション     | タイプ          | 説明                                                                             |
 | -------------- | --------------- | -------------------------------------------------------------------------------- |
 | `oauth`        | Object \| false | OAuth config object, or `false` to disable OAuth auto-detection.                 |
 | `clientId`     | String          | OAuth client ID. If not provided, dynamic client registration will be attempted. |
@@ -290,7 +291,7 @@ opencode mcp debug my-oauth-server
 
 ## 管理
 
-MCP は、組み込みツールと並んで、OpenCode のツールとして利用できます。したがって、他のツールと同様に、OpenCode config を通じてそれらを管理できます。
+MCP は、組み込みツールと並んで、OpenCode のツールとして利用できます。したがって、他のツールと同様に、OpenCode 設定を通じてそれらを管理できます。
 
 ---
 
@@ -317,7 +318,7 @@ MCP は、組み込みツールと並んで、OpenCode のツールとして利�
 }
 ```
 
-グロブ パターンを使用して、一致するすべての MCP を無効にすることもできます。
+グロブパターンを使用して、一致するすべての MCP を無効にすることもできます。
 
 ```json title="opencode.json" {14}
 {
@@ -338,7 +339,7 @@ MCP は、組み込みツールと並んで、OpenCode のツールとして利�
 }
 ```
 
-ここでは、グロブ パターン `my-mcp*` を使用して、すべての MCP を無効にしています。
+ここでは、グロブパターン `my-mcp*` を使用して、すべての MCP を無効にしています。
 
 ---
 
@@ -347,7 +348,7 @@ MCP は、組み込みツールと並んで、OpenCode のツールとして利�
 多数の MCP サーバーがある場合は、エージェントごとにのみ有効にし、グローバルに無効にすることができます。これを行うには:
 
 1. ツールとしてグローバルに無効にします。
-2. [エージェント config](/docs/agents#tools) で、MCP サーバーをツールとして有効にします。
+2. [エージェント設定](/docs/agents#tools) で、MCP サーバーをツールとして有効にします。
 
 ```json title="opencode.json" {11, 14-18}
 {
@@ -376,20 +377,22 @@ MCP は、組み込みツールと並んで、OpenCode のツールとして利�
 
 #### グロブパターン
 
-グロブ パターンでは、単純な正規表現のグロブ パターンを使用します。
+グロブパターンでは、単純な正規表現のグロブパターンを使用します。
 
 - `*` は 0 個以上の任意の文字に一致します (例: `"my-mcp*"` は `my-mcp_search`、`my-mcp_list` などに一致します)。
 - `?` は 1 つの文字に正確に一致します
 - 他のすべての文字は文字通り一致します
 
 :::note
-MCP サーバー ツールはサーバー名をプレフィックスとして登録されているため、サーバーのすべてのツールを無効にするには、次のコマンドを使用するだけです。
+MCP サーバーツールはサーバー名をプレフィックスとして登録されているため、サーバーのすべてのツールを無効にするには、次のコマンドを使用するだけです。
 
 ```
 "mymcpservername_*": false
 ```
 
 :::
+
+---
 
 ## 例
 
@@ -399,7 +402,7 @@ MCP サーバー ツールはサーバー名をプレフィックスとして登
 
 ### Sentry
 
-[Sentry MCP サーバー ](https://mcp.sentry.dev) を追加して、Sentry プロジェクトや問題と対話します。
+[Sentry MCP サーバー](https://mcp.sentry.dev) を追加して、Sentry プロジェクトや問題と対話します。
 
 ```json title="opencode.json" {4-8}
 {
@@ -414,15 +417,15 @@ MCP サーバー ツールはサーバー名をプレフィックスとして登
 }
 ```
 
-構成を追加した後、Sentry で認証します。
+設定を追加した後、Sentry で認証します。
 
 ```bash
 opencode mcp auth sentry
 ```
 
-これにより、ブラウザ ウィンドウが開き、OAuth フローが完了し、OpenCode が Sentry アカウントに接続されます。
+これにより、ブラウザウィンドウが開き、OAuth フローが完了し、OpenCode が Sentry アカウントに接続されます。
 
-認証が完了すると、プロンプトで Sentry ツールを使用して、問題、プロジェクト、エラー データをクエリできるようになります。
+認証が完了すると、プロンプトで Sentry ツールを使用して、問題、プロジェクト、エラーデータをクエリできるようになります。
 
 ```txt "use sentry"
 Show me the latest unresolved issues in my project. use sentry
@@ -471,7 +474,7 @@ Context7 MCP サーバーを使用するには、プロンプトに `use context
 Configure a Cloudflare Worker script to cache JSON API responses for five minutes. use context7
 ```
 
-あるいは、次のようなものを [AGENTS.md](/docs/rules/).
+あるいは、次のようなものを [AGENTS.md](/docs/rules/) に追加します。
 
 ```md title="AGENTS.md"
 When you need to search docs, use `context7` tools.
@@ -481,7 +484,7 @@ When you need to search docs, use `context7` tools.
 
 ### Grep by Vercel
 
-GitHub 上のコード スニペットを検索するには、[Grep by Vercel](https://grep.app) MCP サーバーを追加します。
+GitHub 上のコードスニペットを検索するには、[Grep by Vercel](https://grep.app) MCP サーバーを追加します。
 
 ```json title="opencode.json" {4-7}
 {
@@ -501,7 +504,7 @@ MCP サーバーに `gh_grep` という名前を付けたので、プロンプ�
 What's the right way to set a custom domain in an SST Astro component? use the gh_grep tool
 ```
 
-あるいは、次のようなものを [AGENTS.md](/docs/rules/).
+あるいは、次のようなものを [AGENTS.md](/docs/rules/) に追加します。
 
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.

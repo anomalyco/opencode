@@ -134,23 +134,23 @@ OpenCode-tillatelser tastes inn etter verktøynavn, pluss et par sikkerhetsvakte
 - `glob` — fil-globing (tilsvarer glob-mønsteret)
 - `grep` — innholdssøk (samsvarer med regex-mønsteret)
 - `list` — viser filer i en katalog (tilsvarer katalogbanen)
-- `bash` — kjører shell-kommandoer (matcher analyserte kommandoer som `git status --porcelain`)
-- `task` — lansering av subagenter (tilsvarer subagenttypen)
-- `skill` — laster en ferdighet (tilsvarer ferdighetsnavnet)
+- `bash` — kjører skallkommandoer (matcher analyserte kommandoer som `git status --porcelain`)
+- `task` — start av subagenter (tilsvarer subagenttypen)
+- `skill` — laster en ferdighet (tilsvarer navnet på ferdigheten)
 - `lsp` — kjører LSP-spørringer (for øyeblikket ikke-granulære)
 - `todoread`, `todowrite` — lesing/oppdatering av gjøremålslisten
 - `webfetch` — henter en URL (tilsvarer URL)
 - `websearch`, `codesearch` - nett-/kodesøk (samsvarer med søket)
 - `external_directory` - utløses når et verktøy berører stier utenfor prosjektets arbeidskatalog
-- `doom_loop` — utløses når det samme verktøykallet gjentas 3 ganger med identisk inngang
+- `doom_loop` — utløses når det samme verktøykallet gjentas 3 ganger med identisk inndata
 
 ---
 
-## Standard
+## Standarder
 
 Hvis du ikke spesifiserer noe, starter OpenCode fra tillatte standardinnstillinger:
 
-- De fleste tillatelser er `"allow"` som standard.
+- De fleste tillatelser er satt til `"allow"` som standard.
 - `doom_loop` og `external_directory` er standard til `"ask"`.
 - `read` er `"allow"`, men `.env` filer nektes som standard:
 
@@ -171,7 +171,7 @@ Hvis du ikke spesifiserer noe, starter OpenCode fra tillatte standardinnstilling
 
 ## Hva "ask" gjør
 
-Når OpenCode ber om godkjenning, gir UI tre utfall:
+Når OpenCode ber om godkjenning, gir brukergrensesnittet tre alternativer:
 
 - `once` — godkjenne nettopp denne forespørselen
 - `always` — godkjenn fremtidige forespørsler som samsvarer med de foreslåtte mønstrene (for resten av den nåværende OpenCode-økten)

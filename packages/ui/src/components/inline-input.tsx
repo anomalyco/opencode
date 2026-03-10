@@ -6,6 +6,17 @@ export type InlineInputProps = ComponentProps<"input"> & {
 }
 
 export function InlineInput(props: InlineInputProps) {
-  const [local, others] = splitProps(props, ["class", "width"])
-  return <input data-component="inline-input" class={local.class} style={{ width: local.width }} {...others} />
+  const [local, others] = splitProps(props, ["class", "width", "style"])
+
+  const style = () => {
+    if (!local.style) return { width: local.width }
+    if (typeof local.style === "string") {
+      if (!local.width) return local.style
+      return `${local.style};width:${local.width}`
+    }
+    if (!local.width) return local.style
+    return { ...local.style, width: local.width }
+  }
+
+  return <input data-component="inline-input" class={local.class} style={style()} {...others} />
 }

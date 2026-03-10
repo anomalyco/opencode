@@ -1,4 +1,5 @@
-import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
+import type { ServerConnection } from "@/context/server"
+import { createSdkForServer } from "./server"
 
 export type ServerHealth = { healthy: boolean; version?: string }
 
@@ -17,7 +18,10 @@ function timeoutSignal(timeoutMs: number) {
   const timeout = (AbortSignal as unknown as { timeout?: (ms: number) => AbortSignal }).timeout
   if (timeout) {
     try {
-      return { signal: timeout.call(AbortSignal, timeoutMs), clear: undefined as (() => void) | undefined }
+      return {
+        signal: timeout.call(AbortSignal, timeoutMs),
+        clear: undefined as (() => void) | undefined,
+      }
     } catch {}
   }
   const controller = new AbortController()
@@ -52,7 +56,7 @@ function retryable(error: unknown, signal?: AbortSignal) {
 }
 
 export async function checkServerHealth(
-  url: string,
+  server: ServerConnection.HttpBase,
   fetch: typeof globalThis.fetch,
   opts?: CheckServerHealthOptions,
 ): Promise<ServerHealth> {
@@ -67,8 +71,8 @@ export async function checkServerHealth(
       .catch(() => ({ healthy: false }))
   }
   const attempt = (count: number): Promise<ServerHealth> =>
-    createOpencodeClient({
-      baseUrl: url,
+    createSdkForServer({
+      server,
       fetch,
       signal,
     })

@@ -114,7 +114,7 @@ OpenCode kan udløses af følgende GitHub hændelser:
 | `schedule`                    | Cron-baseret tidsplan                   | Kør OpenCode efter en tidsplan. Kræver `prompt` input. Output går til logfiler og PR'er (intet problem ved kommentere). |
 | `workflow_dispatch`           | Manuel trigger fra GitHub UI            | Udløs OpenCode efter behov via fanen Handlinger. Kræver `prompt` input. Output går til logfiler og PR'er.               |
 
-### Skema Eksempel
+### Tidsplan eksempel
 
 Kør OpenCode efter en tidsplan for at udføre automatiske opgaver:
 
@@ -154,7 +154,7 @@ For planlagte begivenheder er `prompt` input **påkrævet**, da der ikke er noge
 
 ---
 
-### Pull Request Eksempel
+### Pull Request eksempel
 
 Gennemgå automatisk PR'er, når de åbnes eller opdateres:
 
@@ -195,7 +195,7 @@ For `pull_request` hændelser, hvis der ikke er angivet nogen `prompt`, vil Open
 
 ---
 
-### Issues Triage Eksempel
+### Issues Triage eksempel
 
 Triage automatisk nye problemer. Dette eksempel filtrerer til konti ældre end 30 dage for at reducere spam:
 

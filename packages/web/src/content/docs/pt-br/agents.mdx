@@ -3,10 +3,10 @@ title: Agentes
 description: Configure e use agentes especializados.
 ---
 
-Agentes são assistentes de AI especializados que podem ser configurados para tarefas e fluxos de trabalho específicos. Eles permitem que você crie ferramentas focadas com prompts, modelos e acesso a ferramentas personalizados.
+Agentes são assistentes de IA especializados que podem ser configurados para tarefas e fluxos de trabalho específicos. Eles permitem que você crie ferramentas focadas com prompts, modelos e acesso a ferramentas personalizados.
 
 :::tip
-Use o agente de planejamento para analisar código e revisar sugestões sem fazer alterações no código.
+Use o agente de planejamento (plan) para analisar código e revisar sugestões sem fazer alterações no código.
 :::
 
 Você pode alternar entre agentes durante uma sessão ou invocá-los com a menção `@`.
@@ -40,13 +40,13 @@ opencode vem com dois subagentes integrados, **General** e **Explore**. Vamos ve
 
 ---
 
-## Integrado
+## Integrados
 
 opencode vem com dois agentes primários integrados e dois subagentes integrados.
 
 ---
 
-### Usar build
+### build
 
 _Modo_: `primary`
 
@@ -54,7 +54,7 @@ Build é o agente primário **padrão** com todas as ferramentas habilitadas. Es
 
 ---
 
-### Usar plan
+### plan
 
 _Modo_: `primary`
 
@@ -68,7 +68,7 @@ Este agente é útil quando você deseja que o LLM analise código, sugira alter
 
 ---
 
-### Usar general
+### general
 
 _Modo_: `subagent`
 
@@ -76,7 +76,7 @@ Um agente de propósito geral para pesquisar questões complexas e executar tare
 
 ---
 
-### Usar explore
+### explore
 
 _Modo_: `subagent`
 
@@ -84,7 +84,7 @@ Um agente rápido e somente leitura para explorar bases de código. Não pode mo
 
 ---
 
-### Usar compaction
+### compaction
 
 _Modo_: `primary`
 
@@ -92,7 +92,7 @@ Agente de sistema oculto que compacta longos contextos em um resumo menor. Ele �
 
 ---
 
-### Usar title
+### title
 
 _Modo_: `primary`
 
@@ -100,7 +100,7 @@ Agente de sistema oculto que gera títulos curtos para sessões. Ele é executad
 
 ---
 
-### Usar summary
+### summary
 
 _Modo_: `primary`
 
@@ -128,7 +128,7 @@ Agente de sistema oculto que cria resumos de sessões. Ele é executado automati
 
 ---
 
-## Configurar
+## Configuração
 
 Você pode personalizar os agentes integrados ou criar os seus próprios através da configuração. Os agentes podem ser configurados de duas maneiras:
 
@@ -162,10 +162,10 @@ Configure os agentes em seu arquivo de configuração `opencode.json`:
       }
     },
     "code-reviewer": {
-      "description": "Reviews code for best practices and potential issues",
+      "description": "Revisa código para melhores práticas e potenciais problemas",
       "mode": "subagent",
       "model": "anthropic/claude-sonnet-4-20250514",
-      "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
+      "prompt": "Você é um revisor de código. Foque em segurança, performance e manutenibilidade.",
       "tools": {
         "write": false,
         "edit": false
@@ -186,7 +186,7 @@ Você também pode definir agentes usando arquivos markdown. Coloque-os em:
 
 ```markdown title="~/.config/opencode/agents/review.md"
 ---
-description: Reviews code for quality and best practices
+description: Revisa código para qualidade e melhores práticas
 mode: subagent
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.1
@@ -196,14 +196,14 @@ tools:
   bash: false
 ---
 
-You are in code review mode. Focus on:
+Você está no modo de revisão de código. Foque em:
 
-- Code quality and best practices
-- Potential bugs and edge cases
-- Performance implications
-- Security considerations
+- Qualidade do código e melhores práticas
+- Bugs potenciais e casos de borda
+- Implicações de desempenho
+- Considerações de segurança
 
-Provide constructive feedback without making direct changes.
+Forneça feedback construtivo sem fazer alterações diretas.
 ```
 
 O nome do arquivo markdown se torna o nome do agente. Por exemplo, `review.md` cria um agente `review`.
@@ -224,7 +224,7 @@ Use a opção `description` para fornecer uma breve descrição do que o agente 
 {
   "agent": {
     "review": {
-      "description": "Reviews code for best practices and potential issues"
+      "description": "Revisa código para melhores práticas e potenciais problemas"
     }
   }
 }
@@ -291,8 +291,8 @@ Se isso não for definido, o agente continuará a iterar até que o modelo decid
 {
   "agent": {
     "quick-thinker": {
-      "description": "Fast reasoning with limited iterations",
-      "prompt": "You are a quick thinker. Solve problems with minimal steps.",
+      "description": "Raciocínio rápido com iterações limitadas",
+      "prompt": "Você é um pensador rápido. Resolva problemas com etapas mínimas.",
       "steps": 5
     }
   }
@@ -449,7 +449,7 @@ Você também pode definir permissões em agentes Markdown.
 
 ```markdown title="~/.config/opencode/agents/review.md"
 ---
-description: Code review without edits
+description: Revisão de código sem edições
 mode: subagent
 permission:
   edit: deny
@@ -461,7 +461,7 @@ permission:
   webfetch: deny
 ---
 
-Only analyze code and suggest changes.
+Apenas analise o código e sugira alterações.
 ```
 
 Você pode definir permissões para comandos bash específicos.
@@ -645,7 +645,7 @@ Por exemplo, com os modelos de raciocínio da OpenAI, você pode controlar o esf
 {
   "agent": {
     "deep-thinker": {
-      "description": "Agent that uses high reasoning effort for complex problems",
+      "description": "Agente que usa alto esforço de raciocínio para problemas complexos",
       "model": "openai/gpt-5",
       "reasoningEffort": "high",
       "textVerbosity": "low"
@@ -662,7 +662,7 @@ Execute `opencode models` para ver uma lista dos modelos disponíveis.
 
 ---
 
-## Criar agentes
+## Criando agentes
 
 Você pode criar novos agentes usando o seguinte comando:
 
@@ -706,20 +706,20 @@ Você tem um agente que gostaria de compartilhar? [Envie um PR](https://github.c
 
 ```markdown title="~/.config/opencode/agents/docs-writer.md"
 ---
-description: Writes and maintains project documentation
+description: Escreve e mantém a documentação do projeto
 mode: subagent
 tools:
   bash: false
 ---
 
-You are a technical writer. Create clear, comprehensive documentation.
+Você é um escritor técnico. Crie documentação clara e abrangente.
 
-Focus on:
+Foque em:
 
-- Clear explanations
-- Proper structure
-- Code examples
-- User-friendly language
+- Explicações claras
+- Estrutura adequada
+- Exemplos de código
+- Linguagem amigável ao usuário
 ```
 
 ---
@@ -728,20 +728,20 @@ Focus on:
 
 ```markdown title="~/.config/opencode/agents/security-auditor.md"
 ---
-description: Performs security audits and identifies vulnerabilities
+description: Realiza auditorias de segurança e identifica vulnerabilidades
 mode: subagent
 tools:
   write: false
   edit: false
 ---
 
-You are a security expert. Focus on identifying potential security issues.
+Você é um especialista em segurança. Foque em identificar potenciais problemas de segurança.
 
-Look for:
+Procure por:
 
-- Input validation vulnerabilities
-- Authentication and authorization flaws
-- Data exposure risks
-- Dependency vulnerabilities
-- Configuration security issues
+- Vulnerabilidades de validação de entrada
+- Falhas de autenticação e autorização
+- Riscos de exposição de dados
+- Vulnerabilidades de dependência
+- Problemas de segurança de configuração
 ```

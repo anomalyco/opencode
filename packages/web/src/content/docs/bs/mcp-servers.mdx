@@ -8,7 +8,7 @@ Jednom dodani, MCP alati su automatski dostupni LLM-u zajedno sa ugrađenim alat
 
 ---
 
-#### Upozorenja
+#### Upozorenje
 
 Kada koristite MCP server, on dodaje u kontekst. Ovo se može brzo zbrojiti ako imate puno alata. Stoga preporučujemo da pazite koje MCP servere koristite.
 :::tip
@@ -17,7 +17,7 @@ MCP serveri dodaju vaš kontekst, tako da želite da budete pažljivi s tim koje
 
 Određeni MCP serveri, poput GitHub MCP servera, mogu dodati mnogo tokena i lako premašiti limit konteksta.
 
-## Omogući
+## Omogućavanje
 
 Možete definirati MCP servere u vašoj [OpenCode Config](https://opencode.ai/docs/config/) pod `mcp`. Dodajte svaki MCP sa jedinstvenim imenom. Možete se pozvati na taj MCP po imenu kada tražite LLM.
 
@@ -38,7 +38,7 @@ Možete definirati MCP servere u vašoj [OpenCode Config](https://opencode.ai/do
 
 Također možete onemogućiti server postavljanjem `enabled` na `false`. To je korisno kada ga želite privremeno isključiti bez uklanjanja iz konfiguracije.
 
-### Poništavanje daljinskih zadanih postavki
+### Poništavanje udaljenih zadanih postavki
 
 Organizacije mogu obezbijediti zadane MCP servere preko svoje krajnje tačke `.well-known/opencode`. Ovi serveri mogu biti onemogućeni prema zadanim postavkama, omogućavajući korisnicima da se odluče za one koji su im potrebni.
 Da omogućite određeni server iz udaljene konfiguracije vaše organizacije, dodajte ga u svoju lokalnu konfiguraciju sa `enabled: true`:
@@ -115,7 +115,7 @@ Ovdje su sve opcije za konfiguriranje lokalnog MCP servera.
 
 ---
 
-## Daljinski
+## Udaljeno
 
 Dodajte udaljene MCP servere postavljanjem `type` na `"remote"`.
 
@@ -178,7 +178,7 @@ Za većinu MCP servera sa omogućenim OAuthom nije potrebna posebna konfiguracij
 
 Ako server zahtijeva autentifikaciju, OpenCode će vas tražiti prijavu pri prvom korištenju. Ako se to ne desi, možete [ručno pokrenuti tok](#authenticating) naredbom `opencode mcp auth <server-name>`.
 
-### Prethodno registrovano
+### Prethodno registrirano
 
 Ako imate klijentske vjerodajnice od dobavljača MCP servera, možete ih konfigurirati:
 
@@ -269,11 +269,11 @@ opencode mcp debug my-oauth-server
 
 Komanda `mcp debug` prikazuje trenutni auth status, testira HTTP povezanost i pokušava OAuth discovery flow.
 
-## Manage
+## Upravljanje
 
 Vaši MCP serveri su dostupni kao alati u OpenCode, zajedno s ugrađenim alatima. Možete njima upravljati kroz OpenCode konfiguraciju kao i bilo kojim drugim alatom.
 
-### Global
+### Globalno
 
 To znači da ih možete omogućiti ili onemogućiti globalno.
 

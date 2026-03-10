@@ -10,21 +10,26 @@ async function seedConversation(input: {
   sessionID: string
   token: string
 }) {
+  const messages = async () =>
+    await input.sdk.session.messages({ sessionID: input.sessionID, limit: 100 }).then((r) => r.data ?? [])
+  const seeded = await messages()
+  const userIDs = new Set(seeded.filter((m) => m.info.role === "user").map((m) => m.info.id))
+
   const prompt = input.page.locator(promptSelector)
   await expect(prompt).toBeVisible()
-  await prompt.click()
-  await input.page.keyboard.type(`Reply with exactly: ${input.token}`)
-  await input.page.keyboard.press("Enter")
+  await input.sdk.session.promptAsync({
+    sessionID: input.sessionID,
+    noReply: true,
+    parts: [{ type: "text", text: input.token }],
+  })
 
   let userMessageID: string | undefined
   await expect
     .poll(
       async () => {
-        const messages = await input.sdk.session
-          .messages({ sessionID: input.sessionID, limit: 50 })
-          .then((r) => r.data ?? [])
-        const users = messages.filter(
+        const users = (await messages()).filter(
           (m) =>
+            !userIDs.has(m.info.id) &&
             m.info.role === "user" &&
             m.parts.filter((p) => p.type === "text").some((p) => p.text.includes(input.token)),
         )
@@ -33,21 +38,14 @@ async function seedConversation(input: {
         const user = users[users.length - 1]
         if (!user) return false
         userMessageID = user.info.id
-
-        const assistantText = messages
-          .filter((m) => m.info.role === "assistant")
-          .flatMap((m) => m.parts)
-          .filter((p) => p.type === "text")
-          .map((p) => p.text)
-          .join("\n")
-
-        return assistantText.includes(input.token)
+        return true
       },
-      { timeout: 90_000 },
+      { timeout: 90_000, intervals: [250, 500, 1_000] },
     )
     .toBe(true)
 
   if (!userMessageID) throw new Error("Expected a user message id")
+  await expect(input.page.locator(`[data-message-id="${userMessageID}"]`)).toHaveCount(1, { timeout: 30_000 })
   return { prompt, userMessageID }
 }
 
@@ -125,7 +123,7 @@ test("slash redo clears revert and restores latest state", async ({ page, withPr
         .toBeUndefined()
 
       await expect(seeded.prompt).not.toContainText(token)
-      await expect(page.locator(`[data-message-id="${seeded.userMessageID}"]`).first()).toBeVisible()
+      await expect(page.locator(`[data-message-id="${seeded.userMessageID}"]`)).toHaveCount(1)
     })
   })
 })
@@ -160,8 +158,8 @@ test("slash undo/redo traverses multi-step revert stack", async ({ page, withPro
       const firstMessage = page.locator(`[data-message-id="${first.userMessageID}"]`)
       const secondMessage = page.locator(`[data-message-id="${second.userMessageID}"]`)
 
-      await expect(firstMessage.first()).toBeVisible()
-      await expect(secondMessage.first()).toBeVisible()
+      await expect(firstMessage).toHaveCount(1)
+      await expect(secondMessage).toHaveCount(1)
 
       await second.prompt.click()
       await page.keyboard.press(`${modKey}+A`)
@@ -178,7 +176,7 @@ test("slash undo/redo traverses multi-step revert stack", async ({ page, withPro
         })
         .toBe(second.userMessageID)
 
-      await expect(firstMessage.first()).toBeVisible()
+      await expect(firstMessage).toHaveCount(1)
       await expect(secondMessage).toHaveCount(0)
 
       await second.prompt.click()
@@ -212,7 +210,7 @@ test("slash undo/redo traverses multi-step revert stack", async ({ page, withPro
         })
         .toBe(second.userMessageID)
 
-      await expect(firstMessage.first()).toBeVisible()
+      await expect(firstMessage).toHaveCount(1)
       await expect(secondMessage).toHaveCount(0)
 
       await second.prompt.click()
@@ -228,8 +226,8 @@ test("slash undo/redo traverses multi-step revert stack", async ({ page, withPro
         })
         .toBeUndefined()
 
-      await expect(firstMessage.first()).toBeVisible()
-      await expect(secondMessage.first()).toBeVisible()
+      await expect(firstMessage).toHaveCount(1)
+      await expect(secondMessage).toHaveCount(1)
     })
   })
 })

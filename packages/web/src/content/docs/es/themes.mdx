@@ -59,13 +59,13 @@ El tema del sistema es para usuarios que:
 
 ---
 
-## Usando un tema
+## Usar un tema
 
-Puede seleccionar un tema abriendo la selección de tema con el comando `/theme`. O puede especificarlo en su [config](/docs/config).
+Puede seleccionar un tema abriendo la selección de tema con el comando `/theme`. O puede especificarlo en `tui.json`.
 
-```json title="opencode.json" {3}
+```json title="tui.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "theme": "tokyonight"
 }
 ```
@@ -91,7 +91,7 @@ Si varios directorios contienen un tema con el mismo nombre, se utilizará el te
 
 ---
 
-### Creando un tema
+### Crear un tema
 
 Para crear un tema personalizado, cree un archivo JSON en uno de los directorios de temas.
 
@@ -111,7 +111,7 @@ vim .opencode/themes/my-theme.json
 
 ---
 
-### formato JSON
+### Formato JSON
 
 Los temas utilizan un formato JSON flexible compatible con:
 

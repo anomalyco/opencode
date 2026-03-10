@@ -3,11 +3,11 @@ title: Tastenkombinationen
 description: Passen Sie Ihre Tastenkombinationen an.
 ---
 
-OpenCode verfügt über eine Liste von Tastenkombinationen, die Sie über die OpenCode-Konfiguration anpassen können.
+OpenCode verfügt über eine Liste von Tastenkombinationen, die Sie über `tui.json` anpassen können.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -28,6 +28,7 @@ OpenCode verfügt über eine Liste von Tastenkombinationen, die Sie über die Op
     "session_unshare": "none",
     "session_interrupt": "escape",
     "session_compact": "<leader>c",
+    "session_child_first": "<leader>down",
     "session_child_cycle": "<leader>right",
     "session_child_cycle_reverse": "<leader>left",
     "session_parent": "<leader>up",
@@ -117,11 +118,11 @@ Sie müssen für Ihre Keybinds keinen Leader Key verwenden, wir empfehlen jedoch
 
 ## Keybind deaktivieren
 
-Sie können eine Keybind deaktivieren, indem Sie den Schlüssel mit dem Wert „none“ zu Ihrer Konfiguration hinzufügen.
+Sie können eine Keybind deaktivieren, indem Sie den Schlüssel mit dem Wert „none“ zu `tui.json` hinzufügen.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "session_compact": "none"
   }
@@ -130,7 +131,7 @@ Sie können eine Keybind deaktivieren, indem Sie den Schlüssel mit dem Wert „
 
 ---
 
-## Verknüpfungen zur Desktop-Eingabeaufforderung
+## Desktop-Prompt-Shortcuts
 
 Die Eingabeaufforderungseingabe der OpenCode-Desktop-App unterstützt gängige Readline/Emacs-style-Verknüpfungen zum Bearbeiten von Text. Diese sind integriert und derzeit nicht über `opencode.json` konfigurierbar.
 
@@ -152,11 +153,11 @@ Die Eingabeaufforderungseingabe der OpenCode-Desktop-App unterstützt gängige R
 
 ---
 
-## Umschalt+Eingabetaste
+## Shift+Enter
 
 Einige Terminals senden standardmäßig keine Zusatztasten mit der Eingabetaste. Möglicherweise müssen Sie Ihr Terminal so konfigurieren, dass es `Shift+Enter` als Escape-Sequenz sendet.
 
-### Windows-Terminal
+### Windows Terminal
 
 Öffnen Sie Ihr `settings.json` unter:
 

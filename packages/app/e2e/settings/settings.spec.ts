@@ -83,16 +83,23 @@ test("changing theme persists in localStorage", async ({ page, gotoSession }) =>
   const select = dialog.locator(settingsThemeSelector)
   await expect(select).toBeVisible()
 
+  const currentThemeId = await page.evaluate(() => {
+    return document.documentElement.getAttribute("data-theme")
+  })
+  const currentTheme = (await select.locator('[data-slot="select-select-trigger-value"]').textContent())?.trim() ?? ""
+
   await select.locator('[data-slot="select-select-trigger"]').click()
 
   const items = page.locator('[data-slot="select-select-item"]')
   const count = await items.count()
   expect(count).toBeGreaterThan(1)
 
-  const firstTheme = await items.nth(1).locator('[data-slot="select-select-item-label"]').textContent()
-  expect(firstTheme).toBeTruthy()
+  const nextTheme = (await items.locator('[data-slot="select-select-item-label"]').allTextContents())
+    .map((x) => x.trim())
+    .find((x) => x && x !== currentTheme)
+  expect(nextTheme).toBeTruthy()
 
-  await items.nth(1).click()
+  await items.filter({ hasText: nextTheme! }).first().click()
 
   await page.keyboard.press("Escape")
 
@@ -101,12 +108,48 @@ test("changing theme persists in localStorage", async ({ page, gotoSession }) =>
   })
 
   expect(storedThemeId).not.toBeNull()
-  expect(storedThemeId).not.toBe("oc-1")
+  expect(storedThemeId).not.toBe(currentThemeId)
 
   const dataTheme = await page.evaluate(() => {
     return document.documentElement.getAttribute("data-theme")
   })
   expect(dataTheme).toBe(storedThemeId)
+})
+
+test("legacy oc-1 theme migrates to oc-2", async ({ page, gotoSession }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("opencode-theme-id", "oc-1")
+    localStorage.setItem("opencode-theme-css-light", "--background-base:#fff;")
+    localStorage.setItem("opencode-theme-css-dark", "--background-base:#000;")
+  })
+
+  await gotoSession()
+
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "oc-2")
+
+  await expect
+    .poll(async () => {
+      return await page.evaluate(() => {
+        return localStorage.getItem("opencode-theme-id")
+      })
+    })
+    .toBe("oc-2")
+
+  await expect
+    .poll(async () => {
+      return await page.evaluate(() => {
+        return localStorage.getItem("opencode-theme-css-light")
+      })
+    })
+    .toBeNull()
+
+  await expect
+    .poll(async () => {
+      return await page.evaluate(() => {
+        return localStorage.getItem("opencode-theme-css-dark")
+      })
+    })
+    .toBeNull()
 })
 
 test("changing font persists in localStorage and updates CSS variable", async ({ page, gotoSession }) => {
@@ -333,6 +376,28 @@ test("changing sound agent selection persists in localStorage", async ({ page, g
   }, settingsKey)
 
   expect(stored?.sounds?.agent).not.toBe("staplebops-01")
+})
+
+test("selecting none disables agent sound", async ({ page, gotoSession }) => {
+  await gotoSession()
+
+  const dialog = await openSettings(page)
+  const select = dialog.locator(settingsSoundsAgentSelector)
+  const trigger = select.locator('[data-slot="select-select-trigger"]')
+  await expect(select).toBeVisible()
+  await expect(trigger).toBeEnabled()
+
+  await trigger.click()
+  const items = page.locator('[data-slot="select-select-item"]')
+  await expect(items.first()).toBeVisible()
+  await items.first().click()
+
+  const stored = await page.evaluate((key) => {
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : null
+  }, settingsKey)
+
+  expect(stored?.sounds?.agentEnabled).toBe(false)
 })
 
 test("changing permissions and errors sounds updates localStorage", async ({ page, gotoSession }) => {

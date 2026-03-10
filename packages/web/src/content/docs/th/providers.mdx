@@ -29,7 +29,7 @@ OpenCode ใช้ [AI SDK](https://ai-sdk.dev/) และ [Models.dev](https://
 
 ---
 
-#### Base URL
+#### Base URL (URL พื้นฐาน)
 
 คุณสามารถปรับแต่งฐาน URL สำหรับผู้ให้บริการรายใดก็ได้โดยตั้งค่าตัวเลือก `baseURL` สิ่งนี้มีประโยชน์เมื่อใช้บริการพร็อกซีหรือจุดสิ้นสุดแบบกำหนดเอง
 
@@ -58,6 +58,37 @@ OpenCode Zen คือรายชื่อโมเดลที่จัดท�
 :::
 
 1. เรียกใช้คำสั่ง `/connect` ใน TUI เลือก opencode และไปที่ [opencode.ai/auth](https://opencode.ai/auth)
+
+   ```txt
+   /connect
+   ```
+
+2. ลงชื่อเข้าใช้ เพิ่มรายละเอียดการเรียกเก็บเงินของคุณ และคัดลอกรหัส API ของคุณ
+
+3. วางคีย์ API ของคุณ
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. เรียกใช้ `/models` ใน TUI เพื่อดูรายการรุ่นที่เราแนะนำ
+
+   ```txt
+   /models
+   ```
+
+มันทำงานเหมือนกับผู้ให้บริการรายอื่นใน OpenCode และเป็นทางเลือกในการใช้งานโดยสมบูรณ์
+
+---
+
+## OpenCode Go
+
+OpenCode Go คือแผนการสมัครสมาชิกราคาประหยัดที่ให้การเข้าถึงโมเดลการเขียนโค้ดแบบเปิดยอดนิยมที่เชื่อถือได้ ซึ่งจัดเตรียมโดยทีมงาน OpenCode ที่ได้รับการทดสอบและตรวจสอบแล้วว่าทำงานได้ดีกับ OpenCode
+
+1. เรียกใช้คำสั่ง `/connect` ใน TUI เลือก `OpenCode Go` และไปที่ [opencode.ai/auth](https://opencode.ai/zen)
 
    ```txt
    /connect
@@ -282,7 +313,7 @@ OpenCode Zen คือรายชื่อโมเดลที่จัดท�
 การใช้การสมัครสมาชิก Claude Pro/Max ใน OpenCode ไม่ได้รับการสนับสนุนอย่างเป็นทางการจาก [Anthropic](https://anthropic.com)
 :::
 
-##### ใช้API Key
+##### การใช้ API Key
 
 คุณยังสามารถเลือก **สร้าง API คีย์** หากคุณไม่มีการสมัครสมาชิก Pro/Max นอกจากนี้ยังจะเปิดเบราว์เซอร์ของคุณและขอให้คุณเข้าสู่ระบบ Anthropic และให้รหัสที่คุณสามารถวางใน terminal ของคุณ
 
@@ -341,7 +372,7 @@ OpenCode Zen คือรายชื่อโมเดลที่จัดท�
 
 ---
 
-### บริการความรู้ความเข้าใจ Azure
+### Azure Cognitive Services
 
 1. ไปที่ [พอร์ทัล Azure](https://portal.azure.com/) และสร้างทรัพยากร **Azure OpenAI** คุณจะต้องการ:
    - **ชื่อทรัพยากร**: นี่จะกลายเป็นส่วนหนึ่งของจุดสิ้นสุด API ของคุณ (`https://AZURE_COGNITIVE_SERVICES_RESOURCE_NAME.cognitiveservices.azure.com/`)
@@ -388,7 +419,7 @@ OpenCode Zen คือรายชื่อโมเดลที่จัดท�
 
 ---
 
-### บาสเตน
+### Baseten
 
 1. ไปที่ [Baseten](https://app.baseten.co/) สร้างบัญชี และสร้างคีย์ API
 
@@ -442,11 +473,11 @@ OpenCode Zen คือรายชื่อโมเดลที่จัดท�
 
 ---
 
-### เกตเวย์ AI ของ Cloudflare
+### Cloudflare AI Gateway
 
 Cloudflare AI Gateway ช่วยให้คุณเข้าถึงโมเดลจาก OpenAI, Anthropic, Workers AI และอื่นๆ อีกมากมายผ่านตำแหน่งข้อมูลแบบรวม ด้วย [การเรียกเก็บเงินแบบรวม](https://developers.cloudflare.com/ai-gateway/features/unified-billing/) คุณไม่จำเป็นต้องใช้คีย์ API แยกต่างหากสำหรับผู้ให้บริการแต่ละราย
 
-1. ไปที่ [แดชบอร์ด Cloudflare](https://dash.cloudflare.com/) ไปที่ **AI** > **เกตเวย์ AI** และสร้างเกตเวย์ใหม่
+1. ไปที่ [แดชบอร์ด Cloudflare](https://dash.cloudflare.com/) ไปที่ **AI** > **AI Gateway** และสร้างเกตเวย์ใหม่
 
 2. ตั้งค่ารหัสบัญชีและรหัสเกตเวย์ของคุณเป็นตัวแปรสภาพแวดล้อม
 
@@ -500,7 +531,7 @@ Cloudflare AI Gateway ช่วยให้คุณเข้าถึงโม�
 
 ---
 
-### คอร์เทคส์
+### Cortecs
 
 1. ไปที่ [คอนโซล Cortecs](https://cortecs.ai/) สร้างบัญชี และสร้างคีย์ API
 
@@ -527,7 +558,7 @@ Cloudflare AI Gateway ช่วยให้คุณเข้าถึงโม�
 
 ---
 
-### ดีปซีค
+### DeepSeek
 
 1. ไปที่ [คอนโซล DeepSeek](https://platform.deepseek.com/) สร้างบัญชี แล้วคลิก **สร้างคีย์ API ใหม่**
 
@@ -583,15 +614,15 @@ Cloudflare AI Gateway ช่วยให้คุณเข้าถึงโม�
 
 ### Firmware
 
-1. ไปที่ [แดชบอร์ดเฟิร์มแวร์](https://app.firmware.ai/signup) สร้างบัญชี และสร้างคีย์ API
+1. ไปที่ [แดชบอร์ด Firmware](https://app.firmware.ai/signup) สร้างบัญชี และสร้างคีย์ API
 
-2. เรียกใช้คำสั่ง `/connect` และค้นหา **เฟิร์มแวร์**
+2. เรียกใช้คำสั่ง `/connect` และค้นหา **Firmware**
 
    ```txt
    /connect
    ```
 
-3. ป้อนคีย์เฟิร์มแวร์ API ของคุณ
+3. ป้อนคีย์ Firmware API ของคุณ
 
    ```txt
    ┌ API key
@@ -610,7 +641,7 @@ Cloudflare AI Gateway ช่วยให้คุณเข้าถึงโม�
 
 ### Fireworks AI
 
-1. ไปที่ [คอนโซล AI ดอกไม้ไฟ](https://app.fireworks.ai/) สร้างบัญชี แล้วคลิก **สร้าง API คีย์**
+1. ไปที่ [คอนโซล Fireworks AI](https://app.fireworks.ai/) สร้างบัญชี แล้วคลิก **Create API Key**
 
 2. รันคำสั่ง `/connect` และค้นหา **Fireworks AI**
 
@@ -618,7 +649,7 @@ Cloudflare AI Gateway ช่วยให้คุณเข้าถึงโม�
    /connect
    ```
 
-3. ป้อนคีย์ดอกไม้ไฟ AI API ของคุณ
+3. ป้อนคีย์ Fireworks AI API ของคุณ
 
    ```txt
    ┌ API key
@@ -659,7 +690,7 @@ GitLab Duo ให้การแชทแบบเอเจนต์ที่ข
 
    เลือก **OAuth** และเบราว์เซอร์ของคุณจะเปิดขึ้นเพื่อรับสิทธิ์
 
-#### Using Personal Access Token
+#### การใช้ Personal Access Token
 
 1.  ไปที่ [GitLab User Settings > Access Tokens](https://gitlab.com/-/user_settings/personal_access_tokens)
 2.  คลิก **เพิ่มโทเค็นใหม่**
@@ -791,7 +822,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 :::note
 บางรุ่นอาจต้องมี [Pro+
-สมัครสมาชิก](https://github.com/features/copilot/plans) เพื่อใช้งาน
+subscription](https://github.com/features/copilot/plans) เพื่อใช้งาน
 
 บางรุ่นจำเป็นต้องเปิดใช้งานด้วยตนเองใน [การตั้งค่า GitHub Copilot](https://docs.github.com/en/copilot/how-tos/use-ai-models/configure-access-to-ai-models#setup-for-individual-use)
 :::
@@ -811,7 +842,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
    │
    │ Enter code: 8F43-6FCF
    │
-   └ Waiting for authorization...
+   │ Waiting for authorization...
    ```
 
 3. ตอนนี้รันคำสั่ง `/models` เพื่อเลือกรุ่นที่คุณต้องการ
@@ -822,7 +853,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ---
 
-### กูเกิล เวอร์เท็กซ์ เอไอ
+### Google Vertex AI
 
 วิธีใช้ Google Vertex AI กับ OpenCode:
 
@@ -895,9 +926,9 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ### Hugging Face
 
-[ผู้ให้บริการการอนุมานHugging Face](https://huggingface.co/docs/inference-providers) ช่วยให้สามารถเข้าถึงโมเดลแบบเปิดที่รองรับโดยผู้ให้บริการมากกว่า 17 ราย
+[ผู้ให้บริการการอนุมาน Hugging Face](https://huggingface.co/docs/inference-providers) ช่วยให้สามารถเข้าถึงโมเดลแบบเปิดที่รองรับโดยผู้ให้บริการมากกว่า 17 ราย
 
-1. ไปที่ [การตั้งค่าHugging Face](https://huggingface.co/settings/tokens/new?ownUserPermissions=inference.serverless.write&tokenType=fineGrained) เพื่อสร้างโทเค็นที่มีสิทธิ์ในการโทรไปยังผู้ให้บริการการอนุมาน
+1. ไปที่ [การตั้งค่า Hugging Face](https://huggingface.co/settings/tokens/new?ownUserPermissions=inference.serverless.write&tokenType=fineGrained) เพื่อสร้างโทเค็นที่มีสิทธิ์ในการโทรไปยังผู้ให้บริการการอนุมาน
 
 2. เรียกใช้คำสั่ง `/connect` และค้นหา **Hugging Face**
 
@@ -922,7 +953,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ---
 
-### เฮลิโคน
+### Helicone
 
 [Helicone](https://helicone.ai) เป็นแพลตฟอร์มการติดตาม LLM ที่ให้การบันทึก การตรวจสอบ และการวิเคราะห์สำหรับแอปพลิเคชัน AI ของคุณ Helicone AI Gateway กำหนดเส้นทางคำขอของคุณไปยังผู้ให้บริการที่เหมาะสมโดยอัตโนมัติตามรุ่น
 
@@ -1073,7 +1104,7 @@ npm install -g opencode-helicone-session
 
 ---
 
-### ไอโอ.NET
+### IO.NET
 
 IO.NET มี 17 โมเดลที่ได้รับการปรับให้เหมาะกับการใช้งานที่หลากหลาย:
 
@@ -1140,7 +1171,7 @@ IO.NET มี 17 โมเดลที่ได้รับการปรับ
 
 วิธีใช้ Kimi K2 จาก Moonshot AI:
 
-1. ไปที่ [Moonshot AI console](https://platform.moonshot.ai/console) สร้างบัญชี แล้วคลิก **สร้าง API คีย์**
+1. ไปที่ [Moonshot AI console](https://platform.moonshot.ai/console) สร้างบัญชี แล้วคลิก **Create API Key**
 
 2. รันคำสั่ง `/connect` และค้นหา **Moonshot AI**
 
@@ -1194,7 +1225,7 @@ IO.NET มี 17 โมเดลที่ได้รับการปรับ
 
 ### Nebius Token Factory
 
-1. ไปที่ [คอนโซล Nebius Token Factory](https://tokenfactory.nebius.com/) สร้างบัญชี แล้วคลิก **เพิ่มรหัส**
+1. ไปที่ [คอนโซล Nebius Token Factory](https://tokenfactory.nebius.com/) สร้างบัญชี แล้วคลิก **Add key**
 
 2. รันคำสั่ง `/connect` และค้นหา **Nebius Token Factory**
 
@@ -1267,7 +1298,7 @@ Ollama สามารถกำหนดค่าตัวเองสำหร�
 
 1. ไปที่ [https://ollama.com/](https://ollama.com/) แล้วลงชื่อเข้าใช้หรือสร้างบัญชี
 
-2. ไปที่ **การตั้งค่า** > **คีย์** แล้วคลิก **เพิ่ม API คีย์** เพื่อสร้างคีย์ API ใหม่
+2. ไปที่ **Settings** > **Keys** แล้วคลิก **Add API Key** เพื่อสร้างคีย์ API ใหม่
 
 3. คัดลอกคีย์ API เพื่อใช้ใน OpenCode
 
@@ -1327,13 +1358,13 @@ Ollama สามารถกำหนดค่าตัวเองสำหร�
    /models
    ```
 
-##### ใช้API Key
+##### การใช้ API Key
 
-หากคุณมีคีย์ API อยู่แล้ว คุณสามารถเลือก **ป้อนคีย์ API ด้วยตนเอง** และวางลงใน terminal ของคุณ
+หากคุณมีคีย์ API อยู่แล้ว คุณสามารถเลือก **Manually enter API Key** และวางลงใน terminal ของคุณ
 
 ---
 
-### โอเพ่นโค้ดเซน
+### OpenCode Zen
 
 OpenCode Zen คือรายการโมเดลที่ได้รับการทดสอบและตรวจสอบแล้วโดยทีมงาน OpenCode [เรียนรู้เพิ่มเติม](/docs/zen)
 
@@ -1344,6 +1375,583 @@ OpenCode Zen คือรายการโมเดลที่ได้รั�
    ```txt
    /connect
    ```
+
+3. ป้อนคีย์ OpenCode API ของคุณ
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. รันคำสั่ง `/models` เพื่อเลือกโมเดลเช่น _Qwen 3 Coder 480B_
+
+   ```txt
+   /models
+   ```
+
+---
+
+### OpenRouter
+
+1. ไปที่ [OpenRouter dashboard](https://openrouter.ai/settings/keys) คลิก **Create API Key** และคัดลอกคีย์
+
+2. เรียกใช้คำสั่ง `/connect` และค้นหา OpenRouter
+
+   ```txt
+   /connect
+   ```
+
+3. ป้อนคีย์ API สำหรับผู้ให้บริการ
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. โมเดล OpenRouter จำนวนมากถูกโหลดไว้ล่วงหน้าตามค่าเริ่มต้น รันคำสั่ง `/models` เพื่อเลือกโมเดลที่คุณต้องการ
+
+   ```txt
+   /models
+   ```
+
+   คุณยังสามารถเพิ่มโมเดลเพิ่มเติมผ่านการกำหนดค่า opencode ของคุณได้
+
+   ```json title="opencode.json" {6}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "openrouter": {
+         "models": {
+           "somecoolnewmodel": {}
+         }
+       }
+     }
+   }
+   ```
+
+5. คุณยังสามารถปรับแต่งได้ผ่านการกำหนดค่า opencode ของคุณ นี่คือตัวอย่างการระบุผู้ให้บริการ
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "openrouter": {
+         "models": {
+           "moonshotai/kimi-k2": {
+             "options": {
+               "provider": {
+                 "order": ["baseten"],
+                 "allow_fallbacks": false
+               }
+             }
+           }
+         }
+       }
+     }
+   }
+   ```
+
+---
+
+### SAP AI Core
+
+SAP AI Core ให้การเข้าถึงโมเดลมากกว่า 40 รุ่นจาก OpenAI, Anthropic, Google, Amazon, Meta, Mistral และ AI21 ผ่านแพลตฟอร์มเดียว
+
+1. ไปที่ [SAP BTP Cockpit](https://account.hana.ondemand.com/) ของคุณ ไปที่อินสแตนซ์บริการ SAP AI Core และสร้างคีย์บริการ
+
+   :::tip
+   คีย์บริการคือวัตถุ JSON ที่มี `clientid`, `clientsecret`, `url` และ `serviceurls.AI_API_URL` คุณสามารถค้นหาอินสแตนซ์ AI Core ของคุณได้ภายใต้ **Services** > **Instances and Subscriptions** ใน BTP Cockpit
+   :::
+
+2. เรียกใช้คำสั่ง `/connect` และค้นหา **SAP AI Core**
+
+   ```txt
+   /connect
+   ```
+
+3. ป้อน JSON คีย์บริการของคุณ
+
+   ```txt
+   ┌ Service key
+   │
+   │
+   └ enter
+   ```
+
+   หรือตั้งค่าตัวแปรสภาพแวดล้อม `AICORE_SERVICE_KEY`:
+
+   ```bash
+   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
+   ```
+
+   หรือเพิ่มลงในโปรไฟล์ทุบตีของคุณ:
+
+   ```bash title="~/.bash_profile"
+   export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}'
+   ```
+
+4. เลือกตั้งค่ารหัสการปรับใช้และกลุ่มทรัพยากร:
+
+   ```bash
+   AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group opencode
+   ```
+
+   :::note
+   การตั้งค่าเหล่านี้เป็นทางเลือกและควรกำหนดค่าตามการตั้งค่า SAP AI Core ของคุณ
+   :::
+
+5. รันคำสั่ง `/models` เพื่อเลือกจาก 40+ รุ่นที่มีอยู่
+
+   ```txt
+   /models
+   ```
+
+---
+
+### STACKIT
+
+STACKIT AI Model Serving มอบสภาพแวดล้อมการโฮสต์ที่มีการจัดการเต็มรูปแบบสำหรับโมเดล AI โดยเน้นที่ LLM เช่น Llama, Mistral และ Qwen โดยมีอธิปไตยของข้อมูลสูงสุดบนโครงสร้างพื้นฐานยุโรป
+
+1. ไปที่ [STACKIT Portal](https://portal.stackit.cloud) ไปที่ **AI Model Serving** และสร้างโทเค็นการตรวจสอบสิทธิ์สำหรับโครงการของคุณ
+
+   :::tip
+   คุณต้องมีบัญชีลูกค้า STACKIT บัญชีผู้ใช้ และโครงการก่อนสร้างโทเค็นการตรวจสอบสิทธิ์
+   :::
+
+2. เรียกใช้คำสั่ง `/connect` และค้นหา **STACKIT**
+
+   ```txt
+   /connect
+   ```
+
+3. ป้อนโทเค็นการตรวจสอบสิทธิ์ STACKIT AI Model Serving ของคุณ
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. รันคำสั่ง `/models` เพื่อเลือกจากโมเดลที่มีอยู่ เช่น _Qwen3-VL 235B_ หรือ _Llama 3.3 70B_
+
+   ```txt
+   /models
+   ```
+
+---
+
+### OVHcloud AI Endpoints
+
+1. ไปที่ [OVHcloud panel](https://ovh.com/manager) ไปที่ส่วน `Public Cloud`, `AI & Machine Learning` > `AI Endpoints` และในแท็บ `API Keys` ให้คลิก **Create a new API key**
+
+2. เรียกใช้คำสั่ง `/connect` และค้นหา **OVHcloud AI Endpoints**
+
+   ```txt
+   /connect
+   ```
+
+3. ป้อนคีย์ API OVHcloud AI Endpoints ของคุณ
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. รันคำสั่ง `/models` เพื่อเลือกโมเดลเช่น _gpt-oss-120b_
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Scaleway
+
+วิธีใช้ [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) กับ Opencode:
+
+1. ไปที่ [Scaleway Console IAM settings](https://console.scaleway.com/iam/api-keys) เพื่อสร้างคีย์ API ใหม่
+
+2. เรียกใช้คำสั่ง `/connect` และค้นหา **Scaleway**
+
+   ```txt
+   /connect
+   ```
+
+3. ป้อนคีย์ Scaleway API ของคุณ
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. รันคำสั่ง `/models` เพื่อเลือกโมเดลเช่น _devstral-2-123b-instruct-2512_ หรือ _gpt-oss-120b_
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Together AI
+
+1. ไปที่ [Together AI console](https://api.together.ai) สร้างบัญชี และคลิก **Add Key**
+
+2. เรียกใช้คำสั่ง `/connect` และค้นหา **Together AI**
+
+   ```txt
+   /connect
+   ```
+
+3. ป้อนคีย์ Together AI API ของคุณ
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. รันคำสั่ง `/models` เพื่อเลือกโมเดลเช่น _Kimi K2 Instruct_
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Venice AI
+
+1. ไปที่ [Venice AI console](https://venice.ai) สร้างบัญชี และสร้างคีย์ API
+
+2. เรียกใช้คำสั่ง `/connect` และค้นหา **Venice AI**
+
+   ```txt
+   /connect
+   ```
+
+3. ป้อนคีย์ Venice AI API ของคุณ
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. รันคำสั่ง `/models` เพื่อเลือกโมเดลเช่น _Llama 3.3 70B_
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Vercel AI Gateway
+
+Vercel AI Gateway ช่วยให้คุณเข้าถึงโมเดลจาก OpenAI, Anthropic, Google, xAI และอื่นๆ อีกมากมายผ่านจุดสิ้นสุดแบบรวม โมเดลถูกนำเสนอในราคาปลีกโดยไม่มีการบวกเพิ่ม
+
+1. ไปที่ [Vercel dashboard](https://vercel.com/) ไปที่แท็บ **AI Gateway** และคลิก **API keys** เพื่อสร้างคีย์ API ใหม่
+
+2. เรียกใช้คำสั่ง `/connect` และค้นหา **Vercel AI Gateway**
+
+   ```txt
+   /connect
+   ```
+
+3. ป้อนคีย์ Vercel AI Gateway API ของคุณ
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. รันคำสั่ง `/models` เพื่อเลือกรุ่น
+
+   ```txt
+   /models
+   ```
+
+คุณยังสามารถปรับแต่งโมเดลผ่านการกำหนดค่า opencode ของคุณได้ นี่คือตัวอย่างการระบุลำดับการกำหนดเส้นทางผู้ให้บริการ
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "vercel": {
+      "models": {
+        "anthropic/claude-sonnet-4": {
+          "options": {
+            "order": ["anthropic", "vertex"]
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+ตัวเลือกการกำหนดเส้นทางที่มีประโยชน์บางประการ:
+
+| ตัวเลือก            | คำอธิบาย                                                   |
+| ------------------- | ---------------------------------------------------------- |
+| `order`             | ลำดับผู้ให้บริการที่จะลอง                                  |
+| `only`              | จำกัดเฉพาะผู้ให้บริการที่ระบุ                              |
+| `zeroDataRetention` | ใช้เฉพาะผู้ให้บริการที่มีนโยบายการเก็บรักษาข้อมูลเป็นศูนย์ |
+
+---
+
+### xAI
+
+1. ไปที่ [xAI console](https://console.x.ai/) สร้างบัญชี และสร้างคีย์ API
+
+2. เรียกใช้คำสั่ง `/connect` และค้นหา **xAI**
+
+   ```txt
+   /connect
+   ```
+
+3. ป้อนคีย์ xAI API ของคุณ
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. รันคำสั่ง `/models` เพื่อเลือกโมเดลเช่น _Grok Beta_
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Z.AI
+
+1. ไปที่ [Z.AI API console](https://z.ai/manage-apikey/apikey-list) สร้างบัญชี และคลิก **Create a new API key**
+
+2. เรียกใช้คำสั่ง `/connect` และค้นหา **Z.AI**
+
+   ```txt
+   /connect
+   ```
+
+   หากคุณสมัครรับ **GLM Coding Plan** ให้เลือก **Z.AI Coding Plan**
+
+3. ป้อนคีย์ Z.AI API ของคุณ
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. รันคำสั่ง `/models` เพื่อเลือกโมเดลเช่น _GLM-4.7_
+
+   ```txt
+   /models
+   ```
+
+---
+
+### ZenMux
+
+1. ไปที่ [ZenMux dashboard](https://zenmux.ai/settings/keys) คลิก **Create API Key** และคัดลอกคีย์
+
+2. เรียกใช้คำสั่ง `/connect` และค้นหา ZenMux
+
+   ```txt
+   /connect
+   ```
+
+3. ป้อนคีย์ API สำหรับผู้ให้บริการ
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. โมเดล ZenMux จำนวนมากถูกโหลดไว้ล่วงหน้าตามค่าเริ่มต้น รันคำสั่ง `/models` เพื่อเลือกโมเดลที่คุณต้องการ
+
+   ```txt
+   /models
+   ```
+
+   คุณยังสามารถเพิ่มโมเดลเพิ่มเติมผ่านการกำหนดค่า opencode ของคุณได้
+
+   ```json title="opencode.json" {6}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "zenmux": {
+         "models": {
+           "somecoolnewmodel": {}
+         }
+       }
+     }
+   }
+   ```
+
+---
+
+## ผู้ให้บริการที่กำหนดเอง
+
+หากต้องการเพิ่มผู้ให้บริการที่ **เข้ากันได้กับ OpenAI** ใดๆ ที่ไม่มีรายชื่ออยู่ในคำสั่ง `/connect`:
+
+:::tip
+คุณสามารถใช้ผู้ให้บริการที่เข้ากันได้กับ OpenAI กับ opencode ได้ ผู้ให้บริการ AI สมัยใหม่ส่วนใหญ่เสนอ API ที่เข้ากันได้กับ OpenAI
+:::
+
+1. เรียกใช้คำสั่ง `/connect` และเลื่อนลงไปที่ **Other**
+
+   ```bash
+   $ /connect
+
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ...
+   │  ● Other
+   └
+   ```
+
+2. ป้อน ID เฉพาะสำหรับผู้ให้บริการ
+
+   ```bash
+   $ /connect
+
+   ┌  Add credential
+   │
+   ◇  Enter provider id
+   │  myprovider
+   └
+   ```
+
+   :::note
+   เลือก ID ที่น่าจดจำ คุณจะใช้ ID นี้ในไฟล์กำหนดค่าของคุณ
+   :::
+
+3. ป้อนคีย์ API สำหรับผู้ให้บริการ
+
+   ```bash
+   $ /connect
+
+   ┌  Add credential
+   │
+   ▲  This only stores a credential for myprovider - you will need to configure it in opencode.json, check the docs for examples.
+   │
+   ◇  Enter your API key
+   │  sk-...
+   └
+   ```
+
+4. สร้างหรืออัปเดตไฟล์ `opencode.json` ของคุณในไดเร็กทอรีโครงการของคุณ:
+
+   ```json title="opencode.json" ""myprovider"" {5-15}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "myprovider": {
+         "npm": "@ai-sdk/openai-compatible",
+         "name": "My AI ProviderDisplay Name",
+         "options": {
+           "baseURL": "https://api.myprovider.com/v1"
+         },
+         "models": {
+           "my-model-name": {
+             "name": "My Model Display Name"
+           }
+         }
+       }
+     }
+   }
+   ```
+
+   นี่คือตัวเลือกการกำหนดค่า:
+   - **npm**: แพ็คเกจ AI SDK ที่จะใช้ `@ai-sdk/openai-compatible` สำหรับผู้ให้บริการที่เข้ากันได้กับ OpenAI
+   - **name**: ชื่อที่แสดงใน UI
+   - **models**: โมเดลที่มีจำหน่าย
+   - **options.baseURL**: URL จุดสิ้นสุด API
+   - **options.apiKey**: ตั้งค่าคีย์ API ทางเลือก หากไม่ได้ใช้การรับรองความถูกต้อง
+   - **options.headers**: ตั้งค่าส่วนหัวที่กำหนดเองได้ตามต้องการ
+
+   ข้อมูลเพิ่มเติมเกี่ยวกับตัวเลือกขั้นสูงในตัวอย่างด้านล่าง
+
+5. รันคำสั่ง `/models` และผู้ให้บริการและโมเดลที่คุณกำหนดเองจะปรากฏในรายการตัวเลือก
+
+---
+
+##### ตัวอย่าง
+
+นี่คือตัวอย่างการตั้งค่าตัวเลือก `apiKey`, `headers` และรุ่น `limit`
+
+```json title="opencode.json" {9,11,17-20}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "myprovider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "My AI ProviderDisplay Name",
+      "options": {
+        "baseURL": "https://api.myprovider.com/v1",
+        "apiKey": "{env:ANTHROPIC_API_KEY}",
+        "headers": {
+          "Authorization": "Bearer custom-token"
+        }
+      },
+      "models": {
+        "my-model-name": {
+          "name": "My Model Display Name",
+          "limit": {
+            "context": 200000,
+            "output": 65536
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+รายละเอียดการกำหนดค่า:
+
+- **apiKey**: ตั้งค่าโดยใช้ไวยากรณ์ตัวแปร `env` [เรียนรู้เพิ่มเติม](/docs/config#env-vars)
+- **headers**: ส่วนหัวที่กำหนดเองที่ส่งไปกับแต่ละคำขอ
+- **limit.context**: โทเค็นอินพุตสูงสุดที่โมเดลยอมรับ
+- **limit.output**: โทเค็นสูงสุดที่โมเดลสามารถสร้างได้
+
+ฟิลด์ `limit` ช่วยให้ OpenCode เข้าใจว่าคุณมีบริบทเหลืออยู่เท่าใด ผู้ให้บริการมาตรฐานจะดึงข้อมูลเหล่านี้จาก models.dev โดยอัตโนมัติ
+
+---
+
+## การแก้ไขปัญหา
+
+หากคุณประสบปัญหาในการกำหนดค่าผู้ให้บริการ ให้ตรวจสอบสิ่งต่อไปนี้:
+
+1. **ตรวจสอบการตั้งค่าการรับรองความถูกต้อง**: รัน `opencode auth list` เพื่อดูว่ามีการเพิ่มข้อมูลรับรอง
+   สำหรับผู้ให้บริการในการกำหนดค่าของคุณหรือไม่
+
+   สิ่งนี้ใช้ไม่ได้กับผู้ให้บริการเช่น Amazon Bedrock ซึ่งอาศัยตัวแปรสภาพแวดล้อมสำหรับการตรวจสอบสิทธิ์
+
+2. สำหรับผู้ให้บริการที่กำหนดเอง ให้ตรวจสอบการกำหนดค่า opencode และ:
+   - ตรวจสอบให้แน่ใจว่า ID ผู้ให้บริการที่ใช้ในคำสั่ง `/connect` ตรงกับ ID ในการกำหนดค่า opencode ของคุณ
+   - ใช้แพ็คเกจ npm ที่ถูกต้องสำหรับผู้ให้บริการ ตัวอย่างเช่น ใช้ `@ai-sdk/cerebras` สำหรับ Cerebras และสำหรับผู้ให้บริการอื่นๆ ที่เข้ากันได้กับ OpenAI ให้ใช้ `@ai-sdk/openai-compatible`
+   - ตรวจสอบว่าใช้จุดสิ้นสุด API ที่ถูกต้องในฟิลด์ `options.baseURL`
 
 3. ป้อนคีย์ OpenCode API ของคุณ
 

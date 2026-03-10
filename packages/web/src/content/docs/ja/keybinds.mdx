@@ -3,11 +3,11 @@ title: キーバインド
 description: キーバインドをカスタマイズします。
 ---
 
-OpenCode には、OpenCode 設定を通じてカスタマイズできるキーバインドのリストがあります。
+OpenCode には、`tui.json` を通じてカスタマイズできるキーバインドのリストがあります。
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -28,6 +28,7 @@ OpenCode には、OpenCode 設定を通じてカスタマイズできるキー�
     "session_unshare": "none",
     "session_interrupt": "escape",
     "session_compact": "<leader>c",
+    "session_child_first": "<leader>down",
     "session_child_cycle": "<leader>right",
     "session_child_cycle_reverse": "<leader>left",
     "session_parent": "<leader>up",
@@ -107,21 +108,21 @@ OpenCode には、OpenCode 設定を通じてカスタマイズできるキー�
 
 ## リーダーキー
 
-OpenCode は、ほとんどのキーバインドに `leader` キーを使用します。これにより、terminal での競合が回避されます。
+OpenCode は、ほとんどのキーバインドに `leader` キーを使用します。これにより、ターミナルでの競合が回避されます。
 
-デフォルトでは、`ctrl+x` がリーダー キーであり、ほとんどの操作では、最初にリーダー キーを押してからショートカットを押す必要があります。たとえば、新しいセッションを開始するには、まず `ctrl+x` を押してから、`n` を押します。
+デフォルトでは、`ctrl+x` がリーダーキーであり、ほとんどの操作では、最初にリーダーキーを押してからショートカットを押す必要があります。たとえば、新しいセッションを開始するには、まず `ctrl+x` を押してから、`n` を押します。
 
-キーバインドにリーダー キーを使用する必要はありませんが、そうすることをお勧めします。
+キーバインドにリーダーキーを使用する必要はありませんが、そうすることをお勧めします。
 
 ---
 
 ## キーバインドを無効にする
 
-キーバインドを無効にするには、値「none」を指定してキーを構成に追加します。
+キーバインドを無効にするには、値「none」を指定してキーを `tui.json` に追加します。
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "session_compact": "none"
   }
@@ -132,7 +133,7 @@ OpenCode は、ほとんどのキーバインドに `leader` キーを使用し�
 
 ## デスクトッププロンプトのショートカット
 
-OpenCode デスクトップ アプリのプロンプト入力は、テキストを編集するための一般的な Readline/Emacs スタイルのショートカットをサポートしています。これらは組み込みであり、現在 `opencode.json` を介して構成することはできません。
+OpenCode デスクトップアプリのプロンプト入力は、テキストを編集するための一般的な Readline/Emacs スタイルのショートカットをサポートしています。これらは組み込みであり、現在 `opencode.json` を介して構成することはできません。
 
 | ショートカット | アクション                                        |
 | -------------- | ------------------------------------------------- |
@@ -154,7 +155,7 @@ OpenCode デスクトップ アプリのプロンプト入力は、テキスト�
 
 ## Shift+Enter
 
-一部のterminal では、デフォルトでは Enter キーを使用して修飾キーを送信しません。エスケープ シーケンスとして `Shift+Enter` を送信するようにterminal を設定する必要がある場合があります。
+一部のターミナルでは、デフォルトでは Enter キーを使用して修飾キーを送信しません。エスケープシーケンスとして `Shift+Enter` を送信するようにターミナルを設定する必要がある場合があります。
 
 ### Windows Terminal
 

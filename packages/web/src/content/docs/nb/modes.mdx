@@ -1,19 +1,19 @@
 ---
-title: Modi
+title: Moduser
 description: Ulike moduser for forskjellige brukstilfeller.
 ---
 
 :::caution
-Modi er nå konfigurert gjennom alternativet `agent` i OpenCode-konfigurasjonen. De
+Moduser konfigureres nå gjennom alternativet `agent` i OpenCode-konfigurasjonen.
 Alternativet `mode` er nå utdatert. [Finn ut mer](/docs/agents).
 :::
 
-Moduser i OpenCode lar deg tilpasse oppførselen, verktøyene og ledetekstene for ulike brukstilfeller.
+Moduser i OpenCode lar deg tilpasse oppførselen, verktøyene og prompter for ulike brukstilfeller.
 
 Den kommer med to innebygde moduser: **bygg** og **plan**. Du kan tilpasse
 disse eller konfigurer din egen gjennom OpenCode-konfigurasjonen.
 
-Du kan bytte mellom moduser under en økt eller konfigurere dem i konfigurasjonsfilen.
+Du kan bytte mellom moduser under en økt eller konfigurere dem i konfigurasjonsfilen din.
 
 ---
 
@@ -25,7 +25,7 @@ OpenCode kommer med to innebygde moduser.
 
 ### Bygg
 
-Bygg er **standard**-modus med alle verktøy aktivert. Dette er standardmodusen for utviklingsarbeid der du trenger full tilgang til filoperasjoner og systemkommandoer.
+Bygg er **standard**-modusen med alle verktøy aktivert. Dette er standardmodusen for utviklingsarbeid der du trenger full tilgang til filoperasjoner og systemkommandoer.
 
 ---
 
@@ -44,19 +44,19 @@ Denne modusen er nyttig når du vil at AI skal analysere kode, foreslå endringe
 
 ## Bytte
 
-Du kan bytte mellom moduser under en økt ved å bruke _Tab_-tasten. Eller din konfigurerte `switch_mode` nøkkelbinding.
+Du kan bytte mellom moduser under en økt ved å bruke _Tab_-tasten. Eller din konfigurerte `switch_mode` hurtigtast.
 
-Se også: [Formatters](/docs/formatters) for informasjon om konfigurasjon av kodeformatering.
+Se også: [Formatters](/docs/formatters) for informasjon om kodeformateringskonfigurasjon.
 
 ---
 
 ## Konfigurer
 
-Du kan tilpasse de innebygde modusene eller lage dine egne gjennom konfigurasjon. Modi kan konfigureres på to måter:
+Du kan tilpasse de innebygde modusene eller opprette din egen gjennom konfigurasjon. Moduser kan konfigureres på to måter:
 
-### JSON Konfigurasjon
+### JSON-konfigurasjon
 
-Konfigurer moduser i konfigurasjonsfilen `opencode.json`:
+Konfigurer moduser i din `opencode.json` konfigurasjonsfil:
 
 ```json title="opencode.json"
 {
@@ -85,7 +85,7 @@ Konfigurer moduser i konfigurasjonsfilen `opencode.json`:
 
 ### Markdown-konfigurasjon
 
-Du kan også definere moduser ved å bruke markdown-filer. Plasser dem i:
+Du kan også definere moduser ved hjelp av markdown-filer. Plasser dem i:
 
 - Globalt: `~/.config/opencode/modes/`
 - Prosjekt: `.opencode/modes/`
@@ -110,7 +110,7 @@ You are in code review mode. Focus on:
 Provide constructive feedback without making direct changes.
 ```
 
-Markdown-filnavnet blir modusnavnet (f.eks. `review.md` oppretter en `review`-modus).
+Filnavnet til markdown-filen blir modusnavnet (f.eks. `review.md` oppretter en `review`-modus).
 
 La oss se på disse konfigurasjonsalternativene i detalj.
 
@@ -118,7 +118,7 @@ La oss se på disse konfigurasjonsalternativene i detalj.
 
 ### Modell
 
-Bruk `model`-konfigurasjonen for å overstyre standardmodellen for denne modusen. Nyttig for bruk av ulike modeller optimalisert for ulike oppgaver. For eksempel en raskere modell for planlegging, en mer kapabel modell for implementering.
+Bruk `model`-konfigurasjonen for å overstyre standardmodellen for denne modusen. Nyttig for å bruke forskjellige modeller optimalisert for forskjellige oppgaver. For eksempel en raskere modell for planlegging, en mer kapabel modell for implementering.
 
 ```json title="opencode.json"
 {
@@ -134,7 +134,7 @@ Bruk `model`-konfigurasjonen for å overstyre standardmodellen for denne modusen
 
 ### Temperatur
 
-Kontroller tilfeldigheten og kreativiteten til AIs svar med `temperature`-konfigurasjonen. Lavere verdier gjør svarene mer fokuserte og deterministiske, mens høyere verdier øker kreativiteten og variasjonen.
+Kontroller tilfeldigheten og kreativiteten til AI-ens svar med `temperature`-konfigurasjonen. Lavere verdier gjør svarene mer fokuserte og deterministiske, mens høyere verdier øker kreativiteten og variasjonen.
 
 ```json title="opencode.json"
 {
@@ -151,8 +151,8 @@ Kontroller tilfeldigheten og kreativiteten til AIs svar med `temperature`-konfig
 
 Temperaturverdier varierer vanligvis fra 0,0 til 1,0:
 
-- **0.0-0.2**: Veldig fokuserte og deterministiske svar, ideell for kodeanalyse og planlegging
-- **0,3-0,5**: Balanserte svar med litt kreativitet, bra for generelle utviklingsoppgaver
+- **0.0-0.2**: Veldig fokuserte og deterministiske svar, ideelt for kodeanalyse og planlegging
+- **0.3-0.5**: Balanserte svar med litt kreativitet, bra for generelle utviklingsoppgaver
 - **0.6-1.0**: Mer kreative og varierte svar, nyttig for idédugnad og utforskning
 
 ```json title="opencode.json"
@@ -173,13 +173,13 @@ Temperaturverdier varierer vanligvis fra 0,0 til 1,0:
 }
 ```
 
-Hvis ingen temperatur er spesifisert, bruker OpenCode modellspesifikke standarder (vanligvis 0 for de fleste modeller, 0,55 for Qwen-modeller).
+Hvis ingen temperatur er spesifisert, bruker OpenCode modellspesifikke standardinnstillinger (vanligvis 0 for de fleste modeller, 0,55 for Qwen-modeller).
 
 ---
 
-### Ledetekst
+### Prompt
 
-Spesifiser en tilpasset systemmeldingsfil for denne modusen med `prompt`-konfigurasjonen. Ledetekstfilen skal inneholde instruksjoner som er spesifikke for modusens formål.
+Angi en tilpasset systemprompt-fil for denne modusen med `prompt`-konfigurasjonen. Prompt-filen skal inneholde instruksjoner som er spesifikke for modusens formål.
 
 ```json title="opencode.json"
 {
@@ -191,8 +191,7 @@ Spesifiser en tilpasset systemmeldingsfil for denne modusen med `prompt`-konfigu
 }
 ```
 
-Denne banen er i forhold til hvor konfigurasjonsfilen er plassert. Så dette fungerer for
-både den globale OpenCode-konfigurasjonen og den prosjektspesifikke konfigurasjonen.
+Denne banen er relativ til der konfigurasjonsfilen er plassert. Så dette fungerer for både den globale OpenCode-konfigurasjonen og den prosjektspesifikke konfigurasjonen.
 
 ---
 
@@ -231,21 +230,21 @@ Her er alle verktøyene som kan kontrolleres gjennom moduskonfigurasjonen.
 | `edit`      | Endre eksisterende filer    |
 | `write`     | Opprett nye filer           |
 | `read`      | Les filinnhold              |
-| `grep`      | Søk filinnhold              |
+| `grep`      | Søk i filinnhold            |
 | `glob`      | Finn filer etter mønster    |
-| `list`      | Liste kataloginnhold        |
+| `list`      | List opp kataloginnhold     |
 | `patch`     | Bruk patcher på filer       |
 | `todowrite` | Administrer gjøremålslister |
 | `todoread`  | Les gjøremålslister         |
-| `webfetch`  | Hent nettinnhold            |
+| `webfetch`  | Hent webinnhold             |
 
 ---
 
 ## Egendefinerte moduser
 
-Du kan lage dine egne tilpassede moduser ved å legge dem til konfigurasjonen. Her er eksempler som bruker begge tilnærmingene:
+Du kan opprette dine egne tilpassede moduser ved å legge dem til i konfigurasjonen. Her er eksempler på bruk av begge metodene:
 
-### Bruker JSON konfigurasjon
+### Bruke JSON-konfigurasjon
 
 ```json title="opencode.json" {4-14}
 {
@@ -266,9 +265,9 @@ Du kan lage dine egne tilpassede moduser ved å legge dem til konfigurasjonen. H
 }
 ```
 
-### Bruker markdown-filer
+### Bruke markdown-filer
 
-Lag modusfiler i `.opencode/modes/` for prosjektspesifikke moduser eller `~/.config/opencode/modes/` for globale moduser:
+Opprett modusfiler i `.opencode/modes/` for prosjektspesifikke moduser eller `~/.config/opencode/modes/` for globale moduser:
 
 ```markdown title=".opencode/modes/debug.md"
 ---
@@ -318,14 +317,14 @@ Priorities:
 
 ---
 
-### Brukstilfeller
+### Bruksområder
 
-Her er noen vanlige brukstilfeller for forskjellige moduser.
+Her er noen vanlige bruksområder for forskjellige moduser.
 
-- **Build-modus**: Fullt utviklingsarbeid med alle verktøy aktivert
+- **Bygg-modus**: Fullt utviklingsarbeid med alle verktøy aktivert
 - **Plan-modus**: Analyse og planlegging uten å gjøre endringer
 - **Review-modus**: Kodegjennomgang med skrivebeskyttet tilgang pluss dokumentasjonsverktøy
 - **Debug-modus**: Fokusert på etterforskning med bash- og leseverktøy aktivert
 - **Docs-modus**: Dokumentasjonsskriving med filoperasjoner, men ingen systemkommandoer
 
-Du kan også finne at forskjellige modeller er gode for forskjellige brukstilfeller.
+Du kan også finne at forskjellige modeller er gode for forskjellige bruksområder.

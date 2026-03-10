@@ -47,7 +47,7 @@ const lastAssistantWithTokens = (messages: Message[]) => {
   }
 }
 
-const build = (messages: Message[], providers: Provider[]): Metrics => {
+const build = (messages: Message[] = [], providers: Provider[] = []): Metrics => {
   const totalCost = messages.reduce((sum, msg) => sum + (msg.role === "assistant" ? msg.cost : 0), 0)
   const message = lastAssistantWithTokens(messages)
   if (!message) return { totalCost, context: undefined }
@@ -77,6 +77,6 @@ const build = (messages: Message[], providers: Provider[]): Metrics => {
   }
 }
 
-export function getSessionContextMetrics(messages: Message[], providers: Provider[]) {
+export function getSessionContextMetrics(messages: Message[] = [], providers: Provider[] = []) {
   return build(messages, providers)
 }

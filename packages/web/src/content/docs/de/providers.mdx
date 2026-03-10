@@ -15,14 +15,14 @@ Um einen Anbieter hinzuzufügen, müssen Sie:
 
 ---
 
-### Credentials
+### Anmeldeinformationen
 
 Wenn Sie die API-Schlüssel eines Anbieters mit dem Befehl `/connect` hinzufügen, werden diese gespeichert
 in `~/.local/share/opencode/auth.json`.
 
 ---
 
-### Config
+### Konfiguration
 
 Sie können die Anbieter über den Abschnitt `provider` in Ihrem OpenCode anpassen
 config.
@@ -84,7 +84,38 @@ Es funktioniert wie jeder andere Anbieter in OpenCode und ist völlig optional.
 
 ---
 
-## Directory
+## OpenCode Go
+
+OpenCode Go ist ein kostenguenstiges Abonnement, das zuverlaessigen Zugriff auf beliebte Open-Coding-Modelle bietet, die vom OpenCode-Team getestet und verifiziert wurden, dass sie gut mit OpenCode funktionieren.
+
+1. Führen Sie den Befehl `/connect` in der TUI aus, waehlen Sie `OpenCode Go` und gehen Sie zu [opencode.ai/auth](https://opencode.ai/zen).
+
+   ```txt
+   /connect
+   ```
+
+2. Melden Sie sich an, geben Sie Ihre Rechnungsdaten ein und kopieren Sie Ihren API-Schlüssel.
+
+3. Fügen Sie Ihren API-Schlüssel ein.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Führen Sie `/models` in der TUI aus, um die Liste der empfohlenen Modelle zu sehen.
+
+   ```txt
+   /models
+   ```
+
+Es funktioniert wie jeder andere Anbieter in OpenCode und ist völlig optional.
+
+---
+
+## Verzeichnis
 
 Schauen wir uns einige der Anbieter im Detail an. Wenn Sie einen Anbieter hinzufügen möchten
 Liste, zögern Sie nicht, ein PR zu öffnen.
@@ -684,7 +715,7 @@ um das Token im OpenCode-Authentifizierungsspeicher zu speichern.
 
 ##### Selbstgehostetes GitLab
 
-:::note[compliance note]
+:::note[Compliance-Hinweis]
 OpenCode verwendet ein kleines Modell für einige AI-Aufgaben wie das Generieren des Sitzungstitels.
 Es ist standardmäßig für die Verwendung von gpt-5-nano konfiguriert und wird von Zen gehostet. Zum Sperren von OpenCode
 Um nur Ihre eigene von GitLab gehostete Instanz zu verwenden, fügen Sie Folgendes zu Ihrer hinzu
@@ -748,7 +779,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 Weitere Dokumentation auf der [opencode-gitlab-auth](https://www.npmjs.com/package/@gitlab/opencode-gitlab-auth)-Homepage.
 
-##### Configuration
+##### Konfiguration
 
 Anpassen über `opencode.json`:
 
@@ -1480,6 +1511,39 @@ SAP AI Core bietet Zugriff auf 40+ Modelle von OpenAI, Anthropic, Google, Amazon
 
 ---
 
+### STACKIT
+
+STACKIT AI Model Serving bietet eine voll verwaltete, souveraene Hosting-Umgebung fuer AI-Modelle, mit Fokus auf LLMs wie Llama, Mistral und Qwen, mit maximaler Datensouveraenitaet auf europaeischer Infrastruktur.
+
+1. Gehen Sie zum [STACKIT Portal](https://portal.stackit.cloud), navigieren Sie zu **AI Model Serving** und erstellen Sie ein Auth-Token fuer Ihr Projekt.
+
+   :::tip
+   Sie benoetigen ein STACKIT-Kundenkonto, Benutzerkonto und Projekt, bevor Sie Auth-Tokens erstellen koennen.
+   :::
+
+2. Führen Sie den Befehl `/connect` aus und suchen Sie nach **STACKIT**.
+
+   ```txt
+   /connect
+   ```
+
+3. Geben Sie Ihr STACKIT AI Model Serving Auth-Token ein.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Führen Sie den Befehl `/models` aus, um aus verfügbaren Modellen wie _Qwen3-VL 235B_ oder _Llama 3.3 70B_ auszuwählen.
+
+   ```txt
+   /models
+   ```
+
+---
+
 ### OVHcloud AI Endpoints
 
 1. Gehen Sie zum [OVHcloud panel](https://ovh.com/manager). Navigieren Sie zum Abschnitt `Public Cloud`, `AI & Machine Learning` > `AI Endpoints` und klicken Sie auf der Registerkarte `API Keys` auf **Neuen API-Schlüssel erstellen**.
@@ -1831,7 +1895,7 @@ Sie können jeden OpenAI-kompatiblen Anbieter mit OpenCode verwenden. Die meiste
 
 ---
 
-##### Example
+##### Beispiel
 
 Hier ist ein Beispiel für die Einstellung der Optionen `apiKey`, `headers` und Modell `limit`.
 
@@ -1874,7 +1938,7 @@ Mithilfe der `limit`-Felder kann OpenCode erkennen, wie viel Kontext Sie noch ha
 
 ---
 
-## Troubleshooting
+## Fehlerbehebung
 
 Wenn Sie Probleme beim Konfigurieren eines Anbieters haben, überprüfen Sie Folgendes:
 

@@ -5,7 +5,7 @@ description: Usando a interface de usuário de terminal opencode.
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-opencode fornece uma interface de terminal interativa ou TUI para trabalhar em seus projetos com um LLM.
+O opencode fornece uma interface de terminal interativa ou TUI para trabalhar em seus projetos com um LLM.
 
 Executar opencode inicia o TUI para o diretório atual.
 
@@ -22,7 +22,7 @@ opencode /path/to/project
 Uma vez que você esteja no TUI, você pode solicitar com uma mensagem.
 
 ```text
-Give me a quick summary of the codebase.
+Faça um resumo rápido da base de código.
 ```
 
 ---
@@ -36,7 +36,7 @@ Você também pode usar `@` para referenciar arquivos em suas mensagens.
 :::
 
 ```text "@packages/functions/src/api/index.ts"
-How is auth handled in @packages/functions/src/api/index.ts?
+Como a autenticação é tratada em @packages/functions/src/api/index.ts?
 ```
 
 O conteúdo do arquivo é adicionado à conversa automaticamente.
@@ -234,7 +234,7 @@ Compartilhe a sessão atual. [Saiba mais](/docs/share).
 Liste os temas disponíveis.
 
 ```bash frame="none"
-/theme
+/themes
 ```
 
 **Atalho:** `ctrl+x t`
@@ -290,12 +290,12 @@ Tanto os comandos `/editor` quanto `/export` usam o editor especificado na sua v
 <Tabs>
   <TabItem label="Linux/macOS">
     ```bash
-    # Example for nano or vim
+    # Exemplo para nano ou vim
     export EDITOR=nano
     export EDITOR=vim
 
-    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
-    # include --wait
+    # Para editores GUI, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # inclua --wait
     export EDITOR="code --wait"
     ```
 
@@ -308,8 +308,8 @@ Tanto os comandos `/editor` quanto `/export` usam o editor especificado na sua v
     ```bash
     set EDITOR=notepad
 
-    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
-    # include --wait
+    # Para editores GUI, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # inclua --wait
     set EDITOR=code --wait
     ```
 
@@ -321,8 +321,8 @@ Tanto os comandos `/editor` quanto `/export` usam o editor especificado na sua v
     ```powershell
     $env:EDITOR = "notepad"
 
-    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
-    # include --wait
+    # Para editores GUI, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # inclua --wait
     $env:EDITOR = "code --wait"
     ```
 
@@ -350,26 +350,36 @@ Alguns editores precisam de argumentos de linha de comando para rodar em modo bl
 
 ---
 
-## Configurar
+## Configuração
 
-Você pode personalizar o comportamento do TUI através do seu arquivo de configuração do opencode.
+Você pode personalizar o comportamento do TUI através de `tui.json` (ou `tui.jsonc`).
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "tui": {
-    "scroll_speed": 3,
-    "scroll_acceleration": {
-      "enabled": true
-    }
-  }
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "opencode",
+  "keybinds": {
+    "leader": "ctrl+x"
+  },
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": true
+  },
+  "diff_style": "auto"
 }
 ```
 
+Isso é separado do `opencode.json`, que configura o comportamento do servidor/runtime.
+
 ### Opções
 
-- `scroll_acceleration` - Ative a aceleração de rolagem no estilo macOS para uma rolagem suave e natural. Quando ativado, a velocidade de rolagem aumenta com gestos de rolagem rápidos e permanece precisa para movimentos mais lentos. **Esta configuração tem precedência sobre `scroll_speed` e a substitui quando ativada.**
-- `scroll_speed` - Controla quão rápido o TUI rola ao usar comandos de rolagem (mínimo: `1`). O padrão é `3`. **Nota: Isso é ignorado se `scroll_acceleration.enabled` estiver definido como `true`.**
+- `theme` - Define o tema da sua interface. [Saiba mais](/docs/themes).
+- `keybinds` - Personaliza atalhos de teclado. [Saiba mais](/docs/keybinds).
+- `scroll_acceleration.enabled` - Ative a aceleração de rolagem no estilo macOS para uma rolagem suave e natural. Quando ativado, a velocidade de rolagem aumenta com gestos de rolagem rápidos e permanece precisa para movimentos mais lentos. **Esta configuração tem precedência sobre `scroll_speed` e a substitui quando ativada.**
+- `scroll_speed` - Controla quão rápido o TUI rola ao usar comandos de rolagem (mínimo: `0.001`, suporta valores decimais). O padrão é `3`. **Nota: Isso é ignorado se `scroll_acceleration.enabled` estiver definido como `true`.**
+- `diff_style` - Controla a renderização de diffs. `"auto"` se adapta à largura do terminal, `"stacked"` sempre mostra um layout de coluna única.
+
+Use `OPENCODE_TUI_CONFIG` para carregar um caminho de configuração TUI personalizado.
 
 ---
 

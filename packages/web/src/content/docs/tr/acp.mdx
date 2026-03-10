@@ -1,19 +1,19 @@
 ---
-title: ACP Destek
-description: opencode'u ACP uyumlu herhangi bir sürdürülebilirde kullanın.
+title: ACP Desteği
+description: opencode'u ACP uyumlu herhangi bir editörde kullanın.
 ---
 
-opencode, [Agent Client Protocol](https://agentclientprotocol.com) veya (ACP) dosyalarını destekleyerek onu doğrudan uyumlu tamamlayıcılarda ve IDE'lerde kullanmanızı sağlar.
+opencode, [Agent Client Protocol](https://agentclientprotocol.com) veya (ACP) dosyalarını destekleyerek onu doğrudan uyumlu editörlerde ve IDE'lerde kullanmanızı sağlar.
 
 :::tip
-ACP'yi destekleyenlerin ve araçların listesi için [ACP progress report](https://zed.dev/blog/acp-progress-report#available-now)'e bakın.
+ACP'yi destekleyen editörlerin ve araçların listesi için [ACP progress report](https://zed.dev/blog/acp-progress-report#available-now)'e bakın.
 :::
 
-ACP, kod editörleri ile AI kullanma araçları arasındaki iletişimi standartlaştıran açık bir protokoldür.
+ACP, kod editörleri ile AI kodlama ajanları arasındaki iletişimi standartlaştıran açık bir protokoldür.
 
 ---
 
-## Yapılandır
+## Yapılandırma
 
 opencode'u ACP aracılığıyla kullanmak için düzenleyicinizi `opencode acp` komutunu çalıştıracak şekilde yapılandırın.
 
@@ -25,7 +25,7 @@ Aşağıda ACP'yi destekleyen popüler düzenleyicilere ilişkin örnekler veril
 
 ### Zed
 
-[Zed](https://zed.dev) bakımınıza (`~/.config/zed/settings.json`) ekleyin:
+[Zed](https://zed.dev) yapılandırmanıza (`~/.config/zed/settings.json`) ekleyin:
 
 ```json title="~/.config/zed/settings.json"
 {
@@ -82,13 +82,13 @@ Açmak için **Komut Paleti**'ndeki `agent: new thread` eylemini kullanın.
 }
 ```
 
-Açmak için AI Sohbet temsilcisi seçicisindeki yeni 'opencode' aracısını kullanın.
+Açmak için AI Chat agent seçicisindeki yeni 'OpenCode' ajanını kullanın.
 
 ---
 
 ### Avante.nvim
 
-[Avante.nvim](https://github.com/yetone/avante.nvim) miktarınıza ekleyin:
+[Avante.nvim](https://github.com/yetone/avante.nvim) yapılandırmanıza ekleyin:
 
 ```lua
 {
@@ -121,7 +121,7 @@ Ortam değişkenlerini iletmeniz gerekiyor:
 
 ### CodeCompanion.nvim
 
-opencode'u [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim)'de ACP aracısı olarak kullanmak için Neovim yapılandırmanıza aşağıdakileri ekleyin:
+opencode'u [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim)'de ACP ajanı olarak kullanmak için Neovim yapılandırmanıza aşağıdakileri ekleyin:
 
 ```lua
 require("codecompanion").setup({
@@ -136,7 +136,7 @@ require("codecompanion").setup({
 })
 ```
 
-Bu yapılandırma, CodeCompanion'ı opencode'u sohbet için ACP aracısı olarak kullanacak şekilde ayarlar.
+Bu yapılandırma, CodeCompanion'ı opencode'u sohbet için ACP ajanı olarak kullanacak şekilde ayarlar.
 
 Ortam değişkenlerini (`OPENCODE_API_KEY` gibi) iletmeniz gerekiyorsa, tüm ayrıntılar için CodeCompanion.nvim belgelerindeki [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)'ye bakın.
 
@@ -145,12 +145,12 @@ Ortam değişkenlerini (`OPENCODE_API_KEY` gibi) iletmeniz gerekiyorsa, tüm ayr
 opencode, terminalde olduğu gibi ACP aracılığıyla aynı şekilde çalışır. Tüm özellikler desteklenir:
 
 :::note
-`/undo` ve `/redo` gibi bazı yerleşik eğik çizgi komutları şu anda desteklenmemektedir.
+`/undo` ve `/redo` gibi bazı yerleşik slash komutları şu anda desteklenmemektedir.
 :::
 
 - Yerleşik araçlar (dosya işlemleri, terminal komutları vb.)
-- Özel araçlar ve eğik çizgi komutları
+- Özel araçlar ve slash komutları
 - opencode yapılandırmanızda yapılandırılmış MCP sunucuları
 - `AGENTS.md`'dan projeye özel kurallar
-- Özel formatlayıcılar ve linterler
+- Özel biçimlendiriciler ve linter'lar
 - Aracılar ve izin sistemi
