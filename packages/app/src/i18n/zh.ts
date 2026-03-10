@@ -28,6 +28,11 @@ export const dict = {
 
   "command.sidebar.toggle": "切换侧边栏",
 
+  "command.page.find": "在页面中查找",
+  "command.page.find.description": "搜索当前页面中的文本",
+  "command.page.find.previous": "上一个匹配",
+  "command.page.find.next": "下一个匹配",
+
   "command.project.open": "打开项目",
   "command.project.switch": "切换项目",
 

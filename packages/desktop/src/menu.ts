@@ -104,6 +104,13 @@ export async function createMenu(trigger: (id: string) => void) {
             item: "Paste",
           }),
           await PredefinedMenuItem.new({
+            item: "Separator",
+          }),
+          await MenuItem.new({
+            text: t("desktop.menu.edit.find"),
+            action: () => trigger("page.find"),
+          }),
+          await PredefinedMenuItem.new({
             item: "SelectAll",
           }),
         ],

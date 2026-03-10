@@ -44,6 +44,7 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
 void initI18n()
 
 let update: Update | null = null
+let find = ""
 
 const deepLinkEvent = "opencode:deep-link"
 
@@ -485,6 +486,21 @@ const createPlatform = (): Platform => {
         }, "image/png")
       })
     },
+
+    async find(query, dir) {
+      const q = query.trim()
+      if (!q) return
+      find = q
+      return (window as Window & { find?: (...args: unknown[]) => boolean }).find?.(
+        q,
+        false,
+        dir === -1,
+        true,
+        false,
+        false,
+        false,
+      )
+    },
   }
 }
 
@@ -541,6 +557,20 @@ render(() => {
 
             function Inner() {
               const cmd = useCommand()
+
+              onMount(() => {
+                const onKeyDown = (event: KeyboardEvent) => {
+                  if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return
+                  if (event.key.toLowerCase() !== "f") return
+
+                  event.preventDefault()
+                  event.stopPropagation()
+                  cmd.trigger("page.find", "keybind")
+                }
+
+                window.addEventListener("keydown", onKeyDown, { capture: true })
+                onCleanup(() => window.removeEventListener("keydown", onKeyDown, { capture: true }))
+              })
 
               menuTrigger = (id) => cmd.trigger(id)
 

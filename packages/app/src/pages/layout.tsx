@@ -161,6 +161,43 @@ export default function Layout(props: ParentProps) {
     active: "" as string,
     value: "",
   })
+  const [findbar, setFindbar] = createStore({
+    open: false,
+    q: "",
+  })
+  let findInput: HTMLInputElement | undefined
+
+  const closeFindbar = () => {
+    setFindbar("open", false)
+  }
+
+  const openFindbar = (seed?: string) => {
+    const q = seed?.trim() || findbar.q
+    setFindbar({ open: true, q })
+    queueMicrotask(() => {
+      findInput?.focus()
+      findInput?.select()
+    })
+  }
+
+  const runFindbar = (dir: 1 | -1) => {
+    const q = findbar.q.trim()
+    if (!q) return
+    void platform.find?.(q, dir)
+  }
+
+  const findbarKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Escape") {
+      event.preventDefault()
+      event.stopPropagation()
+      closeFindbar()
+      return
+    }
+    if (event.key !== "Enter") return
+    event.preventDefault()
+    event.stopPropagation()
+    runFindbar(event.shiftKey ? -1 : 1)
+  }
   const setBusy = (directory: string, value: boolean) => {
     const key = workspaceKey(directory)
     if (value) {
@@ -1102,6 +1139,15 @@ export default function Layout(props: ParentProps) {
         category: language.t("command.category.view"),
         keybind: "mod+b",
         onSelect: () => layout.sidebar.toggle(),
+      },
+      {
+        id: "page.find",
+        title: language.t("command.page.find"),
+        description: language.t("command.page.find.description"),
+        category: language.t("command.category.view"),
+        keybind: "mod+f",
+        disabled: !platform.find,
+        onSelect: () => openFindbar(window.getSelection?.()?.toString().trim() || ""),
       },
       {
         id: "project.open",
@@ -3502,6 +3548,52 @@ export default function Layout(props: ParentProps) {
             "xl:border-l xl:rounded-tl-[12px]": !layout.sidebar.opened(),
           }}
         >
+          <Show when={findbar.open && platform.find}>
+            <div class="pointer-events-none absolute top-3 right-3 z-30 w-[min(480px,calc(100%-24px))]">
+              <div class="pointer-events-auto flex flex-row items-center gap-2 rounded-2xl border border-border-weak-base bg-background-stronger/92 px-2 py-2 shadow-lg backdrop-blur-xl">
+                <div class="flex flex-1 min-w-0 flex-row items-center gap-2 rounded-xl bg-surface-panel px-3 ring-1 ring-border-weaker-base/70">
+                  <Icon name="magnifying-glass" size="small" class="shrink-0 text-text-weaker" />
+                  <InlineInput
+                    ref={findInput}
+                    value={findbar.q}
+                    autofocus
+                    placeholder={language.t("common.search.placeholder")}
+                    style={{ "--inline-input-shadow": "none" }}
+                    class="h-10 flex-1 min-w-0 bg-transparent text-14-regular text-text-strong placeholder:text-text-weaker"
+                    onInput={(event) => setFindbar("q", event.currentTarget.value)}
+                    onKeyDown={findbarKeyDown}
+                  />
+                </div>
+                <div class="flex flex-row items-center gap-1 rounded-xl bg-surface-panel px-1.5 py-1 ring-1 ring-border-weaker-base/70">
+                  <IconButton
+                    icon="arrow-left"
+                    variant="ghost"
+                    size="large"
+                    class="rounded-lg text-text-weak hover:text-text-strong"
+                    aria-label={language.t("command.page.find.previous")}
+                    onClick={() => runFindbar(-1)}
+                  />
+                  <IconButton
+                    icon="arrow-right"
+                    variant="ghost"
+                    size="large"
+                    class="rounded-lg text-text-weak hover:text-text-strong"
+                    aria-label={language.t("command.page.find.next")}
+                    onClick={() => runFindbar(1)}
+                  />
+                  <div class="mx-0.5 h-5 w-px bg-border-weaker-base" />
+                  <IconButton
+                    icon="close"
+                    variant="ghost"
+                    size="large"
+                    class="rounded-lg text-text-weak hover:text-text-strong"
+                    aria-label={language.t("common.close")}
+                    onClick={closeFindbar}
+                  />
+                </div>
+              </div>
+            </div>
+          </Show>
           <Show when={!autoselecting()} fallback={<div class="size-full" />}>
             {props.children}
           </Show>

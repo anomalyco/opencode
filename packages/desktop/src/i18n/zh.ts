@@ -31,6 +31,7 @@ export const dict = {
   "desktop.menu.help": "帮助",
   "desktop.menu.file.newSession": "新会话",
   "desktop.menu.file.openProject": "打开项目...",
+  "desktop.menu.edit.find": "查找...",
   "desktop.menu.view.toggleSidebar": "切换侧边栏",
   "desktop.menu.view.toggleTerminal": "切换终端",
   "desktop.menu.view.toggleFileTree": "切换文件树",
