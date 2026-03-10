@@ -1,6 +1,5 @@
-import { Instance } from "@/project/instance"
 import type { MiddlewareHandler } from "hono"
-import { Installation } from "../installation"
+import { Flag } from "../flag/flag"
 import { getAdaptor } from "./adaptors"
 import { Workspace } from "./workspace"
 import { WorkspaceContext } from "./workspace-context"
@@ -38,7 +37,7 @@ async function routeRequest(req: Request) {
 
 export const WorkspaceRouterMiddleware: MiddlewareHandler = async (c, next) => {
   // Only available in development for now
-  if (!Installation.isLocal()) {
+  if (!Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
     return next()
   }
 
