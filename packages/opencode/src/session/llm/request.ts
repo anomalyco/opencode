@@ -1,6 +1,7 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import type { Auth } from "@/auth"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
+import type { Interface as MCPInterface } from "@/mcp"
 import type { RuntimeFlags } from "@/effect/runtime-flags"
 import { InstanceState } from "@/effect/instance-state"
 import { Permission } from "@/permission"
@@ -30,6 +31,7 @@ type PrepareInput = {
   readonly tools: Record<string, Tool>
   readonly provider: Provider.Info
   readonly auth: Auth.Info | undefined
+  readonly mcp: MCPInterface
   readonly plugin: Plugin.Interface
   readonly flags: RuntimeFlags.Info
   readonly isWorkflow: boolean
@@ -55,11 +57,22 @@ const mergeOptions = (target: Record<string, any>, source: Record<string, any> |
 
 export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: PrepareInput) {
   const isOpenaiOauth = input.provider.id === "openai" && input.auth?.type === "oauth"
+  const extra = yield* Effect.all([input.mcp.status(), input.mcp.serverInstructions()], { concurrency: "unbounded" }).pipe(
+    Effect.map(([status, instructions]) =>
+      Object.entries(status).flatMap(([name, item]) => {
+        const text = instructions[name]?.trim()
+        if (item.status !== "connected" || !text) return []
+        return [`<mcp-server name="${name}"><![CDATA[\n${text}\n]]></mcp-server>`]
+      }),
+    ),
+    Effect.orElseSucceed((): string[] => []),
+  )
   const system = [
     [
       ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
       ...input.system,
       ...(input.user.system ? [input.user.system] : []),
+      ...extra,
     ]
       .filter((x) => x)
       .join("\n"),

@@ -16,7 +16,7 @@ import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Plugin } from "@/plugin"
-
+import { MCP } from "@/mcp"
 import { testEffect } from "../lib/effect"
 import type { Agent } from "../../src/agent/agent"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -53,6 +53,29 @@ const openAIConfig = (model: ModelsDev.Provider["models"][string], baseURL: stri
 }
 
 const it = testEffect(Layer.mergeAll(LLM.defaultLayer, Provider.defaultLayer))
+const mcp = Layer.succeed(
+  MCP.Service,
+  MCP.Service.of({
+    status: () => Effect.succeed({}),
+    clients: () => Effect.succeed({}),
+    serverInstructions: () => Effect.succeed({}),
+    tools: () => Effect.succeed({}),
+    prompts: () => Effect.succeed({}),
+    resources: () => Effect.succeed({}),
+    add: () => Effect.succeed({ status: { status: "disabled" as const } }),
+    connect: () => Effect.void,
+    disconnect: () => Effect.void,
+    getPrompt: () => Effect.succeed(undefined),
+    readResource: () => Effect.succeed(undefined),
+    startAuth: () => Effect.die("unexpected MCP auth in LLM tests"),
+    authenticate: () => Effect.die("unexpected MCP auth in LLM tests"),
+    finishAuth: () => Effect.die("unexpected MCP auth in LLM tests"),
+    removeAuth: () => Effect.void,
+    supportsOAuth: () => Effect.succeed(false),
+    hasStoredTokens: () => Effect.succeed(false),
+    getAuthStatus: () => Effect.succeed("not_authenticated" as const),
+  }),
+)
 
 // LLM.stream returns a Stream, not an Effect, so we can't use the serviceUse proxy.
 const drain = (input: LLM.StreamInput) => LLM.Service.use((svc) => svc.stream(input).pipe(Stream.runDrain))
@@ -79,6 +102,7 @@ function llmLayerWithExecutor(executor: Layer.Layer<RequestExecutor.Service>, fl
   return LLM.layer.pipe(
     Layer.provide(Auth.defaultLayer),
     Layer.provide(Config.defaultLayer),
+    Layer.provide(mcp),
     Layer.provide(Provider.defaultLayer),
     Layer.provide(Plugin.defaultLayer),
     Layer.provide(LLMClient.layer.pipe(Layer.provide(Layer.mergeAll(executor, WebSocketExecutor.layer)))),
@@ -1132,6 +1156,7 @@ describe("session.llm.stream", () => {
           LLM.layer.pipe(
             Layer.provide(Auth.defaultLayer),
             Layer.provide(Config.defaultLayer),
+            Layer.provide(mcp),
             Layer.provide(Provider.defaultLayer),
             Layer.provide(Plugin.defaultLayer),
             Layer.provide(failingNativeClient),

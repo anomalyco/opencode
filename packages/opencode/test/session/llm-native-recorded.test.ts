@@ -11,6 +11,7 @@ import path from "node:path"
 import z from "zod"
 import { Auth } from "@/auth"
 import { Config } from "@/config/config"
+import { MCP } from "@/mcp"
 import { Plugin } from "@/plugin"
 import { Provider } from "@/provider/provider"
 
@@ -260,6 +261,30 @@ const modelsFixture = Filesystem.readJson<Record<string, ModelsDev.Provider>>(
   path.join(import.meta.dir, "../tool/fixtures/models-api.json"),
 )
 
+const mcp = Layer.succeed(
+  MCP.Service,
+  MCP.Service.of({
+    status: () => Effect.succeed({}),
+    clients: () => Effect.succeed({}),
+    serverInstructions: () => Effect.succeed({}),
+    tools: () => Effect.succeed({}),
+    prompts: () => Effect.succeed({}),
+    resources: () => Effect.succeed({}),
+    add: () => Effect.succeed({ status: { status: "disabled" as const } }),
+    connect: () => Effect.void,
+    disconnect: () => Effect.void,
+    getPrompt: () => Effect.succeed(undefined),
+    readResource: () => Effect.succeed(undefined),
+    startAuth: () => Effect.die("unexpected MCP auth in recorded LLM tests"),
+    authenticate: () => Effect.die("unexpected MCP auth in recorded LLM tests"),
+    finishAuth: () => Effect.die("unexpected MCP auth in recorded LLM tests"),
+    removeAuth: () => Effect.void,
+    supportsOAuth: () => Effect.succeed(false),
+    hasStoredTokens: () => Effect.succeed(false),
+    getAuthStatus: () => Effect.succeed("not_authenticated" as const),
+  }),
+)
+
 function recordedNativeLLMLayer(scenario: RecordedScenario) {
   const auth = authLayer(scenario)
   const provider = Provider.layer.pipe(
@@ -299,6 +324,7 @@ function recordedNativeLLMLayer(scenario: RecordedScenario) {
     LLM.layer.pipe(
       Layer.provide(auth),
       Layer.provide(Config.defaultLayer),
+      Layer.provide(mcp),
       Layer.provide(provider),
       Layer.provide(Plugin.defaultLayer),
       Layer.provide(recordedClient),
