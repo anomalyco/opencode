@@ -31,8 +31,5 @@ export const ControlAccountTable = sqliteTable(
       .$default(() => false),
     ...Timestamps,
   },
-  (table) => [
-    primaryKey({ columns: [table.email, table.url] }),
-    // uniqueIndex("control_account_active_idx").on(table.email).where(eq(table.active, true)),
-  ],
+  (table) => [primaryKey({ columns: [table.email, table.url] })],
 )
