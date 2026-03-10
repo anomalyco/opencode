@@ -209,3 +209,185 @@ describe("session.prompt agent variant", () => {
     }
   })
 })
+
+describe("session.prompt continuation turns", () => {
+  test("appends a synthetic user turn for Copilot Claude when the loop would continue after an assistant turn", () => {
+    const userInfo: MessageV2.User = {
+      id: "msg_user",
+      sessionID: "ses_test",
+      role: "user",
+      time: { created: 1 },
+      agent: "build",
+      model: { providerID: "github-copilot", modelID: "claude-opus-4.6" },
+    }
+    const assistantInfo: MessageV2.Assistant = {
+      id: "msg_assistant",
+      sessionID: "ses_test",
+      role: "assistant",
+      time: { created: 2, completed: 3 },
+      parentID: "msg_user",
+      modelID: "claude-opus-4.6",
+      providerID: "github-copilot",
+      mode: "build",
+      agent: "build",
+      path: { cwd: "/tmp", root: "/tmp" },
+      cost: 0,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
+      finish: "tool-calls",
+    }
+    const messages: MessageV2.WithParts[] = [
+      {
+        info: userInfo,
+        parts: [
+          {
+            id: "prt_user",
+            messageID: "msg_user",
+            sessionID: "ses_test",
+            type: "text",
+            text: "Continue.",
+          },
+        ],
+      },
+      {
+        info: assistantInfo,
+        parts: [
+          {
+            id: "prt_assistant",
+            messageID: "msg_assistant",
+            sessionID: "ses_test",
+            type: "text",
+            text: "It's running. Let me check again.",
+          },
+        ],
+      },
+    ]
+
+    const result = SessionPrompt.appendSyntheticContinuationTurn(messages, userInfo, {
+      id: "claude-opus-4.6",
+      api: { npm: "@ai-sdk/github-copilot" },
+    } as any)
+
+    expect(result).toHaveLength(3)
+    expect(result[2].info.role).toBe("user")
+    expect(result[2].parts).toHaveLength(1)
+    expect(result[2].parts[0].type).toBe("text")
+    expect("synthetic" in result[2].parts[0] && result[2].parts[0].synthetic).toBe(true)
+    expect(result[2].parts[0].type === "text" && result[2].parts[0].text).toContain(
+      "Continue with your task using the conversation and tool results above.",
+    )
+  })
+
+  test("appends the max-step reminder to the trailing user turn when forcing a user-final prompt", () => {
+    const userInfo: MessageV2.User = {
+      id: "msg_user",
+      sessionID: "ses_test",
+      role: "user",
+      time: { created: 1 },
+      agent: "build",
+      model: { providerID: "github-copilot", modelID: "claude-opus-4.6" },
+    }
+    const messages: MessageV2.WithParts[] = [
+      {
+        info: userInfo,
+        parts: [
+          {
+            id: "prt_user",
+            messageID: "msg_user",
+            sessionID: "ses_test",
+            type: "text",
+            text: "Continue.",
+          },
+        ],
+      },
+    ]
+
+    const result = SessionPrompt.appendSyntheticContinuationTurn(
+      messages,
+      userInfo,
+      {
+        id: "claude-opus-4.6",
+        api: { npm: "@ai-sdk/github-copilot" },
+      } as any,
+      {
+        forceFinalUser: true,
+        text: "<system-reminder>\nCRITICAL - MAXIMUM STEPS REACHED\n</system-reminder>",
+      },
+    )
+
+    expect(result).toHaveLength(1)
+    expect(result[0].info.role).toBe("user")
+    expect(result[0].parts).toHaveLength(2)
+    expect(result[0].parts[1].type).toBe("text")
+    expect("synthetic" in result[0].parts[1] && result[0].parts[1].synthetic).toBe(true)
+    expect(result[0].parts[1].type === "text" && result[0].parts[1].text).toContain("MAXIMUM STEPS REACHED")
+  })
+
+  test("does not append a synthetic user turn for providers that allow assistant-final turns", () => {
+    const userInfo: MessageV2.User = {
+      id: "msg_user",
+      sessionID: "ses_test",
+      role: "user",
+      time: { created: 1 },
+      agent: "build",
+      model: { providerID: "openai", modelID: "gpt-5.2" },
+    }
+    const assistantInfo: MessageV2.Assistant = {
+      id: "msg_assistant",
+      sessionID: "ses_test",
+      role: "assistant",
+      time: { created: 2, completed: 3 },
+      parentID: "msg_user",
+      modelID: "gpt-5.2",
+      providerID: "openai",
+      mode: "build",
+      agent: "build",
+      path: { cwd: "/tmp", root: "/tmp" },
+      cost: 0,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
+      finish: "tool-calls",
+    }
+    const messages: MessageV2.WithParts[] = [
+      {
+        info: userInfo,
+        parts: [
+          {
+            id: "prt_user",
+            messageID: "msg_user",
+            sessionID: "ses_test",
+            type: "text",
+            text: "Continue.",
+          },
+        ],
+      },
+      {
+        info: assistantInfo,
+        parts: [
+          {
+            id: "prt_assistant",
+            messageID: "msg_assistant",
+            sessionID: "ses_test",
+            type: "text",
+            text: "Working on it.",
+          },
+        ],
+      },
+    ]
+
+    const result = SessionPrompt.appendSyntheticContinuationTurn(messages, userInfo, {
+      id: "gpt-5.2",
+      api: { npm: "@ai-sdk/openai" },
+    } as any)
+
+    expect(result).toStrictEqual(messages)
+  })
+})

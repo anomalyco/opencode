@@ -1008,9 +1008,10 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
 
     const result = ProviderTransform.message(msgs, anthropicModel, {})
 
-    expect(result).toHaveLength(1)
+    expect(result).toHaveLength(2)
     expect(result[0].content).toHaveLength(1)
     expect(result[0].content[0]).toEqual({ type: "text", text: "Hello" })
+    expect(result[1].role).toBe("user")
   })
 
   test("filters out empty reasoning parts from array content", () => {
@@ -1027,9 +1028,10 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
 
     const result = ProviderTransform.message(msgs, anthropicModel, {})
 
-    expect(result).toHaveLength(1)
+    expect(result).toHaveLength(2)
     expect(result[0].content).toHaveLength(1)
     expect(result[0].content[0]).toEqual({ type: "text", text: "Answer" })
+    expect(result[1].role).toBe("user")
   })
 
   test("removes entire message when all parts are empty", () => {
@@ -1065,7 +1067,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
 
     const result = ProviderTransform.message(msgs, anthropicModel, {})
 
-    expect(result).toHaveLength(1)
+    expect(result).toHaveLength(2)
     expect(result[0].content).toHaveLength(1)
     expect(result[0].content[0]).toEqual({
       type: "tool-call",
@@ -1073,6 +1075,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
       toolName: "bash",
       input: { command: "ls" },
     })
+    expect(result[1].role).toBe("user")
   })
 
   test("keeps messages with valid text alongside empty parts", () => {
@@ -1089,10 +1092,11 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
 
     const result = ProviderTransform.message(msgs, anthropicModel, {})
 
-    expect(result).toHaveLength(1)
+    expect(result).toHaveLength(2)
     expect(result[0].content).toHaveLength(2)
     expect(result[0].content[0]).toEqual({ type: "reasoning", text: "Thinking..." })
     expect(result[0].content[1]).toEqual({ type: "text", text: "Result" })
+    expect(result[1].role).toBe("user")
   })
 
   test("does not filter for non-anthropic providers", () => {
@@ -1410,6 +1414,143 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
     const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
 
     expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("msg_123")
+  })
+})
+
+describe("ProviderTransform.message - user-final provider guard", () => {
+  const createClaudeModel = (overrides: Partial<any> = {}) =>
+    ({
+      id: "claude-opus-4.6",
+      providerID: "github-copilot",
+      api: {
+        id: "claude-opus-4.6",
+        url: "https://api.githubcopilot.com",
+        npm: "@ai-sdk/github-copilot",
+      },
+      name: "Claude Opus 4.6",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: {
+        input: 0.003,
+        output: 0.015,
+        cache: { read: 0.0003, write: 0.00375 },
+      },
+      limit: {
+        context: 200000,
+        output: 8192,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+      ...overrides,
+    }) as any
+
+  test("appends a synthetic user reminder for Copilot Claude assistant-final prompts", () => {
+    const model = createClaudeModel()
+    const msgs = [
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "Let me check that for you." }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+    expect(result).toHaveLength(2)
+    expect(result[0].role).toBe("assistant")
+    expect(result[1]).toEqual(
+      expect.objectContaining({
+        role: "user",
+        content: [
+          expect.objectContaining({
+            type: "text",
+            text: expect.stringContaining("Follow the most recent assistant instructions and tool results."),
+          }),
+        ],
+      }),
+    )
+  })
+
+  test("appends a synthetic user reminder when an Anthropic-style prompt ends with a tool result", () => {
+    const model = createClaudeModel({
+      providerID: "anthropic",
+      api: {
+        id: "claude-sonnet-4",
+        url: "https://api.anthropic.com",
+        npm: "@ai-sdk/anthropic",
+      },
+    })
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call_1",
+            toolName: "bash",
+            input: { command: "ls" },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call_1",
+            toolName: "bash",
+            output: { type: "text", value: "file.txt" },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+    expect(result).toHaveLength(3)
+    expect(result[2]).toEqual(
+      expect.objectContaining({
+        role: "user",
+        content: [
+          expect.objectContaining({
+            type: "text",
+            text: expect.stringContaining("Continue from the conversation above."),
+          }),
+        ],
+      }),
+    )
+  })
+
+  test("does not alter assistant-final prompts for providers that allow them", () => {
+    const model = createClaudeModel({
+      id: "openai/gpt-5.2",
+      providerID: "openai",
+      api: {
+        id: "gpt-5.2",
+        url: "https://api.openai.com",
+        npm: "@ai-sdk/openai",
+      },
+      name: "GPT-5.2",
+    })
+    const msgs = [
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "Done." }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+    expect(result).toHaveLength(1)
+    expect(result[0].role).toBe("assistant")
+    expect(result[0].content).toEqual([{ type: "text", text: "Done." }])
   })
 })
 

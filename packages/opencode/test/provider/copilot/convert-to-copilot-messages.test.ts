@@ -1,4 +1,5 @@
 import { convertToOpenAICompatibleChatMessages as convertToCopilotMessages } from "@/provider/sdk/copilot/chat/convert-to-openai-compatible-chat-messages"
+import { ProviderTransform } from "@/provider/transform"
 import { describe, test, expect } from "bun:test"
 
 describe("system messages", () => {
@@ -519,5 +520,68 @@ describe("full conversation", () => {
     }
     expect(assistantMsg.reasoning_text).toBe("Let me calculate 2+2...")
     expect(assistantMsg.reasoning_opaque).toBe("sig-abc")
+  })
+})
+
+describe("final user turn guard", () => {
+  test("serializes a user-final Copilot Claude prompt after provider repair", () => {
+    const model = {
+      id: "claude-opus-4.6",
+      providerID: "github-copilot",
+      api: {
+        id: "claude-opus-4.6",
+        url: "https://api.githubcopilot.com",
+        npm: "@ai-sdk/github-copilot",
+      },
+      name: "Claude Opus 4.6",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: {
+        input: 0.003,
+        output: 0.015,
+        cache: { read: 0.0003, write: 0.00375 },
+      },
+      limit: {
+        context: 200000,
+        output: 8192,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+    } as any
+
+    const repaired = ProviderTransform.message(
+      [
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "Let me keep going." }],
+        },
+      ] as any[],
+      model,
+      {},
+    )
+    const result = convertToCopilotMessages(repaired as any)
+
+    expect(result).toHaveLength(2)
+    expect(result[0]).toEqual({
+      role: "assistant",
+      content: "Let me keep going.",
+      tool_calls: undefined,
+      reasoning_text: undefined,
+      reasoning_opaque: undefined,
+    })
+    expect(result[1]).toEqual(
+      expect.objectContaining({
+        role: "user",
+        content: expect.stringContaining("Continue from the conversation above."),
+      }),
+    )
   })
 })

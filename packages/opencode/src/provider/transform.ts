@@ -17,8 +17,22 @@ function mimeToModality(mime: string): Modality | undefined {
   return undefined
 }
 
+const USER_FINAL_TURN_SAFETY_NET_REMINDER = [
+  "<system-reminder>",
+  "Continue from the conversation above.",
+  "Follow the most recent assistant instructions and tool results.",
+  "Do not repeat completed work.",
+  "</system-reminder>",
+].join("\n")
+
 export namespace ProviderTransform {
   export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
+
+  export function requiresUserFinalTurn(model: Provider.Model): boolean {
+    if (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/google-vertex/anthropic") return true
+    if (model.api.npm === "@ai-sdk/github-copilot" && model.id.toLowerCase().includes("claude")) return true
+    return false
+  }
 
   // Maps npm package to the key the AI SDK expects for providerOptions
   function sdkKey(npm: string): string | undefined {
@@ -171,6 +185,26 @@ export namespace ProviderTransform {
     return msgs
   }
 
+  function ensureUserFinalTurn(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
+    if (!requiresUserFinalTurn(model)) return msgs
+
+    const last = msgs.at(-1)
+    if (!last || last.role === "user") return msgs
+
+    return [
+      ...msgs,
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: USER_FINAL_TURN_SAFETY_NET_REMINDER,
+          },
+        ],
+      },
+    ]
+  }
+
   function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
     const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
     const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
@@ -252,6 +286,9 @@ export namespace ProviderTransform {
   export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
     msgs = unsupportedParts(msgs, model)
     msgs = normalizeMessages(msgs, model, options)
+    // The session loop should normally keep Anthropic-style providers user-final,
+    // but repair the prompt again here as a last-line transport guard.
+    msgs = ensureUserFinalTurn(msgs, model)
     if (
       (model.providerID === "anthropic" ||
         model.api.id.includes("anthropic") ||

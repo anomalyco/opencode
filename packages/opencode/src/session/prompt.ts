@@ -59,6 +59,17 @@ IMPORTANT:
 - This tool provides your final answer - no further actions are taken after calling it`
 
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
+const CONTINUE_TASK_SYSTEM_REMINDER = [
+  "<system-reminder>",
+  "Continue with your task using the conversation and tool results above.",
+  "Do not repeat completed work.",
+  "</system-reminder>",
+].join("\n")
+const MAX_STEPS_SYSTEM_REMINDER = [
+  "<system-reminder>",
+  MAX_STEPS,
+  "</system-reminder>",
+].join("\n")
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
@@ -647,6 +658,11 @@ export namespace SessionPrompt {
         }
       }
 
+      msgs = appendSyntheticContinuationTurn(msgs, lastUser, model, {
+        forceFinalUser: isLastStep,
+        text: isLastStep ? MAX_STEPS_SYSTEM_REMINDER : CONTINUE_TASK_SYSTEM_REMINDER,
+      })
+
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
       // Build system prompt, adding structured output instruction if needed
@@ -664,7 +680,7 @@ export namespace SessionPrompt {
         system,
         messages: [
           ...MessageV2.toModelMessages(msgs, model),
-          ...(isLastStep
+          ...(isLastStep && !ProviderTransform.requiresUserFinalTurn(model)
             ? [
                 {
                   role: "assistant" as const,
@@ -1958,5 +1974,76 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
       return Session.setTitle({ sessionID: input.session.id, title })
     }
+  }
+
+  /** @internal Exported for testing — appends an ephemeral user turn for Anthropic-style providers when looping */
+  export function appendSyntheticContinuationTurn(
+    messages: MessageV2.WithParts[],
+    lastUser: MessageV2.User,
+    model: Provider.Model,
+    options: {
+      text?: string
+      forceFinalUser?: boolean
+    } = {},
+  ): MessageV2.WithParts[] {
+    if (!ProviderTransform.requiresUserFinalTurn(model)) return messages
+
+    const lastMessage = messages.at(-1)
+    if (!lastMessage) return messages
+
+    const text = options.text ?? CONTINUE_TASK_SYSTEM_REMINDER
+    if (lastMessage.info.role === "user") {
+      if (!options.forceFinalUser) return messages
+
+      // When the first model call is also the last allowed step, keep the prompt
+      // user-final by ephemerally appending the reminder to the trailing user turn.
+      return [
+        ...messages.slice(0, -1),
+        {
+          ...lastMessage,
+          parts: [
+            ...lastMessage.parts,
+            {
+              id: Identifier.ascending("part"),
+              sessionID: lastMessage.info.sessionID,
+              messageID: lastMessage.info.id,
+              type: "text",
+              text,
+              synthetic: true,
+            },
+          ],
+        },
+      ]
+    }
+
+    if (lastMessage.info.role !== "assistant") return messages
+
+    const messageID = Identifier.ascending("message")
+    return [
+      ...messages,
+      {
+        info: {
+          id: messageID,
+          sessionID: lastUser.sessionID,
+          role: "user",
+          time: {
+            created: Date.now(),
+          },
+          agent: lastUser.agent,
+          model: lastUser.model,
+          variant: lastUser.variant,
+        },
+        parts: [
+          {
+            id: Identifier.ascending("part"),
+            sessionID: lastUser.sessionID,
+            messageID,
+            type: "text",
+            text,
+            synthetic: true,
+          },
+        ],
+      },
+    ]
   }
 }
