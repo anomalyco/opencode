@@ -11,7 +11,7 @@ const openBrowser = (url: string) => Effect.promise(() => open(url).catch(() => 
 
 const println = (msg: string) => Effect.sync(() => UI.println(msg))
 
-const loginEffect = Effect.fn("login")(function* (url?: string) {
+const loginEffect = Effect.fn("login")(function* (url: string) {
   const service = yield* AccountService
 
   yield* Prompt.intro("Log in")
@@ -149,12 +149,13 @@ const orgsEffect = Effect.fn("orgs")(function* () {
 })
 
 export const LoginCommand = cmd({
-  command: "login [url]",
+  command: "login <url>",
   describe: false,
   builder: (yargs) =>
     yargs.positional("url", {
       describe: "server URL",
       type: "string",
+      demandOption: true,
     }),
   async handler(args) {
     UI.empty()

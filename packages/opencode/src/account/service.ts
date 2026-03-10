@@ -80,7 +80,6 @@ const DeviceTokenRequest = Schema.Struct({
   client_id: Schema.String,
 })
 
-const serverDefault = "https://web-14275-d60e67f5-pyqs0590.onporter.run"
 const clientId = "opencode-cli"
 
 const toAccountServiceError = (message: string, cause?: unknown) => new AccountServiceError({ message, cause })
@@ -108,7 +107,7 @@ export class AccountService extends ServiceMap.Service<
       orgID: OrgID,
     ) => Effect.Effect<Option.Option<Record<string, unknown>>, AccountError>
     readonly token: (accountID: AccountID) => Effect.Effect<Option.Option<AccessToken>, AccountError>
-    readonly login: (url?: string) => Effect.Effect<Login, AccountError>
+    readonly login: (url: string) => Effect.Effect<Login, AccountError>
     readonly poll: (input: Login) => Effect.Effect<PollResult, AccountError>
   }
 >()("@opencode/Account") {
@@ -249,8 +248,8 @@ export class AccountService extends ServiceMap.Service<
         return Option.some(parsed.config)
       })
 
-      const login = Effect.fn("AccountService.login")(function* (url?: string) {
-        const server = url ?? serverDefault
+      const login = Effect.fn("AccountService.login")(function* (url: string) {
+        const server = url
 
         const response = yield* executeEffect(
           "login",
