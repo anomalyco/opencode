@@ -21,7 +21,10 @@
       "syntax-primitive": "#034cff",
       "syntax-property": "#a753ae",
       "syntax-type": "#8a6f00",
-      "syntax-constant": "#fc533a"
+      "syntax-constant": "#007b80",
+      "syntax-critical": "#ff8c00",
+      "syntax-diff-delete": "#ff8c00",
+      "syntax-diff-unknown": "#a753ae"
     }
   },
   "dark": {
@@ -43,7 +46,10 @@
       "syntax-primitive": "#8cb0ff",
       "syntax-property": "#fab283",
       "syntax-type": "#fcd53a",
-      "syntax-constant": "#fc533a"
+      "syntax-constant": "#93e9f6",
+      "syntax-critical": "#fab283",
+      "syntax-diff-delete": "#fab283",
+      "syntax-diff-unknown": "#edb2f1"
     }
   }
 }

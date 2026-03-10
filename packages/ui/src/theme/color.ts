@@ -170,10 +170,27 @@ export function generateScale(seed: HexColor, isDark: boolean): HexColor[] {
 
 export function generateNeutralScale(seed: HexColor, isDark: boolean, ink?: HexColor): HexColor[] {
   if (ink) {
-    const bg = !isDark && hexToOklch(seed).l < 0.82 ? mixColors(seed, "#ffffff", 0.86) : seed
+    const base = hexToOklch(seed)
+    const lift = (tone: number) =>
+      oklchToHex({
+        l: base.l + (1 - base.l) * tone,
+        c: base.c * Math.max(0, 1 - tone),
+        h: base.h,
+      })
+    const sink = (tone: number) =>
+      oklchToHex({
+        l: base.l * (1 - tone),
+        c: base.c * Math.max(0, 1 - tone * 0.3),
+        h: base.h,
+      })
+    const bg = isDark
+      ? sink(clamp(0.06 + Math.max(0, base.l - 0.18) * 0.22 + base.c * 1.4, 0.06, 0.14))
+      : base.l < 0.82
+        ? lift(0.86)
+        : lift(clamp(0.1 + base.c * 3.2 + Math.max(0, 0.95 - base.l) * 0.35, 0.1, 0.28))
     const steps = isDark
-      ? [0, 0.038, 0.068, 0.102, 0.145, 0.2, 0.276, 0.378, 0.522, 0.68, 0.84, 0.975]
-      : [0, 0.024, 0.046, 0.074, 0.11, 0.158, 0.226, 0.322, 0.462, 0.63, 0.81, 0.965]
+      ? [0, 0.03, 0.055, 0.085, 0.125, 0.18, 0.255, 0.35, 0.5, 0.67, 0.84, 0.975]
+      : [0, 0.022, 0.042, 0.068, 0.102, 0.146, 0.208, 0.296, 0.432, 0.61, 0.81, 0.965]
     return steps.map((step) => mixColors(bg, ink, step))
   }
 
