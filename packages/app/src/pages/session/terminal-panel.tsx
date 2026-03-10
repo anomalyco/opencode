@@ -81,9 +81,9 @@ export function TerminalPanel() {
 
   createEffect(
     on(
-      () => open(),
+      () => opened(),
       (isOpen, wasOpen) => {
-        if (!isOpen || wasOpen) return
+        if (!isDesktop() || !isOpen || wasOpen !== false) return
         const activeId = terminal.active()
         if (!activeId) return
         if (document.activeElement instanceof HTMLElement) {
