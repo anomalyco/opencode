@@ -13,7 +13,12 @@ export type SessionRoute = {
   initialPrompt?: PromptInfo
 }
 
-export type Route = HomeRoute | SessionRoute
+export type MemoryRoute = {
+  type: "memory"
+  back: HomeRoute | SessionRoute
+}
+
+export type Route = HomeRoute | SessionRoute | MemoryRoute
 
 export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
   name: "Route",

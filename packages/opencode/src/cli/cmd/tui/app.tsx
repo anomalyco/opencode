@@ -24,6 +24,7 @@ import { DialogWorkspaceList } from "@tui/component/dialog-workspace-list"
 import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
+import { Memory } from "@tui/routes/memory"
 import { Session } from "@tui/routes/session"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
@@ -279,6 +280,11 @@ function App() {
       // Truncate title to 40 chars max
       const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
       renderer.setTerminalTitle(`OC | ${title}`)
+      return
+    }
+
+    if (route.data.type === "memory") {
+      renderer.setTerminalTitle("OC | Memory")
     }
   })
 
@@ -561,6 +567,22 @@ function App() {
       category: "System",
     },
     {
+      title: "View memory",
+      value: "memory.view",
+      category: "System",
+      slash: {
+        name: "memory",
+      },
+      onSelect: (dialog) => {
+        if (route.data.type === "memory") return
+        route.navigate({
+          type: "memory",
+          back: { ...route.data },
+        })
+        dialog.clear()
+      },
+    },
+    {
       title: "Help",
       value: "help.show",
       slash: {
@@ -770,6 +792,9 @@ function App() {
         </Match>
         <Match when={route.data.type === "session"}>
           <Session />
+        </Match>
+        <Match when={route.data.type === "memory"}>
+          <Memory />
         </Match>
       </Switch>
     </box>

@@ -757,6 +757,8 @@ export namespace Config {
       leader: z.string().optional().default("ctrl+x").describe("Leader key for keybind combinations"),
       app_exit: z.string().optional().default("ctrl+c,ctrl+d,<leader>q").describe("Exit the application"),
       editor_open: z.string().optional().default("<leader>e").describe("Open external editor"),
+      memory_open_file: z.string().optional().default("ctrl+x").describe("Open memory file in editor"),
+      memory_open_directory: z.string().optional().default("alt+o").describe("Open memory directory"),
       theme_list: z.string().optional().default("<leader>t").describe("List available themes"),
       sidebar_toggle: z.string().optional().default("<leader>b").describe("Toggle sidebar"),
       scrollbar_toggle: z.string().optional().default("none").describe("Toggle session scrollbar"),
