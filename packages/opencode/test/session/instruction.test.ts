@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { $ } from "bun"
 import path from "path"
 import { InstructionPrompt } from "../../src/session/instruction"
 import { Instance } from "../../src/project/instance"
@@ -65,6 +66,34 @@ describe("InstructionPrompt.resolve", () => {
 
         const results = await InstructionPrompt.resolve([], filepath, "test-message-2")
         expect(results).toEqual([])
+      },
+    })
+  })
+
+  test("returns repo root AGENTS.md for files outside current project", async () => {
+    await using external = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "AGENTS.md"), "# External Root")
+        await Bun.write(path.join(dir, "subdir", "AGENTS.md"), "# External Subdir")
+        await Bun.write(path.join(dir, "subdir", "nested", "file.ts"), "const x = 1")
+      },
+    })
+    await using tmp = await tmpdir()
+
+    await $`git init`.cwd(external.path).quiet()
+    await $`git init`.cwd(tmp.path).quiet()
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const results = await InstructionPrompt.resolve(
+          [],
+          path.join(external.path, "subdir", "nested", "file.ts"),
+          "test-message-3",
+        )
+
+        expect(results.length).toBe(1)
+        expect(results[0].filepath).toBe(path.join(external.path, "AGENTS.md"))
       },
     })
   })

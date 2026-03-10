@@ -7,6 +7,7 @@ import { Instance } from "../project/instance"
 import { Flag } from "@/flag/flag"
 import { Log } from "../util/log"
 import { Glob } from "../util/glob"
+import { git } from "../util/git"
 import type { MessageV2 } from "./message-v2"
 
 const log = Log.create({ service: "instruction" })
@@ -40,6 +41,28 @@ async function resolveRelative(instruction: string): Promise<string[]> {
     return []
   }
   return Filesystem.globUp(instruction, Flag.OPENCODE_CONFIG_DIR, Flag.OPENCODE_CONFIG_DIR).catch(() => [])
+}
+
+function normalize(cwd: string, value: string) {
+  const text = value.replace(/[\r\n]+$/, "")
+  if (!text) return
+  const resolved = Filesystem.windowsPath(text)
+  if (path.isAbsolute(resolved)) return path.normalize(resolved)
+  return path.resolve(cwd, resolved)
+}
+
+async function repo(filepath: string) {
+  const cwd = path.dirname(filepath)
+  const result = await git(["rev-parse", "--show-toplevel"], { cwd })
+  if (result.exitCode !== 0) return
+  return normalize(cwd, result.text())
+}
+
+async function main(filepath: string) {
+  const dir = await repo(filepath)
+  if (!dir) return
+  const file = path.resolve(path.join(dir, "AGENTS.md"))
+  if (await Filesystem.exists(file)) return file
 }
 
 export namespace InstructionPrompt {
@@ -187,6 +210,22 @@ export namespace InstructionPrompt {
       current = path.dirname(current)
     }
 
+    if (Instance.containsPath(target)) {
+      return results
+    }
+
+    const found = await main(target)
+    if (!found || found === target || system.has(found) || already.has(found) || isClaimed(messageID, found)) {
+      return results
+    }
+
+    claim(messageID, found)
+    const content = await Filesystem.readText(found).catch(() => undefined)
+    if (!content) {
+      return results
+    }
+
+    results.push({ filepath: found, content: "Instructions from: " + found + "\n" + content })
     return results
   }
 }
