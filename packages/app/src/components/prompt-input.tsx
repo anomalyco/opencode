@@ -576,7 +576,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     closePopover()
 
     if (cmd.type === "custom") {
-      const text = `/${cmd.trigger} `
+      const rawText = editorRef.textContent ?? ""
+      const cursor = getCursorPosition(editorRef)
+      const before = rawText.substring(0, cursor)
+      const lastSlash = before.lastIndexOf("/")
+      const prefix = lastSlash !== -1 ? rawText.substring(0, lastSlash) : ""
+      const text = prefix + `/${cmd.trigger} `
       setEditorText(text)
       prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
       focusEditorEnd()
@@ -810,13 +815,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (!shellMode) {
       const atMatch = rawText.substring(0, cursorPosition).match(/@(\S*)$/)
-      const slashMatch = rawText.substring(0, cursorPosition).match(/^\/(\S*)$/)
+      const textBefore = rawText.substring(0, cursorPosition)
+      const lastSlash = textBefore.lastIndexOf("/")
+      const slashMatch =
+        lastSlash !== -1 &&
+        (lastSlash === 0 || /\s/.test(textBefore[lastSlash - 1]!)) &&
+        !textBefore.slice(lastSlash).match(/\s/)
+          ? textBefore.slice(lastSlash + 1)
+          : null
 
       if (atMatch) {
         atOnInput(atMatch[1])
         setStore("popover", "at")
-      } else if (slashMatch) {
-        slashOnInput(slashMatch[1])
+      } else if (slashMatch !== null) {
+        slashOnInput(slashMatch)
         setStore("popover", "slash")
       } else {
         closePopover()
