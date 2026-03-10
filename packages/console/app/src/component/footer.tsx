@@ -8,12 +8,12 @@ import { useI18n } from "~/context/i18n"
 export function Footer() {
   const language = useLanguage()
   const i18n = useI18n()
-  const zh = createMemo(() => {
+  const discordRoute = createMemo(() => {
     const locale = language.locale()
     return locale === "zh" || locale === "zht"
+      ? { key: "footer.feishu", link:  language.route("/feishu") }
+      : { key: "footer.discord", link:  language.route("/discord") }
   })
-  const link = createMemo(() => language.route(zh() ? "/feishu" : "/discord"))
-  const key = createMemo(() => (zh() ? "footer.feishu" : "footer.discord"))
   const githubData = createAsync(() => github())
   const starCount = createMemo(() =>
     githubData()?.stars
