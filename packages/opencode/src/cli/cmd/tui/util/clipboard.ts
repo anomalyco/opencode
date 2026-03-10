@@ -1,9 +1,9 @@
-import { $ } from "bun"
 import { platform, release } from "os"
 import clipboardy from "clipboardy"
 import { lazy } from "../../../../util/lazy.js"
 import { tmpdir } from "os"
 import path from "path"
+import fs from "fs/promises"
 import { Filesystem } from "../../../../util/filesystem"
 import { Process } from "../../../../util/process"
 import { which } from "../../../../util/which"
@@ -34,23 +34,38 @@ export namespace Clipboard {
     if (os === "darwin") {
       const tmpfile = path.join(tmpdir(), "opencode-clipboard.png")
       try {
-        await $`osascript -e 'set imageData to the clipboard as "PNGf"' -e 'set fileRef to open for access POSIX file "${tmpfile}" with write permission' -e 'set eof fileRef to 0' -e 'write imageData to fileRef' -e 'close access fileRef'`
-          .nothrow()
-          .quiet()
+        await Process.run(
+          [
+            "osascript",
+            "-e",
+            'set imageData to the clipboard as "PNGf"',
+            "-e",
+            `set fileRef to open for access POSIX file "${tmpfile}" with write permission`,
+            "-e",
+            "set eof fileRef to 0",
+            "-e",
+            "write imageData to fileRef",
+            "-e",
+            "close access fileRef",
+          ],
+          { nothrow: true },
+        )
         const buffer = await Filesystem.readBytes(tmpfile)
         return { data: buffer.toString("base64"), mime: "image/png" }
       } catch {
       } finally {
-        await $`rm -f "${tmpfile}"`.nothrow().quiet()
+        await fs.rm(tmpfile, { force: true }).catch(() => {})
       }
     }
 
     if (os === "win32" || release().includes("WSL")) {
       const script =
         "Add-Type -AssemblyName System.Windows.Forms; $img = [System.Windows.Forms.Clipboard]::GetImage(); if ($img) { $ms = New-Object System.IO.MemoryStream; $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); [System.Convert]::ToBase64String($ms.ToArray()) }"
-      const base64 = await $`powershell.exe -NonInteractive -NoProfile -command "${script}"`.nothrow().text()
-      if (base64) {
-        const imageBuffer = Buffer.from(base64.trim(), "base64")
+      const base64 = await Process.text(["powershell.exe", "-NonInteractive", "-NoProfile", "-command", script], {
+        nothrow: true,
+      })
+      if (base64.text) {
+        const imageBuffer = Buffer.from(base64.text.trim(), "base64")
         if (imageBuffer.length > 0) {
           return { data: imageBuffer.toString("base64"), mime: "image/png" }
         }
@@ -58,13 +73,15 @@ export namespace Clipboard {
     }
 
     if (os === "linux") {
-      const wayland = await $`wl-paste -t image/png`.nothrow().arrayBuffer()
-      if (wayland && wayland.byteLength > 0) {
-        return { data: Buffer.from(wayland).toString("base64"), mime: "image/png" }
+      const wayland = await Process.run(["wl-paste", "-t", "image/png"], { nothrow: true })
+      if (wayland.stdout.byteLength > 0) {
+        return { data: Buffer.from(wayland.stdout).toString("base64"), mime: "image/png" }
       }
-      const x11 = await $`xclip -selection clipboard -t image/png -o`.nothrow().arrayBuffer()
-      if (x11 && x11.byteLength > 0) {
-        return { data: Buffer.from(x11).toString("base64"), mime: "image/png" }
+      const x11 = await Process.run(["xclip", "-selection", "clipboard", "-t", "image/png", "-o"], {
+        nothrow: true,
+      })
+      if (x11.stdout.byteLength > 0) {
+        return { data: Buffer.from(x11.stdout).toString("base64"), mime: "image/png" }
       }
     }
 
@@ -81,7 +98,7 @@ export namespace Clipboard {
       console.log("clipboard: using osascript")
       return async (text: string) => {
         const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
-        await $`osascript -e 'set the clipboard to "${escaped}"'`.nothrow().quiet()
+        await Process.run(["osascript", "-e", `set the clipboard to "${escaped}"`], { nothrow: true })
       }
     }
 
