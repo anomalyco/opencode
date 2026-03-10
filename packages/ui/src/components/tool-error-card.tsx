@@ -54,12 +54,12 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
 
   return (
     <Card {...rest} data-kind="tool-error-card" data-open={open() ? "true" : "false"} variant="error">
-      <Collapsible class="tool-collapsible" open={open()} onOpenChange={setOpen}>
+      <Collapsible class="tool-collapsible" data-open={open() ? "true" : "false"} open={open()} onOpenChange={setOpen}>
         <Collapsible.Trigger>
           <div data-component="tool-trigger">
             <div data-slot="basic-tool-tool-trigger-content">
               <span data-slot="basic-tool-tool-indicator" data-component="tool-error-card-icon">
-                <Icon name="circle-ban-sign" size="small" />
+                <Icon name="circle-ban-sign" size="small" style={{ "stroke-width": 1.5 }} />
               </span>
               <div data-slot="basic-tool-tool-info">
                 <div data-slot="basic-tool-tool-info-structured">
