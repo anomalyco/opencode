@@ -37,7 +37,7 @@ export namespace Plugin {
       get serverUrl(): URL {
         throw new Error("Server URL is no longer supported in plugins")
       },
-      $: Bun.$,
+      $: () => {},
     }
 
     for (const plugin of INTERNAL_PLUGINS) {

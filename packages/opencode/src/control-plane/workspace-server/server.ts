@@ -1,3 +1,4 @@
+import { createAdaptorServer } from "@hono/node-server"
 import { Hono } from "hono"
 import { Instance } from "../../project/instance"
 import { InstanceBootstrap } from "../../project/bootstrap"
@@ -55,10 +56,10 @@ export namespace WorkspaceServer {
   }
 
   export function Listen(opts: { hostname: string; port: number }) {
-    return Bun.serve({
-      hostname: opts.hostname,
-      port: opts.port,
+    const server = createAdaptorServer({
       fetch: App().fetch,
     })
+    server.listen(opts.port, opts.hostname)
+    return server
   }
 }
