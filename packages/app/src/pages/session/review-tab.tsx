@@ -1,4 +1,4 @@
-import { createEffect, on, onCleanup, type JSX } from "solid-js"
+import { createEffect, onCleanup, type JSX } from "solid-js"
 import type { FileDiff } from "@opencode-ai/sdk/v2"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import type {
@@ -49,6 +49,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
   let scroll: HTMLDivElement | undefined
   let restoreFrame: number | undefined
   let userInteracted = false
+  let restored: { x: number; y: number } | undefined
 
   const sdk = useSDK()
   const layout = useLayout()
@@ -65,6 +66,11 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
 
   const handleInteraction = () => {
     userInteracted = true
+
+    if (restoreFrame !== undefined) {
+      cancelAnimationFrame(restoreFrame)
+      restoreFrame = undefined
+    }
   }
 
   const doRestore = () => {
@@ -82,8 +88,11 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
     const targetY = Math.min(s.y, maxY)
     const targetX = Math.min(s.x, maxX)
 
+    if (el.scrollTop === targetY && el.scrollLeft === targetX) return
+
     if (el.scrollTop !== targetY) el.scrollTop = targetY
     if (el.scrollLeft !== targetX) el.scrollLeft = targetX
+    restored = { x: el.scrollLeft, y: el.scrollTop }
   }
 
   const queueRestore = () => {
@@ -92,9 +101,16 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
   }
 
   const handleScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
-    if (!layout.ready() || !userInteracted) return
-
     const el = event.currentTarget
+    const prev = restored
+    if (prev && el.scrollTop === prev.y && el.scrollLeft === prev.x) {
+      restored = undefined
+      return
+    }
+
+    restored = undefined
+    handleInteraction()
+    if (!layout.ready()) return
     if (el.clientHeight === 0 || el.clientWidth === 0) return
 
     props.view().setScroll("review", {
@@ -103,40 +119,21 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
     })
   }
 
-  createEffect(
-    on(
-      () => props.diffs().length,
-      () => queueRestore(),
-      { defer: true },
-    ),
-  )
-
-  createEffect(
-    on(
-      () => props.diffStyle,
-      () => queueRestore(),
-      { defer: true },
-    ),
-  )
-
-  createEffect(
-    on(
-      () => layout.ready(),
-      (ready) => {
-        if (!ready) return
-        queueRestore()
-      },
-      { defer: true },
-    ),
-  )
+  createEffect(() => {
+    props.diffs().length
+    props.diffStyle
+    if (!layout.ready()) return
+    queueRestore()
+  })
 
   onCleanup(() => {
     if (restoreFrame !== undefined) cancelAnimationFrame(restoreFrame)
     if (scroll) {
-      scroll.removeEventListener("wheel", handleInteraction)
-      scroll.removeEventListener("pointerdown", handleInteraction)
-      scroll.removeEventListener("touchstart", handleInteraction)
-      scroll.removeEventListener("keydown", handleInteraction)
+      scroll.removeEventListener("wheel", handleInteraction, { capture: true })
+      scroll.removeEventListener("mousewheel", handleInteraction, { capture: true })
+      scroll.removeEventListener("pointerdown", handleInteraction, { capture: true })
+      scroll.removeEventListener("touchstart", handleInteraction, { capture: true })
+      scroll.removeEventListener("keydown", handleInteraction, { capture: true })
     }
   })
 
@@ -147,6 +144,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
       scrollRef={(el) => {
         scroll = el
         el.addEventListener("wheel", handleInteraction, { passive: true, capture: true })
+        el.addEventListener("mousewheel", handleInteraction, { passive: true, capture: true })
         el.addEventListener("pointerdown", handleInteraction, { passive: true, capture: true })
         el.addEventListener("touchstart", handleInteraction, { passive: true, capture: true })
         el.addEventListener("keydown", handleInteraction, { passive: true, capture: true })
@@ -158,7 +156,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
       open={props.view().review.open()}
       onOpenChange={props.view().review.setOpen}
       classes={{
-        root: props.classes?.root ?? "pb-6 pr-3",
+        root: props.classes?.root ?? "pr-3",
         header: props.classes?.header ?? "px-3",
         container: props.classes?.container ?? "pl-3",
       }}

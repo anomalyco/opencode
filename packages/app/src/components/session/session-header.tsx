@@ -35,6 +35,7 @@ const OPEN_APPS = [
   "terminal",
   "iterm2",
   "ghostty",
+  "warp",
   "xcode",
   "android-studio",
   "powershell",
@@ -63,6 +64,7 @@ const MAC_APPS = [
   { id: "terminal", label: "Terminal", icon: "terminal", openWith: "Terminal" },
   { id: "iterm2", label: "iTerm2", icon: "iterm2", openWith: "iTerm" },
   { id: "ghostty", label: "Ghostty", icon: "ghostty", openWith: "Ghostty" },
+  { id: "warp", label: "Warp", icon: "warp", openWith: "Warp" },
   { id: "xcode", label: "Xcode", icon: "xcode", openWith: "Xcode" },
   {
     id: "android-studio",
@@ -136,12 +138,12 @@ function useSessionShare(args: {
   globalSDK: ReturnType<typeof useGlobalSDK>
   currentSession: () =>
     | {
-        id: string
         share?: {
           url?: string
         }
       }
     | undefined
+  sessionID: () => string | undefined
   projectDirectory: () => string
   platform: ReturnType<typeof usePlatform>
 }) {
@@ -165,11 +167,11 @@ function useSessionShare(args: {
   })
 
   const shareSession = () => {
-    const session = args.currentSession()
-    if (!session || state.share) return
+    const sessionID = args.sessionID()
+    if (!sessionID || state.share) return
     setState("share", true)
     args.globalSDK.client.session
-      .share({ sessionID: session.id, directory: args.projectDirectory() })
+      .share({ sessionID, directory: args.projectDirectory() })
       .catch((error) => {
         console.error("Failed to share session", error)
       })
@@ -179,11 +181,11 @@ function useSessionShare(args: {
   }
 
   const unshareSession = () => {
-    const session = args.currentSession()
-    if (!session || state.unshare) return
+    const sessionID = args.sessionID()
+    if (!sessionID || state.unshare) return
     setState("unshare", true)
     args.globalSDK.client.session
-      .unshare({ sessionID: session.id, directory: args.projectDirectory() })
+      .unshare({ sessionID, directory: args.projectDirectory() })
       .catch((error) => {
         console.error("Failed to unshare session", error)
       })
@@ -241,9 +243,9 @@ export function SessionHeader() {
   })
   const hotkey = createMemo(() => command.keybind("file.open"))
 
-  const currentSession = createMemo(() => sync.data.session.find((s) => s.id === params.id))
+  const currentSession = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
-  const showShare = createMemo(() => shareEnabled() && !!currentSession())
+  const showShare = createMemo(() => shareEnabled() && !!params.id)
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const view = createMemo(() => layout.view(sessionKey))
   const os = createMemo(() => detectOS(platform))
@@ -301,14 +303,18 @@ export function SessionHeader() {
   })
 
   const canOpen = createMemo(() => platform.platform === "desktop" && !!platform.openPath && server.isLocal())
-  const current = createMemo(() => options().find((o) => o.id === prefs.app) ?? options()[0])
+  const current = createMemo(
+    () =>
+      options().find((o) => o.id === prefs.app) ??
+      options()[0] ??
+      ({ id: "finder", label: fileManager().label, icon: fileManager().icon } as const),
+  )
   const opening = createMemo(() => openRequest.app !== undefined)
 
-  createEffect(() => {
-    const value = prefs.app
-    if (options().some((o) => o.id === value)) return
-    setPrefs("app", options()[0]?.id ?? "finder")
-  })
+  const selectApp = (app: OpenApp) => {
+    if (!options().some((item) => item.id === app)) return
+    setPrefs("app", app)
+  }
 
   const openDir = (app: OpenApp) => {
     if (opening() || !canOpen() || !platform.openPath) return
@@ -345,6 +351,7 @@ export function SessionHeader() {
   const share = useSessionShare({
     globalSDK,
     currentSession,
+    sessionID: () => params.id,
     projectDirectory,
     platform,
   })
@@ -428,7 +435,7 @@ export function SessionHeader() {
                               <Spinner class="size-3.5 text-icon-base" />
                             </Show>
                           </div>
-                          <span class="text-12-regular text-text-strong">Open</span>
+                          <span class="text-12-regular text-text-strong">{language.t("common.open")}</span>
                         </Button>
                         <div class="self-stretch w-px bg-border-weak-base" />
                         <DropdownMenu
@@ -456,7 +463,7 @@ export function SessionHeader() {
                                   value={current().id}
                                   onChange={(value) => {
                                     if (!OPEN_APPS.includes(value as OpenApp)) return
-                                    setPrefs("app", value as OpenApp)
+                                    selectApp(value as OpenApp)
                                   }}
                                 >
                                   <For each={options()}>

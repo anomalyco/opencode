@@ -155,8 +155,9 @@ export function Titlebar() {
 
   return (
     <header
-      class="h-10 shrink-0 bg-background-base relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-center"
+      class="h-10 shrink-0 bg-background-base relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center"
       style={{ "min-height": minHeight() }}
+      data-tauri-drag-region
       onMouseDown={drag}
       onDblClick={maximize}
     >
@@ -268,7 +269,7 @@ export function Titlebar() {
       </div>
 
       <div class="min-w-0 flex items-center justify-center pointer-events-none">
-        <div id="opencode-titlebar-center" class="pointer-events-auto w-full min-w-0 flex justify-center lg:w-fit" />
+        <div id="opencode-titlebar-center" class="pointer-events-auto min-w-0 flex justify-center w-fit max-w-full" />
       </div>
 
       <div
@@ -276,6 +277,7 @@ export function Titlebar() {
           "flex items-center min-w-0 justify-end": true,
           "pr-2": !windows(),
         }}
+        data-tauri-drag-region
         onMouseDown={drag}
       >
         <div id="opencode-titlebar-right" class="flex items-center gap-1 shrink-0 justify-end" />

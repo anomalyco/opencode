@@ -71,6 +71,12 @@ test("test description", async ({ page, sdk, gotoSession }) => {
 - `closeDialog(page, dialog)` - Close any dialog
 - `openSidebar(page)` / `closeSidebar(page)` - Toggle sidebar
 - `withSession(sdk, title, callback)` - Create temp session
+- `withProject(...)` - Create temp project/workspace
+- `sessionIDFromUrl(url)` - Read session ID from URL
+- `slugFromUrl(url)` - Read workspace slug from URL
+- `waitSlug(page, skip?)` - Wait for resolved workspace slug
+- `trackSession(sessionID, directory?)` - Register session for fixture cleanup
+- `trackDirectory(directory)` - Register directory for fixture cleanup
 - `clickListItem(container, filter)` - Click list item by key/text
 
 **Selectors** (`selectors.ts`):
@@ -109,7 +115,7 @@ import { test, expect } from "@playwright/test"
 
 ### Error Handling
 
-Tests should clean up after themselves:
+Tests should clean up after themselves. Prefer fixture-managed cleanup:
 
 ```typescript
 test("test with cleanup", async ({ page, sdk, gotoSession }) => {
@@ -119,6 +125,11 @@ test("test with cleanup", async ({ page, sdk, gotoSession }) => {
   }) // Auto-deletes session
 })
 ```
+
+- Prefer `withSession(...)` for temp sessions
+- In `withProject(...)` tests that create sessions or extra workspaces, call `trackSession(sessionID, directory?)` and `trackDirectory(directory)`
+- This lets fixture teardown abort, wait for idle, and clean up safely under CI concurrency
+- Avoid calling `sdk.session.delete(...)` directly
 
 ### Timeouts
 
@@ -161,9 +172,10 @@ await page.keyboard.press(`${modKey}+Comma`) // Open settings
 1. Choose appropriate folder or create new one
 2. Import from `../fixtures`
 3. Use helper functions from `../actions` and `../selectors`
-4. Clean up any created resources
-5. Use specific selectors (avoid CSS classes)
-6. Test one feature per test file
+4. When validating routing, use shared helpers from `../actions`. Workspace URL slugs can be canonicalized on Windows, so assert against canonical or resolved workspace slugs.
+5. Clean up any created resources
+6. Use specific selectors (avoid CSS classes)
+7. Test one feature per test file
 
 ## Local Development
 

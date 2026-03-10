@@ -352,24 +352,34 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## 設定
 
-您可以透過 OpenCode 設定檔自訂 TUI 行為。
+您可以透過 `tui.json`（或 `tui.jsonc`）自訂 TUI 行為。
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "tui": {
-    "scroll_speed": 3,
-    "scroll_acceleration": {
-      "enabled": true
-    }
-  }
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "opencode",
+  "keybinds": {
+    "leader": "ctrl+x"
+  },
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": true
+  },
+  "diff_style": "auto"
 }
 ```
 
+這與設定伺服器/執行時行為的 `opencode.json` 是分開的。
+
 ### 選項
 
-- `scroll_acceleration` - 啟用 macOS 風格的捲動加速，實現平滑、自然的捲動體驗。啟用後，快速捲動時速度會增加，慢速移動時保持精確。**此設定優先於 `scroll_speed`，啟用時會覆蓋它。**
-- `scroll_speed` - 控制使用捲動指令時 TUI 的捲動速度（最小值：`1`）。預設為 `3`。**注意：如果 `scroll_acceleration.enabled` 設定為 `true`，則此設定會被忽略。**
+- `theme` - 設定您的 UI 主題。[了解更多](/docs/themes)。
+- `keybinds` - 自訂鍵盤快速鍵。[了解更多](/docs/keybinds)。
+- `scroll_acceleration.enabled` - 啟用 macOS 風格的捲動加速，實現平滑、自然的捲動體驗。啟用後，快速捲動時速度會增加，慢速移動時保持精確。**此設定優先於 `scroll_speed`，啟用時會覆蓋它。**
+- `scroll_speed` - 控制使用捲動指令時 TUI 的捲動速度（最小值：`0.001`，支援小數值）。預設為 `3`。**注意：如果 `scroll_acceleration.enabled` 設定為 `true`，則此設定會被忽略。**
+- `diff_style` - 控制差異呈現方式。`"auto"` 根據終端機寬度自適應，`"stacked"` 始終顯示單列。
+
+使用 `OPENCODE_TUI_CONFIG` 載入自訂 TUI 設定路徑。
 
 ---
 

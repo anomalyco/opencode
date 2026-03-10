@@ -1,11 +1,32 @@
 import { createSignal, onCleanup, onMount, splitProps, type ComponentProps, Show, mergeProps } from "solid-js"
+import { useI18n } from "../context/i18n"
 
 export interface ScrollViewProps extends ComponentProps<"div"> {
   viewportRef?: (el: HTMLDivElement) => void
   orientation?: "vertical" | "horizontal" // currently only vertical is fully implemented for thumb
 }
 
+export const scrollKey = (event: Pick<KeyboardEvent, "key" | "altKey" | "ctrlKey" | "metaKey" | "shiftKey">) => {
+  if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+
+  switch (event.key) {
+    case "PageDown":
+      return "page-down"
+    case "PageUp":
+      return "page-up"
+    case "Home":
+      return "home"
+    case "End":
+      return "end"
+    case "ArrowUp":
+      return "up"
+    case "ArrowDown":
+      return "down"
+  }
+}
+
 export function ScrollView(props: ScrollViewProps) {
+  const i18n = useI18n()
   const merged = mergeProps({ orientation: "vertical" }, props)
   const [local, events, rest] = splitProps(
     merged,
@@ -131,31 +152,34 @@ export function ScrollView(props: ScrollViewProps) {
       return
     }
 
+    const next = scrollKey(e)
+    if (!next) return
+
     const scrollAmount = viewportRef.clientHeight * 0.8
     const lineAmount = 40
 
-    switch (e.key) {
-      case "PageDown":
+    switch (next) {
+      case "page-down":
         e.preventDefault()
         viewportRef.scrollBy({ top: scrollAmount, behavior: "smooth" })
         break
-      case "PageUp":
+      case "page-up":
         e.preventDefault()
         viewportRef.scrollBy({ top: -scrollAmount, behavior: "smooth" })
         break
-      case "Home":
+      case "home":
         e.preventDefault()
         viewportRef.scrollTo({ top: 0, behavior: "smooth" })
         break
-      case "End":
+      case "end":
         e.preventDefault()
         viewportRef.scrollTo({ top: viewportRef.scrollHeight, behavior: "smooth" })
         break
-      case "ArrowUp":
+      case "up":
         e.preventDefault()
         viewportRef.scrollBy({ top: -lineAmount, behavior: "smooth" })
         break
-      case "ArrowDown":
+      case "down":
         e.preventDefault()
         viewportRef.scrollBy({ top: lineAmount, behavior: "smooth" })
         break
@@ -188,7 +212,7 @@ export function ScrollView(props: ScrollViewProps) {
         onClick={events.onClick as any}
         tabIndex={0}
         role="region"
-        aria-label="scrollable content"
+        aria-label={i18n.t("ui.scrollView.ariaLabel")}
         onKeyDown={(e) => {
           onKeyDown(e)
           if (typeof events.onKeyDown === "function") events.onKeyDown(e as any)

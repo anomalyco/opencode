@@ -1,5 +1,5 @@
 import { test, expect } from "../fixtures"
-import { clearSessionDockSeed, seedSessionQuestion, seedSessionTodos } from "../actions"
+import { cleanupSession, clearSessionDockSeed, seedSessionQuestion, seedSessionTodos } from "../actions"
 import {
   permissionDockSelector,
   promptSelector,
@@ -26,7 +26,7 @@ async function withDockSession<T>(
   try {
     return await fn(session)
   } finally {
-    await sdk.session.delete({ sessionID: session.id }).catch(() => undefined)
+    await cleanupSession({ sdk, sessionID: session.id })
   }
 }
 
@@ -48,6 +48,15 @@ async function clearPermissionDock(page: any, label: RegExp) {
     await dock.getByRole("button", { name: label }).click()
     await page.waitForTimeout(150)
   }
+}
+
+async function setAutoAccept(page: any, enabled: boolean) {
+  const button = page.locator('[data-action="prompt-permissions"]').first()
+  await expect(button).toBeVisible()
+  const pressed = (await button.getAttribute("aria-pressed")) === "true"
+  if (pressed === enabled) return
+  await button.click()
+  await expect(button).toHaveAttribute("aria-pressed", enabled ? "true" : "false")
 }
 
 async function withMockPermission<T>(
@@ -133,6 +142,17 @@ test("default dock shows prompt input", async ({ page, sdk, gotoSession }) => {
   })
 })
 
+test("auto-accept toggle works before first submit", async ({ page, gotoSession }) => {
+  await gotoSession()
+
+  const button = page.locator('[data-action="prompt-permissions"]').first()
+  await expect(button).toBeVisible()
+  await expect(button).toHaveAttribute("aria-pressed", "false")
+
+  await setAutoAccept(page, true)
+  await setAutoAccept(page, false)
+})
+
 test("blocked question flow unblocks after submit", async ({ page, sdk, gotoSession }) => {
   await withDockSession(sdk, "e2e composer dock question", async (session) => {
     await withDockSeed(sdk, session.id, async () => {
@@ -168,6 +188,7 @@ test("blocked question flow unblocks after submit", async ({ page, sdk, gotoSess
 test("blocked permission flow supports allow once", async ({ page, sdk, gotoSession }) => {
   await withDockSession(sdk, "e2e composer dock permission once", async (session) => {
     await gotoSession(session.id)
+    await setAutoAccept(page, false)
     await withMockPermission(
       page,
       {
@@ -195,6 +216,7 @@ test("blocked permission flow supports allow once", async ({ page, sdk, gotoSess
 test("blocked permission flow supports reject", async ({ page, sdk, gotoSession }) => {
   await withDockSession(sdk, "e2e composer dock permission reject", async (session) => {
     await gotoSession(session.id)
+    await setAutoAccept(page, false)
     await withMockPermission(
       page,
       {
@@ -221,6 +243,7 @@ test("blocked permission flow supports reject", async ({ page, sdk, gotoSession 
 test("blocked permission flow supports allow always", async ({ page, sdk, gotoSession }) => {
   await withDockSession(sdk, "e2e composer dock permission always", async (session) => {
     await gotoSession(session.id)
+    await setAutoAccept(page, false)
     await withMockPermission(
       page,
       {
@@ -288,7 +311,7 @@ test("child session question request blocks parent dock and unblocks after submi
         await expect(page.locator(promptSelector)).toBeVisible()
       })
     } finally {
-      await sdk.session.delete({ sessionID: child.id }).catch(() => undefined)
+      await cleanupSession({ sdk, sessionID: child.id })
     }
   })
 })
@@ -300,6 +323,7 @@ test("child session permission request blocks parent dock and supports allow onc
 }) => {
   await withDockSession(sdk, "e2e composer dock child permission parent", async (session) => {
     await gotoSession(session.id)
+    await setAutoAccept(page, false)
 
     const child = await sdk.session
       .create({
@@ -334,7 +358,7 @@ test("child session permission request blocks parent dock and supports allow onc
         },
       )
     } finally {
-      await sdk.session.delete({ sessionID: child.id }).catch(() => undefined)
+      await cleanupSession({ sdk, sessionID: child.id })
     }
   })
 })
