@@ -1167,6 +1167,94 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(parts[4].type).toBe("tool-call")
   })
 
+  test("strips trailing empty text from assistant messages with reasoning blocks to prevent cache_control on empty text", () => {
+    // Reproduces the defensive fix for ses_3272b8b1dffe8ACUMp7xjxhFEw:
+    // When applyCaching sets message-level cache_control, the @ai-sdk/anthropic
+    // SDK propagates it to content blocks. If the last content block is an empty
+    // text, Anthropic rejects with:
+    // "cache_control cannot be set for empty text blocks"
+    // Trailing empty text after the last reasoning block does not affect
+    // thinking-block signature positions, so it's safe to remove.
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "The user wants to discuss...",
+            providerOptions: { anthropic: { signature: "EoEXCkYICxgC..." } },
+          },
+          { type: "text", text: "" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(1)
+    // The trailing empty text should be stripped
+    const parts = result[0].content as any[]
+    expect(parts).toHaveLength(1)
+    expect(parts[0].type).toBe("reasoning")
+  })
+
+  test("preserves interstitial empty text but strips trailing empty text in the same message", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "Step 1...",
+            providerOptions: { anthropic: { signature: "sig1" } },
+          },
+          { type: "text", text: "" },
+          {
+            type: "reasoning",
+            text: "Step 2...",
+            providerOptions: { anthropic: { signature: "sig2" } },
+          },
+          { type: "text", text: "" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(1)
+    const parts = result[0].content as any[]
+    // Interstitial empty text (between reasoning blocks) is preserved,
+    // but trailing empty text is stripped
+    expect(parts).toHaveLength(3)
+    expect(parts[0].type).toBe("reasoning")
+    expect(parts[1]).toEqual({ type: "text", text: "" })
+    expect(parts[2].type).toBe("reasoning")
+  })
+
+  test("strips trailing empty text but preserves empty reasoning in assistant messages", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "" },
+          { type: "text", text: "" },
+        ],
+      },
+      { role: "user", content: "World" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    // Trailing empty text is stripped, but empty reasoning is preserved
+    // (assistant messages with reasoning blocks are kept for signature integrity)
+    expect(result).toHaveLength(3)
+    expect(result[0].content).toBe("Hello")
+    expect(result[1].content).toHaveLength(1)
+    expect(result[1].content[0]).toEqual({ type: "reasoning", text: "" })
+    expect(result[2].content).toBe("World")
+  })
+
   test("does not filter for non-anthropic providers", () => {
     const openaiModel = {
       ...anthropicModel,

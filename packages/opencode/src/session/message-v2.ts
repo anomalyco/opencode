@@ -610,7 +610,10 @@ export namespace MessageV2 {
           msg.info.error &&
           !(
             MessageV2.AbortedError.isInstance(msg.info.error) &&
-            msg.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+            msg.parts.some(
+              (part) =>
+                part.type !== "step-start" && part.type !== "reasoning" && !(part.type === "text" && part.text === ""),
+            )
           )
         ) {
           continue

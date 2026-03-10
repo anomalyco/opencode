@@ -640,6 +640,65 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("excludes aborted assistant messages that only have reasoning and empty text", () => {
+    // Reproduces the bug from session ses_3272b8b1dffe8ACUMp7xjxhFEw:
+    // An aborted message had [step-start, reasoning, text("")]. The empty text
+    // part passed the "has real content" check, causing the message to be
+    // included. After normalizeMessages preserved it (reasoning blocks present)
+    // and applyCaching set cache_control, the Anthropic API rejected with:
+    // "messages.5.content.1.text: cache_control cannot be set for empty text blocks"
+    const userID = "m-user"
+    const assistantID = "m-aborted"
+    const aborted = new MessageV2.AbortedError({
+      message: "The operation was aborted.",
+    }).toObject() as MessageV2.Assistant["error"]
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "hello",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, "m-parent", aborted),
+        parts: [
+          {
+            ...basePart(assistantID, "s1"),
+            type: "step-start",
+          },
+          {
+            ...basePart(assistantID, "r1"),
+            type: "reasoning",
+            text: "The user wants to discuss the data source...",
+            time: { start: 0 },
+            metadata: { anthropic: { signature: "EoEXCkYICxgC..." } },
+          },
+          {
+            ...basePart(assistantID, "t1"),
+            type: "text",
+            text: "",
+            time: { start: 1773165854386 },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = MessageV2.toModelMessages(input, model)
+
+    // The aborted message should be excluded — empty text is not real content
+    expect(result).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "hello" }],
+      },
+    ])
+  })
+
   test("splits assistant messages on step-start boundaries", () => {
     const assistantID = "m-assistant"
 

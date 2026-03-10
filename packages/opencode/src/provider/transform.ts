@@ -62,7 +62,25 @@ export namespace ProviderTransform {
         .map((msg) => {
           if (msg.role === "assistant") {
             if (!Array.isArray(msg.content)) return msg
-            if (msg.content.some((part) => part.type === "reasoning")) return msg
+            if (msg.content.some((part) => part.type === "reasoning")) {
+              // Strip trailing empty text parts — only interstitial ones
+              // (between reasoning blocks) affect thinking-block signature
+              // positions. A trailing empty text can receive cache_control
+              // from applyCaching, which Anthropic rejects with:
+              // "cache_control cannot be set for empty text blocks"
+              let end = msg.content.length
+              while (end > 0) {
+                const part = msg.content[end - 1]
+                if (part.type === "text" && part.text === "") {
+                  end--
+                  continue
+                }
+                break
+              }
+              if (end === 0) return undefined
+              if (end < msg.content.length) return { ...msg, content: msg.content.slice(0, end) }
+              return msg
+            }
             // No reasoning blocks — safe to filter empty text
           }
           if (typeof msg.content === "string") {
