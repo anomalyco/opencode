@@ -47,7 +47,7 @@ async function openWorkspace(input: {
   }
   let created: Session | undefined
   while (!created) {
-    const result = await client.session.create({}).catch(() => undefined)
+    const result = await client.session.create({ workspaceID: input.workspaceID }).catch(() => undefined)
     if (!result) {
       input.toast.show({
         message: "Failed to open workspace",
