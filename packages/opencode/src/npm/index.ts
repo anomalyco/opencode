@@ -1,3 +1,14 @@
+// Workaround: Bun on Windows does not support the UV_FS_O_FILEMAP flag that
+// the `tar` package uses for files < 512KB (fs.open returns EINVAL).
+// tar silently swallows the error and skips writing files, leaving only empty
+// directories. Setting __FAKE_PLATFORM__ makes tar fall back to the plain 'w'
+// flag. See tar's get-write-flag.js.
+// Must be set before @npmcli/arborist is imported since tar caches the flag
+// at module evaluation time — so we use a dynamic import() below.
+if (process.platform === "win32") {
+  process.env.__FAKE_PLATFORM__ = "linux"
+}
+
 import semver from "semver"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
@@ -6,7 +17,6 @@ import { Lock } from "../util/lock"
 import { Log } from "../util/log"
 import path from "path"
 import { readdir } from "fs/promises"
-import { Arborist } from "@npmcli/arborist"
 
 export namespace Npm {
   const log = Log.create({ service: "npm" })
@@ -50,6 +60,7 @@ export namespace Npm {
     const hash = pkg
     const dir = directory(hash)
 
+    const { Arborist } = await import("@npmcli/arborist")
     const arborist = new Arborist({
       path: dir,
       binLinks: true,
@@ -84,14 +95,14 @@ export namespace Npm {
 
   export async function install(dir: string) {
     log.info("installing dependencies", { dir })
+    const { Arborist } = await import("@npmcli/arborist")
     const arb = new Arborist({
       path: dir,
       binLinks: true,
       progress: false,
       savePrefix: "",
     })
-    const result = await arb.reify()
-    console.log(result)
+    await arb.reify()
   }
 
   export async function which(pkg: string) {
