@@ -8,6 +8,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
+import { Spinner } from "@opencode-ai/ui/spinner"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import type { AssistantMessage, Message as MessageType, Part, TextPart, UserMessage } from "@opencode-ai/sdk/v2"
@@ -192,8 +193,7 @@ export function MessageTimeline(props: {
   onAutoScrollHandleScroll: () => void
   onMarkScrollGesture: (target?: EventTarget | null) => void
   hasScrollGesture: () => boolean
-  isDesktop: boolean
-  onScrollSpyScroll: () => void
+  onUserScroll: () => void
   onTurnBackfillScroll: () => void
   onAutoScrollInteraction: (event: MouseEvent) => void
   centered: boolean
@@ -204,8 +204,6 @@ export function MessageTimeline(props: {
   onLoadEarlier: () => void
   renderedUserMessages: UserMessage[]
   anchor: (id: string) => string
-  onRegisterMessage: (el: HTMLDivElement, id: string) => void
-  onUnregisterMessage: (id: string) => void
 }) {
   let touchGesture: number | undefined
 
@@ -235,6 +233,40 @@ export function MessageTimeline(props: {
     if (!id) return idle
     return sync.data.session_status[id] ?? idle
   })
+  const working = createMemo(() => !!pending() || sessionStatus().type !== "idle")
+
+  const [slot, setSlot] = createStore({
+    open: false,
+    show: false,
+    fade: false,
+  })
+
+  let f: number | undefined
+  const clear = () => {
+    if (f !== undefined) window.clearTimeout(f)
+    f = undefined
+  }
+
+  onCleanup(clear)
+  createEffect(
+    on(
+      working,
+      (on, prev) => {
+        clear()
+        if (on) {
+          setSlot({ open: true, show: true, fade: false })
+          return
+        }
+        if (prev) {
+          setSlot({ open: false, show: true, fade: true })
+          f = window.setTimeout(() => setSlot({ show: false, fade: false }), 260)
+          return
+        }
+        setSlot({ open: false, show: false, fade: false })
+      },
+      { defer: true },
+    ),
+  )
   const activeMessageID = createMemo(() => {
     const parentID = pending()?.parentID
     if (parentID) {
@@ -539,9 +571,9 @@ export function MessageTimeline(props: {
             props.onScheduleScrollState(e.currentTarget)
             props.onTurnBackfillScroll()
             if (!props.hasScrollGesture()) return
+            props.onUserScroll()
             props.onAutoScrollHandleScroll()
             props.onMarkScrollGesture(e.currentTarget)
-            if (props.isDesktop) props.onScrollSpyScroll()
           }}
           onClick={props.onAutoScrollInteraction}
           class="relative min-w-0 w-full h-full"
@@ -573,43 +605,64 @@ export function MessageTimeline(props: {
                         aria-label={language.t("common.goBack")}
                       />
                     </Show>
-                    <Show when={titleValue() || title.editing}>
-                      <Show
-                        when={title.editing}
-                        fallback={
-                          <h1
-                            class="text-14-medium text-text-strong truncate grow-1 min-w-0 pl-2"
-                            onDblClick={openTitleEditor}
-                          >
-                            {titleValue()}
-                          </h1>
-                        }
+                    <div class="flex items-center min-w-0 grow-1">
+                      <div
+                        class="shrink-0 flex items-center justify-center overflow-hidden transition-[width,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+                        style={{
+                          width: slot.open ? "16px" : "0px",
+                          "margin-right": slot.open ? "8px" : "0px",
+                        }}
+                        aria-hidden="true"
                       >
-                        <InlineInput
-                          ref={(el) => {
-                            titleRef = el
-                          }}
-                          value={title.draft}
-                          disabled={title.saving}
-                          class="text-14-medium text-text-strong grow-1 min-w-0 pl-2 rounded-[6px]"
-                          style={{ "--inline-input-shadow": "var(--shadow-xs-border-select)" }}
-                          onInput={(event) => setTitle("draft", event.currentTarget.value)}
-                          onKeyDown={(event) => {
-                            event.stopPropagation()
-                            if (event.key === "Enter") {
-                              event.preventDefault()
-                              void saveTitleEditor()
-                              return
-                            }
-                            if (event.key === "Escape") {
-                              event.preventDefault()
-                              closeTitleEditor()
-                            }
-                          }}
-                          onBlur={closeTitleEditor}
-                        />
+                        <Show when={slot.show}>
+                          <div
+                            class="transition-opacity duration-200 ease-out"
+                            classList={{
+                              "opacity-0": slot.fade,
+                            }}
+                          >
+                            <Spinner class="size-4" style={{ color: "var(--icon-interactive-base)" }} />
+                          </div>
+                        </Show>
+                      </div>
+                      <Show when={titleValue() || title.editing}>
+                        <Show
+                          when={title.editing}
+                          fallback={
+                            <h1
+                              class="text-14-medium text-text-strong truncate grow-1 min-w-0"
+                              onDblClick={openTitleEditor}
+                            >
+                              {titleValue()}
+                            </h1>
+                          }
+                        >
+                          <InlineInput
+                            ref={(el) => {
+                              titleRef = el
+                            }}
+                            value={title.draft}
+                            disabled={title.saving}
+                            class="text-14-medium text-text-strong grow-1 min-w-0 rounded-[6px]"
+                            style={{ "--inline-input-shadow": "var(--shadow-xs-border-select)" }}
+                            onInput={(event) => setTitle("draft", event.currentTarget.value)}
+                            onKeyDown={(event) => {
+                              event.stopPropagation()
+                              if (event.key === "Enter") {
+                                event.preventDefault()
+                                void saveTitleEditor()
+                                return
+                              }
+                              if (event.key === "Escape") {
+                                event.preventDefault()
+                                closeTitleEditor()
+                              }
+                            }}
+                            onBlur={closeTitleEditor}
+                          />
+                        </Show>
                       </Show>
-                    </Show>
+                    </div>
                   </div>
                   <Show when={sessionID()}>
                     {(id) => (
@@ -707,10 +760,6 @@ export function MessageTimeline(props: {
                     <div
                       id={props.anchor(messageID)}
                       data-message-id={messageID}
-                      ref={(el) => {
-                        props.onRegisterMessage(el, messageID)
-                        onCleanup(() => props.onUnregisterMessage(messageID))
-                      }}
                       classList={{
                         "min-w-0 w-full max-w-full": true,
                         "md:max-w-200 2xl:max-w-[1000px]": props.centered,

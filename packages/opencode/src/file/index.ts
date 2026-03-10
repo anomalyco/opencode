@@ -1,6 +1,5 @@
 import { BusEvent } from "@/bus/bus-event"
 import z from "zod"
-import { $ } from "bun"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
 import fs from "fs"
@@ -11,6 +10,7 @@ import { Instance } from "../project/instance"
 import { Ripgrep } from "./ripgrep"
 import fuzzysort from "fuzzysort"
 import { Global } from "../global"
+import { git } from "@/util/git"
 
 export namespace File {
   const log = Log.create({ service: "file" })
@@ -418,11 +418,11 @@ export namespace File {
     const project = Instance.project
     if (project.vcs !== "git") return []
 
-    const diffOutput = await $`git -c core.fsmonitor=false -c core.quotepath=false diff --numstat HEAD`
-      .cwd(Instance.directory)
-      .quiet()
-      .nothrow()
-      .text()
+    const diffOutput = (
+      await git(["-c", "core.fsmonitor=false", "-c", "core.quotepath=false", "diff", "--numstat", "HEAD"], {
+        cwd: Instance.directory,
+      })
+    ).text()
 
     const changedFiles: Info[] = []
 
@@ -439,12 +439,14 @@ export namespace File {
       }
     }
 
-    const untrackedOutput =
-      await $`git -c core.fsmonitor=false -c core.quotepath=false ls-files --others --exclude-standard`
-        .cwd(Instance.directory)
-        .quiet()
-        .nothrow()
-        .text()
+    const untrackedOutput = (
+      await git(
+        ["-c", "core.fsmonitor=false", "-c", "core.quotepath=false", "ls-files", "--others", "--exclude-standard"],
+        {
+          cwd: Instance.directory,
+        },
+      )
+    ).text()
 
     if (untrackedOutput.trim()) {
       const untrackedFiles = untrackedOutput.trim().split("\n")
@@ -465,12 +467,14 @@ export namespace File {
     }
 
     // Get deleted files
-    const deletedOutput =
-      await $`git -c core.fsmonitor=false -c core.quotepath=false diff --name-only --diff-filter=D HEAD`
-        .cwd(Instance.directory)
-        .quiet()
-        .nothrow()
-        .text()
+    const deletedOutput = (
+      await git(
+        ["-c", "core.fsmonitor=false", "-c", "core.quotepath=false", "diff", "--name-only", "--diff-filter=D", "HEAD"],
+        {
+          cwd: Instance.directory,
+        },
+      )
+    ).text()
 
     if (deletedOutput.trim()) {
       const deletedFiles = deletedOutput.trim().split("\n")
@@ -541,16 +545,14 @@ export namespace File {
     const content = (await Filesystem.readText(full).catch(() => "")).trim()
 
     if (project.vcs === "git") {
-      let diff = await $`git -c core.fsmonitor=false diff ${file}`.cwd(Instance.directory).quiet().nothrow().text()
+      let diff = (await git(["-c", "core.fsmonitor=false", "diff", "--", file], { cwd: Instance.directory })).text()
       if (!diff.trim()) {
-        diff = await $`git -c core.fsmonitor=false diff --staged ${file}`
-          .cwd(Instance.directory)
-          .quiet()
-          .nothrow()
-          .text()
+        diff = (
+          await git(["-c", "core.fsmonitor=false", "diff", "--staged", "--", file], { cwd: Instance.directory })
+        ).text()
       }
       if (diff.trim()) {
-        const original = await $`git show HEAD:${file}`.cwd(Instance.directory).quiet().nothrow().text()
+        const original = (await git(["show", `HEAD:${file}`], { cwd: Instance.directory })).text()
         const patch = structuredPatch(file, file, original, content, "old", "new", {
           context: Infinity,
           ignoreWhitespace: true,
