@@ -27,6 +27,7 @@
   },
   "devDependencies": {
     "@babel/core": "7.28.4",
+    "@effect/language-service": "0.79.0",
     "@octokit/webhooks-types": "7.6.1",
     "@opencode-ai/script": "workspace:*",
     "@parcel/watcher-darwin-arm64": "2.5.1",
@@ -108,6 +109,7 @@
     "decimal.js": "10.5.0",
     "diff": "catalog:",
     "drizzle-orm": "1.0.0-beta.16-ea816b6",
+    "effect": "catalog:",
     "fuzzysort": "3.1.0",
     "glob": "13.0.5",
     "google-auth-library": "10.5.0",
