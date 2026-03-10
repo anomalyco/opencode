@@ -8,6 +8,11 @@ const seen = {
   tui: [] as string[],
   inst: [] as string[],
 }
+const state = {
+  timeout: false,
+  shutdown: 0,
+  terminate: 0,
+}
 
 mock.module("../../../src/cli/cmd/tui/app", () => ({
   tui: async (input: { directory: string }) => {
@@ -19,7 +24,13 @@ mock.module("../../../src/cli/cmd/tui/app", () => ({
 mock.module("@/util/rpc", () => ({
   Rpc: {
     client: () => ({
-      call: async () => ({ url: "http://127.0.0.1" }),
+      call: async (name: string) => {
+        if (name === "shutdown") {
+          state.shutdown++
+          return undefined
+        }
+        return { url: "http://127.0.0.1" }
+      },
       on: () => {},
     }),
   },
@@ -51,7 +62,10 @@ mock.module("@/util/log", () => ({
 }))
 
 mock.module("@/util/timeout", () => ({
-  withTimeout: <T>(input: Promise<T>) => input,
+  withTimeout: <T>(input: Promise<T>) => {
+    if (state.timeout) return Promise.reject(new Error("timeout"))
+    return input
+  },
 }))
 
 mock.module("@/cli/network", () => ({
@@ -127,12 +141,19 @@ describe("tui thread", () => {
       onmessage = null
       onmessageerror = null
       postMessage() {}
-      terminate() {}
+      terminate() {
+        state.terminate++
+      }
     } as unknown as typeof Worker
+
+    const timeout = state.timeout
 
     try {
       process.chdir(tmp.path)
       process.env.PWD = link
+      state.timeout = timeout
+      state.shutdown = 0
+      state.terminate = 0
       await expect(call(project)).rejects.toBe(stop)
       expect(seen.inst[0]).toBe(tmp.path)
       expect(seen.tui[0]).toBe(tmp.path)
@@ -153,5 +174,19 @@ describe("tui thread", () => {
 
   test("uses the real cwd after resolving a relative project from PWD", async () => {
     await check(".")
+  })
+
+  test("does not terminate worker after a clean shutdown", async () => {
+    state.timeout = false
+    await check()
+    expect(state.shutdown).toBe(1)
+    expect(state.terminate).toBe(0)
+  })
+
+  test("terminates worker when shutdown times out", async () => {
+    state.timeout = true
+    await check()
+    expect(state.shutdown).toBe(1)
+    expect(state.terminate).toBe(1)
   })
 })

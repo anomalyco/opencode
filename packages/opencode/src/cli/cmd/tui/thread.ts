@@ -159,12 +159,15 @@ export const TuiThreadCommand = cmd({
         process.off("uncaughtException", error)
         process.off("unhandledRejection", error)
         process.off("SIGUSR2", reload)
-        await withTimeout(client.call("shutdown", undefined), 5000).catch((error) => {
-          Log.Default.warn("worker shutdown failed", {
-            error: error instanceof Error ? error.message : String(error),
+        const done = await withTimeout(client.call("shutdown", undefined), 6500)
+          .then(() => true)
+          .catch((error) => {
+            Log.Default.warn("worker shutdown failed", {
+              error: error instanceof Error ? error.message : String(error),
+            })
+            return false
           })
-        })
-        worker.terminate()
+        if (!done) worker.terminate()
       }
 
       const prompt = await input(args.prompt)
