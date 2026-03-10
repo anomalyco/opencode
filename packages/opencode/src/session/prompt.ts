@@ -319,7 +319,7 @@ export namespace SessionPrompt {
       if (
         lastAssistant?.finish &&
         !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
-        lastUser.id < lastAssistant.id
+        lastAssistant.parentID === lastUser.id
       ) {
         log.info("exiting loop", { sessionID })
         break
@@ -667,7 +667,7 @@ export namespace SessionPrompt {
           ...(isLastStep
             ? [
                 {
-                  role: "assistant" as const,
+                  role: "user" as const,
                   content: MAX_STEPS,
                 },
               ]
