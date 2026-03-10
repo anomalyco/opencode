@@ -135,12 +135,25 @@ export function generateScale(seed: HexColor, isDark: boolean): HexColor[] {
   const scale: HexColor[] = []
 
   const lightSteps = isDark
-    ? [0.182, 0.21, 0.261, 0.302, 0.341, 0.387, 0.443, 0.514, base.l, Math.max(0, base.l - 0.017), 0.8, 0.93]
-    : [0.993, 0.983, 0.962, 0.936, 0.906, 0.866, 0.811, 0.74, base.l, Math.max(0, base.l - 0.036), 0.548, 0.33]
+    ? [
+        0.182,
+        0.21,
+        0.261,
+        0.302,
+        0.341,
+        0.387,
+        0.443,
+        0.514,
+        base.l,
+        Math.max(0, base.l - 0.017),
+        Math.min(0.94, Math.max(0.84, base.l + 0.02)),
+        0.975,
+      ]
+    : [0.993, 0.983, 0.962, 0.936, 0.906, 0.866, 0.811, 0.74, base.l, Math.max(0, base.l - 0.036), 0.49, 0.27]
 
   const chromaMultipliers = isDark
-    ? [0.205, 0.275, 0.46, 0.62, 0.71, 0.79, 0.87, 0.97, 1.04, 1.03, 1, 0.58]
-    : [0.045, 0.128, 0.34, 0.5, 0.61, 0.69, 0.77, 0.89, 1, 1, 0.97, 0.56]
+    ? [0.34, 0.45, 0.64, 0.82, 0.96, 1.06, 1.14, 1.2, 1.24, 1.28, 1.34, 1.08]
+    : [0.12, 0.24, 0.46, 0.68, 0.84, 0.98, 1.08, 1.16, 1.22, 1.26, 1.18, 0.98]
 
   for (let i = 0; i < 12; i++) {
     scale.push(
@@ -155,10 +168,18 @@ export function generateScale(seed: HexColor, isDark: boolean): HexColor[] {
   return scale
 }
 
-export function generateNeutralScale(seed: HexColor, isDark: boolean): HexColor[] {
+export function generateNeutralScale(seed: HexColor, isDark: boolean, ink?: HexColor): HexColor[] {
+  if (ink) {
+    const bg = !isDark && hexToOklch(seed).l < 0.82 ? mixColors(seed, "#ffffff", 0.86) : seed
+    const steps = isDark
+      ? [0, 0.038, 0.068, 0.102, 0.145, 0.2, 0.276, 0.378, 0.522, 0.68, 0.84, 0.975]
+      : [0, 0.024, 0.046, 0.074, 0.11, 0.158, 0.226, 0.322, 0.462, 0.63, 0.81, 0.965]
+    return steps.map((step) => mixColors(bg, ink, step))
+  }
+
   const base = hexToOklch(seed)
   const scale: HexColor[] = []
-  const neutralChroma = Math.min(base.c, 0.02)
+  const neutralChroma = Math.min(base.c, isDark ? 0.05 : 0.04)
 
   const lightSteps = isDark
     ? [0.2, 0.226, 0.256, 0.277, 0.301, 0.325, 0.364, 0.431, base.l, 0.593, 0.706, 0.946]
