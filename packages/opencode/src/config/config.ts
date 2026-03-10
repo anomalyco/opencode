@@ -177,21 +177,25 @@ export namespace Config {
 
     const active = Account.active()
     if (active?.active_org_id) {
-      const config = await Account.config(active.id, active.active_org_id)
-      const token = await Account.token(active.id)
-      if (token) {
-        process.env["OPENCODE_CONSOLE_TOKEN"] = token
-        Env.set("OPENCODE_CONSOLE_TOKEN", token)
-      }
+      try {
+        const config = await Account.config(active.id, active.active_org_id)
+        const token = await Account.token(active.id)
+        if (token) {
+          process.env["OPENCODE_CONSOLE_TOKEN"] = token
+          Env.set("OPENCODE_CONSOLE_TOKEN", token)
+        }
 
-      if (config) {
-        result = mergeConfigConcatArrays(
-          result,
-          await load(JSON.stringify(config), {
-            dir: path.dirname(`${active.url}/api/config`),
-            source: `${active.url}/api/config`,
-          }),
-        )
+        if (config) {
+          result = mergeConfigConcatArrays(
+            result,
+            await load(JSON.stringify(config), {
+              dir: path.dirname(`${active.url}/api/config`),
+              source: `${active.url}/api/config`,
+            }),
+          )
+        }
+      } catch (err: any) {
+        log.debug("failed to fetch remote account config", { error: err?.message ?? err })
       }
     }
 
