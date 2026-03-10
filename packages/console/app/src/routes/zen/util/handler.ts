@@ -89,7 +89,7 @@ export async function handler(
     const projectId = input.request.headers.get("x-opencode-project") ?? ""
     const ocClient = input.request.headers.get("x-opencode-client") ?? ""
     logger.metric({
-      is_tream: isStream,
+      is_stream: isStream,
       session: sessionId,
       request: requestId,
       client: ocClient,
@@ -217,7 +217,7 @@ export async function handler(
       const body = JSON.stringify(
         responseConverter({
           ...json,
-          cost: calculateOccuredCost(billingSource, costInfo),
+          cost: calculateOccurredCost(billingSource, costInfo),
         }),
       )
       logger.metric({ response_length: body.length })
@@ -261,7 +261,7 @@ export async function handler(
                   await trialLimiter?.track(usageInfo)
                   await trackUsage(sessionId, billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
                   await reload(billingSource, authInfo, costInfo)
-                  const cost = calculateOccuredCost(billingSource, costInfo)
+                  const cost = calculateOccurredCost(billingSource, costInfo)
                   c.enqueue(encoder.encode(buildCostChunk(opts.format, cost)))
                 }
                 c.close()
@@ -800,7 +800,7 @@ export async function handler(
     }
   }
 
-  function calculateOccuredCost(billingSource: BillingSource, costInfo: CostInfo) {
+  function calculateOccurredCost(billingSource: BillingSource, costInfo: CostInfo) {
     return billingSource === "balance" ? (costInfo.totalCostInCent / 100).toFixed(8) : "0"
   }
 
