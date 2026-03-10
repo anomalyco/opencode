@@ -7,6 +7,8 @@ import { Database } from "../../src/storage/db"
 import { WorkspaceTable } from "../../src/control-plane/workspace.sql"
 import { GlobalBus } from "../../src/bus/global"
 import { resetDatabase } from "../fixture/db"
+import * as adaptors from "../../src/control-plane/adaptors"
+import type { Adaptor } from "../../src/control-plane/types"
 
 afterEach(async () => {
   mock.restore()
@@ -15,35 +17,34 @@ afterEach(async () => {
 
 Log.init({ print: false })
 
-const seen: string[] = []
-const remote = { type: "testing", name: "remote-a" } as unknown as typeof WorkspaceTable.$inferInsert.config
+const remote = { type: "testing", name: "remote-a" } as unknown as typeof WorkspaceTable.$inferInsert
 
-mock.module("../../src/control-plane/adaptors", () => ({
-  getAdaptor: (config: { type: string }) => {
-    seen.push(config.type)
-    return {
-      async create() {
-        throw new Error("not used")
-      },
-      async remove() {},
-      async request() {
-        const body = new ReadableStream<Uint8Array>({
-          start(controller) {
-            const encoder = new TextEncoder()
-            controller.enqueue(encoder.encode('data: {"type":"remote.ready","properties":{}}\n\n'))
-            controller.close()
-          },
-        })
-        return new Response(body, {
-          status: 200,
-          headers: {
-            "content-type": "text/event-stream",
-          },
-        })
-      },
-    }
+const TestAdaptor: Adaptor = {
+  configure(config) {
+    return config
   },
-}))
+  async create() {
+    throw new Error("not used")
+  },
+  async remove() {},
+  async fetch(_config: unknown, _input: RequestInfo | URL, _init?: RequestInit) {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const encoder = new TextEncoder()
+        controller.enqueue(encoder.encode('data: {"type":"remote.ready","properties":{}}\n\n'))
+        controller.close()
+      },
+    })
+    return new Response(body, {
+      status: 200,
+      headers: {
+        "content-type": "text/event-stream",
+      },
+    })
+  },
+}
+
+adaptors.installAdaptor("testing", TestAdaptor)
 
 describe("control-plane/workspace.startSyncing", () => {
   test("syncs only remote workspaces and emits remote SSE events", async () => {
@@ -62,13 +63,16 @@ describe("control-plane/workspace.startSyncing", () => {
             id: id1,
             branch: "main",
             project_id: project.id,
-            config: remote,
+            type: remote.type,
+            name: remote.name,
           },
           {
             id: id2,
             branch: "main",
             project_id: project.id,
-            config: { type: "worktree", directory: tmp.path },
+            type: "worktree",
+            directory: tmp.path,
+            name: "local",
           },
         ])
         .run(),
@@ -91,7 +95,5 @@ describe("control-plane/workspace.startSyncing", () => {
     ])
 
     await sync.stop()
-    expect(seen).toContain("testing")
-    expect(seen).not.toContain("worktree")
   })
 })

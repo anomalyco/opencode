@@ -97,12 +97,15 @@ export const dict: Record<Keys, string> = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webhenting",
+  "ui.tool.websearch": "Nettsøk",
+  "ui.tool.codesearch": "Kodesøk",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Gjøremål",
   "ui.tool.todos.read": "Les gjøremål",
   "ui.tool.questions": "Spørsmål",
   "ui.tool.agent": "{{type}}-agent",
+  "ui.tool.agent.default": "agent",
 
   "ui.common.file.one": "fil",
   "ui.common.file.other": "filer",
@@ -129,6 +132,7 @@ export const dict: Record<Keys, string> = {
   "ui.message.copyResponse": "Kopier svar",
   "ui.message.copied": "Kopiert!",
   "ui.message.interrupted": "Avbrutt",
+  "ui.message.queued": "I kø",
   "ui.message.attachment.alt": "vedlegg",
 
   "ui.patch.action.deleted": "Slettet",
