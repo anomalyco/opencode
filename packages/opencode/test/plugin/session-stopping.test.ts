@@ -11,10 +11,10 @@ describe("session.stopping hook", () => {
   test("plugin with session.stopping hook loads and triggers correctly", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
-        const plug = path.join(dir, ".opencode", "plugin")
-        await fs.mkdir(plug, { recursive: true })
+        const pluginDir = path.join(dir, ".opencode", "plugin")
+        await fs.mkdir(pluginDir, { recursive: true })
         await Bun.write(
-          path.join(plug, "stop-hook.ts"),
+          path.join(pluginDir, "stop-hook.ts"),
           [
             "export default async () => ({",
             '  "session.stopping": async (input, output) => {',
@@ -54,10 +54,10 @@ describe("session.stopping hook", () => {
   test("stop=false without message does not satisfy re-entry condition", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
-        const plug = path.join(dir, ".opencode", "plugin")
-        await fs.mkdir(plug, { recursive: true })
+        const pluginDir = path.join(dir, ".opencode", "plugin")
+        await fs.mkdir(pluginDir, { recursive: true })
         await Bun.write(
-          path.join(plug, "no-msg.ts"),
+          path.join(pluginDir, "no-msg.ts"),
           ["export default async () => ({", '  "session.stopping": async (_input, output) => {', "    output.stop = false", "  },", "})"].join("\n"),
         )
       },
@@ -77,10 +77,10 @@ describe("session.stopping hook", () => {
     await using tmp = await tmpdir({
       git: true,
       init: async (dir) => {
-        const plug = path.join(dir, ".opencode", "plugin")
-        await fs.mkdir(plug, { recursive: true })
+        const pluginDir = path.join(dir, ".opencode", "plugin")
+        await fs.mkdir(pluginDir, { recursive: true })
         await Bun.write(
-          path.join(plug, "gate.ts"),
+          path.join(pluginDir, "gate.ts"),
           [
             "export default async () => ({",
             '  "session.stopping": async (_input, output) => {',
