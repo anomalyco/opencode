@@ -8,7 +8,6 @@ export namespace Subscription {
   const LimitsSchema = z.object({
     free: z.object({
       promoTokens: z.number().int(),
-      newDailyRequests: z.number().int(),
       dailyRequests: z.number().int(),
       checkHeader: z.string(),
       fallbackValue: z.number().int(),
