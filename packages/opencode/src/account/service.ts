@@ -346,7 +346,9 @@ export class AccountService extends ServiceMap.Service<
         const expiry = now + (parsed.expires_in ?? 0) * 1000
         const refresh = parsed.refresh_token ?? ""
         if (!refresh) {
-          yield* Effect.logWarning("Server did not return a refresh token — session may expire without ability to refresh")
+          yield* Effect.logWarning(
+            "Server did not return a refresh token — session may expire without ability to refresh",
+          )
         }
 
         yield* repo.persistAccount({

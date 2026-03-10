@@ -75,9 +75,7 @@ const logoutEffect = Effect.fn("logout")(function* (email?: string) {
     const server = UI.Style.TEXT_DIM + a.url + UI.Style.TEXT_NORMAL
     return {
       value: a,
-      label: isActive
-        ? `${a.email} ${server}` + UI.Style.TEXT_DIM + " (active)"
-        : `${a.email} ${server}`,
+      label: isActive ? `${a.email} ${server}` + UI.Style.TEXT_DIM + " (active)" : `${a.email} ${server}`,
     }
   })
 

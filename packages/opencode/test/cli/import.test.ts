@@ -24,9 +24,7 @@ test("only attaches share auth headers for same-origin URLs", () => {
   expect(shouldAttachShareAuthHeaders("https://control.example.com/share/abc", "https://control.example.com")).toBe(
     true,
   )
-  expect(
-    shouldAttachShareAuthHeaders("https://other.example.com/share/abc", "https://control.example.com"),
-  ).toBe(false)
+  expect(shouldAttachShareAuthHeaders("https://other.example.com/share/abc", "https://control.example.com")).toBe(false)
   expect(shouldAttachShareAuthHeaders("https://control.example.com:443/share/abc", "https://control.example.com")).toBe(
     true,
   )
