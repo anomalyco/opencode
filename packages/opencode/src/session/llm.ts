@@ -27,6 +27,23 @@ export namespace LLM {
   const log = Log.create({ service: "llm" })
   export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
+  function getSystemMessageMode(model: Provider.Model): "single" | "multiple" {
+    if (model.capabilities.systemMessage) {
+      return model.capabilities.systemMessage
+    }
+    const providerDefaults: Record<string, "single" | "multiple"> = {
+      anthropic: "multiple",
+    }
+    const mode = providerDefaults[model.providerID] ?? "single"
+    if (!providerDefaults[model.providerID]) {
+      log.info("Using default 'single' systemMessage mode for provider", {
+        providerID: model.providerID,
+        modelID: model.id,
+      })
+    }
+    return mode
+  }
+
   export type StreamInput = {
     user: MessageV2.User
     sessionID: string
@@ -223,12 +240,14 @@ export namespace LLM {
       },
       maxRetries: input.retries ?? 0,
       messages: [
-        ...system.map(
-          (x): ModelMessage => ({
-            role: "system",
-            content: x,
-          }),
-        ),
+        ...(getSystemMessageMode(input.model) === "multiple"
+          ? system.map(
+              (x): ModelMessage => ({
+                role: "system",
+                content: x,
+              }),
+            )
+          : ([{ role: "system", content: system.join("\n") }] as ModelMessage[])),
         ...input.messages,
       ],
       model: wrapLanguageModel({

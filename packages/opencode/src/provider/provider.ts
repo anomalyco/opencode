@@ -707,6 +707,7 @@ export namespace Provider {
             field: z.enum(["reasoning_content", "reasoning_details"]),
           }),
         ]),
+        systemMessage: z.enum(["single", "multiple"]).optional(),
       }),
       cost: z.object({
         input: z.number(),
@@ -814,6 +815,7 @@ export namespace Provider {
           pdf: model.modalities?.output?.includes("pdf") ?? false,
         },
         interleaved: model.interleaved ?? false,
+        systemMessage: undefined,
       },
       release_date: model.release_date,
       variants: {},
