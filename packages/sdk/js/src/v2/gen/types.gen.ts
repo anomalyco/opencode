@@ -4024,6 +4024,15 @@ export type ProviderAuthResponses = {
 
 export type ProviderAuthResponse = ProviderAuthResponses[keyof ProviderAuthResponses]
 
+export type ProviderReloadResponses = {
+  /**
+   * Providers reloaded
+   */
+  200: boolean
+}
+
+export type ProviderReloadResponse = ProviderReloadResponses[keyof ProviderReloadResponses]
+
 export type ProviderOauthAuthorizeData = {
   body?: {
     /**

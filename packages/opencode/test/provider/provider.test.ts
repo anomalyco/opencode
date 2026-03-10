@@ -5,6 +5,7 @@ import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
 import { Env } from "../../src/env"
+import { Auth } from "../../src/auth"
 
 test("provider loaded from env variable", async () => {
   await using tmp = await tmpdir({
@@ -56,6 +57,42 @@ test("provider loaded from config with apiKey option", async () => {
     fn: async () => {
       const providers = await Provider.list()
       expect(providers["anthropic"]).toBeDefined()
+    },
+  })
+})
+
+test("provider.reload picks up api auth changes", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const first = await Provider.list()
+      expect(first["anthropic"]).toBeUndefined()
+
+      await Auth.set("anthropic", {
+        type: "api",
+        key: "test-api-key",
+      })
+
+      const stale = await Provider.list()
+      expect(stale["anthropic"]).toBeUndefined()
+
+      await Provider.reload()
+
+      const updated = await Provider.list()
+      expect(updated["anthropic"]).toBeDefined()
+      expect(updated["anthropic"].source).toBe("api")
+      expect(updated["anthropic"].key).toBe("test-api-key")
     },
   })
 })

@@ -161,5 +161,27 @@ export const ProviderRoutes = lazy(() =>
         })
         return c.json(true)
       },
+    )
+    .post(
+      "/reload",
+      describeRoute({
+        summary: "Reload providers",
+        description: "Reload provider auth state, picking up any changes to auth credentials without restarting.",
+        operationId: "provider.reload",
+        responses: {
+          200: {
+            description: "Providers reloaded",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        await Provider.reload()
+        return c.json(true)
+      },
     ),
 )

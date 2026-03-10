@@ -1310,6 +1310,10 @@ export namespace Config {
     }),
   )
 
+  export async function reset() {
+    await state.reset()
+  }
+
   export async function get() {
     return state().then((x) => x.config)
   }

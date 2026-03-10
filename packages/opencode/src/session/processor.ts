@@ -9,7 +9,7 @@ import { Bus } from "@/bus"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { Plugin } from "@/plugin"
-import type { Provider } from "@/provider/provider"
+import { Provider } from "@/provider/provider"
 import { LLM } from "./llm"
 import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
@@ -34,6 +34,7 @@ export namespace SessionProcessor {
     let blocked = false
     let attempt = 0
     let needsCompaction = false
+    let reloaded = false
 
     const result = {
       get message() {
@@ -362,6 +363,18 @@ export namespace SessionProcessor {
                 sessionID: input.sessionID,
                 error,
               })
+            } else if (MessageV2.APIError.isInstance(error) && error.data.statusCode === 401 && !reloaded) {
+              reloaded = true
+              attempt++
+              log.info("reloading provider state after 401", { providerID: input.model.providerID })
+              await Provider.reload()
+              SessionStatus.set(input.sessionID, {
+                type: "retry",
+                attempt,
+                message: "Reloading provider auth state",
+                next: Date.now(),
+              })
+              continue
             } else {
               const retry = SessionRetry.retryable(error)
               if (retry !== undefined) {

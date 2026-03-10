@@ -531,6 +531,20 @@ function App() {
       category: "Provider",
     },
     {
+      title: "Reload provider state",
+      value: "provider.reload",
+      slash: {
+        name: "reload",
+        aliases: ["refresh"],
+      },
+      onSelect: async (dialog) => {
+        dialog.clear()
+        await sdk.client.provider.reload()
+        await sync.bootstrap()
+      },
+      category: "Provider",
+    },
+    {
       title: "View status",
       keybind: "status_view",
       value: "opencode.status",

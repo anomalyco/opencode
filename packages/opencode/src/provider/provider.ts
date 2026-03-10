@@ -11,6 +11,7 @@ import { Plugin } from "../plugin"
 import { NamedError } from "@opencode-ai/util/error"
 import { ModelsDev } from "./models"
 import { Auth } from "../auth"
+import { WellknownAuth } from "../auth/wellknown"
 import { Env } from "../env"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
@@ -1106,6 +1107,13 @@ export namespace Provider {
       modelLoaders,
     }
   })
+
+  export async function reload() {
+    log.info("reloading provider state")
+    await WellknownAuth.refreshAll()
+    await Config.reset()
+    await state.reset()
+  }
 
   export async function list() {
     return state().then((state) => state.providers)

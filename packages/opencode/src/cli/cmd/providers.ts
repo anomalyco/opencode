@@ -11,8 +11,7 @@ import { Global } from "../../global"
 import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
-import { Process } from "../../util/process"
-import { text } from "node:stream/consumers"
+import { WellknownAuth } from "../../auth/wellknown"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
 
@@ -274,28 +273,12 @@ export const ProvidersLoginCommand = cmd({
         prompts.intro("Add credential")
         if (args.url) {
           const url = args.url.replace(/\/+$/, "")
-          const wellknown = await fetch(`${url}/.well-known/opencode`).then((x) => x.json() as any)
-          prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
-          const proc = Process.spawn(wellknown.auth.command, {
-            stdout: "pipe",
-          })
-          if (!proc.stdout) {
-            prompts.log.error("Failed")
-            prompts.outro("Done")
-            return
+          try {
+            await WellknownAuth.login(url)
+            prompts.log.success("Logged into " + url)
+          } catch (e: any) {
+            prompts.log.error(e.message ?? "Failed")
           }
-          const [exit, token] = await Promise.all([proc.exited, text(proc.stdout)])
-          if (exit !== 0) {
-            prompts.log.error("Failed")
-            prompts.outro("Done")
-            return
-          }
-          await Auth.set(url, {
-            type: "wellknown",
-            key: wellknown.auth.env,
-            token: token.trim(),
-          })
-          prompts.log.success("Logged into " + url)
           prompts.outro("Done")
           return
         }
