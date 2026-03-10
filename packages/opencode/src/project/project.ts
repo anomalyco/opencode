@@ -146,7 +146,7 @@ export namespace Project {
 
         // generate id from root commit
         if (!id) {
-          const roots = await git(["rev-list", "--max-parents=0", "--all"], {
+          const roots = await git(["rev-list", "--max-parents=0", "HEAD"], {
             cwd: sandbox,
           })
             .then(async (result) =>
@@ -169,7 +169,10 @@ export namespace Project {
 
           id = roots[0]
           if (id) {
-            await Filesystem.write(path.join(dotgit, "opencode"), id).catch(() => undefined)
+            // Write to common dir so the cache is shared across worktrees.
+            // Falls back to dotgit for non-worktree repos (worktree === sandbox).
+            const cache = worktree !== sandbox ? path.join(worktree, ".git", "opencode") : path.join(dotgit, "opencode")
+            await Filesystem.write(cache, id).catch(() => undefined)
           }
         }
 
