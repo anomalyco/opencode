@@ -8,6 +8,12 @@ import { useI18n } from "~/context/i18n"
 export function Footer() {
   const language = useLanguage()
   const i18n = useI18n()
+  const zh = createMemo(() => {
+    const locale = language.locale()
+    return locale === "zh" || locale === "zht"
+  })
+  const link = createMemo(() => language.route(zh() ? "/feishu" : "/discord"))
+  const key = createMemo(() => (zh() ? "footer.feishu" : "footer.discord"))
   const githubData = createAsync(() => github())
   const starCount = createMemo(() =>
     githubData()?.stars
@@ -32,7 +38,7 @@ export function Footer() {
         <a href={language.route("/changelog")}>{i18n.t("footer.changelog")}</a>
       </div>
       <div data-slot="cell">
-        <a href={language.route("/discord")}>{i18n.t("footer.discord")}</a>
+        <a href={link()}>{i18n.t(key())}</a>
       </div>
       <div data-slot="cell">
         <a href={config.social.twitter}>{i18n.t("footer.x")}</a>
