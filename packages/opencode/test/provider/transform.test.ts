@@ -2591,7 +2591,6 @@ describe("ProviderTransform.variants", () => {
       expect(result.high).toEqual({ reasoningEffort: "high" })
     })
 
-
     test("sonar models return empty object", () => {
       const model = createMockModel({
         id: "sap-ai-core/perplexity--sonar-pro",
