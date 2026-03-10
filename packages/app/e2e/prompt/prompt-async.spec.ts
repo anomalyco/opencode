@@ -1,6 +1,6 @@
 import { test, expect } from "../fixtures"
 import { promptSelector } from "../selectors"
-import { sessionIDFromUrl, withSession } from "../actions"
+import { cleanupSession, sessionIDFromUrl, withSession } from "../actions"
 
 const text = (value: string | null) => (value ?? "").replace(/\u200B/g, "").trim()
 
@@ -40,7 +40,7 @@ test("prompt succeeds when sync message endpoint is unreachable", async ({ page,
       )
       .toContain(token)
   } finally {
-    await sdk.session.delete({ sessionID }).catch(() => undefined)
+    await cleanupSession({ sdk, sessionID })
   }
 })
 

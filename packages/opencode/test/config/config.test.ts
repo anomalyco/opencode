@@ -2,6 +2,7 @@ import { test, expect, describe, mock, afterEach } from "bun:test"
 import { Config } from "../../src/config/config"
 import { Instance } from "../../src/project/instance"
 import { Auth } from "../../src/auth"
+import { AccessToken, Account, AccountID, OrgID } from "../../src/account"
 import { tmpdir } from "../fixture/fixture"
 import path from "path"
 import fs from "fs/promises"
@@ -23,6 +24,34 @@ async function writeManagedSettings(settings: object, filename = "opencode.json"
 
 async function writeConfig(dir: string, config: object, name = "opencode.json") {
   await Filesystem.write(path.join(dir, name), JSON.stringify(config))
+}
+
+async function check(map: (dir: string) => string) {
+  if (process.platform !== "win32") return
+  await using globalTmp = await tmpdir()
+  await using tmp = await tmpdir({ git: true, config: { snapshot: true } })
+  const prev = Global.Path.config
+  ;(Global.Path as { config: string }).config = globalTmp.path
+  Config.global.reset()
+  try {
+    await writeConfig(globalTmp.path, {
+      $schema: "https://opencode.ai/config.json",
+      snapshot: false,
+    })
+    await Instance.provide({
+      directory: map(tmp.path),
+      fn: async () => {
+        const cfg = await Config.get()
+        expect(cfg.snapshot).toBe(true)
+        expect(Instance.directory).toBe(Filesystem.resolve(tmp.path))
+        expect(Instance.project.id).not.toBe("global")
+      },
+    })
+  } finally {
+    await Instance.disposeAll()
+    ;(Global.Path as { config: string }).config = prev
+    Config.global.reset()
+  }
 }
 
 test("loads config with defaults when no files exist", async () => {
@@ -53,6 +82,23 @@ test("loads JSON config file", async () => {
       expect(config.model).toBe("test/model")
       expect(config.username).toBe("testuser")
     },
+  })
+})
+
+test("loads project config from Git Bash and MSYS2 paths on Windows", async () => {
+  // Git Bash and MSYS2 both use /<drive>/... paths on Windows.
+  await check((dir) => {
+    const drive = dir[0].toLowerCase()
+    const rest = dir.slice(2).replaceAll("\\", "/")
+    return `/${drive}${rest}`
+  })
+})
+
+test("loads project config from Cygwin paths on Windows", async () => {
+  await check((dir) => {
+    const drive = dir[0].toLowerCase()
+    const rest = dir.slice(2).replaceAll("\\", "/")
+    return `/cygdrive/${drive}${rest}`
   })
 })
 
@@ -193,6 +239,52 @@ test("preserves env variables when adding $schema to config", async () => {
       process.env["PRESERVE_VAR"] = originalEnv
     } else {
       delete process.env["PRESERVE_VAR"]
+    }
+  }
+})
+
+test("resolves env templates in account config with account token", async () => {
+  const originalActive = Account.active
+  const originalConfig = Account.config
+  const originalToken = Account.token
+  const originalControlToken = process.env["OPENCODE_CONSOLE_TOKEN"]
+
+  Account.active = mock(() => ({
+    id: AccountID.make("account-1"),
+    email: "user@example.com",
+    url: "https://control.example.com",
+    active_org_id: OrgID.make("org-1"),
+  }))
+
+  Account.config = mock(async () => ({
+    provider: {
+      opencode: {
+        options: {
+          apiKey: "{env:OPENCODE_CONSOLE_TOKEN}",
+        },
+      },
+    },
+  }))
+
+  Account.token = mock(async () => AccessToken.make("st_test_token"))
+
+  try {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.provider?.["opencode"]?.options?.apiKey).toBe("st_test_token")
+      },
+    })
+  } finally {
+    Account.active = originalActive
+    Account.config = originalConfig
+    Account.token = originalToken
+    if (originalControlToken !== undefined) {
+      process.env["OPENCODE_CONSOLE_TOKEN"] = originalControlToken
+    } else {
+      delete process.env["OPENCODE_CONSOLE_TOKEN"]
     }
   }
 })
