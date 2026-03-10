@@ -204,6 +204,7 @@ export function MessageTimeline(props: {
   onLoadEarlier: () => void
   renderedUserMessages: UserMessage[]
   anchor: (id: string) => string
+  eagerParts?: boolean
 }) {
   let touchGesture: number | undefined
 
@@ -804,6 +805,7 @@ export function MessageTimeline(props: {
                       <SessionTurn
                         sessionID={sessionID() ?? ""}
                         messageID={messageID}
+                        lazyParts={!props.eagerParts}
                         active={active()}
                         queued={queued()}
                         status={active() ? sessionStatus() : undefined}

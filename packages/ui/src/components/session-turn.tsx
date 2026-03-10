@@ -144,6 +144,7 @@ export function SessionTurn(
     showReasoningSummaries?: boolean
     shellToolDefaultOpen?: boolean
     editToolDefaultOpen?: boolean
+    lazyParts?: boolean
     active?: boolean
     queued?: boolean
     status?: SessionStatus
@@ -399,13 +400,14 @@ export function SessionTurn(
               </div>
               <Show when={compaction()}>
                 <div data-slot="session-turn-compaction">
-                  <Part part={compaction()!} message={message()!} hideDetails />
+                  <Part part={compaction()!} message={message()!} hideDetails lazy={props.lazyParts} />
                 </div>
               </Show>
               <Show when={assistantMessages().length > 0}>
                 <div data-slot="session-turn-assistant-content" aria-hidden={working()}>
                   <AssistantParts
                     messages={assistantMessages()}
+                    lazy={props.lazyParts}
                     showAssistantCopyPartID={assistantCopyPartID()}
                     turnDurationMs={turnDurationMs()}
                     working={working()}

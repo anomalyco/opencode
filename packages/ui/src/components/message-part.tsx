@@ -133,6 +133,7 @@ export interface MessageProps {
   interrupted?: boolean
   queued?: boolean
   showReasoningSummaries?: boolean
+  lazy?: boolean
 }
 
 export interface MessagePartProps {
@@ -142,6 +143,7 @@ export interface MessagePartProps {
   defaultOpen?: boolean
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number
+  lazy?: boolean
 }
 
 export type PartComponent = Component<MessagePartProps>
@@ -464,6 +466,7 @@ function partDefaultOpen(part: PartType, shell = false, edit = false) {
 
 export function AssistantParts(props: {
   messages: AssistantMessage[]
+  lazy?: boolean
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number
   working?: boolean
@@ -476,6 +479,13 @@ export function AssistantParts(props: {
   const emptyParts: PartType[] = []
   const emptyTools: ToolPart[] = []
   const [cap, setCap] = createSignal(0)
+  const maps = createMemo(() => {
+    const map = new Map<string, Map<string, PartType>>()
+    for (const message of props.messages) {
+      map.set(message.id, partMap(list(data.store.part?.[message.id], emptyParts)))
+    }
+    return map
+  })
 
   const grouped = createMemo(
     () =>
@@ -495,10 +505,7 @@ export function AssistantParts(props: {
 
   const lastKey = () => grouped().at(-1)?.key
   const msgById = (id: string) => props.messages.find((m) => m.id === id)
-  const partById = (messageId: string, partId: string) => {
-    const parts = list(data.store.part?.[messageId], emptyParts)
-    return parts.find((p) => p.id === partId)
-  }
+  const partById = (messageId: string, partId: string) => maps().get(messageId)?.get(partId)
 
   let frame: number | undefined
   const cancel = () => {
@@ -514,6 +521,11 @@ export function AssistantParts(props: {
         cancel()
         if (len <= 0) {
           setCap(0)
+          return
+        }
+
+        if (props.lazy === false) {
+          setCap(len)
           return
         }
 
@@ -548,13 +560,17 @@ export function AssistantParts(props: {
             <Switch>
               <Match when={entry().type === "context"}>
                 {(() => {
-                  const partsList = () => {
-                    const item = entry()
-                    if (item.type !== "context") return emptyTools
-                    return item.refs
-                      .map((ref) => partById(ref.messageID, ref.partID))
-                      .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
-                  }
+                  const partsList = createMemo(
+                    () => {
+                      const item = entry()
+                      if (item.type !== "context") return emptyTools
+                      return item.refs
+                        .map((ref) => partById(ref.messageID, ref.partID))
+                        .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
+                    },
+                    emptyTools,
+                    { equals: same },
+                  )
                   const isBusy = () => props.working && lastKey() === entry().key
 
                   return (
@@ -585,6 +601,7 @@ export function AssistantParts(props: {
                           message={message()!}
                           showAssistantCopyPartID={props.showAssistantCopyPartID}
                           turnDurationMs={props.turnDurationMs}
+                          lazy={props.lazy}
                           defaultOpen={partDefaultOpen(part()!, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
                         />
                       </Show>
@@ -727,6 +744,7 @@ export function Message(props: MessageProps) {
           <AssistantMessageDisplay
             message={assistantMessage() as AssistantMessage}
             parts={props.parts}
+            lazy={props.lazy}
             showAssistantCopyPartID={props.showAssistantCopyPartID}
             showReasoningSummaries={props.showReasoningSummaries}
           />
@@ -739,10 +757,12 @@ export function Message(props: MessageProps) {
 export function AssistantMessageDisplay(props: {
   message: AssistantMessage
   parts: PartType[]
+  lazy?: boolean
   showAssistantCopyPartID?: string | null
   showReasoningSummaries?: boolean
 }) {
   const emptyTools: ToolPart[] = []
+  const partsById = createMemo(() => partMap(props.parts))
   const grouped = createMemo(
     () =>
       groupParts(
@@ -757,7 +777,7 @@ export function AssistantMessageDisplay(props: {
     { equals: sameGroups },
   )
 
-  const partById = (id: string) => props.parts.find((p) => p.id === id)
+  const partById = (id: string) => partsById().get(id)
 
   return (
     <Index each={grouped()}>
@@ -768,13 +788,17 @@ export function AssistantMessageDisplay(props: {
           <Switch>
             <Match when={entry().type === "context"}>
               {(() => {
-                const partsList = () => {
-                  const item = entry()
-                  if (item.type !== "context") return emptyTools
-                  return item.refs
-                    .map((ref) => partById(ref.partID))
-                    .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
-                }
+                const partsList = createMemo(
+                  () => {
+                    const item = entry()
+                    if (item.type !== "context") return emptyTools
+                    return item.refs
+                      .map((ref) => partById(ref.partID))
+                      .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
+                  },
+                  emptyTools,
+                  { equals: same },
+                )
 
                 return (
                   <Show when={partsList().length > 0}>
@@ -796,6 +820,7 @@ export function AssistantMessageDisplay(props: {
                     <Part
                       part={part()!}
                       message={props.message}
+                      lazy={props.lazy}
                       showAssistantCopyPartID={props.showAssistantCopyPartID}
                     />
                   </Show>
@@ -814,7 +839,7 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
   const [open, setOpen] = createSignal(false)
   const pending = () =>
     !!props.busy || props.parts.some((part) => part.state.status === "pending" || part.state.status === "running")
-  const summary = () => contextToolSummary(props.parts)
+  const summary = createMemo(() => contextToolSummary(props.parts))
 
   return (
     <Collapsible open={open()} onOpenChange={setOpen} variant="ghost">
@@ -1112,8 +1137,12 @@ function HighlightedText(props: { text: string; references: FilePart[]; agents: 
 
 export function Part(props: MessagePartProps) {
   const component = () => PART_MAPPING[props.part.type]
-  const [ready, setReady] = createSignal(typeof window === "undefined")
+  const [ready, setReady] = createSignal(props.lazy === false)
   let root: HTMLDivElement | undefined
+
+  createEffect(() => {
+    if (props.lazy === false) setReady(true)
+  })
 
   onMount(() => {
     if (ready()) return
@@ -1154,7 +1183,11 @@ export function Part(props: MessagePartProps) {
     )
 
   return (
-    <div ref={root}>
+    <div
+      ref={(el) => {
+        root = el
+      }}
+    >
       <Show when={ready() && component()} fallback={placeholder()}>
         <Dynamic
           component={component()}

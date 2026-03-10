@@ -77,7 +77,26 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
     turnStart: 0,
     prefetchUntil: 0,
     prefetchNoGrowth: 0,
+    eager: false,
   })
+
+  let settle = 0
+
+  const eager = () => state.eager
+
+  const arm = () => {
+    settle += 1
+    const id = settle
+    setState("eager", true)
+    return () => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (settle !== id) return
+          setState("eager", false)
+        })
+      })
+    }
+  }
 
   const initialTurnStart = (len: number) => (len > turnInit ? len - turnInit : 0)
 
@@ -120,13 +139,14 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
       fn()
       return
     }
+    const done = arm()
     const beforeTop = el.scrollTop
     const beforeHeight = el.scrollHeight
     fn()
     requestAnimationFrame(() => {
       const delta = el.scrollHeight - beforeHeight
-      if (!delta) return
-      el.scrollTop = beforeTop + delta
+      if (delta) el.scrollTop = beforeTop + delta
+      done()
     })
   }
 
@@ -246,6 +266,7 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
   )
 
   return {
+    eager,
     turnStart,
     setTurnStart,
     renderedUserMessages,
@@ -1330,6 +1351,7 @@ export default function Page() {
                     onLoadEarlier={() => {
                       void historyWindow.loadAndReveal()
                     }}
+                    eagerParts={historyWindow.eager()}
                     renderedUserMessages={historyWindow.renderedUserMessages()}
                     anchor={anchor}
                   />
