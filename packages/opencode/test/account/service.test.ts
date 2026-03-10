@@ -5,12 +5,18 @@ import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { AccountRepo } from "../../src/account/repo"
 import { AccountService } from "../../src/account/service"
 import { AccountID, Login, Org, OrgID } from "../../src/account/schema"
-import { resetDatabase } from "../fixture/db"
+import { Database } from "../../src/storage/db"
 import { testEffect } from "../fixture/effect"
 
-const reset = Layer.effectDiscard(Effect.promise(() => resetDatabase()))
+const truncate = Layer.effectDiscard(
+  Effect.sync(() => {
+    const db = Database.Client()
+    db.run(/*sql*/ `DELETE FROM account_state`)
+    db.run(/*sql*/ `DELETE FROM account`)
+  }),
+)
 
-const it = testEffect(Layer.merge(AccountRepo.layer, reset))
+const it = testEffect(Layer.merge(AccountRepo.layer, truncate))
 
 const live = (client: HttpClient.HttpClient) =>
   AccountService.layer.pipe(Layer.provide(Layer.succeed(HttpClient.HttpClient, client)))

@@ -3,12 +3,18 @@ import { Effect, Layer, Option } from "effect"
 
 import { AccountRepo } from "../../src/account/repo"
 import { AccountID, OrgID } from "../../src/account/schema"
-import { resetDatabase } from "../fixture/db"
+import { Database } from "../../src/storage/db"
 import { testEffect } from "../fixture/effect"
 
-const reset = Layer.effectDiscard(Effect.promise(() => resetDatabase()))
+const truncate = Layer.effectDiscard(
+  Effect.sync(() => {
+    const db = Database.Client()
+    db.run(/*sql*/ `DELETE FROM account_state`)
+    db.run(/*sql*/ `DELETE FROM account`)
+  }),
+)
 
-const it = testEffect(Layer.merge(AccountRepo.layer, reset))
+const it = testEffect(Layer.merge(AccountRepo.layer, truncate))
 
 it.effect(
   "list returns empty when no accounts exist",
