@@ -585,9 +585,6 @@ export namespace File {
     if (!Instance.containsPath(resolved)) {
       throw new Error(`Access denied: path escapes project directory`)
     }
-    if (Protected.contains(resolved)) {
-      throw new Error(`Access denied: path is a system-protected directory`)
-    }
 
     const nodes: Node[] = []
     for (const entry of await fs.promises

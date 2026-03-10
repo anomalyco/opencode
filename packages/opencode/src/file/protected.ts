@@ -56,13 +56,4 @@ export namespace Protected {
     if (process.platform === "win32") return WIN32_NAMES.map((n) => path.join(home, n))
     return []
   }
-
-  /** Returns true if `target` is inside (or equal to) any protected path. */
-  export function contains(target: string): boolean {
-    const resolved = path.resolve(target)
-    for (const p of paths()) {
-      if (resolved === p || resolved.startsWith(p + path.sep)) return true
-    }
-    return false
-  }
 }
