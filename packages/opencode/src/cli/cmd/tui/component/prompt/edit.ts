@@ -6,8 +6,8 @@ export function lead(prompt: PromptInfo, text: string): PromptInfo {
   return {
     ...prompt,
     input: text + prompt.input,
-    parts: prompt.parts.map((part) => {
-      if ((part.type === "file" || part.type === "text") && part.source?.text) {
+    parts: prompt.parts.map((part): PromptInfo["parts"][number] => {
+      if (part.type === "file" && part.source?.text) {
         return {
           ...part,
           source: {
@@ -19,7 +19,23 @@ export function lead(prompt: PromptInfo, text: string): PromptInfo {
             },
           },
         }
-      } else if (part.type === "agent" && part.source) {
+      }
+
+      if (part.type === "text" && part.source?.text) {
+        return {
+          ...part,
+          source: {
+            ...part.source,
+            text: {
+              ...part.source.text,
+              start: part.source.text.start + size,
+              end: part.source.text.end + size,
+            },
+          },
+        }
+      }
+
+      if (part.type === "agent" && part.source) {
         return {
           ...part,
           source: {
