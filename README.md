@@ -1,4 +1,4 @@
-# OpenCode Desktop - 定制版
+# OpenCode DesktopX
 
 > 基于 [OpenCode](https://github.com/anomalyco/opencode) 的桌面应用定制版本
 
@@ -55,6 +55,7 @@
 
 #### 交互改进
 
+- **输入框基本自动补全**: 括号、引号等的自动补全和自动成对删除
 - **拖放 (drag and drop) 文件夹**: 支持直接拖放文件夹到窗口打开项目
 - **快速切换项目面板**: 新增快捷键 `Cmd+T`，快速在多个项目间切换
 - **助手身份显示**：会话中显示助手身份元数据
