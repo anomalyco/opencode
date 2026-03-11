@@ -13,7 +13,8 @@ type Nav = {
   list: LocalProject[]
   current?: string
   close: (directory: string) => void
-  navigate: (href: string) => void
+  go?: (href: string) => void
+  navigate?: (href: string) => void
   open: (directory: string) => Promise<void> | void
 }
 
@@ -41,6 +42,7 @@ export function projectCloseBody(count: number, t: T) {
 }
 
 export function closeProject(input: Nav) {
+  const go = input.go ?? input.navigate
   const index = input.list.findIndex((x) => x.worktree === input.directory)
   const active = input.current === input.directory
   if (index === -1) return
@@ -53,11 +55,11 @@ export function closeProject(input: Nav) {
 
   if (!next) {
     input.close(input.directory)
-    input.navigate("/")
+    go?.("/")
     return
   }
 
-  input.navigate(`/${base64Encode(next.worktree)}/session`)
+  go?.(`/${base64Encode(next.worktree)}/session`)
   input.close(input.directory)
   queueMicrotask(() => {
     void input.open(next.worktree)

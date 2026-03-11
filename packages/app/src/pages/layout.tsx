@@ -970,7 +970,7 @@ export default function Layout(props: ParentProps) {
         onSelect: () => {
           const project = currentProject()
           if (!project) return
-          void askClose(project)
+          close(project.worktree)
         },
       },
       {
@@ -1337,7 +1337,7 @@ export default function Layout(props: ParentProps) {
       list: layout.projects.list(),
       current: currentProject()?.worktree,
       close: layout.projects.close,
-      navigate,
+      go: navigateWithSidebarReset,
       open: navigateToProject,
     })
 
