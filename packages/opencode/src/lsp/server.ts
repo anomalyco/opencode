@@ -15,8 +15,8 @@ import { which } from "../util/which"
 import { Module } from "@opencode-ai/util/module"
 
 const spawn = ((cmd, args, opts) => {
-  if (Array.isArray(args)) return launch(cmd, [...args], { ...(opts ?? {}), windowsHide: true });
-  return launch(cmd, { ...(args ?? {}), windowsHide: true });
+  if (Array.isArray(args)) return launch(cmd, [...args], { ...(opts ?? {}), windowsHide: true })
+  return launch(cmd, { ...(args ?? {}), windowsHide: true })
 }) as typeof launch
 
 export namespace LSPServer {
