@@ -294,7 +294,7 @@ export namespace Session {
   })
 
   export async function createNext(input: {
-    id?: string
+    id?: SessionID
     title?: string
     parentID?: SessionID
     workspaceID?: string
