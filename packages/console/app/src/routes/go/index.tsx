@@ -62,7 +62,7 @@ function LimitsGraph(props: { href: string }) {
   const rmax = Math.max(1, ...models.map((m) => ratio(m.req)))
   const log = (n: number) => Math.log10(Math.max(n, 1))
   const base = 24
-  const p = 2.2
+  const p = 1.8
   const x = (r: number) => left + base + Math.pow(log(r) / log(rmax), p) * (plot - base)
   const start = (x(1) / w) * 100
 
