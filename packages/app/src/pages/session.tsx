@@ -446,7 +446,6 @@ export default function Page() {
   const [store, setStore] = createStore({
     messageId: undefined as string | undefined,
     mobileTab: "session" as "session" | "changes",
-    changes: "session" as "session" | "turn",
     newSessionWorktree: "main",
     deferRender: false,
   })
@@ -478,7 +477,7 @@ export default function Page() {
   }, desktopReviewOpen())
 
   const turnDiffs = createMemo(() => lastUserMessage()?.summary?.diffs ?? [])
-  const reviewDiffs = createMemo(() => (store.changes === "session" ? diffs() : turnDiffs()))
+  const reviewDiffs = createMemo(() => (view().review.changes() === "session" ? diffs() : turnDiffs()))
 
   const newSessionWorktree = createMemo(() => {
     if (store.newSessionWorktree === "create") return "create"
@@ -647,7 +646,6 @@ export default function Page() {
       sessionKey,
       () => {
         setStore("messageId", undefined)
-        setStore("changes", "session")
         setUi("pendingMessage", undefined)
       },
       { defer: true },
@@ -844,11 +842,11 @@ export default function Page() {
     return (
       <Select
         options={changesOptionsList}
-        current={store.changes}
+        current={view().review.changes()}
         label={(option) =>
           option === "session" ? language.t("ui.sessionReview.title") : language.t("ui.sessionReview.title.lastTurn")
         }
-        onSelect={(option) => option && setStore("changes", option)}
+        onSelect={(option) => option && view().review.setChanges(option)}
         variant="ghost"
         size="small"
         valueClass="text-14-medium"
@@ -871,7 +869,7 @@ export default function Page() {
   }) => (
     <Show when={!store.deferRender}>
       <Switch>
-        <Match when={store.changes === "turn" && !!params.id}>
+        <Match when={view().review.changes() === "turn" && !!params.id}>
           <SessionReviewTab
             title={changesTitle()}
             empty={emptyTurn()}
@@ -921,7 +919,7 @@ export default function Page() {
           <SessionReviewTab
             title={changesTitle()}
             empty={
-              store.changes === "turn" ? (
+              view().review.changes() === "turn" ? (
                 emptyTurn()
               ) : reviewEmptyKey() === "session.review.noVcs" ? (
                 <div class={input.emptyClass}>
