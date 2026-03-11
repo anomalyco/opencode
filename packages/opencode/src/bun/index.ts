@@ -20,8 +20,9 @@ export namespace BunProc {
   }
 
   export async function run(cmd: string[], options?: Process.RunOptions) {
-    log.info("running", { cmd: [which(), ...cmd], ...options })
-    const result = await Process.run([which(), ...cmd], {
+    const bin = which()
+    log.info("running", { cmd: [bin, ...cmd], ...options })
+    const result = await Process.run([bin, ...cmd], {
       cwd: options?.cwd,
       env: { ...process.env, ...options?.env, BUN_BE_BUN: "1" },
       nothrow: true,
