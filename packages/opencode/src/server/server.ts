@@ -534,14 +534,79 @@ export namespace Server {
       )
       .all("/*", async (c) => {
         const path = c.req.path
+        const appDir = Flag.OPENCODE_WEB_URL
 
-        const response = await proxy(`https://app.opencode.ai${path}`, {
+        // Serve from local dist directory if OPENCODE_WEB_URL is a file path
+        if (appDir && !appDir.startsWith("http")) {
+          const fs = await import("fs")
+          const nodePath = await import("path")
+          const mimeTypes: Record<string, string> = {
+            ".html": "text/html",
+            ".js": "application/javascript",
+            ".mjs": "application/javascript",
+            ".css": "text/css",
+            ".json": "application/json",
+            ".svg": "image/svg+xml",
+            ".png": "image/png",
+            ".woff": "font/woff",
+            ".woff2": "font/woff2",
+            ".wasm": "application/wasm",
+            ".onnx": "application/octet-stream",
+          }
+          const getMime = (p: string) => mimeTypes[nodePath.default.extname(p)] || "application/octet-stream"
+          const filePath = nodePath.default.join(appDir, path === "/" ? "index.html" : path)
+          if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+            const stat = fs.statSync(filePath)
+            const etag = `W/"${stat.size.toString(16)}-${stat.mtimeMs.toString(16)}"`
+            const hashed = /\/assets\/.*-[a-zA-Z0-9]{6,}\.[a-z]+$/.test(path)
+            const cache = hashed ? "public, max-age=31536000, immutable" : "no-cache"
+            return new Response(Bun.file(filePath), {
+              headers: { "Content-Type": getMime(filePath), "Cache-Control": cache, ETag: etag },
+            })
+          }
+          // SPA fallback — only for paths that look like client-side routes
+          const apiPrefixes = [
+            "/global",
+            "/project",
+            "/pty",
+            "/config",
+            "/experimental",
+            "/session",
+            "/permission",
+            "/question",
+            "/provider",
+            "/mcp",
+            "/tui",
+            "/voice",
+            "/tts",
+          ]
+          const isApiPath = apiPrefixes.some((prefix) => path.startsWith(prefix))
+          if (!isApiPath) {
+            const indexPath = nodePath.default.join(appDir, "index.html")
+            if (fs.existsSync(indexPath)) {
+              return new Response(Bun.file(indexPath), {
+                headers: { "Content-Type": "text/html", "Cache-Control": "no-cache" },
+              })
+            }
+          }
+          return c.notFound()
+        }
+
+        const appHost = appDir || "https://app.opencode.ai"
+        const appHostname = new URL(appHost).hostname
+
+        const response = await proxy(`${appHost}${path}`, {
           ...c.req,
           headers: {
             ...c.req.raw.headers,
-            host: "app.opencode.ai",
+            host: appHostname,
           },
         })
+        // Override cache headers for hashed assets (GH Pages only sends max-age=600)
+        const hashed = /\/assets\/.*-[a-zA-Z0-9]{6,}\.[a-z]+$/.test(path)
+        if (hashed) {
+          response.headers.set("Cache-Control", "public, max-age=31536000, immutable")
+        }
         const match = response.headers.get("content-type")?.includes("text/html")
           ? (await response.clone().text()).match(
               /<script\b(?![^>]*\bsrc\s*=)[^>]*\bid=(['"])oc-theme-preload-script\1[^>]*>([\s\S]*?)<\/script>/i,
