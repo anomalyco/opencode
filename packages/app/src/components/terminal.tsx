@@ -363,11 +363,13 @@ export const Terminal = (props: TerminalProps) => {
           return true
         }
 
-        // allow for toggle terminal keybinds in parent
+        // Let terminal-toggle keybind bubble to parent command handlers.
+        // Returning false prevents xterm from consuming the key event.
         const config = settings.keybinds.get(TOGGLE_TERMINAL_ID) ?? DEFAULT_TOGGLE_TERMINAL_KEYBIND
         const keybinds = parseKeybind(config)
+        if (matchKeybind(keybinds, event)) return false
 
-        return matchKeybind(keybinds, event)
+        return true
       })
 
       const fit = new mod.FitAddon()
