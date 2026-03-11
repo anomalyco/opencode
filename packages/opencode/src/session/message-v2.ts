@@ -15,6 +15,10 @@ import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
 import { type SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
+import { Filesystem } from "../util/filesystem"
+import { Glob } from "../util/glob"
+import { Global } from "../global"
+import path from "path"
 
 export namespace MessageV2 {
   export function isMedia(mime: string) {
@@ -493,6 +497,28 @@ export namespace MessageV2 {
   })
   export type WithParts = z.infer<typeof WithParts>
 
+  async function legacy(messageID: string, sessionID: string) {
+    const dir = path.join(Global.Path.data, "storage", "part", messageID)
+    if (!(await Filesystem.isDir(dir))) return []
+    const files = await Glob.scan("*.json", {
+      cwd: dir,
+      absolute: true,
+      include: "file",
+    }).catch(() => [])
+    const rows = await Promise.all(files.map((file) => Filesystem.readJson(file).catch(() => undefined)))
+    return rows.flatMap((row, i) => {
+      if (!row || typeof row !== "object") return []
+      const part = {
+        ...(row as Record<string, unknown>),
+        id: typeof (row as { id?: unknown }).id === "string" ? (row as { id: string }).id : path.basename(files[i], ".json"),
+        sessionID,
+        messageID,
+      }
+      const parsed = Part.safeParse(part)
+      return parsed.success ? [parsed.data] : []
+    })
+  }
+
   export function toModelMessages(
     input: WithParts[],
     model: Provider.Model,
@@ -770,9 +796,10 @@ export namespace MessageV2 {
 
       for (const row of rows) {
         const info = { ...row.data, id: row.id, sessionID: row.session_id } as MessageV2.Info
+        const parts = partsByMessage.get(row.id) ?? (await legacy(row.id, row.session_id))
         yield {
           info,
-          parts: partsByMessage.get(row.id) ?? [],
+          parts,
         }
       }
 
@@ -799,9 +826,10 @@ export namespace MessageV2 {
       const row = Database.use((db) => db.select().from(MessageTable).where(eq(MessageTable.id, input.messageID)).get())
       if (!row) throw new Error(`Message not found: ${input.messageID}`)
       const info = { ...row.data, id: row.id, sessionID: row.session_id } as MessageV2.Info
+      const result = await parts(input.messageID)
       return {
         info,
-        parts: await parts(input.messageID),
+        parts: result.length ? result : await legacy(input.messageID, row.session_id),
       }
     },
   )
