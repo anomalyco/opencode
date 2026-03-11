@@ -302,7 +302,7 @@ export namespace Session {
     permission?: PermissionNext.Ruleset
   }) {
     const result: Info = {
-      id: SessionID.make(Identifier.descending("session", input.id)),
+      id: SessionID.descending(input.id),
       slug: Slug.create(),
       version: Installation.VERSION,
       projectID: Instance.project.id,

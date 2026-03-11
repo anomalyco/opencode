@@ -11,6 +11,7 @@ export type SessionID = typeof sessionIdSchema.Type
 export const SessionID = sessionIdSchema.pipe(
   withStatics((schema: typeof sessionIdSchema) => ({
     make: (id: string) => schema.makeUnsafe(id),
+    descending: (id?: string) => schema.makeUnsafe(Identifier.descending("session", id)),
     zod: z.string().startsWith("ses").pipe(z.custom<SessionID>()),
   })),
 )
