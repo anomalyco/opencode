@@ -122,6 +122,8 @@ export function SessionComposerRegion(props: {
   const value = createMemo(() => Math.max(0, Math.min(1, progress())))
   const [height, setHeight] = createSignal(320)
   const dock = createMemo(() => (gate.ready && props.state.dock()) || value() > 0.001)
+  const rolled = createMemo(() => (props.revert?.items.length ? props.revert : undefined))
+  const lift = createMemo(() => (rolled() ? 18 : 36 * value()))
   const full = createMemo(() => Math.max(78, height()))
   const [contentRef, setContentRef] = createSignal<HTMLDivElement>()
 
@@ -173,19 +175,25 @@ export function SessionComposerRegion(props: {
         </Show>
 
         <Show when={!props.state.blocked()}>
-          <Show when={props.revert?.items.length ? props.revert : undefined} keyed>
-            {(revert) => (
-              <div class="pb-2">
-                <SessionRevertDock items={revert.items} restoring={revert.restoring} onRestore={revert.onRestore} />
-              </div>
-            )}
-          </Show>
           <Show
             when={prompt.ready()}
             fallback={
-              <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
-                {handoffPrompt() || language.t("prompt.loading")}
-              </div>
+              <>
+                <Show when={rolled()} keyed>
+                  {(revert) => (
+                    <div class="pb-2">
+                      <SessionRevertDock
+                        items={revert.items}
+                        restoring={revert.restoring}
+                        onRestore={revert.onRestore}
+                      />
+                    </div>
+                  )}
+                </Show>
+                <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
+                  {handoffPrompt() || language.t("prompt.loading")}
+                </div>
+              </>
             }
           >
             <Show when={dock()}>
@@ -222,12 +230,23 @@ export function SessionComposerRegion(props: {
                 </div>
               </div>
             </Show>
+            <Show when={rolled()} keyed>
+              {(revert) => (
+                <div
+                  style={{
+                    "margin-top": `${-36 * value()}px`,
+                  }}
+                >
+                  <SessionRevertDock items={revert.items} restoring={revert.restoring} onRestore={revert.onRestore} />
+                </div>
+              )}
+            </Show>
             <div
               classList={{
                 "relative z-10": true,
               }}
               style={{
-                "margin-top": `${-36 * value()}px`,
+                "margin-top": `${-lift()}px`,
               }}
             >
               <PromptInput
