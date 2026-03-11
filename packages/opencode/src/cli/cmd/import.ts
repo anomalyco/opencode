@@ -152,10 +152,7 @@ export const ImportCommand = cmd({
         return
       }
 
-      const row = {
-        ...Session.toRow({ ...exportData.info, projectID: Instance.project.id }),
-        project_id: Instance.project.id,
-      }
+      const row = Session.toRow({ ...exportData.info, projectID: Instance.project.id })
       Database.use((db) =>
         db
           .insert(SessionTable)
