@@ -11,7 +11,7 @@ import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 import type { Agent } from "../../src/agent/agent"
 import type { MessageV2 } from "../../src/session/message-v2"
-import { SessionID } from "../../src/session/schema"
+import { SessionID, MessageID } from "../../src/session/schema"
 
 describe("session.llm.hasToolCalls", () => {
   test("returns false for empty messages array", () => {
@@ -277,7 +277,7 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         const user = {
-          id: "user-1",
+          id: MessageID.make("user-1"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
@@ -406,7 +406,7 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         const user = {
-          id: "user-2",
+          id: MessageID.make("user-2"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
@@ -529,7 +529,7 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         const user = {
-          id: "user-3",
+          id: MessageID.make("user-3"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
@@ -630,7 +630,7 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         const user = {
-          id: "user-4",
+          id: MessageID.make("user-4"),
           sessionID,
           role: "user",
           time: { created: Date.now() },

@@ -1,6 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
-import { SessionID } from "@/session/schema"
+import { SessionID, MessageID } from "@/session/schema"
 import z from "zod"
 import { Log } from "../util/log"
 import { Identifier } from "../id/id"
@@ -26,7 +26,7 @@ export namespace Permission {
       type: z.string(),
       pattern: z.union([z.string(), z.array(z.string())]).optional(),
       sessionID: SessionID.zod,
-      messageID: z.string(),
+      messageID: MessageID.zod,
       callID: z.string().optional(),
       message: z.string(),
       metadata: z.record(z.string(), z.any()),

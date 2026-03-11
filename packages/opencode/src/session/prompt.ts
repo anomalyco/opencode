@@ -4,7 +4,7 @@ import fs from "fs/promises"
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import { Identifier } from "../id/id"
-import { SessionID } from "./schema"
+import { SessionID, MessageID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import { Log } from "../util/log"
 import { SessionRevert } from "./revert"
@@ -92,7 +92,7 @@ export namespace SessionPrompt {
 
   export const PromptInput = z.object({
     sessionID: SessionID.zod,
-    messageID: Identifier.schema("message").optional(),
+    messageID: MessageID.zod.optional(),
     model: z
       .object({
         providerID: z.string(),
@@ -355,7 +355,7 @@ export namespace SessionPrompt {
         const taskTool = await TaskTool.init()
         const taskModel = task.model ? await Provider.getModel(task.model.providerID, task.model.modelID) : model
         const assistantMessage = (await Session.updateMessage({
-          id: Identifier.ascending("message"),
+          id: MessageID.ascending(),
           role: "assistant",
           parentID: lastUser.id,
           sessionID,
@@ -504,7 +504,7 @@ export namespace SessionPrompt {
           // If we create assistant messages w/ out user ones following mid loop thinking signatures
           // will be missing and it can cause errors for models like gemini for example
           const summaryUserMsg: MessageV2.User = {
-            id: Identifier.ascending("message"),
+            id: MessageID.ascending(),
             sessionID,
             role: "user",
             time: {
@@ -568,7 +568,7 @@ export namespace SessionPrompt {
 
       const processor = SessionProcessor.create({
         assistantMessage: (await Session.updateMessage({
-          id: Identifier.ascending("message"),
+          id: MessageID.ascending(),
           parentID: lastUser.id,
           role: "assistant",
           mode: agent.name,
@@ -971,7 +971,7 @@ export namespace SessionPrompt {
     const variant = input.variant ?? (agent.variant && full?.variants?.[agent.variant] ? agent.variant : undefined)
 
     const info: MessageV2.Info = {
-      id: input.messageID ?? Identifier.ascending("message"),
+      id: input.messageID ?? MessageID.ascending(),
       role: "user",
       sessionID: input.sessionID,
       time: {
@@ -1505,7 +1505,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const agent = await Agent.get(input.agent)
     const model = input.model ?? agent.model ?? (await lastModel(input.sessionID))
     const userMsg: MessageV2.User = {
-      id: Identifier.ascending("message"),
+      id: MessageID.ascending(),
       sessionID: input.sessionID,
       time: {
         created: Date.now(),
@@ -1529,7 +1529,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     await Session.updatePart(userPart)
 
     const msg: MessageV2.Assistant = {
-      id: Identifier.ascending("message"),
+      id: MessageID.ascending(),
       sessionID: input.sessionID,
       parentID: userMsg.id,
       mode: input.agent,
@@ -1719,7 +1719,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   }
 
   export const CommandInput = z.object({
-    messageID: Identifier.schema("message").optional(),
+    messageID: MessageID.zod.optional(),
     sessionID: SessionID.zod,
     agent: z.string().optional(),
     model: z.string().optional(),

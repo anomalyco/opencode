@@ -2,7 +2,7 @@ import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { Config } from "@/config/config"
 import { Identifier } from "@/id/id"
-import { SessionID } from "@/session/schema"
+import { SessionID, MessageID } from "@/session/schema"
 import { Instance } from "@/project/instance"
 import { Database, eq } from "@/storage/db"
 import { PermissionTable } from "@/session/session.sql"
@@ -77,7 +77,7 @@ export namespace PermissionNext {
       always: z.string().array(),
       tool: z
         .object({
-          messageID: z.string(),
+          messageID: MessageID.zod,
           callID: z.string(),
         })
         .optional(),

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { APICallError } from "ai"
 import { MessageV2 } from "../../src/session/message-v2"
 import type { Provider } from "../../src/provider/provider"
-import { SessionID } from "../../src/session/schema"
+import { SessionID, MessageID } from "../../src/session/schema"
 
 const sessionID = SessionID.make("session")
 const model: Provider.Model = {
@@ -100,7 +100,7 @@ function basePart(messageID: string, id: string) {
   return {
     id,
     sessionID,
-    messageID,
+    messageID: MessageID.make(messageID),
   }
 }
 

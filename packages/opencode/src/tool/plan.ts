@@ -7,7 +7,7 @@ import { MessageV2 } from "../session/message-v2"
 import { Identifier } from "../id/id"
 import { Provider } from "../provider/provider"
 import { Instance } from "../project/instance"
-import type { SessionID } from "../session/schema"
+import { type SessionID, MessageID } from "../session/schema"
 import EXIT_DESCRIPTION from "./plan-exit.txt"
 
 async function getLastModel(sessionID: SessionID) {
@@ -45,7 +45,7 @@ export const PlanExitTool = Tool.define("plan_exit", {
     const model = await getLastModel(ctx.sessionID)
 
     const userMsg: MessageV2.User = {
-      id: Identifier.ascending("message"),
+      id: MessageID.ascending(),
       sessionID: ctx.sessionID,
       role: "user",
       time: {
@@ -103,7 +103,7 @@ export const PlanEnterTool = Tool.define("plan_enter", {
     const model = await getLastModel(ctx.sessionID)
 
     const userMsg: MessageV2.User = {
-      id: Identifier.ascending("message"),
+      id: MessageID.ascending(),
       sessionID: ctx.sessionID,
       role: "user",
       time: {

@@ -15,3 +15,15 @@ export const SessionID = sessionIdSchema.pipe(
     zod: z.string().startsWith("ses").pipe(z.custom<SessionID>()),
   })),
 )
+
+const messageIdSchema = Schema.String.pipe(Schema.brand("MessageId"))
+
+export type MessageID = typeof messageIdSchema.Type
+
+export const MessageID = messageIdSchema.pipe(
+  withStatics((schema: typeof messageIdSchema) => ({
+    make: (id: string) => schema.makeUnsafe(id),
+    ascending: (id?: string) => schema.makeUnsafe(Identifier.ascending("message", id)),
+    zod: z.string().startsWith("msg").pipe(z.custom<MessageID>()),
+  })),
+)
