@@ -2,6 +2,7 @@ import { test, expect, describe, mock, afterEach } from "bun:test"
 import { Config } from "../../src/config/config"
 import { Instance } from "../../src/project/instance"
 import { Auth } from "../../src/auth"
+import { AccessToken, Account, AccountID, OrgID } from "../../src/account"
 import { tmpdir } from "../fixture/fixture"
 import path from "path"
 import fs from "fs/promises"
@@ -238,6 +239,52 @@ test("preserves env variables when adding $schema to config", async () => {
       process.env["PRESERVE_VAR"] = originalEnv
     } else {
       delete process.env["PRESERVE_VAR"]
+    }
+  }
+})
+
+test("resolves env templates in account config with account token", async () => {
+  const originalActive = Account.active
+  const originalConfig = Account.config
+  const originalToken = Account.token
+  const originalControlToken = process.env["OPENCODE_CONSOLE_TOKEN"]
+
+  Account.active = mock(() => ({
+    id: AccountID.make("account-1"),
+    email: "user@example.com",
+    url: "https://control.example.com",
+    active_org_id: OrgID.make("org-1"),
+  }))
+
+  Account.config = mock(async () => ({
+    provider: {
+      opencode: {
+        options: {
+          apiKey: "{env:OPENCODE_CONSOLE_TOKEN}",
+        },
+      },
+    },
+  }))
+
+  Account.token = mock(async () => AccessToken.make("st_test_token"))
+
+  try {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.provider?.["opencode"]?.options?.apiKey).toBe("st_test_token")
+      },
+    })
+  } finally {
+    Account.active = originalActive
+    Account.config = originalConfig
+    Account.token = originalToken
+    if (originalControlToken !== undefined) {
+      process.env["OPENCODE_CONSOLE_TOKEN"] = originalControlToken
+    } else {
+      delete process.env["OPENCODE_CONSOLE_TOKEN"]
     }
   }
 })
