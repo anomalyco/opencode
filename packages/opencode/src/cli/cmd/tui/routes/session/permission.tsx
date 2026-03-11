@@ -54,6 +54,10 @@ function EditBody(props: { request: PermissionRequest }) {
 
   const filepath = createMemo(() => (props.request.metadata?.filepath as string) ?? "")
   const diff = createMemo(() => (props.request.metadata?.diff as string) ?? "")
+  const files = createMemo(() => {
+    const value = props.request.metadata?.files
+    return Array.isArray(value) ? value : []
+  })
 
   const view = createMemo(() => {
     const diffStyle = config.diff_style
@@ -63,9 +67,58 @@ function EditBody(props: { request: PermissionRequest }) {
 
   const ft = createMemo(() => filetype(filepath()))
 
+  function title(file: { type: string; relativePath: string; filePath: string }) {
+    if (file.type === "delete") return "# Deleted " + file.relativePath
+    if (file.type === "add") return "# Created " + file.relativePath
+    if (file.type === "move") return "# Moved " + normalizePath(file.filePath) + " -> " + file.relativePath
+    return "# Patched " + file.relativePath
+  }
+
   return (
     <box flexDirection="column" gap={1}>
-      <Show when={diff()}>
+      <Show when={files().length > 0}>
+        <scrollbox
+          height="100%"
+          verticalScrollbarOptions={{
+            trackOptions: {
+              backgroundColor: theme.background,
+              foregroundColor: theme.borderActive,
+            },
+          }}
+        >
+          <box flexDirection="column" gap={1}>
+            <For each={files()}>
+              {(file) => (
+                <box flexDirection="column" gap={1}>
+                  <box paddingLeft={1}>
+                    <text fg={theme.textMuted}>{title(file)}</text>
+                  </box>
+                  <diff
+                    diff={file.diff}
+                    view={view()}
+                    filetype={filetype(file.filePath)}
+                    syntaxStyle={syntax()}
+                    showLineNumbers={true}
+                    width="100%"
+                    wrapMode="word"
+                    fg={theme.text}
+                    addedBg={theme.diffAddedBg}
+                    removedBg={theme.diffRemovedBg}
+                    contextBg={theme.diffContextBg}
+                    addedSignColor={theme.diffHighlightAdded}
+                    removedSignColor={theme.diffHighlightRemoved}
+                    lineNumberFg={theme.diffLineNumber}
+                    lineNumberBg={theme.diffContextBg}
+                    addedLineNumberBg={theme.diffAddedLineNumberBg}
+                    removedLineNumberBg={theme.diffRemovedLineNumberBg}
+                  />
+                </box>
+              )}
+            </For>
+          </box>
+        </scrollbox>
+      </Show>
+      <Show when={!files().length && diff()}>
         <scrollbox
           height="100%"
           verticalScrollbarOptions={{
@@ -96,7 +149,7 @@ function EditBody(props: { request: PermissionRequest }) {
           />
         </scrollbox>
       </Show>
-      <Show when={!diff()}>
+      <Show when={!files().length && !diff()}>
         <box paddingLeft={1}>
           <text fg={theme.textMuted}>No diff provided</text>
         </box>

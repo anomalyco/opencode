@@ -20,6 +20,7 @@ import { ReadTool } from "../../tool/read"
 import { WebFetchTool } from "../../tool/webfetch"
 import { EditTool } from "../../tool/edit"
 import { WriteTool } from "../../tool/write"
+import { ApplyPatchTool } from "../../tool/apply_patch"
 import { CodeSearchTool } from "../../tool/codesearch"
 import { WebSearchTool } from "../../tool/websearch"
 import { TaskTool } from "../../tool/task"
@@ -151,6 +152,38 @@ function edit(info: ToolProps<typeof EditTool>) {
     },
     diff,
   )
+}
+
+function applypatch(info: ToolProps<typeof ApplyPatchTool>) {
+  const files = Array.isArray(info.metadata.files) ? info.metadata.files : []
+  if (!files.length) {
+    block(
+      {
+        icon: "%",
+        title: "Patch",
+      },
+      info.metadata.diff,
+    )
+    return
+  }
+
+  for (const file of files) {
+    const title =
+      file.type === "delete"
+        ? `Deleted ${file.relativePath}`
+        : file.type === "add"
+          ? `Created ${file.relativePath}`
+          : file.type === "move"
+            ? `Moved ${normalizePath(file.filePath)} -> ${file.relativePath}`
+            : `Patched ${file.relativePath}`
+    block(
+      {
+        icon: "%",
+        title,
+      },
+      file.diff,
+    )
+  }
 }
 
 function codesearch(info: ToolProps<typeof CodeSearchTool>) {
@@ -419,6 +452,7 @@ export const RunCommand = cmd({
           if (part.tool === "write") return write(props<typeof WriteTool>(part))
           if (part.tool === "webfetch") return webfetch(props<typeof WebFetchTool>(part))
           if (part.tool === "edit") return edit(props<typeof EditTool>(part))
+          if (part.tool === "apply_patch") return applypatch(props<typeof ApplyPatchTool>(part))
           if (part.tool === "codesearch") return codesearch(props<typeof CodeSearchTool>(part))
           if (part.tool === "websearch") return websearch(props<typeof WebSearchTool>(part))
           if (part.tool === "task") return task(props<typeof TaskTool>(part))
