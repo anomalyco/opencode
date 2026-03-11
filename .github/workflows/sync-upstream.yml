@@ -50,13 +50,16 @@ jobs:
         run: |
           git rebase --abort
 
-          # Push upstream/dev as a branch in our repo, then open a PR
+          # Create branch from our dev, merge upstream into it (with conflict markers)
           BRANCH="sync/upstream-$(date +%Y%m%d-%H%M%S)"
-          git checkout -b "$BRANCH" upstream/dev
+          git checkout -b "$BRANCH" origin/dev
+          git merge upstream/dev --no-edit || true
+          git add -A
+          git commit -m "sync: merge upstream (conflicts to resolve)" --no-verify
           git push origin "$BRANCH"
           gh pr create --base dev --head "$BRANCH" \
             --title "Sync upstream $(date +%Y-%m-%d)" \
-            --body "Automatic rebase failed due to conflicts. Please merge manually and resolve conflicts."
+            --body "Automatic rebase failed due to conflicts. Please resolve manually."
         env:
           GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
 
