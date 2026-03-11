@@ -1,6 +1,7 @@
 import type { Argv } from "yargs"
 import type { Session as SDKSession, Message, Part } from "@opencode-ai/sdk/v2"
 import { Session } from "../../session"
+import { SessionID } from "../../session/schema"
 import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
 import { Database } from "../../storage/db"
@@ -152,7 +153,12 @@ export const ImportCommand = cmd({
         return
       }
 
-      const row = Session.toRow({ ...exportData.info, projectID: Instance.project.id })
+      const row = Session.toRow({
+        ...exportData.info,
+        id: SessionID.make(exportData.info.id),
+        parentID: exportData.info.parentID ? SessionID.make(exportData.info.parentID) : undefined,
+        projectID: Instance.project.id,
+      })
       Database.use((db) =>
         db
           .insert(SessionTable)
@@ -167,7 +173,7 @@ export const ImportCommand = cmd({
             .insert(MessageTable)
             .values({
               id: msg.info.id,
-              session_id: exportData.info.id,
+              session_id: row.id,
               time_created: msg.info.time?.created ?? Date.now(),
               data: msg.info,
             })
@@ -182,7 +188,7 @@ export const ImportCommand = cmd({
               .values({
                 id: part.id,
                 message_id: msg.info.id,
-                session_id: exportData.info.id,
+                session_id: row.id,
                 data: part,
               })
               .onConflictDoNothing()

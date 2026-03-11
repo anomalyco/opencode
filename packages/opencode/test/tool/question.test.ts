@@ -2,9 +2,10 @@ import { describe, expect, test, spyOn, beforeEach, afterEach } from "bun:test"
 import { z } from "zod"
 import { QuestionTool } from "../../src/tool/question"
 import * as QuestionModule from "../../src/question"
+import { SessionID } from "../../src/session/schema"
 
 const ctx = {
-  sessionID: "test-session",
+  sessionID: SessionID.make("ses_test-session"),
   messageID: "test-message",
   callID: "test-call",
   agent: "test-agent",

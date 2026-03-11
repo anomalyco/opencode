@@ -4,6 +4,7 @@ import { Session } from "."
 
 import { MessageV2 } from "./message-v2"
 import { Identifier } from "@/id/id"
+import { SessionID } from "./schema"
 import { Snapshot } from "@/snapshot"
 
 import { Storage } from "@/storage/storage"
@@ -68,7 +69,7 @@ export namespace SessionSummary {
 
   export const summarize = fn(
     z.object({
-      sessionID: z.string(),
+      sessionID: SessionID.zod,
       messageID: z.string(),
     }),
     async (input) => {
@@ -80,7 +81,7 @@ export namespace SessionSummary {
     },
   )
 
-  async function summarizeSession(input: { sessionID: string; messages: MessageV2.WithParts[] }) {
+  async function summarizeSession(input: { sessionID: SessionID; messages: MessageV2.WithParts[] }) {
     const diffs = await computeDiff({ messages: input.messages })
     await Session.setSummary({
       sessionID: input.sessionID,
@@ -113,7 +114,7 @@ export namespace SessionSummary {
 
   export const diff = fn(
     z.object({
-      sessionID: Identifier.schema("session"),
+      sessionID: SessionID.zod,
       messageID: Identifier.schema("message").optional(),
     }),
     async (input) => {

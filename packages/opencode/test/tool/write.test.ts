@@ -4,9 +4,10 @@ import fs from "fs/promises"
 import { WriteTool } from "../../src/tool/write"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
+import { SessionID } from "../../src/session/schema"
 
 const ctx = {
-  sessionID: "test-write-session",
+  sessionID: SessionID.make("ses_test-write-session"),
   messageID: "",
   callID: "",
   agent: "build",

@@ -6,11 +6,12 @@ import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 import { PermissionNext } from "../../src/permission/next"
 import { Agent } from "../../src/agent/agent"
+import { SessionID } from "../../src/session/schema"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
 const ctx = {
-  sessionID: "test",
+  sessionID: SessionID.make("ses_test"),
   messageID: "",
   callID: "",
   agent: "build",

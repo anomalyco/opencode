@@ -2,6 +2,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Session } from "."
 import { Identifier } from "../id/id"
+import { SessionID } from "./schema"
 import { Instance } from "../project/instance"
 import { Provider } from "../provider/provider"
 import { MessageV2 } from "./message-v2"
@@ -22,7 +23,7 @@ export namespace SessionCompaction {
     Compacted: BusEvent.define(
       "session.compacted",
       z.object({
-        sessionID: z.string(),
+        sessionID: SessionID.zod,
       }),
     ),
   }
@@ -55,7 +56,7 @@ export namespace SessionCompaction {
   // goes backwards through parts until there are 40_000 tokens worth of tool
   // calls. then erases output of previous tool calls. idea is to throw away old
   // tool calls that are no longer relevant.
-  export async function prune(input: { sessionID: string }) {
+  export async function prune(input: { sessionID: SessionID }) {
     const config = await Config.get()
     if (config.compaction?.prune === false) return
     log.info("pruning")
@@ -101,7 +102,7 @@ export namespace SessionCompaction {
   export async function process(input: {
     parentID: string
     messages: MessageV2.WithParts[]
-    sessionID: string
+    sessionID: SessionID
     abort: AbortSignal
     auto: boolean
     overflow?: boolean
@@ -295,7 +296,7 @@ When constructing the summary, try to stick to this template:
 
   export const create = fn(
     z.object({
-      sessionID: Identifier.schema("session"),
+      sessionID: SessionID.zod,
       agent: z.string(),
       model: z.object({
         providerID: z.string(),

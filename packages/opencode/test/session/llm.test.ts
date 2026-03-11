@@ -11,6 +11,7 @@ import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 import type { Agent } from "../../src/agent/agent"
 import type { MessageV2 } from "../../src/session/message-v2"
+import { SessionID } from "../../src/session/schema"
 
 describe("session.llm.hasToolCalls", () => {
   test("returns false for empty messages array", () => {
@@ -265,7 +266,7 @@ describe("session.llm.stream", () => {
       directory: tmp.path,
       fn: async () => {
         const resolved = await Provider.getModel(providerID, model.id)
-        const sessionID = "session-test-1"
+        const sessionID = SessionID.make("session-test-1")
         const agent = {
           name: "test",
           mode: "primary",
@@ -395,7 +396,7 @@ describe("session.llm.stream", () => {
       directory: tmp.path,
       fn: async () => {
         const resolved = await Provider.getModel("openai", model.id)
-        const sessionID = "session-test-2"
+        const sessionID = SessionID.make("session-test-2")
         const agent = {
           name: "test",
           mode: "primary",
@@ -517,7 +518,7 @@ describe("session.llm.stream", () => {
       directory: tmp.path,
       fn: async () => {
         const resolved = await Provider.getModel(providerID, model.id)
-        const sessionID = "session-test-3"
+        const sessionID = SessionID.make("session-test-3")
         const agent = {
           name: "test",
           mode: "primary",
@@ -618,7 +619,7 @@ describe("session.llm.stream", () => {
       directory: tmp.path,
       fn: async () => {
         const resolved = await Provider.getModel(providerID, model.id)
-        const sessionID = "session-test-4"
+        const sessionID = SessionID.make("session-test-4")
         const agent = {
           name: "test",
           mode: "primary",
