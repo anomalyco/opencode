@@ -9,6 +9,9 @@
     "edit": {
       "packages/opencode/migration/*": "deny",
     },
+    "skill": {
+      "bake a cake": "deny",
+    },
   },
   "mcp": {},
   "tools": {
