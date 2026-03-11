@@ -9,13 +9,14 @@ import { useI18n } from "../context/i18n"
 export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "children" | "variant"> {
   tool: string
   error: string
+  defaultOpen?: boolean
 }
 
 export function ToolErrorCard(props: ToolErrorCardProps) {
   const i18n = useI18n()
-  const [open, setOpen] = createSignal(true)
+  const [open, setOpen] = createSignal(props.defaultOpen ?? false)
   const [copied, setCopied] = createSignal(false)
-  const [split, rest] = splitProps(props, ["tool", "error"])
+  const [split, rest] = splitProps(props, ["tool", "error", "defaultOpen"])
   const name = createMemo(() => {
     const map: Record<string, string> = {
       read: "ui.tool.read",

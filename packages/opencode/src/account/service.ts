@@ -192,11 +192,17 @@ export class AccountService extends ServiceMap.Service<
 
       const orgsByAccount = Effect.fn("AccountService.orgsByAccount")(function* () {
         const accounts = yield* repo.list()
-        return yield* Effect.forEach(
+        const [errors, results] = yield* Effect.partition(
           accounts,
           (account) => orgs(account.id).pipe(Effect.map((orgs) => ({ account, orgs }))),
           { concurrency: 3 },
         )
+        for (const error of errors) {
+          yield* Effect.logWarning("failed to fetch orgs for account").pipe(
+            Effect.annotateLogs({ error: String(error) }),
+          )
+        }
+        return results
       })
 
       const orgs = Effect.fn("AccountService.orgs")(function* (accountID: AccountID) {
