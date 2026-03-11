@@ -83,6 +83,7 @@ import {
 import { workspaceOpenState } from "./layout/sidebar-workspace-helpers"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
+import { askProjectClose, closeProject as runProjectClose } from "./layout/project-close"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -962,13 +963,14 @@ export default function Layout(props: ParentProps) {
       {
         id: "project.close",
         title: language.t("command.project.close"),
-        description: currentProject()?.worktree,
+        description: language.t("command.project.close.description"),
+        keywords: "remove workspace",
         category: language.t("command.category.project"),
         disabled: !currentProject(),
         onSelect: () => {
           const project = currentProject()
           if (!project) return
-          closeProject(project.worktree)
+          void askClose(project)
         },
       },
       {
@@ -1329,30 +1331,25 @@ export default function Layout(props: ParentProps) {
     setWorkspaceName(directory, next, projectId, branch)
   }
 
-  function closeProject(directory: string) {
-    const list = layout.projects.list()
-    const index = list.findIndex((x) => x.worktree === directory)
-    const active = currentProject()?.worktree === directory
-    if (index === -1) return
-    const next = list[index + 1]
-
-    if (!active) {
-      layout.projects.close(directory)
-      return
-    }
-
-    if (!next) {
-      layout.projects.close(directory)
-      navigate("/")
-      return
-    }
-
-    navigateWithSidebarReset(`/${base64Encode(next.worktree)}/session`)
-    layout.projects.close(directory)
-    queueMicrotask(() => {
-      void navigateToProject(next.worktree)
+  const close = (directory: string) =>
+    runProjectClose({
+      directory,
+      list: layout.projects.list(),
+      current: currentProject()?.worktree,
+      close: layout.projects.close,
+      navigate,
+      open: navigateToProject,
     })
-  }
+
+  const askClose = (project: LocalProject) =>
+    askProjectClose({
+      project,
+      t: language.t,
+      show: dialog.show,
+      dismiss: dialog.close,
+      onClose: close,
+      list: globalSDK.client.session.list,
+    })
 
   function toggleProjectWorkspaces(project: LocalProject) {
     const enabled = layout.sidebar.workspaces(project.worktree)()
@@ -1894,7 +1891,7 @@ export default function Layout(props: ParentProps) {
     onProjectFocus: (worktree) => aim.activate(worktree),
     navigateToProject,
     openSidebar: () => layout.sidebar.open(),
-    closeProject,
+    closeProject: close,
     showEditProjectDialog,
     toggleProjectWorkspaces,
     workspacesEnabled: (project) => project.vcs === "git" && layout.sidebar.workspaces(project.worktree)(),
@@ -2028,7 +2025,7 @@ export default function Layout(props: ParentProps) {
                         <DropdownMenu.Item
                           data-action="project-close-menu"
                           data-project={base64Encode(p().worktree)}
-                          onSelect={() => closeProject(p().worktree)}
+                          onSelect={() => void askClose(p())}
                         >
                           <DropdownMenu.ItemLabel>{language.t("common.close")}</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>

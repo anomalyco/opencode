@@ -53,6 +53,7 @@ export interface CommandOption {
   id: string
   title: string
   description?: string
+  keywords?: string
   category?: string
   keybind?: KeybindConfig
   slash?: string

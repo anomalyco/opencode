@@ -24,6 +24,7 @@ type Entry = {
   type: EntryType
   title: string
   description?: string
+  keywords?: string
   keybind?: string
   category: string
   option?: CommandOption
@@ -62,6 +63,7 @@ const createCommandEntry = (option: CommandOption, category: string): Entry => (
   type: "command",
   title: option.title,
   description: option.description,
+  keywords: option.keywords,
   keybind: option.keybind,
   category,
   option,
@@ -392,7 +394,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
         loadingMessage={language.t("common.loading")}
         items={items}
         key={(item) => item.id}
-        filterKeys={["title", "description", "category"]}
+        filterKeys={["title", "description", "keywords", "category"]}
         groupBy={grouped() ? (item) => item.category : () => ""}
         onMove={handleMove}
         onSelect={handleSelect}
