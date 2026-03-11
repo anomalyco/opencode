@@ -44,6 +44,37 @@ function aggregate(comments: Record<string, LineComment[]>) {
     .sort((a, b) => a.time - b.time)
 }
 
+function cloneSelection(selection: SelectedLineRange): SelectedLineRange {
+  const next: SelectedLineRange = {
+    start: selection.start,
+    end: selection.end,
+  }
+
+  if (selection.side) next.side = selection.side
+  if (selection.endSide) next.endSide = selection.endSide
+  return next
+}
+
+function cloneComment(comment: LineComment): LineComment {
+  return {
+    ...comment,
+    selection: cloneSelection(comment.selection),
+  }
+}
+
+function group(comments: LineComment[]) {
+  return comments.reduce<Record<string, LineComment[]>>((acc, comment) => {
+    const list = acc[comment.file]
+    const next = cloneComment(comment)
+    if (list) {
+      list.push(next)
+      return acc
+    }
+    acc[comment.file] = [next]
+    return acc
+  }, {})
+}
+
 function createCommentSessionState(store: Store<CommentStore>, setStore: SetStoreFunction<CommentStore>) {
   const [state, setState] = createStore({
     focus: null as CommentFocus | null,
@@ -70,6 +101,7 @@ function createCommentSessionState(store: Store<CommentStore>, setStore: SetStor
       id: uuid(),
       time: Date.now(),
       ...input,
+      selection: cloneSelection(input.selection),
     }
 
     batch(() => {
@@ -87,6 +119,23 @@ function createCommentSessionState(store: Store<CommentStore>, setStore: SetStor
     })
   }
 
+  const update = (file: string, id: string, comment: string) => {
+    setStore("comments", file, (items) =>
+      (items ?? []).map((item) => {
+        if (item.id !== id) return item
+        return { ...item, comment }
+      }),
+    )
+  }
+
+  const replace = (comments: LineComment[]) => {
+    batch(() => {
+      setStore("comments", reconcile(group(comments)))
+      setFocus(null)
+      setActive(null)
+    })
+  }
+
   const clear = () => {
     batch(() => {
       setStore("comments", reconcile({}))
@@ -100,6 +149,8 @@ function createCommentSessionState(store: Store<CommentStore>, setStore: SetStor
     all,
     add,
     remove,
+    update,
+    replace,
     clear,
     focus: () => state.focus,
     setFocus,
@@ -132,6 +183,8 @@ function createCommentSession(dir: string, id: string | undefined) {
     all: session.all,
     add: session.add,
     remove: session.remove,
+    update: session.update,
+    replace: session.replace,
     clear: session.clear,
     focus: session.focus,
     setFocus: session.setFocus,
@@ -176,6 +229,8 @@ export const { use: useComments, provider: CommentsProvider } = createSimpleCont
       all: () => session().all(),
       add: (input: Omit<LineComment, "id" | "time">) => session().add(input),
       remove: (file: string, id: string) => session().remove(file, id),
+      update: (file: string, id: string, comment: string) => session().update(file, id, comment),
+      replace: (comments: LineComment[]) => session().replace(comments),
       clear: () => session().clear(),
       focus: () => session().focus(),
       setFocus: (focus: CommentFocus | null) => session().setFocus(focus),

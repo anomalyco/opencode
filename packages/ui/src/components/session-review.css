@@ -3,11 +3,10 @@
   flex-direction: column;
   gap: 0px;
   height: 100%;
-  overflow-y: auto;
-  scrollbar-width: none;
-  contain: strict;
-  &::-webkit-scrollbar {
-    display: none;
+
+  [data-slot="session-review-scroll"] {
+    flex: 1 1 auto;
+    min-height: 0;
   }
 
   .scroll-view__viewport {
@@ -17,13 +16,11 @@
 
   [data-slot="session-review-container"] {
     flex: 1 1 auto;
-    padding-right: 4px;
+    padding-right: 0;
   }
 
   [data-slot="session-review-header"] {
-    position: sticky;
-    top: 0;
-    z-index: 20;
+    z-index: 120;
     background-color: var(--background-stronger);
     height: 40px;
     padding-bottom: 8px;
@@ -63,7 +60,7 @@
   }
 
   [data-component="sticky-accordion-header"] {
-    --sticky-accordion-top: 40px;
+    --sticky-accordion-top: 0px;
   }
 
   [data-slot="session-review-accordion-item"][data-selected]
@@ -198,50 +195,6 @@
 
   [data-slot="session-review-change"][data-type="modified"] {
     color: var(--icon-diff-modified-base);
-  }
-
-  [data-slot="session-review-file-container"] {
-    padding: 0;
-  }
-
-  [data-slot="session-review-image-container"] {
-    padding: 12px;
-    display: flex;
-    justify-content: center;
-    background: var(--background-stronger);
-  }
-
-  [data-slot="session-review-image"] {
-    max-width: 100%;
-    max-height: 60vh;
-    object-fit: contain;
-    border-radius: 8px;
-    border: 1px solid var(--border-weak-base);
-    background: var(--background-base);
-  }
-
-  [data-slot="session-review-image-placeholder"] {
-    font-family: var(--font-family-sans);
-    font-size: var(--font-size-small);
-    color: var(--text-weak);
-  }
-
-  [data-slot="session-review-audio-container"] {
-    padding: 12px;
-    display: flex;
-    justify-content: center;
-    background: var(--background-stronger);
-  }
-
-  [data-slot="session-review-audio"] {
-    width: 100%;
-    max-width: 560px;
-  }
-
-  [data-slot="session-review-audio-placeholder"] {
-    font-family: var(--font-family-sans);
-    font-size: var(--font-size-small);
-    color: var(--text-weak);
   }
 
   [data-slot="session-review-diff-wrapper"] {

@@ -74,7 +74,7 @@ Hier sind alle verfuegbaren Slash-Commands:
 
 ### connect
 
-Add a provider to OpenCode. Allows you to select from available providers and add their API keys.
+Fuegt einen Provider zu OpenCode hinzu. Erlaubt die Auswahl aus verfuegbaren Providern und das Hinzufuegen ihrer API-Keys.
 
 ```bash frame="none"
 /connect
@@ -84,7 +84,7 @@ Add a provider to OpenCode. Allows you to select from available providers and ad
 
 ### compact
 
-Compact the current session. _Alias_: `/summarize`
+Kompaktiert die aktuelle Session. _Alias_: `/summarize`
 
 ```bash frame="none"
 /compact
@@ -96,7 +96,7 @@ Compact the current session. _Alias_: `/summarize`
 
 ### details
 
-Toggle tool execution details.
+Schaltet Tool-Ausfuehrungsdetails um.
 
 ```bash frame="none"
 /details
@@ -108,7 +108,7 @@ Toggle tool execution details.
 
 ### editor
 
-Open external editor for composing messages. Uses the editor set in your `EDITOR` environment variable. [Learn more](#editor-setup).
+Oeffnet externen Editor zum Verfassen von Nachrichten. Nutzt den in der `EDITOR`-Umgebungsvariable gesetzten Editor. [Mehr dazu](#editor-setup).
 
 ```bash frame="none"
 /editor
@@ -120,7 +120,7 @@ Open external editor for composing messages. Uses the editor set in your `EDITOR
 
 ### exit
 
-Exit OpenCode. _Aliases_: `/quit`, `/q`
+Beendet OpenCode. _Aliase_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -132,7 +132,7 @@ Exit OpenCode. _Aliases_: `/quit`, `/q`
 
 ### export
 
-Export current conversation to Markdown and open in your default editor. Uses the editor set in your `EDITOR` environment variable. [Learn more](#editor-setup).
+Exportiert die aktuelle Unterhaltung als Markdown und oeffnet sie in deinem Standard-Editor. Nutzt den in der `EDITOR`-Umgebungsvariable gesetzten Editor. [Mehr dazu](#editor-setup).
 
 ```bash frame="none"
 /export
@@ -144,7 +144,7 @@ Export current conversation to Markdown and open in your default editor. Uses th
 
 ### help
 
-Show the help dialog.
+Zeigt den Hilfedialog.
 
 ```bash frame="none"
 /help
@@ -156,7 +156,7 @@ Show the help dialog.
 
 ### init
 
-Create or update `AGENTS.md` file. [Learn more](/docs/rules).
+Erstellt oder aktualisiert die `AGENTS.md`-Datei. [Mehr dazu](/docs/rules).
 
 ```bash frame="none"
 /init
@@ -168,7 +168,7 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 
 ### models
 
-List available models.
+Listet verfuegbare Modelle.
 
 ```bash frame="none"
 /models
@@ -180,7 +180,7 @@ List available models.
 
 ### new
 
-Start a new session. _Alias_: `/clear`
+Startet eine neue Session. _Alias_: `/clear`
 
 ```bash frame="none"
 /new
@@ -192,14 +192,13 @@ Start a new session. _Alias_: `/clear`
 
 ### redo
 
-Redo a previously undone message. Only available after using `/undo`.
+Wiederholt eine zuvor rueckgaengig gemachte Nachricht. Nur verfuegbar nach Verwendung von `/undo`.
 
 :::tip
-Any file changes will also be restored.
+Auch Dateiaenderungen werden wiederhergestellt.
 :::
 
-Internally, this uses Git to manage the file changes. So your project **needs to
-be a Git repository**.
+Intern nutzt dies Git, um die Dateiaenderungen zu verwalten. Dein Projekt muss also **ein Git-Repository sein**.
 
 ```bash frame="none"
 /redo
@@ -211,7 +210,7 @@ be a Git repository**.
 
 ### sessions
 
-List and switch between sessions. _Aliases_: `/resume`, `/continue`
+Listet Sessions und wechselt zwischen ihnen. _Aliase_: `/resume`, `/continue`
 
 ```bash frame="none"
 /sessions
@@ -223,7 +222,7 @@ List and switch between sessions. _Aliases_: `/resume`, `/continue`
 
 ### share
 
-Share current session. [Learn more](/docs/share).
+Teilt die aktuelle Session. [Mehr dazu](/docs/share).
 
 ```bash frame="none"
 /share
@@ -235,7 +234,7 @@ Share current session. [Learn more](/docs/share).
 
 ### themes
 
-List available themes.
+Listet verfuegbare Themes.
 
 ```bash frame="none"
 /theme
@@ -247,10 +246,10 @@ List available themes.
 
 ### thinking
 
-Toggle the visibility of thinking/reasoning blocks in the conversation. When enabled, you can see the model's reasoning process for models that support extended thinking.
+Schaltet die Sichtbarkeit von Thinking/Reasoning-Bloecken in der Unterhaltung um. Wenn aktiviert, kannst du den Denkprozess des Modells sehen (bei Modellen, die das unterstuetzen).
 
 :::note
-This command only controls whether thinking blocks are **displayed** - it does not enable or disable the model's reasoning capabilities. To toggle actual reasoning capabilities, use `ctrl+t` to cycle through model variants.
+Dieser Befehl steuert nur, ob Thinking-Bloecke **angezeigt** werden - er aktiviert oder deaktiviert nicht die Reasoning-Faehigkeiten des Modells. Um die Reasoning-Faehigkeiten umzuschalten, nutze `ctrl+t`, um durch die Modell-Varianten zu wechseln.
 :::
 
 ```bash frame="none"
@@ -261,14 +260,13 @@ This command only controls whether thinking blocks are **displayed** - it does n
 
 ### undo
 
-Undo last message in the conversation. Removes the most recent user message, all subsequent responses, and any file changes.
+Macht die letzte Nachricht in der Unterhaltung rueckgaengig. Entfernt die letzte Benutzernachricht, alle folgenden Antworten und alle Dateiaenderungen.
 
 :::tip
-Any file changes made will also be reverted.
+Auch durchgefuehrte Dateiaenderungen werden rueckgaengig gemacht.
 :::
 
-Internally, this uses Git to manage the file changes. So your project **needs to
-be a Git repository**.
+Intern nutzt dies Git, um die Dateiaenderungen zu verwalten. Dein Projekt muss also **ein Git-Repository sein**.
 
 ```bash frame="none"
 /undo
@@ -280,7 +278,7 @@ be a Git repository**.
 
 ### unshare
 
-Unshare current session. [Learn more](/docs/share#un-sharing).
+Hebt das Teilen der aktuellen Session auf. [Mehr dazu](/docs/share#un-sharing).
 
 ```bash frame="none"
 /unshare
@@ -290,7 +288,7 @@ Unshare current session. [Learn more](/docs/share#un-sharing).
 
 ## Editor-Einrichtung
 
-Both the `/editor` and `/export` commands use the editor specified in your `EDITOR` environment variable.
+Sowohl `/editor` als auch `/export` nutzen den in deiner `EDITOR`-Umgebungsvariable spezifizierten Editor.
 
 <Tabs>
   <TabItem label="Linux/macOS">
@@ -304,7 +302,7 @@ Both the `/editor` and `/export` commands use the editor specified in your `EDIT
     export EDITOR="code --wait"
     ```
 
-    To make it permanent, add this to your shell profile;
+    Um es dauerhaft zu machen, fuege dies zu deinem Shell-Profil hinzu;
     `~/.bashrc`, `~/.zshrc`, etc.
 
   </TabItem>
@@ -318,8 +316,7 @@ Both the `/editor` and `/export` commands use the editor specified in your `EDIT
     set EDITOR=code --wait
     ```
 
-    To make it permanent, use **System Properties** > **Environment
-    Variables**.
+    Um es dauerhaft zu machen, nutze **Systemeigenschaften** > **Umgebungsvariablen**.
 
   </TabItem>
 
@@ -332,62 +329,72 @@ Both the `/editor` and `/export` commands use the editor specified in your `EDIT
     $env:EDITOR = "code --wait"
     ```
 
-    To make it permanent, add this to your PowerShell profile.
+    Um es dauerhaft zu machen, fuege dies zu deinem PowerShell-Profil hinzu.
 
   </TabItem>
 </Tabs>
 
-Popular editor options include:
+Beliebte Editoren sind:
 
 - `code` - Visual Studio Code
 - `cursor` - Cursor
 - `windsurf` - Windsurf
-- `nvim` - Neovim editor
-- `vim` - Vim editor
-- `nano` - Nano editor
+- `nvim` - Neovim
+- `vim` - Vim
+- `nano` - Nano
 - `notepad` - Windows Notepad
 - `subl` - Sublime Text
 
 :::note
-Some editors like VS Code need to be started with the `--wait` flag.
+Einige Editoren wie VS Code muessen mit dem `--wait`-Flag gestartet werden.
 :::
 
-Some editors need command-line arguments to run in blocking mode. The `--wait` flag makes the editor process block until closed.
+Einige Editoren benoetigen Befehlszeilenargumente, um im blockierenden Modus zu laufen. Das `--wait`-Flag sorgt dafuer, dass der Editor-Prozess blockiert, bis er geschlossen wird.
 
 ---
 
 ## Konfiguration
 
-You can customize TUI behavior through your OpenCode config file.
+Du kannst das Verhalten der TUI ueber die Datei `tui.json` (oder `tui.jsonc`) anpassen.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "tui": {
-    "scroll_speed": 3,
-    "scroll_acceleration": {
-      "enabled": true
-    }
-  }
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "opencode",
+  "keybinds": {
+    "leader": "ctrl+x"
+  },
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": true
+  },
+  "diff_style": "auto"
 }
 ```
 
+Dies ist getrennt von `opencode.json`, welche das Server-/Runtime-Verhalten konfiguriert.
+
 ### Optionen
 
-- `scroll_acceleration` - Enable macOS-style scroll acceleration for smooth, natural scrolling. When enabled, scroll speed increases with rapid scrolling gestures and stays precise for slower movements. **This setting takes precedence over `scroll_speed` and overrides it when enabled.**
-- `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (minimum: `1`). Defaults to `3`. **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**
+- `theme` - Setzt dein UI-Theme. [Mehr dazu](/docs/themes).
+- `keybinds` - Passt Tastenkombinationen an. [Mehr dazu](/docs/keybinds).
+- `scroll_acceleration.enabled` - Aktiviert Scroll-Beschleunigung im macOS-Stil fuer weiches, natuerliches Scrollen. Wenn aktiviert, erhoeht sich die Scroll-Geschwindigkeit bei schnellen Gesten und bleibt praezise bei langsamen Bewegungen. **Diese Einstellung hat Vorrang vor `scroll_speed` und ueberschreibt es, wenn aktiviert.**
+- `scroll_speed` - Steuert, wie schnell die TUI scrollt (Minimum: `0.001`, unterstuetzt Dezimalwerte). Standard ist `3`. **Hinweis: Wird ignoriert, wenn `scroll_acceleration.enabled` auf `true` gesetzt ist.**
+- `diff_style` - Steuert die Diff-Darstellung. `"auto"` passt sich der Terminalbreite an, `"stacked"` zeigt immer ein einspaltiges Layout.
+
+Verwende `OPENCODE_TUI_CONFIG`, um einen benutzerdefinierten TUI-Konfigurationspfad zu laden.
 
 ---
 
 ## Anpassung
 
-You can customize various aspects of the TUI view using the command palette (`ctrl+x h` or `/help`). These settings persist across restarts.
+Du kannst verschiedene Aspekte der TUI-Ansicht ueber die Befehlspalette (`ctrl+x h` oder `/help`) anpassen. Diese Einstellungen bleiben ueber Neustarts hinweg erhalten.
 
 ---
 
 #### Benutzername-Anzeige
 
-Toggle whether your username appears in chat messages. Access this through:
+Schaltet um, ob dein Benutzername in Chat-Nachrichten erscheint. Zugriff hierueber:
 
-- Command palette: Search for "username" or "hide username"
-- The setting persists automatically and will be remembered across TUI sessions
+- Befehlspalette: Suche nach "username" oder "hide username"
+- Die Einstellung wird automatisch gespeichert und bleibt ueber TUI-Sessions hinweg erhalten.

@@ -1,9 +1,9 @@
 import { sqliteTable, text, integer, index, primaryKey } from "drizzle-orm/sqlite-core"
 import { ProjectTable } from "../project/project.sql"
 import type { MessageV2 } from "./message-v2"
-import type { Snapshot } from "@/snapshot"
-import type { PermissionNext } from "@/permission/next"
-import { Timestamps } from "@/storage/schema.sql"
+import type { Snapshot } from "../snapshot"
+import type { PermissionNext } from "../permission/next"
+import { Timestamps } from "../storage/schema.sql"
 
 type PartData = Omit<MessageV2.Part, "id" | "sessionID" | "messageID">
 type InfoData = Omit<MessageV2.Info, "id" | "sessionID">
@@ -15,6 +15,7 @@ export const SessionTable = sqliteTable(
     project_id: text()
       .notNull()
       .references(() => ProjectTable.id, { onDelete: "cascade" }),
+    workspace_id: text(),
     parent_id: text(),
     slug: text().notNull(),
     directory: text().notNull(),
@@ -31,7 +32,11 @@ export const SessionTable = sqliteTable(
     time_compacting: integer(),
     time_archived: integer(),
   },
-  (table) => [index("session_project_idx").on(table.project_id), index("session_parent_idx").on(table.parent_id)],
+  (table) => [
+    index("session_project_idx").on(table.project_id),
+    index("session_workspace_idx").on(table.workspace_id),
+    index("session_parent_idx").on(table.parent_id),
+  ],
 )
 
 export const MessageTable = sqliteTable(

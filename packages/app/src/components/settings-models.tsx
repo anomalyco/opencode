@@ -4,7 +4,6 @@ import { Switch } from "@opencode-ai/ui/switch"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TextField } from "@opencode-ai/ui/text-field"
-import type { IconName } from "@opencode-ai/ui/icons/provider"
 import { type Component, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useModels } from "@/context/models"
@@ -98,7 +97,7 @@ export const SettingsModels: Component = () => {
               {(group) => (
                 <div class="flex flex-col gap-1">
                   <div class="flex items-center gap-2 pb-2">
-                    <ProviderIcon id={group.category as IconName} class="size-5 shrink-0 icon-strong-base" />
+                    <ProviderIcon id={group.category} class="size-5 shrink-0 icon-strong-base" />
                     <span class="text-14-medium text-text-strong">{group.items[0].provider.name}</span>
                   </div>
                   <div class="bg-surface-raised-base px-4 rounded-lg">

@@ -6,6 +6,14 @@ on:
       - dev
   pull_request:
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   unit:
     name: unit (${{ matrix.settings.name }})
@@ -86,6 +94,7 @@ jobs:
           path: |
             packages/app/e2e/test-results
             packages/app/e2e/playwright-report
+<<<<<<< HEAD
 
   required:
     name: test (linux)
@@ -101,3 +110,5 @@ jobs:
           echo "e2e=${{ needs.e2e.result }}"
           test "${{ needs.unit.result }}" = "success"
           test "${{ needs.e2e.result }}" = "success"
+=======
+>>>>>>> upstream/dev

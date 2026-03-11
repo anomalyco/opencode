@@ -131,6 +131,8 @@ OpenCode Zen 是由 OpenCode 团队提供的模型列表，这些模型已经过
 
 2. 使用以下方法之一**配置身份验证**：
 
+   ***
+
    #### 环境变量（快速上手）
 
    运行 opencode 时设置以下环境变量之一：
@@ -152,6 +154,8 @@ OpenCode Zen 是由 OpenCode 团队提供的模型列表，这些模型已经过
    export AWS_PROFILE=my-dev-profile
    export AWS_REGION=us-east-1
    ```
+
+   ***
 
    #### 配置文件（推荐）
 
@@ -180,6 +184,8 @@ OpenCode Zen 是由 OpenCode 团队提供的模型列表，这些模型已经过
    配置文件中的选项优先级高于环境变量。
    :::
 
+   ***
+
    #### 进阶：VPC 端点
 
    如果你使用 Bedrock 的 VPC 端点：
@@ -203,11 +209,15 @@ OpenCode Zen 是由 OpenCode 团队提供的模型列表，这些模型已经过
    `endpoint` 选项是通用 `baseURL` 选项的别名，使用了 AWS 特有的术语。如果同时指定了 `endpoint` 和 `baseURL`，则 `endpoint` 优先。
    :::
 
+   ***
+
    #### 认证方式
    - **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**：在 AWS 控制台中创建 IAM 用户并生成访问密钥
    - **`AWS_PROFILE`**：使用 `~/.aws/credentials` 中的命名配置文件。需要先通过 `aws configure --profile my-profile` 或 `aws sso login` 进行配置
    - **`AWS_BEARER_TOKEN_BEDROCK`**：从 Amazon Bedrock 控制台生成长期 API 密钥
    - **`AWS_WEB_IDENTITY_TOKEN_FILE` / `AWS_ROLE_ARN`**：适用于 EKS IRSA（服务账户的 IAM 角色）或其他支持 OIDC 联合的 Kubernetes 环境。使用服务账户注解时，Kubernetes 会自动注入这些环境变量。
+
+   ***
 
    #### 认证优先级
 

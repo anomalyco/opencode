@@ -28,6 +28,18 @@ export const isRootVisibleSession = (session: Session, directory: string) =>
 export const sortedRootSessions = (store: { session: Session[]; path: { directory: string } }, now: number) =>
   store.session.filter((session) => isRootVisibleSession(session, store.path.directory)).sort(sortSessions(now))
 
+export const latestRootSession = (stores: { session: Session[]; path: { directory: string } }[], now: number) =>
+  stores
+    .flatMap((store) => store.session.filter((session) => isRootVisibleSession(session, store.path.directory)))
+    .sort(sortSessions(now))[0]
+
+export function hasProjectPermissions<T>(
+  request: Record<string, T[] | undefined>,
+  include: (item: T) => boolean = () => true,
+) {
+  return Object.values(request).some((list) => list?.some(include))
+}
+
 export const childMapByParent = (sessions: Session[]) => {
   const map = new Map<string, string[]>()
   for (const session of sessions) {
@@ -62,9 +74,29 @@ export const errorMessage = (err: unknown, fallback: string) => {
   return fallback
 }
 
-export const syncWorkspaceOrder = (local: string, dirs: string[], existing?: string[]) => {
-  if (!existing) return dirs
-  const keep = existing.filter((d) => d !== local && dirs.includes(d))
-  const missing = dirs.filter((d) => d !== local && !existing.includes(d))
-  return [local, ...missing, ...keep]
+export const effectiveWorkspaceOrder = (local: string, dirs: string[], persisted?: string[]) => {
+  const root = workspaceKey(local)
+  const live = new Map<string, string>()
+
+  for (const dir of dirs) {
+    const key = workspaceKey(dir)
+    if (key === root) continue
+    if (!live.has(key)) live.set(key, dir)
+  }
+
+  if (!persisted?.length) return [local, ...live.values()]
+
+  const result = [local]
+  for (const dir of persisted) {
+    const key = workspaceKey(dir)
+    if (key === root) continue
+    const match = live.get(key)
+    if (!match) continue
+    result.push(match)
+    live.delete(key)
+  }
+
+  return [...result, ...live.values()]
 }
+
+export const syncWorkspaceOrder = effectiveWorkspaceOrder
