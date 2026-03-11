@@ -32,8 +32,9 @@ import { useLayout } from "@/context/layout"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { useTerminal } from "@/context/terminal"
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
-import { createOpenReviewFile, createSizing } from "@/pages/session/helpers"
+import { createOpenReviewFile, createSizing, focusTerminalById } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { resetSessionModel, syncSessionModel } from "@/pages/session/session-model-helpers"
@@ -267,6 +268,7 @@ export default function Page() {
   const sdk = useSDK()
   const prompt = usePrompt()
   const comments = useComments()
+  const terminal = useTerminal()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
 
   createEffect(() => {
@@ -759,8 +761,11 @@ export default function Page() {
       return
     }
 
-    // Don't autofocus chat if desktop terminal panel is open
-    if (isDesktop() && view().terminal.opened()) return
+    // Prefer the open terminal over the composer when it can take focus
+    if (view().terminal.opened()) {
+      const id = terminal.active()
+      if (id && focusTerminalById(id)) return
+    }
 
     // Only treat explicit scroll keys as potential "user scroll" gestures.
     if (event.key === "PageUp" || event.key === "PageDown" || event.key === "Home" || event.key === "End") {
