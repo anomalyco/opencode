@@ -196,11 +196,11 @@ export namespace Skill {
     return list.filter((skill) => PermissionNext.evaluate("skill", skill.name, agent.permission).action !== "deny")
   }
 
-  export function fmt(list: Info[], opts: { structured: boolean }) {
+  export function fmt(list: Info[], opts: { verbose: boolean }) {
     if (list.length === 0) {
       return "No skills are currently available."
     }
-    if (opts.structured) {
+    if (opts.verbose) {
       return [
         "<available_skills>",
         ...list.flatMap((skill) => [

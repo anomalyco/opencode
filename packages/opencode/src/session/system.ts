@@ -66,7 +66,7 @@ export namespace SystemPrompt {
       "Use the skill tool to load a skill when a task matches its description.",
       // the agents seem to ingest the information about skills a bit better if we present a more verbose
       // version of them here and a less verbose version in tool description, rather than vice versa.
-      Skill.fmt(list, { structured: true }),
+      Skill.fmt(list, { verbose: true }),
     ].join("\n")
   }
 }
