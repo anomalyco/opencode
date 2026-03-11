@@ -1,7 +1,7 @@
 import type { Argv } from "yargs"
 import type { Session as SDKSession, Message, Part } from "@opencode-ai/sdk/v2"
 import { Session } from "../../session"
-import { SessionID, MessageID } from "../../session/schema"
+import { SessionID, MessageID, PartID } from "../../session/schema"
 import { WorkspaceID } from "../../control-plane/schema"
 import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
@@ -161,7 +161,11 @@ export const ImportCommand = cmd({
         workspaceID: exportData.info.workspaceID ? WorkspaceID.make(exportData.info.workspaceID) : undefined,
         projectID: Instance.project.id,
         revert: exportData.info.revert
-          ? { ...exportData.info.revert, messageID: MessageID.make(exportData.info.revert.messageID) }
+          ? {
+              ...exportData.info.revert,
+              messageID: MessageID.make(exportData.info.revert.messageID),
+              partID: exportData.info.revert.partID ? PartID.make(exportData.info.revert.partID) : undefined,
+            }
           : undefined,
       })
       Database.use((db) =>
@@ -193,7 +197,7 @@ export const ImportCommand = cmd({
             db
               .insert(PartTable)
               .values({
-                id: part.id,
+                id: PartID.make(part.id),
                 message_id: MessageID.make(msg.info.id),
                 session_id: row.id,
                 data: partData,

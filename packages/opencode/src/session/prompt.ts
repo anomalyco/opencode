@@ -3,8 +3,7 @@ import os from "os"
 import fs from "fs/promises"
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
-import { Identifier } from "../id/id"
-import { SessionID, MessageID } from "./schema"
+import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import { Log } from "../util/log"
 import { SessionRevert } from "./revert"
@@ -380,7 +379,7 @@ export namespace SessionPrompt {
           },
         })) as MessageV2.Assistant
         let part = (await Session.updatePart({
-          id: Identifier.ascending("part"),
+          id: PartID.ascending(),
           messageID: assistantMessage.id,
           sessionID: assistantMessage.sessionID,
           type: "tool",
@@ -449,7 +448,7 @@ export namespace SessionPrompt {
         })
         const attachments = result?.attachments?.map((attachment) => ({
           ...attachment,
-          id: Identifier.ascending("part"),
+          id: PartID.ascending(),
           sessionID,
           messageID: assistantMessage.id,
         }))
@@ -515,7 +514,7 @@ export namespace SessionPrompt {
           }
           await Session.updateMessage(summaryUserMsg)
           await Session.updatePart({
-            id: Identifier.ascending("part"),
+            id: PartID.ascending(),
             messageID: summaryUserMsg.id,
             sessionID,
             type: "text",
@@ -814,7 +813,7 @@ export namespace SessionPrompt {
             ...result,
             attachments: result.attachments?.map((attachment) => ({
               ...attachment,
-              id: Identifier.ascending("part"),
+              id: PartID.ascending(),
               sessionID: ctx.sessionID,
               messageID: input.processor.message.id,
             })),
@@ -917,7 +916,7 @@ export namespace SessionPrompt {
           output: truncated.content,
           attachments: attachments.map((attachment) => ({
             ...attachment,
-            id: Identifier.ascending("part"),
+            id: PartID.ascending(),
             sessionID: ctx.sessionID,
             messageID: input.processor.message.id,
           })),
@@ -989,7 +988,7 @@ export namespace SessionPrompt {
     type Draft<T> = T extends MessageV2.Part ? Omit<T, "id"> & { id?: string } : never
     const assign = (part: Draft<MessageV2.Part>): MessageV2.Part => ({
       ...part,
-      id: part.id ?? Identifier.ascending("part"),
+      id: part.id ? PartID.make(part.id) : PartID.ascending(),
     })
 
     const parts = await Promise.all(
@@ -1335,7 +1334,7 @@ export namespace SessionPrompt {
     if (!Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE) {
       if (input.agent.name === "plan") {
         userMessage.parts.push({
-          id: Identifier.ascending("part"),
+          id: PartID.ascending(),
           messageID: userMessage.info.id,
           sessionID: userMessage.info.sessionID,
           type: "text",
@@ -1346,7 +1345,7 @@ export namespace SessionPrompt {
       const wasPlan = input.messages.some((msg) => msg.info.role === "assistant" && msg.info.agent === "plan")
       if (wasPlan && input.agent.name === "build") {
         userMessage.parts.push({
-          id: Identifier.ascending("part"),
+          id: PartID.ascending(),
           messageID: userMessage.info.id,
           sessionID: userMessage.info.sessionID,
           type: "text",
@@ -1366,7 +1365,7 @@ export namespace SessionPrompt {
       const exists = await Filesystem.exists(plan)
       if (exists) {
         const part = await Session.updatePart({
-          id: Identifier.ascending("part"),
+          id: PartID.ascending(),
           messageID: userMessage.info.id,
           sessionID: userMessage.info.sessionID,
           type: "text",
@@ -1385,7 +1384,7 @@ export namespace SessionPrompt {
       const exists = await Filesystem.exists(plan)
       if (!exists) await fs.mkdir(path.dirname(plan), { recursive: true })
       const part = await Session.updatePart({
-        id: Identifier.ascending("part"),
+        id: PartID.ascending(),
         messageID: userMessage.info.id,
         sessionID: userMessage.info.sessionID,
         type: "text",
@@ -1520,7 +1519,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     await Session.updateMessage(userMsg)
     const userPart: MessageV2.Part = {
       type: "text",
-      id: Identifier.ascending("part"),
+      id: PartID.ascending(),
       messageID: userMsg.id,
       sessionID: input.sessionID,
       text: "The following tool was executed by the user",
@@ -1555,7 +1554,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     await Session.updateMessage(msg)
     const part: MessageV2.Part = {
       type: "tool",
-      id: Identifier.ascending("part"),
+      id: PartID.ascending(),
       messageID: msg.id,
       sessionID: input.sessionID,
       tool: "bash",

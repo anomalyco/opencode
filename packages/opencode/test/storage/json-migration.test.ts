@@ -11,7 +11,7 @@ import { ProjectTable } from "../../src/project/project.sql"
 import { ProjectID } from "../../src/project/schema"
 import { SessionTable, MessageTable, PartTable, TodoTable, PermissionTable } from "../../src/session/session.sql"
 import { SessionShareTable } from "../../src/share/share.sql"
-import { SessionID, MessageID } from "../../src/session/schema"
+import { SessionID, MessageID, PartID } from "../../src/session/schema"
 
 // Test fixtures
 const fixtures = {
@@ -259,7 +259,7 @@ describe("JSON to SQLite migration", () => {
 
     const parts = db.select().from(PartTable).all()
     expect(parts.length).toBe(1)
-    expect(parts[0].id).toBe("prt_testabc123")
+    expect(parts[0].id).toBe(PartID.make("prt_testabc123"))
   })
 
   test("migrates legacy parts without ids in body", async () => {
@@ -302,7 +302,7 @@ describe("JSON to SQLite migration", () => {
 
     const parts = db.select().from(PartTable).all()
     expect(parts.length).toBe(1)
-    expect(parts[0].id).toBe("prt_testabc123")
+    expect(parts[0].id).toBe(PartID.make("prt_testabc123"))
     expect(parts[0].message_id).toBe(MessageID.make("msg_test789ghi"))
     expect(parts[0].session_id).toBe(SessionID.make("ses_test456def"))
     expect(parts[0].data).not.toHaveProperty("id")
@@ -374,7 +374,7 @@ describe("JSON to SQLite migration", () => {
     const db = drizzle({ client: sqlite })
     const parts = db.select().from(PartTable).all()
     expect(parts.length).toBe(1)
-    expect(parts[0].id).toBe("prt_from_filename") // Uses filename, not JSON id
+    expect(parts[0].id).toBe(PartID.make("prt_from_filename")) // Uses filename, not JSON id
     expect(parts[0].message_id).toBe(MessageID.make("msg_realmsgid")) // Uses parent dir, not JSON messageID
   })
 

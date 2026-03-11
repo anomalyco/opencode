@@ -5,8 +5,7 @@ import { Bus } from "../../src/bus"
 import { Log } from "../../src/util/log"
 import { Instance } from "../../src/project/instance"
 import { MessageV2 } from "../../src/session/message-v2"
-import { Identifier } from "../../src/id/id"
-import { MessageID } from "../../src/session/schema"
+import { MessageID, PartID } from "../../src/session/schema"
 
 const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
@@ -108,7 +107,7 @@ describe("step-finish token propagation via Bus event", () => {
           }
 
           const partInput = {
-            id: Identifier.ascending("part"),
+            id: PartID.ascending(),
             messageID,
             sessionID: session.id,
             type: "step-finish" as const,
