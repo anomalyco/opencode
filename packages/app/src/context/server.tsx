@@ -97,8 +97,6 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
   init: (props: { defaultServer: ServerConnection.Key; servers?: Array<ServerConnection.Any> }) => {
     const checkServerHealth = useCheckServerHealth()
 
-    console.log("defaultServer", props.defaultServer)
-
     const [store, setStore, _, ready] = persisted(
       Persist.global("server", ["server.v3"]),
       createStore({
