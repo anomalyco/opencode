@@ -83,8 +83,9 @@ export namespace Log {
       absolute: true,
       include: "file",
     })
-    if (files.length <= 5) return
+    if (files.length <= 10) return
 
+    files.sort()
     const filesToDelete = files.slice(0, -10)
     await Promise.all(filesToDelete.map((file) => fs.unlink(file).catch(() => {})))
   }
