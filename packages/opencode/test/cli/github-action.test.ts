@@ -1,13 +1,14 @@
 import { test, expect, describe } from "bun:test"
 import { extractResponseText, formatPromptTooLargeError } from "../../src/cli/cmd/github"
 import type { MessageV2 } from "../../src/session/message-v2"
+import { SessionID, MessageID } from "../../src/session/schema"
 
 // Helper to create minimal valid parts
 function createTextPart(text: string): MessageV2.Part {
   return {
     id: "1",
-    sessionID: "s",
-    messageID: "m",
+    sessionID: SessionID.make("s"),
+    messageID: MessageID.make("m"),
     type: "text" as const,
     text,
   }
@@ -16,8 +17,8 @@ function createTextPart(text: string): MessageV2.Part {
 function createReasoningPart(text: string): MessageV2.Part {
   return {
     id: "1",
-    sessionID: "s",
-    messageID: "m",
+    sessionID: SessionID.make("s"),
+    messageID: MessageID.make("m"),
     type: "reasoning" as const,
     text,
     time: { start: 0 },
@@ -28,8 +29,8 @@ function createToolPart(tool: string, title: string, status: "completed" | "runn
   if (status === "completed") {
     return {
       id: "1",
-      sessionID: "s",
-      messageID: "m",
+      sessionID: SessionID.make("s"),
+      messageID: MessageID.make("m"),
       type: "tool" as const,
       callID: "c1",
       tool,
@@ -45,8 +46,8 @@ function createToolPart(tool: string, title: string, status: "completed" | "runn
   }
   return {
     id: "1",
-    sessionID: "s",
-    messageID: "m",
+    sessionID: SessionID.make("s"),
+    messageID: MessageID.make("m"),
     type: "tool" as const,
     callID: "c1",
     tool,
@@ -61,8 +62,8 @@ function createToolPart(tool: string, title: string, status: "completed" | "runn
 function createStepStartPart(): MessageV2.Part {
   return {
     id: "1",
-    sessionID: "s",
-    messageID: "m",
+    sessionID: SessionID.make("s"),
+    messageID: MessageID.make("m"),
     type: "step-start" as const,
   }
 }
@@ -70,8 +71,8 @@ function createStepStartPart(): MessageV2.Part {
 function createStepFinishPart(): MessageV2.Part {
   return {
     id: "1",
-    sessionID: "s",
-    messageID: "m",
+    sessionID: SessionID.make("s"),
+    messageID: MessageID.make("m"),
     type: "step-finish" as const,
     reason: "done",
     cost: 0,

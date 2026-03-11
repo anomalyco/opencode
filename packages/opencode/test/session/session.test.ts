@@ -6,6 +6,7 @@ import { Log } from "../../src/util/log"
 import { Instance } from "../../src/project/instance"
 import { MessageV2 } from "../../src/session/message-v2"
 import { Identifier } from "../../src/id/id"
+import { MessageID } from "../../src/session/schema"
 
 const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
@@ -81,7 +82,7 @@ describe("step-finish token propagation via Bus event", () => {
         fn: async () => {
           const session = await Session.create({})
 
-          const messageID = Identifier.ascending("message")
+          const messageID = MessageID.ascending()
           await Session.updateMessage({
             id: messageID,
             sessionID: session.id,
