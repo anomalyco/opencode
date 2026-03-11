@@ -23,6 +23,7 @@ export const dict = {
 
   "command.sidebar.toggle": "Переключить боковую панель",
   "command.project.open": "Открыть проект",
+  "command.project.close": "Закрыть проект",
   "command.provider.connect": "Подключить провайдера",
   "command.server.switch": "Переключить сервер",
   "command.settings.open": "Открыть настройки",

@@ -23,6 +23,7 @@ export const dict = {
 
   "command.sidebar.toggle": "Skift sidebjælke",
   "command.project.open": "Åbn projekt",
+  "command.project.close": "Luk projekt",
   "command.provider.connect": "Tilslut udbyder",
   "command.server.switch": "Skift server",
   "command.settings.open": "Åbn indstillinger",

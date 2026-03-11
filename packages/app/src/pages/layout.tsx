@@ -936,6 +936,18 @@ export default function Layout(props: ParentProps) {
         onSelect: () => chooseProject(),
       },
       {
+        id: "project.close",
+        title: language.t("command.project.close"),
+        description: currentProject()?.worktree,
+        category: language.t("command.category.project"),
+        disabled: !currentProject(),
+        onSelect: () => {
+          const project = currentProject()
+          if (!project) return
+          closeProject(project.worktree)
+        },
+      },
+      {
         id: "provider.connect",
         title: language.t("command.provider.connect"),
         category: language.t("command.category.provider"),
