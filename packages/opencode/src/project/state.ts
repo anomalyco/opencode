@@ -46,20 +46,24 @@ export namespace State {
     }, 10000).unref()
 
     const tasks: Promise<void>[] = []
-    for (const entry of entries.values()) {
+    for (const [init, entry] of entries) {
       if (!entry.dispose) continue
+
+      const label = typeof init === "function" ? init.name : String(init)
 
       const task = Promise.resolve(entry.state)
         .then((state) => entry.dispose!(state))
         .catch((error) => {
-          log.error("Error while disposing state:", { error, key })
+          log.error("Error while disposing state:", { error, key, init: label })
         })
 
       tasks.push(task)
     }
+    await Promise.all(tasks)
+
     entries.clear()
     recordsByKey.delete(key)
-    await Promise.all(tasks)
+
     disposalFinished = true
     log.info("state disposal completed", { key })
   }

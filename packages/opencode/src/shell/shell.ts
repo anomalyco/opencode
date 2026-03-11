@@ -1,7 +1,10 @@
 import { Flag } from "@/flag/flag"
 import { lazy } from "@/util/lazy"
+import { Filesystem } from "@/util/filesystem"
+import { which } from "@/util/which"
 import path from "path"
 import { spawn, type ChildProcess } from "child_process"
+import { setTimeout as sleep } from "node:timers/promises"
 
 const SIGKILL_TIMEOUT_MS = 200
 
@@ -12,7 +15,10 @@ export namespace Shell {
 
     if (process.platform === "win32") {
       await new Promise<void>((resolve) => {
-        const killer = spawn("taskkill", ["/pid", String(pid), "/f", "/t"], { stdio: "ignore" })
+        const killer = spawn("taskkill", ["/pid", String(pid), "/f", "/t"], {
+          stdio: "ignore",
+          windowsHide: true,
+        })
         killer.once("exit", () => resolve())
         killer.once("error", () => resolve())
       })
@@ -21,13 +27,13 @@ export namespace Shell {
 
     try {
       process.kill(-pid, "SIGTERM")
-      await Bun.sleep(SIGKILL_TIMEOUT_MS)
+      await sleep(SIGKILL_TIMEOUT_MS)
       if (!opts?.exited?.()) {
         process.kill(-pid, "SIGKILL")
       }
     } catch (_e) {
       proc.kill("SIGTERM")
-      await Bun.sleep(SIGKILL_TIMEOUT_MS)
+      await sleep(SIGKILL_TIMEOUT_MS)
       if (!opts?.exited?.()) {
         proc.kill("SIGKILL")
       }
@@ -38,17 +44,17 @@ export namespace Shell {
   function fallback() {
     if (process.platform === "win32") {
       if (Flag.OPENCODE_GIT_BASH_PATH) return Flag.OPENCODE_GIT_BASH_PATH
-      const git = Bun.which("git")
+      const git = which("git")
       if (git) {
         // git.exe is typically at: C:\Program Files\Git\cmd\git.exe
         // bash.exe is at: C:\Program Files\Git\bin\bash.exe
         const bash = path.join(git, "..", "..", "bin", "bash.exe")
-        if (Bun.file(bash).size) return bash
+        if (Filesystem.stat(bash)?.size) return bash
       }
       return process.env.COMSPEC || "cmd.exe"
     }
     if (process.platform === "darwin") return "/bin/zsh"
-    const bash = Bun.which("bash")
+    const bash = which("bash")
     if (bash) return bash
     return "/bin/sh"
   }

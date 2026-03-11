@@ -1,0 +1,128 @@
+---
+title: Partager
+description: Partagez vos conversations OpenCode.
+---
+
+La fonctionnalité de partage de OpenCode vous permet de créer des liens publics vers vos conversations OpenCode, afin que vous puissiez collaborer avec vos coéquipiers ou obtenir de l'aide d'autres personnes.
+
+:::note
+Les conversations partagées sont accessibles publiquement à toute personne disposant du lien.
+:::
+
+---
+
+## Comment ça marche
+
+Lorsque vous partagez une conversation, OpenCode :
+
+1. Crée un URL public unique pour votre session
+2. Synchronise l'historique de vos conversations avec nos serveurs
+3. Rend la conversation accessible via le lien partageable — `opncd.ai/s/<share-id>`
+
+---
+
+## Partage
+
+OpenCode prend en charge trois modes de partage qui contrôlent la manière dont les conversations sont partagées :
+
+---
+
+### Manuel (par défaut)
+
+Par défaut, OpenCode utilise le mode de partage manuel. Les sessions ne sont pas partagées automatiquement, mais vous pouvez les partager manuellement à l'aide de la commande `/share` :
+
+```
+/share
+```
+
+Cela générera un URL unique qui sera copié dans votre presse-papiers.
+
+Pour définir explicitement le mode manuel dans votre [fichier de configuration](/docs/config) :
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "manual"
+}
+```
+
+---
+
+### Partage automatique
+
+Vous pouvez activer le partage automatique pour toutes les nouvelles conversations en définissant l'option `share` sur `"auto"` dans votre [fichier de configuration](/docs/config) :
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "auto"
+}
+```
+
+Avec le partage automatique activé, chaque nouvelle conversation sera automatiquement partagée et un lien sera généré.
+
+---
+
+### Désactivé
+
+Vous pouvez désactiver entièrement le partage en définissant l'option `share` sur `"disabled"` dans votre [fichier de configuration](/docs/config) :
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled"
+}
+```
+
+Pour appliquer cela au sein de votre équipe pour un projet donné, ajoutez-le au `opencode.json` dans votre projet et enregistrez-vous dans Git.
+
+---
+
+## Annuler le partage
+
+Pour arrêter de partager une conversation et la supprimer de l'accès public :
+
+```
+/unshare
+```
+
+Cela supprimera le lien de partage et supprimera les données liées à la conversation.
+
+---
+
+## Confidentialité
+
+Il y a quelques points à garder à l’esprit lorsque vous partagez une conversation.
+
+---
+
+### Conservation des données
+
+Les conversations partagées restent accessibles jusqu'à ce que vous les annuliez explicitement. Ce
+comprend :
+
+- Historique complet des conversations
+- Tous les messages et réponses
+- Métadonnées de session
+
+---
+
+### Recommandations
+
+- Partagez uniquement les conversations qui ne contiennent pas d'informations sensibles.
+- Examinez le contenu de la conversation avant de la partager.
+- Annulez le partage des conversations une fois la collaboration terminée.
+- Évitez de partager des conversations avec du code propriétaire ou des données confidentielles.
+- Pour les projets sensibles, désactivez complètement le partage.
+
+---
+
+## Pour les entreprises
+
+Pour les déploiements en entreprise, la fonctionnalité de partage peut être :
+
+- **Désactivé** entièrement pour des raisons de conformité en matière de sécurité
+- **Réservé** aux utilisateurs authentifiés via SSO uniquement
+- **Auto-hébergé** sur votre propre infrastructure
+
+[En savoir plus](/docs/enterprise) sur l'utilisation de opencode dans votre organisation.

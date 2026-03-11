@@ -31,12 +31,12 @@
       }
     }
 
-    &:not([data-expanded]):focus {
+    &:not([data-expanded]):focus-visible {
       &[data-variant="secondary"] {
         background-color: var(--button-secondary-base);
       }
       &[data-variant="ghost"] {
-        background-color: transparent;
+        background-color: var(--surface-raised-base-hover);
       }
       &[data-variant="primary"] {
         background-color: var(--icon-strong-base);
@@ -82,7 +82,7 @@
         box-shadow: var(--shadow-xs-border-base);
       }
 
-      &:not([data-expanded]):focus {
+      &:not([data-expanded]):not(:focus-visible):focus {
         background-color: transparent;
         box-shadow: none;
       }

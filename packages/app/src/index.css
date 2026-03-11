@@ -1,57 +1,29 @@
 @import "@opencode-ai/ui/styles/tailwind";
 
-:root {
-  a {
-    cursor: default;
+@layer components {
+  [data-component="getting-started"] {
+    container-type: inline-size;
+    container-name: getting-started;
   }
-}
 
-[data-component="markdown"] ul {
-  list-style: disc outside;
-  padding-left: 1.5rem;
-}
+  [data-component="getting-started-actions"] {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem; /* gap-3 */
+  }
 
-[data-component="markdown"] ol {
-  list-style: decimal outside;
-  padding-left: 1.5rem;
-}
+  [data-component="getting-started-actions"] > [data-component="button"] {
+    width: 100%;
+  }
 
-[data-component="markdown"] li > p:first-child {
-  display: inline;
-  margin: 0;
-}
+  @container getting-started (min-width: 17rem) {
+    [data-component="getting-started-actions"] {
+      flex-direction: row;
+      align-items: center;
+    }
 
-[data-component="markdown"] li > p + p {
-  display: block;
-  margin-top: 0.5rem;
-}
-
-*[data-tauri-drag-region] {
-  app-region: drag;
-}
-
-.session-scroller::-webkit-scrollbar {
-  width: 10px !important;
-  height: 10px !important;
-}
-
-.session-scroller::-webkit-scrollbar-track {
-  background: transparent !important;
-  border-radius: 5px !important;
-}
-
-.session-scroller::-webkit-scrollbar-thumb {
-  background: var(--border-weak-base) !important;
-  border-radius: 5px !important;
-  border: 3px solid transparent !important;
-  background-clip: padding-box !important;
-}
-
-.session-scroller::-webkit-scrollbar-thumb:hover {
-  background: var(--border-weak-base) !important;
-}
-
-.session-scroller {
-  scrollbar-width: thin !important;
-  scrollbar-color: var(--border-weak-base) transparent !important;
+    [data-component="getting-started-actions"] > [data-component="button"] {
+      width: auto;
+    }
+  }
 }
