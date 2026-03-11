@@ -1,11 +1,21 @@
-import { describe, expect } from "bun:test"
-import path from "path"
-import { Effect } from "effect"
-import { Global } from "@opencode-ai/core/global"
-import { InstallationChannel } from "@opencode-ai/core/installation/version"
-import { RuntimeFlags } from "@/effect/runtime-flags"
-import { Database } from "@/storage/db"
-import { it } from "../lib/effect"
+import { afterAll, beforeAll, describe, expect, test } from "bun:test"
+
+let Database: typeof import("../../src/storage/db").Database
+
+const prev = process.env["OPENCODE_DISABLE_CHANNEL_DB"]
+
+beforeAll(async () => {
+  process.env["OPENCODE_DISABLE_CHANNEL_DB"] = "0"
+  ;({ Database } = await import(`../../src/storage/db?test=${Date.now()}`))
+})
+
+afterAll(() => {
+  if (prev === undefined) {
+    delete process.env["OPENCODE_DISABLE_CHANNEL_DB"]
+    return
+  }
+  process.env["OPENCODE_DISABLE_CHANNEL_DB"] = prev
+})
 
 describe("Database.getChannelPath", () => {
   it.effect("returns database path for the current channel", () =>

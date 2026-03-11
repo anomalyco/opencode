@@ -4,6 +4,8 @@ import type { JSONSchema7 } from "@ai-sdk/provider"
 import type * as Provider from "./provider"
 import type * as ModelsDev from "@opencode-ai/core/models-dev"
 import { iife } from "@/util/iife"
+import { Flag } from "@/flag/flag"
+import { isOpenAIProviderID } from "./id"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -1053,14 +1055,13 @@ export function options(input: {
     result["store"] = false
   }
 
-  if (input.model.api.npm === "@ai-sdk/azure") {
-    result["store"] = false
-    result["promptCacheKey"] = input.sessionID
-  }
-
-  if (input.model.api.npm === "@openrouter/ai-sdk-provider" || input.model.api.npm === "@llmgateway/ai-sdk-provider") {
-    result["usage"] = {
-      include: true,
+    // openai and providers using openai package should set store to false by default.
+    if (
+      isOpenAIProviderID(input.model.providerID) ||
+      input.model.api.npm === "@ai-sdk/openai" ||
+      input.model.api.npm === "@ai-sdk/github-copilot"
+    ) {
+      result["store"] = false
     }
     if (input.model.api.id.includes("gemini-3")) {
       result["reasoning"] = { effort: "high" }
@@ -1088,8 +1089,11 @@ export function options(input: {
     result["promptCacheKey"] = input.sessionID
   }
 
-  if (input.model.api.npm === "@ai-sdk/google" || input.model.api.npm === "@ai-sdk/google-vertex") {
-    if (input.model.capabilities.reasoning) {
+    if (isOpenAIProviderID(input.model.providerID) || input.providerOptions?.setCacheKey) {
+      result["promptCacheKey"] = input.sessionID
+    }
+
+    if (input.model.api.npm === "@ai-sdk/google" || input.model.api.npm === "@ai-sdk/google-vertex") {
       result["thinkingConfig"] = {
         includeThoughts: true,
       }
@@ -1231,42 +1235,15 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
     return result
   }
 
-  // AI SDK packages that resolve providerOptionsName by splitting the
-  // provider name on "." (e.g. "wafer.ai" -> "wafer") need the same
-  // logic here so the key we write matches the key they read.
-  // Other SDKs (xai, mistral, groq, cohere, etc.) use hardcoded keys
-  // like "xai" or "cohere" - applying .split(".")[0] would break those.
-  const usesDotSplitOptions =
-    model.api.npm === "@ai-sdk/openai-compatible" ||
-    model.api.npm === "@ai-sdk/openai" ||
-    model.api.npm === "@ai-sdk/anthropic"
-  const key = sdkKey(model.api.npm) ?? (usesDotSplitOptions ? model.providerID.split(".")[0] : model.providerID)
-  // @ai-sdk/azure delegates to OpenAIChatLanguageModel which reads from
-  // providerOptions["openai"], but OpenAIResponsesLanguageModel checks
-  // "azure" first. Pass both so model options work on either code path.
-  if (model.api.npm === "@ai-sdk/azure") {
-    return { openai: options, azure: options }
-  }
-  return { [key]: options }
-}
-
-export function maxOutputTokens(model: Provider.Model, outputTokenMax = OUTPUT_TOKEN_MAX): number {
-  return Math.min(model.limit.output, outputTokenMax) || outputTokenMax
-}
-
-export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 {
-  /*
-  if (["openai", "azure"].includes(providerID)) {
-    if (schema.type === "object" && schema.properties) {
-      for (const [key, value] of Object.entries(schema.properties)) {
-        if (schema.required?.includes(key)) continue
-        schema.properties[key] = {
-          anyOf: [
-            value as JSONSchema.JSONSchema,
-            {
-              type: "null",
-            },
-          ],
+  export function smallOptions(model: Provider.Model) {
+    if (
+      isOpenAIProviderID(model.providerID) ||
+      model.api.npm === "@ai-sdk/openai" ||
+      model.api.npm === "@ai-sdk/github-copilot"
+    ) {
+      if (model.api.id.includes("gpt-5")) {
+        if (model.api.id.includes("5.")) {
+          return { store: false, reasoningEffort: "low" }
         }
       }
     }

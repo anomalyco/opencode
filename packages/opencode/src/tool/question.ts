@@ -7,14 +7,17 @@ export const Parameters = Schema.Struct({
   questions: Schema.mutable(Schema.Array(Question.Prompt)).annotate({ description: "Questions to ask" }),
 })
 
-type Metadata = {
-  answers: ReadonlyArray<Question.Answer>
-}
+    function format(part: Question.Part) {
+      if (typeof part === "string") return part
+      return part.filename ? `[image: ${part.filename}]` : "[image]"
+    }
 
-export const QuestionTool = Tool.define<typeof Parameters, Metadata, Question.Service>(
-  "question",
-  Effect.gen(function* () {
-    const question = yield* Question.Service
+    function formatAnswer(answer: Question.Answer | undefined) {
+      if (!answer?.length) return "Unanswered"
+      return answer.map(format).join(", ")
+    }
+
+    const formatted = params.questions.map((q, i) => `"${q.question}"="${formatAnswer(answers[i])}"`).join(", ")
 
     return {
       description: DESCRIPTION,

@@ -8,6 +8,7 @@ type PromptImageAttachmentsProps = {
   onOpen: (attachment: ImageAttachmentPart) => void
   onRemove: (id: string) => void
   removeLabel: string
+  class?: string
 }
 
 const fallbackClass = "size-16 rounded-md bg-surface-base flex items-center justify-center border border-border-base"
@@ -20,7 +21,7 @@ const nameClass = "absolute bottom-0 left-0 right-0 px-1 py-0.5 bg-black/50 roun
 export const PromptImageAttachments: Component<PromptImageAttachmentsProps> = (props) => {
   return (
     <Show when={props.attachments.length > 0}>
-      <div class="flex flex-wrap gap-2 px-3 pt-3">
+      <div class={`flex flex-wrap gap-2 px-3 pt-3 ${props.class ?? ""}`.trim()}>
         <For each={props.attachments}>
           {(attachment) => (
             <div class="relative group">

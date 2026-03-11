@@ -1,7 +1,7 @@
 import { APICallError } from "ai"
 import { STATUS_CODES } from "http"
 import { iife } from "@/util/iife"
-import type { ProviderID } from "./schema"
+import { isOpenAIProviderID } from "./id"
 
 // Adapted from overflow detection patterns in:
 // https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/utils/overflow.ts
@@ -159,6 +159,18 @@ export function parseStreamError(input: unknown): ParsedStreamError | undefined 
         isRetryable: true,
         responseBody,
       }
+    }
+
+    const metadata = input.error.url ? { url: input.error.url } : undefined
+    return {
+      type: "api_error",
+      message: m,
+      statusCode: input.error.statusCode,
+      isRetryable: isOpenAIProviderID(input.providerID) ? isOpenAiErrorRetryable(input.error) : input.error.isRetryable,
+      responseHeaders: input.error.responseHeaders,
+      responseBody: input.error.responseBody,
+      metadata,
+    }
   }
 }
 
