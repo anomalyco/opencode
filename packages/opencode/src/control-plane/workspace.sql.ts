@@ -1,5 +1,5 @@
 import { sqliteTable, text } from "drizzle-orm/sqlite-core"
-import { ProjectTable } from "@/project/project.sql"
+import { ProjectTable } from "../project/project.sql"
 
 export const WorkspaceTable = sqliteTable("workspace", {
   id: text().primaryKey(),
