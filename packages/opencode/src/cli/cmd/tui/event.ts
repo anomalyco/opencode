@@ -43,7 +43,7 @@ export const TuiEvent = {
   SessionSelect: BusEvent.define(
     "tui.session.select",
     z.object({
-      sessionID: SessionID.zod,
+      sessionID: SessionID.zod.describe("Session ID to navigate to"),
     }),
   ),
 }
