@@ -31,7 +31,8 @@ import { Flag } from "../flag/flag"
 import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
-import { $, fileURLToPath, pathToFileURL } from "bun"
+import { $ } from "bun"
+import { pathToFileURL, fileURLToPath } from "url"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/util/error"
@@ -533,6 +534,7 @@ export namespace SessionPrompt {
           abort,
           sessionID,
           auto: task.auto,
+          overflow: task.overflow,
         })
         if (result === "stop") break
         continue
@@ -707,6 +709,7 @@ export namespace SessionPrompt {
           agent: lastUser.agent,
           model: lastUser.model,
           auto: true,
+          overflow: !processor.message.finish,
         })
       }
       continue
@@ -1626,6 +1629,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const proc = spawn(shell, args, {
       cwd,
       detached: process.platform !== "win32",
+      windowsHide: process.platform === "win32",
       stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,

@@ -84,6 +84,37 @@ Es funktioniert wie jeder andere Anbieter in OpenCode und ist völlig optional.
 
 ---
 
+## OpenCode Go
+
+OpenCode Go ist ein kostenguenstiges Abonnement, das zuverlaessigen Zugriff auf beliebte Open-Coding-Modelle bietet, die vom OpenCode-Team getestet und verifiziert wurden, dass sie gut mit OpenCode funktionieren.
+
+1. Führen Sie den Befehl `/connect` in der TUI aus, waehlen Sie `OpenCode Go` und gehen Sie zu [opencode.ai/auth](https://opencode.ai/zen).
+
+   ```txt
+   /connect
+   ```
+
+2. Melden Sie sich an, geben Sie Ihre Rechnungsdaten ein und kopieren Sie Ihren API-Schlüssel.
+
+3. Fügen Sie Ihren API-Schlüssel ein.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Führen Sie `/models` in der TUI aus, um die Liste der empfohlenen Modelle zu sehen.
+
+   ```txt
+   /models
+   ```
+
+Es funktioniert wie jeder andere Anbieter in OpenCode und ist völlig optional.
+
+---
+
 ## Verzeichnis
 
 Schauen wir uns einige der Anbieter im Detail an. Wenn Sie einen Anbieter hinzufügen möchten
@@ -1473,6 +1504,39 @@ SAP AI Core bietet Zugriff auf 40+ Modelle von OpenAI, Anthropic, Google, Amazon
    :::
 
 5. Führen Sie den Befehl `/models` aus, um aus 40+ verfügbaren Modellen auszuwählen.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### STACKIT
+
+STACKIT AI Model Serving bietet eine voll verwaltete, souveraene Hosting-Umgebung fuer AI-Modelle, mit Fokus auf LLMs wie Llama, Mistral und Qwen, mit maximaler Datensouveraenitaet auf europaeischer Infrastruktur.
+
+1. Gehen Sie zum [STACKIT Portal](https://portal.stackit.cloud), navigieren Sie zu **AI Model Serving** und erstellen Sie ein Auth-Token fuer Ihr Projekt.
+
+   :::tip
+   Sie benoetigen ein STACKIT-Kundenkonto, Benutzerkonto und Projekt, bevor Sie Auth-Tokens erstellen koennen.
+   :::
+
+2. Führen Sie den Befehl `/connect` aus und suchen Sie nach **STACKIT**.
+
+   ```txt
+   /connect
+   ```
+
+3. Geben Sie Ihr STACKIT AI Model Serving Auth-Token ein.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Führen Sie den Befehl `/models` aus, um aus verfügbaren Modellen wie _Qwen3-VL 235B_ oder _Llama 3.3 70B_ auszuwählen.
 
    ```txt
    /models

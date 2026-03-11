@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Instance } from "../../src/project/instance"
 import { Pty } from "../../src/pty"
 import { tmpdir } from "../fixture/fixture"
+import { setTimeout as sleep } from "node:timers/promises"
 
 describe("pty", () => {
   test("does not leak output when websocket objects are reused", async () => {
@@ -43,7 +44,7 @@ describe("pty", () => {
 
           // Output from a must never show up in b.
           Pty.write(a.id, "AAA\n")
-          await Bun.sleep(100)
+          await sleep(100)
 
           expect(outB.join("")).not.toContain("AAA")
         } finally {
@@ -88,7 +89,7 @@ describe("pty", () => {
           }
 
           Pty.write(a.id, "AAA\n")
-          await Bun.sleep(100)
+          await sleep(100)
 
           expect(outB.join("")).not.toContain("AAA")
         } finally {
@@ -98,7 +99,7 @@ describe("pty", () => {
     })
   })
 
-  test("does not leak output when socket data mutates in-place", async () => {
+  test("treats in-place socket data mutation as the same connection", async () => {
     await using dir = await tmpdir({ git: true })
 
     await Instance.provide({
@@ -106,15 +107,14 @@ describe("pty", () => {
       fn: async () => {
         const a = await Pty.create({ command: "cat", title: "a" })
         try {
-          const outA: string[] = []
-          const outB: string[] = []
+          const out: string[] = []
 
           const ctx = { connId: 1 }
           const ws = {
             readyState: 1,
             data: ctx,
             send: (data: unknown) => {
-              outA.push(typeof data === "string" ? data : Buffer.from(data as Uint8Array).toString("utf8"))
+              out.push(typeof data === "string" ? data : Buffer.from(data as Uint8Array).toString("utf8"))
             },
             close: () => {
               // no-op
@@ -122,19 +122,16 @@ describe("pty", () => {
           }
 
           Pty.connect(a.id, ws as any)
-          outA.length = 0
+          out.length = 0
 
-          // Simulate the runtime mutating per-connection data without
-          // swapping the reference (ws.data stays the same object).
+          // Mutating fields on ws.data should not look like a new
+          // connection lifecycle when the object identity stays stable.
           ctx.connId = 2
-          ws.send = (data: unknown) => {
-            outB.push(typeof data === "string" ? data : Buffer.from(data as Uint8Array).toString("utf8"))
-          }
 
           Pty.write(a.id, "AAA\n")
-          await Bun.sleep(100)
+          await sleep(100)
 
-          expect(outB.join("")).not.toContain("AAA")
+          expect(out.join("")).toContain("AAA")
         } finally {
           await Pty.remove(a.id)
         }

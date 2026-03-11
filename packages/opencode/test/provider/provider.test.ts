@@ -260,6 +260,7 @@ test("env variable takes precedence, config merges options", async () => {
             anthropic: {
               options: {
                 timeout: 60000,
+                chunkTimeout: 15000,
               },
             },
           },
@@ -277,6 +278,7 @@ test("env variable takes precedence, config merges options", async () => {
       expect(providers["anthropic"]).toBeDefined()
       // Config options should be merged
       expect(providers["anthropic"].options.timeout).toBe(60000)
+      expect(providers["anthropic"].options.chunkTimeout).toBe(15000)
     },
   })
 })
@@ -2215,6 +2217,67 @@ test("Google Vertex: supports OpenAI compatible models", async () => {
 
       expect(model).toBeDefined()
       expect(model.api.npm).toBe("@ai-sdk/openai-compatible")
+    },
+  })
+})
+
+test("cloudflare-ai-gateway loads with env variables", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("CLOUDFLARE_ACCOUNT_ID", "test-account")
+      Env.set("CLOUDFLARE_GATEWAY_ID", "test-gateway")
+      Env.set("CLOUDFLARE_API_TOKEN", "test-token")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["cloudflare-ai-gateway"]).toBeDefined()
+    },
+  })
+})
+
+test("cloudflare-ai-gateway forwards config metadata options", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "cloudflare-ai-gateway": {
+              options: {
+                metadata: { invoked_by: "test", project: "opencode" },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("CLOUDFLARE_ACCOUNT_ID", "test-account")
+      Env.set("CLOUDFLARE_GATEWAY_ID", "test-gateway")
+      Env.set("CLOUDFLARE_API_TOKEN", "test-token")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["cloudflare-ai-gateway"]).toBeDefined()
+      expect(providers["cloudflare-ai-gateway"].options.metadata).toEqual({
+        invoked_by: "test",
+        project: "opencode",
+      })
     },
   })
 })

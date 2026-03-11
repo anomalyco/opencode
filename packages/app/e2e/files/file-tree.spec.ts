@@ -43,7 +43,14 @@ test("file tree can expand folders and open a file", async ({ page, gotoSession 
   await tab.click()
   await expect(tab).toHaveAttribute("aria-selected", "true")
 
-  const code = page.locator('[data-component="code"]').first()
-  await expect(code).toBeVisible()
-  await expect(code).toContainText("export default function FileTree")
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(allTab).toHaveAttribute("aria-selected", "true")
+
+  const viewer = page.locator('[data-component="file"][data-mode="text"]').first()
+  await expect(viewer).toBeVisible()
+  await expect(viewer).toContainText("export default function FileTree")
 })
