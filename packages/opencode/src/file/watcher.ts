@@ -22,12 +22,11 @@ declare const OPENCODE_LIBC: string | undefined
 
 export namespace FileWatcher {
   const log = Log.create({ service: "file.watcher" })
-  const hold = new Map<string, number>()
+  const hold = new Set<string>()
 
   export function paused(file: string) {
     const input = path.resolve(file)
-    for (const [dir, count] of hold) {
-      if (count < 1) continue
+    for (const dir of hold) {
       if (input === dir) return true
       if (input.startsWith(dir + path.sep)) return true
     }
@@ -36,17 +35,12 @@ export namespace FileWatcher {
 
   export function pause(dir: string) {
     const id = path.resolve(dir)
-    hold.set(id, (hold.get(id) ?? 0) + 1)
+    hold.add(id)
     let live = true
     return () => {
       if (!live) return
       live = false
-      const count = hold.get(id) ?? 0
-      if (count <= 1) {
-        hold.delete(id)
-        return
-      }
-      hold.set(id, count - 1)
+      hold.delete(id)
     }
   }
 
