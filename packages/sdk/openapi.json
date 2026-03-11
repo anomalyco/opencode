@@ -3253,7 +3253,8 @@
             "in": "path",
             "name": "partID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^prt.*"
             },
             "required": true
           }
@@ -3337,7 +3338,8 @@
             "in": "path",
             "name": "partID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^prt.*"
             },
             "required": true
           }
@@ -3634,7 +3636,8 @@
                           "type": "object",
                           "properties": {
                             "id": {
-                              "type": "string"
+                              "type": "string",
+                              "pattern": "^prt.*"
                             },
                             "type": {
                               "type": "string",
@@ -7633,7 +7636,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "sessionID": {
             "type": "string",
@@ -7682,7 +7686,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "sessionID": {
             "type": "string",
@@ -7727,7 +7732,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "sessionID": {
             "type": "string",
@@ -7894,7 +7900,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "sessionID": {
             "type": "string",
@@ -8089,7 +8096,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "sessionID": {
             "type": "string",
@@ -8126,7 +8134,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "sessionID": {
             "type": "string",
@@ -8150,7 +8159,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "sessionID": {
             "type": "string",
@@ -8210,7 +8220,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "sessionID": {
             "type": "string",
@@ -8234,7 +8245,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "sessionID": {
             "type": "string",
@@ -8264,7 +8276,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "sessionID": {
             "type": "string",
@@ -8307,7 +8320,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "sessionID": {
             "type": "string",
@@ -8343,7 +8357,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "sessionID": {
             "type": "string",
@@ -8444,7 +8459,8 @@
                 "pattern": "^msg.*"
               },
               "partID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^prt.*"
               },
               "field": {
                 "type": "string"
@@ -8477,7 +8493,8 @@
                 "pattern": "^msg.*"
               },
               "partID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^prt.*"
               }
             },
             "required": ["sessionID", "messageID", "partID"]
@@ -9207,7 +9224,8 @@
                 "pattern": "^msg.*"
               },
               "partID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^prt.*"
               },
               "snapshot": {
                 "type": "string"
@@ -11296,7 +11314,8 @@
                 "pattern": "^msg.*"
               },
               "partID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^prt.*"
               },
               "snapshot": {
                 "type": "string"
@@ -11345,7 +11364,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "type": {
             "type": "string",
@@ -11386,7 +11406,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "type": {
             "type": "string",
@@ -11411,7 +11432,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "type": {
             "type": "string",
@@ -11446,7 +11468,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "type": {
             "type": "string",
