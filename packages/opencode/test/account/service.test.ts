@@ -1,10 +1,10 @@
 import { expect } from "bun:test"
-import { Effect, Layer, Option, Ref, Schema } from "effect"
+import { Duration, Effect, Layer, Option, Ref, Schema } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 
 import { AccountRepo } from "../../src/account/repo"
 import { AccountService } from "../../src/account/service"
-import { AccountID, Login, Org, OrgID } from "../../src/account/schema"
+import { AccountID, DeviceCode, Login, Org, OrgID, UserCode } from "../../src/account/schema"
 import { Database } from "../../src/storage/db"
 import { testEffect } from "../fixture/effect"
 
@@ -180,12 +180,12 @@ it.effect(
   "poll stores the account and first org on success",
   Effect.gen(function* () {
     const login = new Login({
-      code: "device-code",
-      user: "user-code",
+      code: DeviceCode.make("device-code"),
+      user: UserCode.make("user-code"),
       url: "https://one.example.com/verify",
       server: "https://one.example.com",
-      expiry: 600,
-      interval: 5,
+      expiry: Duration.seconds(600),
+      interval: Duration.seconds(5),
     })
 
     const client = HttpClient.make((req) =>

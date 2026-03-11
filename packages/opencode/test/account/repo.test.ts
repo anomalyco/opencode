@@ -51,7 +51,7 @@ it.effect(
     const row = yield* AccountRepo.use((r) => r.getRow(id))
     expect(Option.isSome(row)).toBe(true)
     const value = Option.getOrThrow(row)
-    expect(value.id).toBe("user-1")
+    expect(value.id).toBe(AccountID.make("user-1"))
     expect(value.email).toBe("test@example.com")
 
     const active = yield* AccountRepo.use((r) => r.active())
