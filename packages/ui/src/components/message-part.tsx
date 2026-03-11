@@ -57,6 +57,11 @@ interface Diagnostic {
   severity?: number
 }
 
+function formatQuestionPart(part: string | { type: "image"; url: string; mime: string; filename?: string }) {
+  if (typeof part === "string") return part
+  return part.filename ? `[image: ${part.filename}]` : "[image]"
+}
+
 function getDiagnostics(
   diagnosticsByFile: Record<string, Diagnostic[]> | undefined,
   filePath: string | undefined,
@@ -2123,7 +2128,9 @@ ToolRegistry.register({
                 return (
                   <div data-slot="question-answer-item">
                     <div data-slot="question-text">{q.question}</div>
-                    <div data-slot="answer-text">{answer().join(", ") || i18n.t("ui.question.answer.none")}</div>
+                    <div data-slot="answer-text">
+                      {answer().map(formatQuestionPart).join(", ") || i18n.t("ui.question.answer.none")}
+                    </div>
                   </div>
                 )
               }}

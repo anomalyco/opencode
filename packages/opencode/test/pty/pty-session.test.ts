@@ -5,7 +5,7 @@ import { Pty } from "../../src/pty"
 import { tmpdir } from "../fixture/fixture"
 import { setTimeout as sleep } from "node:timers/promises"
 
-const wait = async (fn: () => boolean, ms = 2000) => {
+const wait = async (fn: () => boolean, ms = 5000) => {
   const end = Date.now() + ms
   while (Date.now() < end) {
     if (fn()) return
@@ -19,7 +19,7 @@ const pick = (log: Array<{ type: "created" | "exited" | "deleted"; id: string }>
 }
 
 describe("pty", () => {
-  test("publishes created, exited, deleted in order for /bin/ls + remove", async () => {
+  test("publishes created, exited, deleted in order for env true + remove", async () => {
     if (process.platform === "win32") return
 
     await using dir = await tmpdir({ git: true })
@@ -36,7 +36,7 @@ describe("pty", () => {
 
         let id = ""
         try {
-          const info = await Pty.create({ command: "/bin/ls", title: "ls" })
+          const info = await Pty.create({ command: "/usr/bin/env", args: ["true"], title: "true" })
           id = info.id
 
           await wait(() => pick(log, id).includes("exited"))

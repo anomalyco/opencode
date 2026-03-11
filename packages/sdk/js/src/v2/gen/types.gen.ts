@@ -663,7 +663,16 @@ export type EventQuestionAsked = {
   properties: QuestionRequest
 }
 
-export type QuestionAnswer = Array<string>
+export type QuestionImageAnswer = {
+  type: "image"
+  mime: string
+  url: string
+  filename?: string
+}
+
+export type QuestionAnswerPart = string | QuestionImageAnswer
+
+export type QuestionAnswer = Array<QuestionAnswerPart>
 
 export type EventQuestionReplied = {
   type: "question.replied"
@@ -3077,6 +3086,7 @@ export type SessionGenerateTitleData = {
   }
   query?: {
     directory?: string
+    workspace?: string
   }
   url: "/session/{sessionID}/generate-title"
 }

@@ -18,6 +18,7 @@ import { iife } from "@/util/iife"
 import { Global } from "../global"
 import path from "path"
 import { Filesystem } from "../util/filesystem"
+import { isOpenAIProviderID } from "./id"
 
 // Direct imports for bundled providers
 import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
@@ -48,6 +49,130 @@ import { Installation } from "../installation"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
+
+  function requestURL(input: unknown) {
+    if (typeof input === "string") return input
+    if (input instanceof URL) return input.toString()
+    if (typeof input === "object" && input !== null && "url" in input && typeof input.url === "string") {
+      return input.url
+    }
+  }
+
+  function shouldNormalizeOpenAIResponsesStream(url: string | undefined, response: Response) {
+    if (!url) return false
+    const type = response.headers.get("content-type")?.toLowerCase() ?? ""
+    if (!type.includes("text/event-stream")) return false
+
+    try {
+      return new URL(url).pathname.endsWith("/responses")
+    } catch {
+      return url.includes("/responses")
+    }
+  }
+
+  function normalizeOpenAIResponsesErrorChunk(input: unknown) {
+    if (typeof input !== "object" || input === null || Array.isArray(input)) return input
+
+    const chunk = input as Record<string, unknown>
+    const nested =
+      typeof chunk.error === "object" && chunk.error !== null && !Array.isArray(chunk.error)
+        ? { ...(chunk.error as Record<string, unknown>) }
+        : undefined
+
+    if (!nested && chunk.type !== "error") return input
+    if (chunk.type !== undefined && chunk.type !== "error") return input
+
+    return {
+      ...chunk,
+      type: "error",
+      sequence_number: typeof chunk.sequence_number === "number" ? chunk.sequence_number : 0,
+      error: {
+        type: typeof nested?.type === "string" ? nested.type : "",
+        code:
+          typeof nested?.code === "string"
+            ? nested.code
+            : typeof nested?.type === "string"
+              ? nested.type
+              : typeof chunk.code === "string"
+                ? chunk.code
+                : "",
+        message:
+          typeof nested?.message === "string"
+            ? nested.message
+            : typeof chunk.message === "string"
+              ? chunk.message
+              : "",
+        param:
+          typeof nested?.param === "string"
+            ? nested.param
+            : typeof chunk.param === "string"
+              ? chunk.param
+              : null,
+      },
+    }
+  }
+
+  function normalizeOpenAIResponsesEvent(input: string) {
+    if (input === "[DONE]") return input
+
+    try {
+      return JSON.stringify(normalizeOpenAIResponsesErrorChunk(JSON.parse(input)))
+    } catch {
+      return input
+    }
+  }
+
+  function normalizeOpenAIResponsesBlock(input: string) {
+    return input
+      .split(/\r?\n/)
+      .map((line) => {
+        if (!line.startsWith("data:")) return line
+        const prefix = line.startsWith("data: ") ? "data: " : "data:"
+        return prefix + normalizeOpenAIResponsesEvent(line.slice(prefix.length))
+      })
+      .join("\n")
+  }
+
+  function normalizeOpenAIResponsesStream(response: Response) {
+    if (!response.body) return response
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    const encoder = new TextEncoder()
+    let pending = ""
+
+    const stream = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        const chunk = await reader.read()
+
+        if (chunk.done) {
+          pending += decoder.decode()
+          if (pending) {
+            controller.enqueue(encoder.encode(normalizeOpenAIResponsesBlock(pending)))
+          }
+          controller.close()
+          return
+        }
+
+        pending += decoder.decode(chunk.value, { stream: true })
+        const blocks = pending.split(/\r?\n\r?\n/)
+        pending = blocks.pop() ?? ""
+
+        for (const block of blocks) {
+          controller.enqueue(encoder.encode(normalizeOpenAIResponsesBlock(block) + "\n\n"))
+        }
+      },
+      async cancel(reason) {
+        await reader.cancel(reason)
+      },
+    })
+
+    return new Response(stream, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    })
+  }
 
   function isGpt5OrLater(modelID: string): boolean {
     const match = /^gpt-(\d+)/.exec(modelID)
@@ -835,13 +960,32 @@ export namespace Provider {
     // extend database from config
     for (const [providerID, provider] of configProviders) {
       const existing = database[providerID]
+      const base = existing
+        ? existing
+        : isOpenAIProviderID(providerID) && providerID !== "openai"
+          ? iife(() => {
+              const match = database["openai"]
+              if (!match) return undefined
+              return {
+                ...match,
+                id: providerID,
+                models: mapValues(match.models, (model) => ({
+                  ...model,
+                  providerID,
+                })),
+              }
+            })
+          : undefined
       const parsed: Info = {
         id: providerID,
-        name: provider.name ?? existing?.name ?? providerID,
-        env: provider.env ?? existing?.env ?? [],
-        options: mergeDeep(existing?.options ?? {}, provider.options ?? {}),
+        name: provider.name ?? base?.name ?? providerID,
+        env: provider.env ?? base?.env ?? [],
+        options: mergeDeep(base?.options ?? {}, provider.options ?? {}),
         source: "config",
-        models: existing?.models ?? {},
+        models: mapValues(base?.models ?? {}, (model) => ({
+          ...model,
+          providerID,
+        })),
       }
 
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {
@@ -1010,6 +1154,14 @@ export namespace Provider {
       mergeProvider(providerID, partial)
     }
 
+    for (const providerID of Object.keys(database)) {
+      if (!isOpenAIProviderID(providerID) || providerID === "openai") continue
+      if (disabled.has(providerID)) continue
+
+      const result = await CUSTOM_LOADERS.openai(database[providerID])
+      if (result.getModel) modelLoaders[providerID] = result.getModel
+    }
+
     for (const [providerID, provider] of Object.entries(providers)) {
       if (!isProviderAllowed(providerID)) {
         delete providers[providerID]
@@ -1128,11 +1280,20 @@ export namespace Provider {
           }
         }
 
-        return fetchFn(input, {
+        const response = await fetchFn(input, {
           ...opts,
           // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
           timeout: false,
         })
+
+        if (model.api.npm === "@ai-sdk/openai") {
+          const url = requestURL(input) ?? response.url
+          if (shouldNormalizeOpenAIResponsesStream(url, response)) {
+            return normalizeOpenAIResponsesStream(response)
+          }
+        }
+
+        return response
       }
 
       const bundledFn = BUNDLED_PROVIDERS[model.api.npm]

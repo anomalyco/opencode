@@ -15,12 +15,17 @@ export const QuestionTool = Tool.define("question", {
       tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
     })
 
-    function format(answer: Question.Answer | undefined) {
-      if (!answer?.length) return "Unanswered"
-      return answer.join(", ")
+    function format(part: Question.Part) {
+      if (typeof part === "string") return part
+      return part.filename ? `[image: ${part.filename}]` : "[image]"
     }
 
-    const formatted = params.questions.map((q, i) => `"${q.question}"="${format(answers[i])}"`).join(", ")
+    function formatAnswer(answer: Question.Answer | undefined) {
+      if (!answer?.length) return "Unanswered"
+      return answer.map(format).join(", ")
+    }
+
+    const formatted = params.questions.map((q, i) => `"${q.question}"="${formatAnswer(answers[i])}"`).join(", ")
 
     return {
       title: `Asked ${params.questions.length} question${params.questions.length > 1 ? "s" : ""}`,

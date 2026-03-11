@@ -1,6 +1,7 @@
 import { APICallError } from "ai"
 import { STATUS_CODES } from "http"
 import { iife } from "@/util/iife"
+import { isOpenAIProviderID } from "./id"
 
 export namespace ProviderError {
   // Adapted from overflow detection patterns in:
@@ -191,9 +192,7 @@ export namespace ProviderError {
       type: "api_error",
       message: m,
       statusCode: input.error.statusCode,
-      isRetryable: input.providerID.startsWith("openai")
-        ? isOpenAiErrorRetryable(input.error)
-        : input.error.isRetryable,
+      isRetryable: isOpenAIProviderID(input.providerID) ? isOpenAiErrorRetryable(input.error) : input.error.isRetryable,
       responseHeaders: input.error.responseHeaders,
       responseBody: input.error.responseBody,
       metadata,

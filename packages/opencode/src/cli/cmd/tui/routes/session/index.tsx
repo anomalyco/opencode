@@ -2172,9 +2172,14 @@ function Question(props: ToolProps<typeof QuestionTool>) {
   const { theme } = useTheme()
   const count = createMemo(() => props.input.questions?.length ?? 0)
 
-  function format(answer?: string[]) {
+  function formatPart(part: string | { type: "image"; filename?: string }) {
+    if (typeof part === "string") return part
+    return part.filename ? `[image: ${part.filename}]` : "[image]"
+  }
+
+  function format(answer?: Array<string | { type: "image"; filename?: string }>) {
     if (!answer?.length) return "(no answer)"
-    return answer.join(", ")
+    return answer.map(formatPart).join(", ")
   }
 
   return (

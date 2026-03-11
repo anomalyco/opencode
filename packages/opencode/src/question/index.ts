@@ -48,7 +48,24 @@ export namespace Question {
     })
   export type Request = z.infer<typeof Request>
 
-  export const Answer = z.array(z.string()).meta({
+  export const Image = z
+    .object({
+      type: z.literal("image"),
+      mime: z.string(),
+      url: z.string(),
+      filename: z.string().optional(),
+    })
+    .meta({
+      ref: "QuestionImageAnswer",
+    })
+  export type Image = z.infer<typeof Image>
+
+  export const Part = z.union([z.string(), Image]).meta({
+    ref: "QuestionAnswerPart",
+  })
+  export type Part = z.infer<typeof Part>
+
+  export const Answer = z.array(Part).meta({
     ref: "QuestionAnswer",
   })
   export type Answer = z.infer<typeof Answer>

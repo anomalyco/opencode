@@ -6,6 +6,7 @@ import type { Provider } from "./provider"
 import type { ModelsDev } from "./models"
 import { iife } from "@/util/iife"
 import { Flag } from "@/flag/flag"
+import { isOpenAIProviderID } from "./id"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -687,7 +688,7 @@ export namespace ProviderTransform {
 
     // openai and providers using openai package should set store to false by default.
     if (
-      input.model.providerID === "openai" ||
+      isOpenAIProviderID(input.model.providerID) ||
       input.model.api.npm === "@ai-sdk/openai" ||
       input.model.api.npm === "@ai-sdk/github-copilot"
     ) {
@@ -717,7 +718,7 @@ export namespace ProviderTransform {
       }
     }
 
-    if (input.model.providerID === "openai" || input.providerOptions?.setCacheKey) {
+    if (isOpenAIProviderID(input.model.providerID) || input.providerOptions?.setCacheKey) {
       result["promptCacheKey"] = input.sessionID
     }
 
@@ -798,7 +799,7 @@ export namespace ProviderTransform {
 
   export function smallOptions(model: Provider.Model) {
     if (
-      model.providerID === "openai" ||
+      isOpenAIProviderID(model.providerID) ||
       model.api.npm === "@ai-sdk/openai" ||
       model.api.npm === "@ai-sdk/github-copilot"
     ) {

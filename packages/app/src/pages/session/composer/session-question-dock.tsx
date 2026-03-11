@@ -4,25 +4,47 @@ import { Button } from "@opencode-ai/ui/button"
 import { DockPrompt } from "@opencode-ai/ui/dock-prompt"
 import { Icon } from "@opencode-ai/ui/icon"
 import { showToast } from "@opencode-ai/ui/toast"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
+import { usePlatform } from "@/context/platform"
+import { ACCEPTED_IMAGE_TYPES } from "@/components/prompt-input/attachments"
+import { PromptImageAttachments } from "@/components/prompt-input/image-attachments"
+import { uuid } from "@/utils/uuid"
+import {
+  questionAnswered,
+  questionAttachments,
+  questionReply,
+  type QuestionImage as Image,
+} from "./session-question-dock-helpers"
 
-const cache = new Map<string, { tab: number; answers: QuestionAnswer[]; custom: string[]; customOn: boolean[] }>()
+function textPart(part: QuestionAnswer[number]): part is string {
+  return typeof part === "string"
+}
+
+export const questionCache = new Map<
+  string,
+  { tab: number; answers: QuestionAnswer[]; custom: string[]; customOn: boolean[]; images: Image[][] }
+>()
 
 export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit: () => void }> = (props) => {
   const sdk = useSDK()
   const language = useLanguage()
+  const dialog = useDialog()
+  const platform = usePlatform()
 
   const questions = createMemo(() => props.request.questions)
   const total = createMemo(() => questions().length)
 
-  const cached = cache.get(props.request.id)
+  const cached = questionCache.get(props.request.id)
   const [store, setStore] = createStore({
     tab: cached?.tab ?? 0,
     answers: cached?.answers ?? ([] as QuestionAnswer[]),
     custom: cached?.custom ?? ([] as string[]),
     customOn: cached?.customOn ?? ([] as boolean[]),
+    images: cached?.images ?? ([] as Image[][]),
     editing: false,
     sending: false,
   })
@@ -33,6 +55,8 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   const question = createMemo(() => questions()[store.tab])
   const options = createMemo(() => question()?.options ?? [])
   const input = createMemo(() => store.custom[store.tab] ?? "")
+  const images = createMemo(() => store.images[store.tab] ?? [])
+  const attachments = createMemo(() => questionAttachments(images()))
   const on = createMemo(() => store.customOn[store.tab] === true)
   const multi = createMemo(() => question()?.multiple === true)
 
@@ -52,9 +76,11 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
 
     if (multi()) {
       setStore("answers", store.tab, (current = []) => {
-        const removed = prev ? current.filter((item) => item.trim() !== prev) : current
+        const removed = prev
+          ? current.filter((item: QuestionAnswer[number]) => !textPart(item) || item.trim() !== prev)
+          : current
         if (!next) return removed
-        if (removed.some((item) => item.trim() === next)) return removed
+        if (removed.some((item: QuestionAnswer[number]) => textPart(item) && item.trim() === next)) return removed
         return [...removed, next]
       })
       return
@@ -113,11 +139,12 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
 
   onCleanup(() => {
     if (replied) return
-    cache.set(props.request.id, {
+    questionCache.set(props.request.id, {
       tab: store.tab,
-      answers: store.answers.map((a) => (a ? [...a] : [])),
-      custom: store.custom.map((s) => s ?? ""),
-      customOn: store.customOn.map((b) => b ?? false),
+      answers: store.answers.map((a: QuestionAnswer | undefined) => (a ? [...a] : [])),
+      custom: store.custom.map((s: string | undefined) => s ?? ""),
+      customOn: store.customOn.map((b: boolean | undefined) => b ?? false),
+      images: store.images.map((x: Image[] | undefined) => (x ?? []).map((y: Image) => ({ ...y }))),
     })
   })
 
@@ -134,7 +161,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     try {
       await sdk.client.question.reply({ requestID: props.request.id, answers })
       replied = true
-      cache.delete(props.request.id)
+      questionCache.delete(props.request.id)
     } catch (err) {
       fail(err)
     } finally {
@@ -150,7 +177,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     try {
       await sdk.client.question.reject({ requestID: props.request.id })
       replied = true
-      cache.delete(props.request.id)
+      questionCache.delete(props.request.id)
     } catch (err) {
       fail(err)
     } finally {
@@ -158,7 +185,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     }
   }
 
-  const submit = () => void reply(questions().map((_, i) => store.answers[i] ?? []))
+  const submit = () => void reply(questionReply(questions(), store.answers, store.images))
 
   const pick = (answer: string, custom: boolean = false) => {
     setStore("answers", store.tab, [answer])
@@ -193,7 +220,10 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     }
 
     const value = input().trim()
-    if (value) setStore("answers", store.tab, (current = []) => current.filter((item) => item.trim() !== value))
+    if (value)
+      setStore("answers", store.tab, (current = []) =>
+        current.filter((item: QuestionAnswer[number]) => !textPart(item) || item.trim() !== value),
+      )
     setStore("editing", false)
   }
 
@@ -224,6 +254,60 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   const commitCustom = () => {
     setStore("editing", false)
     customUpdate(input())
+  }
+
+  const addImage = async (file: File) => {
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) return
+
+    const url = await new Promise<string | null>((resolve) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null)
+      reader.onerror = () => resolve(null)
+      reader.readAsDataURL(file)
+    })
+    if (!url) return
+
+    setStore("images", store.tab, (list = []) => [
+      ...list,
+      {
+        type: "image" as const,
+        id: uuid(),
+        mime: file.type,
+        url,
+        filename: file.name,
+      },
+    ])
+  }
+
+  const removeImage = (id: string) => {
+    setStore("images", store.tab, (list = []) => list.filter((item: Image) => item.id !== id))
+  }
+
+  const pasteImage = async (event: ClipboardEvent) => {
+    if (store.sending) return
+
+    const data = event.clipboardData
+    if (!data) return
+    const files = Array.from(data.items)
+      .filter((item: DataTransferItem) => item.kind === "file" && ACCEPTED_IMAGE_TYPES.includes(item.type))
+      .map((item) => item.getAsFile())
+      .filter((item): item is File => !!item)
+
+    if (files.length > 0) {
+      event.preventDefault()
+      event.stopPropagation()
+      await Promise.all(files.map(addImage))
+      return
+    }
+
+    const text = data.getData("text/plain") ?? ""
+    if (!text && platform.readClipboardImage) {
+      const file = await platform.readClipboardImage()
+      if (!file) return
+      event.preventDefault()
+      event.stopPropagation()
+      await addImage(file)
+    }
   }
 
   const next = () => {
@@ -266,10 +350,12 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                   type="button"
                   data-slot="question-progress-segment"
                   data-active={i() === store.tab}
-                  data-answered={
-                    (store.answers[i()]?.length ?? 0) > 0 ||
-                    (store.customOn[i()] === true && (store.custom[i()] ?? "").trim().length > 0)
-                  }
+                  data-answered={questionAnswered(
+                    store.answers[i()],
+                    store.custom[i()],
+                    store.customOn[i()],
+                    store.images[i()],
+                  )}
                   disabled={store.sending}
                   onClick={() => jump(i())}
                   aria-label={`${language.t("ui.tool.questions")} ${i() + 1}`}
@@ -339,14 +425,21 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
         <Show
           when={store.editing}
           fallback={
-            <button
+            <div
               data-slot="question-option"
               data-custom="true"
               data-picked={on()}
               role={multi() ? "checkbox" : "radio"}
               aria-checked={on()}
-              disabled={store.sending}
+              aria-disabled={store.sending}
+              tabIndex={store.sending ? -1 : 0}
               onClick={customOpen}
+              onKeyDown={(e) => {
+                if (store.sending) return
+                if (e.key !== "Enter" && e.key !== " ") return
+                e.preventDefault()
+                customOpen()
+              }}
             >
               <span
                 data-slot="question-option-check"
@@ -366,8 +459,21 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
               <span data-slot="question-option-main">
                 <span data-slot="option-label">{language.t("ui.messagePart.option.typeOwnAnswer")}</span>
                 <span data-slot="option-description">{input() || language.t("ui.question.custom.placeholder")}</span>
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => e.stopPropagation()}
+                >
+                  <PromptImageAttachments
+                    attachments={attachments()}
+                    onOpen={(file) => dialog.show(() => <ImagePreview src={file.dataUrl} alt={file.filename} />)}
+                    onRemove={removeImage}
+                    removeLabel={language.t("prompt.attachment.remove")}
+                    class="px-0 pt-2"
+                  />
+                </div>
               </span>
-            </button>
+            </div>
           }
         >
           <form
@@ -420,6 +526,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                 value={input()}
                 rows={1}
                 disabled={store.sending}
+                onPaste={(e) => void pasteImage(e)}
                 onKeyDown={(e) => {
                   if (e.key === "Escape") {
                     e.preventDefault()
@@ -435,6 +542,13 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                   e.currentTarget.style.height = "0px"
                   e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`
                 }}
+              />
+              <PromptImageAttachments
+                attachments={attachments()}
+                onOpen={(file) => dialog.show(() => <ImagePreview src={file.dataUrl} alt={file.filename} />)}
+                onRemove={removeImage}
+                removeLabel={language.t("prompt.attachment.remove")}
+                class="px-0 pt-2"
               />
             </span>
           </form>

@@ -443,6 +443,110 @@ describe("session.llm.stream", () => {
     })
   })
 
+  test("normalizes malformed OpenAI responses error chunks", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const source = await loadFixture("openai", "gpt-5.2")
+    const model = source.model
+
+    const request = waitRequest(
+      "/responses",
+      createEventResponse([
+        {
+          error: {
+            message: "Too many requests",
+            type: "too_many_requests",
+          },
+        },
+      ], true),
+    )
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: ["openai"],
+            provider: {
+              openai: {
+                name: "OpenAI",
+                env: ["OPENAI_API_KEY"],
+                npm: "@ai-sdk/openai",
+                api: "https://api.openai.com/v1",
+                models: {
+                  [model.id]: model,
+                },
+                options: {
+                  apiKey: "test-openai-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await Provider.getModel("openai", model.id)
+        const sessionID = "session-test-openai-error"
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          temperature: 0.2,
+        } satisfies Agent.Info
+
+        const user = {
+          id: "user-openai-error",
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: "openai", modelID: resolved.id },
+          variant: "high",
+        } satisfies MessageV2.User
+
+        const stream = await LLM.stream({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          abort: new AbortController().signal,
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        const parts: Array<any> = []
+        for await (const part of stream.fullStream) {
+          parts.push(part)
+        }
+
+        const error = parts.find((part) => part.type === "error")
+        expect(error).toBeDefined()
+        expect(error.error).toMatchObject({
+          type: "error",
+          sequence_number: 0,
+          error: {
+            type: "too_many_requests",
+            code: "too_many_requests",
+            message: "Too many requests",
+          },
+        })
+
+        await request
+      },
+    })
+  })
+
   test("sends messages API payload for Anthropic models", async () => {
     const server = state.server
     if (!server) {
