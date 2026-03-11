@@ -5,7 +5,6 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { showToast } from "@opencode-ai/ui/toast"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
@@ -296,14 +295,7 @@ export function TerminalPanel() {
                             autoFocus={opened()}
                             onConnect={() => terminal.trim(id)}
                             onCleanup={terminal.update}
-                            onConnectError={async (err) => {
-                              await terminal.close(id)
-                              showToast({
-                                variant: "error",
-                                title: language.t("terminal.connectionLost.title"),
-                                description: language.t("terminal.connectionLost.description"),
-                              })
-                            }}
+                            onConnectError={() => terminal.clone(id)}
                           />
                         </div>
                       )}
