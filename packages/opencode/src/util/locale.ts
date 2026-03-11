@@ -5,7 +5,7 @@ export namespace Locale {
 
   export function time(input: number): string {
     const date = new Date(input)
-    return date.toLocaleTimeString(undefined, { timeStyle: "short" })
+    return date.toLocaleTimeString(undefined, { timeStyle: "short", hour12: false})
   }
 
   export function datetime(input: number): string {
