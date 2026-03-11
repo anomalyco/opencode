@@ -1274,6 +1274,25 @@ export namespace Config {
         await Filesystem.write(options.path, updated).catch(() => {})
       }
       const data = parsed.data
+
+      // Strip any keys that Zod injected as defaults but were absent in the
+      // original input.  Config merging works by layering each file's explicit
+      // values on top of lower-priority layers; if Zod defaults are allowed to
+      // propagate here they will overwrite the user's settings from a
+      // lower-priority layer during mergeDeep.
+      //
+      // $schema is the one synthetic key added by code (not by Zod defaults),
+      // so it is always preserved regardless of the input.
+      if (normalized && typeof normalized === "object" && !Array.isArray(normalized)) {
+        const inputKeys = new Set(Object.keys(normalized as Record<string, unknown>))
+        for (const key of Object.keys(data) as Array<keyof Info>) {
+          if (key === "$schema") continue
+          if (!inputKeys.has(key)) {
+            delete (data as Record<string, unknown>)[key]
+          }
+        }
+      }
+
       if (data.plugin && isFile) {
         for (let i = 0; i < data.plugin.length; i++) {
           const plugin = data.plugin[i]
