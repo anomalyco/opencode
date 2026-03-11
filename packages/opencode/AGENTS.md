@@ -8,3 +8,37 @@
 - **Command**: `bun run db generate --name <slug>`.
 - **Output**: creates `migration/<timestamp>_<slug>/migration.sql` and `snapshot.json`.
 - **Tests**: migration tests should read the per-folder layout (no `_journal.json`).
+
+# opencode Effect guide
+
+Instructions to follow when writing Effect.
+
+## Schemas
+
+- Use `Schema.Class` for data types with multiple fields.
+- Use branded schemas (`Schema.brand`) for single-value types.
+
+## Services
+
+- Services use `ServiceMap.Service<ServiceName, ServiceName.Service>()("@console/<Name>")`.
+- In `Layer.effect`, always return service implementations with `ServiceName.of({ ... })`, never a plain object.
+
+## Errors
+
+- Use `Schema.TaggedErrorClass` for typed errors.
+- For defect-like causes, use `Schema.Defect` instead of `unknown`.
+- In `Effect.gen`, prefer `yield* new MyError(...)` over `yield* Effect.fail(new MyError(...))` for direct early-failure branches.
+
+## Effects
+
+- Use `Effect.gen(function* () { ... })` for composition.
+- Use `Effect.fn("ServiceName.method")` for named/traced effects and `Effect.fnUntraced` for internal helpers.
+- `Effect.fn` / `Effect.fnUntraced` accept pipeable operators as extra arguments, so avoid unnecessary `flow` or outer `.pipe()` wrappers.
+
+## Time
+
+- Prefer `DateTime.nowAsDate` over `new Date(yield* Clock.currentTimeMillis)` when you need a `Date`.
+
+## Errors
+
+- In `Effect.gen/fn`, prefer `yield* new MyError(...)` over `yield* Effect.fail(new MyError(...))` for direct early-failure branches.
