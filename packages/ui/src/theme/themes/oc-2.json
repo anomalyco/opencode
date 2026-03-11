@@ -13,6 +13,9 @@
       "interactive": "#034cff",
       "diffAdd": "#9ff29a",
       "diffDelete": "#fc533a"
+    },
+    "overrides": {
+      "surface-critical-base": "#FFF2F0"
     }
   },
   "dark": {
@@ -26,6 +29,9 @@
       "interactive": "#034cff",
       "diffAdd": "#c8ffc4",
       "diffDelete": "#fc533a"
+    },
+    "overrides": {
+      "surface-critical-base": "#1F0603"
     }
   }
 }

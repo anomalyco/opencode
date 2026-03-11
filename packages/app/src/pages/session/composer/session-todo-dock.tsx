@@ -138,7 +138,6 @@ export function SessionTodoDock(props: {
               "--tool-motion-mask-height": `${props.countMaskHeight ?? 0}px`,
               "--tool-motion-spring-ms": `${props.countWidthDuration ?? 560}ms`,
               opacity: `${Math.max(0, Math.min(1, 1 - shut()))}`,
-              filter: `blur(${Math.max(0, Math.min(1, shut())) * 2}px)`,
             }}
           >
             <AnimatedNumber value={done()} />
@@ -196,7 +195,6 @@ export function SessionTodoDock(props: {
           style={{
             visibility: off() ? "hidden" : "visible",
             opacity: `${Math.max(0, Math.min(1, 1 - hide()))}`,
-            filter: `blur(${Math.max(0, Math.min(1, hide())) * 2}px)`,
           }}
         >
           <TodoList todos={props.todos} open={!store.collapsed} />
