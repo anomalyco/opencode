@@ -21,6 +21,8 @@ import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
+import { useTerminal } from "@/context/terminal"
+import { focusTerminalById } from "@/pages/session/helpers"
 import { decode64 } from "@/utils/base64"
 import { Persist, persisted } from "@/utils/persist"
 import { StatusPopover } from "../status-popover"
@@ -138,12 +140,12 @@ function useSessionShare(args: {
   globalSDK: ReturnType<typeof useGlobalSDK>
   currentSession: () =>
     | {
-        id: string
         share?: {
           url?: string
         }
       }
     | undefined
+  sessionID: () => string | undefined
   projectDirectory: () => string
   platform: ReturnType<typeof usePlatform>
 }) {
@@ -167,11 +169,11 @@ function useSessionShare(args: {
   })
 
   const shareSession = () => {
-    const session = args.currentSession()
-    if (!session || state.share) return
+    const sessionID = args.sessionID()
+    if (!sessionID || state.share) return
     setState("share", true)
     args.globalSDK.client.session
-      .share({ sessionID: session.id, directory: args.projectDirectory() })
+      .share({ sessionID, directory: args.projectDirectory() })
       .catch((error) => {
         console.error("Failed to share session", error)
       })
@@ -181,11 +183,11 @@ function useSessionShare(args: {
   }
 
   const unshareSession = () => {
-    const session = args.currentSession()
-    if (!session || state.unshare) return
+    const sessionID = args.sessionID()
+    if (!sessionID || state.unshare) return
     setState("unshare", true)
     args.globalSDK.client.session
-      .unshare({ sessionID: session.id, directory: args.projectDirectory() })
+      .unshare({ sessionID, directory: args.projectDirectory() })
       .catch((error) => {
         console.error("Failed to unshare session", error)
       })
@@ -229,6 +231,7 @@ export function SessionHeader() {
   const sync = useSync()
   const platform = usePlatform()
   const language = useLanguage()
+  const terminal = useTerminal()
 
   const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
   const project = createMemo(() => {
@@ -243,9 +246,9 @@ export function SessionHeader() {
   })
   const hotkey = createMemo(() => command.keybind("file.open"))
 
-  const currentSession = createMemo(() => sync.data.session.find((s) => s.id === params.id))
+  const currentSession = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
-  const showShare = createMemo(() => shareEnabled() && !!currentSession())
+  const showShare = createMemo(() => shareEnabled() && !!params.id)
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const view = createMemo(() => layout.view(sessionKey))
   const os = createMemo(() => detectOS(platform))
@@ -296,6 +299,16 @@ export function SessionHeader() {
     ] as const
   })
 
+  const toggleTerminal = () => {
+    const next = !view().terminal.opened()
+    view().terminal.toggle()
+    if (!next) return
+
+    const id = terminal.active()
+    if (!id) return
+    focusTerminalById(id)
+  }
+
   const [prefs, setPrefs] = persisted(Persist.global("open.app"), createStore({ app: "finder" as OpenApp }))
   const [menu, setMenu] = createStore({ open: false })
   const [openRequest, setOpenRequest] = createStore({
@@ -303,14 +316,18 @@ export function SessionHeader() {
   })
 
   const canOpen = createMemo(() => platform.platform === "desktop" && !!platform.openPath && server.isLocal())
-  const current = createMemo(() => options().find((o) => o.id === prefs.app) ?? options()[0])
+  const current = createMemo(
+    () =>
+      options().find((o) => o.id === prefs.app) ??
+      options()[0] ??
+      ({ id: "finder", label: fileManager().label, icon: fileManager().icon } as const),
+  )
   const opening = createMemo(() => openRequest.app !== undefined)
 
-  createEffect(() => {
-    const value = prefs.app
-    if (options().some((o) => o.id === value)) return
-    setPrefs("app", options()[0]?.id ?? "finder")
-  })
+  const selectApp = (app: OpenApp) => {
+    if (!options().some((item) => item.id === app)) return
+    setPrefs("app", app)
+  }
 
   const openDir = (app: OpenApp) => {
     if (opening() || !canOpen() || !platform.openPath) return
@@ -347,6 +364,7 @@ export function SessionHeader() {
   const share = useSessionShare({
     globalSDK,
     currentSession,
+    sessionID: () => params.id,
     projectDirectory,
     platform,
   })
@@ -458,7 +476,7 @@ export function SessionHeader() {
                                   value={current().id}
                                   onChange={(value) => {
                                     if (!OPEN_APPS.includes(value as OpenApp)) return
-                                    setPrefs("app", value as OpenApp)
+                                    selectApp(value as OpenApp)
                                   }}
                                 >
                                   <For each={options()}>
@@ -612,39 +630,39 @@ export function SessionHeader() {
                 </div>
               </Show>
               <div class="flex items-center gap-1">
-                <div class="hidden md:flex items-center gap-1 shrink-0">
-                  <TooltipKeybind
-                    title={language.t("command.terminal.toggle")}
-                    keybind={command.keybind("terminal.toggle")}
+                <TooltipKeybind
+                  title={language.t("command.terminal.toggle")}
+                  keybind={command.keybind("terminal.toggle")}
+                >
+                  <Button
+                    variant="ghost"
+                    class="group/terminal-toggle titlebar-icon w-8 h-6 p-0 box-border shrink-0"
+                    onClick={toggleTerminal}
+                    aria-label={language.t("command.terminal.toggle")}
+                    aria-expanded={view().terminal.opened()}
+                    aria-controls="terminal-panel"
                   >
-                    <Button
-                      variant="ghost"
-                      class="group/terminal-toggle titlebar-icon w-8 h-6 p-0 box-border"
-                      onClick={() => view().terminal.toggle()}
-                      aria-label={language.t("command.terminal.toggle")}
-                      aria-expanded={view().terminal.opened()}
-                      aria-controls="terminal-panel"
-                    >
-                      <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
-                        <Icon
-                          size="small"
-                          name={view().terminal.opened() ? "layout-bottom-partial" : "layout-bottom"}
-                          class="group-hover/terminal-toggle:hidden"
-                        />
-                        <Icon
-                          size="small"
-                          name="layout-bottom-partial"
-                          class="hidden group-hover/terminal-toggle:inline-block"
-                        />
-                        <Icon
-                          size="small"
-                          name={view().terminal.opened() ? "layout-bottom" : "layout-bottom-partial"}
-                          class="hidden group-active/terminal-toggle:inline-block"
-                        />
-                      </div>
-                    </Button>
-                  </TooltipKeybind>
+                    <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
+                      <Icon
+                        size="small"
+                        name={view().terminal.opened() ? "layout-bottom-partial" : "layout-bottom"}
+                        class="group-hover/terminal-toggle:hidden"
+                      />
+                      <Icon
+                        size="small"
+                        name="layout-bottom-partial"
+                        class="hidden group-hover/terminal-toggle:inline-block"
+                      />
+                      <Icon
+                        size="small"
+                        name={view().terminal.opened() ? "layout-bottom" : "layout-bottom-partial"}
+                        class="hidden group-active/terminal-toggle:inline-block"
+                      />
+                    </div>
+                  </Button>
+                </TooltipKeybind>
 
+                <div class="hidden md:flex items-center gap-1 shrink-0">
                   <TooltipKeybind
                     title={language.t("command.review.toggle")}
                     keybind={command.keybind("review.toggle")}

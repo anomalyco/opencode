@@ -39,7 +39,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   const usd = createMemo(
     () =>
-      new Intl.NumberFormat(language.locale(), {
+      new Intl.NumberFormat(language.intl(), {
         style: "currency",
         currency: "USD",
       }),
@@ -77,7 +77,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
         {(ctx) => (
           <>
             <div class="flex items-center gap-2">
-              <span class="text-text-invert-strong">{ctx().total.toLocaleString(language.locale())}</span>
+              <span class="text-text-invert-strong">{ctx().total.toLocaleString(language.intl())}</span>
               <span class="text-text-invert-base">{language.t("context.usage.tokens")}</span>
             </div>
             <div class="flex items-center gap-2">

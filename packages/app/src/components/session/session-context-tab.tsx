@@ -128,7 +128,7 @@ export function SessionContextTab() {
 
   const usd = createMemo(
     () =>
-      new Intl.NumberFormat(language.locale(), {
+      new Intl.NumberFormat(language.intl(), {
         style: "currency",
         currency: "USD",
       }),
@@ -136,7 +136,7 @@ export function SessionContextTab() {
 
   const metrics = createMemo(() => getSessionContextMetrics(messages(), sync.data.provider.all))
   const ctx = createMemo(() => metrics().context)
-  const formatter = createMemo(() => createSessionContextFormatter(language.locale()))
+  const formatter = createMemo(() => createSessionContextFormatter(language.intl()))
 
   const cost = createMemo(() => {
     return usd().format(metrics().totalCost)
@@ -200,7 +200,7 @@ export function SessionContextTab() {
 
   const stats = [
     { label: "context.stats.session", value: () => info()?.title ?? params.id ?? "—" },
-    { label: "context.stats.messages", value: () => counts().all.toLocaleString(language.locale()) },
+    { label: "context.stats.messages", value: () => counts().all.toLocaleString(language.intl()) },
     { label: "context.stats.provider", value: providerLabel },
     { label: "context.stats.model", value: modelLabel },
     { label: "context.stats.limit", value: () => formatter().number(ctx()?.limit) },
@@ -213,8 +213,8 @@ export function SessionContextTab() {
       label: "context.stats.cacheTokens",
       value: () => `${formatter().number(ctx()?.cacheRead)} / ${formatter().number(ctx()?.cacheWrite)}`,
     },
-    { label: "context.stats.userMessages", value: () => counts().user.toLocaleString(language.locale()) },
-    { label: "context.stats.assistantMessages", value: () => counts().assistant.toLocaleString(language.locale()) },
+    { label: "context.stats.userMessages", value: () => counts().user.toLocaleString(language.intl()) },
+    { label: "context.stats.assistantMessages", value: () => counts().assistant.toLocaleString(language.intl()) },
     { label: "context.stats.totalCost", value: cost },
     { label: "context.stats.sessionCreated", value: () => formatter().time(info()?.time.created) },
     { label: "context.stats.lastActivity", value: () => formatter().time(ctx()?.message.time.created) },
@@ -307,7 +307,7 @@ export function SessionContextTab() {
                   <div class="flex items-center gap-1 text-11-regular text-text-weak">
                     <div class="size-2 rounded-sm" style={{ "background-color": BREAKDOWN_COLOR[segment.key] }} />
                     <div>{breakdownLabel(segment.key)}</div>
-                    <div class="text-text-weaker">{segment.percent.toLocaleString(language.locale())}%</div>
+                    <div class="text-text-weaker">{segment.percent.toLocaleString(language.intl())}%</div>
                   </div>
                 )}
               </For>
