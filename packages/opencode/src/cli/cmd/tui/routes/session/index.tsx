@@ -348,6 +348,28 @@ export function Session() {
     }
   }
 
+  // moveGlobal cycles through top-level sessions sorted by most recently updated.
+  function moveGlobal(direction: number) {
+    const topLevel = sync.data.session
+      .filter((x) => !x.parentID)
+      .toSorted((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
+
+    if (topLevel.length <= 1) return
+
+    const currentID = session()?.parentID ?? session()?.id
+    let idx = topLevel.findIndex((x) => x.id === currentID)
+    if (idx === -1) return
+
+    let next = idx + direction
+    if (next >= topLevel.length) next = 0
+    if (next < 0) next = topLevel.length - 1
+
+    navigate({
+      type: "session",
+      sessionID: topLevel[next].id,
+    })
+  }
+
   function childSessionHandler(func: (dialog: DialogContext) => void) {
     return (dialog: DialogContext) => {
       if (!session()?.parentID || dialog.stack.length > 0) return
@@ -975,6 +997,26 @@ export function Session() {
         moveChild(-1)
         dialog.clear()
       }),
+    },
+    {
+      title: "Next session",
+      value: "session.global.next",
+      keybind: "session_global_cycle",
+      category: "Session",
+      onSelect: (dialog) => {
+        moveGlobal(1)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Previous session",
+      value: "session.global.previous",
+      keybind: "session_global_cycle_reverse",
+      category: "Session",
+      onSelect: (dialog) => {
+        moveGlobal(-1)
+        dialog.clear()
+      },
     },
   ])
 
