@@ -7,6 +7,7 @@ import { GrepTool } from "./grep"
 import { BatchTool } from "./batch"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
+import { TaskStatusTool } from "./task_status"
 import { TodoWriteTool, TodoReadTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
@@ -110,6 +111,7 @@ export namespace ToolRegistry {
       EditTool,
       WriteTool,
       TaskTool,
+      TaskStatusTool,
       WebFetchTool,
       TodoWriteTool,
       // TodoReadTool,

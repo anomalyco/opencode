@@ -1,0 +1,13 @@
+Poll the status of a subagent task launched with the task tool.
+
+Use this to check background tasks started with `task(background=true)`.
+
+Parameters:
+- `task_id` (required): the task session id returned by the task tool
+- `wait` (optional): when true, wait for completion
+- `timeout_ms` (optional): max wait duration in milliseconds when `wait=true`
+
+Returns compact, parseable output:
+- `task_id`
+- `state` (`running`, `completed`, or `error`)
+- `<task_result>...</task_result>` containing final output, error summary, or current progress text
