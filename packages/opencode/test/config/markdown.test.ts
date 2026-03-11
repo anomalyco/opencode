@@ -1,4 +1,7 @@
-import { expect, test, describe } from "bun:test"
+import { afterAll, beforeAll, expect, test, describe } from "bun:test"
+import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import { ConfigMarkdown } from "../../src/config/markdown"
 
 describe("ConfigMarkdown: normal template", () => {
@@ -224,5 +227,49 @@ describe("ConfigMarkdown: frontmatter has weird model id", async () => {
     expect(result.data["stuff"]).toBe("This is some stuff\n")
 
     expect(result.content.trim()).toBe("Strictly follow da rules")
+  })
+})
+
+describe("ConfigMarkdown: frontmatter parsing w/ hex colors", () => {
+  let dir: string
+
+  beforeAll(async () => {
+    dir = await mkdtemp(path.join(tmpdir(), "opencode-markdown-"))
+
+    await writeFile(
+      path.join(dir, "quoted-hex.md"),
+      `---
+name: Quoted Hex
+color: "#008080"
+---
+
+Content
+`,
+    )
+
+    await writeFile(
+      path.join(dir, "unquoted-hex.md"),
+      `---
+name: Unquoted Hex
+color: #008080
+---
+
+Content
+`,
+    )
+  })
+
+  afterAll(async () => {
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  test("should preserve quoted hex colors", async () => {
+    const result = await ConfigMarkdown.parse(path.join(dir, "quoted-hex.md"))
+    expect(result.data.color).toBe("#008080")
+  })
+
+  test("should recover unquoted hex colors that YAML treats as comments", async () => {
+    const result = await ConfigMarkdown.parse(path.join(dir, "unquoted-hex.md"))
+    expect(result.data.color).toBe("#008080")
   })
 })

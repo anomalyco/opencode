@@ -6,6 +6,8 @@ import { Filesystem } from "../util/filesystem"
 export namespace ConfigMarkdown {
   export const FILE_REGEX = /(?<![\w`])@(\.?[^\s`,.]*(?:\.[^\s`,.]+)*)/g
   export const SHELL_REGEX = /!`([^`]+)`/g
+  export const UNQUOTED_HEX_FRONTMATTER_REGEX =
+    /^---\r?\n[\s\S]*?^\s*[a-zA-Z_][a-zA-Z0-9_]*\s*:\s*#[0-9a-fA-F]{6}\s*$/m
 
   export function files(template: string) {
     return Array.from(template.matchAll(FILE_REGEX))
@@ -54,6 +56,12 @@ export namespace ConfigMarkdown {
         continue
       }
 
+      // quote unquoted hex colors because YAML treats #... as a comment
+      if (value.match(/^#[0-9a-fA-F]{6}$/)) {
+        result.push(`${key}: "${value}"`)
+        continue
+      }
+
       // if value contains a colon, convert to block scalar
       if (value.includes(":")) {
         result.push(`${key}: |-`)
@@ -70,9 +78,10 @@ export namespace ConfigMarkdown {
 
   export async function parse(filePath: string) {
     const template = await Filesystem.readText(filePath)
+    const shouldUseFallback = UNQUOTED_HEX_FRONTMATTER_REGEX.test(template)
 
     try {
-      const md = matter(template)
+      const md = matter(shouldUseFallback ? fallbackSanitization(template) : template)
       return md
     } catch {
       try {
