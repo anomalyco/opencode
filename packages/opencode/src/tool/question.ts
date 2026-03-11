@@ -13,7 +13,11 @@ export const QuestionTool = Tool.define("question", {
     try {
       await ctx.ask({ permission: "question", patterns: ["*"], metadata: {}, always: ["*"] })
     } catch (e) {
-      if (e instanceof PermissionNext.DeniedError || e instanceof PermissionNext.RejectedError) {
+      if (
+        e instanceof PermissionNext.DeniedError ||
+        e instanceof PermissionNext.RejectedError ||
+        e instanceof PermissionNext.CorrectedError
+      ) {
         return {
           title: "Question denied",
           output: "Cannot ask questions in this session. Make your best judgment and proceed.",
