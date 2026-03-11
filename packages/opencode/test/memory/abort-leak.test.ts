@@ -2,11 +2,12 @@ import { describe, test, expect } from "bun:test"
 import path from "path"
 import { Instance } from "../../src/project/instance"
 import { WebFetchTool } from "../../src/tool/webfetch"
+import { SessionID } from "../../src/session/schema"
 
 const projectRoot = path.join(__dirname, "../..")
 
 const ctx = {
-  sessionID: "test",
+  sessionID: SessionID.make("ses_test"),
   messageID: "",
   callID: "",
   agent: "build",

@@ -4,9 +4,10 @@ import * as fs from "fs/promises"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
+import { SessionID } from "../../src/session/schema"
 
 const baseCtx = {
-  sessionID: "test",
+  sessionID: SessionID.make("ses_test"),
   messageID: "",
   callID: "",
   agent: "build",

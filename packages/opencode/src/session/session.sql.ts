@@ -4,6 +4,7 @@ import type { MessageV2 } from "./message-v2"
 import type { Snapshot } from "../snapshot"
 import type { PermissionNext } from "../permission/next"
 import type { ProjectID } from "../project/schema"
+import type { SessionID } from "./schema"
 import { Timestamps } from "../storage/schema.sql"
 
 type PartData = Omit<MessageV2.Part, "id" | "sessionID" | "messageID">
@@ -12,13 +13,13 @@ type InfoData = Omit<MessageV2.Info, "id" | "sessionID">
 export const SessionTable = sqliteTable(
   "session",
   {
-    id: text().primaryKey(),
+    id: text().$type<SessionID>().primaryKey(),
     project_id: text()
       .$type<ProjectID>()
       .notNull()
       .references(() => ProjectTable.id, { onDelete: "cascade" }),
     workspace_id: text(),
-    parent_id: text(),
+    parent_id: text().$type<SessionID>(),
     slug: text().notNull(),
     directory: text().notNull(),
     title: text().notNull(),
@@ -46,6 +47,7 @@ export const MessageTable = sqliteTable(
   {
     id: text().primaryKey(),
     session_id: text()
+      .$type<SessionID>()
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
     ...Timestamps,
@@ -61,7 +63,7 @@ export const PartTable = sqliteTable(
     message_id: text()
       .notNull()
       .references(() => MessageTable.id, { onDelete: "cascade" }),
-    session_id: text().notNull(),
+    session_id: text().$type<SessionID>().notNull(),
     ...Timestamps,
     data: text({ mode: "json" }).notNull().$type<PartData>(),
   },
@@ -72,6 +74,7 @@ export const TodoTable = sqliteTable(
   "todo",
   {
     session_id: text()
+      .$type<SessionID>()
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
     content: text().notNull(),
